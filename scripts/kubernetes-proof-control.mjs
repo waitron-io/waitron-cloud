@@ -761,6 +761,83 @@ export async function inspectManualFirstGuestCleanup(options) {
     observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
 }
 
+export async function inspectManualFirstBilling(options) {
+  const { checkout, aws, now, clock = Date.now } = options;
+  const setup = structuredClone(options.setup), launch = structuredClone(options.launch);
+  const inspection = await inspectManualBudget({ ...options, stackId: setup?.stackId, store: undefined });
+  const reservation = launch?.reservation;
+  check(setup.account === account && setup.region === region && setup.head === inspection.head && setup.tree === inspection.tree
+    && setup.bucket === inspection.bucket && launch.account === account && launch.region === region
+    && launch.stackId === setup.stackId && launch.bucket === inspection.bucket
+    && launch.head === inspection.head && launch.tree === inspection.tree
+    && reservation?.uuid === inspection.budget.activeUuid && reservation.head === inspection.head && reservation.tree === inspection.tree
+    && instant(reservation.startedAt) <= instant(now) && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
+    && setup.upperMicroUsd === inspection.budget.overheadMicroUsd + inspection.budget.bookedMicroUsd);
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+  }
+  const guarded = { async call(...args) {
+    await unchanged();
+    const result = await aws.call(...args);
+    await unchanged();
+    return result;
+  } };
+  const start = setup.openingBilling?.period?.Start;
+  check(typeof start === 'string' && /^\d{4}-\d\d-01$/.test(start)
+    && instant(start + 'T00:00:00Z') <= instant(reservation.startedAt));
+  const period = { Start: start, End: inspection.billing.period.End };
+  const expected = [], cursor = new Date(start + 'T00:00:00Z');
+  while (cursor.toISOString().slice(0, 10) < period.End) {
+    check(expected.length < 3);
+    const from = cursor.toISOString().slice(0, 10);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    expected.push({ Start: from, End: cursor.toISOString().slice(0, 10) < period.End ? cursor.toISOString().slice(0, 10) : period.End });
+  }
+  const groupBy = [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'USAGE_TYPE' }];
+  const response = await guarded.call('ce', 'get-cost-and-usage', { TimePeriod: period, Granularity: 'MONTHLY',
+    Metrics: ['UnblendedCost', 'UsageQuantity'], GroupBy: groupBy,
+    Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [account] } } });
+  check(!response?.NextPageToken && isDeepStrictEqual(response?.GroupDefinitions, groupBy)
+    && Array.isArray(response?.ResultsByTime) && response.ResultsByTime.length === expected.length);
+  const store = createManualLedgerStore({ bucket: inspection.bucket, aws: guarded });
+  const scope = { account, region, stackId: setup.stackId }, months = [];
+  const decimal = value => typeof value === 'string' && /^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(value);
+  const rounded = nanos => Number((nanos + 9999n) / 10000n);
+  for (const [index, row] of response.ResultsByTime.entries()) {
+    check(isDeepStrictEqual(row?.TimePeriod, expected[index]) && typeof row.Estimated === 'boolean'
+      && Array.isArray(row.Groups) && row.Groups.length <= 1000);
+    const seen = new Set(), components = []; let total = 0n;
+    for (const group of row.Groups) {
+      check(Array.isArray(group?.Keys) && group.Keys.length === 2
+        && group.Keys.every(key => typeof key === 'string' && key.length > 0 && key.length <= 256));
+      const key = JSON.stringify(group.Keys), cost = group.Metrics?.UnblendedCost, usage = group.Metrics?.UsageQuantity;
+      check(!seen.has(key) && cost?.Unit === 'USD' && decimal(cost.Amount) && decimal(usage?.Amount)
+        && typeof usage.Unit === 'string' && usage.Unit.length > 0 && usage.Unit.length <= 128);
+      seen.add(key);
+      const [whole, fraction = ''] = cost.Amount.split('.'), nanos = BigInt(whole + fraction.padEnd(10, '0'));
+      total += nanos;
+      components.push({ service: group.Keys[0], usageType: group.Keys[1], microUsd: rounded(nanos),
+        usage: { amount: usage.Amount, unit: usage.Unit } });
+    }
+    const accountCostMicroUsd = rounded(total), month = row.TimePeriod.Start.slice(0, 7);
+    if (month === now.slice(0, 7)) check(accountCostMicroUsd === inspection.billing.microUsd && row.Estimated === inspection.billing.estimated);
+    const at = month === now.slice(0, 7) ? now : iso(instant(row.TimePeriod.End + 'T00:00:00Z') - 1000);
+    const budget = await inspectBudget({ scope, now: at, billingMicroUsd: accountCostMicroUsd, store });
+    check(budget.activeUuid === reservation.uuid && accountCostMicroUsd >= budget.baselineMicroUsd);
+    months.push({ period: row.TimePeriod, estimated: row.Estimated, accountCostMicroUsd,
+      baselineMicroUsd: budget.baselineMicroUsd, components });
+  }
+  await unchanged();
+  const accountCostMicroUsd = months.reduce((sum, month) => sum + month.accountCostMicroUsd, 0);
+  // Account totals include setup and other services; they are never an attributed per-run cost or a refund.
+  return { ...inspection, costReport: { estimateMicroUsd: setup.upperMicroUsd, accountCostMicroUsd,
+    billedAccountMicroUsd: months.some(month => month.estimated) ? null : accountCostMicroUsd, months } };
+}
+
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   console.error('D570 manual lifecycle is not implemented. No setup, launch, reconciliation or removal was performed.');
   process.exitCode = 1;

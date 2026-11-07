@@ -1827,3 +1827,158 @@ for (const state of ['running', 'terminated']) test(`shutdown timing refuses cle
   };
   await assert.rejects(f.observe(), /D570 controller refused/);
 });
+
+async function billingFixture(t) {
+  const f = await guestCleanupFixture(t), previous = f.aws.call;
+  const groups = [
+    { Keys: ['Amazon Elastic Compute Cloud - Compute', 'EUN1-BoxUsage:m7g.2xlarge'], Metrics: {
+      UnblendedCost: { Amount: '0.01', Unit: 'USD' }, UsageQuantity: { Amount: '0.03', Unit: 'N/A' } } },
+    { Keys: ['EC2 - Other', 'EUN1-EBS:VolumeUsage.gp3'], Metrics: {
+      UnblendedCost: { Amount: '0.0023456789', Unit: 'USD' }, UsageQuantity: { Amount: '0.04', Unit: 'N/A' } } },
+  ];
+  const response = { GroupDefinitions: [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'USAGE_TYPE' }],
+    ResultsByTime: [{ TimePeriod: { ...period }, Estimated: true, Total: {}, Groups: groups }] };
+  f.aws.call = async (service, operation, input) => {
+    if (service === 'ce') {
+      f.calls.push({ service, operation, input });
+      if (input.GroupBy) return structuredClone(response);
+      return { GroupDefinitions: [], ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: response.ResultsByTime.at(-1)?.Estimated ?? true, Groups: [],
+        Total: { UnblendedCost: { Amount: '0.0123456789', Unit: 'USD' } } }] };
+    }
+    return previous(service, operation, input);
+  };
+  f.calls.length = 0;
+  const options = { ...f.options, setup: f.setup, launch: f.ready };
+  const inspect = changes => {
+    assert.equal(typeof control.inspectManualFirstBilling, 'function', 'missing itemized first-drill billing');
+    return control.inspectManualFirstBilling({ ...options, ...changes });
+  };
+  return { ...f, options, response, groups, inspect };
+}
+
+// Dropping itemization, confusing usage units or treating an estimate as a final bill would hide cost.
+test('first billing reports rounded account costs and separate usage rows without releasing the booking', async t => {
+  const f = await billingFixture(t), before = structuredClone([...f.objects]), writes = f.writes.length;
+  const result = await f.inspect();
+  assert.deepEqual(result.costReport, { estimateMicroUsd: 9313491, accountCostMicroUsd: 12346, billedAccountMicroUsd: null,
+    months: [{ period, estimated: true, accountCostMicroUsd: 12346, baselineMicroUsd: 0,
+      components: [
+        { service: 'Amazon Elastic Compute Cloud - Compute', usageType: 'EUN1-BoxUsage:m7g.2xlarge', microUsd: 10000,
+          usage: { amount: '0.03', unit: 'N/A' } },
+        { service: 'EC2 - Other', usageType: 'EUN1-EBS:VolumeUsage.gp3', microUsd: 2346,
+          usage: { amount: '0.04', unit: 'N/A' } },
+      ] }] });
+  assert.deepEqual(f.calls.filter(row => row.service === 'ce').at(-1).input, {
+    TimePeriod: period, Granularity: 'MONTHLY', Metrics: ['UnblendedCost', 'UsageQuantity'],
+    GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'USAGE_TYPE' }],
+    Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: ['462991287391'] } },
+  });
+  assert.equal(Object.hasOwn(result, 'actualMicroUsd'), false);
+  assert.equal(Object.hasOwn(result, 'billingReconciled'), false);
+  assert.equal(result.budget.activeUuid, f.uuid);
+  assert.equal(f.writes.length, writes); assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('first billing distinguishes a non-estimated account bill from the retained setup estimate', async t => {
+  const f = await billingFixture(t); f.response.ResultsByTime[0].Estimated = false;
+  const result = await f.inspect();
+  assert.equal(result.costReport.billedAccountMicroUsd, 12346);
+  assert.equal(result.costReport.estimateMicroUsd, 9313491);
+  assert.equal(result.budget.activeUuid, f.uuid);
+});
+
+for (const [label, mutate] of [
+  ['missing month', f => { f.response.ResultsByTime = []; }],
+  ['duplicate month', f => { f.response.ResultsByTime.push(structuredClone(f.response.ResultsByTime[0])); }],
+  ['wrong period', f => { f.response.ResultsByTime[0].TimePeriod.End = '2026-11-06'; }],
+  ['partial page', f => { f.response.NextPageToken = 'more'; }],
+  ['wrong grouping', f => { f.response.GroupDefinitions[1].Key = 'REGION'; }],
+  ['unknown estimate', f => { delete f.response.ResultsByTime[0].Estimated; }],
+  ['duplicate component', f => { const duplicate = structuredClone(f.groups[0]);
+    duplicate.Metrics.UnblendedCost.Amount = '0'; duplicate.Metrics.UsageQuantity.Amount = '0'; f.groups.push(duplicate); }],
+  ['foreign currency', f => { f.groups[0].Metrics.UnblendedCost.Unit = 'EUR'; }],
+  ['negative credit', f => { f.groups[0].Metrics.UnblendedCost.Amount = '-0.01'; }],
+  ['nondecimal cost', f => { f.groups[0].Metrics.UnblendedCost.Amount = '1e-2'; }],
+  ['missing usage', f => { delete f.groups[0].Metrics.UsageQuantity; }],
+  ['incomplete keys', f => { f.groups[0].Keys.pop(); }],
+  ['over budget', f => { f.groups[0].Metrics.UnblendedCost.Amount = '9.99'; }],
+  ['other run', f => { f.options.launch.reservation.uuid = '00000000-0000-4000-8000-000000000002'; }],
+  ['other setup', f => { f.options.setup.bucket = 'other-bucket'; }],
+]) test(`first billing refuses ${label} without rewriting history`, async t => {
+  const f = await billingFixture(t); mutate(f); const before = structuredClone([...f.objects]);
+  await assert.rejects(f.inspect(), /D570 controller refused|D570 budget refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('first billing refuses main advancing during the itemized request', async t => {
+  const f = await billingFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[0] === 'ce' && args[2].GroupBy) {
+      writeFileSync(join(f.root, 'controller.txt'), 'advance main during billing');
+      f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main');
+      f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+    }
+    return response;
+  };
+  await assert.rejects(f.inspect(), /D570 controller refused/);
+});
+
+test('first billing keeps a later estimated month separate from a completed earlier bill', async t => {
+  const f = await billingFixture(t), later = '2026-12-02T12:00:00Z';
+  f.response.ResultsByTime[0].TimePeriod.End = '2026-12-01';
+  f.response.ResultsByTime[0].Estimated = false;
+  f.response.ResultsByTime.push({ TimePeriod: { Start: '2026-12-01', End: '2026-12-03' }, Estimated: true,
+    Total: {}, Groups: structuredClone(f.groups) });
+  f.p.health.startedAt = '2026-12-02T11:59:00.000Z'; f.p.health.completedAt = '2026-12-02T11:59:01.000Z';
+  f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+  f.p.responses['s3api/get-object'].LastModified = '2026-12-02T11:59:01Z';
+  const result = await f.inspect({ now: later, clock: () => Date.parse(later) });
+  assert.equal(result.costReport.accountCostMicroUsd, 24692);
+  assert.equal(result.costReport.billedAccountMicroUsd, null);
+  assert.deepEqual(result.costReport.months.map(row => [row.period, row.estimated, row.accountCostMicroUsd]), [
+    [{ Start: '2026-11-01', End: '2026-12-01' }, false, 12346],
+    [{ Start: '2026-12-01', End: '2026-12-03' }, true, 12346],
+  ]);
+  assert.deepEqual(f.calls.filter(row => row.service === 'ce').at(-1).input.TimePeriod,
+    { Start: '2026-11-01', End: '2026-12-03' });
+});
+
+for (const changed of ['estimate', 'amount']) test(`first billing refuses a contradictory current-month ${changed}`, async t => {
+  const f = await billingFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[0] === 'ce' && !args[2].GroupBy) {
+      if (changed === 'estimate') response.ResultsByTime[0].Estimated = false;
+      else response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.02';
+    }
+    return response;
+  };
+  await assert.rejects(f.inspect(), /D570 controller refused/);
+});
+
+test('first billing refuses protection aging during the itemized read', async t => {
+  const f = await billingFixture(t), previous = f.aws.call; let at = Date.parse(f.options.now);
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[0] === 'ce' && args[2].GroupBy) at += 90000;
+    return response;
+  };
+  await assert.rejects(f.inspect({ clock: () => at }), /D570 controller refused/);
+});
+
+test('first billing refuses a past month above its retained booking even when the current bill fits', async t => {
+  const f = await billingFixture(t), later = '2026-12-02T12:00:00Z';
+  const current = structuredClone(f.response.ResultsByTime[0]);
+  current.TimePeriod = { Start: '2026-12-01', End: '2026-12-03' };
+  f.response.ResultsByTime[0].TimePeriod.End = '2026-12-01';
+  f.response.ResultsByTime[0].Estimated = false;
+  f.groups[0].Metrics.UnblendedCost.Amount = '9.99';
+  f.response.ResultsByTime.push(current);
+  f.p.health.startedAt = '2026-12-02T11:59:00.000Z'; f.p.health.completedAt = '2026-12-02T11:59:01.000Z';
+  f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+  f.p.responses['s3api/get-object'].LastModified = '2026-12-02T11:59:01Z';
+  const before = structuredClone([...f.objects]);
+  await assert.rejects(f.inspect({ now: later, clock: () => Date.parse(later) }), /D570 budget refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});

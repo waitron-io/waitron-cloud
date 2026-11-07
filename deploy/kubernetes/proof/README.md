@@ -316,6 +316,22 @@ Run `node --test --test-name-pattern='^shutdown timing' scripts/kubernetes-proof
 for the synthetic timing checks. Actual guest behavior, billed reconciliation
 and removal still need qualification before you can run the owner commands.
 
+You need the account's itemized costs before you can compare the bill with the
+booking. `inspectManualFirstBilling` reads monthly costs grouped by service and
+usage type, from the original setup month through today. It checks every month
+against its retained opening and reservation, including a month boundary. Usage
+amounts stay in separate rows because their units may differ. Costs round upward;
+the current month's total and estimate flag must agree with the initial bill read.
+
+The report keeps the setup estimate separate from account costs. Any estimated
+month withholds the combined billed amount. An account total includes other
+services and setup, so it cannot establish this guest's individual cost or release
+its reservation. Missing components, partial pages, stale protection and changed
+source refuse. Run
+`node --test --test-name-pattern='^first billing' scripts/kubernetes-proof-control.test.mjs`
+for synthetic checks. These checks do not read a real bill. Attributing billed usage to
+the guest, final reconciliation and private history export/removal remain open.
+
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill
 with the original opening plus that month's booked upper costs. A later bill
