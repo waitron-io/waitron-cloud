@@ -230,7 +230,8 @@ test('expiry role, environment and invocation target retain separate ownership b
   assert.deepEqual(resource(t, 'ExpiryRole').AssumeRolePolicyDocument, { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole' }] });
   const fn = resource(t, 'ExpiryFunction');
   assert.deepEqual(fn.Role, { 'Fn::GetAtt': ['ExpiryRole', 'Arn'] });
-  assert.equal(fn.ReservedConcurrentExecutions, 1);
+  assert.equal(Object.hasOwn(fn, 'ReservedConcurrentExecutions'), false);
+  assert.equal(Object.hasOwn(module.renderManualSetup(inputs()).Resources.ExpiryFunction.Properties, 'ReservedConcurrentExecutions'), false);
   assert.deepEqual(fn.Environment.Variables, { ACCOUNT: '462991287391', STACK_ID: { Ref: 'AWS::StackId' }, BUCKET: { Ref: 'Bucket' }, ACCESS_EXPIRY: '2027-02-28T23:59:00Z' });
   assert.deepEqual(resource(t, 'ExpiryRule').Targets, [{ Id: 'D570Expiry', Arn: { 'Fn::GetAtt': ['ExpiryFunction', 'Arn'] }, RetryPolicy: { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0 } }]);
   assert.deepEqual(resource(t, 'ExpiryPermission').FunctionName, { Ref: 'ExpiryFunction' });

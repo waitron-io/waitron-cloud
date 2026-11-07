@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open, readdir } from 'node:fs/promises';
+import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open, readdir, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, basename, resolve } from 'node:path';
@@ -34,7 +34,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
   return { async call(service, operation, input) {
     check((service === 'sts' && operation === 'get-caller-identity')
       || (service === 'ce' && operation === 'get-cost-and-usage')
-      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources', 'create-stack', 'delete-stack'].includes(operation))
+      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources', 'describe-stack-events', 'create-stack', 'delete-stack'].includes(operation))
       || (service === 'events' && ['describe-rule', 'list-targets-by-rule', 'enable-rule', 'disable-rule'].includes(operation))
       || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2', 'delete-objects'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
@@ -77,7 +77,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
         && input.TimeoutInMinutes === 10 && input.OnFailure === 'ROLLBACK'
         && typeof input.ClientRequestToken === 'string' && /^d570-[a-f0-9]{64}$/.test(input.ClientRequestToken));
     }
-    if (service === 'cloudformation' && operation === 'delete-stack') check(input
+    if (service === 'cloudformation' && ['delete-stack', 'describe-stack-events'].includes(operation)) check(input
       && Object.keys(input).join(',') === 'StackName' && typeof input.StackName === 'string'
       && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(input.StackName));
     if (service === 'events' && ['enable-rule', 'disable-rule'].includes(operation)) check(input
@@ -530,7 +530,7 @@ export async function createManualFirstSetup(options) {
     const before = clock(), source = await checkedMain(checkout), after = clock();
     check(source.head === booking.head && source.tree === booking.tree
       && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
-      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10));
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10), 'setup time');
   }
   async function call(service, operation, input) {
     await unchanged();
@@ -539,20 +539,51 @@ export async function createManualFirstSetup(options) {
     return result;
   }
   const templateBody = JSON.stringify(booking.template);
-  check(Buffer.byteLength(templateBody) <= 51200);
+  check(Buffer.byteLength(templateBody) <= 51200, 'setup template');
   const request = { StackName: 'd570-first', TemplateBody: templateBody, Capabilities: ['CAPABILITY_IAM'],
     Tags: [{ Key: 'Proof', Value: 'D570' }], TimeoutInMinutes: 10, OnFailure: 'ROLLBACK',
     ClientRequestToken: 'd570-' + createHash('sha256').update(JSON.stringify({ head: booking.head, tree: booking.tree, now })).digest('hex') };
   const created = await call('cloudformation', 'create-stack', request), stackId = created?.StackId;
   check(typeof stackId === 'string'
-    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(stackId));
+    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(stackId), 'stack id');
+  async function failedStack(status) {
+    const statuses = ['CREATE_IN_PROGRESS', 'CREATE_FAILED', 'ROLLBACK_IN_PROGRESS', 'ROLLBACK_FAILED', 'ROLLBACK_COMPLETE',
+      'DELETE_IN_PROGRESS', 'DELETE_FAILED', 'DELETE_COMPLETE', 'UPDATE_IN_PROGRESS', 'UPDATE_COMPLETE',
+      'UPDATE_ROLLBACK_IN_PROGRESS', 'UPDATE_ROLLBACK_FAILED', 'UPDATE_ROLLBACK_COMPLETE'];
+    let reason = 'stack status ' + (statuses.includes(status) ? status : 'unrecognized');
+    try {
+      const events = await call('cloudformation', 'describe-stack-events', { StackName: stackId });
+      if (!Array.isArray(events?.StackEvents) || events.StackEvents.length > 1000) throw new Error('invalid events');
+      const event = events.StackEvents.filter(row => row?.StackId === stackId
+        && Object.hasOwn(booking.template.Resources, row.LogicalResourceId)
+        && row.ResourceStatus === 'CREATE_FAILED' && typeof row.ResourceStatusReason === 'string'
+        && row.ResourceStatusReason !== 'Resource creation cancelled').at(-1);
+      if (event) {
+        reason += '; ' + event.LogicalResourceId + ': ';
+        if (event.ResourceStatusReason.includes('Specified ReservedConcurrentExecutions')
+          && event.ResourceStatusReason.includes('UnreservedConcurrentExecution')
+          && event.ResourceStatusReason.includes('minimum value')) reason += 'Lambda reserved concurrency exceeds account allowance';
+        else {
+          const path = join(dirname(options.directory), 'setup-failure.json');
+          try {
+            await privateWrite(path, JSON.stringify({ stackId, logicalResourceId: event.LogicalResourceId,
+              reason: event.ResourceStatusReason.slice(0, 1024) }) + '\n');
+          } catch (error) {
+            if (error.code !== 'EEXIST' || (await privateJson(path)).stackId !== stackId) throw error;
+          }
+          reason += 'failure details in ' + path;
+        }
+      }
+    } catch { reason += '; failure event unavailable'; }
+    refuse(reason);
+  }
   for (let attempt = 0; ; attempt++) {
     const response = await call('cloudformation', 'describe-stacks', { StackName: stackId });
     check(!response?.NextToken && Array.isArray(response?.Stacks) && response.Stacks.length === 1
-      && response.Stacks[0]?.StackId === stackId);
+      && response.Stacks[0]?.StackId === stackId, 'stack status');
     const status = response.Stacks[0].StackStatus;
     if (status === 'CREATE_COMPLETE') break;
-    check(status === 'CREATE_IN_PROGRESS' && attempt < 39);
+    if (status !== 'CREATE_IN_PROGRESS' || attempt >= 39) await failedStack(status);
     await sleep(15000);
   }
   const { ruleName } = await readManualProtection(call, stackId, ['DISABLED', 'ENABLED']);
@@ -1100,12 +1131,50 @@ export async function retainManualHistory(options) {
   return { ...inspection, directory, files: [...bodies.keys()] };
 }
 
+async function exists(path) {
+  try { await lstat(path); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+
+async function replacePrivateJson(path, value) {
+  const temporary = path + '.' + randomUUID() + '.tmp';
+  try {
+    await privateWrite(temporary, JSON.stringify(value) + '\n');
+    if (await exists(path)) await privateJson(path);
+    await rename(temporary, path);
+    const parent = await open(dirname(path), 'r');
+    try { await parent.sync(); } finally { await parent.close(); }
+  } finally { await rm(temporary, { force: true }); }
+}
+
+async function readCleanup(base) {
+  const path = join(base, 'cleanup.json');
+  if (!await exists(path)) return null;
+  const record = await privateJson(path), booking = await privateJson(join(base, 'setup', 'setup.json'));
+  check(record?.schema === 'd570-cleanup-v1' && record.account === account && record.region === region
+    && record.head === booking.head && record.tree === booking.tree && record.upperMicroUsd === booking.upperMicroUsd
+    && isDeepStrictEqual(record.billing, booking.billing) && typeof record.eligible === 'boolean'
+    && typeof record.stackId === 'string'
+    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(record.stackId)
+    && (record.releasedAt === null || record.eligible && instant(record.releasedAt) > 0), 'private history');
+  if (record.releasedAt) {
+    const history = join(base, 'history'), info = await lstat(history);
+    check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700
+      && isDeepStrictEqual((await readdir(history)).sort(), ['setup.json'])
+      && !await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json')), 'private history');
+    await privateJson(join(history, 'setup.json'));
+    check((await readFile(join(history, 'setup.json'))).equals(await readFile(join(base, 'setup', 'setup.json'))), 'private history');
+  }
+  return record;
+}
+
 export async function removeManualFirstSetup(options) {
   const check = (value, reason = 'ec2 cleanup') => checkControl(value, reason);
   const { checkout, aws, directory, now, clock = Date.now, sleep = delay } = options;
   const setup = structuredClone(options.setup), inspection = await inspectManualOwner(options, false);
   check(setup?.account === account && setup.region === region && /^[a-f0-9]{40}$/.test(setup.head)
-    && /^[a-f0-9]{40}$/.test(setup.tree) && setup.template?.Resources);
+    && /^[a-f0-9]{40}$/.test(setup.tree) && setup.template?.Resources
+    && typeof setup.directory === 'string' && setup.directory === resolve(setup.directory));
+  const base = dirname(setup.directory), cleanupPath = join(base, 'cleanup.json'), priorCleanup = await readCleanup(base);
   async function call(service, operation, input) {
     async function unchanged() {
       const source = await checkedMain(checkout), at = clock();
@@ -1117,7 +1186,7 @@ export async function removeManualFirstSetup(options) {
     await unchanged();
     return response;
   }
-  const described = await call('cloudformation', 'describe-stacks', { StackName: setup.stackId ?? 'd570-first' });
+  const described = await call('cloudformation', 'describe-stacks', { StackName: setup.stackId ?? priorCleanup?.stackId ?? 'd570-first' });
   check(!described?.NextToken && Array.isArray(described?.Stacks) && described.Stacks.length === 1);
   const stack = described.Stacks[0], stackId = stack?.StackId;
   check(typeof stackId === 'string' && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(stackId)
@@ -1125,8 +1194,20 @@ export async function removeManualFirstSetup(options) {
     && Array.isArray(stack.Tags) && stack.Tags.filter(row => row?.Key === 'Proof' && row.Value === 'D570').length === 1
     && Date.parse(stack.CreationTime) >= instant(setup.openingBilling?.observedAt ?? setup.billing.observedAt)
     && Date.parse(stack.CreationTime) <= clock());
+  if (priorCleanup) check(priorCleanup.stackId === stackId);
+  async function waitForDeletion() {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const result = await call('cloudformation', 'describe-stacks', { StackName: stackId });
+      check(!result?.NextToken && Array.isArray(result?.Stacks) && result.Stacks.length === 1 && result.Stacks[0].StackId === stackId);
+      if (result.Stacks[0].StackStatus === 'DELETE_COMPLETE') return;
+      check(result.Stacks[0].StackStatus === 'DELETE_IN_PROGRESS', 'stack deletion status'); await sleep(15000);
+    }
+    refuse('stack deletion pending');
+  }
+  if (priorCleanup && stack.StackStatus === 'DELETE_IN_PROGRESS') { await waitForDeletion(); stack.StackStatus = 'DELETE_COMPLETE'; }
+  if (stack.StackStatus === 'ROLLBACK_IN_PROGRESS') refuse('stack cleanup status ROLLBACK_IN_PROGRESS; wait for rollback to finish');
   check(['CREATE_COMPLETE', 'CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'UPDATE_COMPLETE',
-    'DELETE_FAILED'].includes(stack.StackStatus));
+    'DELETE_FAILED'].includes(stack.StackStatus) || priorCleanup && stack.StackStatus === 'DELETE_COMPLETE', 'stack cleanup status');
   const inventory = await call('cloudformation', 'describe-stack-resources', { StackName: stackId });
   check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
   const resources = new Map();
@@ -1182,14 +1263,35 @@ export async function removeManualFirstSetup(options) {
     const empty = await call('s3api', 'list-objects-v2', { Bucket: bucket, ExpectedBucketOwner: account, Prefix: 'd570/', MaxKeys: 1000 });
     check(empty?.IsTruncated === false && !empty.NextContinuationToken && (empty.Contents ?? []).length === 0);
   }
-  await call('cloudformation', 'delete-stack', { StackName: stackId });
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const result = await call('cloudformation', 'describe-stacks', { StackName: stackId });
-    check(!result?.NextToken && Array.isArray(result?.Stacks) && result.Stacks.length === 1 && result.Stacks[0].StackId === stackId);
-    if (result.Stacks[0].StackStatus === 'DELETE_COMPLETE') return { ...inspection, stackId, directory, deleted: true };
-    check(result.Stacks[0].StackStatus === 'DELETE_IN_PROGRESS'); await sleep(15000);
+  const noRun = !await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json'))
+    && isDeepStrictEqual(retained.files, ['setup.json']);
+  const eligible = noRun && (priorCleanup?.eligible ?? ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED'].includes(stack.StackStatus));
+  const record = priorCleanup ?? { schema: 'd570-cleanup-v1', account, region, stackId, head: setup.head, tree: setup.tree,
+    billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, eligible, releasedAt: null };
+  check(!record.eligible || eligible, 'booking');
+  await replacePrivateJson(cleanupPath, record);
+  if (stack.StackStatus !== 'DELETE_COMPLETE') {
+    await call('cloudformation', 'delete-stack', { StackName: stackId });
+    await waitForDeletion();
   }
-  refuse('stack');
+  const remaining = await call('ec2', 'describe-volumes', { Filters: [
+    { Name: 'tag:Proof', Values: ['D570'] }, { Name: 'tag:Stack', Values: [stackId] }], MaxResults: 100 });
+  check(!remaining?.NextToken && Array.isArray(remaining?.Volumes) && remaining.Volumes.length === 0);
+  if (record.subnet) {
+    check(/^subnet-[a-f0-9]{17}$/.test(record.subnet));
+    const instances = await call('ec2', 'describe-instances', { Filters: [{ Name: 'subnet-id', Values: [record.subnet] }], MaxResults: 100 });
+    check(!instances?.NextToken && Array.isArray(instances?.Reservations));
+    for (const row of instances.Reservations) {
+      check(row?.OwnerId === account && Array.isArray(row.Instances));
+      for (const instance of row.Instances) check(instance?.SubnetId === record.subnet && instance.State?.Name === 'terminated');
+    }
+    const interfaces = await call('ec2', 'describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [record.subnet] }], MaxResults: 100 });
+    check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
+  }
+  const deletedAt = iso(Math.floor(clock() / 1000) * 1000);
+  await replacePrivateJson(cleanupPath, { ...record, deletedAt, releasedAt: eligible ? deletedAt : null,
+    reason: eligible ? 'failed setup removed without a run' : 'setup removed; booking retained' });
+  return { ...inspection, stackId, directory, deleted: true };
 }
 
 async function privateWrite(path, body) {
@@ -1215,7 +1317,8 @@ async function runManualCommandInContext(options) {
   check(Array.isArray(args) && ['up', 'drill', 'reconcile', 'down'].includes(args[0]));
   const [command, directory, ...flags] = args;
   check(typeof directory === 'string' && directory === resolve(directory));
-  const info = await lstat(directory), root = await realpath(checkout), base = await realpath(directory);
+  const info = await lstat(directory), root = await realpath(checkout);
+  let base = await realpath(directory);
   check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700
     && base !== root && !base.startsWith(root + '/'));
   const explanations = [];
@@ -1230,6 +1333,19 @@ async function runManualCommandInContext(options) {
   const common = { checkout, region: options.region ?? region, environment: options.environment ?? process.env, clock, sleep };
   const provider = options.aws ?? createManualAwsCli();
   const initial = await inspectManualOwner({ ...common, now: stamp(), aws: provider }, false);
+  for (;;) {
+    const cleanup = await readCleanup(base);
+    if (!cleanup?.releasedAt) break;
+    check(!await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json')), 'booking');
+    const child = join(base, 'retry');
+    if (!await exists(child)) {
+      if (command !== 'up') break;
+      try { await mkdir(child, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
+    const childInfo = await lstat(child);
+    check(childInfo.isDirectory() && childInfo.uid === process.getuid() && (childInfo.mode & 0o777) === 0o700, 'private history');
+    base = child;
+  }
   const aws = { async call(...request) {
     async function unchanged() {
       const source = await checkedMain(checkout);
