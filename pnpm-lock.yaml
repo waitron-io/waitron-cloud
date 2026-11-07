@@ -21,8 +21,8 @@ importers:
         specifier: 14.0.0
         version: 14.0.0
       '@waitron-io/ui-core':
-        specifier: 0.1.0
-        version: 0.1.0(lit@3.3.3)
+        specifier: 0.2.1
+        version: 0.2.1(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -206,8 +206,8 @@ importers:
   packages/ui-smoke:
     dependencies:
       '@waitron-io/ui-core':
-        specifier: 0.1.0
-        version: 0.1.0(lit@3.3.3)
+        specifier: 0.2.1
+        version: 0.2.1(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -820,8 +820,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@waitron-io/ui-core@0.1.0':
-    resolution: {integrity: sha512-MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.1.0/d2467965338838c9162336c791083d10d56522c9}
+  '@waitron-io/ui-core@0.2.1':
+    resolution: {integrity: sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58}
     peerDependencies:
       lit: ^3.2.0
 
@@ -1962,7 +1962,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@waitron-io/ui-core@0.1.0(lit@3.3.3)':
+  '@waitron-io/ui-core@0.2.1(lit@3.3.3)':
     dependencies:
       lit: 3.3.3
 

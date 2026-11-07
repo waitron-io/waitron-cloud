@@ -12,12 +12,12 @@ import { calculateCosts } from '../../scripts/cloud-cost/calculator.mjs';
 const root = import.meta.dirname;
 test('the pinned registry package renders and responds in a real browser', { timeout: 60000 }, async () => {
   const consumer = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-  assert.equal(consumer.dependencies['@waitron-io/ui-core'], '0.1.0', 'consumer must pin the registry version');
+  assert.equal(consumer.dependencies['@waitron-io/ui-core'], '0.2.1', 'consumer must pin the registry version');
   const manifestPath = join(dirname(fileURLToPath(import.meta.resolve('@waitron-io/ui-core'))), '../package.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   assert.equal(manifest.name, '@waitron-io/ui-core');
-  assert.equal(manifest.version, '0.1.0');
-  assert.equal(manifest.waitronSource.commit, '0a93f4d3557b669661ac8f589aad866e2cd9653f');
+  assert.equal(manifest.version, '0.2.1');
+  assert.equal(manifest.waitronSource.commit, '47dda656b641794051c64d3752937ea7f2929f51');
   assert((await realpath(manifestPath)).includes('/node_modules/.pnpm/'), 'must use an installed package');
   const output = await build({ absWorkingDir: root, entryPoints: ['src/fixture.ts'], bundle: true, format: 'esm', platform: 'browser', write: false, metafile: true });
   assert(Object.keys(output.metafile.inputs).some(path => path.includes('@waitron-io/ui-core/dist/')));

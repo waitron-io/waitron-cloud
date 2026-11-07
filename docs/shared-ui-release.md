@@ -36,8 +36,8 @@ Before merging:
 
 The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
 authenticated to the private registry and found only `0.1.0`, so it opened no
-update PR. A newer-version update covering both consumers and a private-package
-CI install remains unproved.
+update PR. The first newer-version automatic PR remains unproved. The current consumer
+update was prepared manually using the same review steps.
 
 ## Keep Cloud within seven days of a release
 
@@ -69,11 +69,12 @@ after that compatibility check, so it does not prove complete CI.
 ## Publish from Waitron
 
 Waitron owns [release preparation](https://github.com/clintongormley/waitron/blob/main/docs/developers/shared-ui-preparation.md).
-Its [publisher PR](https://github.com/clintongormley/waitron/pull/2526) adds
+Its merged [publisher PR](https://github.com/clintongormley/waitron/pull/2526) adds
 private publication on merges that change `packages/ui-core`, using
 `0.2.<workflow run number>` and recording the merged source commit in
-`waitronSource.commit`. The PR is not merged yet; the first hosted publication
-and a resulting Cloud update PR remain unproved.
+`waitronSource.commit`. The first [hosted publication](https://github.com/clintongormley/waitron/actions/runs/42376444927)
+published private version `0.2.1` from merged source
+`47dda656b641794051c64d3752937ea7f2929f51`.
 
 The package keeps Elastic License 2.0 and `LICENSE-GRANTS.md`. Cloud keeps its
 existing package access and authenticated install and image build paths.
@@ -113,7 +114,7 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.1.0` and Lit `3.3.3` in `apps/portal`,
+Cloud pins `@waitron-io/ui-core@0.2.1` and Lit `3.3.3` in `apps/portal`,
 `packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
 then run:
 
@@ -129,10 +130,15 @@ autocomplete, button interaction and light/dark tokens. Its declaration check ke
 `skipLibCheck` disabled. A local file dependency fails the version check. The normal
 `pnpm test` includes this fixture; it is test infrastructure, not an account screen.
 
-Version `0.1.0` was published by [release run 35871335561](https://github.com/waitron-io/waitron-cloud/actions/runs/35871335561)
-from Waitron `0a93f4d3557b669661ac8f589aad866e2cd9653f`. GitHub's package API confirms
-private visibility and the Cloud repository association. Local installation used the
-GitHub CLI token helper. CI must install with its own temporary package-read token.
+Version `0.2.1` records Waitron source
+`47dda656b641794051c64d3752937ea7f2929f51`. Its installed `dist/LICENSE` and
+`dist/LICENSE-GRANTS.md` match that source commit byte for byte. The source
+package's own version remains `0.1.0`; publication assigns the registry version
+without changing the source manifest. Local qualification used the GitHub CLI
+token helper, the smoke browser and declaration checks, `pnpm typecheck`, and the
+portal's four English/Spanish, light/dark accessibility cases. Screens were also
+inspected at 390 and 1280 pixels. CI must install with its own temporary
+package-read token.
 
 Use the [automatic update review steps](#review-automatic-dependency-updates)
 when Dependabot opens an upgrade PR. If you prepare an update manually, keep

@@ -9,12 +9,12 @@ Qualify a real assignment and same-source hosted retry for the implemented [ordi
 ## Keep the private shared UI release current (D579)
 
 The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-still needs its first hosted Waitron publication and a resulting Cloud dependency
-update PR. Lane F/A1412 owns [the publisher](https://github.com/clintongormley/waitron/pull/2526).
-The [first authenticated update check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
-found only `0.1.0`, so it opened no PR. Verify a newer-version update for both
-consumers and its private-package CI install. Review actual readers and update
-the smoke test’s version/source expectations without removing assertions.
+still needs a newer-version automatic dependency PR covering both consumers and
+its authenticated CI install. The first authenticated check ran before the
+new publication and opened no PR. GitHub refuses to rerun that dynamic workflow;
+use the native “Check for updates” control or the next daily check. Review the
+actual generated PR before claiming this path is qualified. Publication and the
+manual `0.2.1` consumer update are recorded in the [release guide](shared-ui-release.md).
 The package stays private; existing authenticated install and image paths remain.
 
 ## Shared storage-test seed downloads (D585)
@@ -3136,8 +3136,8 @@ implementation or production evidence.
   the failure, but CI did not record window timestamps, so its exact cause remains
   unproved. Production guards and timing policies are unchanged.
 
-- **Shared UI.** The portal uses the released shared account controls. Release the
-  shared hover fix in Waitron before removing Cloud's override, and read the first
+- **Shared UI.** The portal uses the released shared account controls. Qualify removal of Cloud's
+  duplicate hover override after this package update, and read the first
   post-split weekly mutation results; see [scope and remaining work](backlog/shared-ui.md).
 - **Identity and organisations.** Local signup, recovery, passkeys, authenticator
   controls, account sessions, pairing approval and encrypted transactional mail are
