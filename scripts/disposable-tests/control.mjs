@@ -5,9 +5,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
-import {refuseLegacy,withTemporaryState} from './manual.mjs';
-import {CITransport,protectOutputStreams} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted} from './ci-canary.mjs';
+import {refuseLegacy,withTemporaryState,withAvailableSlot} from './manual.mjs';
+import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const end=Date.now()+900000;
@@ -29,13 +29,46 @@ export async function withOrdinaryController({state,hostGeneration,api,policy,ap
  }
 }
 
+// Each child owns one slot lock and its temporary directory through guest cleanup.
+export async function automaticTick({configuration,config,api,signal,runWorker}){
+ const policy=config.ci,slots=configuredSlots(config);
+ if(await routingMode({api,policy,signal})!=='server')return {code:0,served:0};
+ assert.equal(await routingHead({api,policy,signal}),'','Automatic CI requires unrestricted same-repository routing');
+ const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+ const free=state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length;
+ const exclude=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
+ for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)exclude.add(Number(match[1]));}
+ const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)});
+ runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal});
+ const results=await Promise.allSettled(jobs.map(ci=>runWorker(ci)));
+ for(let i=0;i<results.length;i++)console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:jobs[i].runId,jobId:jobs[i].jobId,
+  ...(results[i].status==='fulfilled'?results[i].value:{code:125,error:results[i].reason.message})}));
+ return {code:0,served:jobs.length};
+}
+async function automaticJob({config,api,runId,jobId,signal}){
+ const policy=config.ci,run=await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal});
+ const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId,jobId,automatic:true,signal});
+ if(!ci)return {code:75,reason:'job-no-longer-queued'};
+ return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,()=>
+  executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport(config),signal,automatic:true,
+   fallback:options=>withKernelLock(config.state,()=>fallbackOrdinary(options),{signal:options.signal})})),{signal});
+}
+
 export async function main(args){
  const [configuration,command,...values]=args;
- assert.ok(configuration?.startsWith('/') && ['status','mode','run'].includes(command),
+ assert.ok(configuration?.startsWith('/') && ['status','mode','run','job'].includes(command),
   'Usage: control.mjs CONFIG status | mode hosted --reason REASON | mode server --reason REASON --head SHA | run LANE APPROVED_HEAD RUN_ID');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);const slots=configuredSlots(config);
  assert.equal(config.ci.workflowPath,'.github/workflows/ci.yml','Ordinary CI needs its reviewed workflow configuration');
  const api=new GithubApp(config.ci),policy=config.ci;
+ if(command==='job'){
+  assert.ok(values.length===2 && values.every(v=>/^[1-9][0-9]*$/.test(v)) && values.every(v=>Number.isSafeInteger(Number(v))),'Invalid automatic job identity');
+  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
+  for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
+  protectOutputStreams();
+  try{return await automaticJob({config,api,runId:Number(values[0]),jobId:Number(values[1]),signal:cancellation.signal});}
+  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
+ }
  if(command==='status'){
   assert.equal(values.length,0);return {code:0,mode:await routingMode({api,policy}),selectedHead:await routingHead({api,policy}),state:new LocalLeases(config.state+'/ledger',
    {hostGeneration:config.hostGeneration,slots}).inspect()};

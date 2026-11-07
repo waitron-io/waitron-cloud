@@ -129,8 +129,10 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
             assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
             const identity={repositoryId:ci.repositoryId,workflowId:ci.workflowId,workflowSha:pending.workflowSha,
               runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
-            if(pending.ordinaryStage!==undefined)
-              await fallbackOrdinary({api,policy:ci,ci:identity,leases,signal:cleanup});
+            if(pending.ordinaryStage!==undefined){
+              const outcome=await fallbackOrdinary({api,policy:ci,ci:identity,leases,automatic:slots>1,signal:cleanup});
+              if(outcome.pending)return {code:75,reason:'ci-recovery-pending'};
+            }
             else await cancelCIJob({api,repository:ci.repository,ci:identity,signal:cleanup});
             leases.clearInvocation(pending.nonce);
           }
@@ -227,6 +229,10 @@ export async function main(args) {
       console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
         resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error,
         ...(result.pending?{pending:result.pending,busy:result.busy}:{})}));
+    if(reconciling && result.code===0 && slots>1 && config.ci?.workflowPath==='.github/workflows/ci.yml'){
+      const {automaticTick}=await import('./control.mjs'),{GithubApp}=await import('./github-app.mjs');
+      await automaticTick({configuration,config,api:new GithubApp(config.ci),signal:cancellation.signal});
+    }
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:

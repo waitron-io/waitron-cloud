@@ -4,7 +4,7 @@
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
-Complete the same-source hosted retry for [ordinary pull-request typechecking](../deploy/disposable-tests/README.md#run-the-first-ci-canary). Finish the [D599 mixed-coverage and four-then-six measurements](superpowers/plans/2026-11-07-waitron-runner-capacity.md), including browser/heavy work and guest memory excluding cache; retain the shared canary probe, contributor approval and accepted public-repository limits. Automatic pickup, frozen transitive guest packages and permanent-host reproduction remain open. D570’s EC2 proof and D591’s selection work stay separate.
+Activate [automatic same-repository PR pickup](../deploy/disposable-tests/README.md#pick-up-ordinary-pr-jobs-automatically) on six slots for Waitron server, heavy and till jobs. Record real traffic and hosted fallbacks; enable UI/dashboard after an actual font-fixed run, then size ten slots from the browser working memory. Cloud admission, frozen transitive guest packages and permanent-host reproduction remain open. Retain contributor approval and the accepted public-repository limits. D570’s EC2 proof and D591’s selection work stay separate.
 
 ## Keep the private shared UI release current (D579)
 
