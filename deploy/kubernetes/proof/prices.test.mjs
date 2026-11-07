@@ -423,9 +423,9 @@ for (const [label, change] of [
   ['zero fixed bound', x => x.fixed.network.upperMicroUsd = 0],
   ['foreign fixed source', x => x.fixed.transfer.source = 'https://example.invalid/prices'],
   ['malformed fixed digest', x => x.fixed.events.digest = 'unknown'],
-  ['cap reached', x => x.fixed.contingency.upperMicroUsd = 10000000],
-  ['aggregate cap reached', x => x.fixed.contingency.upperMicroUsd = 9000000],
-  ['aggregate cap exactly ten dollars', x => x.fixed.contingency.upperMicroUsd = 8926266],
+  ['cap reached', x => x.fixed.contingency.upperMicroUsd = 20000000],
+  ['aggregate cap reached', x => x.fixed.contingency.upperMicroUsd = 19000000],
+  ['aggregate cap exactly twenty dollars', x => x.fixed.contingency.upperMicroUsd = 18926266],
 ]) test(`manual cost refuses ${label}`, async () => {
   const input = await costFixture(); change(input);
   assert.throws(() => calculate(input), /D570 price evidence refused/);
@@ -439,4 +439,9 @@ test('manual cost retains fractional charges when every category is already nonz
     logStoredByteSeconds: 92771293593600 };
   assert.deepEqual(Object.fromEntries(Object.entries(calculate(input).components).slice(0, 6).map(([key, row]) => [key, row.upperMicroUsd])),
     { compute: 97, disk: 125, storage: 822, requests: 7, lambda: 1335, logs: 541000 });
+});
+
+test('manual cost accepts a reconciled component above ten dollars below the twenty-dollar cap',async()=>{
+ const x=await costFixture();x.fixed.contingency.upperMicroUsd=10000000;
+ const result=prices.calculateManualCost(x);assert.equal(result.components.contingency.upperMicroUsd,10000000);
 });

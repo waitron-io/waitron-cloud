@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync, mkdirSync, symlinkSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { open } from 'node:fs/promises';
 
@@ -176,7 +177,7 @@ for (const [label, change] of [
   ['foreign currency', b => b.ResultsByTime[0].Total.UnblendedCost.Unit = 'EUR'],
   ['negative credit', b => b.ResultsByTime[0].Total.UnblendedCost.Amount = '-1'],
   ['nondecimal amount', b => b.ResultsByTime[0].Total.UnblendedCost.Amount = '1e-6'],
-  ['over cap', b => b.ResultsByTime[0].Total.UnblendedCost.Amount = '10'],
+  ['over cap', b => b.ResultsByTime[0].Total.UnblendedCost.Amount = '20'],
   ['duplicate period', b => b.ResultsByTime.push(structuredClone(b.ResultsByTime[0]))],
   ['grouped amount', b => b.ResultsByTime[0].Groups = [{ Keys: ['other'], Metrics: {} }]],
   ['unknown estimate flag', b => delete b.ResultsByTime[0].Estimated],
@@ -933,9 +934,9 @@ for (const [label, change] of [
   assert.deepEqual(f.calls, []); assert.equal(existsSync(f.options.directory), false);
 });
 
-test('setup booking includes the actual opening in the strict ten-dollar cap', async t => {
+test('setup booking includes the actual opening in the strict twenty-dollar cap', async t => {
   const f = setupBookingFixture(t);
-  f.options.cost.components.compute.upperMicroUsd = 8665432;
+  f.options.cost.components.compute.upperMicroUsd = 18665432;
   await assert.rejects(f.book(), /D570 controller refused/);
   assert.equal(existsSync(f.options.directory), false);
 });
@@ -1121,11 +1122,11 @@ for (const override of [{ cost: {} }, { priceInputs: {} }, { quantities: { compu
   });
 }
 
-test('first setup refuses when the actual opening plus fixed protection bound reaches ten dollars', async t => {
+test('first setup refuses when the actual opening plus fixed protection bound reaches twenty dollars', async t => {
   const f = await firstSetupFixture(t), prior = f.aws.call;
   f.aws.call = async (...args) => {
     const response = await prior(...args);
-    if (args[0] === 'ce') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.686509';
+    if (args[0] === 'ce') response.ResultsByTime[0].Total.UnblendedCost.Amount = '10.686509';
     return response;
   };
   await assert.rejects(f.bookFirst(), /D570 controller refused/);
@@ -2522,7 +2523,7 @@ for (const pending of ['volume', 'interface']) test(`owner cleanup distinguishes
   assert.deepEqual(structuredClone([...f.objects]), before);
 });
 
-for (const latency of [0, 1000]) test(`owner command drill records the original shutdown window with ${latency}ms provider latency`, async t => {
+for (const [latency, delayedConsole] of [[0, false], [1000, false], [0, true]]) test(`owner command drill records the original shutdown window with ${latency}ms provider latency${delayedConsole ? ' and console at T449' : ''}`, async t => {
   const f = await drillFixture(t), prior = f.aws.call, base = f.parent;
   writeFileSync(join(base, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
   let current = Date.parse(now), launchedAt, reservedAt, instanceReads = 0, consoleReads = 0, providerCalls = 0;
@@ -2556,7 +2557,7 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
       }
       if (operation === 'describe-instance-attribute') return { InstanceId: f.instanceId, InstanceInitiatedShutdownBehavior: { Value: 'terminate' } };
       if (operation === 'get-console-output') return { InstanceId: f.instanceId, Timestamp: new Date(current).toISOString(),
-        Output: consoleReads++ === 0 ? '' : 'D570_DEADLINE_READY ' + f.uuid + ' ' + (reservedAt + 180000) / 1000 + ' 11111111-1111-4111-8111-111111111111\n' };
+        Output: consoleReads++ === 0 || delayedConsole && current < reservedAt + 449000 ? '' : 'D570_DEADLINE_READY ' + f.uuid + ' ' + (reservedAt + 180000) / 1000 + ' 11111111-1111-4111-8111-111111111111\n' };
       return operation === 'describe-volumes' ? { Volumes: [] } : { NetworkInterfaces: [] };
     }
     return prior(service, operation, input);
@@ -2597,7 +2598,9 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
     assert.equal(statSync(join(base, name)).mode & 0o777, 0o600);
     assert.equal(JSON.parse(readFileSync(join(base, name))).reservation.uuid, f.uuid);
   }
-  assert.ok(instanceReads >= 5); assert.equal(consoleReads, 2);
+  assert.ok(instanceReads >= 5);
+  if (delayedConsole) { assert.ok(consoleReads > 2); assert.ok(current >= reservedAt + 449000); }
+  else assert.equal(consoleReads, 2);
   await assert.rejects(run());
   assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
   assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.uuid, f.uuid);
@@ -2632,16 +2635,16 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
 
 test('owner command shows the actual opening and fixed reservation headroom before a cap refusal', async t => {
   const f = await explainedOpeningFixture(t), prior = f.aws.call;
-  f.groups[0].Metrics.UnblendedCost.Amount = '1';
+  f.groups[0].Metrics.UnblendedCost.Amount = '11';
   f.aws.call = async (...args) => {
     const response = await prior(...args);
-    if (args[0] === 'ce' && !args[2].GroupBy) response.ResultsByTime[0].Total.UnblendedCost.Amount = '1';
+    if (args[0] === 'ce' && !args[2].GroupBy) response.ResultsByTime[0].Total.UnblendedCost.Amount = '11';
     return response;
   };
   await assert.rejects(ownerCommand(f, ['up', f.parent, '--explain', 'Amazon Simple Storage Service',
-    'EUN1-TimedStorage-ByteHrs', '1000000', 'Existing synthetic staging backup']), error => {
+    'EUN1-TimedStorage-ByteHrs', '11000000', 'Existing synthetic staging backup']), error => {
     assert.equal(error.message, 'D570 opening and reservation reach the monthly cap');
-    assert.equal(error.opening.billing.microUsd, 1000000);
+    assert.equal(error.opening.billing.microUsd, 11000000);
     assert.equal(error.opening.estimateMicroUsd, 9313491);
     assert.equal(error.opening.headroomMicroUsd, -313491);
     return true;
@@ -3046,7 +3049,7 @@ test('failed setup release remains readable when the real clock includes millise
   assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
 });
 
-for (const amount of ['0.686509', '0.686510']) test(`failed setup retry refuses a fresh opening of ${amount} at or above the monthly cap`, async t => {
+for (const amount of ['10.686509', '10.686510']) test(`failed setup retry refuses a fresh opening of ${amount} at or above the monthly cap`, async t => {
   const f = await failedOwnerSetupFixture(t); await ownerCommand(f, ['down', f.parent]);
   const prior = f.aws.call, serviceName = 'Amazon Simple Storage Service', usageType = 'EUN1-TimedStorage-ByteHrs';
   f.aws.call = async (service, operation, input) => {
@@ -3133,4 +3136,142 @@ test('pending failed removal refuses new initialization evidence before requesti
   await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: booking/);
   assert.equal(f.deletions(), 0);
   assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
+});
+
+async function lateConsoleFixture(t){
+ const f=await guestCleanupFixture(t);
+ const stamp=seconds=>new Date(Date.parse(now)+seconds*1000).toISOString().replace('.000Z','Z');
+ f.p.health.startedAt=stamp(420);f.p.health.completedAt=stamp(421);
+ f.p.responses['s3api/get-object'].Body=Buffer.from(JSON.stringify(f.p.health));
+ f.p.responses['s3api/get-object'].LastModified=stamp(421);
+ f.consoleOutput.Timestamp=stamp(449);
+ f.consoleOutput.Output=`[    6.388599] cloud-init[2735]: D570_DEADLINE_READY ${f.uuid} 1793966580 11111111-1111-4111-8111-111111111111\n`;
+ const shutdownObservation={runningRequestedAt:stamp(170),runningReceivedAt:stamp(170),terminatedReceivedAt:stamp(180),stateReason:{Code:'Client.InstanceInitiatedShutdown'}};
+ const options={...f.options,launch:f.launch,capture:f.ready,shutdownObservation,now:stamp(450),clock:()=>Date.parse(stamp(450))};
+ return {...f,stamp,lateOptions:options,late:changes=>control.inspectManualFirstGuest({...options,...changes})};
+}
+test('late console accepts the observed T449 record at T450 after independently bounded OS shutdown',async t=>{
+ const f=await lateConsoleFixture(t),before=structuredClone([...f.objects]);
+ const ready=await f.late();assert.equal(ready.bootId,'11111111-1111-4111-8111-111111111111');
+ assert.equal(ready.observedAt,f.stamp(450));assert.deepEqual(ready.shutdownObservation,f.lateOptions.shutdownObservation);
+ const cleaned=await f.cleanup({...f.lateOptions,ready});
+ assert.equal(cleaned.terminated,true);assert.equal(cleaned.volumesAbsent,true);assert.equal(cleaned.interfacesAbsent,true);
+ assert.deepEqual(structuredClone([...f.objects]),before);
+});
+for(const [label,change] of [
+ ['missing shutdown',f=>({shutdownObservation:undefined})],
+ ['no T170 running',f=>({shutdownObservation:{...f.lateOptions.shutdownObservation,runningRequestedAt:f.stamp(169)}})],
+ ['OS receipt at T300',f=>({shutdownObservation:{...f.lateOptions.shutdownObservation,terminatedReceivedAt:f.stamp(300)}})],
+ ['read at collection end',f=>({now:f.stamp(480),clock:()=>Date.parse(f.stamp(480))})],
+ ['API shutdown',f=>({shutdownObservation:{...f.lateOptions.shutdownObservation,stateReason:{Code:'Client.UserInitiatedShutdown'}}})],
+ ['missing captured disk',f=>({capture:{...f.ready,volumeIds:[]}})],
+])test(`late console refuses ${label} without changing the booking`,async t=>{
+ const f=await lateConsoleFixture(t),before=structuredClone([...f.objects]);
+ await assert.rejects(f.late(change(f)),/D570 controller refused/);assert.deepEqual(structuredClone([...f.objects]),before);
+});
+test('late console capture retains live deletion identities without requiring a console reply',async t=>{
+ const f=await readyGuestFixture(t);f.consoleOutput.Output='';
+ assert.equal(typeof control.captureManualFirstResources,'function');
+ const capture=await control.captureManualFirstResources(f.options);
+ assert.deepEqual(capture.volumeIds,['vol-0123456789abcdef0']);assert.deepEqual(capture.interfaceIds,['eni-0123456789abcdef0']);
+ assert.equal(Object.hasOwn(capture,'bootId'),false);assert.equal(f.calls.some(r=>r.operation==='get-console-output'),false);
+});
+
+async function launchedRetryFixture(t){
+ const f=await removalFixture(t),base=realpathSync(dirname(f.setup.directory)),oldStack=f.setup.stackId;
+ await f.remove();
+ mkdirSync(join(base,'history'),{mode:0o700});
+ for(const name of (await import('node:fs')).readdirSync(f.directory))writeFileSync(join(base,'history',name),readFileSync(join(f.directory,name)),{mode:0o600});
+ writeFileSync(join(base,'initialized.json'),JSON.stringify(f.setup),{mode:0o600});
+ writeFileSync(join(base,'launch.json'),JSON.stringify(f.launch),{mode:0o600});
+ const original=new Map(['initialized.json','launch.json','setup/setup.json',...['setup.json','active.json','2026-11.json','2026-12.json'].map(n=>'history/'+n)].map(n=>[n,readFileSync(join(base,n))]));
+ let current=f.options.clock()+60000,newStack=false;const prior=f.aws.call;
+ const stamp=()=>new Date(current).toISOString().replace('.000Z','Z');
+ const files={instance:join(base,'retained-instance.json'),console:join(base,'retained-console.json')};
+ writeFileSync(files.instance,JSON.stringify(f.instances),{mode:0o600});writeFileSync(files.console,JSON.stringify(f.consoleOutput),{mode:0o600});
+ const flags=()=>['--retained-evidence',files.instance,createHash('sha256').update(readFileSync(files.instance)).digest('hex'),files.console,createHash('sha256').update(readFileSync(files.console)).digest('hex')];
+ f.aws.call=async(service,operation,input)=>{
+  if(operation==='describe-stacks'&&input.StackName===oldStack)return {Stacks:[{StackId:oldStack,StackStatus:'DELETE_COMPLETE',Tags:[{Key:'Proof',Value:'D570'}],CreationTime:now}]};
+  if(operation==='describe-stack-resources'&&input.StackName===oldStack)return {StackResources:f.p.resource.map(row=>({...row,ResourceStatus:'DELETE_COMPLETE'}))};
+  if(operation==='create-stack'){
+   newStack=true;f.p.stackId=oldStack.slice(0,-1)+'1';
+   f.p.responses['events/describe-rule'].State='ENABLED';
+   f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackId=f.p.stackId;
+   f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackStatus='CREATE_COMPLETE';
+   f.p.responses['cloudformation/describe-stacks'].Stacks[0].CreationTime=stamp();
+   for(const row of f.p.resource)row.StackId=f.p.stackId;
+   f.p.health.stackId=f.p.stackId;f.p.health.startedAt=stamp();f.p.health.completedAt=stamp();
+   f.p.responses['s3api/get-object'].Body=Buffer.from(JSON.stringify(f.p.health));f.p.responses['s3api/get-object'].LastModified=stamp();
+  }
+  if(newStack&&operation==='put-object'){
+   const old=f.objects.get(input.Key);if(old)assert.equal(input.IfMatch,old.etag);else assert.equal(input.IfNoneMatch,'*');
+   const etag='"retry-'+f.writes.length+'"';f.objects.set(input.Key,{body:Buffer.from(input.Body),etag});f.writes.push(input.Key);f.calls.push({service,operation,input});return {ETag:etag};
+  }
+  if(newStack&&operation==='describe-stacks'&&input.StackName===f.p.stackId)return structuredClone(f.p.responses['cloudformation/describe-stacks']);
+  return prior(service,operation,input);
+ };
+ const command=(name,extra=[])=>ownerCommand(f,[name,base,...extra],{clock:()=>current,sleep:async ms=>{current+=ms;}});
+ return {...f,base,oldStack,files,flags,original,stamp,command,advance:ms=>{current+=ms;}};
+}
+test('launched retry qualifies the already-deleted attempt from hash-bound reads and retains its full prior booking',async t=>{
+ const f=await launchedRetryFixture(t),recordPath=join(f.base,'setup-removal.json'),before=JSON.parse(readFileSync(recordPath));
+ await f.command('down',f.flags());const qualified=JSON.parse(readFileSync(recordPath));
+ assert.equal(qualified.eligible,false);assert.equal(qualified.releasedAt,null);assert.equal(qualified.deletedAt,before.deletedAt);assert.equal(qualified.reason,before.reason);
+ assert.equal(qualified.retryAt,f.stamp());
+ for(const [name,bytes]of f.original)assert.equal(readFileSync(join(f.base,name)).equals(bytes),true,name);
+ f.advance(1000);await f.command('down',f.flags());assert.equal(JSON.parse(readFileSync(recordPath)).retryAt,qualified.retryAt);
+ const child=await f.command('up');assert.equal(child.directory,join(f.base,'retry','setup'));assert.notEqual(child.stackId,f.oldStack);
+ const active=JSON.parse(f.objects.get('d570/ledger/active.json').body);
+ assert.equal(active.monthHeads['2026-11']!==undefined,true);
+ assert.equal(child.runEvidence.openings['2026-11'].overheadMicroUsd,18320296);
+ assert.equal(child.runEvidence.openings['2026-12'].overheadMicroUsd,18320296);
+ assert.equal(f.calls.filter(row=>row.operation==='run-instances').length,0);
+ for(const [name,bytes]of f.original)assert.equal(readFileSync(join(f.base,name)).equals(bytes),true,name);
+});
+for(const [label,edit]of [
+ ['wrong hash',(f,flags)=>{flags[2]='0'.repeat(64);}],
+ ['public file',(f)=>chmodSync(f.files.instance,0o644)],
+ ['foreign token',(f)=>{const body=JSON.parse(readFileSync(f.files.instance));body.Reservations[0].Instances[0].ClientToken='00000000-0000-4000-8000-000000000002';writeFileSync(f.files.instance,JSON.stringify(body));}],
+ ['API termination',(f)=>{const body=JSON.parse(readFileSync(f.files.instance));body.Reservations[0].Instances[0].StateReason.Code='Client.UserInitiatedShutdown';writeFileSync(f.files.instance,JSON.stringify(body));}],
+ ['wrong console instance',(f)=>{const body=JSON.parse(readFileSync(f.files.console));body.InstanceId='i-00000000000000000';writeFileSync(f.files.console,JSON.stringify(body));}],
+ ['changed history',(f)=>{const path=join(f.base,'history','2026-11.json'),body=JSON.parse(readFileSync(path));body.entries[0].upperMicroUsd++;writeFileSync(path,JSON.stringify(body));}],
+ ['missing history',(f)=>rmSync(join(f.base,'history','active.json'))],
+])test(`launched retry refuses ${label} before qualifying or creating another stack`,async t=>{
+ const f=await launchedRetryFixture(t);let flags=f.flags();edit(f,flags);if(label!=='wrong hash')flags=f.flags();
+ await assert.rejects(f.command('down',flags),/D570 controller refused|D570 budget refused/);
+ assert.equal(existsSync(join(f.base,'retry')),false);assert.equal(JSON.parse(readFileSync(join(f.base,'setup-removal.json'))).retryAt,undefined);
+ assert.equal(f.calls.filter(row=>row.operation==='run-instances').length,0);
+});
+
+test('late console needs no terminated-instance attribute read after the live capture',async t=>{
+ const f=await lateConsoleFixture(t),prior=f.aws.call;
+ f.aws.call=async(...args)=>{if(args[1]==='describe-instance-attribute')throw new Error('synthetic terminated attribute unavailable');return prior(...args);};
+ assert.equal((await f.late()).bootId,'11111111-1111-4111-8111-111111111111');
+});
+for(const command of ['up','drill','reconcile'])test(`retained evidence flags refuse on ${command} before any provider call`,async t=>{
+ const f=fixture(t),base=mkdtempSync(join(tmpdir(),'d570-flags-'));chmodSync(base,0o700);t.after(()=>rmSync(base,{recursive:true,force:true}));
+ await assert.rejects(control.runManualCommand({checkout:f.root,aws:f.aws,args:[command,base,'--retained-evidence','/private/a','a'.repeat(64),'/private/b','b'.repeat(64)]}),/D570 controller refused/);
+ assert.deepEqual(f.calls,[]);
+});
+
+for(const month of ['2026-11','2026-12'])test(`setup booking includes launched ancestors in the strict ${month} cap`,async t=>{
+ const f=setupBookingFixture(t);
+ await assert.rejects(f.book({priorBookings:{[month]:20000000}}),/D570 controller refused: booking/);
+ assert.equal(existsSync(f.options.directory),false);
+ assert.equal(f.calls.some(row=>row.operation==='create-stack'),false);
+});
+test('first removal refuses a captured untagged disk before deleting the stack',async t=>{
+ const f=await removalFixture(t),base=dirname(f.setup.directory),prior=f.aws.call;
+ writeFileSync(join(base,'launch.json'),JSON.stringify({...f.launch,capture:{volumeIds:f.ready.volumeIds,interfaceIds:f.ready.interfaceIds,observedAt:f.ready.observedAt}}),{mode:0o600});
+ f.aws.call=async(...args)=>args[1]==='describe-volumes'&&args[2].Filters?.[0].Name==='volume-id'?{Volumes:[{VolumeId:f.ready.volumeIds[0]}]}:prior(...args);
+ await assert.rejects(f.remove(),/D570 controller refused/);
+ assert.equal(f.calls.some(row=>row.operation==='delete-stack'),false);
+});
+
+test('launched retry reuses the checked cleanup instance after EC2 forgets it',async t=>{
+ const f=await launchedRetryFixture(t),prior=f.aws.call;
+ writeFileSync(join(f.base,'cleanup.json'),JSON.stringify({...f.ready,instanceObservation:f.instances,terminated:true,volumesAbsent:true,interfacesAbsent:true,stateReason:{Code:'Client.InstanceInitiatedShutdown'}}),{mode:0o600});
+ f.aws.call=async(...args)=>{if(args[1]==='describe-instances'&&args[2].InstanceIds)throw new Error('synthetic terminated instance expired');return prior(...args);};
+ await f.command('down');assert.equal(JSON.parse(readFileSync(join(f.base,'setup-removal.json'))).retryAt,f.stamp());
+ assert.equal(f.calls.some(row=>row.operation==='run-instances'),false);
 });

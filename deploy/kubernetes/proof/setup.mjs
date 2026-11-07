@@ -20,6 +20,7 @@ export function renderSetup({ account, region, repository, oidcProviderArn, imag
   if (typeof s3PrefixListId !== 'string' || !/^pl-[0-9a-f]{8,17}$/.test(s3PrefixListId)) throw new Error('Invalid S3 prefix identity');
   const subject = `repo:${repository.fullName}:environment:${policy.environment}`;
   const substitutions = {
+    D570_MONTHLY_CAP_USD: String(policy.monthlyCapUsd),
     D570_S3_PREFIX_LIST: s3PrefixListId, D570_OIDC_ARN: oidcProviderArn ?? '',
     D570_REPO_ID: String(repository.id), D570_OWNER_ID: String(repository.ownerId), D570_SUBJECT: subject,
   };

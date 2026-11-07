@@ -134,8 +134,8 @@ for (const [label, mutate] of [
   assert.equal(store.writes.length, writes);
 });
 
-test('an exact ten-dollar month refuses and never books another run', async () => {
-  const proof = evidence(); proof.openings['2026-11'].baselineMicroUsd = 8800000;
+test('an exact twenty-dollar month refuses and never books another run', async () => {
+  const proof = evidence(); proof.openings['2026-11'].baselineMicroUsd = 18800000;
   const store = await fresh({ evidence: proof });
   await assert.rejects(reserve(store, identity(), proof), /budget/i);
   assert.equal(store.body('d570/ledger/active.json').active, null);
@@ -495,7 +495,7 @@ test('the first booking in an unseen month is create-only and contains the full 
 
 test('a new month at the cap refuses without taking partial active ownership', async () => {
   const initial = evidence(); delete initial.openings['2026-12']; const store = await fresh({ evidence: initial });
-  const proof = evidence(); proof.openings['2026-12'].baselineMicroUsd = 8800000;
+  const proof = evidence(); proof.openings['2026-12'].baselineMicroUsd = 18800000;
   await assert.rejects(reserve(store, identity(), proof), /budget/i); assert.equal(store.body('d570/ledger/active.json').active, null);
 });
 
@@ -574,7 +574,7 @@ test('budget inspection compares current billing with the original opening and e
 });
 
 for (const [label, amount] of [['unknown', undefined], ['negative', -1], ['fractional', 0.5],
-  ['nonfinite', Infinity], ['over cap', 10000000], ['unexplained', 1200001]]) {
+  ['nonfinite', Infinity], ['over cap', 20000000], ['unexplained', 1200001]]) {
   test(`budget inspection refuses ${label} billing without a write`, async () => {
     const store = await fresh(); await reserve(store);
     assert.equal(typeof budget.inspectBudget, 'function', 'missing retained-history budget inspection');
@@ -626,4 +626,12 @@ test('budget inspection notices a controller changing ownership while reading mo
     return row;
   };
   await assert.rejects(inspectBudget(store, 0), /budget/i);
+});
+
+test('the approved twenty-dollar limit permits a reconciled opening above ten dollars',async()=>{
+ const proof=evidence();proof.openings['2026-11'].baselineMicroUsd=11000000;
+ const store=await fresh({evidence:proof});const result=await reserve(store,identity(),proof);
+ assert.equal(result.upperMicroUsd,1000000);
+ assert.equal(store.body('d570/ledger/2026-11.json').opening.baselineMicroUsd,11000000);
+ assert.equal(store.body('d570/ledger/2026-11.json').entries.length,1);
 });

@@ -58,7 +58,7 @@ test('outputs supply runtime identities and numeric launch version without paste
   assert.equal(t.Outputs.RepositoryId.Value, '1381507078');
   assert.equal(t.Outputs.RepositoryOwnerId.Value, '332029685');
   assert.equal(t.Outputs.Subject.Value, 'repo:waitron-io/waitron-cloud:environment:kubernetes-proof-staging');
-  assert.equal(t.Outputs.MonthlyCapUsd.Value, '10');
+  assert.equal(t.Outputs.MonthlyCapUsd.Value, '20');
   assert.equal(t.Outputs.AccessExpiry.Value, '2027-02-28T23:59:00Z');
 });
 
@@ -518,4 +518,11 @@ test('manual setup still refuses a foreign account, region or image and expired 
     { image: { ...inputs().image, OwnerId: '000000000000' } },
     { now: '2027-02-28T23:59:00Z' },
   ]) assert.throws(() => renderManual({ ...inputs(), ...change }), /scope|image|authority/i);
+});
+
+test('the rendered monthly cap and runtime budget share the owner policy',async()=>{
+ const budget=await import('../../../scripts/kubernetes-proof-budget.mjs');
+ const policy=JSON.parse(readFileSync(new URL('./policy.json',import.meta.url)));
+ assert.equal(budget.MONTHLY_CAP_MICRO_USD,20000000);
+ assert.equal(budget.MONTHLY_CAP_MICRO_USD,policy.monthlyCapUsd*1000000);
 });

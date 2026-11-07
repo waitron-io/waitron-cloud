@@ -10,7 +10,7 @@ import { promisify, isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
-import { inspectBudget, initializeLedger, reserveRun, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
+import { MONTHLY_CAP_MICRO_USD, inspectBudget, initializeLedger, reserveRun, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
 import { calculateManualCost, acquirePriceCatalogue } from '../deploy/kubernetes/proof/prices.mjs';
 import { renderDeadlineBootstrap } from '../deploy/kubernetes/proof/bootstrap.mjs';
 
@@ -207,7 +207,7 @@ function billingObservation(response, period, now) {
   const [whole, fraction = ''] = total.Amount.split('.');
   const nanos = BigInt(whole + fraction.padEnd(10, '0'));
   const microUsd = Number((nanos + 9999n) / 10000n);
-  check(Number.isSafeInteger(microUsd) && microUsd < 10_000_000);
+  check(Number.isSafeInteger(microUsd) && microUsd < MONTHLY_CAP_MICRO_USD);
   // Current-month estimates do not establish reconciled billing or release cost ownership.
   return { observedAt: now, period, microUsd, estimated: row.Estimated };
 }
@@ -280,7 +280,7 @@ export async function inspectManualOpening(options) {
   const seen = new Set(), matched = [];
   for (const explanation of explanations) {
     if (!explanation || Object.keys(explanation).sort().join(',') !== 'maxMicroUsd,reason,service,usageType'
-      || !Number.isSafeInteger(explanation.maxMicroUsd) || explanation.maxMicroUsd < 0 || explanation.maxMicroUsd >= 10_000_000
+      || !Number.isSafeInteger(explanation.maxMicroUsd) || explanation.maxMicroUsd < 0 || explanation.maxMicroUsd >= MONTHLY_CAP_MICRO_USD
       || typeof explanation.reason !== 'string' || explanation.reason.trim().length === 0 || explanation.reason.length > 1000) refuseOpening();
     const key = JSON.stringify([explanation.service, explanation.usageType]);
     const row = items.find(item => item.service === explanation.service && item.usageType === explanation.usageType);
@@ -467,14 +467,14 @@ export async function bookManualSetup(options) {
     check(source.protocol === 'https:' && ['pricing.us-east-1.amazonaws.com', 'aws.amazon.com'].includes(source.hostname)
       && !source.username && !source.password && !source.port && !source.search && !source.hash);
     upperMicroUsd += item.upperMicroUsd;
-    check(Number.isSafeInteger(upperMicroUsd) && upperMicroUsd < 10_000_000);
+    check(Number.isSafeInteger(upperMicroUsd) && upperMicroUsd < MONTHLY_CAP_MICRO_USD);
   }
   check(typeof directory === 'string' && directory === resolve(directory));
   const parent = await lstat(dirname(directory));
   check(parent.isDirectory() && (parent.mode & 0o777) === 0o700 && parent.uid === process.getuid());
   const inspection = await inspectManualSetup(options);
   if (options.expectedOpening) check(isDeepStrictEqual(inspection.billing, options.expectedOpening));
-  check(inspection.billing.microUsd + upperMicroUsd < 10_000_000);
+  manualSetupBound(options, inspection.billing.microUsd, upperMicroUsd);
   // Keep even incomplete bookings: an uncertain write must never erase setup's reserved cost.
   await mkdir(directory, { mode: 0o700 });
   const file = await open(join(directory, 'setup.json'), 'wx', 0o600);
@@ -598,6 +598,7 @@ export async function createManualFirstSetup(options) {
       const protection = await inspectManualProtection({ ...options, stackId });
       await unchanged();
       check(protection.billing.microUsd <= booking.billing.microUsd + booking.upperMicroUsd);
+      manualSetupBound(options, protection.billing.microUsd, booking.upperMicroUsd);
       return { ...booking, ...protection, openingBilling: booking.billing };
     } catch (error) {
       if (error.name !== 'NoSuchKey' || error.$metadata?.httpStatusCode !== 404) throw error;
@@ -636,9 +637,8 @@ export async function initializeManualFirstSetup(options) {
   while (cursor.getTime() <= until) {
     const month = cursor.toISOString().slice(0, 7);
     const baselineMicroUsd = month === now.slice(0, 7) ? setup.openingBilling.microUsd : 0;
-    openings[month] = { baselineMicroUsd, overheadMicroUsd: setup.upperMicroUsd - runMicroUsd,
-      digest: createHash('sha256').update(JSON.stringify({ month, baselineMicroUsd, billing: setup.openingBilling,
-        cost: setup.cost, openingExplanations: setup.openingExplanations })).digest('hex') };
+    openings[month] = { baselineMicroUsd, overheadMicroUsd: setup.upperMicroUsd - runMicroUsd + priorBooked(options, month),
+      digest: manualOpeningDigest(setup, month, baselineMicroUsd, options) };
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
   // This reconciles the first opening to its retained booking, never the eventual final bill.
@@ -717,11 +717,47 @@ export async function launchManualFirstDrill(options) {
   return { ...inspection, reservation, guestExpiry, instanceId: instance.InstanceId, subnetId, groupId, templateId };
 }
 
-export async function inspectManualFirstGuest(options) {
+function manualReadyBoot(output, reservation, guestExpiry) {
+  const check = value => checkControl(value, 'ec2 observation');
+  check(typeof output === 'string' && Buffer.byteLength(output) <= 1024 * 1024);
+  const prefix = `D570_DEADLINE_READY ${reservation.uuid} ${instant(guestExpiry) / 1000} `;
+  const lines = output.split(/\r?\n/).map(line => line.replace(/^\[[ \t]*\d+(?:\.\d+)?\][ \t]+cloud-init\[\d+\]:[ \t]+/, ''))
+    .filter(line => line.startsWith('D570_DEADLINE_READY '));
+  check(lines.every(line => line.startsWith(prefix)));
+  const boots = new Set(lines.map(line => line.slice(prefix.length)));
+  if (!boots.size) pending('D570_NOT_READY', 'readiness pending');
+  check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
+  return [...boots][0];
+}
+function manualCapture(launch, capture) {
+  const check = value => checkControl(value, 'ec2 observation');
+  check(launch && capture && ['account','region','stackId','head','tree','bucket','instanceId','subnetId','groupId','templateId']
+    .every(key => launch[key] === capture[key]) && isDeepStrictEqual(launch.reservation, capture.reservation)
+    && launch.guestExpiry === capture.guestExpiry
+    && instant(capture.observedAt) >= instant(launch.reservation.startedAt) && instant(capture.observedAt) < instant(launch.guestExpiry)
+    && Array.isArray(capture.volumeIds) && capture.volumeIds.length === 1 && /^vol-[a-f0-9]{17}$/.test(capture.volumeIds[0])
+    && Array.isArray(capture.interfaceIds) && capture.interfaceIds.length === 1 && /^eni-[a-f0-9]{17}$/.test(capture.interfaceIds[0]));
+}
+function manualCollectionEnd(launch, capture, observation) {
+  manualCapture(launch, capture);
+  const check = value => checkControl(value, 'ec2 observation');
+  check(observation?.stateReason?.Code === 'Client.InstanceInitiatedShutdown');
+  const requested = instant(observation.runningRequestedAt), received = instant(observation.runningReceivedAt), ended = instant(observation.terminatedReceivedAt);
+  check(requested >= instant(launch.reservation.startedAt) + 170_000 && received >= requested && ended >= received
+    && ended < instant(launch.reservation.expiry));
+  return ended + 300_000;
+}
+export async function captureManualFirstResources(options) { return inspectManualGuest(options, true); }
+export async function inspectManualFirstGuest(options) { return inspectManualGuest(options, false); }
+
+async function inspectManualGuest(options, captureOnly) {
   const check = (value, reason = 'ec2 observation') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now } = options, launch = structuredClone(options.launch);
   const inspection = await inspectManualBudget({ ...options, stackId: launch?.stackId, store: undefined });
   const reservation = launch.reservation;
+  const late = !!(options.capture && options.shutdownObservation);
+  check(!captureOnly || !late);
+  const deadline = late ? manualCollectionEnd(launch, options.capture, options.shutdownObservation) : instant(launch.guestExpiry);
   check(launch.account === account && launch.region === region && launch.head === inspection.head && launch.tree === inspection.tree
     && launch.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
     && reservation.head === inspection.head && reservation.tree === inspection.tree
@@ -732,7 +768,8 @@ export async function inspectManualFirstGuest(options) {
     const before = clock(), source = await checkedMain(checkout), after = clock();
     check(source.head === inspection.head && source.tree === inspection.tree
       && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
-      && after < instant(launch.guestExpiry) && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+      && after < deadline && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
     return after;
   }
   async function call(operation, input) {
@@ -756,6 +793,10 @@ export async function inspectManualFirstGuest(options) {
       const matches = instance.Tags.filter(tag => tag?.Key === key);
       return matches.length === 1 && matches[0].Value === value;
     }));
+    if (late) {
+      check(instance.State?.Name === 'terminated' && instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown');
+      return { volumeIds: [...options.capture.volumeIds], interfaceIds: [...options.capture.interfaceIds] };
+    }
     if (instance.State?.Name === 'pending') pending('D570_NOT_READY', 'readiness pending');
     check(instance.State?.Name === 'running');
     check(Array.isArray(instance.BlockDeviceMappings) && instance.BlockDeviceMappings.length === 1
@@ -774,9 +815,16 @@ export async function inspectManualFirstGuest(options) {
     return { volumeIds: [disk.Ebs.VolumeId], interfaceIds: [network.NetworkInterfaceId] };
   }
   const resources = await liveResources();
-  const shutdown = await call('describe-instance-attribute', { InstanceId: launch.instanceId, Attribute: 'instanceInitiatedShutdownBehavior' });
-  check(shutdown?.InstanceId === launch.instanceId && shutdown.InstanceInitiatedShutdownBehavior?.Value === 'terminate');
-  // The CLI decodes console bytes; a line seen only after termination cannot establish live readiness.
+  if (!late) {
+    const shutdown = await call('describe-instance-attribute', { InstanceId: launch.instanceId, Attribute: 'instanceInitiatedShutdownBehavior' });
+    check(shutdown?.InstanceId === launch.instanceId && shutdown.InstanceInitiatedShutdownBehavior?.Value === 'terminate');
+  }
+  if (captureOnly) {
+    check(isDeepStrictEqual(await liveResources(), resources));
+    return { ...launch, ...inspection, ...resources, observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
+  }
+  // Buffered readiness is accepted only with independent live capture and bounded OS shutdown.
+
   const consoleOutput = await call('get-console-output', { InstanceId: launch.instanceId, Latest: true });
   const timestamp = Date.parse(consoleOutput?.Timestamp);
   check(consoleOutput?.InstanceId === launch.instanceId);
@@ -784,25 +832,19 @@ export async function inspectManualFirstGuest(options) {
   check(Number.isFinite(timestamp)
     && timestamp >= instant(reservation.startedAt) && timestamp <= clock()
     && typeof consoleOutput.Output === 'string' && Buffer.byteLength(consoleOutput.Output) <= 1024 * 1024);
-  const prefix = `D570_DEADLINE_READY ${reservation.uuid} ${instant(launch.guestExpiry) / 1000} `;
-  // Cloud-init can wrap the guest's exact token sequence in its console envelope.
-  const lines = consoleOutput.Output.split(/\r?\n/)
-    .map(line => line.replace(/^\[[ \t]*\d+(?:\.\d+)?\][ \t]+cloud-init\[\d+\]:[ \t]+/, ''))
-    .filter(line => line.startsWith('D570_DEADLINE_READY '));
-  check(lines.every(line => line.startsWith(prefix)));
-  const boots = new Set(lines.map(line => line.slice(prefix.length)));
-  if (boots.size === 0) pending('D570_NOT_READY', 'readiness pending');
-  check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
+  const bootId = manualReadyBoot(consoleOutput.Output, reservation, launch.guestExpiry);
   check(isDeepStrictEqual(await liveResources(), resources));
-  return { ...launch, ...inspection, ...resources, bootId: [...boots][0], consoleOutput,
+  return { ...launch, ...inspection, ...resources, bootId, consoleOutput,
+    ...(late ? { capture: options.capture, shutdownObservation: options.shutdownObservation } : {}),
     observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
 }
 
 export async function observeManualFirstShutdown(options) {
   const check = (value, reason = 'ec2 observation') => checkControl(value, reason);
-  const { checkout, aws, now, clock = Date.now, sleep = delay } = options, ready = structuredClone(options.ready);
+  const { checkout, aws, now, clock = Date.now, sleep = delay } = options, ready = structuredClone(options.ready ?? options.capture);
   const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
   const reservation = ready.reservation;
+  if (options.capture && !options.ready) manualCapture(options.launch, ready);
   check(ready.account === account && ready.region === region && ready.head === inspection.head && ready.tree === inspection.tree
     && ready.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
     && reservation.head === inspection.head && reservation.tree === inspection.tree
@@ -867,10 +909,12 @@ export async function inspectManualFirstGuestCleanup(options) {
   const { checkout, aws, now, clock = Date.now } = options, ready = structuredClone(options.ready);
   const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
   const reservation = ready.reservation;
+  const readinessEnd = ready.capture && ready.shutdownObservation
+    ? manualCollectionEnd(ready, ready.capture, ready.shutdownObservation) : instant(ready.guestExpiry);
   check(ready.account === account && ready.region === region && ready.head === inspection.head && ready.tree === inspection.tree
     && ready.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
     && reservation.head === inspection.head && reservation.tree === inspection.tree
-    && instant(reservation.startedAt) <= instant(ready.observedAt) && instant(ready.observedAt) < instant(ready.guestExpiry)
+    && instant(reservation.startedAt) <= instant(ready.observedAt) && instant(ready.observedAt) < readinessEnd
     && instant(ready.guestExpiry) === instant(reservation.startedAt) + 180_000
     && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
     && instant(ready.observedAt) <= instant(now)
@@ -919,7 +963,7 @@ export async function inspectManualFirstGuestCleanup(options) {
     pending('D570_CLEANUP_PENDING', 'cleanup pending');
   }
   // An OS actor and absent resources do not establish when the guest stopped or reconcile its bill.
-  return { ...ready, ...inspection, stateReason: instance.StateReason, terminated: true, volumesAbsent: true, interfacesAbsent: true,
+  return { ...ready, ...inspection, instanceObservation: response, stateReason: instance.StateReason, terminated: true, volumesAbsent: true, interfacesAbsent: true,
     observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
 }
 
@@ -935,7 +979,7 @@ export async function inspectManualFirstBilling(options) {
     && launch.head === setup.head && launch.tree === setup.tree
     && reservation?.uuid === inspection.budget.activeUuid
     && instant(reservation.startedAt) <= instant(now) && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
-    && setup.upperMicroUsd === inspection.budget.overheadMicroUsd + inspection.budget.bookedMicroUsd);
+    && setup.upperMicroUsd + priorBooked(options, now.slice(0, 7)) === inspection.budget.overheadMicroUsd + inspection.budget.bookedMicroUsd);
   async function unchanged() {
     const before = clock(), source = await checkedMain(checkout), after = clock();
     check(source.head === inspection.head && source.tree === inspection.tree
@@ -959,9 +1003,7 @@ export async function inspectManualFirstBilling(options) {
     && isDeepStrictEqual(retained.months, reservation.months));
   const openingMonth = setup.openingBilling?.period?.Start?.slice(0, 7);
   const baselineMicroUsd = setup.openingBilling?.microUsd;
-  check(retained.evidence.openings[openingMonth]?.digest === createHash('sha256').update(JSON.stringify({
-    month: openingMonth, baselineMicroUsd, billing: setup.openingBilling, cost: setup.cost,
-    openingExplanations: setup.openingExplanations })).digest('hex'));
+  check(retained.evidence.openings[openingMonth]?.digest === manualOpeningDigest(setup, openingMonth, baselineMicroUsd, options));
   const start = setup.openingBilling?.period?.Start;
   check(typeof start === 'string' && /^\d{4}-\d\d-01$/.test(start)
     && instant(start + 'T00:00:00Z') <= instant(reservation.startedAt));
@@ -1151,7 +1193,90 @@ async function replacePrivateJson(path, value) {
   } finally { await rm(temporary, { force: true }); }
 }
 
-async function readCleanup(base) {
+function priorBooked(options, month) {
+  const value = options.priorBookings?.[month] ?? 0;
+  check(Number.isSafeInteger(value) && value >= 0, 'booking');
+  return value;
+}
+function manualSetupBound(options, billingMicroUsd, upperMicroUsd) {
+  const at = instant(options.now), cursor = new Date(at), until = at + 31 * 86400_000 + 300_000;
+  cursor.setUTCDate(1); cursor.setUTCHours(0, 0, 0, 0);
+  while (cursor.getTime() <= until) {
+    const month = cursor.toISOString().slice(0, 7);
+    const total = (month === options.now.slice(0, 7) ? billingMicroUsd : 0) + priorBooked(options, month) + upperMicroUsd;
+    check(Number.isSafeInteger(total) && total < MONTHLY_CAP_MICRO_USD, 'booking');
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+}
+function manualOpeningDigest(setup, month, baselineMicroUsd, options) {
+  const ancestors = priorBooked(options, month);
+  return createHash('sha256').update(JSON.stringify({ month, baselineMicroUsd, billing: setup.openingBilling,
+    cost: setup.cost, openingExplanations: setup.openingExplanations, ...(ancestors ? { ancestorsMicroUsd: ancestors } : {}) })).digest('hex');
+}
+async function launchedHistory(base, record) {
+  try {
+    const setup = await privateJson(join(base, 'initialized.json')), launch = await privateJson(join(base, 'launch.json'));
+    const booking = await privateJson(join(base, 'setup', 'setup.json'));
+    check(['account','region','head','tree','upperMicroUsd'].every(key => setup[key] === booking[key] && setup[key] === record[key])
+      && setup.stackId === record.stackId && launch.stackId === record.stackId
+      && ['account','region','head','tree','bucket'].every(key => setup[key] === launch[key])
+      && isDeepStrictEqual(setup.cost, booking.cost), 'private history');
+    const directory = join(base, 'history'), info = await lstat(directory), names = (await readdir(directory)).sort();
+    check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700
+      && names.length <= 15 && names.includes('setup.json') && names.includes('active.json')
+      && names.every(name => ['setup.json','active.json'].includes(name) || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name)), 'private history');
+    const rows = new Map();
+    for (const name of names) {
+      await privateJson(join(directory, name));
+      if (name !== 'setup.json') rows.set('d570/ledger/' + name, { body: await readFile(join(directory, name)), etag: '"retained"' });
+    }
+    check((await readFile(join(directory, 'setup.json'))).equals(await readFile(join(base, 'setup', 'setup.json'))), 'private history');
+    const active = JSON.parse(rows.get('d570/ledger/active.json').body), retained = active.active, reservation = launch.reservation;
+    check(retained?.state === 'reserved' && ['uuid','head','tree','startedAt','expiry','liabilityUntil'].every(key => retained.identity[key] === reservation?.[key])
+      && retained.upperMicroUsd === reservation.upperMicroUsd && retained.evidenceHash === reservation.evidenceHash
+      && isDeepStrictEqual(retained.months, reservation.months) && isDeepStrictEqual(retained.evidence, setup.runEvidence), 'private history');
+    const months = Object.keys(active.monthHeads).sort(), last = months.at(-1); check(/^\d{4}-\d\d$/.test(last), 'private history');
+    const end = new Date(last + '-01T00:00:00Z'); end.setUTCMonth(end.getUTCMonth() + 1);
+    await inspectBudget({ scope: { account, region, stackId: record.stackId }, now: iso(Math.floor(Math.min(Date.now(), end.getTime() - 1000) / 1000) * 1000), billingMicroUsd: 0,
+      store: { async list() { return [...rows.keys()]; }, async get(key) { return rows.get(key) ?? null; } } });
+    return { setup, launch, months };
+  } catch (error) { if (error.message?.startsWith('D570 ')) throw error; refuse('private history'); }
+}
+function stoppedInstance(response, launch) {
+  check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1, 'retained evidence');
+  const row = response.Reservations[0], instance = row?.Instances?.[0];
+  check(row.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
+    && instance?.InstanceId === launch.instanceId && instance.ClientToken === launch.reservation.uuid
+    && instance.SubnetId === launch.subnetId && instance.InstanceType === 'm7g.2xlarge'
+    && instance.State?.Name === 'terminated' && instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown', 'retained evidence');
+  const tags = { Proof: 'D570', Stack: launch.stackId, Run: launch.reservation.uuid, ExpiresAt: launch.reservation.expiry };
+  check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key,value]) => {
+    const matching = instance.Tags.filter(tag => tag?.Key === key); return matching.length === 1 && matching[0].Value === value;
+  }), 'retained evidence');
+  return instance;
+}
+async function retainedJson(reference, checkout) {
+  try {
+    check(reference && typeof reference.path === 'string' && reference.path === resolve(reference.path)
+      && /^[a-f0-9]{64}$/.test(reference.sha256), 'retained evidence');
+    const path = await realpath(reference.path), root = await realpath(checkout), info = await lstat(reference.path);
+    check(path !== root && !path.startsWith(root + '/') && info.isFile() && info.uid === process.getuid()
+      && (info.mode & 0o777) === 0o600 && info.size > 0 && info.size <= 1024 * 1024, 'retained evidence');
+    const bytes = await readFile(reference.path);
+    check(bytes.length <= 1024 * 1024 && createHash('sha256').update(bytes).digest('hex') === reference.sha256, 'retained evidence');
+    return JSON.parse(bytes);
+  } catch (error) { if (error.message?.startsWith('D570 ')) throw error; refuse('retained evidence'); }
+}
+async function retainedStop(evidence, checkout, launch) {
+  const instance = await retainedJson(evidence.instance, checkout), console = await retainedJson(evidence.console, checkout);
+  stoppedInstance(instance, launch);
+  check(console.InstanceId === launch.instanceId && Number.isFinite(Date.parse(console.Timestamp))
+    && Date.parse(console.Timestamp) >= instant(launch.reservation.startedAt), 'retained evidence');
+  manualReadyBoot(console.Output, launch.reservation, launch.guestExpiry);
+  return instance;
+}
+
+async function readCleanup(base, checkout) {
   const path = join(base, 'setup-removal.json');
   if (!await exists(path)) return null;
   const record = await privateJson(path), booking = await privateJson(join(base, 'setup', 'setup.json'));
@@ -1169,6 +1294,11 @@ async function readCleanup(base) {
     await privateJson(join(history, 'setup.json'));
     check((await readFile(join(history, 'setup.json'))).equals(await readFile(join(base, 'setup', 'setup.json'))), 'private history');
   }
+  if (record.retryAt) {
+    check(record.eligible === false && record.releasedAt === null && instant(record.retryAt) >= instant(record.deletedAt), 'private history');
+    const history = await launchedHistory(base, record); stoppedInstance(record.stoppedInstance, history.launch);
+    if (record.retainedEvidence) check(isDeepStrictEqual(await retainedStop(record.retainedEvidence, checkout, history.launch), record.stoppedInstance), 'private history');
+  }
   return record;
 }
 
@@ -1179,7 +1309,7 @@ export async function removeManualFirstSetup(options) {
   check(setup?.account === account && setup.region === region && /^[a-f0-9]{40}$/.test(setup.head)
     && /^[a-f0-9]{40}$/.test(setup.tree) && setup.template?.Resources
     && typeof setup.directory === 'string' && setup.directory === resolve(setup.directory));
-  const base = dirname(setup.directory), cleanupPath = join(base, 'setup-removal.json'), priorCleanup = await readCleanup(base);
+  const base = dirname(setup.directory), cleanupPath = join(base, 'setup-removal.json'), priorCleanup = await readCleanup(base, checkout);
   async function call(service, operation, input) {
     async function unchanged() {
       const source = await checkedMain(checkout), at = clock();
@@ -1200,6 +1330,19 @@ export async function removeManualFirstSetup(options) {
     && Date.parse(stack.CreationTime) >= instant(setup.openingBilling?.observedAt ?? setup.billing.observedAt)
     && Date.parse(stack.CreationTime) <= clock());
   if (priorCleanup) check(priorCleanup.stackId === stackId);
+  const launchPath = join(base, 'launch.json');
+  const savedLaunch = await exists(launchPath) ? await privateJson(launchPath) : null;
+  async function capturedAbsent() {
+    if (!savedLaunch?.capture) return;
+    check(savedLaunch.stackId === stackId && savedLaunch.account === account && savedLaunch.region === region
+      && savedLaunch.head === setup.head && savedLaunch.tree === setup.tree);
+    manualCapture(savedLaunch, { ...savedLaunch, ...savedLaunch.capture });
+    const disks = await call('ec2', 'describe-volumes', { Filters: [{ Name: 'volume-id', Values: savedLaunch.capture.volumeIds }], MaxResults: 100 });
+    check(!disks?.NextToken && Array.isArray(disks?.Volumes) && disks.Volumes.length === 0);
+    const interfaces = await call('ec2', 'describe-network-interfaces', { Filters: [{ Name: 'network-interface-id', Values: savedLaunch.capture.interfaceIds }], MaxResults: 100 });
+    check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
+  }
+  await capturedAbsent();
   async function waitForDeletion() {
     for (let attempt = 0; attempt < 40; attempt++) {
       const result = await call('cloudformation', 'describe-stacks', { StackName: stackId });
@@ -1245,6 +1388,29 @@ export async function removeManualFirstSetup(options) {
   check(!volumes?.NextToken && Array.isArray(volumes?.Volumes) && volumes.Volumes.length === 0);
   const retained = await retainManualHistory({ ...options, aws: { call }, stackId,
     [removalExport]: { inspection, setup, bucket } });
+  let ended = priorCleanup?.stoppedInstance ?? null;
+  let evidence = priorCleanup?.retainedEvidence;
+  if (options.retainedEvidence) {
+    if (evidence) check(isDeepStrictEqual(evidence, options.retainedEvidence), 'retained evidence');
+    evidence = options.retainedEvidence;
+    const history = await launchedHistory(base, priorCleanup ?? { ...setup, billing: setup.billing });
+    ended = await retainedStop(evidence, checkout, history.launch);
+  } else if (!ended && await exists(join(base, 'launch.json')) && await exists(join(base, 'history', 'active.json'))) {
+    // Eligibility is optional; the independent absence checks must still permit ordinary removal.
+    try {
+      const history = await launchedHistory(base, priorCleanup ?? { ...setup, billing: setup.billing });
+      const cleanup = await exists(join(base, 'cleanup.json')) ? await privateJson(join(base, 'cleanup.json')) : null;
+      let candidate;
+      if (cleanup?.instanceObservation) {
+        check(['account','region','stackId','head','tree','bucket','instanceId','subnetId'].every(key => cleanup[key] === history.launch[key])
+          && isDeepStrictEqual(cleanup.reservation, history.launch.reservation)
+          && cleanup.terminated === true && cleanup.volumesAbsent === true && cleanup.interfacesAbsent === true
+          && cleanup.stateReason?.Code === 'Client.InstanceInitiatedShutdown', 'private history');
+        candidate = cleanup.instanceObservation;
+      } else candidate = await call('ec2', 'describe-instances', { InstanceIds: [history.launch.instanceId] });
+      stoppedInstance(candidate, history.launch); ended = candidate;
+    } catch { ended = null; }
+  }
   const keys = retained.files.filter(name => name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name))
     .map(name => 'd570/ledger/' + name);
   if (rule) {
@@ -1274,7 +1440,8 @@ export async function removeManualFirstSetup(options) {
   const record = priorCleanup ?? { schema: 'd570-cleanup-v1', account, region, stackId, head: setup.head, tree: setup.tree,
     billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, eligible, releasedAt: null };
   check(!record.eligible || eligible, 'booking');
-  await replacePrivateJson(cleanupPath, record);
+  const qualifiedRecord = { ...record, ...(ended ? { stoppedInstance: ended, ...(evidence ? { retainedEvidence: evidence } : {}) } : {}) };
+  await replacePrivateJson(cleanupPath, qualifiedRecord);
   if (stack.StackStatus !== 'DELETE_COMPLETE') {
     await call('cloudformation', 'delete-stack', { StackName: stackId });
     await waitForDeletion();
@@ -1293,9 +1460,12 @@ export async function removeManualFirstSetup(options) {
     const interfaces = await call('ec2', 'describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [record.subnet] }], MaxResults: 100 });
     check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
   }
-  const deletedAt = iso(Math.floor(clock() / 1000) * 1000);
-  await replacePrivateJson(cleanupPath, { ...record, deletedAt, releasedAt: eligible ? deletedAt : null,
-    reason: eligible ? 'failed setup removed without a run' : 'setup removed; booking retained' });
+  await capturedAbsent();
+  const at = iso(Math.floor(clock() / 1000) * 1000), deletedAt = priorCleanup?.deletedAt ?? at;
+  if (ended) { const history = await launchedHistory(base, qualifiedRecord); stoppedInstance(ended, history.launch); }
+  await replacePrivateJson(cleanupPath, { ...qualifiedRecord, deletedAt, releasedAt: eligible ? priorCleanup?.releasedAt ?? deletedAt : null,
+    ...(ended && !eligible ? { retryAt: priorCleanup?.retryAt ?? at } : {}),
+    reason: priorCleanup?.reason ?? (eligible ? 'failed setup removed without a run' : 'setup removed; booking retained') });
   return { ...inspection, stackId, directory, deleted: true };
 }
 
@@ -1326,22 +1496,33 @@ async function runManualCommandInContext(options) {
   let base = await realpath(directory);
   check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700
     && base !== root && !base.startsWith(root + '/'));
-  const explanations = [];
-  check(command === 'up' || flags.length === 0);
+  const explanations = []; let retainedEvidence;
   for (let index = 0; index < flags.length; index += 5) {
-    check(flags[index] === '--explain' && flags.slice(index, index + 5).length === 5
-      && /^(0|[1-9]\d{0,7})$/.test(flags[index + 3]));
-    explanations.push({ service: flags[index + 1], usageType: flags[index + 2],
-      maxMicroUsd: Number(flags[index + 3]), reason: flags[index + 4] });
+    check(flags.slice(index, index + 5).length === 5);
+    if (flags[index] === '--retained-evidence') {
+      check(command === 'down' && !retainedEvidence);
+      retainedEvidence = { instance: { path: flags[index + 1], sha256: flags[index + 2] }, console: { path: flags[index + 3], sha256: flags[index + 4] } };
+    } else {
+      check(command === 'up' && flags[index] === '--explain' && /^(0|[1-9]\d{0,7})$/.test(flags[index + 3]));
+      explanations.push({ service: flags[index + 1], usageType: flags[index + 2], maxMicroUsd: Number(flags[index + 3]), reason: flags[index + 4] });
+    }
   }
   const stamp = () => iso(Math.floor(clock() / 1000) * 1000);
   const common = { checkout, region: options.region ?? region, environment: options.environment ?? process.env, clock, sleep };
   const provider = options.aws ?? createManualAwsCli();
   const initial = await inspectManualOwner({ ...common, now: stamp(), aws: provider }, false);
+  const priorBookings = {};
   for (;;) {
-    const cleanup = await readCleanup(base);
-    if (!cleanup?.releasedAt) break;
-    check(!await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json')), 'booking');
+    const cleanup = await readCleanup(base, checkout);
+    if (!cleanup?.releasedAt && !cleanup?.retryAt) break;
+    if (cleanup.releasedAt) check(!await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json')), 'booking');
+    if (cleanup.retryAt) {
+      const history = await launchedHistory(base, cleanup);
+      for (const month of history.months) {
+        priorBookings[month] = (priorBookings[month] ?? 0) + cleanup.upperMicroUsd;
+        check(Number.isSafeInteger(priorBookings[month]), 'booking');
+      }
+    }
     const child = join(base, 'retry');
     if (!await exists(child)) {
       if (command !== 'up') break;
@@ -1362,7 +1543,7 @@ async function runManualCommandInContext(options) {
     }
     const response = await provider.call(...request); await unchanged(); return response;
   } };
-  const fresh = () => ({ ...common, aws, now: stamp() });
+  const fresh = () => ({ ...common, aws, now: stamp(), priorBookings, retainedEvidence });
   const save = (name, value) => privateWrite(join(base, name), JSON.stringify(value) + '\n');
   if (command === 'up') {
     try { await lstat(join(base, 'setup')); refuse('booking'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -1374,12 +1555,12 @@ async function runManualCommandInContext(options) {
     }
     const cost = calculateManualCost({ ...firstSetupPriceInputs(catalogues), now: stamp() });
     const estimateMicroUsd = Object.values(cost.components).reduce((sum, row) => sum + row.upperMicroUsd, 0);
-    const headroomMicroUsd = 10_000_000 - opening.billing.microUsd - estimateMicroUsd;
+    const headroomMicroUsd = MONTHLY_CAP_MICRO_USD - opening.billing.microUsd - estimateMicroUsd - priorBooked(fresh(), stamp().slice(0, 7));
     if (headroomMicroUsd <= 0) throw Object.assign(new Error('D570 opening and reservation reach the monthly cap'), {
       opening: { billing: opening.billing, items: opening.openingExplanations, estimateMicroUsd, headroomMicroUsd } });
     const setup = await initializeManualFirstSetup({ ...fresh(), directory: join(base, 'setup'), catalogues, explanations });
     await save('initialized.json', setup);
-    return setup;
+    return { ...setup, priorBookedMicroUsd: priorBooked(fresh(), stamp().slice(0, 7)) };
   }
   let setup;
   try { setup = await privateJson(join(base, 'initialized.json')); }
@@ -1403,9 +1584,19 @@ async function runManualCommandInContext(options) {
     }
     refuse('ec2 observation');
   }
-  const ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch }), 'D570_NOT_READY', instant(launch.guestExpiry));
+  const capture = await poll(() => captureManualFirstResources({ ...fresh(), launch }), 'D570_NOT_READY', instant(launch.guestExpiry));
+  await replacePrivateJson(join(base, 'launch.json'), { ...launch, capture: {
+    volumeIds: capture.volumeIds, interfaceIds: capture.interfaceIds, observedAt: capture.observedAt } });
+  let ready;
+  if (clock() < instant(launch.reservation.startedAt) + 170_000) {
+    try { ready = await inspectManualFirstGuest({ ...fresh(), launch }); }
+    catch (error) { if (error?.code !== 'D570_NOT_READY') throw error; }
+  }
+  const stopped = await observeManualFirstShutdown({ ...fresh(), launch, capture });
+  if (!ready) ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch, capture, shutdownObservation: stopped.shutdownObservation }),
+    'D570_NOT_READY', instant(stopped.shutdownObservation.terminatedReceivedAt) + 300_000);
   await save('ready.json', ready);
-  const shutdown = await observeManualFirstShutdown({ ...fresh(), ready });
+  const shutdown = { ...ready, shutdownObservation: stopped.shutdownObservation };
   await save('shutdown.json', shutdown);
   const cleanup = await poll(() => inspectManualFirstGuestCleanup({ ...fresh(), ready: shutdown }),
     'D570_CLEANUP_PENDING', clock() + 120000);
@@ -1421,7 +1612,7 @@ async function runManualCommandInContext(options) {
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
-    console.log('node scripts/kubernetes-proof-control.mjs up|drill|reconcile|down /absolute/private-directory [--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON ...]\nUse an existing owner-only private directory outside the checkout. Amounts are millionths of USD. Run from clean reviewed main with the temporary staging sign-in.');
+    console.log('node scripts/kubernetes-proof-control.mjs up|drill|reconcile|down /absolute/private-directory [--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON ...] [--retained-evidence INSTANCE_FILE INSTANCE_SHA256 CONSOLE_FILE CONSOLE_SHA256]\nUse an existing owner-only private directory outside the checkout. Amounts are millionths of USD. Run from clean reviewed main with the temporary staging sign-in.');
   } else try {
     check(args.length >= 2 && await realpath(process.cwd()) === await realpath(join(dirname(fileURLToPath(import.meta.url)), '..')));
     const result = await runManualCommand({ args, checkout: process.cwd() });
@@ -1429,7 +1620,7 @@ if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]
     console.log(JSON.stringify({ command: args[0], account: result.account, region: result.region, stackId: result.stackId,
       ...(result.openingBilling ? { openingUsd: usd(result.openingBilling.microUsd), openingEstimated: result.openingBilling.estimated,
         opening: result.openingExplanations.map(row => ({ service: row.service, usageType: row.usageType, usd: usd(row.microUsd), what: row.reason })),
-        reservedUsd: usd(result.upperMicroUsd), headroomUsd: usd(10_000_000 - result.openingBilling.microUsd - result.upperMicroUsd) } : {}),
+        reservedUsd: usd(result.upperMicroUsd), headroomUsd: usd(MONTHLY_CAP_MICRO_USD - result.openingBilling.microUsd - result.upperMicroUsd - (result.priorBookedMicroUsd ?? 0)) } : {}),
       ...(result.runtimeObservation ? { runtimeObservation: result.runtimeObservation } : {}),
       ...(result.costReport ? { costReport: result.costReport } : {}),
       ...(result.deleted ? { deleted: true, privateHistory: result.directory } : {}),

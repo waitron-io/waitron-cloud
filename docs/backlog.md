@@ -3184,11 +3184,12 @@ implementation or production evidence.
   availability checks for sign-in, remote access and backups. Full service/fault proof
   and the strict common verifier remain unbuilt. D570's
   [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
-  still needs a live payload-free ARM run after the billing-response, Lambda
-  reservation and cloud-init console-prefix corrections, with named failure steps and a failed-setup retry
-  only after verified removal in the original private folder,
-  explained existing account charges within the unchanged monthly cap, measured
-  shutdown and disk/interface absence, actual itemised billing and removal.
+  still needs a live payload-free ARM run with buffered console collection after
+  independently observed shutdown and a retained-evidence retry in the original
+  private folder, under the approved US$20 cap. Keep every launched reservation,
+  explain existing account charges and qualify shutdown, disk/interface absence,
+  actual itemised billing and removal. The [retry plan](superpowers/plans/2026-11-07-kubernetes-launched-retry.md)
+  records the owner's timing and saved-response authority.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1
   service/fault proof and measured build/steady/fault/verifier/healing peaks remain

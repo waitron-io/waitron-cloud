@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
-const cap = 10_000_000, limit = 1024 * 1024;
+export const MONTHLY_CAP_MICRO_USD = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/policy.json', import.meta.url), 'utf8')).monthlyCapUsd * 1_000_000;
+if (!Number.isSafeInteger(MONTHLY_CAP_MICRO_USD) || MONTHLY_CAP_MICRO_USD <= 0) throw new Error('D570 budget policy refused');
+const cap = MONTHLY_CAP_MICRO_USD, limit = 1024 * 1024;
 const activeKey = 'd570/ledger/active.json';
 const categories = ['compute', 'disk', 'storage', 'requests', 'transfer', 'events', 'lambda', 'logs', 'network', 'tax', 'contingency'];
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;

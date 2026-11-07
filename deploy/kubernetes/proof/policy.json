@@ -6,7 +6,7 @@
   "repository": "waitron-io/waitron-cloud",
   "environment": "kubernetes-proof-staging",
   "accessExpiry": "2027-02-28T23:59:00Z",
-  "monthlyCapUsd": 10,
+  "monthlyCapUsd": 20,
   "approvedBaselineUsd": 0,
   "instanceType": "m7g.2xlarge",
   "sessionSeconds": 8100,

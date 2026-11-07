@@ -906,7 +906,7 @@
     },
     "MonthlyCapUsd": {
       "Condition": "D570Scope",
-      "Value": "10"
+      "Value": "D570_MONTHLY_CAP_USD"
     },
     "Admission": {
       "Condition": "D570Scope",

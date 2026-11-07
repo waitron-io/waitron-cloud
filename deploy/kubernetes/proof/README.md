@@ -54,7 +54,7 @@ refuse. The cap uses observed charges, so a larger explained ceiling never grant
 more room. A credit bill still refuses and shows its observed aggregate; credits
 never become a zero opening or increase allowance. Save the printed service,
 amount and reason list for the watcher and the owner. The successful response also shows the opening, reserved upper cost
-and remaining headroom. Opening plus reservation must stay strictly below US$10.
+and remaining headroom. Opening plus reservation must stay strictly below US$20.
 
 `up` acquires the four public AWS price files, saves their original bytes, books
 the fixed upper cost, creates `d570-first`, enables its expiry sweep, reads its
@@ -70,18 +70,21 @@ node scripts/kubernetes-proof-control.mjs drill "$HOME/.local/state/waitron-d570
 
 The command books compute and disk before the launch request. The guest has a
 three-minute shutdown deadline; the independent sweep retains the five-minute
-outer expiry. The command waits for its ready console line while running, then
+outer expiry. The command captures disk and interface identities while running,
 requires a running request at T+170 or later and OS termination received before
-T+300. Disk and interface absence are checked separately. The response reports
-when those observations arrived, not the exact physical poweroff time.
+T+300, then checks disk and interface absence. Console collection cannot delay
+the running check. The response reports when those observations arrived, not the
+exact physical poweroff time.
 
 Readiness accepts the exact run, deadline and boot tokens either alone or after
 cloud-init's `[ seconds] cloud-init[pid]: ` console prefix. Conflicting runs,
-extra tokens and multiple boot identities refuse. The controller still needs the
-line while the guest is running; a result received after termination cannot
-qualify readiness. [EC2 buffers console output](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshoot-unreachable-instance.html#instance-console-console-output),
+extra tokens and multiple boot identities refuse. [EC2 buffers console output](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshoot-unreachable-instance.html#instance-console-console-output),
 so an empty early response does not establish that the guest failed to print.
-The three-minute guest deadline stays in force.
+After verified OS shutdown, the controller collects the line for at most another
+300 seconds, measured from its local receipt of termination. Missing evidence at
+that point refuses without another launch. The three-minute guest deadline and
+five-minute shutdown observation bound stay in force. Run the connected synthetic
+case with `node --test --test-name-pattern='console at T449|late console' scripts/kubernetes-proof-control.test.mjs`.
 
 Private `launch.json`, `ready.json`, `shutdown.json` and `cleanup.json` keep the
 observations. A lost reply or failed drill retains its booking and cannot start
@@ -136,11 +139,33 @@ and every private file. `down` releases a failed attempt only after exact stack
 deletion and resource-absence checks, and only when its history holds the setup
 booking alone. An initialized setup, a launch or any monthly ledger prevents
 release. The fresh account opening plus the new reservation must still stay
-strictly below US$10; account billing can lag actual consumption.
+strictly below US$20; account billing can lag actual consumption.
 
 The controller keeps the first attempt intact and selects a `retry/` child
 automatically. Always pass the original folder. A later failed attempt needs its
-own successful `down` before another retry. A completed drill cannot be restarted.
+own successful `down` before another retry. A completed drill cannot be restarted
+in the same attempt. A launched attempt can open a fresh child only after exact
+OS termination and resource absence have been checked. Its full reservation stays
+charged against every matching liability month, together with each earlier launched
+ancestor and the fresh account opening. This deliberately double-counts costs the
+account bill may already include, because that bill can lag consumption.
+
+For an already-deleted attempt, the owner can supply privately saved instance and
+console responses and their SHA-256 hashes to repeat `down`:
+
+```sh
+node scripts/kubernetes-proof-control.mjs down "$HOME/.local/state/waitron-d570" \
+  --retained-evidence /absolute/private/instance.json INSTANCE_SHA256 \
+  /absolute/private/console.json CONSOLE_SHA256
+```
+
+Use the original folder and the hashes of the unchanged owner-only files. The
+instance, token, stack, subnet, tags and OS shutdown reason must match the retained
+launch. The console must match that instance and contain the exact run, expiry and
+single boot. Changed files, missing history and uncertain ownership refuse. Repeat
+`up` and then `drill` only after `down` succeeds; supply current opening explanations
+again if requested. The synthetic retry check is
+`node --test --test-name-pattern='launched retry' scripts/kubernetes-proof-control.test.mjs`.
 The private `setup-removal.json` retains the exact stack ID before deletion, so repeat
 `down` after a lost reply or interrupted release write. Pending deletion never
 permits another `up`. A missing or uncertain exact stack response refuses release.

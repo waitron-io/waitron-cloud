@@ -1,3 +1,4 @@
+import { MONTHLY_CAP_MICRO_USD } from '../../../scripts/kubernetes-proof-budget.mjs';
 import { createHash } from 'node:crypto';
 
 const region = 'eu-north-1', maxBytes = 320 * 1024 * 1024;
@@ -202,7 +203,7 @@ export function calculateManualCost({ catalogues, quantities, fixed, now }) {
       const denominator = 10000000000n * divisor;
       upper += (numerator + denominator - 1n) / denominator;
     }
-    check(upper > 0n && upper < 10000000n);
+    check(upper > 0n && upper < BigInt(MONTHLY_CAP_MICRO_USD));
     components[name] = { upperMicroUsd: Number(upper), source: catalogue.source, digest: catalogue.digest };
   }
   component('compute', 'AmazonEC2', [['compute', 'computeSeconds', 3600n]]);
@@ -213,7 +214,7 @@ export function calculateManualCost({ catalogues, quantities, fixed, now }) {
   component('logs', 'AmazonCloudWatch', [['logIngest', 'logIngestBytes', gib], ['logStorage', 'logStoredByteSeconds', gib * monthSeconds]]);
   for (const [name, bound] of Object.entries(fixed)) {
     check(equalKeys(bound, ['upperMicroUsd', 'source', 'digest']) && Number.isSafeInteger(bound.upperMicroUsd)
-      && bound.upperMicroUsd > 0 && bound.upperMicroUsd < 10000000
+      && bound.upperMicroUsd > 0 && bound.upperMicroUsd < MONTHLY_CAP_MICRO_USD
       && typeof bound.digest === 'string' && /^[a-f0-9]{64}$/.test(bound.digest) && typeof bound.source === 'string'
       && bound.source.length <= 2048);
     let source; try { source = new URL(bound.source); } catch { check(false); }
@@ -221,6 +222,6 @@ export function calculateManualCost({ catalogues, quantities, fixed, now }) {
       && !source.username && !source.password && !source.port && !source.search && !source.hash);
     components[name] = { ...bound };
   }
-  check(Object.values(components).reduce((sum, row) => sum + row.upperMicroUsd, 0) < 10000000);
+  check(Object.values(components).reduce((sum, row) => sum + row.upperMicroUsd, 0) < MONTHLY_CAP_MICRO_USD);
   return { observedAt: now, components };
 }
