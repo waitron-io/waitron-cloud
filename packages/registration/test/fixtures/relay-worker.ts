@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {randomBytes,randomUUID,generateKeyPairSync,sign} from 'node:crypto';
 import {Pool} from 'pg';
 import {createSession} from '@waitron-cloud/identity';
-import {migrate} from '../../src/migrate.ts';
+import {migrate} from './setup-waits.ts';
 import {transaction} from '../../src/transaction.ts';
 import {RelayGrantStore,type RelayConfig} from '../../src/relay-grants.ts';
 import {RelayMessages,type RelayAdmissionConfig} from '../../src/relay-messages.ts';

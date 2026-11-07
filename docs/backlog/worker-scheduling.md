@@ -192,10 +192,15 @@ passes 86 cases. Its temporary query probe measures 47 applications of migration
 013 at 25–30 ms. These are local observations, not healthy hosted timing evidence
 or a reproduction of the original cancellation. Neither passing run repairs it.
 
-Keep the timeout and every shutdown assertion. If this setup fails again, capture
-bounded PostgreSQL wait categories and blocker counts while migration 013 is still
-running, together with the failing statement and runner health. Do not log SQL
-parameters, credentials or row contents. D530 owns that causal investigation;
+Keep the timeout and every shutdown assertion. On recurrence, read the test-only
+`cloud-test-setup-waits` report alongside the migration stage. The affected setup
+fixtures retain at most eight activity samples with wait categories, blocker process
+IDs and up to sixteen waiting locks each. SQL text and query hashes are omitted to
+keep row values out of the report. The observer has its own bounded connection and
+prints only when setup fails. You can exercise real blocked migrations
+with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node
+--test test/setup-wait-diagnostics.test.ts`. No parameters or row contents belong in
+these reports. Capture runner health separately. D530 owns the causal investigation;
 lock contention, slow storage and runner scheduling remain unproved explanations.
 
 #### 7 November: registration shard 3 also fails setup and shutdown
@@ -221,7 +226,7 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 This does not reproduce or repair the hosted failures. An initial root-directory
 probe could not launch the usage CLI and supplies no evidence about shutdown;
 only the corrected package-directory run above counts. D530 retains the SQL-setup
-and worker-shutdown investigation. Capture active waits/blockers on recurrence;
+and worker-shutdown investigation. Read the retained setup waits on recurrence;
 keep the three migration ordinals and the shutdown symptom distinct until evidence
 joins them. Do not change caps or exit assertions on the strength of a passing rerun.
 
