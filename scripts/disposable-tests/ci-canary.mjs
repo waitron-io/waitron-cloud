@@ -244,8 +244,9 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
     job.name===jobName(ci) && job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt &&
     job.head_sha===ci.workflowSha && job.status==='queued' && !job.runner_id,'CI identity changed before registration');
    assert.equal((await namedRunners(api,repository,name,options.signal)).length,0,'CI runner name already registered; do not remint');
+   // Match hosted checkouts because coverage blobs key source files by absolute path.
    const registration=await api.post(`${base}/runners/generate-jitconfig`,{
-    name,runner_group_id:1,labels:['self-hosted',routingLabel(ci)],work_folder:'_work'},options);
+    name,runner_group_id:1,labels:['self-hosted',routingLabel(ci)],work_folder:'/home/runner/work'},options);
    assert.ok(registration.runner?.name===name && Number.isSafeInteger(registration.runner.id) && registration.runner.id>0 &&
     typeof registration.encoded_jit_config==='string' && registration.encoded_jit_config.length>0 && registration.encoded_jit_config.length<=64000,'Invalid CI registration response');
    assert.ok(leases.bindRunner(lease,registration.runner.id),'CI runner lease changed before binding');

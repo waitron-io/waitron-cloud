@@ -1,7 +1,7 @@
 """CI uses only a bound request, never a workstation source/package transfer."""
-import hashlib, importlib.util, io, json, sys, tempfile, time, unittest
+import hashlib, importlib.util, io, json, os, pwd, sys, tempfile, time, unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import session
 spec=importlib.util.spec_from_file_location('guest',Path(__file__).with_name('guest-exec.py'))
 guest=importlib.util.module_from_spec(spec);spec.loader.exec_module(guest)
@@ -44,7 +44,8 @@ class CISession(unittest.TestCase):
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):
   self.assertTrue(callable(getattr(guest,'complete_ci',None)),'CI execution entry point missing')
   output=self.root/'result.json';value={'deadline':int(time.time()*1000)+5000,'nonce':'a'*32,'jitconfig':'synthetic-base64'}
-  with patch.object(guest,'execute',return_value=0) as execute:
+  account=pwd.struct_passwd(('runner','x',1001,1001,'','/home/runner','/bin/bash'))
+  with patch.object(guest,'execute',return_value=0) as execute,patch.object(pwd,'getpwnam',return_value=account),patch.object(os,'getgrouplist',return_value=[1001,999]):
    guest.complete_ci(value,str(self.root),self.resource,output)
   args=execute.call_args
   self.assertEqual(args.args[0]['argv'],ARGV)
@@ -52,6 +53,61 @@ class CISession(unittest.TestCase):
   self.assertEqual(args.kwargs['environment']['ACTIONS_RUNNER_INPUT_JITCONFIG'],'synthetic-base64')
   self.assertNotIn('jit',output.read_text())
   with self.assertRaises(ValueError):guest.complete_ci({**value,'jitconfig':'x'*65537},str(self.root),self.resource,self.root/'bad')
+ def test_ci_listener_runs_with_the_ordinary_account_and_its_environment(self):
+  account=pwd.struct_passwd(('runner','x',1001,1001,'','/home/runner','/bin/bash'))
+  def lookup(name):
+   if name!='runner':raise KeyError(name)
+   return account
+  child=Mock(pid=2710000);child.wait.return_value=0
+  value={'deadline':int(time.time()*1000)+5000,'nonce':'d'*32,'jitconfig':'synthetic-jit'}
+  login={'HOME':'/root','USER':'root','LOGNAME':'root','SHELL':'/bin/sh','PATH':'/root/.local/bin:/usr/bin','RUNNER_ALLOW_RUNASROOT':'1',
+         'XDG_RUNTIME_DIR':'/run/user/0','XDG_SESSION_ID':'synthetic','XDG_CONFIG_HOME':'/root/.config',
+         'SSH_CLIENT':'synthetic','SSH_CONNECTION':'synthetic','SSH_TTY':'/dev/pts/0',
+         'DBUS_SESSION_BUS_ADDRESS':'unix:path=/run/user/0/bus','MAIL':'/var/mail/root','PWD':'/root',
+         'LANG':'C.UTF-8','LC_TIME':'C','TZ':'UTC'}
+  with patch.object(pwd,'getpwnam',side_effect=lookup),patch.object(os,'getgrouplist',return_value=[1001,999]),patch.object(guest.subprocess,'Popen',return_value=child) as launch,patch.object(guest.os,'killpg'),patch.dict(os.environ,login,clear=True):
+   receipt=guest.complete_ci(value,str(self.root),self.resource,self.root/'ordinary-result.json')
+  self.assertEqual(launch.call_args.args[0],ARGV)
+  options=launch.call_args.kwargs
+  self.assertEqual(options.get('user'),1001)
+  self.assertEqual(options.get('group'),1001)
+  self.assertEqual(options.get('extra_groups'),[1001,999])
+  self.assertEqual(options['cwd'],str(self.root))
+  environment=options['env']
+  self.assertEqual(environment['HOME'],'/home/runner')
+  self.assertEqual(environment['USER'],'runner')
+  self.assertEqual(environment['LOGNAME'],'runner')
+  self.assertEqual(environment.get('PATH'),'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin')
+  self.assertNotIn('/root',environment['PATH'])
+  self.assertNotIn('RUNNER_ALLOW_RUNASROOT',environment)
+  for name in ['XDG_RUNTIME_DIR','XDG_SESSION_ID','XDG_CONFIG_HOME','SSH_CLIENT','SSH_CONNECTION','SSH_TTY','DBUS_SESSION_BUS_ADDRESS','MAIL','PWD']:
+   self.assertNotIn(name,environment)
+  self.assertEqual(environment.get('SHELL'),'/bin/bash')
+  self.assertEqual(environment.get('LANG'),'C.UTF-8')
+  self.assertEqual(environment.get('LC_TIME'),'C')
+  self.assertEqual(environment.get('TZ'),'UTC')
+  self.assertEqual(environment['ACTIONS_RUNNER_INPUT_JITCONFIG'],'synthetic-jit')
+  self.assertEqual(receipt,{'resourceId':self.resource,'nonce':'d'*32,'code':0})
+  self.assertNotIn('synthetic-jit',(self.root/'ordinary-result.json').read_text())
+ def test_ci_refuses_root_identity_or_root_groups_before_launch_or_receipt(self):
+  value={'deadline':int(time.time()*1000)+5000,'nonce':'e'*32,'jitconfig':'synthetic-jit'}
+  for uid,gid,groups in [(0,1001,[1001,999]),(1001,0,[1001,999]),(1001,1001,[1001,0])]:
+   with self.subTest(uid=uid,gid=gid,groups=groups):
+    account=pwd.struct_passwd(('runner','x',uid,gid,'','/home/runner','/bin/bash'))
+    output=self.root/f'unsafe-{uid}-{gid}-{groups[-1]}.json'
+    with patch.object(pwd,'getpwnam',return_value=account),patch.object(os,'getgrouplist',return_value=groups),patch.object(guest,'execute',return_value=0) as execute:
+     with self.assertRaises(ValueError):guest.complete_ci(value,str(self.root),self.resource,output)
+    execute.assert_not_called()
+    self.assertFalse(output.exists())
+ def test_ci_missing_ordinary_account_refuses_without_a_root_fallback(self):
+  value={'deadline':int(time.time()*1000)+5000,'nonce':'f'*32,'jitconfig':'synthetic-jit'}
+  output=self.root/'missing-account.json';failure=None
+  with patch.object(pwd,'getpwnam',side_effect=KeyError('runner')),patch.object(guest,'execute',return_value=0) as execute:
+   try:guest.complete_ci(value,str(self.root),self.resource,output)
+   except Exception as error:failure=error
+  self.assertIsInstance(failure,ValueError)
+  execute.assert_not_called()
+  self.assertFalse(output.exists())
  def test_changed_runner_binary_refuses_before_credentials_are_delivered(self):
   directory=self.root/self.resource;directory.mkdir();(directory/'request.json').write_text(json.dumps(request(self.resource)));(directory/'prepared').touch()
   calls=[]

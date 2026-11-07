@@ -3,13 +3,14 @@
 import os
 import json
 import re
+import pwd
 from pathlib import Path
 import signal
 import subprocess
 import time
 
 
-def execute(request, directory, environment=None):
+def execute(request, directory, environment=None, user=None, group=None, extra_groups=None):
     now = int(time.time()*1000)
     if not isinstance(request, dict) or set(request) != {'argv', 'deadline'}:
         raise ValueError('Unknown or missing command request field')
@@ -27,7 +28,8 @@ def execute(request, directory, environment=None):
     child = None
     end = time.monotonic()+(deadline-now)/1000
     try:
-        child = subprocess.Popen(argv, cwd=directory, start_new_session=True, env=environment)
+        child = subprocess.Popen(argv, cwd=directory, start_new_session=True, env=environment,
+                                 user=user, group=group, extra_groups=extra_groups)
         while True:
             remaining = end-time.monotonic()
             if cancelled or remaining <= 0:
@@ -77,9 +79,21 @@ def complete_ci(request, directory, resource, output):
             not isinstance(request['nonce'],str) or not re.fullmatch(r'[a-f0-9]{32}',request['nonce']) or
             not isinstance(request['jitconfig'],str) or not 1<=len(request['jitconfig'])<=64000):
         raise ValueError('Invalid CI credential input')
-    environment={**os.environ,'ACTIONS_RUNNER_INPUT_JITCONFIG':request['jitconfig'],
-                 'RUNNER_ALLOW_RUNASROOT':'1','ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE':'1'}
-    code=execute({'argv':['/opt/actions-runner/bin/Runner.Listener','run'],'deadline':request['deadline']},directory,environment=environment)
+    try:
+        account=pwd.getpwnam('runner')
+    except KeyError:
+        raise ValueError('The ordinary CI runner account is missing') from None
+    groups=os.getgrouplist(account.pw_name,account.pw_gid)
+    if account.pw_uid==0 or account.pw_gid==0 or 0 in groups:
+        raise ValueError('The CI runner account must have an ordinary identity and groups')
+    environment={key:value for key,value in os.environ.items()
+                 if key in ('LANG','LANGUAGE','TZ') or key.startswith('LC_')}
+    environment.update(HOME=account.pw_dir,USER=account.pw_name,LOGNAME=account.pw_name,
+                       PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',SHELL=account.pw_shell,
+                       ACTIONS_RUNNER_INPUT_JITCONFIG=request['jitconfig'],
+                       ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE='1')
+    code=execute({'argv':['/opt/actions-runner/bin/Runner.Listener','run'],'deadline':request['deadline']},directory,
+                 environment=environment,user=account.pw_uid,group=account.pw_gid,extra_groups=groups)
     receipt={'resourceId':resource,'nonce':request['nonce'],'code':code}
     output=Path(output);output.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
     with output.open('x') as target:

@@ -2,7 +2,7 @@
 set -euo pipefail
 # This runs only after guest-tools.sh has verified the disposable KVM guest.
 export DEBIAN_FRONTEND=noninteractive
-timeout 60s apt-get install -y --no-install-recommends 'libicu76=76.1-4'
+timeout 60s apt-get install -y --no-install-recommends 'libicu76=76.1-4' 'sudo=1.9.16p2-3+deb13u2'
 temporary=$(mktemp -d /tmp/disposable-runner.XXXXXXXX)
 trap 'rm -rf -- "$temporary"' EXIT
 curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
@@ -14,3 +14,8 @@ tar --extract --gzip --file "$temporary/runner.tgz" --directory /opt/actions-run
 /opt/actions-runner/bin/Runner.Listener --version | tee /opt/waitron-tools/runner-version.txt
 test "$(cat /opt/waitron-tools/runner-version.txt)" = '2.338.2'
 sha256sum /opt/actions-runner/bin/Runner.Listener > /opt/waitron-tools/runner-listener.sha256
+useradd --uid 1001 --user-group --create-home --groups docker --shell /bin/bash runner
+chown -R runner:runner /opt/actions-runner
+printf '%s\n' 'runner ALL=(ALL:ALL) NOPASSWD:ALL' > /etc/sudoers.d/waitron-runner
+chmod 0440 /etc/sudoers.d/waitron-runner
+visudo --check --file=/etc/sudoers.d/waitron-runner
