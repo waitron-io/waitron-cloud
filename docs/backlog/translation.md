@@ -265,8 +265,13 @@ PostgreSQL self-termination during cleanup passes three times with the guard and
 with the guard deleted. Treat that as qualification of the fatal-then-retry mechanism,
 not proof that every intermittent disconnect failure is resolved. On recurrence, keep the
 complete assertion output, selected backend ids and termination results before changing
-the original check. Active-job failure ordering at direct pool queries remains separately
-unqualified; the reviewed idle scenario leases no job.
+the original check. The venue proof now retains the actual and expected four-value
+assertion for this case when its output contains only the worker’s fixed messages
+(`node --test scripts/translation-disconnect-diagnostics.test.mjs`). Other output
+remains private. Details beyond 400 output characters or the proof’s existing
+16 failure slots are omitted; the ordinary failure row keeps priority. Selected
+backend ids and termination results still need capture. Active-job failure
+ordering at direct pool queries remains separately unqualified; the reviewed idle scenario leases no job.
 A later CI disconnect failure retains the reverse output: a pass-retry line before
 that fatal line. A local real PostgreSQL lease-query termination reproduces this
 ordering when the client error event arrives later. The query reports `57P01`,

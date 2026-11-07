@@ -396,7 +396,11 @@ scripts/cloud-cost/litestream-smoke-checks.test.mjs
 scripts/cloud-cost/litestream-smoke-accounting-gaps.test.mjs` for those controls.
 Three genuine native-smoke cases each change one observer record while restoring
 both sales with SQLite and fiscal checks and removing owned resources. The
-six surrounding native conformance cases now use the same original-record
+replication case reported a byte discrepancy of 742 instead of -1 in
+[PR1050's cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/42332288959/job/128281835882).
+Its cause stays in D530. Capture the synthetic proof before asserting its exact
+discrepancy; keep that assertion.
+The six surrounding native conformance cases now use the same original-record
 validation. Known byte counts and storage bounds keep their original checks;
 unknown figures require named gaps. All sale, restore, SQLite, fiscal, stop and
 owned-cleanup checks remain. The shared reader also validates original storage
@@ -3687,8 +3691,11 @@ zero-based file number, reported source line, runner failure category and an
 allowlisted error code.
 Match the file number against that group's file list in
 `scripts/test-cloud-free-services.mjs`. Unknown codes stay unclassified; messages,
-test names, paths, assertion values and child output remain private. Unexpected
-output still refuses the proof and records only its stream and file position.
+test names, paths, arbitrary assertion values and child output remain private.
+The disconnect case’s fixed-message assertion exception is covered by
+`node --test scripts/translation-disconnect-diagnostics.test.mjs`; its unknown
+cause and missing backend evidence stay in [translation work](backlog/translation.md).
+Unexpected output still refuses the proof and records only its stream and file position.
 The sender retains at most sixteen event records plus a truncation marker.
 The command also reports its final refusal stage and allowlisted code.
 
