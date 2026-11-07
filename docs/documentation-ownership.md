@@ -115,3 +115,5 @@ Reuse Waitron's stream restore engine, cold-restore checks and bucket setup jour
 Cloud owns managed storage provisioning, scoped credentials, owner authorisation and
 integration with those interfaces. Keep that division when selecting work so the two
 repositories do not implement competing restore paths.
+
+<!-- Temporary older-head CI rehearsal; close without merging. -->
