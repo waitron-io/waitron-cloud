@@ -43,3 +43,20 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(process.env.BILLING_RECEIPT_DIR){await mkdir(process.env.BILLING_RECEIPT_DIR,{recursive:true});await section.screenshot({path:`${process.env.BILLING_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
  }finally{await browser.close();}
 });
+
+for(const status of [403,503])test(`unavailable trial chooser ${status} adds no ordinary-account panel`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();page.setDefaultTimeout(4000);
+  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/session'))return route.fulfill({json:{accountId:'ordinary',expiresAt:new Date(Date.now()+3600000).toISOString()}});
+   if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
+   return route.fulfill({status:path.endsWith('/billing/read')?status:503,json:{error:path.endsWith('/billing/read')&&status===403?'permission_denied':'temporarily_unavailable'}});
+  });
+  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.waitForFunction(()=>{const billing=(window as any).app.billing;return billing.loadAttempted&&!billing.pending;});
+  assert.equal(await page.getByRole('region',{name:translations.en.billingTitle,exact:true}).count(),0);
+ }finally{await browser.close();}
+});
