@@ -37,3 +37,10 @@ test('recovery of a recorded server invocation cancels that attempt and dispatch
  const result=await recoverCanary({api,leases,policy,wait:async()=>{}});
  assert.equal(cancelled,true);assert.equal(dispatched.inputs.source_sha,sourceSha);assert.equal(dispatched.inputs.route,'hosted');assert.equal(result.runId,790);
 });
+test('a terminal failed hosted attempt stops visibly and does not strand the next invocation',async t=>{
+ const {recoverCanary}=await import('./ci-canary.mjs');const leases=setup(t);
+ const invocation={nonce:'a'.repeat(32),sourceSha,workflowSha,route:'hosted',createdAt:Date.now(),runId:789,attempt:1};leases.setInvocation(invocation);
+ const api={get:async()=>({id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,display_title:'disposable-'+invocation.nonce,event:'workflow_dispatch',status:'completed',conclusion:'failure'})};
+ await assert.rejects(recoverCanary({api,leases,policy}),/789.*failure|failure.*789/);
+ assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
+});

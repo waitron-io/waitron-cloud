@@ -151,7 +151,16 @@ export async function recoverCanary({api,leases,policy,signal,wait=delay}){
  let invocation=leases.inspect().ciInvocation;
  if(!invocation)return null;
  invocation=await dispatchCanary({api,leases,policy,...invocation,signal,wait});
- if(invocation.route==='hosted')return invocation;
+ if(invocation.route==='hosted'){
+  const run=await api.get(`/repos/${policy.repository}/actions/runs/${invocation.runId}`,{signal});
+  assert.ok(run.id===invocation.runId && run.run_attempt===invocation.attempt && run.workflow_id===policy.workflowId &&
+   run.head_sha===invocation.workflowSha && run.display_title==='disposable-'+invocation.nonce && run.event==='workflow_dispatch','Hosted recovery identity differs');
+  if(run.status==='completed' && run.conclusion!=='success'){
+   leases.clearInvocation(invocation.nonce);
+   throw new Error(`Hosted canary ${invocation.runId} finished ${run.conclusion}; no passing qualification`);
+  }
+  return invocation;
+ }
  return fallbackCI({api,policy,invocation,signal,wait,dispatch:async({sourceSha,route})=>{
   leases.clearInvocation(invocation.nonce);
   return dispatchCanary({api,leases,policy,sourceSha,workflowSha:invocation.workflowSha,route,signal,wait});
