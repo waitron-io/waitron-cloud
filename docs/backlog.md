@@ -736,8 +736,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    (typed text sent by an admin), and a triage agent. D101's AI gate still has to be opened
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
-   updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
-   covers Cloud receiving and a local grouped reader that uses the shared box-error receiver.
+   updater honouring a held version.
    Local PostgreSQL measurement at one million synthetic reports used 586 MiB including
    indexes; the latest hold comparison took 343 ms on the x86 test box. See the
    [volume measurements](box-error-reports.md#measure-storage-and-reads-before-sizing-a-service)

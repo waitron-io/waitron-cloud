@@ -1,6 +1,6 @@
 # Staff problem reports implementation plan
 
-D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection.  no AI, paging, mail, accounts, spending or Waitron implementation. Watcher, lane D questions 2026-11-07 14:21: “Write its one-page plan now and get the Claude read; build once lane K’s D601 lands, reusing D601’s table and cleaning.” Watcher 2026-11-07 15:09 supersedes the timing: “Branch D603’s build from #1073’s current head … and build … now”; publish only after D601 lands, rebased onto main. D603 queue: “do not build a second one.”
+D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection. No AI, paging, mail, accounts, spending or Waitron implementation. Watcher, lane D questions 2026-11-07 14:21: “Write its one-page plan now and get the Claude read; build once lane K’s D601 lands, reusing D601’s table and cleaning.” Watcher 2026-11-07 15:09 supersedes the timing: “Branch D603’s build from #1073’s current head … and build … now”; publish only after D601 lands, rebased onto main. D603 queue: “do not build a second one.”
 
 ## Contract and gate
 

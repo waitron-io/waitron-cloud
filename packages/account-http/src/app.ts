@@ -143,7 +143,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
-    if(c.req.path==='/api/installations/error-report'||c.req.path==='/api/installations/release-held')return boxErrorResponse(c,{machine:boxErrors,ip,consume});
+    if(['/api/installations/error-report','/api/installations/release-held','/api/installations/staff-report','/api/installations/staff-description'].includes(c.req.path))return boxErrorResponse(c,{machine:boxErrors,ip,consume});
     if(c.req.path==='/api/installations/tunnel-provision')return tunnelProvisionResponse(c,{machine:tunnelProvision,ip,consume});
     if(c.req.path==='/api/installations/address-lookup')return addressLookupResponse(c,{machine:addressLookup,ip,consume});
     if(translationPaths.includes(c.req.path))return translationResponse(c,{machine:translation,ip,consume});
