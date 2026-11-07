@@ -33,6 +33,8 @@ test('explicit current-image evidence requires the complete validated target own
 for (const [name, change] of [
   ['missing node owner', a => {a.result.modules.splice(4, 1);}],
   ['duplicate owner', a => {a.result.modules[4] = structuredClone(a.result.modules[0]);}],
+  ['additional duplicate owner', a => {a.result.modules.push(structuredClone(a.result.modules[0]));}],
+  ['unexpected owner', a => {a.result.modules.push({name: 'unexpected', status: 'passed', checks: [{code: 'data', status: 'passed'}]});}],
   ['failed node owner', a => {a.result.modules[4].status = 'failed';}],
   ['unchecked node owner', a => {a.result.modules[4].checks = [];}],
   ['failed node check', a => {a.result.modules[4].checks[0].status = 'failed';}],
