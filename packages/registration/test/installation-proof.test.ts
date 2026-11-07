@@ -11,6 +11,14 @@ const lease=issuer.issue(leaseClaims);
 const claims:MachineClaims={origin,action:'configuration',installationId:leaseClaims.installationId,operationId:randomUUID(),issuedAt:now,lease:JSON.stringify(lease),body:'{}'};
 function proof(c=claims){const bytes=encodeMachine(c);return {payload:bytes.toString('base64url'),signature:sign(null,bytes,key.privateKey).toString('base64url')};}
 function verify(p=proof(),time=now){return verifyMachine(p,publicKey,origin,'configuration',time);}
+test('address lookup uses the existing signed namespace and cannot be relabelled as another action',()=>{
+ const value={...claims,action:'address-lookup' as const,body:JSON.stringify({version:1,kind:'suggest',workflowId:randomUUID(),query:'Calle de Prueba',language:'es'})};
+ const signed=proof(value);
+ assert.deepEqual(readMachineClaims(signed),value);assert.deepEqual(verifyMachine(signed,publicKey,origin,'address-lookup',now),value);
+ assert.throws(()=>verifyMachine(signed,publicKey,origin,'configuration',now));
+ assert.throws(()=>verifyMachine(signed,publicKey,'https://other.test','address-lookup',now));
+ assert.throws(()=>verifyMachine(signed,publicKey,origin,'address-lookup',now+60001));
+});
 test('a lease binds the issuer, installation key and scope; the machine proves possession separately',()=>{
   const trusted=new Map([[issuer.keyId,issuer.publicKey]]);
   assert.deepEqual(verifyLease(lease,trusted,origin,now),{...leaseClaims,keyId:issuer.keyId,audience:'control'});

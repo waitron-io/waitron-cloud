@@ -41,16 +41,20 @@ venue does not subscribe to remote access or backups.
   remain release gates. The retained CartoCiudad audit agrees with published
   scores and the earlier parser fix; a new raw-response re-score is unavailable
   because both landings deleted those replies.
-  The test-box Google client now prepares transient suggestions and editable
-  validation drafts, with injected transport and no startup or package-index wiring.
-  Ten offline checks cover its field mapping, country refusals, input/response
-  bounds, cancellation and secret-free failures; a real local HTTP redirect is
-  refused. This does not prove Google quality, storage rights or a working screen.
-  The owner’s 6 November step-5 trial still needs its signed route and Waitron
-  provider handoff before the client lands. Its counted-abandonment trial choice
-  keeps one allowance hold per workflow and releases none on abandonment; full
-  service accounting remains open. No real provider call or production enablement
-  is added by this client. See the [client plan](../superpowers/plans/2026-11-07-test-address-lookup.md).
+  The owner’s one-box trial now has a signed route and a Google client for
+  transient suggestions and editable validation drafts, with explicit injection
+  and no startup/key wiring. Normal deployments still refuse it. Real PostgreSQL
+  checks cover the ten counted workflows/month, eight suggestions/workflow and
+  twenty/day, replay, authority after waits, expiry and uncertain validation.
+  The [trial contract](../address-lookup-trial.md) is the handoff for Waitron’s
+  existing editable screens; its joint screen/attribution proof remains open.
+  The watcher approved counted abandonment for this trial: expired or abandoned
+  holds stay counted. **Remove that exception when the real service is scoped.**
+  A crash can shorten one dispatch gap; no strict crash-spacing guarantee is made.
+  Real Google activation is a separate reviewed change requiring the server-only
+  key, owner usage/quotas confirmation, published allowance, tested stop control
+  and retained terms/privacy gates. No live request or production enablement is
+  proved by these local checks.
   The offline evaluation client now waits a full spacing interval when created,
   including after reopening its durable journal. A controlled 150 ms reservation
   delay reproduces a restart dispatch less than the original 90 ms test bound;

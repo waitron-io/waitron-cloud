@@ -17,7 +17,7 @@ function text(value:unknown):string{
  if(typeof value!=='string')fail('malformed',true);
  return value;
 }
-function checkInput(value:unknown,token:unknown,validation=false){
+export function checkInput(value:unknown,token:unknown,validation=false){
  if(typeof value!=='string'||!value.trim()||Buffer.byteLength(value,'utf8')>512
   ||(validation&&Array.from(value).length+2>280)
   ||typeof token!=='string'||!/^[-_A-Za-z0-9]{1,36}$/.test(token))fail('invalid_input');
