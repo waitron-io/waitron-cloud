@@ -1,35 +1,77 @@
-# D604 first piece: choose a level and add a sandbox card
+# D604 piece 1: start Connected’s existing trial
 
-**Goal:** An owner chooses Registered (1) or Connected (2) for a fresh synthetic test venue, adds their first SumUp sandbox card, and sees both after reload. Hosted (3) is priced but unavailable here.
-**Dependencies:** Only A (#1069) and C (#718), already on main; [slice F](2026-10-29-cloud-billing.md#the-slices-in-order). No dependency on D–J.
-**Spec:** [billing design](../specs/2026-10-29-cloud-billing-design.md), §§2, 5, 6, 9–10; [provider receipt](../../billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge). Source inspection only; this plan runs no billing tests or providers.
-**Execution:** Driver implements inline, failing behavioral test → observed expected failure → minimal implementation → passing test. Preserve existing assertions; no implementation delegation.
+Authority: watcher, lane G questions, **2026-11-07 14:52**:
+> “Confirmed: piece 1 is choosing Connected by starting the existing 30-day trial
+> through BillingStore.transition, using the existing trial eligibility and
+> permission rules, with no renewal anchor, no provider call and no CSP change.
+> Trim the plan to one page for that piece and build it.”
+> “D570's fix keeps priority at every pause.”
 
-## Before build and boundaries
-- [ ] Mandatory Claude plan read: `~/workspace/tools/claude-seat.sh review-branch <worktree> <brief-file> <report-file>`; resolve findings before building. The brief asks whether this piece should exist and the simplest alternative.
-- [ ] Named prerequisites: confirm A's setup-only amount/consent, server-readable checkout/customer correlation, and exact widget/authentication frame origins from public documentation and sanitized evidence. Unresolved details or any needed migration stop the affected build; name the prerequisite, reserve nothing.
-- Node ≥26, pnpm 9.15.0; opt-in sandbox server configuration with explicit synthetic-account allowlist, test venues and verified SumUp sandbox merchant. Default off; reject live/mismatched merchants before writes. Stripe remains test-mode-only and deferred.
-- No renewal/absent-customer charge, live data, production credentials/resources, migration, D570 scripts or `deploy/kubernetes` changes. No fee promise: receipt reports 2.5% in sandbox; live 1.95%, enablement, settlement, legal, supplier and country-flow evidence remain unqualified. Add no approval protocol or ledger.
+Scope: owned synthetic test venues only. Entire F, sandbox cards (piece 2),
+providers, tax, cancellation, account closure, hosting, supplier and live work
+remain open. No money, keys, migrations, new state, ledger, permission rules or
+trial calculations. This replaces signed `944fadc6`’s unsafe unpaid anchor and
+open-ended paid grant. Spec: [billing design](../specs/2026-10-29-cloud-billing-design.md#4-trials),
+restricted by the authority above. Node ≥26; pnpm 9.15.0; implement inline.
 
-## One independently landable implementation
-- [ ] Trace before changes: `billing-store.ts:133–143` method writes → `billing-allowances.ts:70–95` trial limits; `billing-venues.ts:13–40` level/date reads → `billing-charges.ts`, `billing-display-machine.ts`, `venue-service-permissions.ts` and their tests (all under `packages/registration/src/`). Trace HTTP/portal option and CSP consumers too; retain field meanings and existing service gates.
-- [ ] In `packages/registration/src/billing-store.ts`, expose `executeOn(client:PoolClient, scope:BillingScope, event:BillingEvent, command:BillingCommand):Promise<BillingReceipt>` using the same validated, locked command path; existing `execute` retains its transaction wrapper. This lets owner authorization and related commands commit together.
-- [ ] Create `packages/account-http/src/billing-account.ts`; wire optional sandbox options through `app.ts` and `server.ts`. Resolve current session, verified owner membership and venue-derived business scope; reuse authorization/parent lock order. Recheck session/ownership and binding after waits, within the committing transaction. Never accept client account/business/provider identities.
-- [ ] Routes under `/api/account/billing`: `POST /read {}` → `{price:BillingPriceVersion,venues:[{venueId,businessName,level,revision,cardAdded:boolean}]}` lists all owned test venues, including those without installations. `POST /level {venueId,level:'registered'|'connected',expectedRevision}` returns that view. Reuse bounded JSON, origin, CSRF, account/IP limits, cookies and errors from `translation-consent.ts`; omit saved instrument references.
-- [ ] Read configured effective prices via `BillingPriceStore`; no defaults, €10/€30 estimates or fee text. Missing prices return unavailable without writes. Label monthly prices before VAT in both languages.
-- [ ] First selection only: Registered is a no-op; Connected uses `ensure_business`, initial `anchor` and revision-checked `set_venue` atomically, with test-calendar UTC date as `connectedFrom`, other date/schedule fields null. Repeated identical selection returns current view; stale/conflicting selection refuses. Reject existing trials, paid history, hosted/scheduled states and downgrades; create no trial, paid period or service enrollment.
-- [ ] Create `packages/account-http/src/sumup-sandbox.ts`: `begin(scope:BillingScope,venueId:string):Promise<{checkoutId:string}>`, `verify(scope:BillingScope,venueId:string,checkoutId:string):Promise<ProviderMethod>`. Inject bounded transport and sandbox merchant configuration; use A's `SETUP_RECURRING_PAYMENT` widget flow, server-owned customer/reference binding and server API reads.
-- [ ] Add `POST /card/start {venueId}` and `/card/finish {venueId,checkoutId}`. Start returns checkout ID for the provider widget; finish returns the read view. Only completed authenticated setup plus an active instrument for the exact merchant/customer/reference permits internal `set_method`; provisional tokens/browser success do not. Card fields stay in provider frames; secrets stay server-side, out of logs/responses.
-- [ ] Provider calls run outside database transactions; authorize before calling and again before saving. First-card-only completion serializes on the business, recognizes the same saved instrument after reply loss/restart, and refuses a different existing method. Reuse existing method/event storage; cancellation, failure or pending authentication saves nothing and shows retryable status.
-- [ ] Create `apps/portal/src/billing-{types,controller,screen}.ts`; integrate `app.ts`, `screens.ts`, `api.ts`, `locale.ts` and shared UI controls into `/account`. Select owned venues including those without installations; show level, configured prices, add-card action and saved/error status. Fence late replies on account/venue change or sign-out; keyboard and retry flows must work.
-- [ ] Update `packages/account-http/src/portal.ts` and affected header consumers for exact SumUp script/frame/connect origins only when sandbox billing is enabled; preserve other security directives. Provider setup/authentication must work under the actual served policy, without wildcards or raw card inputs in Cloud.
+- [ ] **Store.** In `packages/registration/src/billing-store.ts`, add
+  `executeOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:BillingCommand):Promise<BillingReceipt>`
+  and equivalent `transitionOn` accepting `PermissionCommand`. Both reuse one
+  validated, locked apply path; retain transaction-owning `execute`/`transition`
+  wrappers and the enrol flag semantics. Require an active transaction using the
+  existing SAVEPOINT/RELEASE pattern; do not change `transaction.ts` or duplicate
+  SQL invariants. Export `readBillingPrice`, `readBillingVenue`, `readVenueHistory`,
+  `mayStartTrial`, `effectiveVenueLevel` through registration `src/index.ts`.
 
-## Failing tests and qualification
-- [ ] Add `packages/account-http/test/{billing-account,sumup-sandbox}.test.ts` and extend `packages/registration/test/billing-store.test.ts`: persistence/reload; no-price refusal; first-level/anchor atomic rollback; stale revision; concurrent/lost-reply card completion stores one method; pending/provisional/foreign merchant/customer/reference refuses; no renewal charge rows or paid history. Fake provider runs on loopback, never an external endpoint.
-- [ ] Pin missing/expired/revoked sessions, non-owner/foreign venue, CSRF/origin refusal, production scope and default-off refusal before provider writes; revoke/change binding during provider or real database lock waits and require no save. Preserve store replay/isolation assertions and trial-allowance behavior after first-card attachment.
-- [ ] Add `apps/portal/test/{billing-browser,billing-account-fencing}.test.ts`; extend `api.test.ts` and HTTP `portal.test.ts`: malformed replies, CSRF, reload, authentication failure/retry, delayed replies after sign-out/venue switch, keyboard use and served CSP. Inspect English + Spanish × light + dark × 390/1280 screenshots; check accessibility and overflow in all eight combinations.
-- [ ] On the approved Docker-capable box, run focused database cases: `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/billing-account.test.ts test/sumup-sandbox.test.ts`; registration: same wrapper with `--dir packages/registration` and `test/billing-store.test.ts test/billing-allowances.test.ts`. Read counts and expected failures/passes.
-- [ ] Build portal, then use that wrapper with `--dir apps/portal` for the two new billing tests and `test/api.test.ts`; run `pnpm typecheck`. CI owns full selected suites; inspect every current-head job. On the approved box, a synthetic SumUp sandbox walkthrough qualifies the real widget separately from fake tests, with sanitized results only; never perform an unattended charge for this piece.
-- [ ] Update the existing billing entry in `docs/backlog.md` and affected guides with commands/results and remaining limits. During `finish-branch`, driver obtains one whole-branch Claude execution review after initial rebase, in a disposable complete candidate checkout with dependencies installed; fix findings and await selected CI. Signed-off commits belong to implementation, not this planning task.
+- [ ] **HTTP.** Create `packages/account-http/src/billing-account.ts`; wire
+  `app.ts`/`server.ts` and optional `billingAccount:{accountIds:readonly string[]}`
+  server configuration, absent/off by default. Require `test-venue-levels` mode
+  and the synthetic-account allowlist. Follow `translation-consent.ts` for bounded
+  bodies, cookies, origin, CSRF, account/IP limits and errors.
+  `POST /api/account/billing/read {}` returns
+  `{price:BillingPriceVersion,beforeVAT:true,venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
+  `/start-trial {venueId}` returns the freshly read same view.
+  List owned venues directly, including multiple businesses and no installation.
+  Use existing `mayStartTrial`, history, effective-level and authority readers;
+  preserve enrollment/service gates. Read effective configured prices, never guessed
+  figures; missing prices return unavailable without writes.
 
-**Still open:** Tax details; switching/removing cards; Stripe direct debit; cancellation retaining the paid month; account close; level-3 hosting agreement; supplier-register rows and qualified country flows before live data; G's trials/renewals/failures; invoices and all production qualification. This sandbox selection/card setup does not qualify any of them.
+- [ ] **Atomic authorization.** Inside existing `transaction`, resolve session
+  (`touch:false`, CSRF), lock verified credentials and owner membership as consent
+  does; derive organisation/business from the venue, never request identities.
+  Use `executeOn(ensure_business)` for existing parent/business lock order, then
+  lock/revalidate the venue’s full binding and test environment. Recheck session
+  after waits; call `transitionOn(start_trial,level:'connected',on:serverUTCday)`.
+  Preserve `billingDate`, `trialEnd`, UTC wall time and exclusive end semantics.
+  Recheck session and owner/scope before returning; any refusal rolls back
+  initialization, events, trial and authority. Never issue anchor or `set_venue`.
+  Repeated/concurrent starts follow existing trial refusal; refresh actual state.
+
+- [ ] **Portal.** Create `apps/portal/src/billing-{types,controller,screen}.ts`;
+  integrate `app.ts`, `screens.ts`, `api.ts`, `locale.ts`, shared controls. Show
+  actual active trial/end after reload, eligibility, configured monthly prices
+  before VAT in English/Spanish; fence late account/venue/sign-out replies.
+  No installation dependency or new Waitron location. Keep I1073 overlaps in
+  `app.ts`/`index.ts` to distinct hunks under the owner’s 1-Nov queue rule;
+  never mutate its checkout.
+
+- [ ] **TDD and finish.** Observe expected failures before implementation, then
+  focused passes. Extend registration `test/{billing-store,venue-service-permissions}.test.ts`;
+  add HTTP `test/billing-account.test.ts`: real parent/venue/authority/installation
+  lock waits, revocation/expiry,
+  owner loss, changed venue binding, concurrent/retried requests, rollback,
+  eligibility/end boundary, foreign/production/unverified/default-off refusal;
+  store wrapper/replay parity and out-of-transaction rejection.
+  Assert no stale success, anchor, paid-level/date/period,
+  charge or payment-method write; preserve assertions and service gates.
+  Add portal `test/{billing-browser,billing-account-fencing}.test.ts`; extend
+  `api.test.ts` and HTTP `portal.test.ts`: malformed replies, CSRF/origin, reload,
+  no-installation venues, unchanged CSP and zero provider calls.
+  On the approved test box use `node scripts/test-postgres.mjs exec pnpm --dir
+  packages/account-http exec node --test test/billing-account.test.ts`;
+  repeat for named registration/portal files above; read counts. Build portal; inspect
+  English/Spanish × light/dark × 390/1280 screenshots, keyboard, axe and overflow;
+  run `pnpm typecheck`. No blanket suites. Update only own billing lines in
+  `docs/backlog.md` and affected guides. During finish-branch obtain one final
+  Claude execution review after initial rebase, using a disposable complete
+  candidate checkout with dependencies; fix findings and inspect every current-head CI job.
