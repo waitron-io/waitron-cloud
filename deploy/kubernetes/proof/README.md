@@ -187,12 +187,29 @@ stale catalogues, foreign sources and totals reaching US$10 refuse. Run
 `node --test --test-name-pattern='manual cost' deploy/kubernetes/proof/prices.test.mjs`
 and the setup booking checks above for the arithmetic and retained snapshot.
 
-The caller still has to supply reviewed upper quantities and fixed transfer,
-events, network, tax and contingency allowances. Source URLs and digests alone
-do not establish those bounds. This calculation has no first-machine profile
-or authenticated billing qualification yet; prior-history import and creation
-remain unfinished. The lifecycle entries still refuse, so you do not need to
-sign in yet. AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
+For the first machine, `bookManualFirstSetup` selects fixed quantities and
+allowances before using that same booking path. You supply the four acquired
+catalogues; caller-selected costs, quantities or allowances refuse. The profile
+reserves 20 minutes of compute, one day of 64 GiB disk, 31 days of 16 MiB storage,
+133,920 writes and Lambda requests, and 5,000 reads. Protection reserves a
+128 MiB function running continuously for 31 days, plus 1 GiB of log ingestion
+and four days of log storage. This includes three write/request attempts per
+minute rather than relying on a shared free tier. Storage covers the core's
+13 monthly records, active record and heartbeat at their 1 MiB limits.
+
+The fixed allowances are US$0.10 each for transfer, events and network, US$2
+for tax and US$1 for contingency. Their digest identifies the fixed profile;
+the pricing-page link does not mean AWS supplied those amounts. The synthetic
+catalogue fixture books US$9.313491 before the observed account opening. Run
+`node --test --test-name-pattern='^first setup' scripts/kubernetes-proof-control.test.mjs`
+to check the booking and refusal at the exact US$10 boundary.
+
+These quantity and allowance ceilings are assumptions for the whole-branch
+review and live qualification. Recording them does not prove cleanup completes
+within a day, bound actual logs or reconcile the bill. Prior-history import,
+creation and the owner lifecycle remain unfinished, and the lifecycle entries
+still refuse, so you do not need to sign in yet.
+AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
 and [per-second disk charging](https://aws.amazon.com/ebs/pricing/).
 
 A stack name alone does not prove its expiry protection is working.

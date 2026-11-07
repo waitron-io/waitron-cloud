@@ -1001,3 +1001,83 @@ test('setup booking refuses ambiguous pasted and acquired cost inputs before a p
   assert.deepEqual(f.calls, []);
   assert.equal(existsSync(f.options.directory), false);
 });
+
+async function firstSetupFixture(t) {
+  const f = setupBookingFixture(t), { acquirePriceCatalogue } = await import('../deploy/kubernetes/proof/prices.mjs');
+  const docs = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/test-fixtures/prices.json', import.meta.url)));
+  const catalogues = {};
+  for (const [service, doc] of Object.entries(docs)) catalogues[service] = await acquirePriceCatalogue(service, {
+    fetch: async () => new Response(JSON.stringify(doc), { headers: { 'content-type': 'application/json' } }),
+    clock: () => Date.parse(now), retain: async () => {},
+  });
+  const prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[0] === 'ce') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.50';
+    return response;
+  };
+  async function book(changes = {}) {
+    assert.equal(typeof control.bookManualFirstSetup, 'function', 'missing fixed first-machine cost booking');
+    return control.bookManualFirstSetup({ ...f.options, cost: undefined, catalogues, ...changes });
+  }
+  return { ...f, catalogues, bookFirst: book };
+}
+
+// A caller-selected quantity could reserve pennies while leaving the sweep running for a month.
+test('first setup books the fixed machine and full month of protection instead of caller-selected quantities', async t => {
+  const f = await firstSetupFixture(t), result = await f.bookFirst();
+  assert.equal(result.upperMicroUsd, 9313491);
+  const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+  assert.equal(saved.billing.microUsd, 500000);
+  assert.deepEqual(Object.fromEntries(Object.entries(saved.cost.components).map(([name, row]) => [name, row.upperMicroUsd])), {
+    compute: 115600, disk: 191086, storage: 398, requests: 671600, lambda: 4490807, logs: 544000,
+    transfer: 100000, events: 100000, network: 100000, tax: 2000000, contingency: 1000000,
+  });
+  assert.deepEqual(saved.priceInputs.quantities, {
+    computeSeconds: 1200, diskGiBSeconds: 5529600, storageByteSeconds: 44936095334400,
+    putRequests: 133920, getRequests: 5000, lambdaMiBSeconds: 342835200, lambdaRequests: 133920,
+    logIngestBytes: 1073741824, logStoredByteSeconds: 371085174374400,
+  });
+  assert.deepEqual(saved.priceInputs.catalogues, f.catalogues);
+  assert.equal(f.calls.some(row => ['create-stack', 'run-instances', 'put-object'].includes(row.operation)), false);
+});
+
+for (const override of [{ cost: {} }, { priceInputs: {} }, { quantities: { computeSeconds: 1 } }, { fixed: {} }]) {
+  test(`first setup refuses a caller cost override ${Object.keys(override)[0]} before any provider access`, async t => {
+    const f = await firstSetupFixture(t);
+    await assert.rejects(f.bookFirst(override), /D570 controller refused/);
+    assert.deepEqual(f.calls, []); assert.equal(existsSync(f.options.directory), false);
+  });
+}
+
+test('first setup refuses when the actual opening plus fixed protection bound reaches ten dollars', async t => {
+  const f = await firstSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[0] === 'ce') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.686509';
+    return response;
+  };
+  await assert.rejects(f.bookFirst(), /D570 controller refused/);
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+for (const kind of ['stale', 'decoded only', 'higher price']) test(`first setup refuses ${kind} catalogues before provider access`, async t => {
+  const f = await firstSetupFixture(t);
+  if (kind === 'stale') f.catalogues.AmazonEC2.observedAt = '2026-11-05T12:00:00Z';
+  if (kind === 'decoded only') f.catalogues.AmazonEC2.kind = 'd570-price-decoded-v1';
+  if (kind === 'higher price') f.catalogues.AWSLambda.rates.lambdaDuration.usdNumerator = '1000000';
+  await assert.rejects(f.bookFirst(), /D570 price evidence refused/);
+  assert.deepEqual(f.calls, []); assert.equal(existsSync(f.options.directory), false);
+});
+
+test('first setup snapshots catalogues before waiting for provider discovery', async t => {
+  const f = await firstSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    f.catalogues.AmazonEC2.rates.compute.usdNumerator = '1';
+    return prior(...args);
+  };
+  await f.bookFirst();
+  const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+  assert.equal(saved.cost.components.compute.upperMicroUsd, 115600);
+  assert.equal(saved.priceInputs.catalogues.AmazonEC2.rates.compute.usdNumerator, '3468000000');
+});

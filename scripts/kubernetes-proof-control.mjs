@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
@@ -350,6 +351,24 @@ export async function bookManualSetup(options) {
     && Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)
     && iso(observed).slice(0, 10) === now.slice(0, 10));
   return { ...inspection, directory, cost, upperMicroUsd };
+}
+
+export async function bookManualFirstSetup(options) {
+  check(['cost', 'priceInputs', 'quantities', 'fixed'].every(name => options[name] === undefined));
+  const monthSeconds = 31 * 86400;
+  const quantities = {
+    computeSeconds: 1200, diskGiBSeconds: 64 * 86400,
+    storageByteSeconds: 16 * 1024 * 1024 * monthSeconds,
+    putRequests: 3 * monthSeconds / 60, getRequests: 5000,
+    lambdaMiBSeconds: 128 * monthSeconds, lambdaRequests: 3 * monthSeconds / 60,
+    logIngestBytes: 1024 ** 3, logStoredByteSeconds: 1024 ** 3 * 4 * 86400,
+  };
+  const allowances = { transfer: 100000, events: 100000, network: 100000, tax: 2000000, contingency: 1000000 };
+  // These are reserved allowances, not acquired prices; the digest identifies these fixed inputs.
+  const digest = createHash('sha256').update(JSON.stringify({ quantities, allowances })).digest('hex');
+  const fixed = Object.fromEntries(Object.entries(allowances).map(([name, upperMicroUsd]) => [name,
+    { upperMicroUsd, source: 'https://aws.amazon.com/pricing/', digest }]));
+  return bookManualSetup({ ...options, priceInputs: { catalogues: options.catalogues, quantities, fixed } });
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
