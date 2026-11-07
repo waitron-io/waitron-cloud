@@ -128,7 +128,7 @@ async function checkExecutionWorkflow({api,policy,run,signal}){
  assert.equal(blob.encoding,'base64','Invalid execution workflow encoding');
  assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),policy.workflowDigest,'Original execution workflow changed');
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set()}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -141,6 +141,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set()})
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of runs.values()){
+  let candidate;
   try{
   if(run.event!=='pull_request' || run.run_attempt!==1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
    run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || run.pull_requests?.length!==1 || !['queued','in_progress'].includes(run.status))continue;
@@ -152,11 +153,16 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set()})
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name);
    if(!/^(typecheck|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-dashboard-[1-4]|test-ui-1)$/.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-1-${key}`))continue;
+   candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-1-${key}`};
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
    if(ci)found.push(ci);
    if(found.length===limit)return found;
   }
-  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));}
+  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
+   if(candidate && onRefused)try{await onRefused(candidate);}catch(fallbackError){
+    signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',runId:run.id,error:fallbackError.message}));
+   }
+  }
  }
  return found;
 }

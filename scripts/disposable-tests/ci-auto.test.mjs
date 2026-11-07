@@ -218,3 +218,28 @@ test('an unhealthy or unreachable host selects hosted before polling or starting
   assert.equal(mode,'server');assert.equal(writes,1);
  }
 });
+
+for(const race of ['none','assigned','changed-label','advanced'])test(`refused workflow fallback handles ${race} race without running unreviewed code`,async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-refused-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
+ for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
+ const f=fixture();f.jobs.splice(1);let cancelled=false,reruns=0,jobReads=0;const get=f.api.get;
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('unreviewed workflow').toString('base64')};
+  if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null,...(race==='assigned'?{runner_id:42}:{}),...(race==='changed-label'?{labels:['self-hosted','dt-123-789-1-test-heavy-3']}: {})};
+  if(path.endsWith('/pulls/12') && race==='advanced' && jobReads++)return {number:12,state:'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
+  return get(path);
+ };
+ f.api.post=async path=>{if(path.endsWith('/cancel'))cancelled=true;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
+ f.api.patch=async()=>assert.fail('A refused workflow must not disable routing for other reviewed PRs');
+ await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unreviewed workflow must never execute on the server')});
+ assert.equal(cancelled,race==='none','Only a still-queued job on the unchanged PR may be cancelled');
+ assert.equal(reruns,race==='none'?1:0,'Only the unchanged refused PR retries using the existing hosted route');
+ const ledger=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
+ assert.ok(ledger.slots.every(s=>s.state==='free' && !s.ciInvocation));
+});
