@@ -83,3 +83,66 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     } finally { await browser.close(); }
   });
 }
+
+for (const locale of ['en', 'es'] as const) for (const first of flows) for (const newerWait of [false, true]) {
+  test(`${locale} ${first.path}: a late refusal ${newerWait ? 'cannot shorten a newer wait' : 'keeps its wait after navigation'}`, async () => {
+    const browser = await chromium.launch({headless: true});
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let received!: () => void;
+    const firstRequest = new Promise<void>(resolve => { received = resolve; });
+    try {
+      const page = await browser.newPage({locale});
+      page.setDefaultTimeout(3000);
+      await page.clock.install({time: new Date('2026-11-07T12:00:00Z')});
+      await page.clock.pauseAt(new Date('2026-11-07T12:00:01Z'));
+      const c = translations[locale], other = flows.find(flow => flow !== first)!;
+      const calls: unknown[] = [];
+      await page.route('https://portal.test/**', async route => {
+        const endpoint = new URL(route.request().url()).pathname.replace('/api/account', '');
+        if (endpoint === '/session') return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
+        if (endpoint === first.endpoint) {
+          calls.push(route.request().postDataJSON());
+          const initial = calls.length === 1;
+          if (initial) { received(); await held; }
+          return route.fulfill({status: 429, headers: {'Retry-After': initial && newerWait ? '5' : '90'}, json: {error: 'rate_limited'}});
+        }
+        return route.fulfill({contentType: 'text/html', body: '<!doctype html><div id="portal" class="portal"></div>'});
+      });
+      await page.goto(`https://portal.test${first.path}`);
+      await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      const navigate = async (path: string) => page.evaluate(next => {
+        history.pushState(null, '', next); dispatchEvent(new PopStateEvent('popstate'));
+      }, path);
+      const input = page.locator('input[name=email]');
+      const submit = page.getByRole('button', {name: c[first.button], exact: true});
+      const wait = page.getByRole('status').filter({hasText: c.cooldown});
+      await input.fill('first@example.test'); await submit.click(); await firstRequest;
+      await navigate(other.path);
+      if (newerWait) {
+        await navigate(first.path); await input.fill('newer@example.test'); await submit.click();
+        await page.getByRole('alert').filter({hasText: c.limited}).waitFor();
+        assert.equal(await wait.textContent(), `${c.cooldown} 90 ${c.seconds}`);
+      }
+      release();
+      await page.waitForLoadState('networkidle');
+      await navigate(other.path);
+      assert.equal(await page.getByRole('button', {name: c[other.button], exact: true}).isEnabled(), true);
+      assert.equal(await wait.count(), 0, 'a late reply belongs only to its original operation');
+      assert.equal(await page.getByRole('alert').count(), 0, 'a late reply must not show an error on another form');
+      await navigate(first.path); await input.fill('corrected@example.test');
+      assert.equal(await submit.isDisabled(), true, 'leaving the form must not discard a server wait');
+      assert.equal(await wait.textContent(), `${c.cooldown} 90 ${c.seconds}`, 'an older reply cannot shorten a newer wait');
+      await page.locator('form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+      assert.deepEqual(calls, [
+        {email: 'first@example.test', locale},
+        ...(newerWait ? [{email: 'newer@example.test', locale}] : []),
+      ]);
+      await page.clock.fastForward(5000);
+      assert.equal(await submit.isDisabled(), true);
+      assert.equal(await wait.textContent(), `${c.cooldown} 85 ${c.seconds}`);
+      await page.clock.fastForward(85_000);
+      assert.equal(await submit.isEnabled(), true);
+    } finally { release(); await browser.close(); }
+  });
+}
