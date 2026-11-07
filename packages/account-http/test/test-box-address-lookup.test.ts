@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,rm,chmod,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
+import {spawnSync,execFileSync} from 'node:child_process';
 
 const input={query:'Calle de Prueba',language:'es' as const,sessionToken:'synthetic-session'};
 async function fixture(){
@@ -16,21 +17,21 @@ async function factory(){
  return module.createTestBoxAddressLookup!;
 }
 test('removing the server key stops both operations, and replacement is read on the next call',async()=>{
- const create=await factory(),f=await fixture();let sends=0;
+ const create=await factory(),f=await fixture();const keys:(string|null)[]=[];
  try{
   const provider=create({keyFile:f.keyFile,fetcher:async(_url,options)=>{
-   sends++;const key=new Headers(options?.headers).get('X-Goog-Api-Key');
-   assert.equal(key,sends===1?'synthetic-first':'synthetic-second');
+   keys.push(new Headers(options?.headers).get('X-Goog-Api-Key'));
    return Response.json({});
   }});
   assert.deepEqual(await provider.suggest(input),{provider:'google',candidates:[]});
   await writeFile(f.keyFile,'GOOGLE_MAPS_SERVER_KEY=synthetic-second\n');
   assert.deepEqual(await provider.suggest(input),{provider:'google',candidates:[]});
+  assert.deepEqual(keys,['synthetic-first','synthetic-second']);
   await rm(f.keyFile);
   for(const run of [()=>provider.suggest(input),()=>provider.validate({selectedText:'Calle de Prueba',sessionToken:input.sessionToken})]){
    await assert.rejects(run,{message:'unavailable',dispatched:false});
   }
-  assert.equal(sends,2);
+  assert.equal(keys.length,2);
  }finally{await f.close();}
 });
 test('validation uses the same file-backed client and forwards its editable draft',async()=>{
@@ -57,7 +58,11 @@ test('unprotected, linked and malformed key files refuse without disclosing thei
    async()=>{await chmod(f.keyFile,0o600);await writeFile(f.keyFile,'OTHER_KEY=PRIVATE-SECRET\n');},
    ()=>writeFile(f.keyFile,'GOOGLE_MAPS_SERVER_KEY=\n'),
    ()=>writeFile(f.keyFile,'GOOGLE_MAPS_SERVER_KEY='+ 'x'.repeat(8192)),
-   async()=>{await rm(f.keyFile);await symlink(join(f.directory,'missing'),f.keyFile);},
+   async()=>{
+    const target=join(f.directory,'target.env');
+    await writeFile(target,'GOOGLE_MAPS_SERVER_KEY=PRIVATE-SECRET\n',{mode:0o600});
+    await rm(f.keyFile);await symlink(target,f.keyFile);
+   },
   ]){
    await setup();await assert.rejects(()=>provider.suggest(input),(error:unknown)=>{
     assert.ok(error instanceof Error);assert.equal(error.message,'unavailable');
@@ -65,6 +70,25 @@ test('unprotected, linked and malformed key files refuse without disclosing thei
     assert.equal(String(error.stack).includes('PRIVATE-SECRET'),false);return true;
    });
   }
+  await rm(f.keyFile);await writeFile(f.keyFile,'GOOGLE_MAPS_SERVER_KEY=PRIVATE-SECRET\n',{mode:0o600});
+  const uid=process.getuid!;
+  try{
+   process.getuid=()=>uid()+1;
+   await assert.rejects(()=>provider.suggest(input),{message:'unavailable',dispatched:false});
+  }finally{process.getuid=uid;}
   assert.equal(sends,0);
+ }finally{await f.close();}
+});
+test('a named pipe refuses promptly without holding the provider call open',async()=>{
+ const f=await fixture();
+ try{
+  await rm(f.keyFile);execFileSync('mkfifo',[f.keyFile]);
+  const moduleUrl=new URL('../src/test-box-address-lookup.ts',import.meta.url).href;
+  const script=`import {createTestBoxAddressLookup} from ${JSON.stringify(moduleUrl)};
+   let sends=0;const p=createTestBoxAddressLookup({keyFile:${JSON.stringify(f.keyFile)},fetcher:async()=>{sends++;return Response.json({});}});
+   try{await p.suggest(${JSON.stringify(input)});process.exitCode=1;}catch(e){console.log(JSON.stringify({code:e.code,dispatched:e.dispatched,sends}));}`;
+  const r=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',timeout:2000});
+  assert.equal(r.status,0,String(r.error??r.stderr));
+  assert.deepEqual(JSON.parse(r.stdout),{code:'unavailable',dispatched:false,sends:0});
  }finally{await f.close();}
 });

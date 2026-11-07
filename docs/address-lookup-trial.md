@@ -24,12 +24,15 @@ In the private launcher, import `createTestBoxAddressLookup` from
 `/root/waitron-address` directory read-only at `/trial-address`. Mount the directory
 so removing or replacing the original file remains visible inside the server.
 
-The provider reads `GOOGLE_MAPS_SERVER_KEY` for each call. The file must be a regular,
+The provider reads `GOOGLE_MAPS_SERVER_KEY` for each call. The file must be a regular
 file that is not a symbolic link, owned by the server's user, mode 600 and at most 8192 bytes. A missing
 or invalid file returns `unavailable` with `dispatched:false`. Removing the original
 key file prevents later dispatch; it cannot recall a request already sent. Run
 `node --test packages/account-http/test/test-box-address-lookup.test.ts` to check
-key removal, replacement and refusal using synthetic transport replies.
+key removal, replacement and refusal using synthetic transport replies. Signed
+requests still consume allowance and request limits before reading the key file;
+validation closes its workflow even if the key is missing. Keep manual entry
+available and do not retry automatically while the trial is stopped.
 
 ## Sign each request through the box's existing connection
 
