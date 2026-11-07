@@ -330,3 +330,13 @@ test('the real recovery CLI finishes a refused-workflow hosted retry without an 
  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:15000});
  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/REFUSED_CLI_FINISHED/);assert.doesNotMatch(result.stderr,/unsettled top-level await/);
 });
+
+test('owned cancellation bypasses an always-run summary queue before requesting the hosted retry',async()=>{
+ const f=fixture(),get=f.api.get;let forced=false,reruns=0;
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:'completed',conclusion:'cancelled'}:path.endsWith('/actions/runs/789')?{...f.run,status:forced?'completed':'queued'}:get(path);
+ f.api.post=async path=>{if(path.endsWith('/force-cancel'))forced=true;else if(path.endsWith('/rerun')){assert.equal(forced,true);reruns++;}else assert.fail('Normal cancellation is already recorded');};
+ const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
+ const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>{}});
+ assert.equal(forced,true,'An always-run summary must not hold a cancelled source in the runner queue');assert.equal(reruns,1);assert.equal(result.retry,true);
+});

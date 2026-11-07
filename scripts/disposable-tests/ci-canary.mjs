@@ -88,6 +88,8 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
   leases.setInvocation({...pending,ordinaryStage:'cancel-requested'});
   await cancelCIJob({api,repository:policy.repository,ci,signal,wait});
  }
+ if(ownedCancel && run.status==='queued' && job.conclusion==='cancelled')
+  await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true});
  run=await api.get(path,{signal});check(run);
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt changed before retry');
  if(run.status!=='completed'){
@@ -247,7 +249,7 @@ export async function fallbackCI({api,policy,invocation,dispatch,signal,wait=del
  return dispatch({sourceSha:invocation.sourceSha,route:'hosted'});
 }
 
-export async function cancelCIJob({api,repository,ci,signal,wait=delay}){
+export async function cancelCIJob({api,repository,ci,signal,wait=delay,force=false}){
  assert.ok(Number.isSafeInteger(ci.jobId) && ci.jobId>0,'Recorded CI job identity is missing');
  const path=`/repos/${repository}/actions/runs/${ci.runId}`;
  const run=await api.get(path,{signal});
@@ -255,10 +257,11 @@ export async function cancelCIJob({api,repository,ci,signal,wait=delay}){
   run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Recorded CI cancellation identity differs');
  const job=await api.get(`/repos/${repository}/actions/jobs/${ci.jobId}`,{signal});
  assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha,'Recorded CI job identity differs');
- if(job.status==='completed')return;
+ if(job.status==='completed' && !force)return;
  assert.equal(run.run_attempt,ci.attempt,'Recorded CI cancellation attempt differs');
  if(run.status==='completed')return;
- await api.post(path+'/cancel',undefined,{signal});const end=Date.now()+120000;
+ assert.ok(!force || run.status==='queued' && job.status==='completed' && job.conclusion==='cancelled','Force cancellation needs a cancelled job and queued run');
+ await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});const end=Date.now()+120000;
  while(true){const current=await api.get(path,{signal});assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during cancellation');
   if(current.status==='completed')return;
   assert.ok(Date.now()<end,'CI cancellation readback deadline exceeded');await wait(15000,undefined,{signal});}
