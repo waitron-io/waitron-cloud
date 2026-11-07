@@ -17,6 +17,10 @@ def main(argv):
     if not Path(node).is_absolute() or not Path(configuration).is_absolute():
         raise ValueError('Node and immutable configuration need absolute paths')
     config = json.loads(Path(configuration).read_text())
+    if not isinstance(config, dict) or not isinstance(config.get('state'), str):
+        raise ValueError('Configuration needs a string state path')
+    if len(args) >= 3 and args[2] == '--':
+        args[1] = os.path.abspath(args[1])
     state = Path(config['state'])
     if not state.is_absolute():
         raise ValueError('State needs an absolute path')
@@ -32,7 +36,10 @@ def main(argv):
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print('Disposable tests: Mac controller busy', flush=True)
+            try:
+                os.write(1, b'Disposable tests: Mac controller busy\n')
+            except OSError:
+                pass
             return 75
         script = Path(__file__).resolve().parents[2] / 'scripts/disposable-tests/manual.mjs'
         environment = {key: value for key, value in os.environ.items() if key not in ('NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONHOME')}

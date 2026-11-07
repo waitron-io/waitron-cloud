@@ -30,12 +30,12 @@ export async function withManualSlot(directory,work) {
 export async function recoverManual(args) {return recoverState(args, false);}
 export async function reconcileManual(args) {return recoverState(args, true);}
 
-async function recoverState({state,leases,transport,resourceId,signal=AbortSignal.timeout(120000)},automatic) {
+async function recoverState({state,leases,transport,resourceId,allowInitialize=false,signal=AbortSignal.timeout(120000)},automatic) {
   privateState(state);
   if(automatic&&existsSync(join(state,'recovery.lock'))&&!reclaimDeadGate(join(state,'recovery.lock')))return {code:75,reason:'recovery-owner-live-or-unknown'};
   const recovery=claimGate(state,'recovery.lock');
   if(!recovery)return {code:75,reason:'recovery-already-owned-or-needs-inspection'};
-  let gate;
+  let gate, freshGate=false, keepGate=false;
   try {
     const path=join(state,'manual.lock');
     if(existsSync(path)) {
@@ -46,7 +46,9 @@ async function recoverState({state,leases,transport,resourceId,signal=AbortSigna
     } else {
       gate=claimGate(state,'manual.lock');
       if(!gate)return {code:75,reason:'manual-owner-raced-recovery'};
+      freshGate=true;
     }
+    assert.ok(existsSync(join(leases.directory,'state.json'))||(freshGate&&allowInitialize),'Recorded ledger is missing; recovery refused');
     if(automatic&&existsSync(join(leases.directory,'lock'))&&!reclaimDeadGate(join(leases.directory,'lock')))return {code:75,reason:'ledger-owner-live-or-unknown'};
     const ledger=leases.inspect();
     assert.ok(Array.isArray(ledger.slots),'Ledger is locked or unknown; inspect its owner before recovery');
@@ -54,19 +56,23 @@ async function recoverState({state,leases,transport,resourceId,signal=AbortSigna
       const occupied=ledger.slots.filter(slot=>slot.state!=='free');
       assert.ok(occupied.length<=1,'Automatic recovery supports one slot');
       resourceId=occupied[0]?.lease.resourceId;
-      if(!resourceId) {releaseGate(gate);return {code:0,cleanup:'absent'};}
+      if(!resourceId) {releaseGate(gate);gate=undefined;return {code:0,cleanup:'absent'};}
     }
     const lease=ledger.slots.find(slot=>slot.lease?.resourceId===resourceId)?.lease;
     assert.ok(lease,'No matching recorded lease; recovery refused');
+    keepGate=true;
     try {
       await transport.destroy(lease,{signal});
       const observed=await transport.inspect(lease,{signal});
       assert.ok(observed.resourceId===resourceId&&observed.absent===true,'Exact resource absence was not proved');
       assert.equal(leases.release(lease,observed),true,'Recorded lease release refused');
     } catch(error) {leases.release(lease,undefined);throw error;}
-    releaseGate(gate);
+    releaseGate(gate);gate=undefined;
     return {code:0,cleanup:'absent',resourceId};
-  } finally {releaseGate(recovery);}
+  } finally {
+    try {if(freshGate&&gate&&!keepGate)releaseGate(gate);}
+    finally {releaseGate(recovery);}
+  }
 }
 
 export async function main(args) {
@@ -95,7 +101,9 @@ export async function main(args) {
   try {
     if(!reconciling)console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
     if(recovering) {
-      const recovered=await (reconciling?reconcileManual:recoverManual)({state:resolve(config.state),leases:new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1}),transport:new SSHTransport({host:config.host,recipe:config.recipe}),resourceId:checkout,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
+      const ledgerDirectory=join(config.state,'ledger'),allowInitialize=!existsSync(ledgerDirectory);
+      const leases=new LocalLeases(ledgerDirectory,{hostGeneration:config.hostGeneration,slots:1});
+      const recovered=await (reconciling?reconcileManual:recoverManual)({state:resolve(config.state),leases,allowInitialize,transport:new SSHTransport({host:config.host,recipe:config.recipe}),resourceId:checkout,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
       if(!reconciling||recovered.code!==0||recovered.resourceId)console.log(JSON.stringify(recovered));return recovered.code;
     }
     const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(5000)])});

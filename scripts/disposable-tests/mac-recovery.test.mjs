@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
@@ -209,4 +209,77 @@ test('a changed boot releases an interrupted owner even when PID and formatted s
   mkdirSync(join(f.state,'manual.lock'),{mode:0o700});
   writeFileSync(join(f.state,'manual.lock/owner.json'),JSON.stringify({...recorded,boot:'00000000-0000-4000-8000-000000000000'}),{mode:0o600});
   assert.equal((await reconcile(f)).code,0);assert.equal(existsSync(f.resource),false);
+});
+
+for(const name of ['recovery.lock','ledger/lock'])test(`a live ${name} owner prevents reclamation and preserves the guest`,async t=>{
+ const f=fixture(t);legacyGate(f.state,'manual.lock',deadPid());legacyGate(f.state,name,process.pid);
+ const before=readFileSync(join(f.state,name,'owner.json'),'utf8');
+ assert.equal((await reconcile(f)).code,75);
+ assert.equal(existsSync(f.resource),true);assert.equal(readFileSync(join(f.state,name,'owner.json'),'utf8'),before);
+});
+
+test('a refused ledger read removes only the fresh preparation gate created by recovery',async t=>{
+ const f=fixture(t);mkdirSync(join(f.state,'ledger/lock'));
+ assert.equal((await reconcile(f)).code,75);
+ assert.equal(existsSync(join(f.state,'manual.lock')),false);
+ assert.equal(existsSync(join(f.state,'ledger/lock')),true);assert.equal(existsSync(f.resource),true);
+});
+
+test('a deleted committed ledger cannot become an empty slot during abandoned-owner recovery',async t=>{
+ const f=fixture(t);legacyGate(f.state,'manual.lock',deadPid());rmSync(join(f.state,'ledger/state.json'));
+ await assert.rejects(reconcile(f),/ledger.*missing|missing.*ledger/i);
+ assert.equal(existsSync(f.resource),true);assert.equal(existsSync(join(f.state,'manual.lock')),true);
+ assert.equal(existsSync(join(f.state,'ledger/state.json')),false);
+});
+
+for(const invalid of [[],{state:37}])test(`invalid Mac configuration ${JSON.stringify(invalid)} returns125 without a traceback`,t=>{
+ const f=wrapperFixture(t);writeFileSync(f.config,JSON.stringify(invalid));const result=invokeWrapper(f);
+ assert.equal(result.status,125,result.stderr);assert.doesNotMatch(result.stderr,/Traceback/);
+});
+
+test('busy Mac admission preserves75 after its output pipe closes',async t=>{
+ const f=wrapperFixture(t);const child=spawn('python3',['-I','-B',wrapper,f.node,f.config,'I','/candidate','--','false'],{stdio:['ignore','pipe','pipe']});
+ const closed=once(child,'close');let output='',ownedPid;child.stderr.on('data',()=>{});
+ try {
+  await Promise.race([new Promise(resolve=>child.stdout.on('data',data=>{output+=data;if(output.includes('READY'))resolve();})),closed.then(()=>assert.fail('No owning work readiness'))]);
+  ownedPid=Number(readFileSync(join(f.root,'pid'),'utf8'));
+  const busy=spawn('python3',['-I','-B',wrapper,f.node,f.config,'--once'],{stdio:['ignore','pipe','pipe']});
+  const busyClosed=once(busy,'close');busy.stderr.on('data',()=>{});busy.stdout.destroy();
+  assert.equal((await busyClosed)[0],75);
+ } finally {
+  if(ownedPid)try{process.kill(ownedPid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
+  if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await closed;
+ }
+});
+
+test('the Mac child runs from root without inherited Node or Python injection variables',t=>{
+ const f=wrapperFixture(t);
+ writeFileSync(f.node,`#!/bin/sh\nprintf '%s|%s|%s|%s|%s' "$PWD" "\${NODE_OPTIONS-absent}" "\${NODE_PATH-absent}" "\${PYTHONPATH-absent}" "\${PYTHONHOME-absent}" > '${f.root}/context'\n`,{mode:0o700});
+ const result=spawnSync('python3',['-I','-B',wrapper,f.node,f.config,'--once'],{
+  cwd:f.root,env:{...process.env,NODE_OPTIONS:'candidate-options',NODE_PATH:'candidate-node',PYTHONPATH:'candidate-python',PYTHONHOME:'candidate-home'},encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stderr);
+ assert.equal(readFileSync(join(f.root,'context'),'utf8'),'/|absent|absent|absent|absent');
+});
+
+for(const unsafe of ['linked-state','public-state','linked-lock','public-lock','directory-lock'])test(`the Mac wrapper refuses ${unsafe} before starting its child`,t=>{
+ const f=wrapperFixture(t);const privateState=join(f.root,'private-state');mkdirSync(privateState,{mode:0o700});let state=privateState;
+ if(unsafe==='linked-state'){state=join(f.root,'linked');symlinkSync(privateState,state);}
+ if(unsafe==='public-state')chmodSync(privateState,0o755);
+ if(unsafe==='linked-lock'){writeFileSync(join(f.root,'foreign'),'',{mode:0o600});symlinkSync(join(f.root,'foreign'),join(state,'mac-controller.lock'));}
+ if(unsafe==='public-lock'){writeFileSync(join(state,'mac-controller.lock'),'');chmodSync(join(state,'mac-controller.lock'),0o644);}
+ if(unsafe==='directory-lock')mkdirSync(join(state,'mac-controller.lock'));
+ writeFileSync(f.config,JSON.stringify({state}));const result=invokeWrapper(f);
+ assert.equal(result.status,125,result.stderr);assert.equal(existsSync(join(f.root,'calls')),false);
+});
+
+test('the wrapper preserves a child killed by SIGKILL as status137',t=>{
+ const f=wrapperFixture(t);writeFileSync(f.node,'#!/bin/sh\nkill -KILL $$\n',{mode:0o700});
+ assert.equal(invokeWrapper(f).status,137);
+});
+
+test('explicit resource recovery reaches only its requested command without an automatic preflight',t=>{
+ const f=wrapperFixture(t);writeFileSync(f.node,`#!/bin/sh\nprintf '%s\\n' "$*" >> '${f.root}/calls'\n`,{mode:0o700});
+ assert.equal(invokeWrapper(f,['--recover','dt-mac-0-1']).status,0);
+ const calls=readFileSync(join(f.root,'calls'),'utf8').trim().split('\n');assert.equal(calls.length,1);
+ assert.match(calls[0],/--recover dt-mac-0-1$/);
 });

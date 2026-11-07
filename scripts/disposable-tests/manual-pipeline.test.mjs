@@ -160,3 +160,22 @@ test('automatic recovery refuses a direct invocation without the inherited contr
  assert.match(result.stderr,/controller lock/i);
  assert.equal(existsSync(join(f.root,'state/ledger')),false);
 });
+
+test('the Mac entry point resolves a relative checkout before entering its safe working directory',t=>{
+ const f=fixture(t);
+ const result=spawnSync('python3',['-I','-B',macWrapper,process.execPath,f.config,'I','.','--','false'],{
+  cwd:join(f.root,'repo'),env:f.env,encoding:'utf8',timeout:10000});
+ assert.equal(result.status,3,result.stdout+result.stderr);
+});
+
+test('automatic recovery refuses an inherited descriptor for a different private file',async t=>{
+ const f=fixture(t);const {openSync,closeSync}=await import('node:fs');
+ writeFileSync(join(f.root,'state/mac-controller.lock'),'',{mode:0o600});
+ const fd=openSync(join(f.root,'foreign-lock'),'wx',0o600);
+ try {
+  const result=spawnSync(process.execPath,[script,f.config,'--reconcile'],{
+   env:{...f.env,WAITRON_DISPOSABLE_LOCK_FD:'3'},stdio:['ignore','pipe','pipe',fd],encoding:'utf8',timeout:10000});
+  assert.equal(result.status,125,result.stdout+result.stderr);
+  assert.match(result.stderr,/controller lock/i);assert.equal(existsSync(join(f.root,'state/ledger')),false);
+ } finally {closeSync(fd);}
+});

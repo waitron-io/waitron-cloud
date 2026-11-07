@@ -18,7 +18,8 @@ function requestIdentity(request) {
 }
 
 // The controller owns this directory. A lock left by its death closes admission;
-// recovery must inspect owned guests before clearing the lock or freeing capacity.
+// recovery must reclaim only a proven dead transaction owner before reading the
+// committed ledger. Guest absence is required before freeing capacity.
 export class LocalLeases {
   constructor(directory, {hostGeneration, slots, now = Date.now}) {
     assert.ok(typeof hostGeneration === 'string' && word.test(hostGeneration) && Number.isSafeInteger(slots) && slots >= 1 && slots <= 16, 'Invalid host configuration');
