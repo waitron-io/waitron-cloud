@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync, mkdirSync, symlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync, mkdirSync, symlinkSync, chmodSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -2579,6 +2579,33 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
   await assert.rejects(run());
   assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
   assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.uuid, f.uuid);
+  if (latency === 0) {
+    const originalCleanup = readFileSync(join(base, 'cleanup.json')), afterDrill = f.aws.call;
+    let deleted = false, healthPresent = true;
+    f.p.responses['cloudformation/describe-stacks'].Stacks[0].Tags = [{ Key: 'Proof', Value: 'D570' }];
+    f.p.responses['cloudformation/describe-stacks'].Stacks[0].CreationTime = now;
+    f.aws.call = async (service, operation, input) => {
+      if (service === 'ce' && input.GroupBy) return { GroupDefinitions: input.GroupBy,
+        ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [], Total: {} }] };
+      if (operation === 'disable-rule') { f.p.responses['events/describe-rule'].State = 'DISABLED'; return {}; }
+      if (operation === 'list-objects-v2' && input.Prefix === 'd570/') return { IsTruncated: false,
+        Contents: [...f.objects.keys(), ...(healthPresent ? ['d570/health/reaper.json'] : [])].map(Key => ({ Key })) };
+      if (operation === 'delete-objects') {
+        for (const row of input.Delete.Objects) { f.objects.delete(row.Key); if (row.Key === 'd570/health/reaper.json') healthPresent = false; }
+        return { Deleted: structuredClone(input.Delete.Objects) };
+      }
+      if (operation === 'delete-stack') { assert.equal(f.objects.size, 0); assert.equal(healthPresent, false); deleted = true; return {}; }
+      if (operation === 'describe-stacks' && deleted) return { Stacks: [{ StackId: f.setup.stackId, StackStatus: 'DELETE_COMPLETE' }] };
+      return afterDrill(service, operation, input);
+    };
+    const command = name => ownerCommand(f, [name, base], { clock: () => current, sleep: async ms => { current += ms; } });
+    await assert.rejects(command('drill'), { message: 'D570 controller refused: ec2 launch' });
+    assert.equal((await command('reconcile')).costReport.accountCostMicroUsd, 0);
+    assert.equal((await command('down')).deleted, true);
+    assert.equal(readFileSync(join(base, 'cleanup.json')).equals(originalCleanup), true);
+    assert.equal(existsSync(join(base, 'retry')), false);
+    assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+  }
 });
 
 test('owner command shows the actual opening and fixed reservation headroom before a cap refusal', async t => {
@@ -2770,4 +2797,318 @@ test('a credit bill stays unusable and reports its observed aggregate instead of
     assert.equal(Object.hasOwn(error.opening.billing, 'microUsd'), false);
     return true;
   });
+});
+
+for (const reason of ['setup time', 'setup template', 'stack id', 'stack status']) test(`setup refusal identifies ${reason} without another mutation`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call; let at = Date.parse(now);
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[1] === 'create-stack' && reason === 'setup time') at += 86400_000;
+    if (args[1] === 'create-stack' && reason === 'stack id') response.StackId = 'invalid';
+    if (args[1] === 'describe-stacks' && reason === 'stack status') response.Stacks = [];
+    return response;
+  };
+  if (reason === 'setup template') {
+    const stringify = JSON.stringify;
+    t.mock.method(JSON, 'stringify', (value, ...args) => value?.Resources ? 'x'.repeat(51201) : stringify(value, ...args));
+  }
+  await assert.rejects(f.create({ clock: () => at }), { message: `D570 controller refused: ${reason}` });
+  assert.deepEqual(f.counts(), { creates: reason === 'setup template' ? 0 : 1, enables: 0 });
+  assert.equal(existsSync(join(f.options.directory, 'setup.json')), true);
+});
+
+for (const kind of ['known concurrency', 'private reason', 'unavailable events']) {
+  test(`failed stack exposes its status and ${kind} without leaking provider text`, async t => {
+    const f = await creationFixture(t), previous = f.aws.call;
+    const secret = 'synthetic-private-token-should-never-be-printed';
+    const providerReason = kind === 'known concurrency'
+      ? 'Resource handler returned message: "Specified ReservedConcurrentExecutions for function decreases account UnreservedConcurrentExecution below its minimum value of [10]."'
+      : secret + '\n' + 'x'.repeat(5000);
+    f.aws.call = async (...args) => {
+      if (args[1] === 'describe-stack-events') {
+        assert.deepEqual(args[2], { StackName: f.p.stackId });
+        if (kind === 'unavailable events') throw new Error(secret);
+        return { StackEvents: [
+          { StackId: f.p.stackId, LogicalResourceId: 'Bucket', ResourceStatus: 'CREATE_FAILED', ResourceStatusReason: 'Resource creation cancelled' },
+          { StackId: f.p.stackId, LogicalResourceId: 'ExpiryFunction', ResourceStatus: 'CREATE_FAILED', ResourceStatusReason: providerReason },
+        ] };
+      }
+      const response = await previous(...args);
+      if (args[1] === 'describe-stacks') response.Stacks[0].StackStatus = 'ROLLBACK_COMPLETE';
+      return response;
+    };
+    let failure;
+    await assert.rejects(f.create(), error => { failure = error; return /stack status ROLLBACK_COMPLETE/.test(error.message); });
+    assert.equal(failure.message.includes(secret), false);
+    assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+    if (kind === 'known concurrency') assert.match(failure.message, /ExpiryFunction: Lambda reserved concurrency exceeds account allowance/);
+    if (kind === 'private reason') {
+      const file = join(f.parent, 'setup-failure.json');
+      assert.ok(failure.message.includes(file));
+      assert.equal(statSync(file).mode & 0o777, 0o600);
+      const saved = JSON.parse(readFileSync(file));
+      assert.equal(saved.stackId, f.p.stackId); assert.equal(saved.logicalResourceId, 'ExpiryFunction');
+      assert.ok(saved.reason.startsWith(secret)); assert.ok(saved.reason.length <= 1024);
+    }
+  });
+}
+
+test('stack event CLI reads only the validated exact owned stack', async t => {
+  const f = fixture(t), executable = join(f.root, 'aws-events.cjs'), capture = join(f.root, 'events-request.json');
+  const stackId = 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000';
+  writeFileSync(executable, `#!${process.execPath}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(capture)},JSON.stringify(process.argv.slice(2)));process.stdout.write('{"StackEvents":[]}');\n`, { mode: 0o700 });
+  const aws = control.createManualAwsCli({ executable });
+  assert.deepEqual(await aws.call('cloudformation', 'describe-stack-events', { StackName: stackId }), { StackEvents: [] });
+  assert.deepEqual(JSON.parse(readFileSync(capture)).slice(0, 4), ['cloudformation', 'describe-stack-events', '--cli-input-json', JSON.stringify({ StackName: stackId })]);
+  const before = readFileSync(capture);
+  for (const input of [{ StackName: 'd570-first' }, { StackName: stackId, NextToken: 'more' }, { StackName: stackId.replace('462991287391', '949687825720') }]) {
+    await assert.rejects(aws.call('cloudformation', 'describe-stack-events', input), /D570 controller refused/);
+    assert.equal(readFileSync(capture).equals(before), true);
+  }
+});
+
+async function failedOwnerSetupFixture(t) {
+  const f = await initializationFixture(t), previous = f.aws.call, originalId = f.p.stackId;
+  let state = 'failed', deletions = 0;
+  const createTime = now;
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'describe-stacks' && state === 'deleted') {
+      if (input.StackName !== originalId) throw new Error('synthetic deleted stack cannot be found by name');
+      f.calls.push({ service, operation, input });
+      return { Stacks: [{ StackId: originalId, StackStatus: 'DELETE_COMPLETE', Tags: [{ Key: 'Proof', Value: 'D570' }], CreationTime: createTime }] };
+    }
+    if (operation === 'describe-stack-events') return { StackEvents: [] };
+    if (operation === 'describe-stack-resources' && state !== 'creating') {
+      f.calls.push({ service, operation, input }); return { StackResources: [] };
+    }
+    if (operation === 'describe-volumes' && input.Filters?.[0].Name === 'tag:Proof') {
+      f.calls.push({ service, operation, input }); return { Volumes: [] };
+    }
+    if (operation === 'delete-stack') {
+      f.calls.push({ service, operation, input }); state = 'deleted'; deletions++; return {};
+    }
+    const response = await previous(service, operation, input);
+    if (operation === 'create-stack' && state === 'deleted') {
+      state = 'creating'; f.p.stackId = originalId.slice(0, -1) + '1'; response.StackId = f.p.stackId;
+      f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackId = f.p.stackId;
+      for (const row of f.p.resource) row.StackId = f.p.stackId;
+      f.p.health.stackId = f.p.stackId;
+      f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+    }
+    if (operation === 'describe-stacks' && state === 'failed') {
+      response.Stacks[0].StackStatus = 'ROLLBACK_COMPLETE'; response.Stacks[0].Tags = [{ Key: 'Proof', Value: 'D570' }];
+      response.Stacks[0].CreationTime = createTime;
+    }
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /stack status ROLLBACK_COMPLETE/);
+  const original = readFileSync(join(f.parent, 'setup', 'setup.json'));
+  assert.equal(existsSync(join(f.parent, 'initialized.json')), false);
+  return { ...f, original, originalId, state: () => state, deletions: () => deletions };
+}
+
+test('failed owner setup can clean down and retry up in the same folder without erasing its booking', async t => {
+  const f = await failedOwnerSetupFixture(t);
+  assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+  const retry = await ownerCommand(f, ['up', f.parent]);
+  assert.equal(retry.stackId, f.p.stackId); assert.notEqual(retry.stackId, f.originalId);
+  assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
+  assert.equal(readFileSync(join(f.parent, 'history', 'setup.json')).equals(f.original), true);
+  const released = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+  assert.equal(released.stackId, f.originalId); assert.equal(released.releasedAt, now);
+  assert.equal(released.reason, 'failed setup removed without a run');
+  assert.equal(statSync(join(f.parent, 'setup-removal.json')).mode & 0o777, 0o600);
+  assert.equal(retry.directory, join(realpathSync(f.parent), 'retry', 'setup'));
+  assert.equal(existsSync(join(f.parent, 'retry', 'initialized.json')), true);
+  assert.equal(f.calls.some(c => c.operation === 'run-instances'), false);
+  assert.equal(f.deletions(), 1);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
+  assert.deepEqual(f.counts(), { creates: 2, enables: 1 });
+});
+
+for (const loss of ['lost delete reply', 'deletion timeout', 'release write failure']) {
+  test(`failed setup removal resumes after ${loss} using its retained exact stack id`, async t => {
+    const f = await failedOwnerSetupFixture(t), prior = f.aws.call; let interrupted = true;
+    let writeMock;
+    if (loss === 'release write failure') {
+      const sample = await open(join(f.parent, 'write-probe'), 'wx', 0o600), prototype = Object.getPrototypeOf(sample);
+      await sample.close(); const write = prototype.writeFile;
+      writeMock = t.mock.method(prototype, 'writeFile', async function (body, ...args) {
+        if (typeof body === 'string' && body.includes('"deletedAt"')) throw new Error('synthetic release write failure');
+        return write.call(this, body, ...args);
+      });
+    }
+    f.aws.call = async (...args) => {
+      const result = await prior(...args);
+      if (interrupted && loss === 'lost delete reply' && args[1] === 'delete-stack') throw new Error('synthetic lost delete reply');
+      if (interrupted && loss === 'deletion timeout' && f.state() === 'deleted' && args[1] === 'describe-stacks') result.Stacks[0].StackStatus = 'DELETE_IN_PROGRESS';
+      return result;
+    };
+    await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic|stack deletion pending/);
+    const pending = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+    assert.equal(pending.stackId, f.originalId); assert.equal(pending.releasedAt, null);
+    await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
+    assert.equal(existsSync(join(f.parent, 'retry')), false);
+    interrupted = false; writeMock?.mock.restore();
+    assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+    const released = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+    assert.equal(released.stackId, f.originalId); assert.equal(released.releasedAt, now);
+    assert.equal(f.deletions(), 1);
+    assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
+  });
+}
+
+test('failed setup retry verifies owner identity before creating its retry folder', async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent]);
+  const prior = f.aws.call;
+  f.aws.call = async (...args) => args[0] === 'sts' ? { ...identity, Account: '949687825720' } : prior(...args);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: sts identity/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
+test('failed setup down names an unfinished rollback without deleting or releasing it', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await prior(...args);
+    if (args[1] === 'describe-stacks') result.Stacks[0].StackStatus = 'ROLLBACK_IN_PROGRESS';
+    return result;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), {
+    message: 'D570 controller refused: stack cleanup status ROLLBACK_IN_PROGRESS; wait for rollback to finish',
+  });
+  assert.equal(f.deletions(), 0); assert.equal(existsSync(join(f.parent, 'setup-removal.json')), false);
+});
+
+test('failed setup with any retained monthly ledger never releases its booking for retry', async t => {
+  const f = await removalFixture(t, { partial: true });
+  f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackStatus = 'ROLLBACK_COMPLETE';
+  const original = readFileSync(join(f.setup.directory, 'setup.json'));
+  mkdirSync(join(f.parent, 'setup'), { mode: 0o700 });
+  writeFileSync(join(f.parent, 'setup', 'setup.json'), original, { mode: 0o600 });
+  assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+  assert.equal(readFileSync(join(f.setup.directory, 'setup.json')).equals(original), true);
+  const path = join(f.parent, 'setup-removal.json'), altered = JSON.parse(readFileSync(path));
+  altered.eligible = true; altered.releasedAt = now; altered.reason = 'failed setup removed without a run';
+  writeFileSync(path, JSON.stringify(altered));
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
+for (const change of ['changed booking', 'public cleanup']) test(`failed setup retry refuses ${change}`, async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent]);
+  if (change === 'changed booking') {
+    const path = join(f.parent, 'setup', 'setup.json'), booking = JSON.parse(readFileSync(path));
+    booking.head = 'b'.repeat(40); writeFileSync(path, JSON.stringify(booking));
+  } else chmodSync(join(f.parent, 'setup-removal.json'), 0o644);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+});
+
+test('cleanup refuses an incomplete saved setup before reading or writing cleanup metadata', async t => {
+  const f = await removalFixture(t); f.calls.length = 0;
+  await assert.rejects(f.remove({ setup: {} }), /D570 controller refused: ec2 cleanup/);
+  assert.equal(f.calls.some(c => c.service === 'cloudformation'), false);
+  assert.equal(existsSync(join(f.parent, 'setup-removal.json')), false);
+});
+
+test('failed setup release remains readable when the real clock includes milliseconds', async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent], { clock: () => Date.parse(now) + 123 });
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, now);
+  assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
+});
+
+for (const amount of ['0.686509', '0.686510']) test(`failed setup retry refuses a fresh opening of ${amount} at or above the monthly cap`, async t => {
+  const f = await failedOwnerSetupFixture(t); await ownerCommand(f, ['down', f.parent]);
+  const prior = f.aws.call, serviceName = 'Amazon Simple Storage Service', usageType = 'EUN1-TimedStorage-ByteHrs';
+  f.aws.call = async (service, operation, input) => {
+    if (service !== 'ce') return prior(service, operation, input);
+    f.calls.push({ service, operation, input });
+    return input.GroupBy ? { GroupDefinitions: input.GroupBy, ResultsByTime: [{ TimePeriod: input.TimePeriod,
+      Estimated: true, Total: {}, Groups: [{ Keys: [serviceName, usageType], Metrics: {
+        UnblendedCost: { Amount: amount, Unit: 'USD' }, UsageQuantity: { Amount: '0.1', Unit: 'N/A' },
+      } }] }] } : { ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [],
+        Total: { UnblendedCost: { Amount: amount, Unit: 'USD' } } }] };
+  };
+  await assert.rejects(ownerCommand(f, ['up', f.parent, '--explain', serviceName, usageType,
+    String(Math.round(Number(amount) * 1000000)), 'Existing synthetic staging storage']), /D570 opening and reservation reach the monthly cap/);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+  assert.equal(existsSync(join(f.parent, 'retry', 'setup')), false);
+  assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
+});
+
+test('resumed removal refuses a different valid stack returned for its retained exact id', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'delete-stack') throw new Error('synthetic lost deletion reply');
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic lost deletion reply/);
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'describe-stacks') response.Stacks[0].StackId = f.originalId.slice(0, -1) + '2';
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: ec2 cleanup/);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
+  assert.equal(f.deletions(), 1);
+});
+
+test('released retry refuses a changed retained history even when booking fields still match', async t => {
+  const f = await failedOwnerSetupFixture(t); await ownerCommand(f, ['down', f.parent]);
+  const path = join(f.parent, 'history', 'setup.json'), value = JSON.parse(readFileSync(path));
+  value.syntheticMarker = 'changed export'; writeFileSync(path, JSON.stringify(value));
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+});
+
+for (const kind of ['foreign event', 'earliest event', 'truncated events']) test(`failed stack diagnoses ${kind} without borrowing another failure`, async t => {
+  const f = await creationFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'describe-stack-events') {
+      const known = { StackId: kind === 'foreign event' ? f.p.stackId.slice(0, -1) + '2' : f.p.stackId,
+        LogicalResourceId: 'ExpiryFunction', ResourceStatus: 'CREATE_FAILED',
+        ResourceStatusReason: 'Specified ReservedConcurrentExecutions decreases UnreservedConcurrentExecution below its minimum value' };
+      return kind === 'truncated events' ? { StackEvents: [], NextToken: 'synthetic-private-next-token' }
+        : { StackEvents: [...(kind === 'earliest event' ? [{ ...known, LogicalResourceId: 'Bucket', ResourceStatusReason: 'synthetic later failure' }] : []), known] };
+    }
+    const response = await prior(...args);
+    if (args[1] === 'describe-stacks') response.Stacks[0].StackStatus = 'ROLLBACK_COMPLETE';
+    return response;
+  };
+  let failure;
+  await assert.rejects(f.create(), error => { failure = error; return /stack status ROLLBACK_COMPLETE/.test(error.message); });
+  if (kind === 'foreign event') assert.equal(failure.message.includes('ExpiryFunction'), false);
+  if (kind === 'earliest event') {
+    assert.ok(failure.message.includes('ExpiryFunction: Lambda reserved concurrency exceeds account allowance'));
+    assert.equal(failure.message.includes('Bucket'), false);
+  }
+  if (kind === 'truncated events') {
+    assert.match(failure.message, /failure events truncated/);
+    assert.equal(failure.message.includes('synthetic-private-next-token'), false);
+  }
+  assert.equal(existsSync(join(f.parent, 'setup-failure.json')), false);
+});
+
+test('pending failed removal refuses new initialization evidence before requesting stack deletion', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'delete-stack') throw new Error('synthetic deletion not sent');
+    return prior(...args);
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic deletion not sent/);
+  writeFileSync(join(f.parent, 'initialized.json'), JSON.stringify({ ...JSON.parse(f.original),
+    directory: join(realpathSync(f.parent), 'setup') }), { mode: 0o600 });
+  f.aws.call = prior;
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: booking/);
+  assert.equal(f.deletions(), 0);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
 });

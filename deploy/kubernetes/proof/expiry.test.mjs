@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
+import { renderManualSetup } from './setup.mjs';
 
 const module = await import('./expiry.mjs').catch(error => {
   if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
@@ -549,3 +552,60 @@ test('a paginated or failed exact disk read cannot authorize termination', async
   await assert.rejects(sweep(f.options), error => error === failure);
   assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
 });
+
+for (const rendered of [false, true]) for (const race of ['duplicate deletion', 'root disappearance']) {
+  test(`overlapping ${rendered ? 'rendered Lambda' : 'expiry engine'} sweeps contain ${race}`, async () => {
+    let ready = 0, release, terminated = false, deleted = false;
+    const inventoriesRead = new Promise(resolve => release = resolve);
+    const target = instance(), disk = volume();
+    const fresh = instance({ InstanceId: 'i-22222222222222222', Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) });
+    const foreign = instance({ InstanceId: 'i-33333333333333333', Tags: tags({ Stack: stackId + '-foreign' }) });
+    const attached = volume({ VolumeId: 'vol-44444444444444444', State: 'in-use', Attachments: [{ InstanceId: target.InstanceId }] });
+    const f = fixture({ instances: [target, fresh, foreign], volumes: [disk, attached], respond(operation, input) {
+      if (operation === 'DescribeVolumes' && !input.VolumeIds) return (async () => {
+        if (++ready === 2) release();
+        await inventoriesRead;
+        return { Volumes: structuredClone([disk, attached]) };
+      })();
+      if (operation === 'DescribeVolumes' && input.VolumeIds && race === 'root disappearance' && terminated) return { Volumes: [] };
+      if (operation === 'TerminateInstances') {
+        terminated = true;
+        return { TerminatingInstances: [{ InstanceId: target.InstanceId, CurrentState: { Name: 'shutting-down' } }] };
+      }
+      if (operation === 'DeleteVolume') {
+        if (deleted) throw new Error('synthetic volume already deleted by overlapping sweep');
+        deleted = true; return {};
+      }
+    } });
+    let runSweep = () => sweep(f.options);
+    if (rendered) {
+      const input = JSON.parse(readFileSync(new URL('./test-fixtures/setup-input.json', import.meta.url)));
+      const source = renderManualSetup(input).Resources.ExpiryFunction.Properties.Code.ZipFile;
+      const command = name => class { constructor(value) { this.operation = name; this.input = value; } };
+      const client = service => class { async send(c) { return f.options.aws.call(service, c.operation, c.input); } };
+      const exports = {};
+      vm.runInNewContext(source, { exports, Date: class extends Date { static now() { return Date.parse(now); } },
+        process: { env: { AWS_REGION: f.options.region, ACCOUNT: f.options.account, STACK_ID: stackId,
+          BUCKET: f.options.bucket, ACCESS_EXPIRY: f.options.accessExpiry } },
+        require(name) {
+          if (name === '@aws-sdk/client-ec2') return { EC2Client: client('ec2'),
+            ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [n + 'Command', command(n)])) };
+          if (name === '@aws-sdk/client-s3') return { S3Client: client('s3'), PutObjectCommand: command('PutObject') };
+          throw new Error('unexpected rendered import');
+        } });
+      runSweep = () => exports.handler();
+    }
+    const results = await Promise.allSettled([runSweep(), runSweep()]);
+    assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+    const refused = results.find(r => r.status === 'rejected');
+    assert.match(refused.reason.message, /already deleted by overlapping sweep|Invalid termination disk inventory/);
+    const health = results.find(r => r.status === 'fulfilled').value;
+    assert.deepEqual([...health.terminationRequested], [target.InstanceId]);
+    assert.deepEqual([...health.volumeDeletionRequested], [disk.VolumeId]);
+    assert.equal(f.calls.filter(c => c.operation === 'PutObject').length, 1, 'a refused sweep must not publish success');
+    for (const call of mutations(f)) {
+      if (call.operation === 'TerminateInstances') assert.deepEqual(call.input, { InstanceIds: [target.InstanceId] });
+      if (call.operation === 'DeleteVolume') assert.deepEqual(call.input, { VolumeId: disk.VolumeId });
+    }
+  });
+}

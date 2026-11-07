@@ -110,8 +110,41 @@ and waits for the exact stack's deletion to complete. A partial deletion can be
 retried using the retained private export. Unknown ownership, remaining resources
 or an export failure refuses removal. Run
 `node --test --test-name-pattern='^first removal|^owner command down' scripts/kubernetes-proof-control.test.mjs`
-for those synthetic checks. Keep the private history after a successful removal;
-this first build does not implement another `up` or history import.
+for those synthetic checks. Keep the private history after removal.
+
+### Retry a failed setup in the same folder
+
+If setup rolls back before initialization, wait for rollback to finish, then use
+clean reviewed main and your temporary staging sign-in:
+
+```sh
+node scripts/kubernetes-proof-control.mjs down "$HOME/.local/state/waitron-d570"
+node scripts/kubernetes-proof-control.mjs up "$HOME/.local/state/waitron-d570"
+node scripts/kubernetes-proof-control.mjs drill "$HOME/.local/state/waitron-d570"
+```
+
+Run each command only after the previous one succeeds. Keep the original folder
+and every private file. `down` releases a failed attempt only after exact stack
+deletion and resource-absence checks, and only when its history holds the setup
+booking alone. An initialized setup, a launch or any monthly ledger prevents
+release. The fresh account opening plus the new reservation must still stay
+strictly below US$10; account billing can lag actual consumption.
+
+The controller keeps the first attempt intact and selects a `retry/` child
+automatically. Always pass the original folder. A later failed attempt needs its
+own successful `down` before another retry. A completed drill cannot be restarted.
+The private `setup-removal.json` retains the exact stack ID before deletion, so repeat
+`down` after a lost reply or interrupted release write. Pending deletion never
+permits another `up`. A missing or uncertain exact stack response refuses release.
+The connected local check is
+`node --test --test-name-pattern='failed owner setup|failed setup' scripts/kubernetes-proof-control.test.mjs`.
+
+A setup refusal names the failed check and the returned stack status. Recognized
+failure reasons appear on screen; other bounded provider text stays in the
+owner-only `setup-failure.json` beside that attempt's setup folder. Read the path
+shown in the refusal locally and keep its contents out of public logs. If the
+first event page is truncated, the refusal says so; any printed reason comes
+from that page.
 
 ## What remains to qualify
 
@@ -131,6 +164,14 @@ no public IP or inbound internet, no guest credentials, disk deletion on shutdow
 and independent expiry. Only the controller enables its own discovered sweep.
 A heartbeat records accepted cleanup requests; it never substitutes for actual
 termination or absent resources.
+
+The function uses the account's unreserved Lambda capacity. The overlap check runs
+the real expiry engine and rendered Lambda against shared synthetic resources:
+`node --test --test-name-pattern='overlapping' deploy/kubernetes/proof/expiry.test.mjs`.
+A repeated deletion error or a disappearing root disk withholds that invocation's
+heartbeat. These local experiments do not qualify available AWS concurrency or
+live deletion behavior. [EC2 documents repeated termination of the same instance](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_TerminateInstances.html)
+as succeeding without another effective termination.
 
 The installed CLI's new forms have been exercised against an unsigned loopback
 server, not AWS. Live ARM boot, systemd behavior, provider ownership and quota
