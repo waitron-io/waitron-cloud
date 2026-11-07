@@ -14,3 +14,5 @@ Inline TDD after Claude reads this revision. No lane AWS/key calls, refunds, new
 
 
 Watcher **22:02**: delete only the early live console read, add its focused running-observation test, defer other execution-review findings until the physical run. No amended-plan read for this removal. No deadline change.
+
+Watcher **22:10** approves only an explicit full-commit opt-in for a clean detached HEAD equal to both that commit and the current remote head of PR1089’s fixed branch. All other checks and default main-only behavior remain. Three source cases (matching head, wrong commit, default detached refusal) qualify it; retain the existing review and skip another plan read as explicitly directed.

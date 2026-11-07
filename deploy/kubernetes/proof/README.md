@@ -16,8 +16,14 @@ termination or final bill is qualified by the synthetic checks below.
 Use your temporary staging-project sign-in. Run the command from clean reviewed
 Cloud `main`, matching GitHub's current main. The controller refuses a feature
 checkout, a GitHub job, the wrong account or region, root and permanent IAM-user
-identities. Each command checks remote main at entry and before state-changing
+identities. Each command checks its approved remote commit at entry and before state-changing
 AWS calls; local source and clean-checkout checks surround every provider call.
+For the owner's specifically approved pre-merge trial, set
+`D570_REVIEWED_COMMIT` to the full reviewed commit ID and use a clean detached
+checkout of that commit. It must also be the current remote head of
+`fix/kubernetes-console-readiness` (PR #1089). All staging, date, clean-source and
+remote checks stay in force; without that opt-in the main-only rule remains.
+
 It checks the official ARM image and the approved machine's capacity
 before creating anything. If a command refuses, its message names the validation
 step, for example `D570 controller refused: ce billing shape`. Keep the private files

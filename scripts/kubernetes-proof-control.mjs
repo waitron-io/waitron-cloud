@@ -163,7 +163,10 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
 
 async function checkedMain(checkout, { forceRemote = false } = {}) {
   const check = (value, reason = 'checkout') => checkControl(value, reason);
-  const cwd = await realpath(checkout);
+  // A detached trial is pinned to this PR's remote head; normal runs stay on main.
+  const cwd = await realpath(checkout), reviewedCommit = process.env.D570_REVIEWED_COMMIT;
+  check(reviewedCommit === undefined || /^[a-f0-9]{40}$/.test(reviewedCommit));
+  const remoteRef = reviewedCommit === undefined ? 'refs/heads/main' : 'refs/heads/fix/kubernetes-console-readiness';
   async function git(...args) {
     try {
       const { stdout } = await execute('git', args, { cwd, encoding: 'utf8', timeout: 30_000,
@@ -174,17 +177,18 @@ async function checkedMain(checkout, { forceRemote = false } = {}) {
   }
   const values = (await git('rev-parse', '--show-toplevel', 'HEAD', 'HEAD^{tree}', 'refs/remotes/origin/main')).split('\n');
   check(values.length === 4 && await realpath(values[0]) === cwd);
-  check(await git('symbolic-ref', '--short', 'HEAD') === 'main');
+  check(reviewedCommit === undefined ? await git('symbolic-ref', '--short', 'HEAD') === 'main'
+    : await git('rev-parse', '--abbrev-ref', 'HEAD') === 'HEAD');
   check(await git('status', '--porcelain=v1', '--untracked-files=all') === '');
   check(['https://github.com/waitron-io/waitron-cloud.git', 'git@github.com:waitron-io/waitron-cloud.git']
     .includes(await git('config', '--get', 'remote.origin.url')));
   const [, head, tree, recordedMain] = values;
   check(/^[a-f0-9]{40}$/.test(head) && /^[a-f0-9]{40}$/.test(tree));
-  check(recordedMain === head);
+  check(reviewedCommit === undefined ? recordedMain === head : reviewedCommit === head);
   const context = mainChecks.getStore(), scoped = context?.checkout === cwd;
   if (scoped && context.source) check(context.source.head === head && context.source.tree === tree);
   if (!scoped || !context.source || forceRemote) {
-    check(await git('ls-remote', '--exit-code', 'origin', 'refs/heads/main') === `${head}\trefs/heads/main`);
+    check(await git('ls-remote', '--exit-code', 'origin', remoteRef) === `${head}\t${remoteRef}`);
     if (scoped) context.source = { head, tree };
   }
   return { head, tree };
@@ -1632,7 +1636,7 @@ async function runManualCommandInContext(options) {
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
-    console.log('node scripts/kubernetes-proof-control.mjs up|drill|reconcile|down /absolute/private-directory [--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON ...] [--retained-evidence INSTANCE_FILE INSTANCE_SHA256 CONSOLE_FILE CONSOLE_SHA256]\nUse an existing owner-only private directory outside the checkout. Amounts are millionths of USD. Run from clean reviewed main with the temporary staging sign-in.');
+    console.log('node scripts/kubernetes-proof-control.mjs up|drill|reconcile|down /absolute/private-directory [--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON ...] [--retained-evidence INSTANCE_FILE INSTANCE_SHA256 CONSOLE_FILE CONSOLE_SHA256]\nUse an existing owner-only private directory outside the checkout. Amounts are millionths of USD. Run from clean reviewed main, or the exact detached PR1089 head with D570_REVIEWED_COMMIT set, using the temporary staging sign-in.');
   } else try {
     check(args.length >= 2 && await realpath(process.cwd()) === await realpath(join(dirname(fileURLToPath(import.meta.url)), '..')));
     const result = await runManualCommand({ args, checkout: process.cwd() });

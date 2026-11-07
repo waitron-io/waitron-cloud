@@ -3327,3 +3327,20 @@ test('a third full setup cannot fit after two launched reservations even with a 
  await assert.rejects(f.create({priorBookings:{'2026-11':18626982,'2026-12':18626982}}),/D570 controller refused: booking/);
  assert.deepEqual(f.counts(),{creates:0,enables:0});assert.equal(existsSync(f.options.directory),false);
 });
+
+test('owner-reviewed commit opt-in permits the exact detached remote PR head',async t=>{
+ const f=fixture(t),previous=process.env.D570_REVIEWED_COMMIT;
+ t.after(()=>{if(previous===undefined)delete process.env.D570_REVIEWED_COMMIT;else process.env.D570_REVIEWED_COMMIT=previous;});
+ f.git('switch','-c','reviewed-fixture');f.git('-c','commit.gpgsign=false','commit','--allow-empty','-s','-m','Reviewed synthetic branch commit');const reviewed=f.git('rev-parse','HEAD');
+ f.git('update-ref','refs/heads/fix/kubernetes-console-readiness',reviewed);f.git('switch','--detach');process.env.D570_REVIEWED_COMMIT=reviewed;
+ const result=await inspect(f);assert.equal(result.head,reviewed);assert.deepEqual(f.calls.map(x=>x.service),['sts','ce']);
+});
+test('owner-reviewed commit opt-in refuses a different local or remote PR commit before AWS',async t=>{
+ const f=fixture(t),previous=process.env.D570_REVIEWED_COMMIT;
+ t.after(()=>{if(previous===undefined)delete process.env.D570_REVIEWED_COMMIT;else process.env.D570_REVIEWED_COMMIT=previous;});
+ f.git('update-ref','refs/heads/fix/kubernetes-console-readiness',f.head);f.git('switch','--detach');
+ f.git('-c','commit.gpgsign=false','commit','--allow-empty','-s','-m','Different synthetic reviewed commit');const other=f.git('rev-parse','HEAD');
+ process.env.D570_REVIEWED_COMMIT=other;f.git('switch','--detach',f.head);
+ await assert.rejects(inspect(f),/D570 controller refused: checkout/);assert.deepEqual(f.calls,[]);
+ f.git('switch','--detach',other);await assert.rejects(inspect(f),/D570 controller refused: checkout/);assert.deepEqual(f.calls,[]);
+});
