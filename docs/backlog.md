@@ -670,10 +670,12 @@ order. Remote access matters most because Waitron's customer-facing features wai
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
 6. **Support and the operator console.** Open: the [D609 proposed draft](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
-   awaits owner review. Lane D watcher 2026-11-07 22:20 resolves verified-owner contact
-   disclosure and common console/CLI customer-visible audit. Diagnostic sharing versus grant access
-   needs owner approval; the P3 adapter remains unresolved. The console,
-   grant UI and staff history remain unbuilt. Asking for help is a report, not a help desk.
+   awaits owner review. Owner via lane D watcher 2026-11-07 23:08 chose both one-off
+   diagnostic sharing and time-limited grants, chosen each time, plus bug reports with
+   diagnostics from non-customers without Cloud signup. Retain watcher 22:20's audited
+   verified-owner contact display and common console/CLI customer-visible history.
+   Country intake, console, grant UI, P3 adapter and history extensions remain unbuilt;
+   A982 owns capture/preview, not Cloud forwarding. Asking for help is a report, not a help desk.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
