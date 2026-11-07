@@ -1,10 +1,10 @@
 # Staff problem reports implementation plan
 
-D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection. No runtime yet; no AI, paging, mail, accounts, spending or Waitron implementation. Watcher, lane D questions 2026-11-07 14:21: “Write its one-page plan now and get the Claude read; build once lane K’s D601 lands, reusing D601’s table and cleaning.” D603 queue: “do not build a second one.”
+D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection.  no AI, paging, mail, accounts, spending or Waitron implementation. Watcher, lane D questions 2026-11-07 14:21: “Write its one-page plan now and get the Claude read; build once lane K’s D601 lands, reusing D601’s table and cleaning.” Watcher 2026-11-07 15:09 supersedes the timing: “Branch D603’s build from #1073’s current head … and build … now”; publish only after D601 lands, rebased onto main. D603 queue: “do not build a second one.”
 
 ## Contract and gate
 
-- [ ] Claude reads before build. Await D601/#1073; compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. Any difference amends this plan for Claude before build.
+- [ ] Claude reads before build. Stack on D601/#1073 candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`; before publishing compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. Any difference amends this plan for Claude before build.
 
 Provisional builder defaults for A1047: POST `/api/installations/staff-report` and `/api/installations/staff-description`, corresponding signed actions. Follow `account-http/src/translation.ts` and `translation/src/submit-proof.ts`: external string `body`, signed `{version:1,bodySha256,bodyBytes}`. Body ≤16384 bytes; request ≤65536 bytes/5 seconds. Preserve shared envelope/automatic limits and installation-ip/key allowances. Reuse proof/lease locks/rechecks; authenticate venue/environment. Return `{received:true}` after commit.
 
