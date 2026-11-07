@@ -26,12 +26,13 @@ and hand E the route.”
   standard host/Origin/body/IP/key guards. Only the configured account/venue/
   installation tuple, verified owner, current key, matching live lease and test
   environment may dispatch. Production/default absence refuses; no CLI/key wiring.
-- [ ] Per-call signed operationId; strict bodies
+- [ ] Per-call signed operationId; client-generated lowercase UUID workflowId; strict bodies
   `{version:1,kind:"suggest",workflowId,query,language}` or
   `{version:1,kind:"validate",workflowId,selectedText}`. First suggest opens a UUID
   workflow; validation requires its existing hold. Replies: workflowId, expiresAt
   and the client’s provider/candidates or fields. No sequence protocol or cached
-  replies. Reject invalid client input before reserving. Duplicate, expired and
+  replies. Export the client’s `checkInput` from its module and reuse it to reject invalid
+  client input before reserving. Duplicate, expired and
   closed calls refuse; retain ordinary authority/conflict/quota HTTP errors and
   the client’s seven fixed provider errors with dispatched flag.
 - [ ] Borrow a client with error listener/abort; acquire schema-keyed
@@ -40,14 +41,16 @@ and hand E the route.”
   Connection loss aborts; failed unlock discards the session, following
   `packages/backups/src/catalogue.ts:90-103`. PR states: “A crash can shorten one
   dispatch gap in this one-box trial.” No extra recovery/spacing mechanism.
-- [ ] Call existing `reserveAllowance` on every call for write-lock ordering and
+- [ ] Read the installation-scoped saved reservation under the lock first. Unknown
+  validate refuses without reserving; reuse saved binding/expiry unchanged. Take
+  new creation time from DB clock, then call `reserveAllowance` before consume for
   authority; never prelock venue FOR SHARE. One address unit/workflow, reservation
   UUID as Google token, immutable ASCII binding with version/creation/expiry only.
   Expire by15minutes or UTC month end, never recreate an expired workflow.
   Independently cap account-wide held/spent workflows at10/month across tiers.
   Check held before validation spends/closes. Abandoned holds remain counted.
   Recheck signature, lease, revocation, replacement, connection, expiry and UTC
-  date after every lock wait before committing, and before send.
+  date after every lock wait before committing. No extra post-commit read.
 - [ ] Reuse `AccountRateLimiter.consume` unchanged: workflow8/900s suggestions,
   account-plus-UTC-date20/86400s suggestions, installation-plus-call-ID1/300s.
   Roll back every failed admission; commit consumption before sending, never
@@ -70,4 +73,5 @@ and hand E the route.”
   Google attribution, country-pack checks and separate whole-address confirmation.
   No Waitron edits. Live use awaits server-only key, owner usage/quotas confirmation,
   published allowance, stop control and retained terms/privacy gates. No new table,
-  job, grant or cancellation accounting; translation remains unchanged.
+  job, grant or cancellation accounting; translation remains unchanged. PR says
+  Google activation is a separate reviewed change; this route reaches fakes only.
