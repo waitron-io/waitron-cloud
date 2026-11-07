@@ -173,6 +173,8 @@ immutable row, historical result or deployment authority changes here.
 Continue the remaining assigned application-source reviews and fix real findings
 on current main. Test-addition and maintenance pull requests are excluded by the watcher's
 6 November decision. Real provider behaviour remains unqualified.
+`node --test apps/portal/test/stale-signout-focus-browser.test.ts` checks that
+an old failed sign-out leaves a newer page's focus and pending request alone.
 
 Child exit reports retain known operating-system signals and publish the value
 that was checked. Joint-fixture setup reports retain the operation that crossed
