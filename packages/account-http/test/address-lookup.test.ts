@@ -85,7 +85,7 @@ test('trial absence, unpublished allowance and invalid authority never reach Goo
 test('unknown validation and malformed input cannot open a hold',async()=>{
  const f=await fixture();try{
   assert.equal((await f.post({version:1,kind:'validate',workflowId:randomUUID(),selectedText:'PRIVATE-QUERY'})).status,409);
-  for(const body of [{...suggestion(),query:'x'.repeat(513)},{...suggestion(),language:'fr'},{...suggestion(),accountId:f.v.accountId},
+  for(const body of [{...suggestion(),query:'x'.repeat(513)},{...suggestion(),language:'fr'},{...suggestion(),language:['es']},{...suggestion(),language:['en']},{...suggestion(),accountId:f.v.accountId},
    {version:1,kind:'suggest',workflowId:'not-an-id',query:'x',language:'es'},{version:1,kind:'validate',workflowId:randomUUID(),selectedText:'x'.repeat(279)}]){
    assert.equal((await f.post(body)).status,400);
   }

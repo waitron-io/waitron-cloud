@@ -20,7 +20,7 @@ function parseBody(raw:string):Body{
   ||Object.keys(v).sort().join(',')!==(suggest?'kind,language,query,version,workflowId':'kind,selectedText,version,workflowId'))throw new AccountHttpError(400,'invalid_input');
  // Malformed input must not consume a hold that the transport would refuse without sending.
  checkInput(suggest?v.query:v.selectedText,'input-validation',!suggest);
- if(suggest&&!['es','en'].includes(String(v.language)))throw new AccountHttpError(400,'invalid_input');
+ if(suggest&&v.language!=='es'&&v.language!=='en')throw new AccountHttpError(400,'invalid_input');
  return v as Body;
 }
 async function instant(client:PoolClient):Promise<Date>{return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;}
