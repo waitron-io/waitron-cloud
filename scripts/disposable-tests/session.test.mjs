@@ -15,7 +15,7 @@ test('host operations serialize competing processes and permanently fence closed
   assert.match(result.stderr, /Ran 4 tests/);
 });
 
-for (const [file,count] of [['completion.test.py',6],['guards.test.py',7],['startup.test.py',9]]) test(`trusted host ${file} policy executes all ${count} portable cases`,()=>{
+for (const [file,count] of [['completion.test.py',6],['guards.test.py',7],['startup.test.py',17]]) test(`trusted host ${file} policy executes all ${count} portable cases`,()=>{
   const result=spawnSync('python3',['-B',new URL('../../deploy/disposable-tests/'+file,import.meta.url).pathname],{encoding:'utf8',timeout:15000});
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.match(result.stderr,new RegExp('Ran '+count+' tests'));

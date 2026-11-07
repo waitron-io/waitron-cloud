@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import uuid
 
@@ -65,6 +66,7 @@ def inventory():
             raise ValueError('Invalid active host record')
         active = host.resource_id(value.get('resourceId'))
     resources = {active} if active else set()
+    closed = set()
     for name in ('control', 'turns', 'operations'):
         directory = host.ROOT/name
         if not os.path.lexists(directory):
@@ -73,7 +75,22 @@ def inventory():
         for entry in directory.iterdir():
             host.resource_id(entry.name)
             owned(entry, directory=True, guest=name == 'turns')
-            resources.add(entry.name)
+            if name == 'operations' and os.path.lexists(entry/'closed'):
+                owned(entry/'closed')
+                closed.add(entry.name)
+            else:
+                resources.add(entry.name)
+    if closed - resources:
+        units = {line.split()[0] for line in host.run(
+            'systemctl', 'list-units', '--all', '--plain', '--no-legend', '--no-pager',
+            'dt-*.service', 'dt-*.timer').stdout.splitlines() if line.strip()}
+        for resource in closed - resources:
+            # A fence can precede a failed stop. Skip completed history only
+            # when one systemd inventory also finds no remaining owned unit.
+            suffixes = ('.service', '-operation.service', '-cleanup.service', '-expiry.service',
+                        '-expiry.timer', '-transfer-expiry.service', '-transfer-expiry.timer')
+            if any(resource+suffix in units for suffix in suffixes):
+                resources.add(resource)
     # Old completed generations may still have operation fences. Clean the
     # actual slot owner first so stale destruction cannot target its successor.
     return ([active] if active else []) + sorted(resources - {active})
@@ -110,11 +127,22 @@ def reconcile():
         os.close(fd)
 
 
-if __name__ == '__main__':
+def main():
     try:
         if len(sys.argv) != 1 or os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
             raise ValueError('Startup reconciliation requires the dedicated root KVM host')
         print(json.dumps(reconcile()))
+        return 0
+    except BlockingIOError as error:
+        print(str(error), file=sys.stderr)
+        return 75
+    except (TimeoutError, subprocess.TimeoutExpired) as error:
+        print(str(error), file=sys.stderr)
+        return 124
     except (OSError, ValueError) as error:
         print(str(error), file=sys.stderr)
-        sys.exit(125)
+        return 125
+
+
+if __name__ == '__main__':
+    sys.exit(main())

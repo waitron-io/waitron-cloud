@@ -1,6 +1,7 @@
 [Unit]
 Description=Reconcile interrupted disposable test machines before admission
 After=local-fs.target network.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
@@ -10,6 +11,8 @@ TimeoutStartSec=120
 TimeoutStopSec=5
 KillMode=control-group
 UMask=0077
+Restart=on-failure
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target

@@ -1,5 +1,4 @@
 """Startup must close admission until recorded interrupted work is absent."""
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -11,11 +10,7 @@ from unittest.mock import patch
 
 import host
 import session
-
-spec = importlib.util.find_spec('startup')
-startup = importlib.util.module_from_spec(spec) if spec else None
-if spec:
-    spec.loader.exec_module(startup)
+import startup
 
 
 class Startup(unittest.TestCase):
@@ -94,7 +89,7 @@ class Startup(unittest.TestCase):
         for observation in [{'resourceId': 'dt-startup-0-1', 'absent': False},
                             {'resourceId': 'dt-neighbor-0-1', 'absent': True}]:
             self.recorded('dt-startup-0-1', 'control')
-            with patch.object(session, 'destroy', return_value={'absent': True}), \
+            with patch.object(session, 'destroy', return_value={'resourceId': 'dt-startup-0-1', 'absent': True}), \
                  patch.object(session, 'inspect', return_value=observation):
                 with self.assertRaisesRegex(ValueError, 'absence'):
                     startup.reconcile()
@@ -165,6 +160,122 @@ except BlockingIOError:sys.exit(75)
             self.assertFalse(startup.ready())
         self.reconcile()
         self.assertTrue(startup.ready())
+
+    def test_finished_fences_need_one_service_inventory_instead_of_repeated_cleanup(self):
+        import subprocess
+        for generation in range(1, 1001):
+            resource = 'dt-finished-0-'+str(generation)
+            self.recorded(resource, 'operations')
+            (self.root/'operations'/resource/'closed').touch()
+            self.present.discard(resource)
+        calls = []
+        def provider(*argv, **kwargs):
+            calls.append(argv)
+            self.assertEqual(argv, ('systemctl', 'list-units', '--all', '--plain', '--no-legend', '--no-pager',
+                                    'dt-*.service', 'dt-*.timer'))
+            return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
+        with patch.object(host, 'run', side_effect=provider): self.reconcile()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.destroyed, [])
+        self.assertEqual(len(list((self.root/'operations').iterdir())), 1000)
+        self.assertTrue(startup.ready())
+
+    def test_a_closed_fence_with_a_loaded_operation_still_needs_cleanup(self):
+        import subprocess
+        self.recorded('dt-startup-0-1', 'operations')
+        (self.root/'operations/dt-startup-0-1/closed').touch()
+        with patch.object(host, 'run', return_value=subprocess.CompletedProcess([], 0,
+                          stdout='dt-startup-0-1-operation.service loaded active running owned stage\n', stderr='')):
+            self.reconcile()
+        self.assertEqual(self.destroyed, ['dt-startup-0-1'])
+
+    def test_a_disk_record_alone_still_requires_cleanup_even_with_a_closed_fence(self):
+        self.recorded('dt-startup-0-1', 'turns', 'operations')
+        (self.root/'operations/dt-startup-0-1/closed').touch()
+        import subprocess
+        with patch.object(host, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='', stderr='')):
+            self.reconcile()
+        self.assertEqual(self.destroyed, ['dt-startup-0-1'])
+
+    def test_current_readiness_reaches_the_actual_session_worker(self):
+        self.reconcile()
+        with patch.object(session, 'os', type('Root', (), {'geteuid': staticmethod(lambda: 0)})), \
+             patch.object(session, 'Path', return_value=type('KVM', (), {'is_char_device': lambda self: True})()), \
+             patch.object(session, 'stage', return_value=3) as stage, \
+             patch.object(sys, 'argv', ['session.py', '_worker', 'transfer', 'dt-startup-0-1']):
+            self.assertEqual(session.main(), 3)
+            stage.assert_called_once_with('transfer', 'dt-startup-0-1')
+
+    def test_inspection_result_and_cleanup_remain_available_while_admission_is_closed(self):
+        import contextlib
+        import io
+        import subprocess
+        self.assertFalse(startup.ready())
+        with patch.object(session, 'os', type('Root', (), {'geteuid': staticmethod(lambda: 0)})), \
+             patch.object(session, 'Path', return_value=type('KVM', (), {'is_char_device': lambda self: True})()):
+            for mode, operation, value in [('inspect', 'inspect', {'resourceId': 'dt-startup-0-1', 'absent': True}),
+                                           ('result', 'result', {'resourceId': 'dt-startup-0-1', 'code': 3})]:
+                output = io.StringIO()
+                with patch.object(sys, 'argv', ['session.py', mode, 'dt-startup-0-1']), \
+                     patch.object(session, operation, return_value=value) as invoked, contextlib.redirect_stdout(output):
+                    self.assertEqual(session.main(), 0)
+                    self.assertEqual(json.loads(output.getvalue()), value)
+                    invoked.assert_called_once_with('dt-startup-0-1')
+            with patch.object(sys, 'argv', ['session.py', 'destroy', 'dt-startup-0-1']), \
+                 patch.object(session.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)) as invoked:
+                self.assertEqual(session.main(), 0)
+                self.assertEqual(invoked.call_args.args[0][-2:], ['_cleanup', 'dt-startup-0-1'])
+
+    def test_invalid_readiness_fields_and_unsafe_root_or_lock_never_qualify(self):
+        for value in [{'version': 1, 'bootId': self.boot.read_text().strip(), 'extra': True},
+                      {'version': 2, 'bootId': self.boot.read_text().strip()}]:
+            (self.root/'startup.json').write_text(json.dumps(value))
+            self.assertFalse(startup.ready())
+            with self.assertRaises(ValueError): self.reconcile()
+        (self.root/'startup.json').unlink()
+        outside = self.root/'outside'; outside.write_text('preserve')
+        (self.root/'startup.lock').unlink()
+        (self.root/'startup.lock').symlink_to(outside)
+        with self.assertRaises(OSError): self.reconcile()
+        self.assertFalse(startup.ready())
+        self.assertEqual(outside.read_text(), 'preserve')
+        (self.root/'startup.lock').unlink()
+        (self.root/'startup.lock').touch(mode=0o666)
+        (self.root/'startup.lock').chmod(0o666)
+        with self.assertRaisesRegex(ValueError, 'lock'): self.reconcile()
+        self.assertFalse(startup.ready())
+        (self.root/'startup.lock').chmod(0o600)
+        self.reconcile()
+        os.chmod(self.root, 0o777)
+        try: self.assertFalse(startup.ready())
+        finally: os.chmod(self.root, 0o700)
+
+    def test_guest_owned_control_metadata_is_refused_before_any_cleanup(self):
+        import types
+        self.recorded('dt-startup-0-1', 'control')
+        original = Path.lstat
+        def lstat(path):
+            value = original(path)
+            if path == self.root/'control/dt-startup-0-1':
+                return types.SimpleNamespace(st_mode=value.st_mode, st_uid=62000, st_size=value.st_size)
+            return value
+        with patch.object(Path, 'lstat', lstat):
+            with self.assertRaises(ValueError): self.reconcile()
+        self.assertEqual(self.destroyed, [])
+
+    def test_cli_preserves_busy_timeout_and_failure_statuses_without_opening_admission(self):
+        import contextlib
+        import io
+        import subprocess
+        self.assertTrue(callable(getattr(startup, 'main', None)), 'The startup entry point must preserve failure status')
+        with patch.object(sys, 'argv', ['startup.py']), \
+             patch.object(startup.os, 'geteuid', return_value=0), \
+             patch.object(Path, 'is_char_device', return_value=True):
+            for failure, code in [(BlockingIOError('owned'), 75), (subprocess.TimeoutExpired('provider', 30), 124),
+                                  (ValueError('unknown'), 125)]:
+                with patch.object(startup, 'reconcile', side_effect=failure), contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(startup.main(), code)
+                self.assertFalse(startup.ready())
 
 
 unittest.main(verbosity=2)
