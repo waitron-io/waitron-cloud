@@ -23,11 +23,12 @@ async function launch(t, scenario = {}) {
   const state = join(root, 'state.json');
   await writeFile(state, JSON.stringify({cached: [postgres, mailpit], calls: [], failures: [], ...scenario}));
   await writeFile(join(root, 'docker'), `#!${process.execPath}
-import {readFileSync, writeFileSync} from 'node:fs';
+import {readFileSync, writeFileSync, renameSync} from 'node:fs';
 const state = process.env.LAUNCHER_STATE;
 const data = JSON.parse(readFileSync(state));
 const args = process.argv.slice(2);
-const save = () => writeFileSync(state, JSON.stringify(data));
+// A killed daemon probe must leave the previous complete fixture state readable.
+const save = () => {const temporary = state + '.' + process.pid; writeFileSync(temporary, JSON.stringify(data)); renameSync(temporary, state);};
 const fail = message => {save(); console.error(message); process.exit(1);};
 const acquire = image => {
   if (image === (data.failureImage ?? '${postgres}') && data.failures.length) fail(data.failures.shift());
