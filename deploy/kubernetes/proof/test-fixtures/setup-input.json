@@ -1,6 +1,6 @@
 {
   "account": "462991287391",
-  "region": "eu-south-2",
+  "region": "eu-north-1",
   "now": "2026-11-05T20:00:00Z",
   "repository": {
     "fullName": "waitron-io/waitron-cloud",
@@ -15,7 +15,9 @@
     "State": "available",
     "Public": true,
     "RootDeviceType": "ebs",
-    "VirtualizationType": "hvm"
+    "VirtualizationType": "hvm",
+    "Name": "al2023-ami-2023.10.20261026.0-kernel-6.1-arm64",
+    "RootDeviceName": "/dev/xvda"
   },
   "s3PrefixListId": "pl-0123456789abcdef0"
 }

@@ -1,5 +1,5 @@
 const ACCOUNT = '462991287391';
-const REGION = 'eu-south-2';
+const REGION = 'eu-north-1';
 const RUN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function timestamp(value) {
@@ -104,7 +104,7 @@ async function inventory(aws, operation, stackId) {
 // A heartbeat means this bounded sweep completed, not that EC2 finished cleanup.
 export async function sweepExpired({ aws, account, region, stackId, bucket, accessExpiry, now = Date.now }) {
   if (account !== ACCOUNT || region !== REGION || typeof stackId !== 'string'
-    || !/^arn:aws:cloudformation:eu-south-2:462991287391:stack\/[A-Za-z][A-Za-z0-9-]*\/[0-9a-f-]{36}$/.test(stackId)
+    || !/^arn:aws:cloudformation:eu-north-1:462991287391:stack\/[A-Za-z][A-Za-z0-9-]*\/[0-9a-f-]{36}$/.test(stackId)
     || typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)
     || !Number.isFinite(timestamp(accessExpiry)) || timestamp(accessExpiry) <= 0) throw new Error('Invalid expiry scope');
   const started = now();

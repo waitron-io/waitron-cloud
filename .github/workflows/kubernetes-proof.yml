@@ -5,6 +5,8 @@ on:
       - 'deploy/kubernetes/proof/**'
       - 'scripts/kubernetes-proof-budget.mjs'
       - 'scripts/kubernetes-proof-budget.test.mjs'
+      - 'scripts/kubernetes-proof-control.mjs'
+      - 'scripts/kubernetes-proof-control.test.mjs'
       - '.github/workflows/kubernetes-proof.yml'
   push:
     branches: [main]
@@ -16,7 +18,7 @@ concurrency:
 jobs:
   setup-controls:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -45,6 +47,10 @@ jobs:
             [[ -f deploy/kubernetes/proof/prices.mjs && -f deploy/kubernetes/proof/test-fixtures/prices.json ]] || exit 1
             tests+=(deploy/kubernetes/proof/prices.test.mjs)
           fi
+          if [[ -e scripts/kubernetes-proof-control.mjs || -e scripts/kubernetes-proof-control.test.mjs ]]; then
+            [[ -f scripts/kubernetes-proof-control.mjs ]] || exit 1
+            tests+=(scripts/kubernetes-proof-control.test.mjs)
+          fi
           for test_file in "${tests[@]}"; do
             [[ -f "$test_file" ]] || { echo "Missing required test: $test_file"; exit 1; }
           done
@@ -63,10 +69,16 @@ jobs:
           const input = JSON.parse(readFileSync('deploy/kubernetes/proof/test-fixtures/setup-input.json'));
           console.log(JSON.stringify(renderSetup(input), null, 2));
           JS
+          node --input-type=module > "$RUNNER_TEMP/d570-manual-rendered.json" <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { renderManualSetup } from './deploy/kubernetes/proof/setup.mjs';
+          const input = JSON.parse(readFileSync('deploy/kubernetes/proof/test-fixtures/setup-input.json'));
+          console.log(JSON.stringify(renderManualSetup(input), null, 2));
+          JS
       - name: Validate source and rendered CloudFormation without applying either
         shell: bash
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/d570-cfn-lint"
           "$RUNNER_TEMP/d570-cfn-lint/bin/pip" install 'cfn-lint==1.59.0'
-          "$RUNNER_TEMP/d570-cfn-lint/bin/cfn-lint" deploy/kubernetes/proof/setup.yaml "$RUNNER_TEMP/d570-rendered.json"
+          "$RUNNER_TEMP/d570-cfn-lint/bin/cfn-lint" deploy/kubernetes/proof/setup.yaml "$RUNNER_TEMP/d570-rendered.json" "$RUNNER_TEMP/d570-manual-rendered.json"

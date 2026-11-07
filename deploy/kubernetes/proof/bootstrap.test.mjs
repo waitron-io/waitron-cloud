@@ -10,7 +10,7 @@ const module = await import('./bootstrap.mjs').catch(error => {
   return {};
 });
 const input = () => ({
-  scope: { account: '462991287391', region: 'eu-south-2', stackId: 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570-proof/11111111-1111-4111-8111-111111111111' },
+  scope: { account: '462991287391', region: 'eu-north-1', stackId: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-proof/11111111-1111-4111-8111-111111111111' },
   reservation: { uuid: '22222222-2222-4222-8222-222222222222', head: 'a'.repeat(40), tree: 'b'.repeat(40), startedAt: '2026-11-06T12:00:00Z', expiry: '2026-11-06T14:15:00Z' },
 });
 function render(value = input()) {
@@ -110,7 +110,7 @@ test('a changed reservation cannot replace a previously armed deadline', t => {
 
 for (const [label, edit] of [
   ['production account', x => x.scope.account = '949687825720'], ['wrong region', x => x.scope.region = 'eu-west-1'],
-  ['foreign stack', x => x.scope.stackId = 'arn:aws:cloudformation:eu-south-2:949687825720:stack/d570-proof/11111111-1111-4111-8111-111111111111'],
+  ['foreign stack', x => x.scope.stackId = 'arn:aws:cloudformation:eu-north-1:949687825720:stack/d570-proof/11111111-1111-4111-8111-111111111111'],
   ['shell injection', x => x.reservation.uuid = "'; touch /tmp/foreign; #"],
   ['missing head', x => delete x.reservation.head], ['invalid tree', x => x.reservation.tree = 'head'],
   ['impossible date', x => x.reservation.startedAt = '2026-02-30T12:00:00Z'],

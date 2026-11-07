@@ -8,7 +8,7 @@ const budget = await import(target.href).catch(error => {
   throw error;
 });
 const now = '2026-11-06T12:00:00Z';
-const scope = { account: '462991287391', region: 'eu-south-2', stackId: 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000' };
+const scope = { account: '462991287391', region: 'eu-north-1', stackId: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570/00000000-0000-4000-8000-000000000000' };
 const uuid = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const categories = ['compute', 'disk', 'storage', 'requests', 'transfer', 'events', 'lambda', 'logs', 'network', 'tax', 'contingency'];
@@ -16,7 +16,7 @@ const identity = (changes = {}) => ({ uuid, head: 'a'.repeat(40), tree: 'b'.repe
 const evidence = (changes = {}) => ({ observedAt: now, account: scope.account, region: scope.region,
   currency: 'USD', pricesReconciled: true, billingReconciled: true, protectionHealthy: true,
   components: Object.fromEntries(categories.map(key => [key, { upperMicroUsd: key === 'compute' ? 900000 : 10000,
-    source: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-south-2/index.json', digest: 'c'.repeat(64) }])),
+    source: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-north-1/index.json', digest: 'c'.repeat(64) }])),
   openings: { '2026-11': { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'd'.repeat(64) },
     '2026-12': { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'e'.repeat(64) } }, ...changes });
 const confirmed = (changes = {}) => ({ uuid, observedAt: '2026-11-06T14:20:00Z', terminated: true, volumesAbsent: true,
@@ -543,4 +543,82 @@ test('refused S3 response headers close the owned response stream', async () => 
   const body = { destroy() { closed = true; }, async *[Symbol.asyncIterator]() { yield Buffer.from('{}'); } };
   const store = budget.createS3LedgerStore({ bucket: 'd570-synthetic', aws: { call: async () => ({ ContentLength: 1024 * 1024 + 1, ETag: '"etag"', Body: body }) } });
   await assert.rejects(store.get('d570/ledger/active.json'), /budget/i); assert.equal(closed, true);
+});
+
+
+// Treating the new bill as another opening would count the same booked run twice.
+function inspectBudget(store, billingMicroUsd = 1750000, at = '2026-11-06T14:20:00Z') {
+  assert.equal(typeof budget.inspectBudget, 'function', 'missing retained-history budget inspection');
+  return budget.inspectBudget({ scope, now: at, billingMicroUsd, store });
+}
+
+test('budget inspection compares current billing with the original opening and each retained booking once', async () => {
+  const proof = evidence(); proof.openings['2026-11'].baselineMicroUsd = 1500000;
+  const store = await fresh({ evidence: proof }); await reserve(store, identity(), proof); await reconcile(store);
+  const before = clone([...store.objects]), writes = store.writes.length;
+  assert.deepEqual(await inspectBudget(store), { month: '2026-11', baselineMicroUsd: 1500000,
+    overheadMicroUsd: 200000, bookedMicroUsd: 1000000, completedMicroUsd: 500000,
+    billingMicroUsd: 1750000, activeUuid: null });
+  assert.deepEqual(clone([...store.objects]), before); assert.equal(store.writes.length, writes);
+  // A second reservation keeps the original opening; billed spend is not added again.
+  await reserve(store, identity({ uuid: other, startedAt: '2026-11-06T14:21:00Z', expiry: '2026-11-06T14:26:00Z',
+    liabilityUntil: '2026-12-06T14:26:00Z' }), { ...proof, observedAt: '2026-11-06T14:21:00Z' }, '2026-11-06T14:21:00Z');
+  assert.deepEqual(await inspectBudget(store, 2000000, '2026-11-06T14:22:00Z'), { month: '2026-11', baselineMicroUsd: 1500000,
+    overheadMicroUsd: 200000, bookedMicroUsd: 2000000, completedMicroUsd: 500000,
+    billingMicroUsd: 2000000, activeUuid: other });
+});
+
+for (const [label, amount] of [['unknown', undefined], ['negative', -1], ['fractional', 0.5],
+  ['nonfinite', Infinity], ['over cap', 10000000], ['unexplained', 1200001]]) {
+  test(`budget inspection refuses ${label} billing without a write`, async () => {
+    const store = await fresh(); await reserve(store);
+    assert.equal(typeof budget.inspectBudget, 'function', 'missing retained-history budget inspection');
+    const before = clone([...store.objects]);
+    await assert.rejects(budget.inspectBudget({ scope, now, billingMicroUsd: amount, store }), /budget/i);
+    assert.deepEqual(clone([...store.objects]), before);
+  });
+}
+
+test('budget inspection accepts the explained upper boundary without declaring estimated spend settled', async () => {
+  const store = await fresh(); await reserve(store);
+  assert.deepEqual(await inspectBudget(store, 1200000, now), { month: '2026-11', baselineMicroUsd: 0,
+    overheadMicroUsd: 200000, bookedMicroUsd: 1000000, completedMicroUsd: 0,
+    billingMicroUsd: 1200000, activeUuid: uuid });
+  assert.equal(store.body('d570/ledger/active.json').active.state, 'reserved');
+});
+
+for (const [label, damage] of [
+  ['missing active record', s => s.objects.delete('d570/ledger/active.json')],
+  ['missing previous month', s => s.objects.delete('d570/ledger/2026-11.json')],
+  ['missing later month', s => s.objects.delete('d570/ledger/2026-12.json')],
+  ['changed month', s => s.damage('d570/ledger/2026-12.json', m => m.opening.overheadMicroUsd++)],
+  ['unknown object', s => s.objects.set('d570/ledger/unknown.json', { body: Buffer.from('{}'), etag: '"foreign"' })],
+  ['corrupt active', s => s.damage('d570/ledger/active.json', a => a.completed = [])],
+]) test(`budget inspection refuses ${label} even when the current bill fits`, async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store); damage(store);
+  const before = clone([...store.objects]);
+  await assert.rejects(inspectBudget(store, 0), /budget/i);
+  assert.deepEqual(clone([...store.objects]), before);
+});
+
+test('budget inspection cannot silently start a month missing from retained history', async () => {
+  const store = await fresh(); const before = clone([...store.objects]);
+  await assert.rejects(inspectBudget(store, 0, '2027-01-01T00:00:00Z'), /budget/i);
+  assert.deepEqual(clone([...store.objects]), before);
+});
+
+test('budget inspection refuses a completion dated after its observation', async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store);
+  await assert.rejects(inspectBudget(store, 0, now), /budget/i);
+});
+
+test('budget inspection notices a controller changing ownership while reading monthly history', async () => {
+  const store = await fresh(); await reserve(store);
+  const get = store.get; let changed = false;
+  store.get = async key => {
+    const row = await get(key);
+    if (!changed && key === 'd570/ledger/2026-11.json') { changed = true; await reconcile(store); }
+    return row;
+  };
+  await assert.rejects(inspectBudget(store, 0), /budget/i);
 });

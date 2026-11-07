@@ -3150,59 +3150,18 @@ implementation or production evidence.
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
   availability checks for sign-in, remote access and backups. Full service/fault proof
-  and the strict common verifier remain unbuilt. D570 now has a closed-admission
-  reservation core with conditional active/month ledgers, immutable exact retries,
-  full cross-month bookings through receipt retention, conservative no-refund
-  cleanup and retained original cost evidence. Synthetic checks cover competing
-  controllers, partial/lost writes, damaged history, stale evidence, deadline
-  expiry during writes and unknown cleanup. A bounded public-catalogue reader
-  now retains source-byte identity and extracts nine paid Spain EC2/gp3/ARM-Lambda/S3/log
-  rates as exact fractions, excluding shared free tiers and bounding every price
-  tier conservatively. Complete service-page reconciliation, transfer/events/network,
-  taxes, quantities, billing and all-in bound construction, setup integration and
-  live S3/cleanup qualification remain open; these inputs grant no spending or
-  runnable owner setup. A new self-contained guest deadline entry binds the
-  original reservation to a fixed UTC timer, a boot-relative fallback and
-  shutdown on reboot. Synthetic shell checks cover exact retries without
-  rearming, clock rollback, partial installation, damaged state and preserved
-  foreign unit files. Signals and failed diagnostics now request poweroff; clock
-  checksums and systemd loader checks reject changed deadlines and foreign
-  overrides. Debian checks verify unit syntax and isolated persistent enablement.
-  It is not yet wired into a launcher: actual ARM/systemd
-  behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
-  unqualified. D570's
-  [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
-  the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
-  462991287391/eu-south-2, within USD 10/month; production 949687825720 is forbidden.
-  The owner approved temporary setup/repository/input access through
-  2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
-  identity-checked renderer and bounded expiry engine now have synthetic checks
-  and an unprivileged CI gate. The engine and rendered Lambda now attempt later
-  eligible cleanup after a mutation or termination-response failure. If those calls
-  finish, the first error is rethrown without publishing healthy status; a stalled
-  call can still delay later attempts and error reporting. Structural inventory
-  validation still precedes mutations. Malformed run tags now leave their resources
-  untouched without starving independently owned cleanup or publishing health.
-  Original service times cap future expiry at 135 minutes and the approved access
-  deadline; restart times cannot extend it. Missing or contradictory service times
-  request owned instance termination only after deletion-on-termination disks match
-  exact stack/run/expiry/attachment ownership; uncertain disks withhold termination
-  while independent cleanup continues. An observation clock refreshed after the
-  inventories preserves resources created during those reads. Engine and rendered-Lambda checks exercise these guards; live EC2 time/ownership
-  and termination evidence remain open. That workflow selects proof/workflow PR
-  changes and runs on every main push, so unrelated older PR heads need no absent
-  proof files. Launches remain explicitly denied, the sweep rule disabled and CLI
-  up/down closed. The complete removable setup you run in one
-  sitting, with automatic resource setup and removal, remains unfinished. No prior
-  full Mac proof or recurring Mac probe
-  is required; the supported Mac path and every capacity floor remain unchanged.
-  Independent verifier/control prerequisites may land before live qualification.
-  Private ARM inputs, all-in reservations, real termination/cleanup drills, measured
-  build/steady/fault/verifier/healing peaks and the full same-head/tree proof remain
-  open. The observed 6.10 GiB owned-memory sample is only a lower bound.
-  AWS execution and spending wait for the reviewed owner-run setup handoff; this
-  prerequisite creates no infrastructure or live access. No general AWS, production
-  or schema authority follows.
+  and the strict common verifier remain unbuilt. D570's
+  [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
+  still needs the reviewed owner-run handoff and a live payload-free ARM run,
+  explained existing account charges within the unchanged monthly cap, measured
+  shutdown and disk/interface absence, actual itemised billing and removal.
+  Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
+  remain unqualified. The independent expiry drill, offline ARM inputs, full P1
+  service/fault proof and measured build/steady/fault/verifier/healing peaks remain
+  open. The observed 6.10 GiB owned-memory sample is only a lower bound; no capacity
+  floor or supported Mac path changes. Weekly automation still needs scoped access
+  and the later [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
+  No general AWS, production or schema authority follows from this first machine.
   Global account separation and the action controller have planning entries below;
   release waves, hosted venues and regional failover remain later plans.
   Country/provider/cell registry, repeatable resource

@@ -27,7 +27,7 @@
             {
               "Ref": "AWS::Region"
             },
-            "eu-south-2"
+            "eu-north-1"
           ]
         }
       ]
@@ -246,7 +246,7 @@
           "Ref": "Vpc"
         },
         "VpcEndpointType": "Gateway",
-        "ServiceName": "com.amazonaws.eu-south-2.s3",
+        "ServiceName": "com.amazonaws.eu-north-1.s3",
         "RouteTableIds": [
           {
             "Ref": "RouteTable"
@@ -337,25 +337,25 @@
                   "Action": "ec2:RunInstances",
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:aws:ec2:eu-south-2::image/${ImageId}"
+                      "Fn::Sub": "arn:aws:ec2:eu-north-1::image/${ImageId}"
                     },
                     {
-                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:subnet/${Subnet}"
+                      "Fn::Sub": "arn:aws:ec2:eu-north-1:462991287391:subnet/${Subnet}"
                     },
                     {
-                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:security-group/${SecurityGroup}"
+                      "Fn::Sub": "arn:aws:ec2:eu-north-1:462991287391:security-group/${SecurityGroup}"
                     },
                     {
-                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                      "Fn::Sub": "arn:aws:ec2:eu-north-1:462991287391:launch-template/${LaunchTemplate}"
                     }
                   ],
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2"
+                      "aws:RequestedRegion": "eu-north-1"
                     },
                     "ArnEquals": {
                       "ec2:LaunchTemplate": {
-                        "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                        "Fn::Sub": "arn:aws:ec2:eu-north-1:462991287391:launch-template/${LaunchTemplate}"
                       }
                     },
                     "Bool": {
@@ -371,12 +371,12 @@
                   "Effect": "Allow",
                   "Action": "ec2:RunInstances",
                   "Resource": [
-                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
-                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                    "arn:aws:ec2:eu-north-1:462991287391:instance/*",
+                    "arn:aws:ec2:eu-north-1:462991287391:volume/*"
                   ],
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestedRegion": "eu-north-1",
                       "aws:RequestTag/Proof": "D570",
                       "aws:RequestTag/Stack": {
                         "Ref": "AWS::StackId"
@@ -385,7 +385,7 @@
                     },
                     "ArnEquals": {
                       "ec2:LaunchTemplate": {
-                        "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                        "Fn::Sub": "arn:aws:ec2:eu-north-1:462991287391:launch-template/${LaunchTemplate}"
                       }
                     },
                     "Null": {
@@ -402,12 +402,12 @@
                   "Effect": "Allow",
                   "Action": "ec2:CreateTags",
                   "Resource": [
-                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
-                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                    "arn:aws:ec2:eu-north-1:462991287391:instance/*",
+                    "arn:aws:ec2:eu-north-1:462991287391:volume/*"
                   ],
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestedRegion": "eu-north-1",
                       "ec2:CreateAction": "RunInstances",
                       "aws:RequestTag/Proof": "D570",
                       "aws:RequestTag/Stack": {
@@ -436,7 +436,7 @@
                   "Resource": "*",
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2"
+                      "aws:RequestedRegion": "eu-north-1"
                     },
                     "DateLessThan": {
                       "aws:CurrentTime": "2027-02-28T23:59:00Z"
@@ -447,10 +447,10 @@
                   "Sid": "OwnedShutdownRead",
                   "Effect": "Allow",
                   "Action": "ec2:DescribeInstanceAttribute",
-                  "Resource": "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                  "Resource": "arn:aws:ec2:eu-north-1:462991287391:instance/*",
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestedRegion": "eu-north-1",
                       "ec2:ResourceTag/Proof": "D570",
                       "ec2:ResourceTag/Stack": {
                         "Ref": "AWS::StackId"
@@ -469,12 +469,12 @@
                     "ec2:DeleteVolume"
                   ],
                   "Resource": [
-                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
-                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                    "arn:aws:ec2:eu-north-1:462991287391:instance/*",
+                    "arn:aws:ec2:eu-north-1:462991287391:volume/*"
                   ],
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestedRegion": "eu-north-1",
                       "ec2:ResourceTag/Proof": "D570",
                       "ec2:ResourceTag/Stack": {
                         "Ref": "AWS::StackId"
@@ -577,7 +577,7 @@
                   "Resource": "*",
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2"
+                      "aws:RequestedRegion": "eu-north-1"
                     },
                     "DateLessThan": {
                       "aws:CurrentTime": "2027-02-28T23:59:00Z"
@@ -629,7 +629,7 @@
                   "Resource": "*",
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2"
+                      "aws:RequestedRegion": "eu-north-1"
                     }
                   }
                 },
@@ -641,12 +641,12 @@
                     "ec2:DeleteVolume"
                   ],
                   "Resource": [
-                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
-                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                    "arn:aws:ec2:eu-north-1:462991287391:instance/*",
+                    "arn:aws:ec2:eu-north-1:462991287391:volume/*"
                   ],
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestedRegion": "eu-north-1",
                       "ec2:ResourceTag/Proof": "D570",
                       "ec2:ResourceTag/Stack": {
                         "Ref": "AWS::StackId"

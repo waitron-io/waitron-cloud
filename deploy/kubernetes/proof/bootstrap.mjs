@@ -9,8 +9,8 @@ function time(value) {
 }
 
 export function renderDeadlineBootstrap({ scope, reservation } = {}) {
-  if (scope?.account !== '462991287391' || scope.region !== 'eu-south-2'
-    || typeof scope.stackId !== 'string' || !/^arn:aws:cloudformation:eu-south-2:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(scope.stackId)
+  if (scope?.account !== '462991287391' || scope.region !== 'eu-north-1'
+    || typeof scope.stackId !== 'string' || !/^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(scope.stackId)
     || typeof reservation?.uuid !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(reservation.uuid)
     || ![reservation.head, reservation.tree].every(value => typeof value === 'string' && /^(?!0{40}$)[a-f0-9]{40}$/.test(value))) refuse();
   const start = time(reservation.startedAt), expiry = time(reservation.expiry);

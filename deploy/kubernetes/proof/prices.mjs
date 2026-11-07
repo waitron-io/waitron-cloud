@@ -1,23 +1,23 @@
 import { createHash } from 'node:crypto';
 
-const region = 'eu-south-2', maxBytes = 256 * 1024 * 1024;
+const region = 'eu-north-1', maxBytes = 320 * 1024 * 1024;
 const definitions = {
   AmazonEC2: {
-    compute: ['Hrs', { usagetype: 'EUS2-BoxUsage:m7g.2xlarge', instanceType: 'm7g.2xlarge', tenancy: 'Shared', operatingSystem: 'Linux', preInstalledSw: 'NA', capacitystatus: 'Used', operation: 'RunInstances' }],
-    disk: ['GB-Mo', { usagetype: 'EUS2-EBS:VolumeUsage.gp3', volumeApiName: 'gp3', operation: '' }],
+    compute: ['Hrs', { usagetype: 'EUN1-BoxUsage:m7g.2xlarge', instanceType: 'm7g.2xlarge', tenancy: 'Shared', operatingSystem: 'Linux', preInstalledSw: 'NA', capacitystatus: 'Used', operation: 'RunInstances' }],
+    disk: ['GB-Mo', { usagetype: 'EUN1-EBS:VolumeUsage.gp3', volumeApiName: 'gp3', operation: '' }],
   },
   AWSLambda: {
-    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUS2-Lambda-GB-Second-ARM', group: 'AWS-Lambda-Duration-ARM' }],
-    lambdaRequests: ['Requests', { usagetype: 'EUS2-Request-ARM', group: 'AWS-Lambda-Requests-ARM' }],
+    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUN1-Lambda-GB-Second-ARM', group: 'AWS-Lambda-Duration-ARM' }],
+    lambdaRequests: ['Requests', { usagetype: 'EUN1-Request-ARM', group: 'AWS-Lambda-Requests-ARM' }],
   },
   AmazonS3: {
-    storage: ['GB-Mo', { usagetype: 'EUS2-TimedStorage-ByteHrs', storageClass: 'General Purpose', volumeType: 'Standard' }],
-    put: ['Requests', { usagetype: 'EUS2-Requests-Tier1', group: 'S3-API-Tier1', operation: '' }],
-    get: ['Requests', { usagetype: 'EUS2-Requests-Tier2', group: 'S3-API-Tier2', operation: '' }],
+    storage: ['GB-Mo', { usagetype: 'EUN1-TimedStorage-ByteHrs', storageClass: 'General Purpose', volumeType: 'Standard' }],
+    put: ['Requests', { usagetype: 'EUN1-Requests-Tier1', group: 'S3-API-Tier1', operation: '' }],
+    get: ['Requests', { usagetype: 'EUN1-Requests-Tier2', group: 'S3-API-Tier2', operation: '' }],
   },
   AmazonCloudWatch: {
-    logIngest: ['GB', { usagetype: 'EUS2-DataProcessing-Bytes', operation: 'PutLogEvents' }],
-    logStorage: ['GB-Mo', { usagetype: 'EUS2-TimedStorage-ByteHrs', operation: '' }],
+    logIngest: ['GB', { usagetype: 'EUN1-DataProcessing-Bytes', operation: 'PutLogEvents' }],
+    logStorage: ['GB-Mo', { usagetype: 'EUN1-TimedStorage-ByteHrs', operation: '' }],
   },
 };
 const check = condition => { if (!condition) throw new Error('D570 price evidence refused'); };
@@ -169,4 +169,58 @@ export async function acquirePriceCatalogue(service, { fetch = globalThis.fetch,
     clearTimeout(timer);
     reader?.releaseLock();
   }
+}
+
+export function calculateManualCost({ catalogues, quantities, fixed, now }) {
+  const current = time(now), equalKeys = (value, names) => plain(value)
+    && Object.keys(value).sort().join(',') === [...names].sort().join(',');
+  check(equalKeys(catalogues, Object.keys(definitions)) && equalKeys(quantities, [
+    'computeSeconds', 'diskGiBSeconds', 'storageByteSeconds', 'putRequests', 'getRequests',
+    'lambdaMiBSeconds', 'lambdaRequests', 'logIngestBytes', 'logStoredByteSeconds',
+  ]) && equalKeys(fixed, ['transfer', 'events', 'network', 'tax', 'contingency']));
+  for (const quantity of Object.values(quantities)) check(Number.isSafeInteger(quantity) && quantity > 0);
+  for (const [service, names] of Object.entries(definitions)) {
+    const catalogue = catalogues[service];
+    check(plain(catalogue) && catalogue.kind === 'd570-price-acquired-v1' && catalogue.service === service
+      && catalogue.region === region && catalogue.source === sourceFor(service)
+      && /^[a-f0-9]{64}$/.test(catalogue.digest) && time(catalogue.observedAt) <= current
+      && catalogue.observedAt.slice(0, 10) === now.slice(0, 10) && equalKeys(catalogue.rates, Object.keys(names)));
+    for (const [name, [unit]] of Object.entries(names)) {
+      const rate = catalogue.rates[name];
+      check(plain(rate) && rate.unit === unit && rate.usdDenominator === '10000000000'
+        && typeof rate.usdNumerator === 'string' && /^[1-9][0-9]{0,19}$/.test(rate.usdNumerator));
+    }
+  }
+  const components = {};
+  // A 28-day divisor overbooks GB-months even in the shortest calendar month.
+  const monthSeconds = 28n * 86400n, gib = 1024n ** 3n;
+  function component(name, service, terms) {
+    const catalogue = catalogues[service];
+    let upper = 0n;
+    for (const [rate, quantity, divisor] of terms) {
+      const numerator = BigInt(catalogue.rates[rate].usdNumerator) * BigInt(quantities[quantity]) * 1000000n;
+      const denominator = 10000000000n * divisor;
+      upper += (numerator + denominator - 1n) / denominator;
+    }
+    check(upper > 0n && upper < 10000000n);
+    components[name] = { upperMicroUsd: Number(upper), source: catalogue.source, digest: catalogue.digest };
+  }
+  component('compute', 'AmazonEC2', [['compute', 'computeSeconds', 3600n]]);
+  component('disk', 'AmazonEC2', [['disk', 'diskGiBSeconds', monthSeconds]]);
+  component('storage', 'AmazonS3', [['storage', 'storageByteSeconds', gib * monthSeconds]]);
+  component('requests', 'AmazonS3', [['put', 'putRequests', 1n], ['get', 'getRequests', 1n]]);
+  component('lambda', 'AWSLambda', [['lambdaDuration', 'lambdaMiBSeconds', 1024n], ['lambdaRequests', 'lambdaRequests', 1n]]);
+  component('logs', 'AmazonCloudWatch', [['logIngest', 'logIngestBytes', gib], ['logStorage', 'logStoredByteSeconds', gib * monthSeconds]]);
+  for (const [name, bound] of Object.entries(fixed)) {
+    check(equalKeys(bound, ['upperMicroUsd', 'source', 'digest']) && Number.isSafeInteger(bound.upperMicroUsd)
+      && bound.upperMicroUsd > 0 && bound.upperMicroUsd < 10000000
+      && typeof bound.digest === 'string' && /^[a-f0-9]{64}$/.test(bound.digest) && typeof bound.source === 'string'
+      && bound.source.length <= 2048);
+    let source; try { source = new URL(bound.source); } catch { check(false); }
+    check(source.protocol === 'https:' && ['pricing.us-east-1.amazonaws.com', 'aws.amazon.com'].includes(source.hostname)
+      && !source.username && !source.password && !source.port && !source.search && !source.hash);
+    components[name] = { ...bound };
+  }
+  check(Object.values(components).reduce((sum, row) => sum + row.upperMicroUsd, 0) < 10000000);
+  return { observedAt: now, components };
 }
