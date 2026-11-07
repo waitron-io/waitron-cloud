@@ -25,7 +25,7 @@ if any(a.endswith('/snapshot.py') for a in args):
  if mode=='snapshot-failure':sys.exit(9)
  data=b'opaque source fixture';Path(args[-1]).write_bytes(data);print(json.dumps({'sha256':hashlib.sha256(data).hexdigest()}))
 elif any(a.endswith('/private-packages.py') for a in args):
- p=Path(args[-1]);p.mkdir();(p/'ui-core-0.1.0.tgz').write_bytes(b'private fixture')
+ p=Path(args[-1]);p.mkdir();(p/'ui-core-0.2.1.tgz').write_bytes(b'private fixture')
  if mode=='packaging':(root/'packaging.pid').write_text(str(os.getpid()));(root/'packaging-ready').touch();time.sleep(60)
  print('{}')
 else:os.execv(${JSON.stringify(python)},[${JSON.stringify(python)},*args])

@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@simplewebauthn/browser": "14.0.0",
-    "@waitron-io/ui-core": "0.1.0",
+    "@waitron-io/ui-core": "0.2.1",
     "lit": "3.3.3",
     "qrcode": "1.5.4"
   },

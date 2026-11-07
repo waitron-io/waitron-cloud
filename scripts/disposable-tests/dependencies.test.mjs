@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -85,4 +85,22 @@ assert not target.exists()
 `,script,root],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
   assert.equal(result.stdout,'');
+});
+
+// An updated workspace must still install in a guest without workstation credentials.
+test('the guest package preparation covers every private tarball in the workspace lockfile', () => {
+  const result = spawnSync('python3', ['-B', '-c', `import importlib.util,json,sys
+spec=importlib.util.spec_from_file_location('packages',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+print(json.dumps(m.PACKAGES))
+`, script], {encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr);
+  const prepared = JSON.parse(result.stdout);
+  const lock = readFileSync(new URL('../../pnpm-lock.yaml', import.meta.url), 'utf8');
+  const privatePins = [...lock.matchAll(/resolution: \{integrity: (sha512-[^,}]+), tarball: (https:\/\/npm\.pkg\.github\.com\/[^}]+)\}/g)];
+  assert.ok(privatePins.length > 0, 'the private consumer pins must be checked');
+  for (const [, integrity, url] of privatePins) {
+    const pin = prepared.find(package_ => package_.url === url);
+    assert.ok(pin, 'guest preparation is missing the locked private release: ' + url);
+    assert.equal(pin.integrity, integrity, 'guest bytes must match the locked release');
+  }
 });

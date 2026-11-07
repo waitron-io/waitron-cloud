@@ -9,12 +9,12 @@ Qualify a real assignment and same-source hosted retry for the implemented [ordi
 ## Keep the private shared UI release current (D579)
 
 The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-still needs its first hosted Waitron publication and a resulting Cloud dependency
-update PR. Lane F/A1412 owns [the publisher](https://github.com/clintongormley/waitron/pull/2526).
-The [first authenticated update check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
-found only `0.1.0`, so it opened no PR. Verify a newer-version update for both
-consumers and its private-package CI install. Review actual readers and update
-the smoke test’s version/source expectations without removing assertions.
+still needs a newer-version automatic dependency PR covering both consumers and
+its authenticated CI install. Read the first scheduled check after publication,
+including its reason if no update is needed. With the manual `0.2.1` update
+already installed, proving a newer-version PR needs a later Waitron release.
+Review the actual generated PR before claiming that path is qualified. The
+[release guide](shared-ui-release.md) records publication and manual qualification.
 The package stays private; existing authenticated install and image paths remain.
 
 ## Shared storage-test seed downloads (D585)
@@ -734,7 +734,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
-   covers Cloud receiving and a local grouped reader; its build waits for the shared box-error receiver.
+   covers Cloud receiving and a local grouped reader that uses the shared box-error receiver.
    Qualify report storage and read cost at realistic report counts per version, and assess
    matched-window error shares after real reports exist: lifetime totals from
    reporting boxes can delay young-release holds or inflate ratios when other errors
@@ -3149,8 +3149,8 @@ implementation or production evidence.
   the failure, but CI did not record window timestamps, so its exact cause remains
   unproved. Production guards and timing policies are unchanged.
 
-- **Shared UI.** The portal uses the released shared account controls. Release the
-  shared hover fix in Waitron before removing Cloud's override, and read the first
+- **Shared UI.** The portal uses the released shared account controls. Qualify removal of Cloud's
+  duplicate hover override after this package update, and read the first
   post-split weekly mutation results; see [scope and remaining work](backlog/shared-ui.md).
 - **Identity and organisations.** Local signup, recovery, passkeys, authenticator
   controls, account sessions, pairing approval and encrypted transactional mail are

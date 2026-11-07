@@ -177,7 +177,7 @@ export async function main(args) {
         const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
         transport.source = source;
-        transport.privatePackage = join(temporary, 'private', 'ui-core-0.1.0.tgz');
+        transport.privatePackage = join(temporary, 'private', 'ui-core-0.2.1.tgz');
         console.log(`Source ${snapshot}; command starts in a fresh VM, maximum 55 minutes.`);
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
