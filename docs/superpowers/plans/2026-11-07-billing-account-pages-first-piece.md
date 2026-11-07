@@ -39,11 +39,12 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   venue/history/eligibility/effective-level helpers with database UTC date. No writes,
   `readVenuePermissions` or `ensure_business` in reads; start revalidates stale reads.
   Resolve venue→organisation/business unlocked; lock account→session→credential→owner
-  membership, never venue/business parents first. `executeOn(ensure_business)` takes
+  membership only, never venue/business parents first. `executeOn(ensure_business)` takes
   parent locks, then `transitionOn(start_trial,level:'connected')` reuses binding/test
   checks. Each command gets a fresh internal event key. Read `clock_timestamp()`
   immediately before transition; derive `on`/`occurredAt` together. Recheck session
-  with identical touch:false/CSRF proof; held locks serialize revocation/owner removal.
+  with identical touch:false/CSRF proof to cover expiry during waits; held locks serialize
+  revocation/owner removal.
   Before commit re-read UTC day; if changed, roll back and offer retry. Every refusal
   rolls back; refresh separately. Map scope-not-found like non-owner; map IdentityError,
   BillingError and plain permission_denied. Eligibility is test-environment plus
@@ -73,7 +74,7 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   read when the hint returns. Keep existing
   `authenticator-setup-enter-browser.test.ts:135` and
   `usage-shared-countdown-browser.test.ts:75` unchanged; both prohibit unrelated
-  requests.
+  requests. Driver reproduced the former failure before repair.
   TDD: run named API tests through approved box's `scripts/test-postgres.mjs`;
   run portal `api.test.ts`, `billing-browser.test.ts`, `billing-account-fencing.test.ts`
   and those two regressions explicitly. Check types/build and inspect English/Spanish,
