@@ -72,14 +72,14 @@ async function downloadObject(client,key,path){
 async function captureClient(dir,command,input){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
  let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));
- let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');},45000);
- try{const {code,signal}=await new Promise(r=>child.once('exit',(code,signal)=>r({code,signal})));if(timedOut)throw Error('Waitron capture client timed out');assert.equal(code,0,`Waitron capture client failed: ${error}${signal?` (signal ${signal})`:''}`);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+ let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');child.stdout.destroy();child.stderr.destroy();},45000);
+ try{const {code,signal}=await new Promise(r=>child.once('close',(code,signal)=>r({code,signal})));if(timedOut)throw Error('Waitron capture client timed out');assert.equal(code,0,`Waitron capture client failed: ${error}${signal?` (signal ${signal})`:''}`);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
 async function recoveryClient(dir,command,input={}){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-recovery-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
  let output='',error='';child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>error=(error+v).slice(-16000));child.stdin.end(JSON.stringify({command,origin:f.origin,storageCaBase64:Buffer.from(s3.ca).toString('base64'),...input}));
- const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
- try{const code=await new Promise(r=>child.once('exit',r));assert.equal(code,0,'Waitron recovery client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+ let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');child.stdout.destroy();child.stderr.destroy();},45000);
+ try{const code=await new Promise(r=>child.once('close',r));if(timedOut)throw Error('Waitron recovery client timed out');assert.equal(code,0,'Waitron recovery client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
 const record = (value) => {
   checks.push(value);
