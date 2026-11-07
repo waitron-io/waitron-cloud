@@ -1225,9 +1225,11 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 **Open; production enablement is not approved.** Offer address lookup and transactional
 email to open-source Waitron users with a Cloud login, without a paid subscription.
-Qualify providers, storage rights, address quality, account allowances, abuse limits
-and the joint Waitron integration against the [requirements and open work](backlog/free-services.md);
-evaluate mobile notifications separately.
+The owner’s test-box trial has an explicitly injected signed address route;
+Waitron’s joint screen proof and separate Google activation remain open. Qualify providers,
+storage rights, address quality, account allowances, abuse limits and the joint
+Waitron integration against the [requirements and open work](backlog/free-services.md).
+Evaluate mobile notifications separately.
 
 ## Decisions in progress
 
@@ -3777,6 +3779,10 @@ temporary probe measuring 47 applications of migration 013 at 25–30 ms. None
 reproduces or repairs the failure. Preserve the cap and assertions; capture the
 active PostgreSQL wait and failing statement on recurrence before choosing a fix.
 See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
+PR #1042's merge additionally reports migration 024/035 setup timeouts and a
+usage-worker SIGKILL on registration shard 3. The four named cases pass on the
+exact merge on Debian; their hosted causes remain unproved and their limits stay.
+The linked D530 bundle retains this occurrence separately from migration 013.
 
 ## Passive security-audit session timestamp check (D530)
 

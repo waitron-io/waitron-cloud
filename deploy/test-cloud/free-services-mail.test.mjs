@@ -67,6 +67,8 @@ test('deployment drops provider inputs and exposes neither address lookup nor en
       const response = await post(`/v1/address-lookup/${action}`);
       assert.equal(response.status, 404);
     }
+    const address = await post('/api/installations/address-lookup', false);
+    assert.equal(address.status, 503); assert.deepEqual(JSON.parse(address.body), {error: 'temporarily_unavailable'});
     for (const action of ['submit', 'status', 'collect', 'release']) {
       const response = await post(`/api/installations/translation-${action}`, false);
       assert.equal(response.status, 503); assert.deepEqual(JSON.parse(response.body), {error: 'temporarily_unavailable'});

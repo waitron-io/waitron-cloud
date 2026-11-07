@@ -40,8 +40,22 @@ venue does not subscribe to remote access or backups.
   eligibility/storage rights, locality policy and joint Waitron setup acceptance
   remain release gates. The retained CartoCiudad audit agrees with published
   scores and the earlier parser fix; a new raw-response re-score is unavailable
-  because both landings deleted those replies. No further provider call or
-  product route/UI is added.
+  because both landings deleted those replies.
+  The owner’s one-box trial now has a signed route and a Google client for
+  transient suggestions and editable validation drafts, with explicit injection
+  and no startup/key wiring. Normal deployments still refuse it. Real PostgreSQL
+  checks cover the ten counted workflows/month, eight suggestions/workflow and
+  twenty/day, replay, authority after waits, expiry and uncertain validation.
+  The [trial contract](../address-lookup-trial.md) is the handoff for Waitron’s
+  existing editable screens; its joint screen/attribution proof remains open.
+  The watcher approved counted abandonment for this trial: expired or abandoned
+  holds stay counted. **Remove that exception when the real service is scoped.**
+  A crash can shorten one dispatch gap; no strict crash-spacing guarantee is made.
+  Real Google activation is a separate reviewed change requiring the server-only
+  key, owner usage/quotas confirmation and allowance configuration for this
+  account only. Removing the key file stops this private trial; public-service
+  terms/privacy links do not gate it. No live request or production enablement is
+  proved by these local checks.
   The offline evaluation client now waits a full spacing interval when created,
   including after reopening its durable journal. A controlled 150 ms reservation
   delay reproduces a restart dispatch less than the original 90 ms test bound;
