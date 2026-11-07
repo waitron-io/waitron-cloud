@@ -3350,8 +3350,10 @@ Match the file number against that group's file list in
 test names, paths, arbitrary assertion values and child output remain private.
 The disconnect case’s fixed-message assertion exception is covered by
 `node --test scripts/translation-disconnect-diagnostics.test.mjs`; its unknown
-cause stays in [translation work](backlog/translation.md); its next assertion
-failure now retains selected backend IDs and termination results.
+cause stays in [translation work](backlog/translation.md). A fixed-output assertion
+failure retains selected backend IDs and termination results. The earlier
+backend-termination assertion can still fail without those details; its recurrence
+on main remains a priority in that same investigation.
 Unexpected output still refuses the proof and records only its stream and file position.
 The sender retains at most sixteen event records plus a truncation marker.
 The command also reports its final refusal stage and allowlisted code.
