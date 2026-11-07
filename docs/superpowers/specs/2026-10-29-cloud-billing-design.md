@@ -109,9 +109,11 @@ enforcement points are reconciled is left to the builder.
 
 ## 3. Allowances (owner)
 
-- The email gateway, SMS (a new service, to be built separately) and the AI features
-  (translation, the rota solver) each have a **monthly allowance, which can differ by
-  level**.
+- The email gateway and the AI features (translation, the rota solver) each have a
+  **monthly allowance, which can differ by level**. SMS follows the owner's
+  [7 November decision](2026-11-07-cloud-venue-sms-gateway-design.md#two-separate-uses):
+  free sign-in/security codes with hourly/daily abuse limits, and a separate extra paid
+  booking allowance included in no level by default. The gateway remains unbuilt.
 - **The allowances exist to stop abuse, not to make money.** They are set high enough that
   a normal venue never meets them. The AI features cost us very little so far.
 - **What happens when a venue reaches an allowance is not designed now.** "Later, when we
@@ -484,7 +486,7 @@ enrolment and environment-backed settings still need joint formats and tests.
 | --- | --- | --- |
 | Level-2 monthly price | about €10 | cost measurement; the deployment design estimates $2–4 a month of cost per on-prem venue (`docs/superpowers/specs/2026-10-22-cloud-production-deployment-design.md:419-442`) |
 | Level-3 monthly price (daily = ÷30) | about €30 | the same, plus about $6 a month for each hosted venue beyond the first machines' capacity |
-| Allowances per level and service (email, SMS, translation, rota solver, address lookup) | translation: US$5 per venue per month | usage once venues are live |
+| Allowances per level and service (email, translation, rota solver, address lookup); SMS follows [D610](2026-11-07-cloud-venue-sms-gateway-design.md#two-separate-uses) | translation: US$5 per venue per month | usage once venues are live; SMS booking amount/price and security abuse limits remain open |
 | Trial allowances for translation and the rota solver | — | the same |
 
 ## 12. Questions for others
