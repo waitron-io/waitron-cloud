@@ -334,6 +334,8 @@ export class PortalApp {
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();
+    // Failed sign-out feedback belongs to the view that started it.
+    if (!success && route !== this.#route) return;
     // A confirmed anonymous session may already have routed to login.
     if (success) { if (this.path !== '/login') this.navigate('/login'); this.notice = 'signedOut'; }
     else if (route === this.#route) this.error = 'logoutFailed';
