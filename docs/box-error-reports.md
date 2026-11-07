@@ -121,16 +121,15 @@ reports, retries one and reads the latest, first and absent versions through the
 real HTTP routes. Each request captures and explains all eight actual reads with
 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`; `BOX_REPORT_COST` contains the full plans.
 
-On 7 November 2026, this command used PostgreSQL 18.6 in the Mac's ARM Docker
-environment, Node 26 and a host with 18 logical CPUs. A Debian x86 baseline also ran, but the
-shared test box was busy for the final comparison. Sizes below include table
-overhead and indexes; one MiB is 1,048,576 bytes.
+On 7 November 2026, this command used PostgreSQL 18.6 on the Debian x86 test
+box with four CPUs and Node 26.11.1. Sizes below include table overhead and
+indexes; one MiB is 1,048,576 bytes.
 
 | Reports | Table MiB | Index MiB | Total MiB | Bulk insert seconds |
 | --- | --- | --- | --- | --- |
-| 10,000 | 4.38 | 1.77 | 6.16 | 0.133 |
-| 100,000 | 43.45 | 16.67 | 60.12 | 1.284 |
-| 1,000,000 | 434.18 | 150.41 | 584.59 | 14.478 |
+| 10,000 | 4.38 | 1.70 | 6.09 | 0.607 |
+| 100,000 | 43.45 | 16.47 | 59.92 | 6.226 |
+| 1,000,000 | 434.18 | 152.05 | 586.23 | 67.088 |
 
 These are PostgreSQL execution milliseconds after `VACUUM ANALYZE`, with cached
 reads and no competing requests. Shared lookup rows show the largest observation
@@ -140,25 +139,26 @@ request commits, so even the first submission's replay finds its stored row.
 
 | Read | 10,000 | 100,000 | 1,000,000 |
 | --- | --- | --- | --- |
-| Shared IP allowance | 0.020 | 0.017 | 0.029 |
-| Report IP allowance | 0.016 | 0.098 | 0.021 |
-| Installation authentication | 0.011 | 0.012 | 0.135 |
-| Installation allowance | 0.016 | 0.014 | 0.023 |
-| Installation binding | 0.025 | 0.014 | 0.014 |
-| Venue shared lock | 0.018 | 0.016 | 0.021 |
-| Installation update lock | 0.016 | 0.022 | 0.019 |
-| Report deduplication | 0.016 | 0.019 | 0.015 |
-| Latest hold comparison | 1.428 | 11.785 | 118.722 |
-| First version, no predecessor | 0.128 | 0.156 | 0.154 |
-| Absent requested version | 0.119 | 0.122 | 0.114 |
+| Shared IP allowance | 0.128 | 0.066 | 0.104 |
+| Error-route IP allowance | 0.116 | 0.062 | 0.062 |
+| Installation authentication | 0.097 | 0.061 | 0.056 |
+| Installation allowance | 0.111 | 0.074 | 0.062 |
+| Installation binding | 0.090 | 0.053 | 0.048 |
+| Venue shared lock | 0.117 | 0.061 | 0.060 |
+| Installation update lock | 0.113 | 0.071 | 0.057 |
+| Report deduplication | 0.102 | 0.046 | 0.052 |
+| Latest hold comparison | 4.476 | 34.598 | 342.624 |
+| First version, no predecessor | 0.397 | 0.436 | 0.384 |
+| Absent requested version | 0.382 | 0.374 | 0.384 |
 
-The original query at commit `4d0eb9a5e` repeatedly aggregated comparison rows and
-scanned history even when one side was missing. At one million reports, the same
-Mac command measured 30.936 ms without a predecessor and 32.912 ms for an absent
-version, before the existence probes. The latest comparison measured 112.837 ms
-before and 118.722 ms after; this run establishes no improvement for that case.
-Its cost still grows with reports in the two compared versions. The focused test
-checks that aggregates execute once and missing comparisons avoid history scans.
+The original query at commit `4d0eb9a5e` scanned report history even when one
+side was missing. At one million reports, the earlier run on the same test box
+measured 91.409 ms without a predecessor and 99.024 ms for an absent version;
+the final run with both existence probes measured 0.384 ms for each. The latest
+comparison measured 325.450 ms before and 342.624 ms after, so these runs
+establish no improvement for that case. Its cost still grows with reports in
+the two compared versions. The focused test checks that missing comparisons
+avoid history scans, including rows that PostgreSQL reads and discards.
 
 Use these as local synthetic measurements, not a production capacity limit or a
 concurrent throughput estimate. A different version distribution, longer sources,

@@ -89,12 +89,12 @@ export class BoxErrorReports{
      UNION ALL
      SELECT r.installation_id,r.code,r.occurrences,r.version_major,r.version_minor,r.version_patch
      FROM installation_error_reports r JOIN predecessor p USING(version_major,version_minor,version_patch) WHERE r.environment=$1
-    ), versions AS MATERIALIZED (
+    ), versions AS (
      SELECT version_major,version_minor,version_patch,count(DISTINCT installation_id)::numeric AS boxes FROM reports GROUP BY 1,2,3
-    ), current_errors AS MATERIALIZED (
+    ), current_errors AS (
      SELECT code,sum(occurrences)::numeric AS n,count(DISTINCT installation_id) AS boxes FROM reports
      WHERE version_major=$2 AND version_minor=$3 AND version_patch=$4 GROUP BY code
-    ), prior_errors AS MATERIALIZED (
+    ), prior_errors AS (
      SELECT r.code,sum(r.occurrences)::numeric AS n FROM reports r JOIN predecessor p USING(version_major,version_minor,version_patch) GROUP BY r.code
     ) SELECT EXISTS(SELECT 1 FROM current_errors c CROSS JOIN predecessor p
       JOIN versions v ON v.version_major=$2 AND v.version_minor=$3 AND v.version_patch=$4

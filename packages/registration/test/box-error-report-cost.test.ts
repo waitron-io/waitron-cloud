@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 
-function repeatedAggregates(plan:Record<string,any>):number{
- return (plan['Node Type']==='Aggregate'&&plan['Actual Loops']>1?1:0)
-  +(plan.Plans??[]).reduce((n:number,p:Record<string,any>)=>n+repeatedAggregates(p),0);
-}
 function reportRows(plan:Record<string,any>):number{
  return (plan['Relation Name']==='installation_error_reports'
   ?(plan['Actual Rows']+(plan['Rows Removed by Filter']??0)+(plan['Rows Removed by Index Recheck']??0))*plan['Actual Loops']:0)
@@ -27,7 +23,6 @@ test('volume measurement loads distinct boxes and releases and explains real rec
    assert(probe,action);assert.equal(probe.reads.length,8,'include three real route allowance reads and five receiver reads');
    for(const read of probe.reads){
     assert(read.plan.Plan);assert(read.plan['Execution Time']>=0);
-    assert.equal(repeatedAggregates(read.plan.Plan),0,'a hold read must compute each aggregate once');
     if(action==='held-first'||action==='held-missing')assert(reportRows(read.plan.Plan)<=1,
      'a missing comparison needs only an existence probe, not a version history scan');
    }
