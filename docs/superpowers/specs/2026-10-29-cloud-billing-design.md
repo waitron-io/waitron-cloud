@@ -1,7 +1,7 @@
 # Cloud billing — design
 
-Status: draft for owner approval, 2026-10-29. Launch platform item 3 in
-[docs/backlog.md](../../backlog.md) ("Billing").
+Status: approved, 2026-10-29, as recorded under launch platform item 3 in
+[docs/backlog.md](../../backlog.md#launch-platform-work-in-priority-order) ("Billing").
 
 Decisions marked **(owner)** were made by the owner in the design session on 2026-10-29
 unless another date is given. Decisions marked **(driver's call)** were made by the
