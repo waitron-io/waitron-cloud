@@ -1,6 +1,6 @@
 # Kubernetes stack recovery implementation plan
 
-> Implement inline, test first, after Claude reads this plan through `~/workspace/tools/claude-seat.sh review-branch`. This delivery edits only this plan; no code, tests, commits or AWS calls.
+> Implement inline, test first, after Claude reads this plan through `~/workspace/tools/claude-seat.sh review-branch`. No lane AWS calls.
 
 **Approval:** WATCHER, `/Users/clintongormley/waitron-campaign-g/questions.md`, **2026-11-07 16:29**:
 
