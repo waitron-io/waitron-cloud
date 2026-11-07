@@ -250,3 +250,41 @@ test('complete billing command and read matrix refuses crossed and unknown busin
   }
  }finally{await f.close();}
 });
+
+test('caller-owned billing validates commands before touching a client or borrowing a connection',async()=>{
+ const {BillingStore}=await import('../src/index.ts');
+ const store=new BillingStore({connect:async()=>assert.fail('caller-owned method borrowed a connection')} as unknown as Pool);
+ const client={query:async()=>assert.fail('invalid command reached SQL')} as unknown as PoolClient;
+ const scope={organisationId:randomUUID(),legalBusinessId:randomUUID()};
+ await assert.rejects(async()=>store.executeOn(client,{...scope,organisationId:'invalid'},event(),{type:'ensure_business'}),{code:'invalid_billing_input'});
+ await assert.rejects(async()=>store.executeOn(client,scope,{...event(),source:{kind:'provider',provider:'sumup',accountId:'synthetic-account'}},{type:'ensure_business'}),{code:'invalid_billing_input'});
+ await assert.rejects(async()=>store.transitionOn(client,scope,event(),{type:'ensure_business'} as never),{code:'invalid_billing_input'});
+});
+
+test('caller-owned billing keeps writes and replay inside the caller transaction',async()=>{
+ const f=await fixture(),client=await f.pool.connect();try{
+  await ensure(f);const before=await snapshot(f),e=event(),m=method();
+  await client.query('BEGIN');
+  const transactionId=(await client.query('SELECT txid_current()::text AS id')).rows[0].id;
+  const pending=await f.store.executeOn(client,f.scope,e,{type:'set_method',method:m});
+  assert.equal((pending.value as {paymentMethod:{id:string}}).paymentMethod.id,m.id);
+  assert.equal((await client.query('SELECT txid_current()::text AS id')).rows[0].id,transactionId);
+  assert.equal((await client.query('SHOW transaction_isolation')).rows[0].transaction_isolation,'read committed');
+  assert.equal((await client.query('SELECT count(*)::int AS count FROM billing_events WHERE event_key=$1',[e.key])).rows[0].count,1);
+  assert.equal((await f.second.query('SELECT count(*)::int AS count FROM billing_events WHERE event_key=$1',[e.key])).rows[0].count,0);
+  await client.query('ROLLBACK');assert.deepEqual(await snapshot(f),before);
+  await client.query('BEGIN');
+  const applied=await f.store.executeOn(client,f.scope,e,{type:'set_method',method:m});
+  await client.query('COMMIT');
+  assert.deepEqual(await f.store.execute(f.scope,e,{type:'set_method',method:m}),applied);
+  assert.equal((await f.store.business(f.scope)).paymentMethod?.id,m.id);
+ }finally{await client.query('ROLLBACK');client.release();await f.close();}
+});
+
+test('caller-owned billing requires an active transaction before any writes',async()=>{
+ const f=await fixture(),client=await f.pool.connect();try{
+  const before=await snapshot(f);
+  await assert.rejects(f.store.executeOn(client,f.scope,event(),{type:'ensure_business'}),{code:'invalid_billing_input'});
+  assert.deepEqual(await snapshot(f),before);
+ }finally{client.release();await f.close();}
+});

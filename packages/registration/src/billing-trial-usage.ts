@@ -3,15 +3,13 @@ import {billingDate} from './billing-config.ts';
 import {BillingError,type BillingScope,type TrialView} from './billing-types.ts';
 import type {TrialUsage} from './billing-trials.ts';
 import {readTrafficDays} from './traffic-days.ts';
+import {assertBillingTransaction} from './billing-transaction-guard.ts';
 
 /** Call before other reads in a transaction, so stored trial, traffic and invocation facts share one snapshot. */
 export async function readTrialUsage(client:PoolClient,scope:BillingScope,venueId:string,trial:TrialView):Promise<{complete:boolean;usage:TrialUsage}>{
  billingDate(trial.startedOn);billingDate(trial.endsOn);
  if(trial.startedOn>=trial.endsOn)throw new BillingError('invalid_billing_input');
- try{await client.query('SAVEPOINT billing_trial_usage');}catch(error){
-  if((error as {code?:string}).code==='25P01')throw new BillingError('invalid_billing_input');throw error;
- }
- await client.query('RELEASE SAVEPOINT billing_trial_usage');
+ await assertBillingTransaction(client);
  await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
  const args=[scope.organisationId,scope.legalBusinessId,venueId];
  const venue=(await client.query('SELECT environment FROM venues WHERE organisation_id=$1 AND legal_business_id=$2 AND id=$3',args)).rows[0];

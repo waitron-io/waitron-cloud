@@ -3,6 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {billingDate,billingRecord,billingWhole} from './billing-config.ts';
 import {BillingError,type BillingCommand,type BillingEvent,type BillingReceipt,type BillingScope,type PermissionCommand,type BusinessBillingView,type ProviderMethod} from './billing-types.ts';
 import {transaction} from './transaction.ts';
+import {assertBillingTransaction} from './billing-transaction-guard.ts';
 import type {VenueChargeView} from './billing-charges.ts';
 import {applyPermissionTransition} from './venue-service-permissions.ts';
 import {applyVenueCommand,readBillingVenue,readVenueHistory,readRenewalViews,type VenueCommand} from './billing-venues.ts';
@@ -149,6 +150,12 @@ async function applyBusiness(client:PoolClient,scope:BillingScope,eventId:string
  }
  return readBusiness(client,scope,'NO KEY UPDATE');
 }
+function billingInput(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand,enrol:boolean){
+ const scope=scopeInput(inputScope),event=eventInput(inputEvent),command=commandInput(inputCommand);
+ if(enrol&&!['set_venue','start_trial','extend_trial','end_trial'].includes(command.type))invalid();
+ if(event.source.kind!=='internal'&&command.type!=='observe_payment')invalid();
+ return {scope,event,command,enrol};
+}
 export class BillingStore{
  private readonly pool:Pool;
  constructor(pool:Pool){this.pool=pool;}
@@ -182,11 +189,21 @@ export class BillingStore{
  async transition(scope:BillingScope,event:BillingEvent,command:PermissionCommand):Promise<BillingReceipt>{
   return this.apply(scope,event,command,true);
  }
+ async executeOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:BillingCommand):Promise<BillingReceipt>{
+  const input=billingInput(scope,event,command,false);
+  await assertBillingTransaction(client);
+  return this.applyOn(client,input);
+ }
+ async transitionOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:PermissionCommand):Promise<BillingReceipt>{
+  const input=billingInput(scope,event,command,true);
+  await assertBillingTransaction(client);
+  return this.applyOn(client,input);
+ }
  private async apply(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand,enrol:boolean):Promise<BillingReceipt>{
-  const scope=scopeInput(inputScope),event=eventInput(inputEvent),command=commandInput(inputCommand);
-  if(enrol&&!['set_venue','start_trial','extend_trial','end_trial'].includes(command.type))invalid();
-  if(event.source.kind!=='internal'&&command.type!=='observe_payment')invalid();
-  return transaction(this.pool,async client=>{
+  const input=billingInput(inputScope,inputEvent,inputCommand,enrol);
+  return transaction(this.pool,client=>this.applyOn(client,input));
+ }
+ private async applyOn(client:PoolClient,{scope,event,command,enrol}:ReturnType<typeof billingInput>):Promise<BillingReceipt>{
    await lockScope(client,scope);
    const args=[scope.organisationId,scope.legalBusinessId];
    if(command.type==='ensure_business')await client.query('INSERT INTO billing_businesses(organisation_id,legal_business_id) VALUES($1,$2) ON CONFLICT DO NOTHING',args);
@@ -214,6 +231,5 @@ export class BillingStore{
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id`,[eventId,...args,source.kind,source.kind==='provider'?source.provider:null,source.kind==='provider'?source.accountId:null,event.key,event.occurredAt,command,value]);
    if(!inserted.rowCount)throw new BillingError('billing_event_conflict');
    return {eventId,value};
-  });
  }
 }
