@@ -150,3 +150,20 @@ test('translation consent writes carry the unique browser token and never retry'
  assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],'');
  await accountRequest('/translation-consent');assert.equal((options?.headers as Record<string,string>)['X-CSRF-Token'],undefined);assert.equal(options?.method,'GET');
 });
+
+for (const path of ['/session', '/session/activity']) test(`${path} accepts only absent or true trial discovery hints`, async t => {
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  const session={accountId:'owner',expiresAt:'2030-01-01T12:00:00Z'};
+  let value:unknown=session;
+  t.mock.method(globalThis,'fetch',async()=>Response.json(value));
+  for(const valid of [session,{...session,billingTrialAvailable:true}]){
+    value=valid;assert.equal((await accountRequest(path,path.endsWith('activity')?{}:undefined)).ok,true);
+  }
+  for(const hint of [false,null,'true',1,{}]){
+    value={...session,billingTrialAvailable:hint};
+    assert.equal((await accountRequest(path,path.endsWith('activity')?{}:undefined)).ok,false);
+  }
+});

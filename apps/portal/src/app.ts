@@ -110,8 +110,9 @@ export class PortalApp {
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    this.billing.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.billing.loadAttempted) void this.billing.load();
+    const billingAccount=state.kind === 'authenticated' && state.billingTrialAvailable === true ? state.accountId : undefined;
+    this.billing.account(billingAccount);
+    if (['/account','/'].includes(this.path) && billingAccount && !this.billing.loadAttempted) void this.billing.load();
     this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);

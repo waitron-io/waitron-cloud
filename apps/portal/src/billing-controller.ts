@@ -39,7 +39,7 @@ export class BillingController{
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,initialRead=false){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403){this.venues=[];this.selected=undefined;this.loaded=false;}
-  // A first policy refusal leaves the optional panel absent for ordinary accounts.
+  // Discovery grants no authority; a first policy refusal keeps the optional panel absent.
   if(initialRead&&result.status===403&&result.code==='permission_denied')return;
   if(result.status===503&&!this.loaded&&result.code==='temporarily_unavailable')return;
   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';

@@ -39,7 +39,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations') return Array.isArray(data.installations)&&data.installations.every(v=>validInstallation(v)&&typeof v.canRevoke==='boolean');
   if(path==='/installations/revoke') return validInstallation(data);
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
-  if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt));
+  if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true);
   if (path === '/signup/complete') return status === 201 && ['accountId', 'organisationId', 'legalBusinessId']
     .every(field => typeof data[field] === 'string' && data[field].trim().length > 0);
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';

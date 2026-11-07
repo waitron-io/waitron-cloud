@@ -1,5 +1,5 @@
 import { accountRequest, type ApiResult } from './api.ts';
-type Session = {accountId: string; expiresAt: string};
+type Session = {accountId: string; expiresAt: string; billingTrialAvailable?: true};
 export type SessionState = {kind: 'checking' | 'unavailable'} | {kind: 'anonymous'; expired?: true} | ({kind: 'authenticated'} & Session);
 export class PortalSession {
   state: SessionState = {kind: 'checking'};

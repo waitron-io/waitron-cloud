@@ -608,6 +608,15 @@ last setting unset to keep the feature off. Startup rejects it outside test mode
 Programmatic servers pass `billingAccount: {accountIds: [...]}` with
 `planMode: 'test-venue-levels'`.
 
+The successful session and session-activity replies include
+`billingTrialAvailable: true` only for an account on that list. The portal reads
+billing only when it receives this hint, so ordinary accounts send no billing
+request. The hint grants no access: each billing route still checks the session,
+verified email, ownership and test scope. The server sends true or omits the field;
+a false or malformed value makes the portal treat the session reply as unavailable.
+Remove this temporary hint with the synthetic-account allowlist rather than
+extending it to advertise other features.
+
 Sign in as a verified owner and open **Account → Connected trial**. Choose your
 venue, then **Start free trial**. The screen shows the current plan and last trial
 day; that day is the day before the stored exclusive `endsOn` date. You need no

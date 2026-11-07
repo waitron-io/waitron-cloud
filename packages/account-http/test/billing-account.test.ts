@@ -243,3 +243,20 @@ test('account server forwards trial configuration without outbound requests or c
   assert.equal(response.policy,(await request(app(),f.session)).headers.get('content-security-policy')??undefined);assert.equal(calls,0);
  }finally{await running.close();}
 });
+
+test('session and activity discover the trial chooser only for configured synthetic accounts',async()=>{
+ const f=await owner();
+ for(const allowed of [undefined,[randomUUID()],[f.accountId]]){
+  const target=app(allowed);
+  for(const activity of [false,true]){
+   const response=await target.request(origin+'/api/account/session'+(activity?'/activity':''),{
+    method:activity?'POST':'GET',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken},
+    ...(activity?{body:'{}'}:{})
+   },{incoming:{socket:{remoteAddress:`192.0.2.${++addresses%250+1}`}}} as HttpBindings);
+   assert.equal(response.status,200);const value=await response.json();
+   assert.equal(value.accountId,f.accountId);
+   assert.equal(value.billingTrialAvailable,allowed?.includes(f.accountId)?true:undefined);
+   assert.equal(Object.hasOwn(value,'billingTrialAvailable'),allowed?.includes(f.accountId)??false);
+  }
+ }
+});

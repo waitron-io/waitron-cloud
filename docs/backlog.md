@@ -3168,8 +3168,9 @@ implementation or production evidence.
   [launch platform work](#launch-platform-work-in-priority-order); designed in
   [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
   The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
-  covers the test-account chooser for the existing Connected trial. Payment-method pages,
-  paid-plan choices and production qualification remain open.
+  covers the test-account chooser for the existing Connected trial, discovered only
+  for configured synthetic accounts. Payment-method pages, paid-plan choices and
+  production qualification remain open.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open;
