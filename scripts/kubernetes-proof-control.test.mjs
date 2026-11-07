@@ -2562,7 +2562,11 @@ for (const [latency, delayedConsole] of [[0, false], [1000, false], [0, true]]) 
     }
     return prior(service, operation, input);
   };
-  const run = () => ownerCommand(f, ['drill', base], { uuid: f.uuid, clock: () => current, sleep: async ms => { current += ms; } });
+  const run = () => ownerCommand(f, ['drill', base], { uuid: f.uuid, clock: () => current, sleep: async ms => {
+    current += ms;
+    // The buffered wait can pass between wake-ups without changing the earlier shutdown observations.
+    if (delayedConsole && consoleReads >= 2 && current >= reservedAt + 180000) current = Math.max(current, reservedAt + 450000);
+  } });
   let remoteLog;
   const beforeCalls = f.calls.length;
   if (latency) {
