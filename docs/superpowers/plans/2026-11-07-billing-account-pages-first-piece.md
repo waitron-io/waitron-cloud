@@ -10,8 +10,7 @@ D570 keeps priority. [Billing design](../specs/2026-10-29-cloud-billing-design.m
 applies. Synthetic test accounts/venues only; Node ≥26, pnpm 9.15.0; inline TDD.
 Cards, tax, cancellation, closure, hosting, suppliers, reminders and live billing
 remain open. No migration, new billing state, ledger, permission or trial rule.
-Session discovery below repairs the reviewed chooser regression; no new config,
-endpoint or payment-method work.
+Session discovery repairs the chooser regression without new configuration or endpoints.
 
 - [ ] **Store:** `packages/registration/src/billing-store.ts` adds
   `executeOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:BillingCommand):Promise<BillingReceipt>`
@@ -29,12 +28,9 @@ endpoint or payment-method work.
   because venue flags alone do not identify a synthetic account. Require existing
   `test-venue-levels` mode. Reuse consent’s origin/CSRF, bounded bodies, cookies,
   rate limits, verified credentials and owner-membership locks.
-  In `app.ts`, successful `GET /session` and `POST /session/activity` replies add
-  optional `billingTrialAvailable:true` only when the resolved current account is
-  in configured `billingAccount.accountIds`; omit otherwise. Activity retains
-  discovery so ordinary interaction cannot hide a configured chooser. This is
-  display/discovery only: retain every endpoint permission, origin, CSRF, account,
-  verified-credential, owner and test-environment guard.
+  `app.ts` adds `billingTrialAvailable:true` to successful `/session` and
+  `/session/activity` replies only for configured allowlisted accounts; omit
+  otherwise. This discovers the panel and grants no authority; retain every guard.
   `POST /api/account/billing/read {}` returns
   `{venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
   `/start-trial {venueId}` returns that view. Derive organisation/business from
@@ -62,35 +58,32 @@ endpoint or payment-method work.
 
 - [ ] **Portal:** create `apps/portal/src/billing-{types,controller,screen}.ts`;
   integrate `app.ts`, `screens.ts`, `api.ts`, `locale.ts` and shared controls.
-  Propagate `billingTrialAvailable?:true` through `session.ts`’s Session type and
-  API validation (absent or literal true only). `PortalApp.#sessionChanged` gives
-  billing an account and initiates reads only for strict `===true`; otherwise
-  clear the controller to fence late replies, including same-account capability
-  loss. Existing billing browser fixtures advertise true; ordinary fixtures omit it.
+  `session.ts` carries `billingTrialAvailable?:true`; API validation accepts
+  absent or literal true, rejects false/malformed replies as session unavailable.
+  `#sessionChanged` gives billing an account and reads only for strict true;
+  otherwise clear its controller, fencing same-account capability loss too.
   Show effective level, active trial and eligibility. Show last trial day as endsOn−1.
   Price display joins the later paid-plan/card piece; this first choice is free.
   Fence late account/venue/sign-out replies. No new Waitron location or CSP change.
 
-- [ ] **Verify and finish:** TDD in registration `test/{billing-store,venue-service-permissions}.test.ts`,
-  HTTP `test/billing-account.test.ts`, portal `test/{billing-browser,billing-account-fencing}.test.ts`
-  and existing API/portal/config tests. Pin wrapper/replay/enrol parity, active
-  transaction guard, real lock waits, rollback, revocation/expiry/owner/scope loss,
-  concurrency, midnight crossings, trial/end eligibility, foreign/production/default-off
-  refusal, no-installation reload, unchanged CSP and zero providers. Retain every
-  assertion, including security and unrelated no-write checks. Add HTTP discovery tests for off,
-  foreign and allowlisted accounts on both session replies, retaining route
-  refusals; portal API/browser/fencing cases cover absent/false/malformed (no read),
-  true (read), activity retention and same-account loss with a late reply.
-  CI regression: driver reproduced one authenticator failure, actual
-  `['/billing/read']`, expected `[]`; preserve
+- [ ] **Verify and finish:** retain every unrelated/security assertion and prior
+  store, locking, transaction, expiry, midnight, trial and production-refusal tests.
+  Add real-PostgreSQL discovery cases in HTTP `test/billing-account.test.ts`: both
+  session replies omit the hint when off/foreign and include true when allowlisted;
+  every billing route refusal remains. In portal `test/api.test.ts`, reject false
+  and malformed hints. In `test/billing-browser.test.ts`, configured fixtures add
+  true; retain 403/503 panel-absence assertions with flagged sessions, because
+  discovery grants no authority. Add separate ordinary-account zero-read cases
+  after installations settle, plus PortalApp cases for activity retention and
+  same-account hint loss during a delayed billing read. Keep existing
   `authenticator-setup-enter-browser.test.ts:135` and
-  `usage-shared-countdown-browser.test.ts:75`. Failing tests first, then repair.
-  Focused commands (repository root; database command on approved box):
-  `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/billing-account.test.ts test/account-http.test.ts`;
-  `pnpm --dir apps/portal exec node --test test/api.test.ts test/billing-browser.test.ts test/billing-account-fencing.test.ts test/authenticator-setup-enter-browser.test.ts test/usage-shared-countdown-browser.test.ts`.
-  Run named registration tests via approved box’s `scripts/test-postgres.mjs`,
-  build portal, inspect English/Spanish × light/dark ×390/1280, keyboard/axe/overflow,
-  and typecheck; CI owns full suites. Update only own billing backlog lines and
-  stale guides, including the design header’s citation to the approved Billing backlog heading. Claude reads this
-  amendment before build; retain the existing whole-branch review, without another;
-  inspect every current-head job. Cards get their own later plan.
+  `usage-shared-countdown-browser.test.ts:75` unchanged; both prohibit unrelated
+  requests. Driver reproduced the former failure before repair.
+  TDD: run named API tests through approved box's `scripts/test-postgres.mjs`;
+  run portal `api.test.ts`, `billing-browser.test.ts`, `billing-account-fencing.test.ts`
+  and those two regressions explicitly. Check types/build and inspect English/Spanish,
+  light/dark, 390/1280, keyboard/axe/overflow. CI owns full suites. Update only own
+  billing backlog lines; document discovery in account-http README and correct
+  the controller comment to cover refused flagged accounts. Claude reads this
+  amendment before build; retain the completed whole-branch review. Inspect every
+  current-head CI job before authorised finish/land. Cards get their own plan.
