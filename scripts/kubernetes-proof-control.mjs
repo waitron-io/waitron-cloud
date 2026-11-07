@@ -785,12 +785,13 @@ export async function inspectManualFirstGuest(options) {
     && timestamp >= instant(reservation.startedAt) && timestamp <= clock()
     && typeof consoleOutput.Output === 'string' && Buffer.byteLength(consoleOutput.Output) <= 1024 * 1024);
   const prefix = `D570_DEADLINE_READY ${reservation.uuid} ${instant(launch.guestExpiry) / 1000} `;
-  const lines = consoleOutput.Output.split(/\r?\n/).filter(line => line.startsWith(prefix));
+  // Cloud-init can wrap the guest's exact token sequence in its console envelope.
+  const lines = consoleOutput.Output.split(/\r?\n/)
+    .map(line => line.replace(/^\[[ \t]*\d+(?:\.\d+)?\][ \t]+cloud-init\[\d+\]:[ \t]+/, ''))
+    .filter(line => line.startsWith('D570_DEADLINE_READY '));
+  check(lines.every(line => line.startsWith(prefix)));
   const boots = new Set(lines.map(line => line.slice(prefix.length)));
-  if (boots.size === 0) {
-    check(!consoleOutput.Output.split(/\r?\n/).some(line => line.startsWith('D570_DEADLINE_READY ')));
-    pending('D570_NOT_READY', 'readiness pending');
-  }
+  if (boots.size === 0) pending('D570_NOT_READY', 'readiness pending');
   check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
   check(isDeepStrictEqual(await liveResources(), resources));
   return { ...launch, ...inspection, ...resources, bootId: [...boots][0], consoleOutput,

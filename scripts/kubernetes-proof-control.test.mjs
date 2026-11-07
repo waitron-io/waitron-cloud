@@ -1644,6 +1644,28 @@ test('ready guest captures console and deletable resources between two live inst
   assert.equal(f.writes.length, writes); assert.deepEqual(structuredClone([...f.objects]), before);
 });
 
+test('ready guest accepts the cloud-init timestamp and process prefix without changing its exact identity',async t=>{
+ const f=await readyGuestFixture(t),before=structuredClone([...f.objects]);
+ f.consoleOutput.Output=`[    6.388599] cloud-init[2735]: D570_DEADLINE_READY ${f.uuid} 1793966580 11111111-1111-4111-8111-111111111111\n`;
+ const result=await f.observe();
+ assert.equal(result.bootId,'11111111-1111-4111-8111-111111111111');
+ assert.deepEqual(result.consoleOutput,f.consoleOutput);assert.deepEqual(structuredClone([...f.objects]),before);
+});
+
+for(const [label,edit] of [
+ ['foreign run',line=>line.replace('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002')],
+ ['wrong expiry',line=>line.replace('1793966580','1793966700')],
+ ['trailing token',line=>line+' extra'],
+ ['invalid boot',line=>line.replace('11111111-1111-4111-8111-111111111111','not-a-boot')],
+ ['two boot identities',line=>line+'\n'+line.replace('11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222')],
+ ['mixed foreign run',line=>line+'\n'+line.replace('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002')],
+])test(`ready guest refuses a cloud-init line with ${label} and retains every booking`,async t=>{
+ const f=await readyGuestFixture(t),before=structuredClone([...f.objects]);
+ const line=`[    6.388599] cloud-init[2735]: D570_DEADLINE_READY ${f.uuid} 1793966580 11111111-1111-4111-8111-111111111111`;
+ f.consoleOutput.Output=edit(line)+'\n';await assert.rejects(f.observe(),/D570 controller refused/);
+ assert.deepEqual(structuredClone([...f.objects]),before);
+});
+
 for (const [label, mutate] of [
   ['foreign owner', f => { f.instances.Reservations[0].OwnerId = '949687825720'; }],
   ['other run', f => { f.instance.Tags[2].Value = '00000000-0000-4000-8000-000000000002'; }],

@@ -75,6 +75,14 @@ requires a running request at T+170 or later and OS termination received before
 T+300. Disk and interface absence are checked separately. The response reports
 when those observations arrived, not the exact physical poweroff time.
 
+Readiness accepts the exact run, deadline and boot tokens either alone or after
+cloud-init's `[ seconds] cloud-init[pid]: ` console prefix. Conflicting runs,
+extra tokens and multiple boot identities refuse. The controller still needs the
+line while the guest is running; a result received after termination cannot
+qualify readiness. [EC2 buffers console output](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/troubleshoot-unreachable-instance.html#instance-console-console-output),
+so an empty early response does not establish that the guest failed to print.
+The three-minute guest deadline stays in force.
+
 Private `launch.json`, `ready.json`, `shutdown.json` and `cleanup.json` keep the
 observations. A lost reply or failed drill retains its booking and cannot start
 a second first drill. Use `down` after a failure; do not erase files or try another
