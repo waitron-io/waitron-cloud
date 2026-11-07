@@ -720,7 +720,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    (typed text sent by an admin), and a triage agent. D101's AI gate still has to be opened
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
-   updater honouring a held version. Its plan order is written when its turn comes.
+   updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
+   covers Cloud receiving and a local grouped reader; its build waits for the shared box-error receiver.
    D104's [owner setup checklist](incident-setup.md) now gives the Cloudflare Pages
    Free/Direct Upload steps, independent `pages.dev` fallback and two phone-provider
    options with prices checked on 4 November 2026. The incident runbook follows the
