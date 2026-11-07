@@ -60,7 +60,7 @@ if (command === 'image' && args[1] === 'inspect') {
   if (data.hangPull) {save(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);}
   acquire(args[1]);
 } else if (command === 'run') {
-  const image = args.find(arg => arg === '${postgres}' || arg === '${mailpit}');
+  const image = args.at(-1);
   const name = args[args.indexOf('--name') + 1];
   data.calls.push({command, image, name, noPull: args.includes('--pull=never')});
   if (data.runFailure) fail(data.runFailure);

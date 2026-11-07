@@ -195,9 +195,9 @@ or a reproduction of the original cancellation. Neither passing run repairs it.
 Keep the timeout and every shutdown assertion. On recurrence, read the test-only
 `cloud-test-setup-waits` report alongside the migration stage. The affected setup
 fixtures retain at most eight activity samples with wait categories, blocker process
-IDs and up to sixteen locks each. Only SQL matching repository migrations is printed,
-limited to 1,000 characters; other SQL is omitted. The observer has its own bounded
-connection and prints only when setup fails. You can exercise real blocked migrations
+IDs and up to sixteen waiting locks each. SQL text and query hashes are omitted to
+keep row values out of the report. The observer has its own bounded connection and
+prints only when setup fails. You can exercise real blocked migrations
 with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node
 --test test/setup-wait-diagnostics.test.ts`. No parameters or row contents belong in
 these reports. Capture runner health separately. D530 owns the causal investigation;

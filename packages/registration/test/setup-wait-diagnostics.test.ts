@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID, createHash} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {Pool} from 'pg';
 import {migrationNames} from '../src/migrate.ts';
@@ -9,7 +8,7 @@ import {observeSetup,migrate} from './fixtures/setup-waits.ts';
 const url=process.env.TEST_DATABASE_URL;
 if(!url)throw new Error('Run through scripts/test-postgres.mjs');
 
-for(const known of [false,true])test(`setup timeout retains real locks and ${known?'known migration SQL':'redacts private SQL'}`,async t=>{
+for(const known of [false,true])test(`setup timeout retains real locks and ${known?'migration context':'private SQL stays absent'}`,async t=>{
  const admin=new Pool({connectionString:url});
  const schema=`setup_wait_${randomUUID().replaceAll('-','')}`;
  const pool=new Pool({connectionString:url,max:1,options:`-c search_path=${schema} -c statement_timeout=900`});
@@ -25,7 +24,7 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   let sql:string;
   if(known){
    await blocker.query(`CREATE TABLE ${schema}.remote_configuration_jobs (id integer)`);
-   sql=await readFile(new URL('../migrations/024_remote_configuration_jobs.sql',import.meta.url),'utf8');
+   sql='';
   }else{
    await blocker.query('SELECT pg_advisory_xact_lock(782,19)');
    sql="SELECT 'private row value', pg_advisory_xact_lock(782,19)";
@@ -39,13 +38,12 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   const sample=report.samples.find((row:any)=>row.blockers.includes(blockerPid));
   assert.ok(sample,'the waiting backend identifies its real blocker');
   assert.equal(sample.waitType,'Lock');
-  assert.equal(sample.querySha256,createHash('sha256').update(sql).digest('hex'));
+  assert.deepEqual(Object.keys(sample).sort(),['blockers','locks','pid','waitEvent','waitType']);
   assert.ok(sample.locks.some((lock:any)=>lock.granted===false));
-  assert.equal(sample.locks.length,16,'the retained lock list is capped even when this backend owns more locks');
+  assert.equal(sample.locks.length,1,'held locks do not displace the waiting lock');
+  assert.ok(sample.locks.every((lock:any)=>lock.granted===false));
   assert.ok(lines.join('').length<24000);
   assert.ok(!lines.join('').includes('private row value'));
-  if(known){assert.equal(sample.migration,'024_remote_configuration_jobs.sql');assert.equal(sample.statement,sql.slice(0,1000));}
-  else assert.equal(sample.statement,'non-migration SQL omitted');
   assert.equal(pool.listenerCount('acquire'),0);
   assert.equal((await pool.query('SHOW statement_timeout')).rows[0].statement_timeout,'900ms');
  }finally{
