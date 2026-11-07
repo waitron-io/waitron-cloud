@@ -18,6 +18,12 @@ function evidence(){return {repository:{id:123,full_name:'fixture/cloud'},workfl
  job:{id:901,run_id:789,run_attempt:1,head_sha:head,name:'typecheck',status:'queued',
  labels:['self-hosted','dt-123-789-1-typecheck'],runner_id:null},
  source:{sha:head,commit:{tree:{sha:'4'.repeat(40)}}}};}
+function pending(t,ordinaryStage='admitted'){
+ const root=mkdtempSync(join(tmpdir(),'ordinary-intent-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage});
+ return leases;
+}
 
 test('ordinary admission binds an approved open same-repository PR head, workflow and concrete typecheck job',()=>{
  assert.equal(typeof controller.admitOrdinary,'function');
@@ -46,19 +52,21 @@ test('mode writes use the repository variable and require matching readback; abs
  await controller.setRoutingMode({api,policy,mode:'server'});
  assert.deepEqual(posts[0],['/repos/fixture/cloud/actions/variables',{name:'DISPOSABLE_TESTS_MODE',value:'server'}]);
  assert.equal(await controller.routingMode({api,policy}),'server');
+ value='SERVER';assert.equal(await controller.routingMode({api,policy}),'server');
  value='invalid';assert.equal(await controller.routingMode({api,policy}),'hosted');
  api.patch=async()=>{};await assert.rejects(controller.setRoutingMode({api,policy,mode:'hosted'}),/readback/i);
 });
 
-test('ordinary fallback switches hosted before cancelling and retries only its unchanged completed attempt',async()=>{
+test('ordinary fallback switches hosted before cancelling and retries only its unchanged completed attempt',async t=>{
  assert.equal(typeof controller.fallbackOrdinary,'function');let mode='server',cancelled=false,retried=false;
+ const leases=pending(t);
  const ci={...evidence().run,repositoryId:123,workflowId:456,workflowSha:head,runId:789,attempt:1,jobId:901};
- const api={get:async path=>path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
+ const api={get:async path=>path.endsWith('/DISPOSABLE_TESTS_HEAD')?{value:head}:path.includes('/pulls/')?evidence().pull:path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
  {...evidence().job,status:cancelled?'completed':'queued'}:{...evidence().run,status:cancelled?'completed':'in_progress'},
  patch:async(path,body)=>{assert.equal(path,'/repos/fixture/cloud/actions/variables/DISPOSABLE_TESTS_MODE');mode=body.value;},
- post:async path=>{assert.equal(mode,'hosted');if(path.endsWith('/cancel'))cancelled=true;
+ post:async path=>{assert.equal(mode,'hosted');assert.equal(leases.inspect().ciInvocation.ordinaryStage,'cancel-requested');if(path.endsWith('/cancel'))cancelled=true;
  else{assert.equal(path,'/repos/fixture/cloud/actions/runs/789/rerun');assert.equal(cancelled,true);retried=true;}}};
- await controller.fallbackOrdinary({api,policy,ci});assert.equal(retried,true);
+ await controller.fallbackOrdinary({api,policy,ci,leases});assert.equal(retried,true);
 });
 test('ordinary fallback refuses newer attempts and preserves completed jobs and siblings',async()=>{
  assert.equal(typeof controller.fallbackOrdinary,'function');
@@ -75,13 +83,16 @@ test('ordinary fallback refuses newer attempts and preserves completed jobs and 
 test('the real typecheck routing expression selects only first-attempt same-repository server-mode PRs',()=>{
  const yaml=readFileSync(new URL('../../.github/workflows/ci.yml',import.meta.url),'utf8');
  const route=yaml.match(/^  typecheck:\n[\s\S]*?^    runs-on: (.+)$/m)[1];
- for(const [mode,event,attempt,headRepository,want] of [
+ for(const [mode,event,attempt,headRepository,want,full=false,selected=head] of [
   ['server','pull_request',1,123,['self-hosted','dt-123-789-1-typecheck']],
+  ['server','pull_request',1,123,'ubuntu-latest',true],
+  ['server','pull_request',1,123,'ubuntu-latest',false,'5'.repeat(40)],
+  ['server','pull_request',1,123,'ubuntu-latest',false,''],
   ['hosted','pull_request',1,123,'ubuntu-latest'],[undefined,'pull_request',1,123,'ubuntu-latest'],
   ['bad','pull_request',1,123,'ubuntu-latest'],['server','push',1,123,'ubuntu-latest'],
   ['server','pull_request',2,123,'ubuntu-latest'],['server','pull_request',1,999,'ubuntu-latest']]){
-  const context={vars:{DISPOSABLE_TESTS_MODE:mode},github:{event_name:event,run_attempt:attempt,repository_id:123,run_id:789,
-   event:{repository:{id:123},pull_request:{head:{repo:{id:headRepository}}}}},fromJSON:JSON.parse,
+  const context={inputs:{full},vars:{DISPOSABLE_TESTS_MODE:mode,DISPOSABLE_TESTS_HEAD:selected},github:{event_name:event,run_attempt:attempt,repository_id:123,run_id:789,
+   event:{repository:{id:123},pull_request:{head:{sha:head,repo:{id:headRepository}}}}},fromJSON:JSON.parse,
    format:(template,...values)=>template.replace(/\{(\d+)\}/g,(_,n)=>values[Number(n)])};
   const actual=route.startsWith('${{')?runInNewContext(route.slice(3,-2),context):route;
   assert.deepEqual(JSON.parse(JSON.stringify(actual)),want);
@@ -113,7 +124,7 @@ test('a down server retains concrete intent until hosted retry, without preparin
  const root=mkdtempSync(join(tmpdir(),'ordinary-down-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
  const ci=controller.admitOrdinary(policy,head,evidence());let mode='server',cancelled=false,retried=false;
- const api={get:async path=>path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
+ const api={get:async path=>path.endsWith('/DISPOSABLE_TESTS_HEAD')?{value:head}:path.includes('/pulls/')?evidence().pull:path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
  {...evidence().job,status:cancelled?'completed':'queued'}:{...evidence().run,status:cancelled?'completed':'in_progress'},
  patch:async(path,body)=>{assert.equal(leases.inspect().ciInvocation.jobId,901);mode=body.value;},
  post:async path=>{assert.equal(leases.inspect().ciInvocation.runId,789);
@@ -130,9 +141,59 @@ test('polling for a not-yet-created typecheck leaves the manual slot lock availa
  const root=mkdtempSync(join(tmpdir(),'ordinary-poll-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
  await withKernelLock(state,async()=>{new LocalLeases(join(state,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
  let unlocked=false;
- const api={get:async path=>path.includes('/variables/')?{value:'server'}:path.endsWith('/fork-pr-contributor-approval')?
+ const api={get:async path=>path.endsWith('/DISPOSABLE_TESTS_HEAD')?{value:head}:path.includes('/variables/')?{value:'server'}:path.endsWith('/fork-pr-contributor-approval')?
  {approval_policy:'all_external_contributors'}:path.includes('/jobs?')?{total_count:0,jobs:[]}:evidence().run};
  await assert.rejects(withOrdinaryController({state,hostGeneration:'fixture',api,policy,approvedHead:head,runId:789,lane:'I',
   wait:async()=>{unlocked=(await withKernelLock(state,async()=>({code:0}))).code===0;throw new Error('stop fixture poll');}}),/stop fixture poll/);
  assert.equal(unlocked,true);
+});
+
+test('fallback does not cancel or retry an old head after its PR advances',async t=>{
+ let writes=0,mode='server',cancelled=false;const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ const api={get:async path=>path.includes('/pulls/')?{...evidence().pull,head:{sha:'5'.repeat(40),repo:{id:123}}}:
+  path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?{...evidence().job,status:cancelled?'completed':'queued'}:
+  {...evidence().run,status:cancelled?'completed':'in_progress'},post:async path=>{writes++;if(path.endsWith('/cancel'))cancelled=true;},patch:async(path,body)=>{writes++;mode=body.value;}};
+ await assert.rejects(controller.fallbackOrdinary({api,policy,ci,leases:pending(t)}),/PR head/i);assert.equal(writes,0);
+});
+
+test('a crash after owned cancellation resumes the same-head retry without cancelling again',async t=>{
+ const leases=pending(t,'cancel-requested'),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ let writes=[];
+ const api={get:async path=>path.includes('/pulls/')?evidence().pull:path.includes('/variables/')?{value:'hosted'}:
+  path.includes('/jobs/')?{...evidence().job,status:'completed',conclusion:'cancelled'}:
+  {...evidence().run,status:'completed',conclusion:'cancelled'},
+  patch:async()=>{},post:async path=>writes.push(path)};
+ const result=await controller.fallbackOrdinary({api,policy,ci,leases});
+ assert.equal(result.retry,true);assert.deepEqual(writes,['/repos/fixture/cloud/actions/runs/789/rerun']);
+});
+
+test('server selection stores and reads back only a full approved head',async()=>{
+ assert.equal(typeof controller.setRoutingHead,'function');let value='';
+ const api={get:async()=>({value}),patch:async(path,body)=>{assert.equal(path,'/repos/fixture/cloud/actions/variables/DISPOSABLE_TESTS_HEAD');value=body.value;}};
+ await controller.setRoutingHead({api,policy,approvedHead:head});assert.equal(value,head);
+ await assert.rejects(controller.setRoutingHead({api,policy,approvedHead:'short'}));
+ api.patch=async()=>{};await assert.rejects(controller.setRoutingHead({api,policy,approvedHead:'5'.repeat(40)}),/readback/i);
+});
+
+test('ordinary execution refuses an unselected head before recording or preparing a guest',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'ordinary-selection-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
+ const api={get:async path=>({value:path.endsWith('/DISPOSABLE_TESTS_HEAD')?'5'.repeat(40):'server'})};
+ await assert.rejects(controller.executeOrdinary({api,policy,leases,ci:controller.admitOrdinary(policy,head,evidence()),lane:'I',
+ transport:{healthy:async()=>assert.fail('No host work for an unselected head')}}),/selected.*head|head.*selected/i);
+ assert.equal(leases.inspect().ciInvocation,undefined);
+});
+
+test('hosted retry qualification requires its exact next attempt, checkout, hosted typecheck and summary',async()=>{
+ assert.equal(typeof controller.qualifyOrdinaryHosted,'function');
+ const retry={runId:789,previousAttempt:1,sourceSha:head};
+ const job={...evidence().job,run_attempt:2,status:'completed',conclusion:'success',labels:['ubuntu-latest'],runner_id:1001};
+ const summary={...job,id:902,name:'summary'};let log='[command]/usr/bin/git log -1 --format=%H\n'+head;
+ const api={get:async path=>path.includes('/commits/')?evidence().source:path.includes('/jobs?')?{total_count:2,jobs:[job,summary]}:
+ {...evidence().run,run_attempt:2,status:'completed',conclusion:'success'},jobLog:async()=>log};
+ assert.equal((await controller.qualifyOrdinaryHosted({api,policy,retry})).sourceTree,'4'.repeat(40));
+ job.labels=['self-hosted'];await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/hosted/i);job.labels=['ubuntu-latest'];
+ summary.conclusion='failure';await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/summary/i);summary.conclusion='success';
+ log='[command]/usr/bin/git log -1 --format=%H\n'+'5'.repeat(40);
+ await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/checkout/i);
 });

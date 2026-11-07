@@ -27,7 +27,9 @@ export function orphanRunner(value) {
 }
 
 export function ciInvocation(value){
- assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId','ordinaryStage'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ if(value.ordinaryStage!==undefined)assert.ok(['admitted','cancel-requested'].includes(value.ordinaryStage) &&
+  value.route==='server' && Number.isSafeInteger(value.jobId) && value.sourceSha===value.workflowSha,'Invalid ordinary CI stage');
  if(value.jobId!==undefined)assert.ok(Number.isSafeInteger(value.jobId) && value.jobId>0,'Invalid recorded CI job');
  if(value.serverRunnerId!==undefined)assert.ok(value.route==='server' && Number.isSafeInteger(value.serverRunnerId) && value.serverRunnerId>0,'Invalid completed CI runner');
  assert.match(value.nonce,/^[a-f0-9]{32}$/,'Invalid CI invocation nonce');

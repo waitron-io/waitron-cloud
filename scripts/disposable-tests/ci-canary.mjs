@@ -21,33 +21,68 @@ export function admitOrdinary(policy,approvedHead,{repository,run,job,workflow,s
   job.labels.length===2 && job.labels.includes('self-hosted') && job.labels.includes(routingLabel(ci)),'Foreign or already assigned ordinary CI job');
  return ci;
 }
-const modePath=policy=>`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_MODE`;
+const variablePath=(policy,name)=>`/repos/${policy.repository}/actions/variables/${name}`;
+const modePath=policy=>variablePath(policy,'DISPOSABLE_TESTS_MODE');
 export async function routingMode({api,policy,signal}){
- try{return (await api.get(modePath(policy),{signal})).value==='server'?'server':'hosted';}
+ try{return String((await api.get(modePath(policy),{signal})).value).toLowerCase()==='server'?'server':'hosted';}
  catch(error){if(error.status===404)return 'hosted';throw error;}
 }
 export async function setRoutingMode({api,policy,mode,signal}){
  assert.ok(['server','hosted'].includes(mode),'Invalid routing mode');
- let present=true;try{await api.get(modePath(policy),{signal});}catch(error){if(error.status!==404)throw error;present=false;}
- if(present)await api.patch(modePath(policy),{name:'DISPOSABLE_TESTS_MODE',value:mode},{signal});
- else await api.post(`/repos/${policy.repository}/actions/variables`,{name:'DISPOSABLE_TESTS_MODE',value:mode},{signal});
- assert.equal((await api.get(modePath(policy),{signal})).value,mode,'Routing mode readback differs');
+ await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_MODE',value:mode,signal});
  return mode;
 }
-export async function fallbackOrdinary({api,policy,ci,signal,wait=delay}){
+async function writeRoutingVariable({api,policy,name,value,signal}){
+ const path=variablePath(policy,name);let present=true;
+ try{await api.get(path,{signal});}catch(error){if(error.status!==404)throw error;present=false;}
+ if(present)await api.patch(path,{name,value},{signal});
+ else await api.post(`/repos/${policy.repository}/actions/variables`,{name,value},{signal});
+ assert.equal((await api.get(path,{signal})).value,value,'Routing variable readback differs');
+}
+export async function routingHead({api,policy,signal}){
+ try{const value=(await api.get(variablePath(policy,'DISPOSABLE_TESTS_HEAD'),{signal})).value;
+  return typeof value==='string' && /^[a-f0-9]{40}$/i.test(value)?value.toLowerCase():'';}
+ catch(error){if(error.status===404)return '';throw error;}
+}
+export async function setRoutingHead({api,policy,approvedHead,signal}){
+ assert.match(approvedHead,/^[a-f0-9]{40}$/);
+ await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HEAD',value:approvedHead,signal});return approvedHead;
+}
+export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay}){
  const path=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
  const check=run=>assert.ok(run.id===ci.runId && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
   run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Ordinary fallback identity differs');
  let run=await api.get(path,{signal});check(run);
  const job=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
- assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha,'Ordinary fallback job differs');
- if(job.status==='completed')return {retry:false};
+ assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha && job.name==='typecheck','Ordinary fallback job differs');
+ const pending=leases?.inspect().ciInvocation;
+ const ownedCancel=pending?.ordinaryStage==='cancel-requested' && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId;
+ if(job.status==='completed' && (!ownedCancel || job.conclusion==='success'))return {retry:false};
+ assert.ok(run.run_attempt===ci.attempt || ownedCancel && run.run_attempt===ci.attempt+1,'Ordinary fallback attempt differs');
+ const currentPR=async run=>{
+  assert.ok(run.event==='pull_request' && run.pull_requests?.length===1,'Ordinary fallback PR identity differs');
+  const pull=await api.get(`/repos/${policy.repository}/pulls/${run.pull_requests[0].number}`,{signal});
+  assert.ok(pull.number===run.pull_requests[0].number && pull.state==='open' && pull.head?.sha===(ci.sourceSha??ci.workflowSha) &&
+   pull.head.repo?.id===ci.repositoryId && pull.base?.repo?.id===ci.repositoryId,'Ordinary fallback PR head changed');
+ };
+ await currentPR(run);
+ if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
- await setRoutingMode({api,policy,mode:'hosted',signal});
- await cancelCIJob({api,repository:policy.repository,ci,signal,wait});
+ if(job.status!=='completed'){
+  assert.ok(pending?.ordinaryStage==='admitted' || ownedCancel,'Ordinary fallback needs its persisted intent');
+  await setRoutingMode({api,policy,mode:'hosted',signal});
+  leases.setInvocation({...pending,ordinaryStage:'cancel-requested'});
+  await cancelCIJob({api,repository:policy.repository,ci,signal,wait});
+ }
  run=await api.get(path,{signal});check(run);
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt changed before retry');
- assert.equal(run.status,'completed','Ordinary fallback cancellation is unfinished');
+ if(run.status!=='completed'){
+  const completed=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
+  assert.ok(completed.id===ci.jobId && completed.run_id===ci.runId && completed.run_attempt===ci.attempt &&
+   completed.head_sha===ci.workflowSha && completed.status==='completed','Ordinary fallback cancellation is unfinished');
+  return {retry:false};
+ }
+ await currentPR(run);
  await api.post(path+'/rerun',undefined,{signal});
  return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
 }
@@ -76,21 +111,47 @@ export async function findOrdinary({api,policy,approvedHead,runId,signal}){
 export async function executeOrdinary({api,policy,leases,ci,lane,transport,signal}){
  assert.ok(!leases.inspect().ciInvocation && leases.inspect().slots.every(slot=>slot.state==='free'),'CI capacity is occupied');
  assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission is closed');
+ assert.equal(await routingHead({api,policy,signal}),ci.sourceSha,'Ordinary CI selected head differs');
  const {randomBytes}=await import('node:crypto');
  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
-  route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId};
+  route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,ordinaryStage:'admitted'};
  leases.setInvocation(invocation);
  try{
   const health=signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500);
   assert.equal(await transport.healthy({signal:health}),true,'CI server unavailable');
   assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
+  assert.equal(await routingHead({api,policy,signal}),ci.sourceSha,'Ordinary CI selected head changed during health check');
   const result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
   assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');
   leases.clearInvocation(invocation.nonce);return result;
  }catch(error){
   assert.ok(leases.inspect().slots.every(slot=>slot.state==='free'),`Ordinary CI cleanup remains uncertain: ${error.message}`);
-  const retry=await fallbackOrdinary({api,policy,ci,signal:AbortSignal.timeout(240000)});
+  const retry=await fallbackOrdinary({api,policy,ci,leases,signal:AbortSignal.timeout(240000)});
   leases.clearInvocation(invocation.nonce);return {code:125,error:error.message,...retry};
+ }
+}
+export async function qualifyOrdinaryHosted({api,policy,retry,signal,wait=delay}){
+ const base=`/repos/${policy.repository}`,end=Date.now()+3300000;
+ while(true){
+  const run=await api.get(`${base}/actions/runs/${retry.runId}`,{signal});
+  assert.ok(run.id===retry.runId && run.head_sha===retry.sourceSha && run.workflow_id===policy.workflowId && run.event==='pull_request' &&
+   run.path===policy.workflowPath && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+   [retry.previousAttempt,retry.previousAttempt+1].includes(run.run_attempt),'Hosted retry identity or attempt differs');
+  if(run.run_attempt===retry.previousAttempt+1 && run.status==='completed'){
+   assert.equal(run.conclusion,'success','Hosted retry failed');
+   const inventory=await api.get(`${base}/actions/runs/${retry.runId}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+   assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100 && inventory.jobs.every(job=>
+    job.run_id===retry.runId && job.run_attempt===run.run_attempt && job.head_sha===retry.sourceSha && job.status==='completed'),'Hosted retry inventory is incomplete');
+   const named=name=>{const jobs=inventory.jobs.filter(job=>job.name===name);assert.equal(jobs.length,1,`Hosted retry ${name} is missing or duplicated`);return jobs[0];};
+   const job=named('typecheck'),summary=named('summary');
+   for(const completed of [job,summary])assert.ok(completed.conclusion==='success' && completed.runner_id>0 &&
+    completed.labels.includes('ubuntu-latest') && !completed.labels.includes('self-hosted'),`Hosted retry ${completed.name} did not qualify`);
+   const source=await api.get(`${base}/commits/${retry.sourceSha}`,{signal});assert.equal(source.sha,retry.sourceSha);assert.match(source.commit.tree.sha,/^[a-f0-9]{40}$/);
+   const log=await api.jobLog(`${base}/actions/jobs/${job.id}/logs`,{signal});
+   assert.ok(new RegExp('git log -1 --format=%H[\\s\\S]{0,200}'+retry.sourceSha).test(log),'Hosted retry checkout differs');
+   return {runId:run.id,attempt:run.run_attempt,sourceSha:source.sha,sourceTree:source.commit.tree.sha,route:'hosted',typecheck:job.id,summary:summary.id};
+  }
+  assert.ok(Date.now()<end,'Hosted retry overall deadline exceeded');await wait(15000,undefined,{signal});
  }
 }
 

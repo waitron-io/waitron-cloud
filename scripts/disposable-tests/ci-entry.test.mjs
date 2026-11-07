@@ -84,11 +84,11 @@ test('background recovery switches a lost ordinary typecheck to hosted and retri
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
  const root=mkdtempSync(join(tmpdir(),'ordinary-recovery-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');let leases;
  await withKernelLock(state,async()=>{leases=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
  let mode='server',cancelled=false,retried=false;
- const api={get:async path=>path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
+ const api={get:async path=>path.includes('/pulls/')?{number:12,state:'open',head:{sha:'1'.repeat(40),repo:{id:123}},base:{repo:{id:123}}}:path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
  {id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:cancelled?'completed':'queued'}:
- {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},event:'pull_request',status:cancelled?'completed':'in_progress'},
+ {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},event:'pull_request',pull_requests:[{number:12}],status:cancelled?'completed':'in_progress'},
  patch:async(path,body)=>{mode=body.value;},post:async path=>{assert.equal(mode,'hosted');
  if(path.endsWith('/cancel'))cancelled=true;else{assert.ok(path.endsWith('/rerun'));assert.equal(cancelled,true);retried=true;}}};
  await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,

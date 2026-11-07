@@ -187,7 +187,7 @@ jobs:
   typecheck:
     needs: changes
     if: needs.changes.outputs.typecheck == 'true'
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.event.repository.id && github.run_attempt == 1 && vars.DISPOSABLE_TESTS_MODE == 'server' && fromJSON(format('["self-hosted","dt-{0}-{1}-{2}-typecheck"]', github.repository_id, github.run_id, github.run_attempt)) || 'ubuntu-latest' }}
+    runs-on: ${{ !inputs.full && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.event.repository.id && github.run_attempt == 1 && vars.DISPOSABLE_TESTS_MODE == 'server' && vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha && fromJSON(format('["self-hosted","dt-{0}-{1}-{2}-typecheck"]', github.repository_id, github.run_id, github.run_attempt)) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v5
