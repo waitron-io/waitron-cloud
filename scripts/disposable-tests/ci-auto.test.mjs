@@ -79,18 +79,18 @@ test('automatic pickup fills free slots while an independent manual test keeps i
  const lease=manual.reserveLocal({lane:'I',turn:'manual-test',snapshot:'a'.repeat(64),argv:['true']}).lease;
  const f=fixture(),get=f.api.get;f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  let active=0,peak=0,release;const ready=new Promise(r=>release=r),ids=[];
- const result=await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,
+ const result=await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},
  runWorker:async(ci)=>{ids.push(ci.jobId);active++;peak=Math.max(peak,active);if(active===5)release();await ready;active--;return {code:0};}});
  assert.deepEqual(ids,[901,902,903,904,905]);assert.equal(peak,5);assert.equal(result.served,5);
  assert.equal(manual.inspect().slots[0].lease.resourceId,lease.resourceId);
  const pending=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:1});
  pending.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
- const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
+ const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
  assert.deepEqual(next,[902,903,904,905],'A pending job must not be admitted again on a different slot');
  const {ciRequest}=await import('./ci-identity.mjs'),finished=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:2});
  const complete=(await controller.findAutomatic({api:f.api,policy,limit:6})).find(ci=>ci.jobId===905);
  const reserved=finished.reserveLocal(ciRequest('I',complete)).lease;finished.release(reserved,{resourceId:reserved.resourceId,absent:true});
- const after=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,runWorker:async ci=>{after.push(ci.jobId);return {code:0};}});
+ const after=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{after.push(ci.jobId);return {code:0};}});
  assert.deepEqual(after,[902,903,904],'Completed turn history must prevent replay even if the API still says queued');
 });
 
@@ -173,7 +173,7 @@ test('stopping automatic pickup lets its owned worker finish cleanup beyond the 
  t.after(()=>{process.execPath=node;});process.execPath=worker;
  const f=fixture(),get=f.api.get;f.jobs.splice(1);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const cancel=new AbortController();
- const running=automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,signal:cancel.signal}).then(value=>({value}),error=>({error}));
+ const running=automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,transport:{healthy:async()=>true},signal:cancel.signal}).then(value=>({value}),error=>({error}));
  try{const end=Date.now()+5000;while(!existsSync(ready)){assert.ok(Date.now()<end,'Worker never started');await delay(20);}cancel.abort();const result=await running;
   assert.equal(readFileSync(cleaned,'utf8'),'cleaned');assert.match(result.error?.message??'',/abort/i);
  }finally{cancel.abort();await running;process.execPath=node;}
@@ -202,4 +202,19 @@ test('the real CLI completes its automatic recovery import instead of exiting wi
  const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};GithubApp.prototype.get=async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));return {value:'hosted'}};process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(config)},'--once'];await import(${JSON.stringify(manual.href)});console.log('CLI_FINISHED');`;
  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:15000});
  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/CLI_FINISHED/);assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+});
+
+test('an unhealthy or unreachable host selects hosted before polling or starting PR jobs',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{automaticTick}=await import('./control.mjs');
+ for(const failure of ['unhealthy','unreachable']){
+  const root=mkdtempSync(tmpdir()+'/auto-health-');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const leases=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});let mode='server',checks=0,writes=0;
+  const api={get:async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE') || path.endsWith('DISPOSABLE_TESTS_HEAD'),'Must not poll runs or jobs');return {value:path.endsWith('DISPOSABLE_TESTS_HEAD')?'':mode};},patch:async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));assert.equal(body.value,'hosted');mode=body.value;writes++;},post:async()=>assert.fail('Must not cancel or rerun a workflow')};
+  const result=await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api,transport:{healthy:async()=>{checks++;if(failure==='unreachable')throw new Error('Host unreachable');return false;}},runWorker:async()=>assert.fail('Must not start a guest')});
+  assert.equal(result.served,0);assert.equal(mode,'hosted');assert.equal(checks,1);assert.equal(writes,1);assert.ok(leases.inspect().slots.every(s=>s.state==='free' && !s.ciInvocation));
+  for(let slot=0;slot<6;slot++)new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'full-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+  mode='server';await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api,transport:{healthy:async()=>assert.fail('A full healthy pool is busy, not unavailable')}});
+  assert.equal(mode,'server');assert.equal(writes,1);
+ }
 });

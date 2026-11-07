@@ -30,12 +30,20 @@ export async function withOrdinaryController({state,hostGeneration,api,policy,ap
 }
 
 // Each child owns one slot lock and its temporary directory through guest cleanup.
-export async function automaticTick({configuration,config,api,signal,runWorker}){
+export async function automaticTick({configuration,config,api,signal,runWorker,transport}){
  const policy=config.ci,slots=configuredSlots(config);
  if(await routingMode({api,policy,signal})!=='server')return {code:0,served:0};
  assert.equal(await routingHead({api,policy,signal}),'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const free=state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length;
+ if(!free)return {code:0,served:0};
+ transport??=new CITransport(config);
+ let healthy=false;
+ try{healthy=await transport.healthy({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});}catch{signal?.throwIfAborted();}
+ if(!healthy){
+  await setRoutingMode({api,policy,mode:'hosted',signal});
+  return {code:0,served:0,route:'hosted',reason:'host-unavailable'};
+ }
  const exclude=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)exclude.add(Number(match[1]));}
  const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)});
