@@ -202,13 +202,14 @@ function billingObservation(response, period, now) {
   check(row?.TimePeriod?.Start === period.Start && row.TimePeriod.End === period.End
     && typeof row.Estimated === 'boolean' && Array.isArray(row.Groups) && row.Groups.length === 0
     && total?.Unit === 'USD' && typeof total.Amount === 'string');
-  if (/^-(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(total.Amount)) {
+  const amount = /^-0(\.0{1,10})?$/.test(total.Amount) ? total.Amount.slice(1) : total.Amount;
+  if (/^-(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(amount)) {
     throw Object.assign(new Error('D570 controller refused: account bill contains a credit'), {
       opening: { billing: { observedAt: now, period, rawUsd: total.Amount, estimated: row.Estimated }, items: [] },
     });
   }
-  check(/^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(total.Amount));
-  const [whole, fraction = ''] = total.Amount.split('.');
+  check(/^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(amount));
+  const [whole, fraction = ''] = amount.split('.');
   const nanos = BigInt(whole + fraction.padEnd(10, '0'));
   const microUsd = Number((nanos + 9999n) / 10000n);
   check(Number.isSafeInteger(microUsd) && microUsd < MONTHLY_CAP_MICRO_USD);
