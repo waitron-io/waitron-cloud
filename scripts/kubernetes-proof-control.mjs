@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { constants } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,6 +15,7 @@ import { calculateManualCost, acquirePriceCatalogue } from '../deploy/kubernetes
 import { renderDeadlineBootstrap } from '../deploy/kubernetes/proof/bootstrap.mjs';
 
 const execute = promisify(execFile);
+const mainChecks = new AsyncLocalStorage();
 const account = '462991287391', region = 'eu-north-1';
 const refuse = () => { throw new Error('D570 controller refused'); };
 const check = value => { if (!value) refuse(); };
@@ -156,7 +159,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
   } };
 }
 
-async function checkedMain(checkout) {
+async function checkedMain(checkout, { forceRemote = false } = {}) {
   const cwd = await realpath(checkout);
   async function git(...args) {
     try {
@@ -166,15 +169,21 @@ async function checkedMain(checkout) {
       return stdout.trim();
     } catch { refuse(); }
   }
-  check(await realpath(await git('rev-parse', '--show-toplevel')) === cwd);
+  const values = (await git('rev-parse', '--show-toplevel', 'HEAD', 'HEAD^{tree}', 'refs/remotes/origin/main')).split('\n');
+  check(values.length === 4 && await realpath(values[0]) === cwd);
   check(await git('symbolic-ref', '--short', 'HEAD') === 'main');
   check(await git('status', '--porcelain=v1', '--untracked-files=all') === '');
   check(['https://github.com/waitron-io/waitron-cloud.git', 'git@github.com:waitron-io/waitron-cloud.git']
     .includes(await git('config', '--get', 'remote.origin.url')));
-  const head = await git('rev-parse', 'HEAD'), tree = await git('rev-parse', 'HEAD^{tree}');
+  const [, head, tree, recordedMain] = values;
   check(/^[a-f0-9]{40}$/.test(head) && /^[a-f0-9]{40}$/.test(tree));
-  check(await git('rev-parse', 'refs/remotes/origin/main') === head);
-  check(await git('ls-remote', '--exit-code', 'origin', 'refs/heads/main') === `${head}\trefs/heads/main`);
+  check(recordedMain === head);
+  const context = mainChecks.getStore(), scoped = context?.checkout === cwd;
+  if (scoped && context.source) check(context.source.head === head && context.source.tree === tree);
+  if (!scoped || !context.source || forceRemote) {
+    check(await git('ls-remote', '--exit-code', 'origin', 'refs/heads/main') === `${head}\trefs/heads/main`);
+    if (scoped) context.source = { head, tree };
+  }
   return { head, tree };
 }
 
@@ -184,7 +193,13 @@ function billingObservation(response, period, now) {
   const row = response.ResultsByTime[0], total = row?.Total?.UnblendedCost;
   check(row?.TimePeriod?.Start === period.Start && row.TimePeriod.End === period.End
     && typeof row.Estimated === 'boolean' && Array.isArray(row.Groups) && row.Groups.length === 0
-    && total?.Unit === 'USD' && typeof total.Amount === 'string' && /^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(total.Amount));
+    && total?.Unit === 'USD' && typeof total.Amount === 'string');
+  if (/^-(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(total.Amount)) {
+    throw Object.assign(new Error('D570 controller refused: account bill contains a credit'), {
+      opening: { billing: { observedAt: now, period, rawUsd: total.Amount, estimated: row.Estimated }, items: [] },
+    });
+  }
+  check(/^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(total.Amount));
   const [whole, fraction = ''] = total.Amount.split('.');
   const nanos = BigInt(whole + fraction.padEnd(10, '0'));
   const microUsd = Number((nanos + 9999n) / 10000n);
@@ -936,69 +951,126 @@ export async function inspectManualFirstBilling(options) {
     billedAccountMicroUsd: months.some(month => month.estimated) ? null : accountCostMicroUsd, months } };
 }
 
+const removalExport = Symbol('owned removal export');
+
 export async function retainManualHistory(options) {
-  const { checkout, directory, aws, now, clock = Date.now } = options;
+  const { checkout, directory, aws, now, clock = Date.now } = options, cleanup = options[removalExport];
   check(typeof directory === 'string' && directory === resolve(directory));
   const parent = await lstat(dirname(directory));
   check(parent.isDirectory() && (parent.mode & 0o777) === 0o700 && parent.uid === process.getuid());
   const root = await realpath(checkout), destination = join(await realpath(dirname(directory)), basename(directory));
   check(destination !== root && !destination.startsWith(root + '/'));
-  const inspection = await inspectManualBudget({ ...options, store: undefined });
+  const inspection = cleanup ? { ...cleanup.inspection, stackId: options.stackId, bucket: cleanup.bucket }
+    : await inspectManualBudget({ ...options, store: undefined });
   async function unchanged() {
     const before = clock(), source = await checkedMain(checkout), after = clock();
     check(source.head === inspection.head && source.tree === inspection.tree
       && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
       && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
-      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+      && (cleanup || after - Date.parse(inspection.heartbeat.startedAt) < 120_000));
   }
   const guarded = { async call(...args) {
-    await unchanged();
-    const result = await aws.call(...args);
-    await unchanged();
-    return result;
+    await unchanged(); const result = await aws.call(...args); await unchanged(); return result;
   } };
-  const store = createManualLedgerStore({ bucket: inspection.bucket, aws: guarded });
-  const keys = (await store.list()).sort(), records = new Map();
+  let existing;
+  if (cleanup) {
+    try { existing = await lstat(directory); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (existing) check(existing.isDirectory() && existing.uid === process.getuid() && (existing.mode & 0o777) === 0o700);
+  }
+  const store = inspection.bucket ? createManualLedgerStore({ bucket: inspection.bucket, aws: guarded }) : null;
+  const keys = store ? (await store.list()).sort() : [], records = new Map(), repairs = new Set();
+  const scope = { account, region, stackId: inspection.stackId };
   for (const key of keys) {
     const row = await store.get(key); check(row);
+    if (cleanup) check(isDeepStrictEqual(JSON.parse(row.body).scope, scope));
     records.set(key, { body: Buffer.from(row.body), etag: row.etag });
   }
-  // Validate exactly the bytes retained locally, rather than a different set of live reads.
-  const snapshot = { async list() { return [...keys]; }, async get(key) { return records.get(key) ?? null; } };
-  const scope = { account, region, stackId: inspection.stackId };
-  const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store: snapshot });
-  check(isDeepStrictEqual(budget, inspection.budget));
-  check(isDeepStrictEqual((await store.list()).sort(), keys));
-  for (const [key, row] of records) {
-    const current = await store.get(key);
-    check(current && current.etag === row.etag && Buffer.from(current.body).equals(row.body));
+  let bookingBytes;
+  if (cleanup) {
+    bookingBytes = await readFile(join(cleanup.setup.directory, 'setup.json'));
+    const booking = JSON.parse(bookingBytes);
+    check(booking.account === account && booking.region === region
+      && booking.head === cleanup.setup.head && booking.tree === cleanup.setup.tree);
   }
-  // An uncertain local write leaves its private partial export and all provider records intact.
+  if (existing) {
+    const names = await readdir(directory); check(names.length <= 15);
+    for (const name of names) {
+      check(name === 'setup.json' || name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name));
+      const path = join(directory, name), info = await lstat(path);
+      check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600 && info.size <= 1024 * 1024);
+      const body = await readFile(path), key = 'd570/ledger/' + name;
+      let value;
+      try { value = JSON.parse(body); }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        check(name === 'setup.json' || records.has(key)); repairs.add(name); continue;
+      }
+      if (name === 'setup.json') { check(body.equals(bookingBytes)); continue; }
+      check(isDeepStrictEqual(value.scope, scope));
+      if (records.has(key)) check(records.get(key).body.equals(body));
+      else records.set(key, { body, etag: '"private-export"' });
+    }
+  }
+  // Validate exactly the bytes retained locally, rather than a different set of live reads.
+  const snapshot = { async list() { return [...records.keys()]; }, async get(key) { return records.get(key) ?? null; } };
+  if (!cleanup) {
+    const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store: snapshot });
+    check(isDeepStrictEqual(budget, inspection.budget));
+  } else if (records.has('d570/ledger/active.json')) {
+    const active = JSON.parse(records.get('d570/ledger/active.json').body);
+    if (active.active) check(active.active.identity.head === cleanup.setup.head && active.active.identity.tree === cleanup.setup.tree);
+    if (!active.active || active.active.state === 'reserved') {
+      const lastMonth = Object.keys(active.monthHeads).sort().at(-1);
+      check(typeof lastMonth === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(lastMonth));
+      const end = new Date(lastMonth + '-01T00:00:00Z'); end.setUTCMonth(end.getUTCMonth() + 1);
+      const validationNow = iso(Math.min(instant(now), end.getTime() - 1000));
+      await inspectBudget({ scope, now: validationNow, billingMicroUsd: 0, store: snapshot });
+    }
+  }
+  if (store) {
+    check(isDeepStrictEqual((await store.list()).sort(), keys));
+    for (const [key, row] of records) {
+      if (!keys.includes(key)) continue;
+      const current = await store.get(key);
+      check(current && current.etag === row.etag && Buffer.from(current.body).equals(row.body));
+    }
+  }
   await unchanged();
   const latestParent = await lstat(dirname(directory));
   check(latestParent.isDirectory() && (latestParent.mode & 0o777) === 0o700 && latestParent.uid === process.getuid());
-  await mkdir(directory, { mode: 0o700 });
+  try { await mkdir(directory, { mode: 0o700 }); }
+  catch (error) { if (!cleanup || error.code !== 'EEXIST') throw error; }
   const created = await lstat(directory);
   check(created.isDirectory() && (created.mode & 0o777) === 0o700 && created.uid === process.getuid());
-  const files = [];
-  for (const [key, row] of records) {
-    const name = key.slice('d570/ledger/'.length), path = join(directory, name);
-    const handle = await open(path, 'wx', 0o600);
+  const bodies = new Map([...(cleanup ? [['setup.json', bookingBytes]] : []),
+    ...[...records].map(([key, row]) => [key.slice('d570/ledger/'.length), row.body])]);
+  for (const [name, body] of bodies) {
+    const path = join(directory, name); let handle;
     try {
-      await handle.writeFile(row.body);
-      await handle.sync();
-      const info = await handle.stat();
-      check(info.isFile() && (info.mode & 0o777) === 0o600 && info.uid === process.getuid()
-        && info.size === row.body.byteLength && (await readFile(path)).equals(row.body));
-    } finally { await handle.close(); }
-    files.push(name);
+      try { handle = await open(path, 'wx', 0o600); }
+      catch (error) {
+        if (!cleanup || error.code !== 'EEXIST') throw error;
+        if (repairs.has(name)) {
+          handle = await open(path, constants.O_WRONLY | constants.O_NOFOLLOW);
+          const info = await handle.stat();
+          check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600);
+          await handle.truncate(0);
+        }
+      }
+      if (handle) {
+        await handle.writeFile(body); await handle.sync();
+        const info = await handle.stat();
+        check(info.isFile() && (info.mode & 0o777) === 0o600 && info.uid === process.getuid() && info.size === body.byteLength);
+      }
+    } finally { if (handle) await handle.close(); }
+    const info = await lstat(path);
+    check(info.isFile() && (info.mode & 0o777) === 0o600 && info.uid === process.getuid() && (await readFile(path)).equals(body));
   }
   for (const path of [directory, dirname(directory)]) {
-    const handle = await open(path, 'r');
-    try { await handle.sync(); } finally { await handle.close(); }
+    const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); }
   }
   await unchanged();
-  return { ...inspection, directory, files };
+  return { ...inspection, directory, files: [...bodies.keys()] };
 }
 
 export async function removeManualFirstSetup(options) {
@@ -1057,74 +1129,10 @@ export async function removeManualFirstSetup(options) {
   const volumes = await call('ec2', 'describe-volumes', { Filters: [
     { Name: 'tag:Proof', Values: ['D570'] }, { Name: 'tag:Stack', Values: [stackId] }], MaxResults: 100 });
   check(!volumes?.NextToken && Array.isArray(volumes?.Volumes) && volumes.Volumes.length === 0);
-  check(typeof directory === 'string' && directory === resolve(directory));
-  const parent = await lstat(dirname(directory)), root = await realpath(checkout);
-  check(parent.isDirectory() && parent.uid === process.getuid() && (parent.mode & 0o777) === 0o700);
-  const destination = join(await realpath(dirname(directory)), basename(directory));
-  check(destination !== root && !destination.startsWith(root + '/'));
-  let existing;
-  try { existing = await lstat(directory); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (existing) check(existing.isDirectory() && existing.uid === process.getuid() && (existing.mode & 0o777) === 0o700);
-  const store = bucket ? createManualLedgerStore({ bucket, aws: { call } }) : null;
-  const keys = store ? (await store.list()).sort() : [], records = new Map();
-  for (const key of keys) {
-    const row = await store.get(key); check(row);
-    const value = JSON.parse(row.body);
-    check(isDeepStrictEqual(value.scope, { account, region, stackId }));
-    if (key === 'd570/ledger/active.json' && value.active) {
-      check(value.active.identity.head === setup.head && value.active.identity.tree === setup.tree);
-    }
-    records.set(key, row);
-  }
-  // A lost delete reply may leave only part of the provider history; the original private bytes remain authoritative for retention.
-  if (existing) {
-    const names = await readdir(directory); check(names.length <= 15);
-    for (const name of names) {
-      if (name === 'setup.json') continue;
-      check(name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name));
-      const path = join(directory, name), info = await lstat(path);
-      check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600 && info.size > 0 && info.size <= 1024 * 1024);
-      const body = await readFile(path), key = 'd570/ledger/' + name;
-      check(isDeepStrictEqual(JSON.parse(body).scope, { account, region, stackId }));
-      if (records.has(key)) check(Buffer.from(records.get(key).body).equals(body));
-      else records.set(key, { body, etag: '"private-export"' });
-    }
-  }
-  if (records.has('d570/ledger/active.json')) {
-    const active = JSON.parse(records.get('d570/ledger/active.json').body);
-    if (active.active) check(active.active.identity.head === setup.head && active.active.identity.tree === setup.tree);
-    if (!active.active || active.active.state === 'reserved') {
-      // Cleanup validates the retained bookings without admitting new spending from today's bill.
-      await inspectBudget({ scope: { account, region, stackId }, now, billingMicroUsd: 0,
-        store: { async list() { return [...records.keys()]; }, async get(key) { return records.get(key) ?? null; } } });
-    }
-  }
-  if (store) {
-    check(isDeepStrictEqual((await store.list()).sort(), keys));
-    for (const [key, row] of records) {
-      if (!keys.includes(key)) continue;
-      const current = await store.get(key);
-      check(current && current.etag === row.etag && Buffer.from(current.body).equals(row.body));
-    }
-  }
-  try { await mkdir(directory, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-  const info = await lstat(directory);
-  check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700);
-  const bookingBytes = await readFile(join(setup.directory, 'setup.json'));
-  const files = new Map([['setup.json', bookingBytes], ...[...records].map(([key, row]) => [key.split('/').at(-1), row.body])]);
-  for (const [name, body] of files) {
-    const path = join(directory, name);
-    let handle;
-    try {
-      handle = await open(path, 'wx', 0o600); await handle.writeFile(body); await handle.sync();
-    } catch (error) { if (error.code !== 'EEXIST') throw error; }
-    finally { if (handle) await handle.close(); }
-    const row = await lstat(path);
-    check(row.isFile() && row.uid === process.getuid() && (row.mode & 0o777) === 0o600 && (await readFile(path)).equals(body));
-  }
-  for (const path of [directory, dirname(directory)]) {
-    const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); }
-  }
+  const retained = await retainManualHistory({ ...options, aws: { call }, stackId,
+    [removalExport]: { inspection, setup, bucket } });
+  const keys = retained.files.filter(name => name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name))
+    .map(name => 'd570/ledger/' + name);
   if (rule) {
     await call('events', 'disable-rule', { Name: rule, EventBusName: 'default' });
     const disabled = await call('events', 'describe-rule', { Name: rule, EventBusName: 'default' });
@@ -1170,6 +1178,10 @@ async function privateJson(path) {
 }
 
 export async function runManualCommand(options) {
+  return mainChecks.run({ checkout: await realpath(options.checkout) }, () => runManualCommandInContext(options));
+}
+
+async function runManualCommandInContext(options) {
   const { args, checkout, clock = Date.now, sleep = delay } = options;
   check(Array.isArray(args) && ['up', 'drill', 'reconcile', 'down'].includes(args[0]));
   const [command, directory, ...flags] = args;
@@ -1194,7 +1206,11 @@ export async function runManualCommand(options) {
       const source = await checkedMain(checkout);
       check(source.head === initial.head && source.tree === initial.tree);
     }
-    await unchanged(); const response = await provider.call(...request); await unchanged(); return response;
+    await unchanged();
+    if (['create-stack', 'run-instances', 'put-object', 'enable-rule', 'disable-rule', 'delete-objects', 'delete-stack'].includes(request[1])) {
+      await checkedMain(checkout, { forceRemote: true });
+    }
+    const response = await provider.call(...request); await unchanged(); return response;
   } };
   const fresh = () => ({ ...common, aws, now: stamp() });
   const save = (name, value) => privateWrite(join(base, name), JSON.stringify(value) + '\n');

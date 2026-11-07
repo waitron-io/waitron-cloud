@@ -2337,7 +2337,7 @@ for (const [service, operation, input, response] of [
     Delete: { Objects: [{ Key: 'd570/ledger/active.json' }, { Key: 'd570/health/reaper.json' }], Quiet: false } },
     { Deleted: [{ Key: 'd570/ledger/active.json' }, { Key: 'd570/health/reaper.json' }] }],
 ]) test(`removal CLI validates and sends the exact ${operation} boundary`, async t => {
-  const f = fixture(t), executable = join(f.root, 'aws-removal'), capture = join(f.root, 'request.json');
+  const f = fixture(t), executable = join(f.root, 'aws-removal.cjs'), capture = join(f.root, 'request.json');
   writeFileSync(executable, `#!${process.execPath}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(capture)},JSON.stringify(process.argv.slice(2)));process.stdout.write(${JSON.stringify(Object.keys(response).length ? JSON.stringify(response) : '')});\n`, { mode: 0o700 });
   assert.deepEqual(await control.createManualAwsCli({ executable }).call(service, operation, input), response);
   const args = JSON.parse(readFileSync(capture));
@@ -2450,8 +2450,24 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
     return prior(service, operation, input);
   };
   const run = () => ownerCommand(f, ['drill', base], { uuid: f.uuid, clock: () => current, sleep: async ms => { current += ms; } });
+  let remoteLog;
+  const beforeCalls = f.calls.length;
+  if (latency) {
+    const bin = join(base, 'git-bin'); mkdirSync(bin, { mode: 0o700 });
+    remoteLog = join(base, 'remote-lookups'); writeFileSync(remoteLog, '');
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim();
+    const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+    writeFileSync(join(bin, 'git'), '#!/bin/sh\nif [ "$1" = ls-remote ]; then printf x >> ' + quote(remoteLog) + '; fi\nexec ' + quote(realGit) + ' "$@"\n', { mode: 0o700 });
+    const previousPath = process.env.PATH; process.env.PATH = bin + ':' + previousPath;
+    t.after(() => { process.env.PATH = previousPath; });
+  }
   const started = performance.now(), result = await run();
-  t.diagnostic(JSON.stringify({ providerLatencyMs: latency, realBoundaryDelayMs: latency ? 25 : 0, providerCalls, commandWallMs: performance.now() - started }));
+  const remoteLookups = remoteLog ? readFileSync(remoteLog, 'utf8').length : null;
+  t.diagnostic(JSON.stringify({ providerLatencyMs: latency, realBoundaryDelayMs: latency ? 25 : 0, providerCalls, remoteLookups, commandWallMs: performance.now() - started }));
+  if (remoteLog) {
+    const mutations = f.calls.slice(beforeCalls).filter(row => ['create-stack', 'run-instances', 'put-object', 'enable-rule', 'disable-rule', 'delete-objects', 'delete-stack'].includes(row.operation)).length;
+    assert.equal(remoteLookups, mutations + 1, 'one remote check at command entry and before each state-changing provider call');
+  }
   assert.equal(result.terminated, true); assert.equal(result.volumesAbsent, true); assert.equal(result.interfacesAbsent, true);
   if (latency === 0) {
     assert.equal(result.shutdownObservation.runningRequestedAt, '2026-11-06T12:02:50Z');
@@ -2516,7 +2532,7 @@ for (const [label, service, operation, input] of [
   ['version deletion', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Delete: { Objects: [{ Key: 'd570/ledger/active.json', VersionId: 'another' }], Quiet: false } }],
   ['unbounded listing', 's3api', 'list-objects-v2', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Prefix: '', MaxKeys: 1000 }],
 ]) test(`removal CLI refuses ${label} before starting the executable`, async t => {
-  const f = fixture(t), executable = join(f.root, 'aws-invalid'), marker = join(f.root, 'called');
+  const f = fixture(t), executable = join(f.root, 'aws-invalid.cjs'), marker = join(f.root, 'called');
   writeFileSync(executable, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.stdout.write('{}');\n`, { mode: 0o700 });
   await assert.rejects(control.createManualAwsCli({ executable }).call(service, operation, input), /D570 controller refused/);
   assert.equal(existsSync(marker), false);
@@ -2542,9 +2558,126 @@ test('first removal refuses a clock that did not observe the full sweep drain be
 test('owner entry cannot execute a different checkout script while standing in clean main', t => {
   const f = fixture(t), bin = mkdtempSync(join(tmpdir(), 'd570-entry-bin-')), marker = join(bin, 'called');
   t.after(() => rmSync(bin, { recursive: true, force: true }));
-  writeFileSync(join(bin, 'aws'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.stdout.write(${JSON.stringify(JSON.stringify(identity))});\n`, { mode: 0o700 });
+  writeFileSync(join(bin, 'aws'), `#!${process.execPath}\nimport('node:fs').then(fs => { fs.writeFileSync(${JSON.stringify(marker)},'called');process.stdout.write(${JSON.stringify(JSON.stringify(identity))}); });\n`, { mode: 0o700 });
   const result = spawnSync(process.execPath, [target.pathname, 'up', bin], { cwd: f.root, encoding: 'utf8', timeout: 5000,
     env: { ...process.env, PATH: bin + ':' + process.env.PATH, AWS_EC2_METADATA_DISABLED: 'true' } });
   assert.ifError(result.error); assert.equal(result.status, 1); assert.equal(result.stdout, '');
   assert.equal(existsSync(marker), false);
+});
+
+test('first removal preserves provider history when its private parent becomes public during the export read', async t => {
+  const f = await removalFixture(t), prior = f.aws.call, before = structuredClone([...f.objects]);
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'get-object' && args[2].Key === 'd570/ledger/active.json') chmodSync(f.parent, 0o755);
+    return response;
+  };
+  await assert.rejects(f.remove(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+  assert.equal(f.calls.some(row => ['disable-rule', 'delete-objects', 'delete-stack'].includes(row.operation)), false);
+});
+
+test('first removal remains available after the last booked month without adding or refunding bookings', async t => {
+  const f = await removalFixture(t); let current = Date.parse('2027-01-10T12:00:00Z');
+  const result = await f.remove({ now: '2027-01-10T12:00:00Z', clock: () => current,
+    sleep: async ms => { f.sleeps.push(ms); current += ms; } });
+  assert.equal(result.deleted, true);
+  assert.equal(JSON.parse(readFileSync(join(f.directory, 'active.json'))).active.identity.uuid, f.uuid);
+  assert.equal(existsSync(join(f.directory, '2027-01.json')), false);
+  assert.equal(f.calls.some(row => row.operation === 'put-object'), false);
+});
+
+for (const contents of ['', '{"scope":']) test(`first removal repairs an interrupted ${contents ? 'truncated' : 'empty'} export from the still-retained provider bytes`, async t => {
+  const f = await removalFixture(t), expected = Buffer.from(f.objects.get('d570/ledger/active.json').body);
+  mkdirSync(f.directory, { mode: 0o700 }); writeFileSync(join(f.directory, 'active.json'), contents, { mode: 0o600 });
+  assert.equal((await f.remove()).deleted, true);
+  assert.equal(readFileSync(join(f.directory, 'active.json')).equals(expected), true);
+});
+
+test('first removal never repairs a well-formed foreign export as if it were its own', async t => {
+  const f = await removalFixture(t), body = JSON.stringify({ scope: { account: '111111111111', region: 'eu-north-1', stackId: f.setup.stackId } });
+  mkdirSync(f.directory, { mode: 0o700 }); writeFileSync(join(f.directory, 'active.json'), body, { mode: 0o600 });
+  await assert.rejects(f.remove(), /D570 controller refused/);
+  assert.equal(readFileSync(join(f.directory, 'active.json'), 'utf8'), body);
+  assert.equal(f.calls.some(row => ['disable-rule', 'delete-objects', 'delete-stack'].includes(row.operation)), false);
+});
+
+test('CLI boundary fixtures stay executable beneath an ES module workspace', t => {
+  const root = mkdtempSync(join(tmpdir(), 'd570-module-parent-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'package.json'), '{"type":"module"}');
+  const environment = { ...process.env, TMPDIR: root }; delete environment.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=^removal CLI validates', new URL('./kubernetes-proof-control.test.mjs', import.meta.url).pathname], {
+    encoding: 'utf8', timeout: 15000, env: environment });
+  assert.ifError(result.error); assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /(?:#|ℹ) tests 4/);
+  assert.match(result.stdout, /(?:#|ℹ) pass 4/);
+});
+
+test('first removal repairs an interrupted setup copy from the original private booking', async t => {
+  const f = await removalFixture(t), expected = readFileSync(join(f.setup.directory, 'setup.json'));
+  mkdirSync(f.directory, { mode: 0o700 }); writeFileSync(join(f.directory, 'setup.json'), '', { mode: 0o600 });
+  assert.equal((await f.remove()).deleted, true);
+  assert.equal(readFileSync(join(f.directory, 'setup.json')).equals(expected), true);
+});
+
+test('first removal never repairs a damaged export when the provider no longer retains that key', async t => {
+  const f = await removalFixture(t), before = structuredClone([...f.objects]);
+  f.objects.delete('d570/ledger/active.json');
+  mkdirSync(f.directory, { mode: 0o700 }); writeFileSync(join(f.directory, 'active.json'), '', { mode: 0o600 });
+  await assert.rejects(f.remove(), /D570 controller refused/);
+  assert.equal(f.calls.some(row => ['disable-rule', 'delete-objects', 'delete-stack'].includes(row.operation)), false);
+  assert.equal(readFileSync(join(f.directory, 'active.json'), 'utf8'), '');
+});
+
+function independentRemote(t, f) {
+  const remote = mkdtempSync(join(tmpdir(), 'd570-remote-main-'));
+  t.after(() => rmSync(remote, { recursive: true, force: true }));
+  execFileSync('git', ['clone', '--shared', f.root, remote], { stdio: 'pipe' });
+  const git = (...args) => execFileSync('git', ['-C', remote, ...args], { encoding: 'utf8', stdio: 'pipe' });
+  git('config', 'user.email', 'd570-remote@example.invalid'); git('config', 'user.name', 'D570 remote fixture');
+  f.git('config', '--unset-all', 'url.' + f.root + '.insteadOf');
+  f.git('config', 'url.' + remote + '.insteadOf', 'https://github.com/waitron-io/waitron-cloud.git');
+  return () => git('-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-s', '-m', 'Advance synthetic remote only');
+}
+
+test('owner command rechecks remote main before creation even when only the remote advanced during prices', async t => {
+  const f = await initializationFixture(t), advance = independentRemote(t, f);
+  const docs = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/test-fixtures/prices.json', import.meta.url)));
+  let moved = false;
+  await assert.rejects(ownerCommand(f, ['up', f.parent], { fetch: async url => {
+    if (!moved) { moved = true; advance(); }
+    const service = Object.keys(docs).find(name => new URL(url).pathname.includes('/' + name + '/'));
+    return new Response(JSON.stringify(docs[service]), { headers: { 'content-type': 'application/json' } });
+  } }), /D570 controller refused/);
+  assert.deepEqual(f.counts(), { creates: 0, enables: 0 });
+  assert.equal(f.git('rev-parse', 'HEAD'), f.head);
+});
+
+test('owner command rechecks remote main before launch after the retained reservation writes', async t => {
+  const f = await drillFixture(t), advance = independentRemote(t, f), prior = f.aws.call;
+  writeFileSync(join(f.parent, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
+  f.calls.length = 0; let moved = false;
+  f.aws.call = async (...args) => {
+    const result = await prior(...args);
+    if (!moved && args[1] === 'put-object' && args[2].Key === 'd570/ledger/active.json'
+      && JSON.parse(args[2].Body).active?.state === 'reserved') { moved = true; advance(); }
+    return result;
+  };
+  await assert.rejects(ownerCommand(f, ['drill', f.parent], { uuid: f.uuid }), /D570 controller refused/);
+  assert.equal(moved, true);
+  assert.equal(f.calls.some(row => row.operation === 'run-instances'), false);
+  assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.uuid, f.uuid);
+});
+
+test('a credit bill stays unusable and reports its observed aggregate instead of inventing a zero opening', async t => {
+  const f = fixture(t), response = bill(); response.ResultsByTime[0].Total.UnblendedCost.Amount = '-1.25';
+  f.aws.call = async service => service === 'sts' ? identity : response;
+  await assert.rejects(inspect(f), error => {
+    assert.match(error.message, /D570 controller refused.*credit/);
+    assert.equal(error.opening.billing.rawUsd, '-1.25');
+    assert.equal(error.opening.billing.estimated, true);
+    assert.equal(Object.hasOwn(error.opening.billing, 'microUsd'), false);
+    return true;
+  });
 });

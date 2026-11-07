@@ -16,7 +16,9 @@ termination or final bill is qualified by the synthetic checks below.
 Use your temporary staging-project sign-in. Run the command from clean reviewed
 Cloud `main`, matching GitHub's current main. The controller refuses a feature
 checkout, a GitHub job, the wrong account or region, root and permanent IAM-user
-identities. It checks the official ARM image and the approved machine's capacity
+identities. Each command checks remote main at entry and before state-changing
+AWS calls; local source and clean-checkout checks surround every provider call.
+It checks the official ARM image and the approved machine's capacity
 before creating anything. You can read the command shape without signing in:
 
 ```sh
@@ -47,8 +49,9 @@ node scripts/kubernetes-proof-control.mjs up "$HOME/.local/state/waitron-d570" \
 
 Duplicate explanations, unused rows and charges above their explained ceilings
 refuse. The cap uses observed charges, so a larger explained ceiling never grants
-more room. Save the printed service, amount and reason list for the watcher and
-the owner. The successful response also shows the opening, reserved upper cost
+more room. A credit bill still refuses and shows its observed aggregate; credits
+never become a zero opening or increase allowance. Save the printed service,
+amount and reason list for the watcher and the owner. The successful response also shows the opening, reserved upper cost
 and remaining headroom. Opening plus reservation must stay strictly below US$10.
 
 `up` acquires the four public AWS price files, saves their original bytes, books
@@ -116,8 +119,8 @@ a 128 MiB function running continuously for 31 days, 1 GiB of log ingestion and
 four days of log storage. Transfer, events and network each reserve US$0.10;
 tax reserves US$2 and contingency US$1. These are reviewed conservative
 assumptions, not measured account consumption. The price reader uses paid
-Stockholm rates without shared free tiers. Its 320 MiB body limit and 30-second
-acquisition deadline remain unchanged.
+Stockholm rates without shared free tiers. The body limit rises from 256 to 320 MiB to fit the acquired Stockholm catalogue.
+The 30-second acquisition deadline stays fixed.
 
 `setup.mjs` remains a renderer and refuses direct `up`/`down` execution. The
 ordinary template's launcher deny and disabled sweep stay in place; the manual

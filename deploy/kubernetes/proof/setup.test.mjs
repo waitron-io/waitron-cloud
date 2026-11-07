@@ -200,11 +200,12 @@ test('serialized Lambda runs the actual expiry engine with explicit SDK operatio
   assert.equal(calls[2].input.Key, 'd570/health/reaper.json');
 });
 
-test('up and down refuse all execution while owner lifecycle and live qualification are unfinished', () => {
+test('the renderer refuses all execution and names the manual controller entry', () => {
   for (const action of ['up', 'down']) {
     const result = spawnSync(process.execPath, [new URL('./setup.mjs', import.meta.url).pathname, action], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /owner-run lifecycle is not implemented/);
+    assert.match(result.stderr, /renderer does not apply infrastructure/);
+    assert.match(result.stderr, /scripts\/kubernetes-proof-control\.mjs/);
     assert.equal(result.stdout, '');
   }
 });
@@ -217,7 +218,8 @@ test('symlinked CLI refuses up, down and unknown commands without running the ne
     for (const action of ['up', 'down', '--force']) {
       const result = spawnSync(process.execPath, [alias, action], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
       assert.equal(result.status, 1, action);
-      assert.match(result.stderr, /owner-run lifecycle is not implemented/);
+      assert.match(result.stderr, /renderer does not apply infrastructure/);
+      assert.match(result.stderr, /scripts\/kubernetes-proof-control\.mjs/);
       assert.equal(result.stdout, '');
     }
   } finally { rmSync(scratch, { recursive: true }); }

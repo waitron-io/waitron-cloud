@@ -57,6 +57,6 @@ exports.handler = async () => sweepExpired({ account: process.env.ACCOUNT, regio
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  console.error('D570 owner-run lifecycle is not implemented. Do not apply this prerequisite template; budget, bootstrap, repository protection and live safety qualification remain open.');
+  console.error('D570 renderer does not apply infrastructure. Use scripts/kubernetes-proof-control.mjs from reviewed main for the first manual machine; the full weekly proof and live safety qualification remain open.');
   process.exitCode = 1;
 }
