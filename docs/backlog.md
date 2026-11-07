@@ -685,8 +685,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    (owner, 2026-10-24). Two countries mean two accounts. The proposed
    [D608 lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
    describes verified handover, immediate former-owner revocation and recovery of the same
-   owner through existing sign-in proofs. Claude review and owner decisions remain,
-   especially total loss of every proof; the lifecycle is unbuilt and unapproved.
+   owner through existing sign-in proofs. The first draft has had Claude review;
+   mailbox-takeover protection and lost-owner policy still need owner decisions.
+   The lifecycle is unbuilt and unapproved.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
    activation permission.
