@@ -95,6 +95,16 @@ export async function reconcileManual({state,hostGeneration,transport,signal,dea
         api??=new GithubApp(ci);
         await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
         if(recorded?.ci?.workflowPath==='.github/workflows/ci.yml')await cancelCIJob({api,repository:ci.repository,ci:recorded.ci,signal:cleanup});
+        if(ci.workflowPath==='.github/workflows/ci.yml'){
+          const pending=leases.inspect().ciInvocation;
+          if(pending){
+            assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
+            await cancelCIJob({api,repository:ci.repository,ci:{repositoryId:ci.repositoryId,workflowId:ci.workflowId,
+              workflowSha:pending.workflowSha,runId:pending.runId,attempt:pending.attempt},signal:cleanup});
+            leases.clearInvocation(pending.nonce);
+          }
+          return result;
+        }
         const invocation=await recoverCanary({api,leases,policy:ci,signal:cleanup});
         if(invocation){
           const run=await api.get(`/repos/${ci.repository}/actions/runs/${invocation.runId}`,{signal:cleanup});

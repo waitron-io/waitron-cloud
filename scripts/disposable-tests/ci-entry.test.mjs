@@ -50,10 +50,11 @@ test('background recovery cancels only the recorded Waitron attempt after guest 
  const root=mkdtempSync(join(tmpdir(),'waitron-ci-recovery-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');let leases;
  await withKernelLock(state,async()=>{leases=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
  const identity={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowSha:'1'.repeat(40),workflowDigest:'2'.repeat(64),event:'workflow_dispatch',sourceSha:'1'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'test-dashboard-1'};
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1});
  const lease=leases.reserveLocal(ciRequest('I',identity)).lease;leases.start(lease);let gone=false,cancelled=false;
  const api={get:async path=>path.includes('/runners?')?{total_count:0,runners:[]}:
  {id:789,run_attempt:1,workflow_id:456,head_sha:identity.workflowSha,repository:{id:123},head_repository:{id:123},status:cancelled?'completed':'queued'},
  post:async path=>{assert.equal(gone,true);assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');cancelled=true;}};
- await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/waitron'},api,transport:{destroy:async()=>{gone=true;},inspect:async()=>({resourceId:lease.resourceId,absent:true})}});
- assert.equal(cancelled,true);assert.equal(leases.inspect().slots[0].state,'free');
+ await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,transport:{destroy:async()=>{gone=true;},inspect:async()=>({resourceId:lease.resourceId,absent:true})}});
+ assert.equal(cancelled,true);assert.equal(leases.inspect().slots[0].state,'free');assert.equal(leases.inspect().ciInvocation,undefined);
 });
