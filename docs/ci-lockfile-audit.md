@@ -19,8 +19,8 @@ policy. A change to those fields retains full work.
 
 ## Review without generating records
 
-You no longer renew lock or documentation records. Stale, missing and malformed
-retired records do not affect selection. Review changed imports, helper chains,
+Review actual dependency readers. Generated lock and documentation records and
+their writers have been removed. Review changed imports, helper chains,
 file reads, resolution, commands and installation hooks in the PR. Add a real
 consumer to the ownership checks when its reader changes; keep full work when
 that consumer cannot be represented. The [documentation guide](ci-documentation-audit.md)

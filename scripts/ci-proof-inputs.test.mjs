@@ -178,21 +178,15 @@ test('root prose does not wake either proof matrix', () => fixture(({put, commit
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind, event).required, false);
 }));
 
-// Retired record bytes cannot turn an unrelated portal edit into proof work.
-for (const version of [1, 2]) test(`portal selection ignores retired v${version} records`, () => fixture(({put, commit, plan, pr}) => {
-  put('apps/portal/src/account.ts'); put('docs/backlog.md', '# Proof selection fixture\n');
-  const policy = 'scripts/ci-input-audit.json';
-  put(policy, JSON.stringify({version}));
-  if (version === 2) put('scripts/ci-input-audit-v2.json', '{"version":2}\n');
-  let head = commit();
-  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(head)).required, false, kind);
-  for (const path of [policy, 'scripts/ci-input-audit.d/docs/invalid.json', 'scripts/ci-root-review.d/invalid.json']) {
-    put(path, 'not a record\n'); head = commit();
-    for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(head)).required, false, `${kind}: ${path}`);
-  }
-  put('packages/registration/src/signup.ts'); head = commit();
-  assert.equal(plan('cost', pr(head)).required, true);
-  assert.equal(plan('venue', pr(head)).required, false);
+test('portal changes alongside unknown JSON retain both proofs', () => fixture(({put, commit, plan, pr}) => {
+  put('apps/portal/src/account.ts'); const portal = commit();
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(portal)).required, false, kind);
+  put('scripts/unknown.json', '{}\n'); const mixed = commit();
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(mixed)).required, true, kind);
+  put('packages/registration/src/signup.ts'); const head = commit();
+  // A range containing only the registration edit preserves its existing owners.
+  assert.equal(plan('cost', {pull_request: {base: {sha: mixed}, head: {sha: head}}}).required, true);
+  assert.equal(plan('venue', {pull_request: {base: {sha: mixed}, head: {sha: head}}}).required, false);
 }));
 
 for (const path of ['packages/registration/test/fixtures/venue-service.ts',
@@ -211,7 +205,6 @@ for (const path of ['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.
     put(path); assert.equal(plan('venue', pr(commit())).required, true);
   }));
 }
-
 
 test('deleting a consumed backend source still selects cost', () => fixture(({git, put, commit, plan, pr}) => {
   put('packages/remote-access/src/gateway-cli.ts'); const base = commit();

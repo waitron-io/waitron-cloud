@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {inertCIRecord} from './ci-input-audit.mjs';
 
 const revision = /^[a-f0-9]{40}$/;
 const backend = /^packages\/(account-http|backups|identity|operations|registration|remote-access|translation)\//;
@@ -67,7 +66,7 @@ export function proofInputPlanRange(kind, {base, head}, git) {
     assert.ok(paths.length > 0, 'Empty proof diff');
     assert.ok(paths.every(path => path && !/[\\\n\r]/.test(path) &&
       !path.split('/').some(part => ['', '.', '..'].includes(part))), 'Unclassified proof path');
-    const inputs = paths.filter(path => !inertCIRecord(path) && consumes(kind, path));
+    const inputs = paths.filter(path => consumes(kind, path));
     return {required: inputs.length > 0, reason: inputs.length
       ? `Selected ${kind} proof inputs: ${inputs.join(', ')}`
       : `No ${kind} proof inputs changed across ${paths.length} paths`};

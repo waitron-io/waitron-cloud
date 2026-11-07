@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
-import {readInputInventory, inertCIRecord, unreadMarkdown} from './ci-input-audit.mjs';
+import {readInputInventory, unreadMarkdown} from './ci-input-audit.mjs';
 export {unreadMarkdown} from './ci-input-audit.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
@@ -21,7 +21,6 @@ export function readDocumentation(sha, git) {
 }
 
 export function documentationPlan(paths, base, head, git) {
-  paths = paths.filter(path => !inertCIRecord(path));
   if (!paths.length || !paths.every(unreadMarkdown)) return null;
   assertDocumentation({base, head, paths});
   const trees = [base, head].map(sha => readDocumentation(sha, git));
@@ -37,7 +36,7 @@ export function checkDocumentation(plan, git) {
   const {base, head, paths} = plan.documentation;
   const actual = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
   assert.equal(actual.pop(), '');
-  assert.deepEqual([...paths].sort(), actual.filter(path => !inertCIRecord(path)).sort(), 'Document plan omits changed inputs');
+  assert.deepEqual([...paths].sort(), actual.sort(), 'Document plan omits changed inputs');
   documentationPlan(paths, base, head, git);
   const current = readDocumentation(head, git).documents;
   for (const path of paths) {

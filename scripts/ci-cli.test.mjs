@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {execFileSync,spawnSync} from 'node:child_process';
-import {mkdtempSync,writeFileSync,readFileSync,cpSync,existsSync,rmSync} from 'node:fs';
+import {execFileSync, spawnSync} from 'node:child_process';
+import {mkdtempSync, writeFileSync, readFileSync, cpSync, existsSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -123,13 +123,7 @@ test('executed planner forces a full reusable run even with a prose pull request
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
     writeFileSync(join(root, 'scripts/ci-plan.mjs'), readFileSync(join(root, 'scripts/ci-plan.mjs'), 'utf8') + '\n// The fixture uses the current reader before the later prose event.\n');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
-    // This control owns its synthetic audit instead of inheriting retired
-    // feature-only record history from the calling checkout.
-    git('checkout', '--orphan', 'synthetic-nightly-control');
-    rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true, force: true});
-    git('add', '-A'); git('commit', '-sm', 'Isolate nightly control ancestry');
-    git('add', '-A');
-    git('add', 'scripts'); git('commit', '--allow-empty', '-sm', 'Reviewed nightly fixture');
+    git('add', '-A'); git('commit', '-sm', 'Save current full-run fixture');
     const base = git('rev-parse', 'HEAD');
     writeFileSync(join(root, 'docs/nightly-control.md'), '# Nightly control\n');
     git('add', 'docs/nightly-control.md'); git('commit', '-sm', 'Prose control');

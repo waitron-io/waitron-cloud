@@ -2,13 +2,10 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
-
-const generator = resolve('scripts/ci-input-audit.mjs');
-const policy = 'scripts/ci-input-audit.json';
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-mixed-docs-'));
@@ -21,10 +18,6 @@ function fixture(run) {
   const commit = () => {
     git('add', '-A'); git('commit', '-sm', 'Mixed document fixture');
     return git('rev-parse', 'HEAD').trim();
-  };
-  const renew = () => {
-    git('add', '-A');
-    execFileSync(process.execPath, [generator, '--write-staged'], {cwd: root, stdio: 'pipe'});
   };
   try {
     git('init', '-b', 'main'); git('config', 'user.name', 'CI fixture'); git('config', 'user.email', 'ci@example.test');
@@ -41,22 +34,19 @@ function fixture(run) {
       'scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs']) put(path, 'export {};\n');
     put('docs/backlog.md', '# Backlog\n');
     put('README.md', '# Cloud\n');
-    put(policy, JSON.stringify({version: 1, docsInputSha256: '0'.repeat(64), identityInputSha256: '0'.repeat(64),
-      gatewayInputSha256: '0'.repeat(64), lockInputSha256: '0'.repeat(64), manifests: {}}));
-    renew();
     const base = commit();
     const plan = (head, old = base) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}},
       {sha: head}, loadWorkspace(root), git);
-    run({root, git, put, commit, renew, base, plan});
+    run({root, git, put, commit, base, plan});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('mixed audited prose and package code select its real consumer without unrelated packages', () => fixture(({root, put, renew, commit, plan}) => {
+test('mixed audited prose and package code select its real consumer without unrelated packages', () => fixture(({root, put, commit, plan}) => {
   put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   put('docs/backlog.md', '# Updated\n');
   put('docs/a plan.md', '# Plan\n');
   unlinkSync(join(root, 'README.md'));
-  renew();
+
   const selected = plan(commit());
   assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
   assert.equal(selected.typecheck, true);
@@ -65,38 +55,35 @@ test('mixed audited prose and package code select its real consumer without unre
   assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '2\n');
 }));
 
-test('dirty local source cannot hide a committed consumer in a mixed prose change', () => fixture(({put, renew, commit, plan}) => {
+test('dirty local source cannot hide a committed consumer in a mixed prose change', () => fixture(({put, commit, plan}) => {
   put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   put('docs/backlog.md', '# Updated\n');
-  renew();
+
   const head = commit();
   put('packages/consumer/src/index.mjs', 'export const value = 3;\n');
   const selected = plan(head);
   assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
 }));
 
-test('a docs-only base does not prevent the next reviewed mixed package selection', () => fixture(({root, put, renew, commit, plan}) => {
+test('a docs-only base does not prevent the next reviewed mixed package selection', () => fixture(({root, put, commit, plan}) => {
   put('README.md', '# Previous prose-only change\n');
   const base = commit();
-  assert.throws(() => execFileSync(process.execPath, [generator, '--check', base], {cwd: root, stdio: 'pipe'}),
-    error => error.status === 1 && error.stdout.toString().includes('docs: current') &&
-      error.stderr.toString().includes('root-script consumer audit'));
   put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   put('docs/backlog.md', '# Updated\n');
-  renew();
+
   const selected = plan(commit(), base);
   assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
 }));
 
 for (const kind of ['head-executable', 'base-executable', 'base-link']) {
-  test(`mixed package selection retains ${kind} Markdown`, () => fixture(({root, git, put, renew, commit, base, plan}) => {
+  test(`mixed package selection retains ${kind} Markdown`, () => fixture(({root, git, put, commit, base, plan}) => {
     const path = join(root, 'README.md');
     if (kind.startsWith('base-')) {
       if (kind === 'base-link') {
         unlinkSync(path);
         symlinkSync('docs/backlog.md', path);
       } else chmodSync(path, 0o755);
-      renew();
+
       base = commit();
       assert.match(git('ls-tree', base, '--', 'README.md'), new RegExp(`^${kind === 'base-link' ? '120000' : '100755'} blob`));
       if (kind === 'base-link') {
@@ -106,7 +93,7 @@ for (const kind of ['head-executable', 'base-executable', 'base-link']) {
     } else chmodSync(path, 0o755);
     put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
     put('docs/backlog.md', '# Updated\n');
-    renew();
+
     const head = commit();
     if (kind === 'head-executable') assert.match(git('ls-tree', head, '--', 'README.md'), /^100755 blob/);
     assert.deepEqual(plan(head, base).packages.map(row => row.package),
@@ -114,62 +101,41 @@ for (const kind of ['head-executable', 'base-executable', 'base-link']) {
   }));
 }
 
-test('pinned Markdown keeps the package that actually reads its contents', () => fixture(({root, put, renew, commit, plan}) => {
+test('pinned Markdown keeps the package that actually reads its contents', () => fixture(({root, put, commit, plan}) => {
   const path = 'docs/waitron-integration-contract.md';
   put(path, 'published-value\n');
   put('packages/consumer/src/index.mjs', "import {readFileSync} from 'node:fs';\nconsole.log(readFileSync(new URL('../../../docs/waitron-integration-contract.md', import.meta.url), 'utf8').trim());\n");
-  renew();
+
   const base = commit();
   put(path, 'changed-value\n');
   put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   put('docs/backlog.md', '# Updated\n');
-  renew();
+
   const selected = plan(commit(), base);
   assert.ok(selected.packages.some(row => row.package === '@waitron-cloud/consumer'));
   assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'changed-value\n');
 }));
 
-test('mixed prose keeps real refusals independently of retired peer states', () => {
-  for (const change of ['stale-head', 'stale-base', 'linked-document', 'unknown', 'identity-hash', 'gateway-hash', 'lock-hash', 'missing-policy']) fixture(({root, put, renew, commit, base, plan}) => {
-    if (change === 'stale-base') {
-      put('packages/unrelated/src/index.mjs', 'export const value = 3;\n');
-      base = commit();
-    }
-    put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
-    put('docs/backlog.md', '# Updated\n');
-    if (change === 'linked-document') {
-      unlinkSync(join(root, 'docs/backlog.md'));
-      symlinkSync('../README.md', join(root, 'docs/backlog.md'));
-    }
+test('mixed prose keeps real refusals and saved package membership', () => {
+  for (const change of ['earlier-source', 'linked-document', 'unknown']) fixture(({root, put, commit, base, plan}) => {
+    if (change === 'earlier-source') {put('packages/unrelated/src/index.mjs', 'export const value = 3;\n'); base = commit();}
+    put('packages/catalogue/src/index.mjs', 'export const value = 2;\n'); put('docs/backlog.md', '# Updated\n');
+    if (change === 'linked-document') {unlinkSync(join(root, 'docs/backlog.md')); symlinkSync('../README.md', join(root, 'docs/backlog.md'));}
     if (change === 'unknown') put('unmapped.txt', 'unknown input\n');
-    if (change !== 'stale-head') renew();
-    if (change.endsWith('-hash')) {
-      const audit = JSON.parse(readFileSync(join(root, policy), 'utf8'));
-      audit[`${change.split('-')[0]}InputSha256`] = 'f'.repeat(64);
-      put(policy, JSON.stringify(audit));
-    }
-    if (change === 'missing-policy') unlinkSync(join(root, policy));
     assert.deepEqual(plan(commit(), base).packages.map(row => row.package),
       ['@waitron-cloud/catalogue', '@waitron-cloud/consumer', ...(['linked-document', 'unknown'].includes(change) ? ['@waitron-cloud/unrelated'] : [])], change);
   });
 });
 
-test('prose plus retired metadata retains its nonempty document job', () => fixture(({root, put, renew, commit, plan}) => {
-  put('docs/backlog.md', '# Updated\n');
-  renew();
-  // Whitespace changes the policy blob without changing any admitted digest.
-  // There is no executable change to justify a nonempty package selection.
-  put(policy, JSON.stringify(JSON.parse(readFileSync(join(root, policy), 'utf8')), null, 4));
+test('prose plus unknown JSON retains complete work', () => fixture(({put, commit, plan}) => {
+  put('docs/backlog.md', '# Updated\n'); put('scripts/unknown.json', '{}\n');
   const selected = plan(commit());
-  assert.equal(selected.packages.length, 0);
-  assert.equal(selected.typecheck, false);
-  assert.deepEqual(selected.documentation.paths, ['docs/backlog.md']);
+  assert.equal(selected.packages.length, 3); assert.equal(selected.typecheck, true);
+  assert.equal(selected.documentation, undefined);
 }));
 
-
-test('retired metadata alone cannot create an empty successful plan', () => fixture(({root, put, commit, plan}) => {
-  put(policy, JSON.stringify(JSON.parse(readFileSync(join(root, policy), 'utf8')), null, 4));
-  const selected = plan(commit());
+test('unknown JSON alone cannot create an empty successful plan', () => fixture(({put, commit, plan}) => {
+  put('scripts/unknown.json', '{}\n'); const selected = plan(commit());
   assert.equal(selected.packages.length, 3); assert.equal(selected.typecheck, true);
   assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
 }));

@@ -56,10 +56,9 @@ nightly run exercises every suite regardless of the changed paths.
 
 ## Review and verify the boundary
 
-Retired review records and their history no longer grant or refuse a proof
-omission. They are ignored while every real changed input keeps the rules below.
-The old root JSON registry is inert too. A record-only change does not establish
-that any product test ran. The [documentation guide](ci-documentation-audit.md)
+Generated review records and their writers have been removed. Former record
+paths have the same conservative behavior as other unknown root inputs: they
+select both proof jobs. The [documentation guide](ci-documentation-audit.md)
 explains the accepted change from renewal gates to ordinary reader review.
 
 You maintain the reviewed input list in `scripts/ci-proof-inputs.mjs`. When you

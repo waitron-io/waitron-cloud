@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -12,13 +11,7 @@ import {assertSummary} from './ci-summary.mjs';
 const helper = 'scripts/verify-gateway-reconnection-receipt.mjs';
 const checks = 'scripts/verify-gateway-reconnection-receipt.test.mjs';
 const caller = 'scripts/gateway-reconnection-receipt.mjs';
-const policy = 'scripts/ci-input-audit.json';
-const completeAudit = values => ({
-  version: 1,
-  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
-  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
-  manifests: {}, ...values,
-});
+
 const identity = ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'];
 const workspace = loadWorkspace();
 const runner = resolve('scripts/ci-scripts.mjs');
@@ -28,14 +21,6 @@ function fixture(run) {
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   const put = (path, text) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);};
   const commit = () => {git('add', '-A'); git('commit', '-sm', 'Fixture'); return git('rev-parse', 'HEAD').trim();};
-  const certify = () => {
-    git('add', '-A');
-    const rows = git('ls-files', '--stage', '-z').split('\0').filter(Boolean);
-    const digest = excluded => createHash('sha256').update(rows.filter(row => ![...excluded, policy].includes(row.split('\t')[1]))
-      .map(row => row.replace(/^([0-7]{6}) ([a-f0-9]{40}) 0\t/, '$1 blob $2\t') + '\0').join('')).digest('hex');
-    put(policy, JSON.stringify(completeAudit({identityInputSha256: digest(identity), gatewayInputSha256: digest([helper, checks])})) + '\n');
-    return commit();
-  };
   try {
     git('init', '-b', 'main'); git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     put(helper, 'export const result = 1;\n');
@@ -43,13 +28,13 @@ function fixture(run) {
     put(caller, 'import {result} from "./verify-gateway-reconnection-receipt.mjs";\n');
     put(identity[0], 'export const identity = 1;\n'); put(identity[1], 'import "./identity-upstream.mjs";\n');
     put('docs/receipts/gateway.json', '{}\n');
-    const base = certify();
+    const base = commit();
     const plan = (head, old = base, read = git) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}}, {sha: head}, workspace, read, () => {throw Error('No API');});
     const execute = selected => {
       const env = {...process.env, CI_PLAN: JSON.stringify(selected)}; delete env.NODE_TEST_CONTEXT;
       return spawnSync(process.execPath, [runner], {cwd: root, env, encoding: 'utf8'});
     };
-    run({root, git, put, commit, certify, base, plan, execute});
+    run({root, git, put, commit, base, plan, execute});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
@@ -81,18 +66,11 @@ test('gateway caller, published evidence, new readers and installation changes r
   });
 });
 
-test('gateway work checks real targets independently of retired certificates', () => fixture(({git, put, commit, plan, base}) => {
+test('gateway work checks real targets and complete inventories', () => fixture(({git, put, commit, plan, base}) => {
   put(helper, 'export const result = 1; // edited\n'); const head = commit();
   assert.deepEqual(plan(head).packages, []);
-  for (const sha of [base, head]) for (const kind of ['missing', 'digest', 'version', 'truncated', 'omitted-reader']) {
+  for (const sha of [base, head]) for (const kind of ['truncated', 'omitted-reader']) {
     const read = (...args) => {
-      if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
-        if (kind === 'missing') throw Error('Unavailable audit');
-        const audit = JSON.parse(git(...args));
-        if (kind === 'digest') audit.gatewayInputSha256 = '0'.repeat(64);
-        if (kind === 'version') audit.version = 2;
-        return JSON.stringify(audit);
-      }
       if (args[0] === 'ls-tree' && args.at(-1) === sha) {
         if (kind === 'truncated') return git(...args).slice(0, -1);
         if (kind === 'omitted-reader') return git(...args).split('\0').filter(row => row.split('\t')[1] !== caller).join('\0');
@@ -104,10 +82,10 @@ test('gateway work checks real targets independently of retired certificates', (
 }));
 
 test('missing or nonregular gateway targets in either revision retain full checks', () => {
-  for (const path of [helper, checks]) for (const side of ['base', 'head']) for (const kind of ['missing', 'linked', 'executable']) fixture(({root, put, commit, certify, plan, base}) => {
+  for (const path of [helper, checks]) for (const side of ['base', 'head']) for (const kind of ['missing', 'linked', 'executable']) fixture(({root, put, commit, plan, base}) => {
     if (kind === 'executable') chmodSync(join(root, path), 0o755);
     else {unlinkSync(join(root, path)); if (kind === 'linked') symlinkSync('gateway-reconnection-receipt.mjs', join(root, path));}
-    const changed = certify();
+    const changed = commit();
     if (side === 'head') assert.equal(plan(changed).packages.length, 29, `${path}: ${kind}`);
     else {
       if (kind === 'linked') unlinkSync(join(root, path));
@@ -120,8 +98,8 @@ test('missing or nonregular gateway targets in either revision retain full check
 });
 
 test('the gateway job runs real child checks and fails syntax, behavior and caller syntax errors', () => {
-  for (const kind of ['behavior', 'syntax', 'caller-syntax']) fixture(({put, commit, certify, plan, execute}) => {
-    const base = kind === 'caller-syntax' ? (put(caller, 'const broken = ;\n'), certify()) : undefined;
+  for (const kind of ['behavior', 'syntax', 'caller-syntax']) fixture(({put, commit, plan, execute}) => {
+    const base = kind === 'caller-syntax' ? (put(caller, 'const broken = ;\n'), commit()) : undefined;
     put(helper, kind === 'syntax' ? 'export const result = ;\n' : `export const result = ${kind === 'behavior' ? 2 : 1}; // edited\n`);
     const selected = plan(commit(), base); assert.deepEqual(selected.packages, []);
     const result = execute(selected); assert.equal(result.status, 1);
@@ -129,7 +107,7 @@ test('the gateway job runs real child checks and fails syntax, behavior and call
   });
 });
 
-test('the gateway job rechecks diff and exact checkout independently of retired certificates', () => fixture(({git, put, commit, plan, execute, base}) => {
+test('the gateway job rechecks the diff and exact checkout', () => fixture(({git, put, commit, plan, execute, base}) => {
   put(helper, 'export const result = 1; // edited\n'); const head = commit(), selected = plan(head);
   assert.deepEqual(selected.packages, []); assert.equal(execute(selected).status, 0);
   assert.equal(execute({...selected, scripts: {...selected.scripts, paths: [checks]}}).status, 1);
