@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
-import {mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync, rmdirSync} from 'node:fs';
+import {mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync} from 'node:fs';
 import {join, resolve} from 'node:path';
+import {claimGate, releaseGate} from './owners.mjs';
 
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -29,9 +30,8 @@ export class LocalLeases {
     assert.ok(lstatSync(this.directory).isDirectory() && !lstatSync(this.directory).isSymbolicLink(), 'Ledger must be a private directory');
   }
   transaction(operation, busy = {code: 75, reason: 'ledger-locked'}) {
-    const lock = join(this.directory, 'lock');
-    try { mkdirSync(lock, {mode: 0o700}); }
-    catch (error) { if (error.code === 'EEXIST') return busy; throw error; }
+    const gate = claimGate(this.directory, 'lock');
+    if (!gate) return busy;
     try {
       const path = join(this.directory, 'state.json');
       let state;
@@ -71,7 +71,7 @@ export class LocalLeases {
         try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
       return structuredClone(result);
-    } finally { rmdirSync(lock); }
+    } finally { releaseGate(gate); }
   }
   reserveLocal(request, {healthy = true, durationMs = maxDuration} = {}) {
     const identity = requestIdentity(request);

@@ -118,3 +118,45 @@ test('a legacy configuration is refused before selecting source or contacting a 
  const f=fixture(t);const config=JSON.parse(readFileSync(f.config,'utf8'));config.version=1;writeFileSync(f.config,JSON.stringify(config));const result=run(f);
  assert.equal(result.status,125,result.stdout+result.stderr);assert.equal(existsSync(join(f.root,'packaged')),false);assert.equal(existsSync(join(f.root,'calls')),false);
 });
+
+const macWrapper = new URL('../../deploy/disposable-tests/mac-controller.py', import.meta.url).pathname;
+function runMac(f, args = f.args.slice(2)) {
+ return spawnSync('python3', ['-I', '-B', macWrapper, process.execPath, f.config, ...args], {env:f.env, encoding:'utf8', timeout:10000});
+}
+
+test('the OS-locked Mac entry point preserves the real command status and exact cleanup', t => {
+ const f = fixture(t);
+ const result = runMac(f);
+ assert.equal(result.status, 3, result.stdout + result.stderr);
+ assert.equal(JSON.parse(readFileSync(join(f.root, 'state/ledger/state.json'), 'utf8')).slots[0].state, 'free');
+ assertNoTemporaries(f);
+});
+
+test('Mac startup discovers a killed CLI turn and admits a clean successor automatically', async t => {
+ const f=fixture(t,'work');
+ const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});
+ const closed=once(child,'close');let output='';child.stderr.on('data',()=>{});
+ try {
+  const ready=new Promise(resolve=>child.stdout.on('data',data=>{output+=data;if(output.includes('WORK-READY'))resolve();}));
+  await Promise.race([ready,closed.then(()=>assert.fail('No interrupted work readiness: '+output))]);
+  child.kill('SIGKILL');await closed;
+  const before=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].lease;
+  const successor=runMac({...f,env:{...f.env,FIXTURE_MODE:'normal'}});
+  assert.equal(successor.status,3,successor.stdout+successor.stderr);
+  assert.equal(existsSync(join(f.root,before.resourceId)),false);
+  const after=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0];
+  assert.equal(after.state,'free');assert.equal(after.generation,before.generation+1);
+ } finally {
+  if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+  if(existsSync(join(f.root,'work.pid'))){try{process.kill(-Number(readFileSync(join(f.root,'work.pid'),'utf8')),'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
+  await closed;
+ }
+});
+
+test('automatic recovery refuses a direct invocation without the inherited controller lock', t => {
+ const f=fixture(t);
+ const result=spawnSync(process.execPath,[script,f.config,'--reconcile'],{env:f.env,encoding:'utf8',timeout:10000});
+ assert.equal(result.status,125,result.stdout+result.stderr);
+ assert.match(result.stderr,/controller lock/i);
+ assert.equal(existsSync(join(f.root,'state/ledger')),false);
+});

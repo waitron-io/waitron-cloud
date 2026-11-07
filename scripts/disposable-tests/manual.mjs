@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import {mkdirSync, lstatSync, rmdirSync, mkdtempSync, rmSync, readFileSync, realpathSync, existsSync, writeFileSync, unlinkSync, openSync, fsyncSync, closeSync} from 'node:fs';
+import {mkdirSync, lstatSync, fstatSync, mkdtempSync, rmSync, readFileSync, realpathSync, existsSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {LocalLeases} from './leases.mjs';
+import {readOwner, claimGate, releaseGate, ownerDead, reclaimDeadGate} from './owners.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport, runProcess, protectOutputStreams} from './transport.mjs';
 
@@ -13,32 +14,6 @@ function privateState(directory) {
   const info=lstatSync(directory);
   assert.ok(info.isDirectory()&&!info.isSymbolicLink()&&info.uid===process.getuid()&&(info.mode&0o077)===0,'Manual state must be a private owned directory');
 }
-function readOwner(path) {
-  const info=lstatSync(join(path,'owner.json'));
-  assert.ok(info.isFile()&&!info.isSymbolicLink()&&info.uid===process.getuid()&&info.size<=1024&&(info.mode&0o077)===0,'Unknown manual gate owner');
-  const owner=JSON.parse(readFileSync(join(path,'owner.json'),'utf8'));
-  assert.ok(owner.version===1&&Number.isSafeInteger(owner.pid)&&owner.pid>0&&typeof owner.nonce==='string'&&/^[a-f0-9-]{36}$/.test(owner.nonce),'Unknown manual gate owner');
-  return owner;
-}
-function claimGate(directory,name) {
-  const path=join(directory,name);
-  try {mkdirSync(path,{mode:0o700});}
-  catch(error) {if(error.code==='EEXIST')return;throw error;}
-  const owner={version:1,pid:process.pid,nonce:randomUUID()};
-  const fd=openSync(join(path,'owner.json'),'wx',0o600);
-  try {writeFileSync(fd,JSON.stringify(owner));fsyncSync(fd);} finally {closeSync(fd);}
-  const parent=openSync(path,'r');try {fsyncSync(parent);} finally {closeSync(parent);}
-  return {path,owner};
-}
-function releaseGate(gate) {
-  assert.deepEqual(readOwner(gate.path),gate.owner,'Another process owns this manual gate');
-  unlinkSync(join(gate.path,'owner.json'));rmdirSync(gate.path);
-}
-function ownerDead(owner) {
-  try {process.kill(owner.pid,0);return false;}
-  catch(error) {return error.code==='ESRCH';}
-}
-
 // The gate covers packaging as well as work. A dead owner retains its record;
 // only exact-lease recovery may remove it, never an age-based successor.
 export async function withManualSlot(directory,work) {
@@ -52,8 +27,12 @@ export async function withManualSlot(directory,work) {
   } finally {releaseGate(gate);}
 }
 
-export async function recoverManual({state,leases,transport,resourceId,signal=AbortSignal.timeout(120000)}) {
+export async function recoverManual(args) {return recoverState(args, false);}
+export async function reconcileManual(args) {return recoverState(args, true);}
+
+async function recoverState({state,leases,transport,resourceId,signal=AbortSignal.timeout(120000)},automatic) {
   privateState(state);
+  if(automatic&&existsSync(join(state,'recovery.lock'))&&!reclaimDeadGate(join(state,'recovery.lock')))return {code:75,reason:'recovery-owner-live-or-unknown'};
   const recovery=claimGate(state,'recovery.lock');
   if(!recovery)return {code:75,reason:'recovery-already-owned-or-needs-inspection'};
   let gate;
@@ -68,8 +47,15 @@ export async function recoverManual({state,leases,transport,resourceId,signal=Ab
       gate=claimGate(state,'manual.lock');
       if(!gate)return {code:75,reason:'manual-owner-raced-recovery'};
     }
+    if(automatic&&existsSync(join(leases.directory,'lock'))&&!reclaimDeadGate(join(leases.directory,'lock')))return {code:75,reason:'ledger-owner-live-or-unknown'};
     const ledger=leases.inspect();
     assert.ok(Array.isArray(ledger.slots),'Ledger is locked or unknown; inspect its owner before recovery');
+    if(automatic) {
+      const occupied=ledger.slots.filter(slot=>slot.state!=='free');
+      assert.ok(occupied.length<=1,'Automatic recovery supports one slot');
+      resourceId=occupied[0]?.lease.resourceId;
+      if(!resourceId) {releaseGate(gate);return {code:0,cleanup:'absent'};}
+    }
     const lease=ledger.slots.find(slot=>slot.lease?.resourceId===resourceId)?.lease;
     assert.ok(lease,'No matching recorded lease; recovery refused');
     try {
@@ -85,7 +71,8 @@ export async function recoverManual({state,leases,transport,resourceId,signal=Ab
 
 export async function main(args) {
   protectOutputStreams();
-  const recovering=args.length===3&&args[1]==='--recover';
+  const reconciling=args.length===2&&args[1]==='--reconcile';
+  const recovering=reconciling||(args.length===3&&args[1]==='--recover');
   assert.ok(recovering||(args.length>=5&&args[3]==='--'),'Usage: manual.mjs CONFIG LANE CLOUD_CHECKOUT -- COMMAND [ARGS] | CONFIG --recover RESOURCE');
   const [configuration, lane, checkout, , ...argv] = args;
   if(!recovering)assert.match(lane, /^[A-K]$/, 'Invalid campaign lane');
@@ -93,16 +80,23 @@ export async function main(args) {
   const config = JSON.parse(readFileSync(configuration, 'utf8'));
   assert.deepEqual(Object.keys(config).sort(), ['host', 'hostGeneration', 'mode', 'recipe', 'repository', 'state', 'version']);
   assert.ok(config.version === 2 && config.mode === 'manual-one-slot', 'Only manual single-slot use is enabled');
+  if(reconciling) {
+    const descriptor=Number(process.env.WAITRON_DISPOSABLE_LOCK_FD);
+    assert.ok(Number.isInteger(descriptor)&&descriptor>=3,'Automatic recovery requires the inherited controller lock');
+    const inherited=fstatSync(descriptor), recorded=lstatSync(join(config.state,'mac-controller.lock'));
+    assert.ok(inherited.isFile()&&inherited.uid===process.getuid()&&(inherited.mode&0o077)===0&&
+      !recorded.isSymbolicLink()&&inherited.dev===recorded.dev&&inherited.ino===recorded.ino,'Unknown inherited controller lock');
+  }
   const cancellation = new AbortController();
   const cancel = () => cancellation.abort();
   process.on('SIGTERM', cancel);
   process.on('SIGINT', cancel);
   process.on('SIGHUP', cancel);
   try {
-    console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
+    if(!reconciling)console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
     if(recovering) {
-      const recovered=await recoverManual({state:resolve(config.state),leases:new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1}),transport:new SSHTransport({host:config.host,recipe:config.recipe}),resourceId:checkout,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
-      console.log(JSON.stringify(recovered));return recovered.code;
+      const recovered=await (reconciling?reconcileManual:recoverManual)({state:resolve(config.state),leases:new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1}),transport:new SSHTransport({host:config.host,recipe:config.recipe}),resourceId:checkout,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
+      if(!reconciling||recovered.code!==0||recovered.resourceId)console.log(JSON.stringify(recovered));return recovered.code;
     }
     const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(5000)])});
     assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');

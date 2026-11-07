@@ -13,3 +13,4 @@ import './disposable-tests/manual.test.mjs';
 import './disposable-tests/status.test.mjs';
 import './disposable-tests/recovery.test.mjs';
 import './disposable-tests/manual-pipeline.test.mjs';
+import './disposable-tests/mac-recovery.test.mjs';

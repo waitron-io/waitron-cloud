@@ -2,7 +2,7 @@
 
 You currently share one test-box lock across lanes. Replace that bottleneck with several isolated, disposable test slots, then use the same machinery for Cloud's ordinary GitHub Actions work. Bring Waitron later, after a separate inventory and approval.
 
-**Status:** approved on 6 November 2026; the owner authorized slice 1 on the supplied bridge. The [manual slice](https://github.com/waitron-io/waitron-cloud/pull/1031) is available. The server startup implementation is in `deploy/disposable-tests/startup.py`; run `node --test scripts/disposable-tests/session.test.mjs` for its portable checks. Automatic Mac reconciliation, coupled permanent publication, an actual coordinated reboot, frozen transitive packages, measured capacity and later CI activation remain open.
+**Status:** approved on 6 November 2026; the owner authorized slice 1 on the supplied bridge. The [manual slice](https://github.com/waitron-io/waitron-cloud/pull/1031) is available. The server startup implementation is in `deploy/disposable-tests/startup.py`; run `node --test scripts/disposable-tests/session.test.mjs` for its portable checks. Mac interrupted-turn reconciliation is implemented in `deploy/disposable-tests/mac-controller.py`, with a launchd template. Coupled permanent publication and runtime qualification, an actual coordinated reboot, frozen transitive packages, measured capacity and later CI activation remain open.
 
 **Source status:** linked official GitHub references were freshly read on 6 November 2026. Repository receipts below are source inspection, not executed workflow or server evidence.
 
