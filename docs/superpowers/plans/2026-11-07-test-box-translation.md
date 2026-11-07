@@ -1,6 +1,6 @@
 # Test-box translation implementation plan
 
-Deliver D582-S step5 in one PR, up to the absent key. Read-only baseline: `d821c06cf`; no behavior verified here.
+Deliver D582-S step5 up to the absent key; no activation/provider call during implementation.
 
 ## Recorded authority
 
@@ -22,26 +22,25 @@ Same file, WATCHER 2026-11-07 06:45:
 
 > Your next step stays step 5 up to the keys.
 
-These verbatim approvals are embedded for restricted Claude review under the runbook exception; no reconfirmation. Obtain the required `claude-seat.sh review-branch` read before building.
+RUNNER permits these embedded same-lane quotes; owner approval is recorded. The simpler alternative is already forwarded in `questions.md`. No build/landing before required reads/answer, including `claude-seat.sh review-branch`.
 
-## Implementation and proof
+## Build after review
 
-- [ ] TDD: add `packages/translation/test/test-box-worker.test.ts`; observe expected failures, then implement minimally. Use real disposable PostgreSQL, synthetic signed jobs and fake provider only. Intercept fixed-HTTPS fetches and forward to loopback; assert destination, wire body, refusal and request counts. Exercise the actual launcher too, without real keys.
-- [ ] In `packages/translation/src/openai-client.ts`, add `createTestBoxTranslationWorker(pool,{installationId,venueId,apiKey}):TranslationWorker`, consumed by new `src/test-box-worker-cli.ts`. Keep transport private, fixed to `https://api.openai.com/v1`; reuse `localTransport`, parser and limits. Leave both existing client factories unchanged. No generic real-client export, endpoint override or default/production enable flag.
-- [ ] Add optional fixed installation/venue scope in `src/worker.ts`. Filter queued and expired-lease selection; leave other jobs untouched. Immediately before every first/review/retry provider call, recheck job binding, current unrevoked installation, matching venue, test environment, live lease and consent. Compose with existing permission checks; retain prices, accounting, cap, batching and paging. No location scope or billing prerequisite added.
-- [ ] Prove same-venue other-installation refusal, wrong venue, revocation, production transition and consent withdrawal during waits; retain paid results/cost without further calls. Prove cap stops requests and signed collection walks every page before release. Keep existing assertions intact; tests roughly twice added source or less. Disposable omission checks only, no permanent mutation harness.
+- [ ] Files: `packages/translation/src/openai-client.ts`, `packages/translation/src/worker.ts`, new `packages/translation/src/test-box-worker-cli.ts`, new `packages/translation/test/test-box-worker.test.ts`, `packages/translation/README.md`, `docs/backlog.md`, `docs/test-cloud.md` (brief trial/default distinction). No `package.json` change: laneH owns it.
+- [ ] TDD: expected failure first, then `createTestBoxTranslationWorker(pool,{installationId,venueId,apiKey}):TranslationWorker` with private transport fixed to `https://api.openai.com/v1`. Ordinary clients/default deployments stay unchanged; no service/container/default flag. Existing-mode trial only: CLI explicitly rejects non-existing plan modes/allowance settings, never silently omits spend. No global sweep.
+- [ ] Scope BOTH queued/expired-lease arms. Before EACH provider `respond` (first/review/retry), independently of mode-specific hooks, recheck installation/venue binding, revocation, test environment, lease and consent; retain old hook semantics, accounting and paid results/cost.
+- [ ] Disposable PostgreSQL, synthetic signed jobs, direct fake fetch; no loopback forwarder. Test cross-installation/venue isolation and mid-wait revocation/environment/consent changes. Launcher tests cover refusal/empty queue only. Reuse cap/paging assertions. Run focused new/outbound, worker, venue-service, allowance and retention tests through `scripts/test-postgres.mjs`; `pnpm typecheck`. CI owns full package suites; no whole-package local finishing requirement.
 
-Run focused proof and unchanged worker/outbound checks:
+## Operator handoff after key
 
-```sh
-node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec node --test test/test-box-worker.test.ts test/worker.test.ts test/outbound-disabled.test.ts
-pnpm typecheck
-```
+Driver runtime readback (`docker inspect`/`docker exec`): rented-server `d582-account` runs `[node,src/server-cli.ts]`, cwd `/app`; `/app/workspace/translation/src/worker.ts` exists; `DATABASE_URL` inherited; `CLOUD_TRANSLATION`/both plan flags unset. Actual server honours `CLOUD_TRANSLATION`. This approved separately injected source-mounted trial is not `deploy/test-cloud`.
 
-Document the separately injected, one-pass launcher in package README:
+Defer enablement until key/consent ready: existing process gets `CLOUD_TRANSLATION=1` through its private launcher, preserving fixed-box tunnel options; restart only `d582-account`. After reviewed source refresh:
 
 ```sh
-node --env-file=/root/waitron-translation/openai.env packages/translation/src/test-box-worker-cli.ts INSTALLATION_UUID VENUE_UUID --once
+docker exec -i d582-account node --env-file=/dev/stdin /app/workspace/translation/src/test-box-worker-cli.ts INSTALLATION_UUID VENUE_UUID --once < /root/waitron-translation/openai.env
 ```
 
-Require server-only `DATABASE_URL`; key file root-owned 600, parent directory root-owned 700. Do not run this command now. Update only the existing `docs/backlog.md` translation entry with synthetic proof, approval and remaining live/production limits. No provider call, compatibility claim, dependency, table, job, accounting system, protocol, manifest, ledger or broad refactor. Key supply and live result remain pending; unresolved design choices: none.
+Operator checks keyfile root-owned 600/directory 700; Node loads envfile before CLI. Real key never enters arguments/logs/source/parent service. Account `DATABASE_URL` stays inherited. Other signed jobs may queue; scoped worker never leases them. Stop: remove keyfile; do not rerun one-pass.
+
+Post-key E handoff: existing reviewed Waitron Translate-all caller, current account owner's existing consent, synthetic menu; collect all pages, then release/show owner. Fake tests establish no new joint proof; real API compatibility/live result remains unqualified. Trial scope disappears when public privacy/service work replaces it.
