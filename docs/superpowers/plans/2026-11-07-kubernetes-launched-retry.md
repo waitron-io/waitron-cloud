@@ -1,0 +1,23 @@
+# Kubernetes launched retry
+
+**Authority:** Watcher lane G, questions, 2026-11-07 19:46: “after a clean down, a launched attempt whose instance ended Client.InstanceInitiatedShutdown and whose resources are verified gone opens the next retry/ child”; “the cap becomes US$20”. The previous stack is gone; same-stack re-drilling cannot apply. Extend the [manual-first](2026-11-06-kubernetes-manual-first-run.md) and [stack-recovery](2026-11-07-kubernetes-stack-recovery.md) plans.
+
+Implement inline, test first, only after Claude reads this plan through `~/workspace/tools/claude-seat.sh review-branch`. No lane AWS calls, keys, production resources, new ledger/protocol, refunds, resets, fresh folder or invented per-guest costs.
+
+- [ ] **Reproduce and preserve.** Extend `scripts/kubernetes-proof-control.test.mjs` using `failedOwnerSetupFixture`, `removalFixture` and the connected owner-command drill fixture. Watch launched→down→up fail on booking, then implement minimally. Preserve existing behavioral assertions; list changed checks in the PR, limited to the authorized US$20 and launched-retry behavior.
+
+- [ ] **Recover the deleted attempt.** Modify `removeManualFirstSetup`, `readCleanup` and `runManualCommand` in `scripts/kubernetes-proof-control.mjs`. Current removal saves stack/subnet/deletion metadata, not StateReason (lines 1274–1298); the launch result retains exact instance, subnet and reservation (line 717). Repeated `down` must revalidate private setup/initialized/launch identities against the exact exported `history/setup.json`, `active.json` and every monthly record using existing budget validation. Preserve their bytes, full reservations and liability months. Missing/altered history refuses; ready/shutdown files need not exist after failed readiness.
+
+  For retained `eligible:false` metadata after deletion, independently describe the saved instance ID: require exact owner, client token, stack/run tags, subnet, terminated state and `Client.InstanceInitiatedShutdown`. Reconstruct qualification from saved launch plus this fresh response, never from the old cleanup verdict or readiness. Require exact stack-ID DELETE_COMPLETE and independently empty stack-tagged disks and saved-subnet interfaces/no live instances; validate captured resource IDs when available. Unknown/missing instance reason or unavailable exact deletion/ownership/absence evidence refuses; never infer shutdown from disappearance. Sweep/API termination cannot qualify, although ordinary removal remains available. Update only the existing cleanup metadata atomically to distinguish launched eligibility from failed-setup release; preserve the failed-setup path. `readCleanup` validates each path before child selection. Repeated partial down/publication failure remains resumable; select each retry child once, including interrupted empty children, without duplicate launch.
+
+- [ ] **Unify spending limits.** Export `MONTHLY_CAP_MICRO_USD = 20_000_000` from `scripts/kubernetes-proof-budget.mjs`; import it into control and `deploy/kubernetes/proof/prices.mjs`. Trace all control billing/explanation/booking/headroom/CLI sites, active/month validation and price component/fixed/aggregate checks. Set `policy.json` and `setup.yaml` output to 20; keep renderer/policy assertions aligned. Preserve conservative prior obligations alongside fresh explained opening and the new full reservation, strictly below US$20 in every liability month; retain original bookings without offsetting them against delayed billing. Test below/equal/above boundaries, including control fixtures 936/1124/2633/3049, budget 137/211/496/577, prices 426–428 and setup 61/287; adjust boundary inputs, never weaken predicates.
+
+- [ ] **Verify and finish.** Cover failed/unknown/foreign/sweep termination, remaining resources, lost evidence, repeated down and child selection. Retain the driver's parser repair and synthetic `[    6.388599] cloud-init[2735]: ` regression: exact identity, one boot, foreign refusal. Its real-line probe stays private. Keep 180-second guest/300-second outer deadlines and running-only readiness; console-buffer lag remains a known limitation, with no late acceptance. Update proof README and only D570 backlog text. Run:
+
+  ```sh
+  node --test scripts/kubernetes-proof-control.test.mjs scripts/kubernetes-proof-budget.test.mjs deploy/kubernetes/proof/prices.test.mjs deploy/kubernetes/proof/setup.test.mjs
+  pnpm typecheck
+  node --test scripts/ci-docs.test.mjs
+  ```
+
+  Read test counts; obtain one Claude run-it whole-branch review, current-head CI and one PR; land through normal checks. Then supply exact same-folder `down`, `up` and `drill` commands, preserving required explanations. No missing owner decisions.
