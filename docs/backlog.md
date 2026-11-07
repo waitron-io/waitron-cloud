@@ -1212,7 +1212,7 @@ The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
 are complete; preserve the approved cap, admission, consent and paging rules in the
-[translation requirements and open work](backlog/translation.md).
+[translation requirements and open work](backlog/translation.md). The intermittent worker disconnect still needs its cause and backend evidence; the venue proof now retains its known fixed-message assertion values (`node --test scripts/translation-disconnect-diagnostics.test.mjs`).
 
 ## Initial focus
 

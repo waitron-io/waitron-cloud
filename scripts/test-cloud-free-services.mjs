@@ -20,6 +20,24 @@ const failureCodes = ['ERR_ASSERTION','ERR_TEST_FAILURE','ERR_MODULE_NOT_FOUND',
 const commandStages=['checkout-before','environment','services','checkout-after','receipt'];
 const refusalReasons=new Map([['Unexpected test output','unexpected-output'],['Failed suite','failed-suite'],['Missing final test summary','missing-final-summary'],['Missing file execution','missing-file-execution']]);
 const countFields=['tests','passed','failed','cancelled','skipped','todo'];
+const disconnectTitle='disconnected database clients exit with one fixed line and no raw error';
+const workerFailure='Translation worker failed; check database, migrations and provider configuration\n';
+const workerLines=[workerFailure,'Translation worker pass failed; retrying\n','Translation worker cleanup failed; retrying\n'];
+function validDisconnectTuple(value){
+  return Array.isArray(value)&&value.length===4&&
+    (value[0]===null||Number.isSafeInteger(value[0])&&value[0]>=0&&value[0]<=255)&&
+    [null,'SIGINT','SIGTERM','SIGKILL','SIGABRT','SIGSEGV'].includes(value[1])&&value[2]===''&&
+    typeof value[3]==='string'&&value[3].length<=400&&
+    value[3].split(/(?<=\n)/).every(line=>line===''||workerLines.includes(line));
+}
+function disconnectAssertion(error){
+  for(let depth=0;depth<4&&error&&typeof error==='object';depth++,error=error.cause){
+    if(error.code!=='ERR_ASSERTION'||!validDisconnectTuple(error.actual))continue;
+    try{assert.deepEqual(error.expected,[1,null,'',workerFailure]);}
+    catch{continue;}
+    return {kind:'translation-disconnect',actual:error.actual,expected:error.expected};
+  }
+}
 let proofStage;
 function failureCode(error) {
   let code = 'unknown';
@@ -54,6 +72,10 @@ export function parseServiceProofFailure(line) {
   if (!line.startsWith('SERVICE_PROOF_FAILURE ') || line.length>1024) return;
   try {
     const value=JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length));
+    if(value.kind==='translation-disconnect'){
+      keys(value,['kind','actual','expected']);assert.ok(validDisconnectTuple(value.actual));
+      assert.deepEqual(value.expected,[1,null,'',workerFailure]);return value;
+    }
     if(value.kind==='truncated'){
       keys(value,['kind','limit']);assert.equal(value.limit,16);return value;
     }
@@ -163,6 +185,10 @@ export async function summariseServiceMatrix(events,selected){
       lastType=event.type;lastSuccess=data?.success;
       if(event.type==='test:fail'&&position){
         const error=data.details?.error;
+        // Only this assertion's finite worker messages can cross the privacy boundary.
+        if(position.suite==='translation'&&resolve(data.file)===resolve(root,'packages/translation/test/worker-cli.test.ts')&&data.name===disconnectTitle){
+          const diagnostic=disconnectAssertion(data.details?.error);if(diagnostic)report(diagnostic);
+        }
         report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
       }
       if((event.type==='test:stdout'||event.type==='test:stderr')&&position)report({kind:'output',...position,stream:event.type==='test:stdout'?'stdout':'stderr'});
