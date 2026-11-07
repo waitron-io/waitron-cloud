@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,posix} from 'node:path';
 import {LocalLeases} from './leases.mjs';
 const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',workflowSha:'1'.repeat(40),
  workflowDigest:'2'.repeat(64),event:'workflow_dispatch',sourceSha:'3'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
@@ -62,10 +62,11 @@ test('uncertain cleanup preserves the original preparation failure in the report
  await assert.rejects(executeCanary({...f,policy,lane:'I',invocation}),error=>/original preparation refusal/.test(error.message)&&/independent guest absence/.test(error.message));
 });
 
-test('JIT registration explicitly supplies the self-hosted label required by the workflow',async t=>{
- const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),post=f.api.post;
- f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-typecheck']);return post(path,body,options);};
+test('JIT registration binds the workflow label and the hosted checkout root',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),post=f.api.post;let workFolder;
+ f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-typecheck']);workFolder=body.work_folder;return post(path,body,options);};
  assert.equal((await runCI({...f,lane:'I',ci,repository:'fixture/cloud'})).code,0);
+ assert.equal(posix.resolve('/opt/actions-runner',workFolder),'/home/runner/work');
 });
 
 for(const [label,change] of [

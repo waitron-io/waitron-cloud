@@ -86,9 +86,10 @@ def complete_ci(request, directory, resource, output):
     groups=os.getgrouplist(account.pw_name,account.pw_gid)
     if account.pw_uid==0 or account.pw_gid==0 or 0 in groups:
         raise ValueError('The CI runner account must have an ordinary identity and groups')
-    environment={key:value for key,value in os.environ.items() if key!='RUNNER_ALLOW_RUNASROOT'}
+    environment={key:value for key,value in os.environ.items()
+                 if key in ('LANG','LANGUAGE','TZ') or key.startswith('LC_')}
     environment.update(HOME=account.pw_dir,USER=account.pw_name,LOGNAME=account.pw_name,
-                       PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+                       PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',SHELL=account.pw_shell,
                        ACTIONS_RUNNER_INPUT_JITCONFIG=request['jitconfig'],
                        ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE='1')
     code=execute({'argv':['/opt/actions-runner/bin/Runner.Listener','run'],'deadline':request['deadline']},directory,
