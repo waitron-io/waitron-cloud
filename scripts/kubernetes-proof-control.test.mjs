@@ -1518,3 +1518,128 @@ for (const [label, change] of [
   await assert.rejects(control.createManualAwsCli({ executable: f.executable }).call('ec2', 'run-instances', f.input), /D570 controller refused/);
   assert.equal(existsSync(f.capture), false);
 });
+
+
+async function readyGuestFixture(t) {
+  const f = await drillFixture(t), launch = await f.launch();
+  const volumeId = 'vol-0123456789abcdef0', interfaceId = 'eni-0123456789abcdef0';
+  const instance = { InstanceId: f.instanceId, ClientToken: f.uuid, ImageId: 'ami-0123456789abcdef0',
+    InstanceType: 'm7g.2xlarge', SubnetId: f.ids.Subnet, State: { Name: 'running', Code: 16 },
+    LaunchTime: now, RootDeviceName: '/dev/xvda', RootDeviceType: 'ebs',
+    Tags: [{ Key: 'Proof', Value: 'D570' }, { Key: 'Stack', Value: f.setup.stackId },
+      { Key: 'Run', Value: f.uuid }, { Key: 'ExpiresAt', Value: '2026-11-06T12:05:00Z' }],
+    BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: volumeId, DeleteOnTermination: true, Status: 'attached' } }],
+    NetworkInterfaces: [{ NetworkInterfaceId: interfaceId, OwnerId: '462991287391', SubnetId: f.ids.Subnet,
+      Status: 'in-use', Groups: [{ GroupId: f.ids.SecurityGroup }],
+      Attachment: { InstanceId: f.instanceId, DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
+  };
+  const instances = { Reservations: [{ OwnerId: '462991287391', Instances: [instance] }] };
+  const shutdown = { InstanceId: f.instanceId, InstanceInitiatedShutdownBehavior: { Value: 'terminate' } };
+  const consoleOutput = { InstanceId: f.instanceId, Timestamp: '2026-11-06T12:00:30+00:00',
+    Output: 'Booting synthetic guest\r\nD570_DEADLINE_READY ' + f.uuid + ' 1793966580 11111111-1111-4111-8111-111111111111\r\n' };
+  const previous = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (['describe-instances', 'describe-instance-attribute', 'get-console-output'].includes(operation)) {
+      f.calls.push({ service, operation, input });
+      assert.equal(service, 'ec2');
+      assert.deepEqual(input, operation === 'describe-instances' ? { InstanceIds: [f.instanceId] }
+        : operation === 'get-console-output' ? { InstanceId: f.instanceId, Latest: true }
+          : { InstanceId: f.instanceId, Attribute: 'instanceInitiatedShutdownBehavior' });
+      return structuredClone(operation === 'describe-instances' ? instances : operation === 'get-console-output' ? consoleOutput : shutdown);
+    }
+    return previous(service, operation, input);
+  };
+  const options = { ...f.options, launch, now: '2026-11-06T12:00:45Z', clock: () => Date.parse('2026-11-06T12:00:45Z') };
+  const observe = changes => {
+    assert.equal(typeof control.inspectManualFirstGuest, 'function', 'missing live guest readiness observation');
+    return control.inspectManualFirstGuest({ ...options, ...changes });
+  };
+  return { ...f, launch, instance, instances, shutdown, consoleOutput, options, observe, volumeId, interfaceId };
+}
+
+// Missing ownership, readiness or deletion checks must never turn a running machine into a shutdown proof.
+test('ready guest captures console and deletable resources between two live instance reads without changing bookings', async t => {
+  const f = await readyGuestFixture(t), before = structuredClone([...f.objects]), writes = f.writes.length;
+  const result = await f.observe();
+  assert.equal(result.instanceId, f.instanceId);
+  assert.deepEqual(result.volumeIds, ['vol-0123456789abcdef0']);
+  assert.deepEqual(result.interfaceIds, ['eni-0123456789abcdef0']);
+  assert.equal(result.bootId, '11111111-1111-4111-8111-111111111111');
+  assert.equal(result.observedAt, '2026-11-06T12:00:45Z');
+  assert.deepEqual(result.consoleOutput, f.consoleOutput);
+  assert.deepEqual(f.calls.filter(row => row.service === 'ec2' && ['describe-instances', 'describe-instance-attribute', 'get-console-output'].includes(row.operation)).map(row => row.operation),
+    ['describe-instances', 'describe-instance-attribute', 'get-console-output', 'describe-instances']);
+  assert.equal(Object.hasOwn(result, 'terminated'), false);
+  assert.equal(f.writes.length, writes); assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const [label, mutate] of [
+  ['foreign owner', f => { f.instances.Reservations[0].OwnerId = '949687825720'; }],
+  ['other run', f => { f.instance.Tags[2].Value = '00000000-0000-4000-8000-000000000002'; }],
+  ['other source', f => { f.launch.head = 'a'.repeat(40); }],
+  ['no active booking', f => {
+    const unbooked = '00000000-0000-4000-8000-000000000002';
+    f.launch.reservation.uuid = unbooked; f.instance.ClientToken = unbooked; f.instance.Tags[2].Value = unbooked;
+    f.consoleOutput.Output = f.consoleOutput.Output.replace(f.uuid, unbooked);
+  }],
+  ['later outer expiry', f => { f.instance.Tags[3].Value = '2026-11-06T12:06:00Z'; }],
+  ['early shutdown', f => { f.instance.State = { Name: 'terminated', Code: 48 }; }],
+  ['public address', f => { f.instance.PublicIpAddress = '192.0.2.1'; }],
+  ['machine credentials', f => { f.instance.IamInstanceProfile = { Arn: 'arn:aws:iam::462991287391:instance-profile/foreign' }; }],
+  ['disk kept after termination', f => { f.instance.BlockDeviceMappings[0].Ebs.DeleteOnTermination = false; }],
+  ['interface kept after termination', f => { f.instance.NetworkInterfaces[0].Attachment.DeleteOnTermination = false; }],
+  ['foreign interface subnet', f => { f.instance.NetworkInterfaces[0].SubnetId = 'subnet-00000000000000000'; }],
+  ['public interface', f => { f.instance.NetworkInterfaces[0].Association = { PublicIp: '192.0.2.1' }; }],
+  ['shutdown stops the machine', f => { f.shutdown.InstanceInitiatedShutdownBehavior.Value = 'stop'; }],
+  ['foreign shutdown setting', f => { f.shutdown.InstanceId = 'i-00000000000000000'; }],
+  ['missing ready line', f => { f.consoleOutput.Output = 'Still booting'; }],
+  ['wrong ready deadline', f => { f.consoleOutput.Output = f.consoleOutput.Output.replace('1793966580', '1793966700'); }],
+  ['foreign console', f => { f.consoleOutput.InstanceId = 'i-00000000000000000'; }],
+  ['future console', f => { f.consoleOutput.Timestamp = '2026-11-06T12:00:46Z'; }],
+  ['invalid boot identity', f => { f.consoleOutput.Output = f.consoleOutput.Output.replace('11111111-1111-4111-8111-111111111111', 'unknown'); }],
+  ['conflicting boots', f => { f.consoleOutput.Output += f.consoleOutput.Output.replace('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'); }],
+  ['partial inventory', f => { f.instances.NextToken = 'more'; }],
+]) test(`ready guest refuses ${label} and retains the full booking`, async t => {
+  const f = await readyGuestFixture(t); mutate(f); const before = structuredClone([...f.objects]);
+  await assert.rejects(f.observe(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const stage of ['terminated', 'changed disk', 'changed main', 'deadline passed', 'stale heartbeat']) test(`ready guest refuses ${stage} during the console read`, async t => {
+  const f = await readyGuestFixture(t), previous = f.aws.call;
+  if (stage === 'deadline passed') {
+    f.options.now = '2026-11-06T12:02:30Z';
+    f.p.health.startedAt = '2026-11-06T12:02:00.000Z';
+    f.p.health.completedAt = '2026-11-06T12:02:01.000Z';
+    f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+    f.p.responses['s3api/get-object'].LastModified = '2026-11-06T12:02:01Z';
+    f.consoleOutput.Timestamp = '2026-11-06T12:02:30Z';
+  }
+  let at = Date.parse(f.options.now);
+  f.aws.call = async (...args) => {
+    const result = await previous(...args);
+    if (args[1] === 'get-console-output') {
+      if (stage === 'terminated') f.instance.State = { Name: 'terminated', Code: 48 };
+      if (stage === 'changed disk') f.instance.BlockDeviceMappings[0].Ebs.VolumeId = 'vol-00000000000000000';
+      if (stage === 'changed main') {
+        writeFileSync(join(f.root, 'controller.txt'), 'advance clean main during console read');
+        f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main');
+        f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+      }
+      if (stage === 'deadline passed') at = Date.parse('2026-11-06T12:03:00Z');
+      if (stage === 'stale heartbeat') at = Date.parse('2026-11-06T12:01:00Z');
+    }
+    return result;
+  };
+  await assert.rejects(f.observe({ clock: () => at }), /D570 controller refused/);
+});
+
+for (const [operation, input] of [
+  ['describe-instances', { InstanceIds: ['i-0123456789abcdef0'] }],
+  ['describe-instance-attribute', { InstanceId: 'i-0123456789abcdef0', Attribute: 'instanceInitiatedShutdownBehavior' }],
+  ['get-console-output', { InstanceId: 'i-0123456789abcdef0', Latest: true }],
+]) test(`ready guest CLI sends the explicit ${operation} read`, async t => {
+  const f = drillCliFixture(t);
+  assert.deepEqual(await control.createManualAwsCli({ executable: f.executable }).call('ec2', operation, input), { accepted: true });
+  assert.deepEqual(JSON.parse(readFileSync(f.capture)).slice(0, 6), ['ec2', operation, '--cli-input-json', JSON.stringify(input), '--region', 'eu-north-1']);
+});

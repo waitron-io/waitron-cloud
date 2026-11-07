@@ -277,8 +277,22 @@ Run `node --test --test-name-pattern='^guest ' scripts/kubernetes-proof-control.
 for the synthetic launch and refusal checks. AWS CLI encodes EC2 user data
 automatically, so the adapter gives it plain bootstrap text. An unsigned
 loopback check with the installed CLI verifies the actual request encoding;
-it does not launch a machine. Guest observation, billed reconciliation and
-removal remain unfinished, and all four owner commands still refuse.
+it does not launch a machine.
+
+`inspectManualFirstGuest` reads the booked instance's ready message before its
+guest deadline. It checks the account, run tags, private network, disk and
+interface deletion settings, and shutdown-to-terminate behavior. It captures
+the disk and interface IDs between two EC2 reads reporting the instance as
+running, so later cleanup can check those exact resources. Conflicting boot
+messages, a missing message, changed checkout or expired deadline refuse without changing
+the booking. This captures readiness, not successful shutdown.
+
+Run `node --test --test-name-pattern='^ready guest' scripts/kubernetes-proof-control.test.mjs`
+for the synthetic readiness and refusal cases. An unsigned loopback check also
+exercises the three reads through the installed CLI, including its automatic
+console decoding. These checks do not prove guest behavior on AWS. Shutdown
+observation, billed reconciliation and removal remain unfinished, and all four
+owner commands still refuse.
 
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill

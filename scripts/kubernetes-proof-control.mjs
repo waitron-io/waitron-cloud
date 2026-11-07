@@ -33,7 +33,8 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
       || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists',
-        'describe-launch-template-versions', 'run-instances'].includes(operation)));
+        'describe-launch-template-versions', 'run-instances', 'describe-instances',
+        'describe-instance-attribute', 'get-console-output'].includes(operation)));
     if (service === 'ec2' && operation === 'describe-launch-template-versions') check(input
       && Object.keys(input).sort().join(',') === 'LaunchTemplateId,Versions'
       && typeof input.LaunchTemplateId === 'string' && /^lt-[a-f0-9]{17}$/.test(input.LaunchTemplateId)
@@ -575,6 +576,75 @@ export async function launchManualFirstDrill(options) {
     && instance.ClientToken === uuid && instance.ImageId === imageId && instance.InstanceType === 'm7g.2xlarge' && instance.SubnetId === subnetId
     && ['pending', 'running'].includes(instance.State?.Name));
   return { ...inspection, reservation, guestExpiry, instanceId: instance.InstanceId, subnetId, groupId, templateId };
+}
+
+export async function inspectManualFirstGuest(options) {
+  const { checkout, aws, now, clock = Date.now } = options, launch = structuredClone(options.launch);
+  const inspection = await inspectManualBudget({ ...options, stackId: launch?.stackId, store: undefined });
+  const reservation = launch.reservation;
+  check(launch.account === account && launch.region === region && launch.head === inspection.head && launch.tree === inspection.tree
+    && launch.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
+    && reservation.head === inspection.head && reservation.tree === inspection.tree
+    && instant(reservation.startedAt) <= instant(now) && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
+    && instant(launch.guestExpiry) === instant(reservation.startedAt) + 180_000
+    && typeof launch.instanceId === 'string' && /^i-[a-f0-9]{17}$/.test(launch.instanceId));
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < instant(launch.guestExpiry) && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+    return after;
+  }
+  async function call(operation, input) {
+    await unchanged();
+    const result = await aws.call('ec2', operation, input);
+    await unchanged();
+    return result;
+  }
+  async function liveResources() {
+    const response = await call('describe-instances', { InstanceIds: [launch.instanceId] });
+    check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1);
+    const row = response.Reservations[0];
+    check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1);
+    const instance = row.Instances[0];
+    check(instance?.InstanceId === launch.instanceId && instance.ClientToken === reservation.uuid && instance.State?.Name === 'running'
+      && instance.SubnetId === launch.subnetId && instance.InstanceType === 'm7g.2xlarge'
+      && !instance.PublicIpAddress && !instance.IamInstanceProfile && !instance.KeyName
+      && instance.RootDeviceName === '/dev/xvda' && instance.RootDeviceType === 'ebs');
+    const expectedTags = { Proof: 'D570', Stack: launch.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
+    check(Array.isArray(instance.Tags) && Object.entries(expectedTags).every(([key, value]) => {
+      const matches = instance.Tags.filter(tag => tag?.Key === key);
+      return matches.length === 1 && matches[0].Value === value;
+    }));
+    check(Array.isArray(instance.BlockDeviceMappings) && instance.BlockDeviceMappings.length === 1
+      && Array.isArray(instance.NetworkInterfaces) && instance.NetworkInterfaces.length === 1);
+    const disk = instance.BlockDeviceMappings[0], network = instance.NetworkInterfaces[0];
+    check(disk?.DeviceName === '/dev/xvda' && disk.Ebs?.DeleteOnTermination === true && disk.Ebs.Status === 'attached'
+      && typeof disk.Ebs.VolumeId === 'string' && /^vol-[a-f0-9]{17}$/.test(disk.Ebs.VolumeId));
+    check(typeof network?.NetworkInterfaceId === 'string' && /^eni-[a-f0-9]{17}$/.test(network.NetworkInterfaceId)
+      && network.OwnerId === account && network.SubnetId === launch.subnetId && network.Status === 'in-use' && !network.Association
+      && (!network.Ipv6Addresses || Array.isArray(network.Ipv6Addresses) && network.Ipv6Addresses.length === 0)
+      && Array.isArray(network.Groups) && network.Groups.length === 1 && network.Groups[0].GroupId === launch.groupId
+      && network.Attachment?.InstanceId === launch.instanceId && network.Attachment.DeviceIndex === 0
+      && network.Attachment.Status === 'attached' && network.Attachment.DeleteOnTermination === true);
+    return { volumeIds: [disk.Ebs.VolumeId], interfaceIds: [network.NetworkInterfaceId] };
+  }
+  const resources = await liveResources();
+  const shutdown = await call('describe-instance-attribute', { InstanceId: launch.instanceId, Attribute: 'instanceInitiatedShutdownBehavior' });
+  check(shutdown?.InstanceId === launch.instanceId && shutdown.InstanceInitiatedShutdownBehavior?.Value === 'terminate');
+  // The CLI decodes console bytes; a line seen only after termination cannot establish live readiness.
+  const consoleOutput = await call('get-console-output', { InstanceId: launch.instanceId, Latest: true });
+  const timestamp = Date.parse(consoleOutput?.Timestamp);
+  check(consoleOutput?.InstanceId === launch.instanceId && Number.isFinite(timestamp)
+    && timestamp >= instant(reservation.startedAt) && timestamp <= clock()
+    && typeof consoleOutput.Output === 'string' && Buffer.byteLength(consoleOutput.Output) <= 1024 * 1024);
+  const prefix = `D570_DEADLINE_READY ${reservation.uuid} ${instant(launch.guestExpiry) / 1000} `;
+  const lines = consoleOutput.Output.split(/\r?\n/).filter(line => line.startsWith(prefix));
+  const boots = new Set(lines.map(line => line.slice(prefix.length)));
+  check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
+  check(isDeepStrictEqual(await liveResources(), resources));
+  return { ...launch, ...inspection, ...resources, bootId: [...boots][0], consoleOutput,
+    observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

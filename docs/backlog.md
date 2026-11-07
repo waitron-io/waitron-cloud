@@ -3177,7 +3177,7 @@ implementation or production evidence.
   before rendering. It rechecks main and date around each read; synthetic
   missing, contradictory, ambiguous and changing-input cases refuse. No live
   regional resource or quota claim follows from those checks. All four lifecycle
-  commands still refuse while guest observation, billed reconciliation and cleanup remain unbuilt.
+  commands still refuse while shutdown observation, billed reconciliation and cleanup remain unbuilt.
   The manual protection observer now resolves the exact stack's bucket, rule
   and expiry function, checks the enabled one-minute target and reads a fresh
   encrypted sweep heartbeat. Bounded private CLI downloads refuse partial
