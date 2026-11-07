@@ -65,7 +65,7 @@ def locked():
             raise ValueError('Unsafe host operation lock')
         # Kernel ownership survives neither process death nor reboot. Durable
         # active/history records still require verified cleanup before reuse.
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_EX)
         directory(ROOT / 'base', 0o755)
         directory(ROOT / 'turns', 0o755)
         directory(ROOT / 'history')

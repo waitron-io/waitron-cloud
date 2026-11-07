@@ -34,4 +34,34 @@ class Capacity(unittest.TestCase):
         for topology in [{}, {0:(0,0),1:(0,1),2:(0,2),3:(0,3)}, {0:(0,0),1:None}]:
             with self.assertRaises(ValueError):host.guest_cpus(topology)
 
+    def test_short_host_updates_wait_for_the_current_writer_instead_of_rejecting_a_neighbor(self):
+        import fcntl,os,subprocess,sys,tempfile,time
+        from pathlib import Path
+        with tempfile.TemporaryDirectory(prefix='d599-host-lock-') as temporary:
+            path=Path(temporary)/'operation.lock'
+            with path.open('w') as lock:
+                path.chmod(0o600);fcntl.flock(lock,fcntl.LOCK_EX)
+                program="""import os,sys,types
+from pathlib import Path
+import host
+host.ROOT=Path(sys.argv[1]);host.directory=lambda path,mode=0o700:path.mkdir(mode=mode,parents=True,exist_ok=True)
+original=host.Path;host.Path=lambda value:types.SimpleNamespace(is_char_device=lambda:True) if str(value)=='/dev/kvm' else original(value)
+host.os.geteuid=lambda:0
+fstat=os.fstat;host.os.fstat=lambda fd:types.SimpleNamespace(st_mode=fstat(fd).st_mode,st_uid=0)
+print('attempt',flush=True)
+try:
+ with host.locked():print('acquired',flush=True)
+except BlockingIOError:sys.exit(75)
+"""
+                child=subprocess.Popen([sys.executable,'-I','-B','-c','import sys;sys.path.insert(0,sys.argv.pop(1));'+program,str(Path(__file__).resolve().parent),temporary],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+                try:
+                    self.assertEqual(child.stdout.readline().strip(),'attempt');time.sleep(.15)
+                    self.assertIsNone(child.poll(),'A concurrent host update was refused instead of waiting for the short writer')
+                finally:
+                    fcntl.flock(lock,fcntl.LOCK_UN)
+                    try:stdout,stderr=child.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        child.kill();child.communicate();raise
+                self.assertEqual(child.returncode,0,stderr);self.assertEqual(stdout.strip(),'acquired')
+
 unittest.main(verbosity=2)
