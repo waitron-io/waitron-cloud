@@ -134,8 +134,10 @@ text are refused. Timestamps may be old but not over 60 seconds ahead of Cloud.
 
 Include `description` only if the administrator has sent it. Its maximum is 2,000
 Unicode codepoints and 8,192 UTF-8 bytes. Malformed Unicode and control characters
-are refused, except newline and tab in descriptions. The decoded body is limited
-to 16,384 bytes; the outer request to 65,536 bytes and five seconds. Unknown fields
+are refused, except newline and tab in descriptions. Senders convert Windows
+`\r\n` line endings to `\n` before signing, because a carriage return is refused.
+The decoded body is limited to 16,384 bytes; the outer request to 65,536 bytes
+and five seconds. Unknown fields
 are refused. Each staff action has ten requests per minute per installation,
 sharing the existing report IP and account IP limits. Renewal is unchanged.
 

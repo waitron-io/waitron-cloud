@@ -1,4 +1,3 @@
-/// <reference lib="es2024.string" />
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {isPairingUuid} from './pairing-proof.ts';
@@ -29,8 +28,10 @@ function version(value:unknown):number[]{
 }
 interface StaffReport {version:string;time:number;logs:Report['logs'];details:{device:string;equipment:string[];upgradedAt:number|null;hosting:string};description?:string}
 interface StaffDescription {reportId:string;description:string}
+// Node 26 provides this check; its type stays local to this validator.
+const isWellFormed=(text:string)=>(text as string & {isWellFormed():boolean}).isWellFormed();
 function description(value:unknown):value is string{
- return typeof value==='string'&&value.isWellFormed()&&value.trim().length>0&&[...value].length<=2000
+ return typeof value==='string'&&isWellFormed(value)&&value.trim().length>0&&[...value].length<=2000
   &&Buffer.byteLength(value)<=8192&&!/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u.test(value);
 }
 function staffBody(action:'staff-report'|'staff-description',signed:string,text:string|undefined,now:number):StaffReport|StaffDescription{
@@ -38,7 +39,7 @@ function staffBody(action:'staff-report'|'staff-description',signed:string,text:
  if(!object(fingerprint,['version','bodySha256','bodyBytes'])||fingerprint.version!==1||typeof fingerprint.bodySha256!=='string'
   ||!/^[a-f0-9]{64}$/.test(fingerprint.bodySha256)||!Number.isSafeInteger(fingerprint.bodyBytes)||Number(fingerprint.bodyBytes)<1)throw new InstallationError('invalid_proof');
  if(Number(fingerprint.bodyBytes)>16384)return invalid();
- if(typeof text!=='string'||!text.isWellFormed()||Buffer.byteLength(text)!==fingerprint.bodyBytes
+ if(typeof text!=='string'||!isWellFormed(text)||Buffer.byteLength(text)!==fingerprint.bodyBytes
   ||createHash('sha256').update(text).digest('hex')!==fingerprint.bodySha256)throw new InstallationError('invalid_proof');
  try{value=JSON.parse(text);}catch{return invalid();}
  if(action==='staff-description'){

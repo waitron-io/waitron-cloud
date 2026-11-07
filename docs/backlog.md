@@ -732,8 +732,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    Anthropic accounts, and any spending, need a separate go-ahead (its section 16). It changes
    C39 and D104 where its section 3 says: the owner is paged after an AI investigation or at
    15 minutes, by a text then a phone call; the status page updates itself; an on-prem box
-   going quiet never pages. Remaining work includes Waitron opt-in error reporting and staff problem reports
-   (typed text sent by an admin), and a triage agent. D101's AI gate still has to be opened
+   going quiet never pages. Cloud's [report receivers and private reader](box-error-reports.md)
+   have synthetic local checks only. Waitron's opt-in, staff form and sender, and the
+   triage agent remain open. D101's AI gate still has to be opened
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version.

@@ -19,12 +19,21 @@ export async function staffProblemReports(pool:Pick<Pool,'query'>,environment:'t
  if(!wanted.length)return {environment,reports,groups:[]};
  const groups=(await pool.query<GroupRow>(`WITH wanted AS (
   SELECT * FROM jsonb_to_recordset($2::jsonb) AS w(code text,version_major integer,version_minor integer,version_patch integer)
- ) SELECT w.code,w.version_major,w.version_minor,w.version_patch,
-  COALESCE(sum(r.occurrences) FILTER (WHERE r.kind='automatic'),0)::text AS automatic_occurrences,
-  count(DISTINCT (r.installation_id,r.operation_id)) FILTER (WHERE r.kind='staff')::integer AS staff_reports
- FROM wanted w LEFT JOIN installation_error_reports r ON r.environment=$1
-  AND (r.version_major,r.version_minor,r.version_patch)=(w.version_major,w.version_minor,w.version_patch)
-  AND ((r.kind='automatic' AND r.code=w.code) OR (r.kind='staff' AND r.logs @> jsonb_build_array(jsonb_build_object('code',w.code))))
- GROUP BY w.code,w.version_major,w.version_minor,w.version_patch ORDER BY w.code,w.version_major,w.version_minor,w.version_patch`,[environment,JSON.stringify(wanted)])).rows;
+ ), versions AS MATERIALIZED (
+  SELECT DISTINCT version_major,version_minor,version_patch FROM wanted
+ ), automatic AS MATERIALIZED (
+  SELECT r.code,r.version_major,r.version_minor,r.version_patch,sum(r.occurrences)::text AS n
+  FROM installation_error_reports r JOIN versions v USING(version_major,version_minor,version_patch)
+  WHERE r.environment=$1 AND r.kind='automatic' GROUP BY r.code,r.version_major,r.version_minor,r.version_patch
+ ), staff_codes AS MATERIALIZED (
+  SELECT DISTINCT r.installation_id,r.operation_id,r.version_major,r.version_minor,r.version_patch,entry->>'code' AS code
+  FROM installation_error_reports r JOIN versions v USING(version_major,version_minor,version_patch)
+  CROSS JOIN LATERAL jsonb_array_elements(r.logs) entry WHERE r.environment=$1 AND r.kind='staff'
+ ), staff_counts AS (
+  SELECT code,version_major,version_minor,version_patch,count(*)::integer AS n FROM staff_codes GROUP BY code,version_major,version_minor,version_patch
+ ) SELECT w.code,w.version_major,w.version_minor,w.version_patch,COALESCE(a.n,'0') AS automatic_occurrences,COALESCE(s.n,0) AS staff_reports
+ FROM wanted w LEFT JOIN automatic a USING(code,version_major,version_minor,version_patch)
+ LEFT JOIN staff_counts s USING(code,version_major,version_minor,version_patch)
+ ORDER BY w.code,w.version_major,w.version_minor,w.version_patch`,[environment,JSON.stringify(wanted)])).rows;
  return {environment,reports,groups:groups.map(g=>({code:g.code,version:[g.version_major,g.version_minor,g.version_patch].join('.'),automaticOccurrences:g.automatic_occurrences,staffReports:g.staff_reports}))};
 }

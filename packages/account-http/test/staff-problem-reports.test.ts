@@ -76,6 +76,30 @@ test('staff request reading enforces actual byte and five-second stream limits',
  }finally{await f.db.close();}
 });
 
+for(const action of ['staff-report','staff-description'] as const)test(action+' has ten requests per minute without consuming the renewal allowance',async()=>{
+ const f=await fixture();try{
+  const reportId=randomUUID(),descriptionId=randomUUID();assert.equal((await f.send(report(),f.box,reportId)).status,200);await f.reset();
+  const send=()=>action==='staff-report'?f.send():f.describe(reportId,'Synthetic description',f.box,descriptionId);
+  for(let i=0;i<10;i++){const r=await send();assert.equal(r.status,200,await r.clone().text());}
+  const refused=await send();assert.equal(refused.status,429);assert(Number(refused.headers.get('retry-after'))>0);
+  assert.equal((await f.request('renew',f.box.proof('renew',{}))).status,200);
+ }finally{await f.db.close();}
+});
+
+test('staff actions share the existing sixty-request IP ceiling across different installation keys',async()=>{
+ const f=await fixture();try{
+  const people=[f.box,await connectedVenue(f.db,f.issuer,origin),await connectedVenue(f.db,f.issuer,origin),await connectedVenue(f.db,f.issuer,origin)];
+  const targets=people.slice(0,3).map(who=>({who,reportId:randomUUID(),descriptionId:randomUUID()}));
+  for(const t of targets)assert.equal((await f.send(report(),t.who,t.reportId)).status,200);await f.reset();
+  for(const t of targets){
+   for(let i=0;i<10;i++)assert.equal((await f.send(report(),t.who)).status,200);
+   for(let i=0;i<10;i++)assert.equal((await f.describe(t.reportId,'Synthetic description',t.who,t.descriptionId)).status,200);
+  }
+  const refused=await f.send(report(),people[3]!);assert.equal(refused.status,429);assert(Number(refused.headers.get('retry-after'))>0);
+  assert.equal((await f.request('renew',people[3]!.proof('renew',{}))).status,200);
+ }finally{await f.db.close();}
+});
+
 test('missing and foreign descriptions retry without inserting, then a late description is immutable and replayable',async()=>{
  const f=await fixture();try{
   const id=randomUUID(),descriptionId=randomUUID(),text='Printer stopped.\nPlease check\ttray.',other=await connectedVenue(f.db,f.issuer,origin);
