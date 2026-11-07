@@ -25,6 +25,8 @@ No product implementation or live funds.
    sandbox fee availability. Pass only on paid status with no authentication, redirect
    or next step. Record a challenge/refusal for slice F’s fallback. Missing or zero
    simulated fees cannot prove 1.95%; that needs published pricing or the merchant contract.
+   A sandbox pass qualifies the API path, not live-account enablement. Setup challenges
+   with the payer present are allowed; a later unattended challenge fails the check.
 4. **Runs 2–4, Stripe.** Follow official
    [SEPA guidance](https://docs.stripe.com/payments/sepa-debit) and its documented test
    IBAN scenarios. For each success, failure and dispute scenario, collect a mandate
@@ -37,14 +39,14 @@ No product implementation or live funds.
    Pass requires signed `payment_intent.succeeded`, `payment_intent.payment_failed`,
    or `charge.dispute.created`, respectively, matching the actual saved-method debit.
    Confirm the matching payment/charge state by API and record elapsed time.
-   Sandbox elapsed time cannot qualify production settlement timing; leave that open
-   for slice G and cite Stripe’s current timing guidance.
+   Sandbox elapsed time cannot qualify production settlement timing; retain that
+   slice A limitation with Stripe’s current timing guidance.
    Never substitute `stripe trigger` events. Stop only processes this lane started.
 5. **Publish evidence.** Deliver `docs/billing-provider-test.md` with redacted commands,
    status outputs, timestamps and direct official citations; pseudonymize test object IDs.
    Exclude real account/merchant/customer IDs, secrets, tokens and raw provider payloads
    from repository, PR and logs. Record sandbox/headless/challenge blockers without broadening access or
    using live funds or enabling account capabilities. Explain the CLI environment
-   choice. Update only this work’s backlog sentence. Run focused documentation
+   choice because arguments appear in process listings. Update only this work’s backlog sentence. Run focused documentation
    checks and use docs-only finish/land under the owner’s current campaign instruction
-   authorizing both, with the Cloud lock.
+   “The owner authorises finish-branch and land-branch”, with the Cloud lock.
