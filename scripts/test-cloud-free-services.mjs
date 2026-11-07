@@ -185,11 +185,11 @@ export async function summariseServiceMatrix(events,selected){
       lastType=event.type;lastSuccess=data?.success;
       if(event.type==='test:fail'&&position){
         const error=data.details?.error;
+        report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
         // Only this assertion's finite worker messages can cross the privacy boundary.
-        if(position.suite==='translation'&&resolve(data.file)===resolve(root,'packages/translation/test/worker-cli.test.ts')&&data.name===disconnectTitle){
+        if(resolve(data.file)===resolve(root,'packages/translation/test/worker-cli.test.ts')&&data.name===disconnectTitle){
           const diagnostic=disconnectAssertion(data.details?.error);if(diagnostic)report(diagnostic);
         }
-        report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
       }
       if((event.type==='test:stdout'||event.type==='test:stderr')&&position)report({kind:'output',...position,stream:event.type==='test:stdout'?'stdout':'stderr'});
       const duration=event.type==='test:complete'?data?.details?.duration_ms:data?.duration_ms;

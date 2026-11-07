@@ -1212,7 +1212,7 @@ The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
 are complete; preserve the approved cap, admission, consent and paging rules in the
-[translation requirements and open work](backlog/translation.md). The intermittent worker disconnect still needs its cause and backend evidence; the venue proof now retains its known fixed-message assertion values (`node --test scripts/translation-disconnect-diagnostics.test.mjs`).
+[translation requirements and open work](backlog/translation.md).
 
 ## Initial focus
 
@@ -3688,8 +3688,11 @@ zero-based file number, reported source line, runner failure category and an
 allowlisted error code.
 Match the file number against that group's file list in
 `scripts/test-cloud-free-services.mjs`. Unknown codes stay unclassified; messages,
-test names, paths, assertion values and child output remain private. Unexpected
-output still refuses the proof and records only its stream and file position.
+test names, paths, arbitrary assertion values and child output remain private.
+The disconnect case’s fixed-message assertion exception is covered by
+`node --test scripts/translation-disconnect-diagnostics.test.mjs`; its unknown
+cause and missing backend evidence stay in [translation work](backlog/translation.md).
+Unexpected output still refuses the proof and records only its stream and file position.
 The sender retains at most sixteen event records plus a truncation marker.
 The command also reports its final refusal stage and allowlisted code.
 
