@@ -11,7 +11,6 @@ import type {ModelClient} from './openai-client.ts';
 interface StoredBatch {results:ItemResult[];failed:string[];stoppedByCap?:true}
 type StoredBatches=Record<string,StoredBatch>;
 interface TestBoxScope {installationId:string;venueId:string}
-const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const failedRefs=(batch:readonly JobItem[])=>batch.filter(item=>item.missing.length>0).map(item=>item.ref);
 async function defaultWait(ms:number,signal:AbortSignal){try{await delay(ms,undefined,{signal});}catch{/* an abort ends the wait early */}}
 async function recordJobUsage(client:PoolClient,job:JobRow&{finished_at:Date},organisationId:string){
@@ -27,13 +26,13 @@ export class TranslationWorker {
  constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode;allowances?:AllowanceOptions;scope?:TestBoxScope}={}){
   this.#planMode=options.planMode===undefined?'existing':options.planMode;requireTestPlanVenue('test',this.#planMode);
   this.#allowances=validateAllowanceOptions(options.allowances,this.#planMode);
-  if(options.scope&&(this.#planMode!=='existing'||!uuid.test(options.scope.installationId)||!uuid.test(options.scope.venueId)))throw new Error('translation_worker_options_invalid');
+  if(options.scope&&this.#planMode!=='existing')throw new Error('translation_worker_options_invalid');
   this.#scope=options.scope?{...options.scope}:undefined;
   this.#pool=pool;this.#client=client;this.#concurrency=options.batchConcurrency??4;this.#leaseMs=options.leaseMs??600000;
   this.#maxLeases=options.maxLeases??3;this.#wait=options.wait??defaultWait;
   if(this.#concurrency>4||![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
  }
- async runOnce(signal:AbortSignal):Promise<boolean>{
+ async runOnce(signal:AbortSignal,onJob?:(id:string)=>void):Promise<boolean>{
   if(signal.aborted)return false;
   const lease=await this.#lease();
   if(!lease)return false;
@@ -42,6 +41,7 @@ export class TranslationWorker {
   signal.addEventListener('abort',stop,{once:true});
   if(signal.aborted)stop();
   try{
+   onJob?.(job.id);
    if(!await transaction(this.#pool,client=>hasConsent(client,job.venue_id))){
     await this.#pool.query(`UPDATE translation_jobs SET state='failed',reason='consent_required',done=0,failed=total,finished_at=clock_timestamp(),lease_id=NULL,lease_until=NULL
      WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId]);
@@ -81,7 +81,7 @@ export class TranslationWorker {
    // Test-only workers leave production jobs untouched and available to their own workers.
    const environment=this.#planMode==='test-venue-levels'?" AND venue_id IN (SELECT id FROM venues WHERE environment='test')":this.#scope?` AND installation_id=$1 AND venue_id=$2
     AND EXISTS (SELECT 1 FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=translation_jobs.installation_id
-     AND i.venue_id=translation_jobs.venue_id AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND v.environment='test')`:'';
+     AND i.revoked_at IS NULL AND v.environment='test')`:'';
    const candidate=(await client.query<{id:string;venue_id:string}>(`SELECT ${projection} FROM translation_jobs WHERE state='queued'
     AND created_at>clock_timestamp()-interval '24 hours'${environment}
     OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours'${environment})
@@ -103,9 +103,9 @@ export class TranslationWorker {
  }
  async #inScope(job:JobRow,leaseId:string):Promise<boolean>{
   return transaction(this.#pool,async client=>{
-   const current=await client.query(`SELECT 1 FROM translation_jobs j JOIN installations i ON i.id=j.installation_id AND i.venue_id=j.venue_id
+   const current=await client.query(`SELECT 1 FROM translation_jobs j JOIN installations i ON i.id=j.installation_id
     JOIN venues v ON v.id=i.venue_id WHERE j.id=$1 AND j.lease_id=$2 AND j.state='running' AND j.lease_until>clock_timestamp()
-    AND j.installation_id=$3 AND j.venue_id=$4 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND v.environment='test'`,
+    AND j.installation_id=$3 AND j.venue_id=$4 AND i.revoked_at IS NULL AND v.environment='test'`,
     [job.id,leaseId,this.#scope!.installationId,this.#scope!.venueId]);
    return !!current.rowCount&&hasConsent(client,job.venue_id);
   });

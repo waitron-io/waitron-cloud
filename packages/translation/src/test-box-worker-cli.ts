@@ -15,7 +15,16 @@ try{
  const worker=createTestBoxTranslationWorker(pool,{installationId,venueId,apiKey:process.env.CLOUD_OPENAI_API_KEY??''});
  const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
  if(installed.rows[0]?.count!==migrationNames.length)throw Error();
- await worker.runOnce(stop.signal);
+ let jobId:string|undefined;
+ const worked=await worker.runOnce(stop.signal,id=>{jobId=id;});
+ if(failed)throw Error();
+ if(!worked)console.log('No matching translation job');
+ else{
+  const row=(await pool.query<{state:string;failed:number}>('SELECT state,failed FROM translation_jobs WHERE id=$1 AND installation_id=$2 AND venue_id=$3',[jobId,installationId,venueId])).rows[0];
+  if(!row)throw Error();
+  console.log(`Translation job: ${row.state}`);
+  if(row.state!=='done'&&!(row.state==='collected'&&row.failed===0))process.exitCode=1;
+ }
 }catch{fail();}
 finally{
  try{await pool?.end();}catch{fail();}
