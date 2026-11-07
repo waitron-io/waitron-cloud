@@ -38,7 +38,7 @@ function consumes(kind, path) {
   if (path.startsWith('packages/') && !backend.test(path) && !path.startsWith('packages/ui-smoke/')) return true;
   if (path.startsWith('apps/') && !path.startsWith('apps/portal/')) return true;
   if (/^(apps|packages|docs|deploy)\//.test(path) || path.startsWith('.github/workflows/')) return false;
-  // Root configuration, script changes and new top-level areas retain proof work until reviewed.
+  // Root configuration, scripts and new top-level areas have no proof omission rule.
   return true;
 }
 

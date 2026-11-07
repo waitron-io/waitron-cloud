@@ -82,14 +82,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             assert.equal(paths.pop(), '', 'Incomplete proof diff');
             documentation = documentationPlan(paths, base, pr.head.sha, git);
           }
-        } catch { /* Missing or stale evidence retains all proof work. */ }
+        } catch { /* Unclassified saved inputs retain all proof work. */ }
         appendFileSync(process.env.GITHUB_OUTPUT, `required=${!documentation}\n`);
         console.log(documentation ? 'Regular prose: no proof tests required' : 'Full proof work required');
       }
     } else {
       assert.equal(args.length, 0, 'Usage: ci-docs.mjs [--plan]');
       const count = checkDocumentation(JSON.parse(process.env.CI_PLAN), git);
-      console.log(`Checked ${count} changed Markdown paths against audited immutable inputs`);
+      console.log(`Checked ${count} changed Markdown paths against immutable saved inputs`);
     }
   } catch (error) {
     console.error(error.message);

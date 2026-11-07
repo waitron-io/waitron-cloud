@@ -71,11 +71,11 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     try {
       const documentation = documentationPlan(paths, base, head, git);
       if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Regular prose: ${paths.join(', ')}`};
-    } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
+    } catch { /* Unclassified saved prose keeps the full fallback. */ }
     try {
       const scripts = scriptPlan(paths.filter(path => !inertCIRecord(path)), base, head, git);
       if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Owned root script: ${paths.join(', ')}`};
-    } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
+    } catch { /* Missing or nonregular script targets keep the full fallback. */ }
     const root = rootInputPlan(paths, base, head, git);
     if (root?.full) return full(root.reason);
     if (root) {
