@@ -74,13 +74,20 @@ export class BoxErrorReports{
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,[routing.installationId,claims.operationId,venue.environment,digest,report.code,report.source,...parts,new Date(report.time),report.count,JSON.stringify(report.logs)]);
     this.#verify(action,envelope,row,venue.environment,routing.installationId);return {accepted:true};
    }
-   const result=await client.query<{held:boolean}>(`WITH reports AS MATERIALIZED (
-     SELECT * FROM installation_error_reports WHERE environment=$1
+   const result=await client.query<{held:boolean}>(`WITH predecessor AS MATERIALIZED (
+     SELECT version_major,version_minor,version_patch,count(DISTINCT installation_id)::numeric AS boxes
+     FROM installation_error_reports WHERE environment=$1
+      AND (version_major,version_minor,version_patch)<($2::integer,$3::integer,$4::integer)
+     GROUP BY 1,2,3 HAVING count(DISTINCT installation_id)>=2
+     ORDER BY version_major DESC,version_minor DESC,version_patch DESC LIMIT 1
+    ), reports AS MATERIALIZED (
+     SELECT installation_id,code,occurrences,version_major,version_minor,version_patch FROM installation_error_reports
+     WHERE environment=$1 AND (version_major,version_minor,version_patch)=($2::integer,$3::integer,$4::integer)
+     UNION ALL
+     SELECT r.installation_id,r.code,r.occurrences,r.version_major,r.version_minor,r.version_patch
+     FROM installation_error_reports r JOIN predecessor p USING(version_major,version_minor,version_patch) WHERE r.environment=$1
     ), versions AS (
      SELECT version_major,version_minor,version_patch,count(DISTINCT installation_id)::numeric AS boxes FROM reports GROUP BY 1,2,3
-    ), predecessor AS (
-     SELECT * FROM versions WHERE ARRAY[version_major,version_minor,version_patch]<ARRAY[$2::integer,$3::integer,$4::integer]
-      AND boxes>=2 ORDER BY version_major DESC,version_minor DESC,version_patch DESC LIMIT 1
     ), current_errors AS (
      SELECT code,sum(occurrences)::numeric AS n,count(DISTINCT installation_id) AS boxes FROM reports
      WHERE version_major=$2 AND version_minor=$3 AND version_patch=$4 GROUP BY code

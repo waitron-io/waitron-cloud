@@ -14,4 +14,4 @@ CREATE TABLE installation_error_reports (
   received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (installation_id, operation_id)
 );
-CREATE INDEX installation_error_reports_version ON installation_error_reports(environment,version_major,version_minor,version_patch,code);
+CREATE INDEX installation_error_reports_version ON installation_error_reports(environment,version_major,version_minor,version_patch,installation_id) INCLUDE (code,occurrences);

@@ -722,7 +722,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
    covers Cloud receiving and a local grouped reader; its build waits for the shared box-error receiver.
-   Assess matched-window error shares after real reports exist: lifetime totals from
+   Qualify report storage and read cost at realistic report counts per version, and assess
+   matched-window error shares after real reports exist: lifetime totals from
    reporting boxes can delay young-release holds or inflate ratios when other errors
    disappear. The [receiver contract](box-error-reports.md) has synthetic evidence only.
    D104's [owner setup checklist](incident-setup.md) now gives the Cloudflare Pages

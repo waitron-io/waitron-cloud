@@ -165,16 +165,18 @@ test('an error flood uses its own key allowance and still permits credential ren
  }finally{await f.db.close();}
 });
 
-for(const mode of ['revocation','key rotation','lease expiry','proof expiry','proof expiry after insert wait'] as const)test('report rechecks '+mode+' under real PostgreSQL contention',async()=>{
+for(const mode of ['revocation','key rotation','lease expiry','proof expiry','proof expiry after insert wait','proof expiry after held wait'] as const)test('report rechecks '+mode+' under real PostgreSQL contention',async()=>{
  const f=await fixture(),lock=await f.db.secondPool.connect();let pending:Promise<Response>|undefined;
  try{
   const now=Date.now(),issuedAt=mode.startsWith('proof expiry')?now-58000:now,expiresAt=now+1000;
   const lease=mode==='lease expiry'?f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.box.installationId,venueId:f.box.venueId,environment:'test',publicKey:f.box.installationKey,issuedAt:now-1000,expiresAt}):f.box.lease;
   await lock.query('BEGIN');
-  if(mode.endsWith('insert wait'))await lock.query('LOCK TABLE installation_error_reports IN SHARE MODE');
+  if(mode.endsWith('held wait'))await lock.query('LOCK TABLE installation_error_reports IN ACCESS EXCLUSIVE MODE');
+  else if(mode.endsWith('insert wait'))await lock.query('LOCK TABLE installation_error_reports IN SHARE MODE');
   else await lock.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE',[f.box.installationId]);
-  pending=Promise.resolve(f.request('error-report',f.box.proof('error-report',report(),randomUUID(),lease,undefined,issuedAt)));
-  const pattern=mode.endsWith('insert wait')?'INSERT INTO installation_error_reports%':'SELECT public_key,venue_id,revoked_at%';
+  const action=mode.endsWith('held wait')?'release-held':'error-report';
+  pending=Promise.resolve(f.request(action,f.box.proof(action,action==='release-held'?{version:'1.0.0'}:report(),randomUUID(),lease,undefined,issuedAt)));
+  const pattern=mode.endsWith('held wait')?'WITH predecessor%':mode.endsWith('insert wait')?'INSERT INTO installation_error_reports%':'SELECT public_key,venue_id,revoked_at%';
   let waiting=false;const deadline=Date.now()+5000;
   while(Date.now()<deadline){
    if((await f.db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[f.db.schema,pattern])).rowCount){waiting=true;break;}
@@ -187,4 +189,34 @@ for(const mode of ['revocation','key rotation','lease expiry','proof expiry','pr
   await lock.query('COMMIT');const r=await pending;assert.equal(r.status,mode==='revocation'?403:401,await r.clone().text());
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installation_error_reports')).rows[0].count,'0');
  }finally{await lock.query('ROLLBACK');lock.release();await pending;await f.db.close();}
+});
+
+test('one box cannot hold a new error even with five occurrences',async()=>{
+ const f=await fixture();try{
+  const b=await connectedVenue(f.db,f.issuer,origin);
+  for(const who of [f.box,b])assert.equal((await f.send(report('6.0.0','network.unavailable',1),who)).status,200);
+  assert.equal((await f.send(report('6.1.0','storage.disk_full',5))).status,200);
+  assert.deepEqual(await f.held('6.1.0'),{version:'6.1.0',held:false});
+  assert.equal((await f.send(report('6.1.0','storage.disk_full',1),b)).status,200);
+  assert.deepEqual(await f.held('6.1.0'),{version:'6.1.0',held:true});
+ }finally{await f.db.close();}
+});
+
+test('the shared error IP allowance applies across installation keys and leaves renewals available',async()=>{
+ const f=await fixture();try{
+  const b=await connectedVenue(f.db,f.issuer,origin),c=await connectedVenue(f.db,f.issuer,origin);
+  for(const who of [f.box,b,c])for(let i=0;i<20;i++)assert.deepEqual(await f.held('1.0.0',who),{version:'1.0.0',held:false});
+  const limited=await f.request('release-held',f.box.proof('release-held',{version:'1.0.0'},randomUUID(),f.box.lease));
+  assert.equal(limited.status,429);assert(Number(limited.headers.get('retry-after'))>0);
+  assert.equal((await f.request('renew',f.box.proof('renew',{}))).status,200);
+ }finally{await f.db.close();}
+});
+
+test('error routes still share the account API IP ceiling',async()=>{
+ const f=await fixture();try{
+  for(let i=0;i<120;i++)assert.equal((await f.request('not-found',{})).status,404);
+  for(const [action,body] of [['error-report',report()],['release-held',{version:'1.0.0'}]] as const){
+   const r=await f.request(action,f.box.proof(action,body,randomUUID(),f.box.lease));assert.equal(r.status,429);assert(Number(r.headers.get('retry-after'))>0);
+  }
+ }finally{await f.db.close();}
 });

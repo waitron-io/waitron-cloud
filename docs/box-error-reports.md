@@ -77,7 +77,9 @@ count is at least five. A code absent from the predecessor then qualifies; an
 existing code must also have at least twice the predecessor's count per reporting
 installation. The denominator is all installations reporting any error in that
 version. Both numerical boundaries are inclusive. One database statement reads the
-comparison, and later predecessor reports can change the result.
+comparison, and later predecessor reports can change the result. The query first
+chooses a qualifying predecessor, then aggregates only those two versions through
+an index that also holds the fields needed for counting. Reports within either version still contribute to read cost.
 
 These are lifetime counts from error-reporting boxes. Older versions have longer
 to accumulate errors, which can delay a hold on a young release. Fixing other
