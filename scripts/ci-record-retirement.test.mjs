@@ -98,3 +98,14 @@ test('unmarked full work refuses wrong checkouts and dirty tracked bytes without
     assert.throws(() => rootVerificationContext(full, {GITHUB_SHA: head}), /clean tracked checkout/);
   } finally {process.chdir(cwd);}
 }));
+
+// A root test reads this verifier test's live bytes, so its receipt is not its only owner.
+test('the capacity verifier test stays unregistered and retains full work', () => fixture(({git, put, commit}) => {
+  const path = 'scripts/verify-backup-capacity-receipt.test.mjs';
+  put(path); const base = commit(); put(path, 'export const value = 2;\n'); const head = commit();
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+  assert.deepEqual(selected.packages, [{package: '@waitron-cloud/identity', shard: 1}]);
+  assert.equal(selected.typecheck, true); assert.equal(selected.rootInputs, undefined);
+  assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
+    'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+}));

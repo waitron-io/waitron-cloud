@@ -822,7 +822,6 @@ test('actual nested summary command receives the prefix configured by both workf
     assert.equal(typeof prefix, 'string', 'Both workflows must deliver a prefix');
     const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})), {name: 'cost / discover', status: 'in_progress', conclusion: null}];
     writeFileSync(join(root, 'jobs.json'), JSON.stringify(jobPages(records)));
-  writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
     symlinkSync('gh.cjs', join(root, 'gh'));
     const result = spawnSync(process.execPath, [summaryProgram], {cwd: root, encoding: 'utf8', timeout: 3_000, env: {...process.env, ...context.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
