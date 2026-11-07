@@ -76,8 +76,10 @@ test('historical SQL bytes and the populated organisation survive interrupted up
   await pool.query('CREATE TABLE schema_migrations(name text PRIMARY KEY,digest text NOT NULL,applied_at timestamptz NOT NULL DEFAULT clock_timestamp())');
   const root=new URL('../../../',import.meta.url).pathname;
   const names=(await exec('git',['ls-tree','-r','--name-only',previousRelease,'packages/registration/migrations/'],{cwd:root})).stdout.trim().split('\n').map(name=>name.slice('packages/registration/migrations/'.length));
-  assert.deepEqual(migrationNames.slice(0,-1),names,'the previous release must be the exact migration prefix');
-  for(const name of migrationNames.slice(0,-1)){
+  assert.equal(names.length,52,'the delivered predecessor must contain exactly 52 migrations');
+  assert.deepEqual(migrationNames.slice(0,52),names,'the previous release must be the exact migration prefix');
+  assert.equal(migrationNames[52],'053_country_flow_authority.sql');
+  for(const name of names){
    const sql=(await exec('git',['show',previousRelease+':packages/registration/migrations/'+name],{cwd:root,encoding:'buffer'})).stdout;
    assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),sql,name+' must match the delivered predecessor');
    await pool.query(sql.toString());
@@ -86,7 +88,7 @@ test('historical SQL bytes and the populated organisation survive interrupted up
   const org=randomUUID();await pool.query('INSERT INTO organisations(id) VALUES($1)',[org]);
   const oldRows=(await pool.query('SELECT * FROM organisations')).rows;
   const ledger=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(ledger.length,migrationNames.length-1);
+  assert.equal(ledger.length,52);
   held=await pool.connect();await held.query('BEGIN');await held.query('LOCK TABLE schema_migrations IN SHARE MODE');
   const blocker=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
   pending=migrate(pool).then(()=>null,error=>error);
@@ -103,9 +105,9 @@ test('historical SQL bytes and the populated organisation survive interrupted up
   assert.deepEqual((await pool.query('SELECT * FROM organisations')).rows,oldRows);
   await migrate(pool);await migrate(pool);
   const upgraded=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(upgraded.length,migrationNames.length);assert.deepEqual(upgraded.slice(0,-1),ledger);
-  assert.equal(upgraded.at(-1).name,migrationNames.at(-1));
-  assert.equal(upgraded.at(-1).digest,createHash('sha256').update(await readFile(new URL('../migrations/'+migrationNames.at(-1),import.meta.url))).digest('hex'));
+  assert.equal(upgraded.length,migrationNames.length);assert.deepEqual(upgraded.slice(0,52),ledger);
+  assert.deepEqual(upgraded.slice(52).map(row=>row.name),migrationNames.slice(52));
+  for(const row of upgraded.slice(52))assert.equal(row.digest,createHash('sha256').update(await readFile(new URL('../migrations/'+row.name,import.meta.url))).digest('hex'));
   for(const row of ledger)assert.equal(createHash('sha256').update(await readFile(new URL('../migrations/'+row.name,import.meta.url))).digest('hex'),row.digest);
   assert.deepEqual((await pool.query('SELECT * FROM organisations')).rows,oldRows);
   for(const name of tables)assert.equal((await pool.query(`SELECT count(*) FROM ${name}`)).rows[0].count,'0');
