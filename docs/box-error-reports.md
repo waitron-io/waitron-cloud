@@ -100,8 +100,76 @@ IP limit. Batch counts rather than sending once per occurrence. At the report
 limit, payload growth is bounded at 14,400 × 4,096 bytes per day per installation,
 before database overhead; this is not a production capacity qualification.
 
-Paging, the investigator, release waves, the staff problem-report form and
-Waitron's sender/updater remain separate work.
+Paging, the investigator, release waves, Waitron's staff problem-report form and
+its sender/updater remain separate work.
+
+## Receive a staff problem report
+
+You can receive structural error attachments before an administrator sends a
+description. An unsent draft stays on the box. Cloud does not enforce the box's
+administrator role; Waitron's sender must send typed text only after that
+administrator sends it. Staff submissions need no automatic-error opt-in.
+
+POST `/api/installations/staff-report` with exactly `payload`, `signature` and
+`body`, all strings. Sign action `staff-report` using a current installation lease.
+The external `body` string contains JSON like this:
+
+```json
+{"version":"1.2.3","time":1700000000000,"logs":[{"level":"error","code":"storage.disk_full","source":"packages/storage/src/archive.ts#write"}],"details":{"device":"till","equipment":["printer"],"upgradedAt":null,"hosting":"unknown"}}
+```
+
+The signed machine body contains `{"version":1,"bodySha256":"…","bodyBytes":123}`.
+Compute the SHA-256 hex digest and byte count from the exact UTF-8 external string.
+The software version is separate from this fingerprint's schema version. Keeping
+the attachment outside the signed envelope preserves the shared envelope limits.
+Cloud verifies the digest and replies `{"received":true}` after committing.
+
+Use at most eight structural log objects with the automatic report's code,
+source and level rules. Empty logs are accepted. Details have exactly four fields:
+`device` is `till`, `dashboard`, `setup`, `server` or `unknown`; `equipment` holds
+at most sixteen `printer`, `card_reader` or `other` values; `upgradedAt` is a Unix
+millisecond timestamp or null; `hosting` is `hosted`, `on_prem` or `unknown`.
+Hosting is an unverified sender claim. Equipment names, serials, addresses and log
+text are refused. Timestamps may be old but not over 60 seconds ahead of Cloud.
+
+Include `description` only if the administrator has sent it. Its maximum is 2,000
+Unicode codepoints and 8,192 UTF-8 bytes. Malformed Unicode and control characters
+are refused, except newline and tab in descriptions. Senders convert Windows
+`\r\n` line endings to `\n` before signing, because a carriage return is refused.
+The decoded body is limited to 16,384 bytes; the outer request to 65,536 bytes
+and five seconds. Unknown fields
+are refused. Each staff action has ten requests per minute per installation,
+sharing the existing report IP and account IP limits. Renewal is unchanged.
+
+## Attach a description later
+
+POST `/api/installations/staff-description`, signed as `staff-description`, with
+the same outer format and a fingerprint of this external `body`:
+
+```json
+{"reportId":"00000000-0000-4000-8000-000000000001","description":"The printer stopped after the upgrade."}
+```
+
+`reportId` is the original staff submission's operation ID. The description request
+has its own operation ID. If the report has not arrived, retry later: HTTP 404
+`{"error":"report_not_found"}` inserts nothing. A foreign installation or
+environment, or an automatic report, has the same response. A description is
+write-once. Retry its identical operation and body for `{"received":true}`;
+changed descriptions and operation IDs used by another report action return HTTP
+409 `{"error":"conflict"}`. This also applies to concurrent deliveries.
+
+Cloud derives the venue from the authenticated installation. The receiver rechecks
+the key, venue, environment, lease, revocation and proof expiry around database
+waits. Staff rows never supply automatic error counts or release-hold predecessors.
+Neither report kind writes usage operations or contact times, and neither is
+automatically deleted. These are local receiver guarantees, not production or
+sender qualification. The A1047 sender contract remains provisional.
+
+Run the synthetic loopback HTTP, database wait, migration and owner-reader cases:
+
+```sh
+node scripts/test-postgres.mjs exec node --test --test-concurrency=1 packages/account-http/test/staff-problem-reports.test.ts packages/registration/test/staff-problem-reports.test.ts packages/operations/test/staff-problem-reports.test.ts packages/account-http/test/box-error-reports.test.ts packages/registration/test/box-error-reports.test.ts
+```
 
 ## Measure storage and reads before sizing a service
 
