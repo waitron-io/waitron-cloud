@@ -188,10 +188,14 @@ test('disconnected database clients exit with one fixed line and no raw error',a
   try{
    await until(async()=>Number((await db.pool.query(`SELECT count(*) AS n FROM pg_stat_activity
     WHERE application_name=$1 AND state='idle' AND xact_start IS NULL`,[run.applicationName])).rows[0].n)>0);
-   const killed=await db.pool.query('SELECT pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
+   const killed=await db.pool.query('SELECT pid,pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
    assert.ok(killed.rows.length>0);assert.ok(killed.rows.every(row=>row.killed));
    const out=await run.exited;
-   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+   try{assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);}
+   catch(error){
+    // The proof can retain numeric backend facts without exposing connection settings.
+    Object.assign(error as object,{termination:{iteration:repeat,backends:killed.rows}});throw error;
+   }
   }finally{await run.dispose();}
  }
 });
