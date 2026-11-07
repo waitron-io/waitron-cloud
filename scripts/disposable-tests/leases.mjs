@@ -215,7 +215,12 @@ export class LocalLeases {
   setInvocation(value) {
     assert.ok(this.capacity===1 || this.slot!==undefined,'Concurrent CI intent requires a scoped slot');
     ciInvocation(value);
-    return this.transaction(state=>{this.scope(state).ciInvocation=value;return value;});
+    return this.transaction(state=>{
+      if(this.capacity>1 && value.jobId!==undefined)assert.ok(!state.slots.some(slot=>slot.id!==this.slot &&
+        slot.ciInvocation?.runId===value.runId && slot.ciInvocation.attempt===value.attempt && slot.ciInvocation.jobId===value.jobId),
+        'CI job is already recorded on another slot');
+      this.scope(state).ciInvocation=value;return value;
+    });
   }
   clearInvocation(nonce) {
     return this.transaction(state=>{const record=this.scope(state);if(record.ciInvocation?.nonce!==nonce)return false;delete record.ciInvocation;return true;});

@@ -5,7 +5,7 @@ import * as controller from './ci-canary.mjs';
 const head='1'.repeat(40),execution='2'.repeat(40),workflow='reviewed workflow';
 const policy={repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex')};
 function fixture(){
- const run={id:789,run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/ci.yml@refs/pull/12/merge',ref:'refs/pull/12/merge',sha:execution}]};
+ const run={id:789,run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/12/merge',sha:execution}]};
  const jobs=[['test-server (24)','test-server-24'],['test-heavy (3)','test-heavy-3'],['test-till (7)','test-till-7'],['test-ui','test-ui-1'],['test-dashboard (4)','test-dashboard-4']].map(([name,key],i)=>({id:901+i,name,run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-'+key]}));
  const api={get:async path=>{
   if(path.endsWith('fork-pr-contributor-approval'))return {approval_policy:'all_external_contributors'};
@@ -39,16 +39,16 @@ for(const change of ['fork','retry','assigned','hosted','unsupported','stale'])t
 test('automatic pickup pins the original merge workflow and rejects changed execution bytes',async()=>{
  const f=fixture(),get=f.api.get;
  f.api.get=async path=>path.endsWith('?ref='+execution)?{encoding:'base64',content:Buffer.from('changed workflow').toString('base64')}:get(path);
- await assert.rejects(controller.findAutomatic({api:f.api,policy,limit:6}),/execution workflow/i);
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6}),[]);
  f.run.referenced_workflows=[];
- await assert.rejects(controller.findAutomatic({api:f.api,policy,limit:6}),/execution workflow/i);
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6}),[]);
 });
 test('automatic pickup never starts beyond the free-slot count',async()=>{
  const f=fixture();assert.deepEqual((await controller.findAutomatic({api:f.api,policy,limit:2})).map(j=>j.jobId),[901,902]);
  assert.deepEqual(await controller.findAutomatic({api:{get:async()=>assert.fail('Full pool must not poll GitHub')},policy,limit:0}),[]);
 });
 
-test('automatic failure keeps CI enabled and retains cancellation intent until the run can retry',async()=>{
+test('automatic recovery retains cancellation intent when the job stops before its workflow settles',async()=>{
  const {api}=fixture();let stage='admitted',cancelled=false,reruns=0;
  const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901,jobKey:'test-server-24',workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceTree:'4'.repeat(40)};
  const get=api.get;let jobReads=0;api.get=async path=>path.endsWith('/actions/jobs/901')?(++jobReads>1 && (cancelled=true),{id:901,run_id:789,run_attempt:1,head_sha:head,name:'test-server (24)',status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}):path.endsWith('/actions/runs/789')?{...(await get(path)),status:'in_progress'}:get(path);
@@ -87,6 +87,11 @@ test('automatic pickup fills free slots while an independent manual test keeps i
  pending.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
  const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
  assert.deepEqual(next,[902,903,904,905],'A pending job must not be admitted again on a different slot');
+ const {ciRequest}=await import('./ci-identity.mjs'),finished=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:2});
+ const complete=(await controller.findAutomatic({api:f.api,policy,limit:6})).find(ci=>ci.jobId===905);
+ const reserved=finished.reserveLocal(ciRequest('I',complete)).lease;finished.release(reserved,{resourceId:reserved.resourceId,absent:true});
+ const after=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,runWorker:async ci=>{after.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(after,[902,903,904],'Completed turn history must prevent replay even if the API still says queued');
 });
 
 test('the installed recovery entry also polls automatic CI after reconciling its pool',async t=>{
@@ -101,4 +106,87 @@ test('the installed recovery entry also polls automatic CI after reconciling its
  let reads=0;const get=GithubApp.prototype.get;t.after(()=>{GithubApp.prototype.get=get;});
  GithubApp.prototype.get=async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));reads++;return {value:'hosted'};};
  const result=await main([config,'--once']);assert.equal(result,0);assert.equal(reads,1);
+});
+
+for(const obsolete of ['advanced','closed','unavailable'])test(`automatic recovery isolates an ${obsolete} PR without touching its new work`,async t=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const {main}=await import('./manual.mjs'),{GithubApp}=await import('./github-app.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-stale-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
+ for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
+ const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,slot:1});
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
+ const config=directory+'/configuration.json';writeFileSync(config,JSON.stringify({version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:directory,ci:{...policy,appEnv:directory+'/app.env',appKey:directory+'/app.pem'}}));
+ const originalGet=GithubApp.prototype.get,originalPost=GithubApp.prototype.post;t.after(()=>{GithubApp.prototype.get=originalGet;GithubApp.prototype.post=originalPost;});let modeReads=0;
+ const f=fixture();GithubApp.prototype.get=async path=>{if(obsolete==='unavailable' && path.includes('/actions/jobs/'))throw new Error('Fixture API unavailable');return path.endsWith('DISPOSABLE_TESTS_MODE')?(modeReads++,{value:'hosted'}):path.includes('/actions/jobs/')?{id:901,name:'test-server (24)',run_id:789,run_attempt:1,head_sha:head,status:'completed',conclusion:'cancelled'}:path.endsWith('/pulls/12')?{number:12,state:obsolete==='closed'?'closed':'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}}:{...f.run,status:'completed'};};
+ GithubApp.prototype.post=async()=>assert.fail('Must never cancel or rerun obsolete work');
+ assert.equal(await main([config,'--once']),0);assert.equal(await main([config,'--once']),0);
+ assert.equal(modeReads,2);if(obsolete==='unavailable')assert.equal(leases.inspect().ciInvocation.jobId,901);else assert.equal(leases.inspect().ciInvocation,undefined);
+});
+
+test('a PR with changed workflow bytes cannot stop another approved PR from using capacity',async()=>{
+ const f=fixture(),get=f.api.get,otherHead='5'.repeat(40);
+ const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
+ const job={...f.jobs[0],id:911,run_id:790,head_sha:otherHead,labels:['self-hosted','dt-123-790-1-test-server-24']};
+ f.api.get=async path=>{
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
+  if(path.endsWith('/actions/runs/790'))return good;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
+  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  return get(path);
+ };
+ const selected=await controller.findAutomatic({api:f.api,policy,limit:6});assert.deepEqual(selected.map(j=>j.jobId),[911]);
+});
+
+
+test('one pickup reads shared run evidence once before workers independently recheck admission',async()=>{
+ const f=fixture(),get=f.api.get,reads=new Map();f.api.get=async path=>{reads.set(path,(reads.get(path)??0)+1);return get(path);};
+ assert.equal((await controller.findAutomatic({api:f.api,policy,limit:6})).length,5);
+ assert.equal(reads.get('/repos/fixture/waitron/actions/runs/789/attempts/1/jobs?per_page=100'),1);
+ assert.equal(reads.get('/repos/fixture/waitron/actions/permissions/fork-pr-contributor-approval'),1);
+});
+
+test('two workers cannot record the same GitHub job on different slots',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs');
+ const root=mkdtempSync(tmpdir()+'/auto-duplicate-');t.after(()=>rmSync(root,{recursive:true,force:true}));
+ new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});
+ const first=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:0}),second=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:1});
+ const intent={nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'};
+ first.setInvocation(intent);
+ assert.throws(()=>second.setInvocation({...intent,nonce:'b'.repeat(32)}),/job.*recorded/i);
+ assert.equal(second.inspect().ciInvocation,undefined);assert.equal(first.inspect().ciInvocation.jobId,901);
+ second.setInvocation({...intent,nonce:'b'.repeat(32),jobId:902});assert.equal(second.inspect().ciInvocation.jobId,902);
+});
+
+test('stopping automatic pickup lets its owned worker finish cleanup beyond the transport grace',async t=>{
+ const {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {setTimeout:delay}=await import('node:timers/promises');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-stop-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
+ const node=process.execPath,worker=directory+'/worker',ready=directory+'/ready',cleaned=directory+'/cleaned';
+ writeFileSync(worker,'#!'+node+'\n'+`const fs=require('fs');process.on('SIGTERM',()=>setTimeout(()=>{fs.writeFileSync(${JSON.stringify(cleaned)},'cleaned');process.exit(0)},2500));fs.writeFileSync(${JSON.stringify(ready)},'ready');setInterval(()=>{},1000);\n`,{mode:0o700});
+ t.after(()=>{process.execPath=node;});process.execPath=worker;
+ const f=fixture(),get=f.api.get;f.jobs.splice(1);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const cancel=new AbortController();
+ const running=automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,signal:cancel.signal}).then(value=>({value}),error=>({error}));
+ try{const end=Date.now()+5000;while(!existsSync(ready)){assert.ok(Date.now()<end,'Worker never started');await delay(20);}cancel.abort();const result=await running;
+  assert.equal(readFileSync(cleaned,'utf8'),'cleaned');assert.match(result.error?.message??'',/abort/i);
+ }finally{cancel.abort();await running;process.execPath=node;}
+});
+
+
+test('an automatic server failure requests exactly one cancellation and same-head hosted retry',async()=>{
+ const f=fixture(),get=f.api.get;let cancelled=0,reruns=0,stage='admitted';
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901,jobKey:'test-server-24',workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceTree:'4'.repeat(40)};
+ f.api.get=async path=>path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:get(path);
+ f.api.post=async path=>{if(path.endsWith('/cancel')){assert.equal(stage,'cancel-requested');cancelled++;}else{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/rerun');assert.equal(cancelled,1);reruns++;}};
+ f.api.patch=async()=>assert.fail('Automatic routing must stay on');
+ const leases={inspect:()=>({ciInvocation:{ordinaryStage:stage,runId:789,attempt:1,jobId:901}}),setInvocation:v=>{stage=v.ordinaryStage;}};
+ const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>{}});
+ assert.equal(cancelled,1);assert.equal(reruns,1);assert.equal(result.retry,true);assert.equal(result.sourceSha,head);
 });

@@ -70,10 +70,13 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  const currentPR=async run=>{
   assert.ok(run.event==='pull_request' && run.pull_requests?.length===1,'Ordinary fallback PR identity differs');
   const pull=await api.get(`/repos/${policy.repository}/pulls/${run.pull_requests[0].number}`,{signal});
-  assert.ok(pull.number===run.pull_requests[0].number && pull.state==='open' && pull.head?.sha===(ci.sourceSha??ci.workflowSha) &&
-   pull.head.repo?.id===ci.repositoryId && pull.base?.repo?.id===ci.repositoryId,'Ordinary fallback PR head changed');
+  assert.equal(pull.number,run.pull_requests[0].number,'Ordinary fallback PR identity changed');
+  const current=pull.state==='open' && pull.head?.sha===(ci.sourceSha??ci.workflowSha) &&
+   pull.head.repo?.id===ci.repositoryId && pull.base?.repo?.id===ci.repositoryId;
+  if(!automatic)assert.ok(current,'Ordinary fallback PR head changed');
+  return current;
  };
- await currentPR(run);
+ if(!await currentPR(run))return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
  if(job.status!=='completed'){
@@ -90,7 +93,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
    completed.head_sha===ci.workflowSha && completed.status==='completed','Ordinary fallback cancellation is unfinished');
   return {retry:false,pending:true};
  }
- await currentPR(run);
+ if(!await currentPR(run))return {retry:false,obsolete:true};
  await api.post(path+'/rerun',undefined,{signal});
  return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
 }
@@ -119,7 +122,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
 }
 async function checkExecutionWorkflow({api,policy,run,signal}){
  const ref=`refs/pull/${run.pull_requests[0].number}/merge`;
- const matches=(run.referenced_workflows??[]).filter(w=>w.ref===ref && w.path===`${policy.repository}/${policy.workflowPath}@${ref}`);
+ const matches=(run.referenced_workflows??[]).filter(w=>w.ref===ref && w.path===`${policy.repository}/.github/workflows/image-smoke.yml@${w.sha}`);
  assert.ok(matches.length===1 && /^[a-f0-9]{40}$/.test(matches[0].sha),'Original execution workflow identity is missing');
  const blob=await api.get(`/repos/${policy.repository}/contents/${policy.workflowPath}?ref=${matches[0].sha}`,{signal});
  assert.equal(blob.encoding,'base64','Invalid execution workflow encoding');
@@ -129,6 +132,8 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set()})
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
+ const upstream=api,reads=new Map();
+ api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
  const inventories=await Promise.all(['queued','in_progress'].map(status=>api.get(`${base}/actions/workflows/${policy.workflowId}/runs?event=pull_request&status=${status}&per_page=100`,{signal})));
  const runs=new Map();
  for(const inventory of inventories){
@@ -136,6 +141,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set()})
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of runs.values()){
+  try{
   if(run.event!=='pull_request' || run.run_attempt!==1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
    run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || run.pull_requests?.length!==1 || !['queued','in_progress'].includes(run.status))continue;
   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
@@ -150,6 +156,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set()})
    if(ci)found.push(ci);
    if(found.length===limit)return found;
   }
+  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));}
  }
  return found;
 }

@@ -101,7 +101,9 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
   if(slots>1 && slot===undefined){
     let busy=0,pending=0;
     for(let selected=0;selected<slots;selected++){
-      const result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});
+      let result;
+      try{result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});}
+      catch(error){signal?.throwIfAborted();pending++;console.error(JSON.stringify({event:'slot-recovery-pending',slot:selected,error:error.message}));continue;}
       if(result.code===75){if(result.reason==='controller-busy')busy++;else pending++;continue;}
       assert.equal(result.code,0,'Slot recovery failed');
     }

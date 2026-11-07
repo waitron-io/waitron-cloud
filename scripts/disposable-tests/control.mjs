@@ -39,10 +39,12 @@ export async function automaticTick({configuration,config,api,signal,runWorker})
  const exclude=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)exclude.add(Number(match[1]));}
  const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)});
- runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal});
+ // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
+ runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  const results=await Promise.allSettled(jobs.map(ci=>runWorker(ci)));
  for(let i=0;i<results.length;i++)console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:jobs[i].runId,jobId:jobs[i].jobId,
   ...(results[i].status==='fulfilled'?results[i].value:{code:125,error:results[i].reason.message})}));
+ signal?.throwIfAborted();
  return {code:0,served:jobs.length};
 }
 async function automaticJob({config,api,runId,jobId,signal}){
