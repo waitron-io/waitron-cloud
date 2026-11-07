@@ -181,3 +181,45 @@ for (const turn of [undefined, null, 12]) {
 test('a missing host generation cannot allocate an unnamed host', async t => {
   await assert.rejects(setup(t, {hostGeneration: undefined}), /invalid.*configuration/i);
 });
+
+// Without a short transaction lock, simultaneous writers lose each other's owners.
+test('separate controller processes reserve every slot without losing a neighbor',async t=>{
+ const {spawn}=await import('node:child_process');
+ const {leases,dir}=await setup(t,{slots:16});
+ const barrier=join(dir,'begin');
+ const program=`import {LocalLeases} from ${JSON.stringify(module.href)};
+ import {existsSync} from 'node:fs';
+ while(!existsSync(process.argv[3]))await new Promise(r=>setTimeout(r,1));
+ const leases=new LocalLeases(process.argv[2],{hostGeneration:'bridge-1',slots:16});
+ console.log(JSON.stringify(leases.reserveLocal({lane:'I',turn:'child-'+process.argv[4],snapshot:'a'.repeat(64),argv:['true']})));`;
+ const children=Array.from({length:16},(_,id)=>{
+  const child=spawn(process.execPath,['--input-type=module','-',dir,barrier,String(id)],{stdio:['pipe','pipe','pipe'],timeout:10000});
+  let stdout='',stderr='';child.stdout.on('data',v=>stdout+=v);child.stderr.on('data',v=>stderr+=v);child.stdin.end(program);
+  return new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',code=>{try{assert.equal(code,0,stderr);resolve(JSON.parse(stdout));}catch(e){reject(e);}});});
+ });
+ // All workers use the same recorded ledger, not an in-memory simulation.
+ await new Promise(r=>setTimeout(r,250));writeFileSync(barrier,'go');
+ const completed=await Promise.allSettled(children);
+ for(const result of completed)assert.equal(result.status,'fulfilled',result.reason?.stack);
+ const results=completed.map(r=>r.value);
+ assert.ok(results.every(r=>r.code===0));
+ assert.equal(new Set(results.map(r=>r.lease.resourceId)).size,16);
+ assert.equal(leases.inspect().slots.filter(s=>s.state==='reserved').length,16);
+ assert.equal(Object.keys(leases.inspect().turns).length,16);
+});
+
+test('slot-scoped CI intent and cleanup never overwrite a running neighbor',async t=>{
+ const {leases,dir}=await setup(t,{slots:4});
+ const {LocalLeases}=await import(module);
+ const first=new LocalLeases(dir,{...config,slots:4,slot:1}),second=new LocalLeases(dir,{...config,slots:4,slot:2});
+ const invocation={nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ first.setInvocation(invocation);second.setInvocation({...invocation,nonce:'b'.repeat(32),jobId:902});
+ assert.equal(first.inspect().ciInvocation.jobId,901);assert.equal(second.inspect().ciInvocation.jobId,902);
+ const a=first.reserveLocal(request('scoped-a')).lease,b=second.reserveLocal(request('scoped-b')).lease;
+ assert.equal(a.slot,1);assert.equal(b.slot,2);assert.equal(first.start(a),true);assert.equal(second.start(b),true);
+ assert.equal(first.release(b,{resourceId:b.resourceId,absent:true}),false);
+ assert.equal(first.clearInvocation('b'.repeat(32)),false);
+ assert.equal(first.release(a,{resourceId:a.resourceId,absent:true}),true);assert.equal(first.clearInvocation(invocation.nonce),true);
+ assert.equal(second.inspect().slots[0].state,'running');assert.equal(second.inspect().ciInvocation.jobId,902);
+ assert.equal(leases.inspect().slots[2].lease.turn,'scoped-b');
+});

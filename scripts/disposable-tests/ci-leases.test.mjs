@@ -9,7 +9,7 @@ import {LocalLeases} from './leases.mjs';
 const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',
   workflowSha:'1'.repeat(40),workflowDigest:'2'.repeat(64),event:'workflow_dispatch',
   sourceSha:'3'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
-const canonical=()=>({lane:'I',turn:'ci-789-1',snapshot:createHash('sha256').update(JSON.stringify(ci)).digest('hex'),
+const canonical=()=>({lane:'I',turn:'ci-789-1-901',snapshot:createHash('sha256').update(JSON.stringify(ci)).digest('hex'),
   argv:['/opt/actions-runner/bin/Runner.Listener','run'],ci:{...ci}});
 function setup(t){const root=mkdtempSync(join(tmpdir(),'ci-leases-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  return new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:1,bootstrap:true});}
@@ -71,4 +71,21 @@ test('the same one-job lease accepts the requested Waitron measurement shards an
  }
  for(const jobKey of ['test-dashboard-5','test-server-25','test-heavy-4','publish','../test-dashboard-1'])
   assert.throws(()=>ciRequest('I',{...ci,workflowPath:'.github/workflows/ci.yml',jobKey}));
+});
+
+// A run has several simultaneous jobs; using only run/attempt collides their turns.
+test('several jobs from one CI attempt keep separate leases and runner cleanup',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');
+ const root=mkdtempSync(join(tmpdir(),'ci-concurrent-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:4,bootstrap:true});
+ const first=leases.reserveLocal(ciRequest('I',ci));
+ const secondCI={...ci,jobId:902};
+ const second=leases.reserveLocal(ciRequest('I',secondCI));
+ assert.equal(first.code,0);assert.equal(second.code,0);
+ assert.equal(first.lease.turn,'ci-789-1-901');assert.equal(second.lease.turn,'ci-789-1-902');
+ assert.equal(first.lease.slot,0);assert.equal(second.lease.slot,1);
+ assert.equal(leases.start(first.lease),true);assert.equal(leases.start(second.lease),true);
+ assert.equal(leases.release(first.lease,{resourceId:first.lease.resourceId,absent:true}),true);
+ assert.equal(leases.inspect().slots[1].state,'running');
+ assert.equal(leases.inspect().orphanRunners[0].runnerName,'dt-123-789-1-901');
 });

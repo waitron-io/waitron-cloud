@@ -28,7 +28,7 @@ class Guards(unittest.TestCase):
   self.resource='dt-policy-0-1';self.live=set();self.active=False;self.transferred=False;self.order=[]
   self.request={'resourceId':self.resource,'snapshot':hashlib.sha256(b'opaque source').hexdigest(),'argv':['true'],'deadline':int(time.time()*1000)+60000}
   boot=self.root/'boot-id';boot.write_text('11111111-1111-4111-8111-111111111111')
-  values=[(host,'ROOT',self.root),(startup,'BOOT_ID',boot),(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
+  values=[(host,'capacity',lambda extra=None:{'slots':1,'cpus':list(range(4,16))}),(host,'ROOT',self.root),(startup,'BOOT_ID',boot),(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
           (host,'run',self.provider_run),(host,'observation',lambda r:{'resourceId':r,'running':False,'absent':True}),
           (host,'table_present',lambda r:False),
           (host,'service_state',lambda r:{'absent':not self.active,'running':self.active}),
@@ -103,5 +103,58 @@ class Guards(unittest.TestCase):
   original=session.Path
   with patch.object(session,'os',types.SimpleNamespace(geteuid=lambda:0)),patch.object(session,'Path',lambda p:types.SimpleNamespace(is_char_device=lambda:True) if str(p)=='/dev/kvm' else original(p)),patch.object(session,'supervise',lambda *args:0),patch.object(sys,'argv',['session.py','execute',self.resource]):
    with self.assertRaisesRegex(ValueError,'Unknown turn operation'):session.main()
+
+ def test_destroying_one_slot_preserves_other_slots_and_their_egress_policy(self):
+  one=self.root/'active-1.json';two=self.root/'active-2.json'
+  first={'resourceId':'dt-parallel-1-1','deadline':int(time.time()*1000)+60000}
+  neighbor={'resourceId':'dt-parallel-2-1','deadline':first['deadline']}
+  one.write_text(json.dumps(first));two.write_text(json.dumps(neighbor));(self.root/'history').mkdir()
+  with patch.object(host,'locked',contextlib.nullcontext):
+   result=host.destroy(first['resourceId'])
+  self.assertTrue(result['absent']);self.assertFalse(one.exists());self.assertEqual(json.loads(two.read_text()),neighbor)
+  self.assertTrue((self.root/'history/dt-parallel-1-1.json').is_file())
+  with patch.object(host,'run',return_value=subprocess.CompletedProcess([],0,stdout='[]',stderr='')):
+   rules=host.network_policy('dt-parallel-2-1')
+  self.assertIn('meta skuid 62002 ',rules);self.assertNotIn('meta skuid 62000 ',rules)
+
+ def test_guest_management_uses_the_resource_slot_not_the_default_port(self):
+  args=session.guest_ssh(self.control/'dt-parallel-5-1')
+  self.assertEqual(args[args.index('-p')+1],'22005');self.assertEqual(args[-1],'root@127.0.0.1')
+
+
+ def test_image_preparation_creates_only_the_reserved_nonlogin_slot_accounts(self):
+  image=self.root/'base-image';image.touch();accounts={};created=[]
+  def lookup(uid):
+   if uid not in accounts:raise KeyError(uid)
+   return accounts[uid]
+  def provider(*argv,**kwargs):
+   self.assertEqual(argv[0],'useradd');uid=int(argv[argv.index('--uid')+1]);name=argv[-1]
+   self.assertEqual(name,'dt-slot-'+str(uid-62000));self.assertEqual(argv[argv.index('--shell')+1],'/usr/sbin/nologin')
+   self.assertIn('--no-create-home',argv);created.append(uid)
+   accounts[uid]=types.SimpleNamespace(pw_name=name,pw_dir='/nonexistent',pw_shell='/usr/sbin/nologin')
+   return subprocess.CompletedProcess(argv,0,stdout='',stderr='')
+  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'IMAGE',image),patch.object(host,'image_verified',lambda:None),patch.object(host.pwd,'getpwuid',lookup),patch.object(host,'run',provider):
+   host.prepare_image()
+   self.assertEqual(created,list(range(62000,62016)))
+   created.clear();host.prepare_image();self.assertEqual(created,[])
+   accounts[62005].pw_name='foreign'
+   with self.assertRaisesRegex(ValueError,'unexpected'):host.prepare_image()
+
+
+ def test_unsafe_budget_refuses_creation_before_any_resource_is_written(self):
+  (self.root/'turns').mkdir();(self.root/'history').mkdir()
+  key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGiUcL7F9BcOzhFJbD97eQj+L6u16A5RylAnj1BrChgC'
+  request={'resourceId':'dt-budget-1-1','deadline':int(time.time()*1000)+60000,'sshPublicKey':key}
+  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',create=True,side_effect=ValueError('Insufficient memory')),patch.object(host,'image_verified',lambda:None),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None):
+   with self.assertRaisesRegex(ValueError,'memory'):host.create(request)
+  self.assertFalse((self.root/'active-1.json').exists());self.assertEqual(list((self.root/'turns').iterdir()),[])
+
+
+ def test_health_accepts_a_free_budget_while_a_different_slot_is_running(self):
+  (self.root/'active.json').write_text(json.dumps({'resourceId':self.resource}))
+  original=session.Path;output=io.StringIO()
+  with patch.object(session,'os',types.SimpleNamespace(geteuid=lambda:0)),patch.object(session,'Path',lambda p:types.SimpleNamespace(is_char_device=lambda:True) if str(p)=='/dev/kvm' else original(p)),patch.object(sys,'argv',['session.py','health']),contextlib.redirect_stdout(output):
+   self.assertEqual(session.main(),0)
+  self.assertEqual(json.loads(output.getvalue()),{'healthy':True})
 
 unittest.main(verbosity=2)

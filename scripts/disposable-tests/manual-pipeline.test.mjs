@@ -512,3 +512,20 @@ test('SIGTERM during background destruction returns143 and retains quarantine un
   assert.equal(retried.status,0,retried.stdout+retried.stderr);assert.equal(leases.inspect().slots[0].state,'free');assert.equal(existsSync(guest),false);assertNoTemporaries(f);
  }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGTERM');await closed;}
 });
+
+// The ordinary CLI, not a test adapter, must bootstrap and use its configured pool.
+for(const withCI of [false,true])test('the manual CLI bootstraps several slots and can use the next while one is quarantined',t=>{
+ const f=fixture(t);rmSync(join(f.root,'state'),{recursive:true});
+ const config=JSON.parse(readFileSync(f.config,'utf8'));config.mode='manual-slots';config.slots=4;
+ if(withCI)config.ci={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:'a'.repeat(64),appEnv:join(f.root,'app.env'),appKey:join(f.root,'app.pem')};
+ writeFileSync(f.config,JSON.stringify(config));
+ const boot=spawnSync(process.execPath,[script,f.config,'--bootstrap'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(boot.status,0,boot.stdout+boot.stderr);
+ const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:4});
+ const blocked=leases.reserveLocal({lane:'H',turn:'quarantine',snapshot:'a'.repeat(64),argv:['true']}).lease;
+ leases.release(blocked,undefined);
+ const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/dt-fixture-1-1/);
+ assert.equal(leases.inspect().slots[0].state,'quarantined');assert.equal(leases.inspect().slots[1].state,'free');
+ assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
+ assert.deepEqual(readdirSync(join(f.root,'state/slot-1/tmp')),[]);
+});

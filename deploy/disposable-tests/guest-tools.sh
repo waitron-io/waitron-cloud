@@ -8,7 +8,7 @@ fi
 instance=$(cat /var/lib/cloud/data/instance-id)
 virtualisation=$(systemd-detect-virt --vm || true)
 if test "${ID:-}" != debian || test "${VERSION_ID:-}" != 13 || test "$(id -u)" != 0 ||
-   test "$(uname -m)" != x86_64 || ! [[ "$instance" =~ ^dt-[A-Za-z0-9_-]+-0-[1-9][0-9]*$ ]] ||
+   test "$(uname -m)" != x86_64 || ! [[ "$instance" =~ ^dt-[A-Za-z0-9_-]+-([0-9]|1[0-5])-[1-9][0-9]*$ ]] ||
    ! [[ "$virtualisation" =~ ^(kvm|qemu)$ ]]; then
   echo 'A fresh disposable Debian 13 x86 KVM guest is required' >&2; exit 1
 fi

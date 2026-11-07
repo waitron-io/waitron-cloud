@@ -205,7 +205,7 @@ def guest_ssh(directory):
     return ['ssh', '-i', str(directory/'key'), '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
             '-o', 'StrictHostKeyChecking=yes', '-o', f'UserKnownHostsFile={directory}/known',
             '-o', 'ConnectTimeout=3', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2',
-            '-p', '22000', 'root@127.0.0.1']
+            '-p', str(22000+host.slot_id(directory.name)), 'root@127.0.0.1']
 
 
 def prepare(resource):
@@ -219,7 +219,7 @@ def prepare(resource):
     host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public})
     boot_end = min(deadline, int(time.time()*1000)+120000)
     while int(time.time()*1000) < boot_end:
-        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', '22000', '127.0.0.1'],
+        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', str(22000+host.slot_id(resource)), '127.0.0.1'],
                                boot_end, capture=True, check=False)
         if code == 0 and output.strip():
             (directory/'known').write_bytes(output)
@@ -399,7 +399,13 @@ def main():
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
     if len(sys.argv) == 2 and sys.argv[1] == 'health':
-        print(json.dumps({'healthy': startup.ready() and not (host.ROOT/'active.json').exists()}))
+        healthy = startup.ready()
+        if healthy:
+            try:
+                host.capacity()
+            except (OSError,ValueError):
+                healthy = False
+        print(json.dumps({'healthy': healthy}))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == '_cleanup':
         resource = resource_id(sys.argv[2])

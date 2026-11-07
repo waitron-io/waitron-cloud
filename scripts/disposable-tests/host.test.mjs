@@ -17,8 +17,8 @@ test('the host refuses candidate-controlled sockets, mounts, images, ports and s
   }
 });
 
-test('escaping resource IDs, nonlocal slots, expired deadlines and overlong turns are refused', () => {
-  for (const changed of [{resourceId: '../peer'}, {resourceId: 'dt-bridge-1-1-1'}, {resourceId: 'dt-bridge-1-0-0'}, {resourceId: 'dt-bridge-1-0-1;id'}, {deadline: Date.now() - 1}, {deadline: Date.now() + 3600000}, {deadline: 'later'}, {sshPublicKey: key + '\ncommand="id"'}]) {
+test('escaping resource IDs, out-of-range slots, expired deadlines and overlong turns are refused', () => {
+  for (const changed of [{resourceId: '../peer'}, {resourceId: 'dt-bridge-1-16-1'}, {resourceId: 'dt-bridge-1-0-0'}, {resourceId: 'dt-bridge-1-0-1;id'}, {deadline: Date.now() - 1}, {deadline: Date.now() + 3600000}, {deadline: 'later'}, {sshPublicKey: key + '\ncommand="id"'}]) {
     const result = plan({...request(), ...changed});
     assert.notEqual(result.status, 0); assert.match(result.stderr, /invalid|deadline/i);
     assert.equal(result.stdout, '');
@@ -42,4 +42,14 @@ test('a local guest uses a private disk, bounded unprivileged service and loopba
   const runtime = p.service.find(v => v.startsWith('RuntimeMaxSec='));
   assert.ok(Number(runtime.split('=')[1]) > 0 && Number(runtime.split('=')[1]) <= 600);
   assert.deepEqual(JSON.parse(p.userData.slice('#cloud-config\n'.length)).users[0].ssh_authorized_keys, [key]);
+});
+
+// Reusing a management port or host UID would join two guests' authority.
+test('parallel slots use distinct loopback ports, host accounts and egress identities',()=>{
+ for(const [resourceId,uid,port] of [['dt-bridge-1-1-1',62001,22001],['dt-bridge-1-5-1',62005,22005],['dt-bridge-1-15-1',62015,22015]]){
+  const result=plan({...request(),resourceId});assert.equal(result.status,0,result.stderr);
+  const p=JSON.parse(result.stdout);assert.equal(p.uid,uid);assert.equal(p.port,port);
+  assert.ok(p.service.includes('User='+uid));
+  assert.equal(p.qemu[p.qemu.indexOf('-netdev')+1],`user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${port}-:22`);
+ }
 });

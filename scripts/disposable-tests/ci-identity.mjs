@@ -17,7 +17,7 @@ export function ciIdentity(value) {
 export const ciSnapshot=value=>createHash('sha256').update(JSON.stringify(ciIdentity(value))).digest('hex');
 export const runnerName=value=>{const ci=ciIdentity(value);return `dt-${ci.repositoryId}-${ci.runId}-${ci.attempt}-${ci.jobId}`;};
 export const routingLabel=value=>{const ci=ciIdentity(value);return `dt-${ci.repositoryId}-${ci.runId}-${ci.attempt}-${ci.jobKey}`;};
-export function ciRequest(lane,value){const ci=ciIdentity(value);return {lane,turn:`ci-${ci.runId}-${ci.attempt}`,snapshot:ciSnapshot(ci),argv:[...runnerCommand],ci};}
+export function ciRequest(lane,value){const ci=ciIdentity(value);return {lane,turn:`ci-${ci.runId}-${ci.attempt}-${ci.jobId}`,snapshot:ciSnapshot(ci),argv:[...runnerCommand],ci};}
 export function orphanRunner(value) {
   assert.ok(value && Object.keys(value).sort().join(',')==='ci,runnerId,runnerName','Invalid orphan runner fields');
   ciIdentity(value.ci);

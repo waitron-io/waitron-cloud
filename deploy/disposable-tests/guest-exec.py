@@ -110,7 +110,7 @@ if __name__ == '__main__':
         identity = Path('/var/lib/cloud/data/instance-id')
         ci_mode=len(sys.argv)==3 and sys.argv[2]=='--ci'
         if (not (len(sys.argv)==2 or ci_mode) or not identity.is_file() or
-                not re.fullmatch(r'dt-[A-Za-z0-9_-]+-0-[1-9][0-9]*', sys.argv[1]) or
+                not re.fullmatch(r'dt-[A-Za-z0-9_-]+-(?:[0-9]|1[0-5])-[1-9][0-9]*', sys.argv[1]) or
                 identity.read_text().strip() != sys.argv[1]):
             raise ValueError('The command entry point requires a disposable guest')
         raw = sys.stdin.buffer.read(5*1024*1024+1)
