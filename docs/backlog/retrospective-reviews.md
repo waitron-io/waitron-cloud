@@ -130,8 +130,7 @@ the disabled password field. The English, light, 390-pixel ordinary and delayed
 controls reject it at the final recount after the setup reply is released, using
 the original assertions. Removing the record-count condition lets the delayed
 control pass despite that duplicate. Arbitrarily late arrivals and other duplicate
-fault combinations remain unqualified. D535 still needs to qualify later arrivals
-without weakening the current bounds. After restoring the controller, run
+fault combinations remain unqualified. After restoring the controller, run
 `pnpm --dir apps/portal exec node --test test/authenticator-setup-enter-browser.test.ts`
 for all 39 checks. The missing-record control bounds its configured four-second
 wait through a five-second race; it does not independently assert the exact
