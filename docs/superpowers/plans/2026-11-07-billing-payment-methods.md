@@ -2,7 +2,7 @@
 
 **Authority:** Watcher lane G, 2026-11-07 18:54, authorizes D604’s payment-method pages as D602; owner/watch 20:50 approves the smaller binding plan below. Preserve slice F and existing assertions. D570 stays first.
 
-**Build gates:** Wait for D570 retry and chooser #1084 to land. Adopt repaired/rebased head `50ef1bc930c531b87d75ad7134da111736a73fcf` and landed main; `859e` is stale. Obtain the corrected mandatory Claude plan read through `~/workspace/tools/claude-seat.sh review-branch` before building. Choose the next free handwritten migration number after rebasing at build time. No provider/key calls in preparation.
+**Build gates:** Watcher lane G, 2026-11-07 22:34, permits building and reviewing during D570's frozen owner trial; landing waits for #1089 and explicit Cloud lock release. Chooser #1084 has landed. Adopt landed main; `859e` is stale. Retain the corrected mandatory Claude plan read through `~/workspace/tools/claude-seat.sh review-branch`. Choose the next free handwritten migration number at build time. No provider/key calls in preparation.
 
 **Scope:** One independently usable `/account` method panel per legal business, resolved through selected venue. Add/switch sandbox SumUp cards and Stripe test SEPA mandates. Preserve the existing method until successful verification. Exclude real/unattended charges, renewals, live activation, anchors/paid-period changes, tax invoices, closure and hosting. SumUp setup itself is a sandbox payment-like checkout; do not call it charge-free. Use the private D602 receipt’s EUR setup amount; record it in the provider guide at build time. D602 neither measured switching nor late completion; implementation tests establish them. Sandbox fees do not qualify production.
 
