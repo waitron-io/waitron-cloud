@@ -484,12 +484,9 @@ immutable row, historical result or deployment authority changes here.
 
 ## Retrospective review qualification (D535)
 
-Remote-access monitoring alerts and mail identify **Refresh status** below the
-venue list, so an open remote-setup panel does not suggest the other button with
-the same label. That panel reloads setup status; the venue-list control reloads
-monitoring observations and certificate expiry. The guide identifies the venue by
-the ID shown in mail. This correction adds no membership management or operator repair controls;
-real provider behaviour remains unqualified.
+Continue the assigned application-source reviews and fix real findings on current
+main. Test-addition and maintenance pull requests are excluded by the watcher's
+6 November decision. Real provider behaviour remains unqualified.
 
 Child exit reports retain known operating-system signals and publish the value
 that was checked. Joint-fixture setup reports retain the operation that crossed
