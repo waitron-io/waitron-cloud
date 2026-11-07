@@ -1,6 +1,7 @@
 // Exact reader versions bound the reviewed runtime/data scans and inert directory values.
 // File references and package edges remain visible; changed bytes require another review.
 export const reviewedDirectoryReaders = Object.freeze({
+  "packages/operations/test/status-page-cli.test.ts": {"mode":"100644","type":"blob","id":"e209a9baaac2ceacedb695d8b78811aa1882903f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "deploy/test-cloud/backup-worker.mjs": {"mode":"100644","type":"blob","id":"62abb5b5b558f39cd6ea7a0bf9abddd83c1625fd","nonSourceDirectoryReads":false,"directoryReferences":["../"],"sourceReferences":[]},
   "deploy/test-cloud/storage-authority.mjs": {"mode":"100644","type":"blob","id":"a484d5a7fe1f1161eac6934d955c6d3c97af79d5","nonSourceDirectoryReads":false,"directoryReferences":[".",".."],"sourceReferences":[]},
   "packages/account-http/test/venue-service-remote-boundary-guards.test.ts": {"mode":"100644","type":"blob","id":"15c64534bede652d855198e202b9e6db651f15df","nonSourceDirectoryReads":false,"directoryReferences":["packages/","packages"],"sourceReferences":["packages/remote-access/src/plan-permissions.ts","packages/remote-access/src/placement.ts","packages/remote-access/src/reconciler.ts","packages/remote-access/src/forward-observations.ts","packages/account-http/src/remote-access.ts","packages/remote-access/test/plan-permissions.test.ts","packages/remote-access/test/venue-service-remote-boundaries.test.ts","packages/account-http/test/venue-service-remote.test.ts"]},
