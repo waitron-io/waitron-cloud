@@ -52,6 +52,14 @@ test('the local reader lists unmatched reports and groups distinct staff reports
   assert.deepEqual(bounded.groups,[{code:'printer.offline',version:'1.2.3',automaticOccurrences:'0',staffReports:101}]);
   assert.equal(JSON.stringify(bounded).includes('Synthetic organisation'),false);assert.equal(JSON.stringify(bounded).includes('synthetic-key'),false);
   queries=0;await assert.rejects(staffProblemReports(counted,'unknown' as 'test'));assert.equal(queries,0);
+  await db.pool.query('CREATE TABLE read_write_probe(id integer)');
+  await db.pool.query('CREATE FUNCTION probe_description(value text) RETURNS text LANGUAGE plpgsql VOLATILE AS $$ BEGIN INSERT INTO read_write_probe VALUES(1); RETURN value; END $$');
+  await db.pool.query('ALTER TABLE installation_error_reports RENAME TO stored_error_reports');
+  await db.pool.query(`CREATE VIEW installation_error_reports AS SELECT installation_id,operation_id,environment,kind,version_major,version_minor,version_patch,
+   reported_at,received_at,logs,details,probe_description(description) AS description,code,occurrences FROM stored_error_reports`);
+  const guarded=await command(['--environment','test'],env);assert.equal(guarded.status,1);assert.equal(guarded.stdout,'');
+  assert.equal(guarded.stderr,'Staff report read failed; check environment, database and migrations\n');
+  assert.equal((await db.pool.query('SELECT count(*) FROM read_write_probe')).rows[0].count,'0');
  }finally{await db.close();}
 });
 

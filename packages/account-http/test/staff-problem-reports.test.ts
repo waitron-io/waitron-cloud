@@ -134,11 +134,14 @@ test('external staff bodies are fingerprint-bound and keep the shared signed env
  const f=await fixture();try{
   const good=f.signed('staff-report',report()),changed={...good,body:JSON.stringify({...report(),description:'Unsigned'})};
   assert.equal((await f.request('staff-report',changed)).status,401);
+  assert.equal((await f.request('staff-report',{...good,body:good.body.replace('disk_full','disk_free')})).status,401);
+  const wrongBytes=f.box.proof('staff-report',{version:1,bodySha256:createHash('sha256').update(good.body).digest('hex'),bodyBytes:Buffer.byteLength(good.body)+1},randomUUID(),f.box.lease);
+  assert.equal((await f.request('staff-report',{...wrongBytes,body:good.body})).status,401);
   const short=f.box.proof('staff-report',{version:1,bodySha256:'0'.repeat(64),bodyBytes:10},randomUUID(),f.box.lease);
   assert.equal((await f.request('staff-report',{...short,body:good.body})).status,401);
   assert.equal((await f.request('staff-report',{...good,signature:'a'.repeat(86)})).status,401);
   assert.equal((await f.request('staff-report',f.signed('staff-description',report()))).status,401);
-  const raw=' '.repeat(16385);assert.equal((await f.request('staff-report',f.signed('staff-report',{},f.box,randomUUID(),raw))).status,400);
+  const raw=good.body+' '.repeat(16385-Buffer.byteLength(good.body));assert.equal((await f.request('staff-report',f.signed('staff-report',{},f.box,randomUUID(),raw))).status,400);
   assert.equal((await f.request('staff-report',{...good,extra:'private'})).status,400);
   assert.equal((await f.request('staff-report',good,{'content-length':'65537'})).status,413);
   assert.equal((await f.request('staff-report',good,{origin})).status,403);
