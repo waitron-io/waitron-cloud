@@ -16,6 +16,8 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
     const bytes=Buffer.from('verified public fixture bytes'),digest=createHash('sha256').update(bytes).digest('hex');
     let requests=0;const requestTimes=[];
     const server=createServer((request,response)=>{
+      // Other local probes must not advance this archive's scripted responses.
+      if(request.method!=='GET'||request.url!=='/fixture.tar.gz'){response.writeHead(404);response.end();return;}
       const attempt=++requests;requestTimes.push(performance.now());
       if(scenario==='shared-deadline'){
         if(attempt===1)setTimeout(()=>{response.writeHead(504);response.end();},300);
@@ -59,6 +61,11 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
     let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
     const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
     try{
+      if(scenario==='504-twice-success') {
+        const unrelated=await fetch(new URL('/health',url));
+        await unrelated.arrayBuffer();
+        assert.equal(unrelated.status,404,'unrelated probes cannot spend scripted archive responses');
+      }
       const result=await Promise.race([closed,delay(7000,null,{ref:false})]);
       assert.notEqual(result,null,'download must settle: '+output);assert.equal(result.signal,null);
       const success=['504-then-success','500-then-success','504-twice-success','connection-reset','partial-reset','tcp-reset','tcp-partial-reset'].includes(scenario);

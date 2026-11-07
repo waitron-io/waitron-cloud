@@ -1252,10 +1252,10 @@ async function initializationFixture(t) {
 }
 
 test('first ledger keeps the original opening when the bill rises during stack creation', async t => {
-  const f = await initializationFixture(t), previous = f.aws.call; let bills = 0;
+  const f = await initializationFixture(t), previous = f.aws.call;
   f.aws.call = async (...args) => {
     const response = await previous(...args);
-    if (args[0] === 'ce' && ++bills > 1) response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01';
+    if (args[0] === 'ce' && f.counts().creates > 0) response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01';
     return response;
   };
   const result = await f.initialize();
