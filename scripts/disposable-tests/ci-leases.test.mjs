@@ -78,14 +78,28 @@ test('several jobs from one CI attempt keep separate leases and runner cleanup',
  const {ciRequest}=await import('./ci-identity.mjs');
  const root=mkdtempSync(join(tmpdir(),'ci-concurrent-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:4,bootstrap:true});
- const first=leases.reserveLocal(ciRequest('I',ci));
+ const firstSlot=new LocalLeases(leases.directory,{hostGeneration:'bridge-1',slots:4,slot:0}),secondSlot=new LocalLeases(leases.directory,{hostGeneration:'bridge-1',slots:4,slot:1});
+ const first=firstSlot.reserveLocal(ciRequest('I',ci));
  const secondCI={...ci,jobId:902};
- const second=leases.reserveLocal(ciRequest('I',secondCI));
+ const second=secondSlot.reserveLocal(ciRequest('I',secondCI));
  assert.equal(first.code,0);assert.equal(second.code,0);
  assert.equal(first.lease.turn,'ci-789-1-901');assert.equal(second.lease.turn,'ci-789-1-902');
  assert.equal(first.lease.slot,0);assert.equal(second.lease.slot,1);
  assert.equal(leases.start(first.lease),true);assert.equal(leases.start(second.lease),true);
- assert.equal(leases.release(first.lease,{resourceId:first.lease.resourceId,absent:true}),true);
+ assert.equal(firstSlot.release(first.lease,{resourceId:first.lease.resourceId,absent:true}),true);
  assert.equal(leases.inspect().slots[1].state,'running');
- assert.equal(leases.inspect().orphanRunners[0].runnerName,'dt-123-789-1-901');
+ assert.equal(firstSlot.inspect().orphanRunners[0].runnerName,'dt-123-789-1-901');
+});
+
+// An old completed attempt must not gain a new turn just because its naming changed.
+test('a retained legacy CI turn prevents a new-format replay of the same attempt',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');const leases=setup(t),path=join(leases.directory,'state.json');const state=leases.inspect();
+ state.slots[0].generation=1;state.turns['I:ci-789-1']={fingerprint:'c'.repeat(64),slot:0,generation:1};const before=JSON.stringify(state);writeFileSync(path,before);
+ assert.equal(leases.reserveLocal(ciRequest('I',ci)).code,75);assert.equal(readFileSync(path,'utf8'),before);
+});
+
+test('multi-slot CI reservation refuses a caller without a selected slot',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');const root=mkdtempSync(join(tmpdir(),'ci-scope-required-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:4,bootstrap:true});
+ assert.throws(()=>leases.reserveLocal(ciRequest('I',ci)),/scoped|slot/i);assert.ok(leases.inspect().slots.every(s=>s.state==='free'));
 });

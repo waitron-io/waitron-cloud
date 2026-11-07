@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {ciIdentity,ciRequest,runnerName,orphanRunner,ciInvocation} from './ci-identity.mjs';
 import {createHash, randomUUID} from 'node:crypto';
-import {constants, fstatSync, mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync} from 'node:fs';
+import {constants, fstatSync, mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync, readdirSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
@@ -100,6 +100,7 @@ export class LocalLeases {
         Number.isSafeInteger(lease.deadline) && lease.deadline > lease.createdAt &&
         lease.deadline - lease.createdAt <= maxDuration, 'Invalid occupied lease');
     }
+    assert.ok(this.capacity===1 || state.ciInvocation===undefined && !(state.orphanRunners?.length),'Shared CI metadata in a multi-slot ledger requires reconciliation');
     for(const record of [state,...state.slots]) {
     if(record.ciInvocation!==undefined) ciInvocation(record.ciInvocation);
     if(record.orphanRunners!==undefined) {
@@ -107,6 +108,13 @@ export class LocalLeases {
       record.orphanRunners.forEach(orphanRunner);
       assert.equal(new Set(record.orphanRunners.map(r=>r.runnerName)).size,record.orphanRunners.length,'Duplicate orphan runner');
     }
+    }
+    if(this.capacity>1)for(const name of readdirSync(this.directory))if(/^state-[a-f0-9-]{36}\.tmp$/.test(name)){
+      try{
+        const path=join(this.directory,name),info=lstatSync(path);
+        assert.ok(info.isFile() && !info.isSymbolicLink() && info.uid===process.getuid() && (info.mode&0o077)===0,'Unowned ledger temporary');
+        unlinkSync(path);
+      }catch(error){if(error.code!=='ENOENT')console.error('Interrupted ledger temporary retained');}
     }
     const before=initialize?undefined:JSON.stringify(state);
     const now = this.now();
@@ -134,10 +142,12 @@ export class LocalLeases {
 
   reserveLocal(request, {healthy = true, durationMs = maxDuration} = {}) {
     const identity = requestIdentity(request);
+    if(identity.ci)assert.ok(this.capacity===1 || this.slot!==undefined,'Concurrent CI requires a scoped slot');
     assert.ok(typeof healthy === 'boolean', 'Invalid host health');
     assert.ok(Number.isSafeInteger(durationMs) && durationMs > 0 && durationMs <= maxDuration, 'Invalid lease duration');
     if (!healthy) return {code: 75, reason: 'host-down'};
     return this.transaction((state, now) => {
+      if(identity.ci && state.turns[`${identity.lane}:ci-${identity.ci.runId}-${identity.ci.attempt}`])return {code:75,reason:'legacy-ci-attempt-recorded'};
       const key = `${identity.lane}:${identity.turn}`, fingerprint = digest(identity);
       const prior = state.turns[key];
       if (prior) {
@@ -172,6 +182,7 @@ export class LocalLeases {
     });
   }
   release(lease, observation) {
+    if(lease?.ci)assert.ok(this.capacity===1 || this.slot!==undefined,'Concurrent CI cleanup requires a scoped slot');
     return this.transaction(state => {
       const slot = state.slots[lease?.slot];
       if (!this.owns(slot, lease)) return false;
@@ -202,6 +213,7 @@ export class LocalLeases {
     return Boolean(result);
   }
   setInvocation(value) {
+    assert.ok(this.capacity===1 || this.slot!==undefined,'Concurrent CI intent requires a scoped slot');
     ciInvocation(value);
     return this.transaction(state=>{this.scope(state).ciInvocation=value;return value;});
   }
@@ -217,5 +229,11 @@ export class LocalLeases {
       record.orphanRunners.splice(index,1);return true;
     });
   }
-  inspect() { return this.transaction(state => this.slot===undefined?state:{...state,...this.scope(state),slots:[state.slots[this.slot]]}); }
+  inspect() { return this.transaction(state => {
+    if(this.slot===undefined)return state;
+    const scoped=this.scope(state);
+    return {version:state.version,hostGeneration:state.hostGeneration,turns:state.turns,slots:[scoped],
+      ...(scoped.ciInvocation===undefined?{}:{ciInvocation:scoped.ciInvocation}),
+      ...(scoped.orphanRunners===undefined?{}:{orphanRunners:scoped.orphanRunners})};
+  }); }
 }

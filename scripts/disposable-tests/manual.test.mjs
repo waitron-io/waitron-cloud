@@ -94,3 +94,15 @@ test('an admitted command returning75 is never retried on another slot',async t=
  let executions=0;const result=await withAvailableSlot({state,hostGeneration:'test',slots:4},async()=>{executions++;return {code:75,cleanup:'absent'};});
  assert.equal(executions,1);assert.equal(result.code,75);assert.equal(result.cleanup,'absent');
 });
+
+// VM absence alone cannot retire the pending GitHub outcome.
+test('every free slot with an unfinished CI intent refuses a new owner',async t=>{
+ const {withAvailableSlot}=await import('./manual.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const root=mkdtempSync(join(tmpdir(),'pending-pool-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,bootstrap:true});
+  for(let slot=0;slot<4;slot++)await withKernelLock(state+'/slot-'+slot,async()=>({code:0}),{bootstrap:true});
+ },{bootstrap:true});
+ for(let slot=0;slot<4;slot++)new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,slot}).setInvocation({nonce:String(slot+1).repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901+slot});
+ assert.equal((await withAvailableSlot({state,hostGeneration:'test',slots:4},()=>assert.fail('A pending CI record was overwritten'))).code,75);
+ const current=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4}).inspect();assert.deepEqual(current.slots.map(s=>s.ciInvocation.jobId),[901,902,903,904]);
+});

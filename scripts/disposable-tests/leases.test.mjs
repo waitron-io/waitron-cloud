@@ -223,3 +223,29 @@ test('slot-scoped CI intent and cleanup never overwrite a running neighbor',asyn
  assert.equal(second.inspect().slots[0].state,'running');assert.equal(second.inspect().ciInvocation.jobId,902);
  assert.equal(leases.inspect().slots[2].lease.turn,'scoped-b');
 });
+
+// Shared CI metadata cannot be inherited or silently hidden by a multi-slot view.
+test('multi-slot CI metadata must be scoped and malformed shared records stay intact',async t=>{
+ const {leases,dir}=await setup(t,{slots:4});const {LocalLeases}=await import(module);
+ const slot=new LocalLeases(dir,{...config,slots:4,slot:2});
+ const invocation={nonce:'c'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ assert.throws(()=>leases.setInvocation(invocation),/scoped|slot/i);
+ assert.equal(slot.inspect().state,undefined);assert.equal(slot.inspect().id,undefined);
+ slot.setInvocation(invocation);assert.equal(slot.inspect().ciInvocation.jobId,901);
+ const path=join(dir,'state.json'),damaged=leases.inspect();damaged.ciInvocation={...invocation,nonce:'d'.repeat(32)};const bytes=JSON.stringify(damaged);writeFileSync(path,bytes);
+ assert.throws(()=>slot.inspect(),/shared.*CI|scoped/i);assert.throws(()=>leases.inspect(),/shared.*CI|scoped/i);
+ assert.equal(readFileSync(path,'utf8'),bytes);
+});
+
+// Only the ledger lock proves an abandoned temporary file has no live writer.
+test('multi-slot housekeeping waits for the writer before removing its interrupted temporary',async t=>{
+ const {spawn}=await import('node:child_process');const {once}=await import('node:events');
+ const {leases,dir}=await setup(t,{slots:4});const temporary=join(dir,'state-11111111-1111-4111-8111-111111111111.tmp');
+ const program=`import {withKernelLock} from ${JSON.stringify(new URL('./kernel-lock.mjs',import.meta.url).href)};import {writeFileSync,existsSync} from 'node:fs';
+ await withKernelLock(${JSON.stringify(dir)},async()=>{writeFileSync(${JSON.stringify(temporary)},'interrupted',{mode:0o600});console.log('held');await new Promise(r=>setTimeout(r,250));if(!existsSync(${JSON.stringify(temporary)}))throw new Error('Live writer temporary was deleted');});`;
+ const child=spawn(process.execPath,['--input-type=module','-e',program],{stdio:['ignore','pipe','pipe']});const closed=once(child,'close');let error='';child.stderr.on('data',b=>error+=b);
+ try{
+  await Promise.race([once(child.stdout,'data'),closed.then(()=>assert.fail('Writer never held its lock: '+error))]);
+  leases.inspect();assert.equal((await closed)[0],0,error);assert.equal(existsSync(temporary),false);
+ }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');await closed;}
+});

@@ -135,3 +135,20 @@ test('recovery serializes run cancellation across independently owned slots',asy
   assert.equal((await reconcileManual({...config,slot:1})).code,0);assert.equal(posts,1);
  }finally{finish();await Promise.allSettled([first,...(second?[second]:[])]);}
 });
+
+// A busy API-recovery lock is deferred work, not evidence of a live guest owner.
+test('pool recovery distinguishes pending CI cleanup from live slot owners',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
+ const root=mkdtempSync(join(tmpdir(),'ci-recovery-pending-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,bootstrap:true});
+  for(let slot=0;slot<4;slot++)await withKernelLock(state+'/slot-'+slot,async()=>({code:0}),{bootstrap:true});
+ },{bootstrap:true});
+ new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,slot:2}).setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ const api={get:async path=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:'completed',conclusion:'success'}:
+ {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:'in_progress'}};
+ const config={state,hostGeneration:'test',slots:4,ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,transport:{destroy:async()=>assert.fail('No guest remains')}};
+ let ready,finish;const held=new Promise(r=>ready=r),gate=new Promise(r=>finish=r);const locked=withKernelLock(state,async()=>{ready();await gate;return {code:0};});
+ try{await held;const result=await reconcileManual(config);assert.equal(result.cleanup,'pending');assert.equal(result.busy,0);assert.equal(result.pending,1);}
+ finally{finish();await locked;}
+ const complete=await reconcileManual(config);assert.equal(complete.cleanup,'absent');assert.equal(complete.pending,0);
+});

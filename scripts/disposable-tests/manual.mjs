@@ -99,13 +99,13 @@ export async function recoverState({leases,transport,signal=AbortSignal.timeout(
 export async function reconcileManual({state,hostGeneration,slots=1,slot,transport,signal,deadline,ci,api}) {
   protectOutputStreams();
   if(slots>1 && slot===undefined){
-    let busy=0;
+    let busy=0,pending=0;
     for(let selected=0;selected<slots;selected++){
       const result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});
-      if(result.code===75){busy++;continue;}
+      if(result.code===75){if(result.reason==='controller-busy')busy++;else pending++;continue;}
       assert.equal(result.code,0,'Slot recovery failed');
     }
-    return {code:0,cleanup:busy?'live-owners-preserved':'absent',busy};
+    return {code:0,cleanup:pending?'pending':busy?'live-owners-preserved':'absent',busy,pending};
   }
   const ownedState=slot===undefined?state:join(state,'slot-'+slot);
   return withKernelLock(ownedState,async()=>{
@@ -146,7 +146,9 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
         }
         return result;
         };
-        return slots>1?withKernelLock(state,reconcileCI,{signal:cleanup}):reconcileCI();
+        if(slots===1)return reconcileCI();
+        const outcome=await withKernelLock(state,reconcileCI,{signal:cleanup});
+        return outcome.code===75?{...outcome,reason:'ci-recovery-busy'}:outcome;
       }
       return result;
     });
@@ -221,9 +223,10 @@ export async function main(args) {
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
       } finally { rmSync(temporary, {recursive: true, force: true}); }
     });
-    if(!reconciling || result.code!==0 || result.resourceId)
+    if(!reconciling || result.code!==0 || result.resourceId || result.pending)
       console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
-        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error}));
+        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error,
+        ...(result.pending?{pending:result.pending,busy:result.busy}:{})}));
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:

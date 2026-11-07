@@ -64,4 +64,27 @@ except BlockingIOError:sys.exit(75)
                         child.kill();child.communicate();raise
                 self.assertEqual(child.returncode,0,stderr);self.assertEqual(stdout.strip(),'acquired')
 
+    def test_admission_counts_a_retained_guest_without_an_active_record(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        import os,tempfile,types
+        with tempfile.TemporaryDirectory(prefix='d599-quarantine-budget-') as temporary:
+            root=Path(temporary);turn=root/'turns/dt-quarantined-4-1';turn.mkdir(parents=True);(turn/'disk.qcow2').write_bytes(b'owned retained disk')
+            read_text=Path.read_text;lstat=Path.lstat
+            def read(path,*args,**kwargs):
+                text=str(path)
+                if text=='/proc/meminfo':return 'MemTotal: 131072000 kB\n'
+                if text.startswith('/sys/devices/system/cpu/'):
+                    cpu=int(text.split('/cpu')[-1].split('/')[0])
+                    return '0' if text.endswith('physical_package_id') else str(cpu%16)
+                return read_text(path,*args,**kwargs)
+            def owned(path):
+                value=lstat(path)
+                return types.SimpleNamespace(st_mode=value.st_mode,st_uid=0,st_blocks=value.st_blocks) if str(path).startswith(str(root)) else value
+            with patch.object(host,'ROOT',root),patch.object(Path,'read_text',read),patch.object(Path,'lstat',owned),patch.object(host.os,'sched_getaffinity',lambda pid:set(range(32)),create=True),patch.object(host.shutil,'disk_usage',lambda path:types.SimpleNamespace(total=1000*G,free=500*G)):
+                admitted=host.capacity('dt-proposed-0-1');self.assertEqual(admitted['slots'],2)
+                self.assertEqual(admitted['cpus'],list(range(4,16))+list(range(20,32)))
+                with patch.object(host.shutil,'disk_usage',lambda path:types.SimpleNamespace(total=1000*G,free=327*G)):
+                    with self.assertRaisesRegex(ValueError,'disk'):host.capacity('dt-proposed-0-1')
+
 unittest.main(verbosity=2)

@@ -405,7 +405,8 @@ def main():
         healthy = startup.ready()
         if healthy:
             try:
-                host.capacity()
+                with host.locked():
+                    host.capacity()
             except (OSError,ValueError):
                 healthy = False
         print(json.dumps({'healthy': healthy}))

@@ -24,11 +24,11 @@ class Guards(unittest.TestCase):
   # Inventory fixtures stay private regardless of the invoking shell's umask.
   previous_umask=os.umask(0o077);self.addCleanup(os.umask,previous_umask)
   self.temp=tempfile.TemporaryDirectory(prefix='disposable-host-policy-');self.addCleanup(self.temp.cleanup)
-  self.root=Path(self.temp.name);self.control=self.root/'control';self.control.mkdir();self.ops=self.root/'operations'
+  self.host_locked=host.locked;self.root=Path(self.temp.name);self.control=self.root/'control';self.control.mkdir();self.ops=self.root/'operations'
   self.resource='dt-policy-0-1';self.live=set();self.active=False;self.transferred=False;self.order=[]
   self.request={'resourceId':self.resource,'snapshot':hashlib.sha256(b'opaque source').hexdigest(),'argv':['true'],'deadline':int(time.time()*1000)+60000}
   boot=self.root/'boot-id';boot.write_text('11111111-1111-4111-8111-111111111111')
-  values=[(host,'capacity',lambda extra=None:{'slots':1,'cpus':list(range(4,16))}),(host,'ROOT',self.root),(startup,'BOOT_ID',boot),(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
+  values=[(host,'locked',contextlib.nullcontext),(host,'capacity',lambda extra=None:{'slots':1,'cpus':list(range(4,16))}),(host,'ROOT',self.root),(startup,'BOOT_ID',boot),(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
           (host,'run',self.provider_run),(host,'observation',lambda r:{'resourceId':r,'running':False,'absent':True}),
           (host,'table_present',lambda r:False),
           (host,'service_state',lambda r:{'absent':not self.active,'running':self.active}),
@@ -156,5 +156,35 @@ class Guards(unittest.TestCase):
   with patch.object(session,'os',types.SimpleNamespace(geteuid=lambda:0)),patch.object(session,'Path',lambda p:types.SimpleNamespace(is_char_device=lambda:True) if str(p)=='/dev/kvm' else original(p)),patch.object(sys,'argv',['session.py','health']),contextlib.redirect_stdout(output):
    self.assertEqual(session.main(),0)
   self.assertEqual(json.loads(output.getvalue()),{'healthy':True})
+
+ def test_health_owns_the_host_inventory_lock_while_reading_capacity(self):
+  import fcntl,stat
+  original_path=host.Path;original_fstat=os.fstat;original_lstat=Path.lstat;result=io.StringIO()
+  def metadata(path):
+   value=original_lstat(path);return types.SimpleNamespace(st_mode=value.st_mode,st_uid=0,st_size=value.st_size,st_blocks=value.st_blocks)
+  def measured_capacity():
+   with (self.root/'operation.lock').open('r+') as other:
+    try:fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    except BlockingIOError:return {'slots':1,'cpus':[4,5,20,21]}
+    self.fail('Health read allocation inventory without the host lock')
+  def directory(path,mode=0o700):path.mkdir(mode=mode,parents=True,exist_ok=True)
+  fake_path=lambda value:types.SimpleNamespace(is_char_device=lambda:True) if str(value)=='/dev/kvm' else original_path(value)
+  with patch.object(host,'locked',self.host_locked),patch.object(host,'directory',directory),patch.object(host.os,'geteuid',lambda:0),patch.object(host.os,'fstat',lambda fd:types.SimpleNamespace(st_mode=original_fstat(fd).st_mode,st_uid=0)),patch.object(host,'Path',fake_path),patch.object(session,'Path',fake_path),patch.object(Path,'lstat',metadata),patch.object(host,'capacity',measured_capacity),patch.object(sys,'argv',['session.py','health']),contextlib.redirect_stdout(result):
+   # The fixture has a genuine readiness record; only OS ownership is replaced.
+   with (self.root/'operation.lock').open('w'):pass
+   (self.root/'operation.lock').chmod(0o600)
+   self.assertEqual(session.main(),0)
+  self.assertEqual(json.loads(result.getvalue()),{'healthy':True})
+
+ def test_create_applies_the_measured_cpu_pool_to_the_actual_systemd_request(self):
+  (self.root/'turns').mkdir();(self.root/'history').mkdir();calls=[]
+  key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGiUcL7F9BcOzhFJbD97eQj+L6u16A5RylAnj1BrChgC'
+  request={'resourceId':'dt-affinity-1-1','deadline':int(time.time()*1000)+60000,'sshPublicKey':key}
+  def provider(*argv,**kwargs):calls.append(argv);return subprocess.CompletedProcess(argv,0,stdout='',stderr='')
+  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',lambda extra=None:{'slots':1,'cpus':[4,5,20,21]}),patch.object(host,'image_verified',lambda:None),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None),patch.object(host,'run',provider):
+   host.create(request)
+  service=next(argv for argv in calls if argv[0]=='systemd-run')
+  self.assertIn('AllowedCPUs=4,5,20,21',service);self.assertIn('User=62001',service)
+
 
 unittest.main(verbosity=2)
