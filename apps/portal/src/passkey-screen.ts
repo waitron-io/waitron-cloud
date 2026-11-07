@@ -41,7 +41,9 @@ export function passkeyAccountScreen(app: PortalApp) {
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#passkey-add'))}
       @wt-change=${(event: CustomEvent<{value: string}>) => {
         app.passkeys.password = event.detail.value;
-        if (app.passkeys.password && app.passkeys.error === 'requiredPassword') app.passkeys.error = undefined;
+        if (app.passkeys.password && app.passkeys.error === 'requiredPassword') {
+          app.passkeys.error = undefined; app.passkeys.notice = undefined;
+        }
         app.draw();
       }}></wt-input>
     ${app.passkeys.supported === false ? nothing : html`<wt-form-actions>
