@@ -97,3 +97,14 @@ test('translation actions use the same signed machine namespace and cannot cross
     assert.throws(()=>verifyMachine(signed,other.publicKey.export({type:'spki',format:'der'}).toString('base64url'),origin,action,now));
   }
 });
+
+test('box error and held actions stay bound to their signed action and origin',()=>{
+ for(const action of ['error-report','release-held'] as const){
+  const c={...claims,action} as MachineClaims,signed=proof(c);
+  assert.equal(readMachineClaims(signed).action,action);
+  assert.equal(verifyMachine(signed,publicKey,origin,action,now).action,action);
+  assert.throws(()=>verifyMachine(signed,publicKey,origin,'report',now));
+  assert.throws(()=>verifyMachine(signed,publicKey,origin,action,now+60001));
+  assert.throws(()=>verifyMachine(signed,publicKey,'https://elsewhere.example.test',action,now));
+ }
+});

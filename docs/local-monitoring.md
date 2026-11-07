@@ -264,13 +264,14 @@ supplied history cutoff; no retention duration is selected for you.
 ## Rehearse the monitoring schema upgrade
 
 Run the populated upgrade against a clean committed implementation. The old revision
-below has 36 migrations; the new revision must have 37:
+below has 36 migrations; the pinned new revision has 37. Keep this historical
+pair fixed when later migrations land:
 
 ```sh
 node scripts/schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json \
   --monitoring-quiet \
   --old d681db284ac8babeffb9f1029c2c32f8dc47701c \
-  --new "$(git rev-parse HEAD)"
+  --new 08c30216e4b415689f5d82b2b7f878af8d8bca7e
 node scripts/verify-schema-upgrade-receipt.mjs /tmp/cloud-monitoring-upgrade.json
 ```
 

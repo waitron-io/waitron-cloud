@@ -1,3 +1,5 @@
+import {BoxErrorReports} from '@waitron-cloud/registration';
+import {boxErrorResponse} from './box-error-reports.ts';
 import {TunnelProvisionMachine,tunnelProvisionResponse,type TunnelProvisionOptions} from './tunnel-provision.ts';
 import {AddressLookupMachine,addressLookupResponse,type AddressLookupOptions} from './address-lookup.ts';
 import {createBillingDisplayMachine,billingDisplayResponse,type BillingDisplayOptions} from './billing-display.ts';
@@ -95,6 +97,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust,options.planMode,allowances):undefined;
   const billingDisplay=createBillingDisplayMachine({pool,issuer:options.leaseIssuer,origin:config.portalOrigin,display:options.billingDisplay,trusted:options.leaseTrust});
+  const boxErrors=options.leaseIssuer?new BoxErrorReports(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust):undefined;
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
@@ -140,6 +143,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
+    if(c.req.path==='/api/installations/error-report'||c.req.path==='/api/installations/release-held')return boxErrorResponse(c,{machine:boxErrors,ip,consume});
     if(c.req.path==='/api/installations/tunnel-provision')return tunnelProvisionResponse(c,{machine:tunnelProvision,ip,consume});
     if(c.req.path==='/api/installations/address-lookup')return addressLookupResponse(c,{machine:addressLookup,ip,consume});
     if(translationPaths.includes(c.req.path))return translationResponse(c,{machine:translation,ip,consume});
