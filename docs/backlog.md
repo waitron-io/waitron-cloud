@@ -3163,7 +3163,7 @@ implementation or production evidence.
   reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
   without changing the 30-second deadline. Real public retrieval qualifies all
   four catalogues; it does not authenticate an account or reconcile billing. Qualification
-  of first-machine quantity and fixed-cost assumptions, the explained opening account costs, binding itemized billing to the guest,
+  of first-machine quantity and fixed-cost assumptions, the explained opening account costs, reporting measured runtime separately from the itemized account bill,
   real S3 behavior including private ledger export, and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
