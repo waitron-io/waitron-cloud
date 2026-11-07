@@ -86,7 +86,7 @@ class Transfer(unittest.TestCase):
     def test_private_package_bytes_require_the_reviewed_integrity(self):
         package = b'reviewed private package fixture'
         original = getattr(session, 'PACKAGE_SHA512', None)
-        session.PACKAGE_SHA512 = hashlib.sha512(package).digest()
+        session.PACKAGE_SHA512 = {hashlib.sha512(package).digest()}
         self.addCleanup(setattr, session, 'PACKAGE_SHA512', original)
         result = session.receive(self.root, self.resource, self.archive(extras={'ui.tgz': package}))
         self.assertEqual(result, self.request)
@@ -113,5 +113,24 @@ class Transfer(unittest.TestCase):
             with self.assertRaises(ValueError):session.receive(self.root,resource2,self.archive(request={**raw,'resourceId':resource2,'deadline':now+3305001}))
             self.assertFalse((self.root/resource2).exists())
 
+
+    def test_every_reviewed_package_digest_is_consumed_by_the_actual_host_transfer(self):
+        from unittest.mock import patch
+        packages_spec=importlib.util.spec_from_file_location('packages',Path(__file__).resolve().parents[2]/'scripts/disposable-tests/private-packages.py')
+        packages=importlib.util.module_from_spec(packages_spec);packages_spec.loader.exec_module(packages)
+        original=session.hashlib.file_digest
+        for index,package in enumerate(packages.PACKAGES,10):
+            expected=base64.b64decode(package['integrity'][7:]);resource=f'dt-transfer-0-{index}'
+            def digest(source,algorithm):
+                if Path(source.name).name=='ui.tgz':
+                    class CheckedBytes:
+                        def digest(self):return expected
+                    return CheckedBytes()
+                return original(source,algorithm)
+            with patch.object(session.hashlib,'file_digest',digest):
+                try:result=session.receive(self.root,resource,self.archive(request={**self.request,'resourceId':resource},extras={'ui.tgz':b'synthetic crypto-provider input'}))
+                except ValueError as error:self.fail('A reviewed package was refused: '+str(error))
+            self.assertEqual(result['resourceId'],resource)
+            self.assertTrue((self.root/resource/'ui.tgz').is_file())
 
 unittest.main(verbosity=2)

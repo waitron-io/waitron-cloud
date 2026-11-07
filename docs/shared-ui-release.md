@@ -30,10 +30,12 @@ Before merging:
 3. Update the smoke test's version and source expectations while retaining
    its assertions and browser checks.
 4. Update the reviewed tarball URL and integrity in
-   `scripts/disposable-tests/private-packages.py`, and the filename selected by
-   `manual.mjs`, its pipeline fixture and the guest proof. Keep older approved
-   tarballs needed by historical checkouts. The disposable package check must
-   cover the current lockfile.
+   `scripts/disposable-tests/private-packages.py` and the host’s accepted SHA512
+   digests in `deploy/disposable-tests/session.py`. Keep older approved tarballs
+   needed by historical checkouts. The helper selects the package from the
+   captured lockfile, so it needs no version-specific filename change. Update
+   the guest proof’s input filename. The disposable package checks must cover
+   the current lockfile and run each approved digest through host transfer.
 5. Review the changed dependencies and their actual test owners using the
    [root ownership](ci-root-input-ownership.md) and
    [documentation selection](ci-documentation-audit.md) guides.

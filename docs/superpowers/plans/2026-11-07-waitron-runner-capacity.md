@@ -13,7 +13,7 @@ Follow the [design](../specs/2026-11-06-disposable-test-server-design.md) and [e
 - [ ] Extend existing controller/lease/transport modules: short locked ledger updates; slot ownership before reservation through cleanup; recover only unowned slots. Put existing CI intent/temporary directories per slot. Turn identity becomes `ci-RUN-ATTEMPT-JOB`; serialize run-level fallback. Keep the ledger maximum; budget selects capacity.
 - [ ] Extend existing host/session/startup/guest consumers: validate slots, port `22000+slot`, UID `62000+slot`, reserved accounts and existing active record per slot. Preserve tombstones, independent absence, quarantine and runner-removal retries. Drain before coupled publication/new bootstrap; enable several slots only with matching host support.
 
-- [ ] Preserve manual Cloud use after main’s shared UI update: the actual 0.2.1 tarball currently fails host transfer. Select the single approved release from the captured source lockfile, send the existing `ui.tgz` field, and accept only the two already-reviewed digests. Retain legacy source and corruption checks; authentication origins stay fixed.
+- [ ] Preserve manual Cloud use after main’s UI update: on the Mac select one exact approved URL/integrity from captured `source.tar`’s bounded lockfile; refuse missing, unknown or mixed pins. Keep `ui.tgz`, both approved digests, old/corrupt controls and fixed authentication origins. Test each approved pin through host transfer.
 
 ### Prove and measure
 

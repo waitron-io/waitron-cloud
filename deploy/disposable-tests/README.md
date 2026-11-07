@@ -58,13 +58,13 @@ bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST \
   < deploy/disposable-tests/host-runtime.test.py
 ```
 
-Prepare the reviewed private UI package on the Mac before copying source. The adapter downloads only its reviewed release, verifies its full SHA512 and refuses candidate-selected authenticated URLs:
+Prepare the reviewed private UI package on the Mac before copying source. The adapter downloads only its reviewed releases, verifies their full SHA512 digests and refuses candidate-selected authenticated URLs:
 
 ```sh
 python3 scripts/disposable-tests/private-packages.py fetch /tmp/cloud-private-packages
 ```
 
-The package token stays in the Mac process. GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence.
+The package token stays in the Mac process. The helper selects one approved URL and integrity from `pnpm-lock.yaml` inside the captured source archive, then sends that release using the existing `ui.tgz` bundle member. A missing, unknown or mixed private pin refuses preparation; captured files never supply an authenticated URL. The host accepts only the reviewed release digests and verifies the full bytes, including for historical checkouts. GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence.
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 

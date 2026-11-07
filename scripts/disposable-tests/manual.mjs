@@ -209,10 +209,13 @@ export async function main(args) {
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
         const snapshot = JSON.parse(copied.stdout).sha256;
+        const selected=await runProcess('python3',['-I','-B',new URL('./private-packages.py',import.meta.url).pathname,'select',source],{signal:cancellation.signal,capture:true});
+        assert.equal(selected.code,0,'Captured source needs one reviewed private release');
+        const privateFile=selected.stdout.trim();assert.match(privateFile,/^ui-core-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
         const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
         transport.source = source;
-        transport.privatePackage = join(temporary, 'private', 'ui-core-0.2.1.tgz');
+        transport.privatePackage = join(temporary, 'private', privateFile);
         console.log(`Source ${snapshot}; command starts in a fresh VM, maximum 55 minutes.`);
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});

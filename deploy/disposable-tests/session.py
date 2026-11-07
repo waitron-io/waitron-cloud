@@ -22,7 +22,10 @@ from host import resource_id
 
 MAX_BUNDLE = 577 * 1024 * 1024
 LIMITS = {'request.json': 65536, 'source.tar': 512 * 1024 * 1024}
-PACKAGE_SHA512 = base64.b64decode('MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==')
+PACKAGE_SHA512 = {base64.b64decode(value) for value in [
+    'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
+    'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
+]}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'
 RECIPE = Path(__file__).resolve().parent
@@ -131,7 +134,7 @@ def receive(root, resource, stream):
                 raise ValueError('Snapshot digest mismatch')
         if 'ui.tgz' in seen:
             with (target/'ui.tgz').open('rb') as source:
-                if hashlib.file_digest(source, 'sha512').digest() != PACKAGE_SHA512:
+                if hashlib.file_digest(source, 'sha512').digest() not in PACKAGE_SHA512:
                     raise ValueError('Private package integrity mismatch')
         bundle.unlink()
         return request
