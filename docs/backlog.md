@@ -180,6 +180,7 @@ and its [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-ve
 own this remaining qualification. The [compatibility plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
 records the bounded fixture and route amendments. No fiscal implementation,
 immutable row, historical result or deployment authority changes here.
+The current-image full journey remains unqualified: its plan helper was killed (exit 137, no stderr), then a targeted run met readiness 503; Lane H local receipts are `~/waitron-campaign-h/receipts/d598/plan-diagnostic-current-linux.log` and `~/waitron-campaign-h/receipts/d598/plan-memory-current-linux.log`.
 
 ## Retrospective review qualification (D535)
 
@@ -976,12 +977,6 @@ implementation or production evidence.
   four-volume rollback. Free-service fixtures stay separate from unavailable
   Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
   protected Waitron containers are never adopted.
-
-  Current-release paid-stream qualification remains open. Both paired-version
-  installers build, and the old-default journey passes with the direct mail-worker
-  entry at the unchanged 64 MiB cap. Current-image runs still meet a killed plan
-  helper (exit 137) and an earlier readiness 503; their causes remain unproved.
-  Keep the full current-image journey and capacity qualification open.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
