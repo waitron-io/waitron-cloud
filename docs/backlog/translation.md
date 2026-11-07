@@ -276,7 +276,7 @@ backend IDs with their termination results, which have already passed the testâ€
 four connections; update this diagnostic if either producer limit changes.
 The sender and parent accept only
 bounded integer IDs and booleans; other fields and private output remain refused.
-Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec node --test test/worker-diagnostic-binding.test.ts`
+Run `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/translation-disconnect-binding.test.mjs`
 to force this exact assertion to fail after a real backend termination and check
 that its safe details survive the proof. This qualifies evidence capture, not the
 historical cause. Active-job failure ordering at direct pool queries remains
