@@ -8,6 +8,13 @@ import {pathToFileURL} from 'node:url';
 import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention, assertHistoricalV1, auditModes, recordFilename, serializeRecord, writeAuditRecords} from './ci-input-audit-records.mjs';
 
 const immutableAudits = new WeakMap();
+const parsedPolicyBlobs = new WeakMap();
+const verifiedTombstoneAncestry = new WeakMap();
+const blobId = source => createHash('sha1').update(`blob ${Buffer.byteLength(source)}\0`).update(source).digest('hex');
+function rememberPolicy(git, objectId) {
+  if (!parsedPolicyBlobs.has(git)) parsedPolicyBlobs.set(git, new Set());
+  parsedPolicyBlobs.get(git).add(objectId);
+}
 
 const policyPath = 'scripts/ci-input-audit.json';
 const digestPattern = /^[a-f0-9]{64}$/;
@@ -123,6 +130,7 @@ export function readInputAudit(revision, git) {
   const entries = parseEntries(git('ls-tree', '-rz', '--full-tree', revision));
   regular(entries, policyPath);
   const policy = parsePolicy(git('show', `${revision}:${policyPath}`));
+  rememberPolicy(git, entries.find(entry => entry.path === policyPath).objectId);
   if (entries.some(entry => entry.path === auditDescriptor || entry.path.startsWith(auditRecordRoot))) {
     const rawTree = git('ls-tree', '-rz', '--full-tree', revision, {binary: true});
     assert.ok(Buffer.isBuffer(rawTree), 'V2 audit requires raw tree bytes');
@@ -222,7 +230,12 @@ export function auditInputMode(mode, revision, git, manifestPaths = []) {
       if (record.state !== 'absent') continue;
       try {
         assert.ok(kind !== 'commit' || record.previousRevision !== revision, 'Tombstone must name a prior ancestor');
-        git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
+        if (!verifiedTombstoneAncestry.has(git)) verifiedTombstoneAncestry.set(git, new Set());
+        const ancestors = verifiedTombstoneAncestry.get(git), key = `${record.previousRevision}\0${ancestor}`;
+        if (!ancestors.has(key)) {
+          git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
+          ancestors.add(key);
+        }
         assert.ok(currentRecord(mode, record.path, record.previousRevision, git), 'Stale tombstone ancestor evidence');
       } catch (error) { throw new Error(`Invalid audit tombstone for ${record.path}: ${error.message}`); }
     }
@@ -274,29 +287,28 @@ function currentRecord(mode, path, revision, git) {
   if (priorRecords.get(git)?.has(key)) return priorRecords.get(git).get(key);
   if (!proofTrees.has(git)) proofTrees.set(git, new Map());
   const trees = proofTrees.get(git);
-  const treeKey = `${revision}\0${mode}\0${path}`;
-  if (!trees.has(treeKey)) {
-    const wanted = [policyPath, auditDescriptor, recordFilename(mode, path), path, ...targets[mode] ?? [],
-      ...(mode === 'lock' ? ['pnpm-lock.yaml'] : [])];
-    const bytes = git('--literal-pathspecs', 'ls-tree', '-rz', '--full-tree', revision, '--', ...wanted, {binary: true});
+  // One immutable inventory supplies every removed path and mode at this ancestor.
+  if (!trees.has(revision)) {
+    const bytes = git('ls-tree', '-rz', '--full-tree', revision, {binary: true});
     assert.ok(Buffer.isBuffer(bytes), 'Prior audit tree requires raw bytes');
-    trees.set(treeKey, parseEntries(new TextDecoder('utf-8', {fatal: true}).decode(bytes)));
+    trees.set(revision, parseEntries(new TextDecoder('utf-8', {fatal: true}).decode(bytes)));
   }
-  const entries = trees.get(treeKey);
+  const entries = trees.get(revision);
   const policyEntry = entries.find(entry => entry.path === policyPath);
   const descriptor = entries.find(entry => entry.path === auditDescriptor);
   const recordEntry = entries.find(entry => entry.path === recordFilename(mode, path));
   let result = null;
   if (policyEntry && descriptor && recordEntry) try {
     regular(entries, policyPath);
+    regular(entries, auditDescriptor);
+    regular(entries, recordFilename(mode, path));
+    assert.equal(descriptor.objectId, blobId('{"version":2}\n'), 'Invalid prior v2 descriptor');
+    if (!parsedPolicyBlobs.get(git)?.has(policyEntry.objectId)) {
+      parsePolicy(git('show', `${revision}:${policyPath}`));
+      rememberPolicy(git, policyEntry.objectId);
+    }
     const source = entries.find(entry => entry.path === path);
     const manifest = mode === 'lock' && manifestPath(path);
-    const wanted = [policyEntry, descriptor, recordEntry, ...(manifest && source ? [source] : [])];
-    const blobs = git.readBlobs(wanted.map(entry => entry.objectId));
-    parsePolicy(blobs.get(policyEntry.objectId));
-    const read = () => assert.fail('Prior-path metadata must use its batched blobs');
-    read.readBlobs = () => blobs;
-    const record = readModeRecords(revision, read, [descriptor, recordEntry])[mode].get(path);
     for (const target of targets[mode] ?? []) regular(entries, target);
     if (mode === 'lock') regular(entries, 'pnpm-lock.yaml');
     const included = source && path !== policyPath && path !== auditDescriptor && !path.startsWith(auditRecordRoot) &&
@@ -304,7 +316,7 @@ function currentRecord(mode, path, revision, git) {
       !targets[mode]?.includes(path) && !(mode === 'lock' && path === 'pnpm-lock.yaml');
     if (included && manifest) {
       regular(entries, path);
-      const value = JSON.parse(blobs.get(source.objectId));
+      const value = JSON.parse(git('show', `${revision}:${path}`));
       assert.ok(object(value), 'Invalid prior manifest');
       for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
         if (!Object.hasOwn(value, field)) continue;
@@ -312,8 +324,13 @@ function currentRecord(mode, path, revision, git) {
         delete value[field];
       }
       const sha256 = digest(JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b, 'en')))));
-      if (record?.state === 'manifest' && record.sha256 === sha256) result = record;
-    } else if (included && record?.state === 'present' && source.mode === record.gitMode && source.type === record.gitType && source.objectId === record.objectId) result = record;
+      const record = {version: 2, mode, path, state: 'manifest', sha256};
+      if (recordEntry.objectId === blobId(serializeRecord(record))) result = record;
+    } else if (included) {
+      // The canonical record hash authenticates the same bytes without one read per path.
+      const record = {version: 2, mode, path, state: 'present', gitMode: source.mode, gitType: source.type, objectId: source.objectId};
+      if (recordEntry.objectId === blobId(serializeRecord(record))) result = record;
+    }
   } catch (error) {
     if (error.code !== 'ERR_ASSERTION' && !(error instanceof SyntaxError)) throw error;
   }

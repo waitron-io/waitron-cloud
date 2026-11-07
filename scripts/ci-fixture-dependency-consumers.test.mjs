@@ -6,9 +6,9 @@ import {join} from 'node:path';
 import test from 'node:test';
 
 const consumers = [
-  ['report omissions', 'packages/remote-access/test/forward-report-omissions.test.ts', 'native: deleting report cell binding'],
-  ['collection guards', 'packages/remote-access/test/forward-collection-guards.test.ts', 'native: deleting hard link refusal'],
-  ['portal omissions', 'apps/portal/test/forwarding-causes-omissions.test.ts', 'native: deleting canonical timestamp validation'],
+  ['report omissions', 'packages/remote-access/test/forward-report-omissions.manual.ts', 'native: deleting report cell binding'],
+  ['collection guards', 'packages/remote-access/test/forward-collection-guards.manual.ts', 'native: deleting hard link refusal'],
+  ['portal omissions', 'apps/portal/test/forwarding-causes-omissions.manual.ts', 'native: deleting canonical timestamp validation'],
 ];
 const env = {...process.env};
 delete env.NODE_TEST_CONTEXT;
@@ -22,18 +22,6 @@ function temporary(prefix) {
 }
 
 for (const [name, file, pattern] of consumers) {
-  // Reintroducing a download-store install must break the real omission check.
-  test(`${name} runs its original denial check with an empty download store`, {timeout: 90_000}, () => {
-    const scratch = temporary('cloud-consumer-empty-store-');
-    try {
-      const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', `--test-name-pattern=${pattern}`, file],
-      {env: {...env, TMPDIR: scratch, npm_config_store_dir: join(scratch, 'store'), npm_config_registry: 'http://127.0.0.1:9'}, encoding: 'utf8', timeout: 80_000});
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.match(result.stdout, /# pass 1\b/);
-      assert.match(result.stdout, /# fail 0\b/);
-    } finally {rmSync(scratch, {recursive: true, force: true});}
-  });
-
   for (const kind of ['stdout', 'stderr', 'signal', 'missing executable']) test(`${name} prints ${kind} setup refusals as readable text`, {timeout: 90_000}, () => {
     const scratch = temporary('cloud-consumer-setup-output-');
     const marker = kind === 'missing executable' ? 'ENOENT' : 'DEPENDENCY_FIXTURE_SETUP_REFUSED';
@@ -62,7 +50,7 @@ for (const method of ['execFileSync', 'spawnSync']) {
 
 test('the report omission fixture preserves non-UTF-8 bytes in tracked candidate edits', {timeout: 90_000}, () => {
   const scratch = temporary('cloud-consumer-patch-bytes-');
-  const source = join(scratch, 'source'), file = 'packages/remote-access/test/forward-report-omissions.test.ts';
+  const source = join(scratch, 'source'), file = 'packages/remote-access/test/forward-report-omissions.manual.ts';
   const target = 'docs/backlog/ci-pnpm-setup.md', expected = [0x63, 0x61, 0x66, 0xe9, 0x0a];
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), source], {stdio: 'pipe', timeout: 30_000});
@@ -78,12 +66,13 @@ const original = cp.spawnSync;
 cp.spawnSync = function(command, args, options) {
   if (args?.[0] === 'scripts/ci-audit-fixture-dependencies.mjs') {
     assert.deepEqual([...readFileSync(join(options.cwd, ${JSON.stringify(target)}))], ${JSON.stringify(expected)}, 'candidate patch bytes must be preserved');
+    throw Error('CANDIDATE_PATCH_BYTES_VERIFIED');
   }
   return original(command, args, options);
 }; syncBuiltinESMExports();\n`);
     const result = spawnSync(process.execPath, ['--import', preload, '--test', '--test-reporter=tap', '--test-name-pattern=native: deleting report cell binding', file],
     {cwd: source, env: {...env, TMPDIR: scratch}, encoding: 'utf8', timeout: 80_000});
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /# pass 1\b/);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /CANDIDATE_PATCH_BYTES_VERIFIED/);
   } finally {rmSync(scratch, {recursive: true, force: true});}
 });

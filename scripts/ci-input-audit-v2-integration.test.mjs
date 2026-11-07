@@ -32,7 +32,8 @@ function completeFixture(run) {
     rmSync(join(root, records), {recursive: true, force: true});
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     git('checkout', '--orphan', 'complete-v2-fixture');
-    commit();
+    const initial = commit();
+    git('update-ref', 'refs/remotes/origin/main', initial);
     git('add', '-A');
     if (!git('ls-files', marker).trim()) {ok(node('scripts/ci-input-audit.mjs', ['--init-v2-staged'])); git('add', marker, records);}
     ok(node('scripts/ci-input-audit.mjs', ['--write-staged', '--mode', 'all']));

@@ -34,10 +34,11 @@ meet the four-minute target. Earlier six-partition layouts also failed to
 establish a runtime saving; their historical observations remain in the
 [CI execution budget](../backlog.md). More partitions alone are not qualification.
 
-The runner now moves `monitoring.test.ts` and
-`venue-service-legacy-schema-guards.test.ts` to partition 1, and
-`support-grants.test.ts` to partition 2. Other files keep the sorted round-robin
-assignment. The balanced Linux trial at
+The runner assigns `monitoring.test.ts` to partition 1 and
+`support-grants.test.ts` to partition 2. Other files use the sorted round-robin
+assignment. The historical balanced Linux trial below also assigned
+`venue-service-legacy-schema-guards.test.ts` to partition 1. D591 retired that
+wrapper, so these figures do not measure the current file set. The trial at
 `936ebc8a9dbe6fc74e66c1edc1c5b75809ad738a` uses the same package source, lockfile
 and PostgreSQL launcher as the control. All 1,684 cases pass without failures,
 cancellations or skips, and all 139 test files run exactly once.

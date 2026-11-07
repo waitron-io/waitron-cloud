@@ -134,6 +134,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+      - name: Expose main to nested test fixtures
+        run: git branch --force main refs/remotes/origin/main
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
@@ -172,7 +174,7 @@ jobs:
         run: node scripts/ci-root-inputs.mjs --check
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
-      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/8 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
+      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/8 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs scripts/billing-display-guard-probes.test.mjs scripts/venue-service-guard-probes.test.mjs
       # Keep optional saving last so final runner cleanup collects its child processes.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
@@ -377,7 +379,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: matrix.shards && matrix.package != '@waitron-cloud/registration' && matrix.package != '@waitron-cloud/remote-access'
-        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
+        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Keep optional saving last so final runner cleanup collects its child processes.

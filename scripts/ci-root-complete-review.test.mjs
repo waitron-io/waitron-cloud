@@ -42,6 +42,15 @@ test('a complete legacy candidate keeps its record APIs separate from live selec
     if (patch.length) execFileSync('git', ['apply', '--index', '--binary'], {cwd: root, input: patch, stdio: 'pipe'});
     copyFileSync(new URL(import.meta.url), join(root, 'scripts/ci-root-complete-review.test.mjs'));
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    // This fixture tests synthetic records, independent of the caller's retired
+    // records and feature-only history, while retaining the complete source tree.
+    git('checkout', '--orphan', 'synthetic-root-review');
+    for (const directory of ['scripts/ci-root-review.d', 'scripts/ci-input-audit.d']) {
+      rmSync(join(root, directory), {recursive: true, force: true});
+    }
+    git('add', '-A');
+    const initial = commit();
+    git('update-ref', 'refs/remotes/origin/main', initial);
     const beforeActivation = git('rev-parse', 'HEAD').trim();
     git('update-ref', 'refs/remotes/origin/main', beforeActivation);
     // These deliberately synthetic attestations test complete-tree validation.

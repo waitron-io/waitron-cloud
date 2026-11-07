@@ -33,7 +33,7 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
   for(const [id,paths]of Object.entries(files)){
    const container=docker(['create','--name',tag+'-'+id,'--label','io.waitron.traffic-owner='+tag,'--network','container:'+database,'--cap-add','NET_ADMIN','--memory=512m','--cpus=1',
     '--mount',`type=bind,source=${root},target=/proof,readonly`,'--env',`TEST_DATABASE_URL=postgres://postgres:${password}@127.0.0.1:5432/cloud_test`,
-    tag,'node','--test','--test-reporter=tap','--test-concurrency=1','--test-timeout=150000',...paths.map(path=>'/proof/'+path)]);
+    tag,'node','--test','--test-reporter=tap','--test-reporter-destination=stdout','--test-reporter=/proof/scripts/ci-required-cases.mjs','--test-reporter-destination=stdout','--test-concurrency=1','--test-timeout=150000',...paths.map(path=>'/proof/'+path)]);
    assert.match(container,/^[a-f0-9]{64}$/);containers.push(container);
    const result=spawnSync('docker',['start','--attach',container],{cwd:root,timeout:180000,maxBuffer:8*1024*1024,encoding:'utf8'});
    const output=result.stdout+result.stderr;for(const line of output.split('\n'))t.diagnostic(id+': '+line);
@@ -47,7 +47,10 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
    }
    assert.ok(Number(counts.tests)>0);assert.equal(counts.passed,counts.tests);
    for(const field of ['failed','cancelled','skipped','todo'])assert.equal(counts[field],0,`${id}: ${field} must be zero`);
-   if(id==='gateway')assert.equal(counts.tests,4,'all three database scenarios and the rendered reload/crash scenario must run');
+   if(id==='gateway'){
+    assert.equal(counts.tests,4,'all three database scenarios and the rendered reload/crash scenario must run');
+    assert.match(output,/^# Required cases: 1 passed$/m,'the required operational-traffic case must pass through its tracker');
+   }
    suites.push(counts);docker(['rm','--force','--volumes',container]);
   }
  }finally{

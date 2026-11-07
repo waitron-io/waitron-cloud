@@ -31,10 +31,12 @@ The historical failing branch also had an additional unlanded migration; its
 catalogue implementation, behavioural tests and guard wrapper match the main
 branch used for these comparisons.
 
-To run the complete wrapper against disposable PostgreSQL:
+D591 retired the recurring catalogue mutation wrapper. Its measurements above
+remain historical. Run the retained ordinary catalogue assertions against
+disposable PostgreSQL:
 
 ```sh
-node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test test/venue-service-catalogue-guards.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir packages/backups exec node --test --test-timeout=30000 test/venue-service-backups.test.ts
 ```
 
 Keep checking the complete package job on the exact PR head. More migrations,

@@ -1,0 +1,347 @@
+{
+  "apps/portal/test/forwarding-causes-browser.test.ts": [
+    "^en light 390: forwarding categories, expiry and refresh keep private evidence current$"
+  ],
+  "apps/portal/test/remote-controller.test.ts": [
+    "^a recent timestamp with a timezone offset is refused even within the valid lifetime$",
+    "^a venue switch discards its older pending private reply$",
+    "^apply clears private evidence before drawing or awaiting a configuration change$",
+    "^forward view rejects extra fields, categories and noncanonical or impossible dates$",
+    "^older server has null forwarding evidence and the controller clears evidence at expiry without a request$",
+    "^refresh erases old evidence before drawing or awaiting the reply, including malformed and failed replies$"
+  ],
+  "deploy/test-cloud/venue-service-basic.test.mjs": [
+    "^venue basic connected keeps signup and password reset independent across transitions$"
+  ],
+  "deploy/test-cloud/venue-service-storage.test.mjs": [
+    "^venue storage reader refuses a permission round trip while waiting for its file lease$",
+    "^venue storage rejects a generation change during provider publication$",
+    "^venue storage separates legacy revision one from venue generation one$",
+    "^venue storage withdraws stale generations across downgrade round trips and restart$",
+    "^venue storage withdraws the physical writer across end-then-hosted$",
+    "^venue storage withdraws the physical writer across future-gap$",
+    "^venue storage withdraws the physical writer across late-extension$"
+  ],
+  "packages/account-http/test/forwarding-causes.test.ts": [
+    "^existing-plan status locks policy before installation so concurrent downgrade can finish$",
+    "^owner status erases revision evidence$",
+    "^owner status returns exactly the recorded outcome with no caching or session activity; apply does not export it$",
+    "^session expiry while the private observation read waits is refused by the final session check$",
+    "^status refuses foreign, nonowner, wrong origin, missing session and CSRF without a private result$"
+  ],
+  "packages/account-http/test/venue-service-recovery.test.ts": [
+    "^venue continuous recovery provider wait rejects a changed reader reference without credentials$",
+    "^venue continuous recovery provider wait rejects bucket without credentials$",
+    "^venue continuous recovery provider wait rejects endpoint without credentials$",
+    "^venue continuous recovery provider wait rejects membership without credentials$",
+    "^venue continuous recovery provider wait rejects operation-expiry without credentials$",
+    "^venue continuous recovery provider wait rejects owner-close without credentials$",
+    "^venue continuous recovery provider wait rejects proof-expiry without credentials$",
+    "^venue continuous recovery provider wait rejects region without credentials$",
+    "^venue snapshot recovery provider wait rejects bucket without credentials$",
+    "^venue snapshot recovery provider wait rejects endpoint without credentials$",
+    "^venue snapshot recovery provider wait rejects membership without credentials$",
+    "^venue snapshot recovery provider wait rejects operation-expiry without credentials$",
+    "^venue snapshot recovery provider wait rejects owner-close without credentials$",
+    "^venue snapshot recovery provider wait rejects proof-expiry without credentials$",
+    "^venue snapshot recovery provider wait rejects region without credentials$",
+    "^venue snapshot recovery provider wait rejects round-trip without credentials$",
+    "^venue snapshot recovery provider wait rejects trial-extension without credentials$"
+  ],
+  "packages/account-http/test/venue-service-remote.test.ts": [
+    "^venue remote HTTP status masks downgraded setup and needs explicit reprovision after upgrade$"
+  ],
+  "packages/account-http/test/venue-service-replacement.test.ts": [
+    "^venue continuous replacement HTTP at connected keeps the machine wire and activates once$",
+    "^venue continuous replacement HTTP at hosted keeps the machine wire and activates once$",
+    "^venue continuous replacement HTTP authenticates both proofs before reporting level refusal$",
+    "^venue continuous replacement HTTP completed replay refuses a downgrade$",
+    "^venue continuous replacement HTTP refuses activation but retains owner inspection and close$",
+    "^venue continuous replacement HTTP refuses machine proposals at level one$",
+    "^venue snapshot replacement HTTP at connected keeps the machine wire and activates once$",
+    "^venue snapshot replacement HTTP at hosted keeps the machine wire and activates once$",
+    "^venue snapshot replacement HTTP authenticates both proofs before reporting level refusal$",
+    "^venue snapshot replacement HTTP completed replay refuses a downgrade$",
+    "^venue snapshot replacement HTTP refuses activation but retains owner inspection and close$",
+    "^venue snapshot replacement HTTP refuses machine proposals at level one$"
+  ],
+  "packages/account-http/test/venue-service-streams.test.ts": [
+    "^venue stream HTTP backup-stream-configure provider wait rejects lease-expiry$",
+    "^venue stream HTTP backup-stream-configure provider wait rejects proof-expiry$",
+    "^venue stream HTTP backup-stream-observe provider wait rejects lease-expiry$",
+    "^venue stream HTTP backup-stream-observe provider wait rejects proof-expiry$",
+    "^venue stream machine backup-stream-configure authenticates before metadata$",
+    "^venue stream machine backup-stream-configure authenticates before registered$",
+    "^venue stream machine backup-stream-configure authenticates before unavailable$",
+    "^venue stream machine backup-stream-observe authenticates before metadata$",
+    "^venue stream machine backup-stream-observe authenticates before registered$",
+    "^venue stream machine backup-stream-observe authenticates before unavailable$"
+  ],
+  "packages/account-http/test/venue-service-translation-http.test.ts": [
+    "^venue HTTP translation refuses registered admission before creating a job$"
+  ],
+  "packages/backups/test/venue-service-backups.test.ts": [
+    "^venue concurrent snapshot publications keep the winning object and metadata together$",
+    "^venue failed snapshot publication releases its capture for another publisher$",
+    "^venue level one pauses retained expiry but cleans only abandoned staging$",
+    "^venue snapshot admitted deletion finishes before downgrade commits$",
+    "^venue snapshot explicit same location reprovision keeps keys and advances setup once$",
+    "^venue snapshot object wait rejects capture-expiry without publishing$",
+    "^venue snapshot object wait rejects key-change without publishing$",
+    "^venue snapshot object wait rejects location-change without publishing$",
+    "^venue snapshot object wait rejects revocation without publishing$",
+    "^venue snapshot object wait rejects round-trip without publishing$",
+    "^venue snapshot policy wait refuses a changed installation venue$",
+    "^venue snapshot schema failure never creates keys or storage state$"
+  ],
+  "packages/backups/test/venue-service-captures.test.ts": [
+    "^venue capture backup-publish authenticates before unavailable authority$",
+    "^venue capture backup-reserve authenticates before unavailable authority$",
+    "^venue capture grant wait rejects capture-expiry without returning credentials$",
+    "^venue capture grant wait rejects key without returning credentials$",
+    "^venue capture grant wait rejects lease-expiry without returning credentials$",
+    "^venue capture grant wait rejects location without returning credentials$",
+    "^venue capture grant wait rejects proof-expiry without returning credentials$",
+    "^venue capture grant wait rejects revocation without returning credentials$",
+    "^venue capture grant wait rejects round-trip without returning credentials$",
+    "^venue capture grant wait rejects trial-extension without returning credentials$"
+  ],
+  "packages/backups/test/venue-service-replacement.test.ts": [
+    "^venue replacement rechecks proof expiry after waiting on venue authority$",
+    "^venue replacement rolls back activation when session expires behind a storage lock$",
+    "^venue snapshot completed replacement replay cannot bypass a downgrade$",
+    "^venue snapshot replacement refuses new proposals at level one without changing recovery$"
+  ],
+  "packages/backups/test/venue-service-streams.test.ts": [
+    "^venue stream configure wait rejects changed bucket without publishing$",
+    "^venue stream configure wait rejects changed endpoint without publishing$",
+    "^venue stream configure wait rejects changed region without publishing$",
+    "^venue stream explicit reprovision after end-then-hosted preserves recovery and its neighbour$",
+    "^venue stream explicit reprovision after expiry-read preserves recovery and its neighbour$",
+    "^venue stream explicit reprovision after future-gap preserves recovery and its neighbour$",
+    "^venue stream explicit reprovision after late-extension preserves recovery and its neighbour$",
+    "^venue stream explicit reprovision preserves keys reader and observed data$",
+    "^venue stream observe wait rejects changed bucket without publishing$",
+    "^venue stream observe wait rejects changed endpoint without publishing$",
+    "^venue stream observe wait rejects changed region without publishing$",
+    "^venue stream policy wait rechecks installation scope before provisioning$"
+  ],
+  "packages/registration/test/billing-allowance-rules.test.ts": [
+    "^a current payment method selects the full trial allowance$",
+    "^trial grants include their start and exclude their end$"
+  ],
+  "packages/registration/test/billing-allowances.test.ts": [
+    "^foreign owners crossed installations and lost current ownership refuse without writes$",
+    "^one account last unit is atomic across venues$",
+    "^persisted spent translation units cannot be refunded by a state update$",
+    "^reservation replay retains its original receipt and refuses changed immutable binding$"
+  ],
+  "packages/registration/test/billing-display-machine.test.ts": [
+    "^billing display reads of different venues share their business lock while billing writes wait$",
+    "^billing display rechecks key and venue scope after waiting$",
+    "^billing display rechecks revocation after waiting$",
+    "^billing display refuses unsafe account origins$",
+    "^billing display requires remaining accepted success through stored payment retries$"
+  ],
+  "packages/registration/test/billing-display.test.ts": [
+    "^billing display preserves exact hosted day holes$",
+    "^billing display requires remaining accepted success$"
+  ],
+  "packages/registration/test/billing-payments.test.ts": [
+    "^a later successful attempt preserves hosted coverage after the first is refunded$",
+    "^accepted succeeded payment refuses failed before any observation effect$"
+  ],
+  "packages/registration/test/billing-schema.test.ts": [
+    "^billing schema enforces uniqueness and immutable facts$",
+    "^billing schema rejects foreign ownership and retains billing parents$"
+  ],
+  "packages/registration/test/billing-store.test.ts": [
+    "^changed event payload refuses without effects$"
+  ],
+  "packages/registration/test/billing-trial-usage.test.ts": [
+    "^spent unconfirmed service admission stays incomplete and is never a confirmed trial run$",
+    "^trial usage requires complete traffic evidence before zero use is known$"
+  ],
+  "packages/registration/test/venue-service-installations.test.ts": [
+    "^venue account list locks every venue before expiring earlier setup$",
+    "^venue account list rechecks installation scope after its policy wait$",
+    "^venue configuration-v2 cached reply masks every unavailable service$",
+    "^venue configuration-v2 fresh reply masks every unavailable service$",
+    "^venue installation configuration-v2 clears setup across expiry-read$",
+    "^venue installation configuration-v2 clears setup across future-gap$",
+    "^venue installation configuration-v2 clears setup across late-extension$",
+    "^venue level one denies trusted setup without changing its stored services$",
+    "^venue signature verification precedes unavailable authority$"
+  ],
+  "packages/registration/test/venue-service-legacy-schema.test.ts": [
+    "^a missing current authority table cannot silently restore legacy plan access$",
+    "^a missing migration receipt cannot hide an enrolled venue from legacy plans$",
+    "^release 45 legacy plan change does not require venue authority$",
+    "^release 45 legacy plan read does not require venue authority$",
+    "^release 45 pairing completion and replay preserve the historical schema$",
+    "^release 45 registration completion and replay preserve the historical schema$"
+  ],
+  "packages/registration/test/venue-service-migration.test.ts": [
+    "^service authority refuses deletion identity changes skipped or rewound generations$"
+  ],
+  "packages/registration/test/venue-service-permissions.test.ts": [
+    "^permission locks precede installations with absent authority$",
+    "^transition enrols once and raw setters cannot bypass it$"
+  ],
+  "packages/registration/test/venue-service-registration-races.test.ts": [
+    "^pairing replay locks organisation before venue and installations$",
+    "^pairing replay waits for a venue transition without holding installations$",
+    "^registration completion locks organisation before venue and installations$",
+    "^registration replay locks organisation before venue and installations$",
+    "^registration replay waits for a venue transition without holding installations$",
+    "^unenrolled pairing replay preserves the legacy organisation wait boundary$",
+    "^unenrolled registration completion preserves the legacy organisation wait boundary$",
+    "^unenrolled registration replay preserves the legacy organisation wait boundary$"
+  ],
+  "packages/registration/test/venue-service-relay.test.ts": [
+    "^venue relay HTTP takes policy authority before installation locks$",
+    "^venue relay approval takes policy authority before installation locks$",
+    "^venue relay handoff takes policy authority before installation locks$",
+    "^venue relay keeps explicit consent and canonical origin validation for consent$",
+    "^venue relay keeps explicit consent and canonical origin validation for consentVersion$",
+    "^venue relay keeps explicit consent and canonical origin validation for managementOrigin$",
+    "^venue relay messages takes policy authority before installation locks$",
+    "^venue relay new mode preserves its account allowance at registered level$",
+    "^venue relay preserves changed allowance policy refusal after level transition$",
+    "^venue relay preserves changed origin refusal after level transition$",
+    "^venue relay preserves expired grant refusal after level transition$",
+    "^venue relay preserves owner removed refusal after level transition$",
+    "^venue relay preserves revoked grant refusal after level transition$",
+    "^venue relay preserves stale revision refusal after level transition$",
+    "^venue relay preserves stop refusal after level transition$",
+    "^venue relay reserve takes policy authority before installation locks$",
+    "^venue relay stays basic at connected with one grant reservation and SMTP handoff$",
+    "^venue relay stays basic at hosted with one grant reservation and SMTP handoff$",
+    "^venue relay stays basic at registered with one grant reservation and SMTP handoff$"
+  ],
+  "packages/registration/test/venue-service-rules.test.ts": [
+    "^trial dates grant only the stored half open interval$",
+    "^venue levels have exact service floors$"
+  ],
+  "packages/remote-access/test/forward-observations.test.ts": [
+    "^reporting cell jobs do not lock installations in an unrelated cell$",
+    "^rollback_allows_identical_retry and older observation never replaces newer success$",
+    "^signature is rechecked against reporter authority after waiting for its lock$",
+    "^signed current report records a private latest view; success clears failure; replay cannot refresh it$",
+    "^simultaneous_new_old_and_duplicate_reports and restart preserve persistent batch budget$",
+    "^wrong_binding_refuses_without_causes$",
+    "^wrong_country_refuses_without_causes$",
+    "^wrong_environment_refuses_without_causes$",
+    "^wrong_generation_refuses_without_causes$",
+    "^wrong_manifest-high_refuses_without_causes$",
+    "^wrong_manifest-low_refuses_without_causes$",
+    "^wrong_revision_refuses_without_causes$",
+    "^wrong_signature_refuses_without_causes$"
+  ],
+  "packages/remote-access/test/forward-report-collector.test.ts": [
+    "^collector refuses directory-mode before storage$",
+    "^collector refuses directory-open race without hanging or reaching storage$",
+    "^collector refuses fifo race without hanging or reaching storage$",
+    "^collector refuses gid before storage$",
+    "^collector refuses hard-link before storage$",
+    "^collector refuses mode before storage$",
+    "^collector refuses oversize before storage$",
+    "^collector refuses post-read race without hanging or reaching storage$",
+    "^collector refuses uid before storage$",
+    "^failed pruning makes the poll fail before ingestion while a later poll recovers$"
+  ],
+  "packages/remote-access/test/forward-report-retention.test.ts": [
+    "^expiry_and_prune and unlogged_loss_is_unknown preserve durable reporter ordering$",
+    "^logical_restore_contains_no_causes but retains reporter authority and cursor$"
+  ],
+  "packages/remote-access/test/forward-report-writer.test.ts": [
+    "^new_success_beats_old_failure and one completion per attempt$",
+    "^sixty_four_routes_two_writes_per_minute with serialized flush and bounded files$"
+  ],
+  "packages/remote-access/test/forward-report.test.ts": [
+    "^report keys, fixed categories, stream identity and safe counters are closed$",
+    "^report signature, envelope shape, encoding and Ed25519 authority are mandatory$"
+  ],
+  "packages/remote-access/test/plan-permissions.test.ts": [
+    "^a cell export defers an incoming move whose organisation was absent from its policy locks$",
+    "^an export defers a new placement whose policy was not in its locked set$"
+  ],
+  "packages/remote-access/test/reconciler.test.ts": [
+    "^reporting certificate completion and scheduling cannot deadlock each other$",
+    "^reporting concurrent staff and public certificate completions serialize without lock upgrades$"
+  ],
+  "packages/remote-access/test/traffic-counters.test.ts": [
+    "^traffic decreases wraps and signed bigint overflow refuse fabricated deltas$"
+  ],
+  "packages/remote-access/test/traffic-store.test.ts": [
+    "^a new old-generation report refuses even while its public key remains available$",
+    "^forged unbound crossed stale and non-test traffic adds no bytes$",
+    "^traffic atomic replay and scope survive reconnect$"
+  ],
+  "packages/remote-access/test/venue-service-direct-waits.test.ts": [
+    "^venue direct DNS wait refuses changed key without hostname writes$",
+    "^venue direct DNS wait refuses changed venue without hostname writes$",
+    "^venue direct certificate publication refuses changed key after issuance$",
+    "^venue direct certificate publication refuses changed venue after issuance$",
+    "^venue direct certificate rejects changed key after authority wait$",
+    "^venue direct move rereads setup after installation wait$",
+    "^venue direct provision rejects changed venue after authority wait$"
+  ],
+  "packages/remote-access/test/venue-service-legacy-locks.test.ts": [
+    "^legacy remote eligibility waits for first enrolment$",
+    "^legacy remote manifest defers a new same-organisation placement$",
+    "^legacy remote manifest waits for first enrolment$",
+    "^legacy remote observation read waits for first enrolment$",
+    "^legacy remote observation write waits for first enrolment$",
+    "^legacy remote reporting manifest defers a new same-organisation placement$",
+    "^legacy remote reporting manifest waits for first enrolment$",
+    "^legacy remote reporting scheduler defers a new same-organisation placement$",
+    "^legacy remote reporting scheduler waits for first enrolment$",
+    "^legacy remote scheduler waits for first enrolment$"
+  ],
+  "packages/remote-access/test/venue-service-remote-boundaries.test.ts": [
+    "^legacy remote batch excludes enrolled venues with reports false$",
+    "^legacy remote batch excludes enrolled venues with reports true$",
+    "^legacy remote observations cannot grant an enrolled venue access$",
+    "^venue remote SHARE batch rereads setup after installation wait$",
+    "^venue remote signing wait refuses reprovisioned generation with reports false$"
+  ],
+  "packages/remote-access/test/venue-service-remote.test.ts": [
+    "^venue remote batch locks every venue before expiring earlier setup$",
+    "^venue remote export rechecks original installation binding after a venue wait$",
+    "^venue remote incoming routes exclude a denied sibling even with a current staged revision$",
+    "^venue remote provision refuses level one before external work$",
+    "^venue remote routes isolate same organisation siblings with reports false$",
+    "^venue remote routes isolate same organisation siblings with reports true$",
+    "^venue remote stale configured level-one routes and fresh reports remain denied$"
+  ],
+  "packages/remote-access/test/venue-service-report-authority.test.ts": [
+    "^venue report authority accepts only the still eligible sibling in one signed batch$",
+    "^venue report authority hides stale generation before pruning$",
+    "^venue report authority rejects binding without changing observations$",
+    "^venue report authority rejects environment without changing observations$",
+    "^venue report authority rejects revision without changing observations$",
+    "^venue report authority rejects signature without changing observations$"
+  ],
+  "packages/translation/test/billing-allowance-consent.test.ts": [
+    "^allowance consent rechecks the captured row actor after a consent wait$"
+  ],
+  "packages/translation/test/billing-allowance-translation.test.ts": [
+    "^translation allowance and the original exact-fit money cap remain independent$"
+  ],
+  "packages/translation/test/billing-allowance-worker.test.ts": [
+    "^a takeover after allowance spending prevents the actual provider call$"
+  ],
+  "packages/translation/test/venue-service-authority.test.ts": [
+    "^venue translation rechecks revocation after policy wait$"
+  ],
+  "packages/translation/test/venue-service-translation.test.ts": [
+    "^venue translation denies a unenrolled venue despite ready setup and consent$",
+    "^venue translation queued connected work retains consent_required after consent withdrawal$",
+    "^venue translation success after downgrade starts no review or retry$",
+    "^venue translation success after round trip starts no review or retry$"
+  ],
+  "deploy/test-cloud/test-fixtures/allowance-traffic-proof.test.mjs": [
+    "^real rendered gateway and PostgreSQL prove zero operational dates in the exact stored trial$"
+  ]
+}

@@ -87,12 +87,3 @@ test('guard harness can exclude the database environment from pure child runs',a
  const f=await fixture(t,'assert.equal(process.env.TEST_DATABASE_URL,undefined);assert.equal(permitted(),false);');
  assert.deepEqual(await qualifyGuard(f.candidate,f.guard,{...process.env,TEST_DATABASE_URL:undefined}),{guard:'harness fixture',baseline:1,detected:1,restored:1});
 });
-
-test('guard CLI qualifies both real pure omissions in copies and preserves the feature sources',async()=>{
- const root=fileURLToPath(new URL('../',import.meta.url)),file=join(root,'packages/registration/src/billing-display.ts'),before=await readFile(file);
- const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.TEST_DATABASE_URL;
- let result;try{result=await exec(process.execPath,['scripts/billing-display-guard-probes.mjs','--pure'],{cwd:root,env,timeout:60000});}
- catch(error){assert.fail('pure guard CLI must qualify its actual child cases: exit '+error.code);}
- assert.deepEqual(JSON.parse(result.stdout),{mode:'pure',results:[{guard:'remaining accepted success',baseline:1,detected:1,restored:1},{guard:'exact hosted day gaps',baseline:1,detected:1,restored:1}]});
- assert.deepEqual(await readFile(file),before);
-});

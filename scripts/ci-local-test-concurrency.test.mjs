@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, cpSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -8,13 +8,18 @@ import test from 'node:test';
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
 function runPackageCommand(t, packageName, failingFile) {
-  const root = mkdtempSync(join(tmpdir(), 'cloud-local-test-concurrency-'));
-  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const holder = mkdtempSync(join(tmpdir(), 'cloud-local-test-concurrency-'));
+  const root = join(holder, 'packages', packageName);
+  t.after(() => rmSync(holder, {recursive: true, force: true}));
+  mkdirSync(root, {recursive: true});
+  mkdirSync(join(holder, 'scripts'));
+  cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(holder, 'scripts/ci-required-cases.mjs'));
+  writeFileSync(join(holder, 'scripts/ci-required-cases.json'), '{}\n');
   for (const directory of ['bin', 'test', 'active']) mkdirSync(join(root, directory));
   const manifest = JSON.parse(readFileSync(new URL(`../packages/${packageName}/package.json`, import.meta.url), 'utf8'));
   writeFileSync(join(root, 'package.json'), JSON.stringify(manifest));
   // Simulate a high-core host; the package's explicit bound must override this default.
-  writeFileSync(join(root, 'bin/node'), `#!/bin/sh\nexec ${quote(process.execPath)} --test-concurrency=8 --test-reporter=tap "$@"\n`, {mode: 0o700});
+  writeFileSync(join(root, 'bin/node'), `#!/bin/sh\nexec ${quote(process.execPath)} --test-concurrency=8 "$@"\n`, {mode: 0o700});
   const files = ['account', 'leases', 'newly-added', 'recovery', 'sessions', 'venues'];
   for (const name of files) writeFileSync(join(root, 'test', `${name}.test.ts`), `
 import assert from 'node:assert/strict';

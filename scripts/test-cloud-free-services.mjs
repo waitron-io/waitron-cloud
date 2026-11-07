@@ -1,3 +1,4 @@
+import {requiredCaseEvents} from './ci-required-cases.mjs';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -234,7 +235,7 @@ async function proof(venueLevels=false) {
   try{
     proofStage='services';
     for(const suite of selected)process.stderr.write(`Free-service proof: ${suite.id}\n`);
-    results=await summariseServiceMatrix(run({files:selected.flatMap(suite=>suite.files),concurrency:concurrency===2?4:1,timeout:120000,execArgv:[],signal:controller.signal}),selected);
+    results=await summariseServiceMatrix(requiredCaseEvents(run({files:selected.flatMap(suite=>suite.files),concurrency:concurrency===2?4:1,timeout:120000,execArgv:[],signal:controller.signal})),selected);
   }finally{clearTimeout(timer);controller.abort();process.removeListener('SIGTERM',stop);process.removeListener('SIGINT',stop);}
   proofStage='checkout-after';
   assert.equal(git('rev-parse', 'HEAD'), cloudHead); assert.equal(git('status', '--porcelain'), '');
@@ -263,7 +264,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const stop = () => controller.abort();
       process.once('SIGTERM', stop); process.once('SIGINT', stop);
       try {
-        const [{id: _id,...summary}]=await summariseServiceMatrix(run({files: suite.files, concurrency: proofConcurrency(), timeout: 120000, execArgv: [], signal: controller.signal}), [suite]);
+        const [{id: _id,...summary}]=await summariseServiceMatrix(requiredCaseEvents(run({files: suite.files, concurrency: proofConcurrency(), timeout: 120000, execArgv: [], signal: controller.signal})), [suite]);
         process.stdout.write(JSON.stringify(summary) + '\n');
       } finally {controller.abort(); process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);}
     }

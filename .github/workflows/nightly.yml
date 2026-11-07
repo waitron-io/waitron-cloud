@@ -38,10 +38,42 @@ jobs:
     with:
       full: true
       job-prefix: 'aws / '
+  mutations:
+    name: nightly-mutations
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The allowance wrapper also runs its complete pure and synthetic harness.
+      - run: node scripts/test-postgres.mjs exec node --test --test-reporter=tap --test-concurrency=1 packages/account-http/test/venue-service-direct-wait-guards.nightly.ts packages/account-http/test/venue-service-external-wait-guards.nightly.ts packages/registration/test/billing-allowance-guards.nightly.ts packages/registration/test/billing-guard-qualification.nightly.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   summary:
     name: nightly-summary
     if: ${{ always() }}
-    needs: [standard, cost, venue, aws]
+    needs: [standard, cost, venue, aws, mutations]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

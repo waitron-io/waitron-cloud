@@ -21,12 +21,12 @@ test('summary requires all seven backup jobs and refuses previous allocations', 
   }
 });
 
-test('backup partitions execute every current and future file once while dividing the expensive guard files', t => {
+test('backup partitions execute every ordinary file once and exclude retired mutation work', t => {
   // Losing a shard or reverting the allocation must expose missing or concentrated work.
   const rows = workPlan({full: false, packages: ['@waitron-cloud/backups']}, loadWorkspace()).packages;
   const files = readdirSync(new URL('../packages/backups/test/', import.meta.url))
     .filter(name => name.endsWith('.test.ts')).concat('zz-future-backup.test.ts').sort();
-  const expensive = new Set(['venue-service-capture-guards.test.ts',
+  const retired = new Set(['venue-service-capture-guards.test.ts',
     'venue-service-catalogue-guards.test.ts', 'venue-service-stream-guards.test.ts',
     'venue-service-storage-guards.test.ts', 'venue-service-replacement-guards.test.ts']);
   const root = mkdtempSync(join(tmpdir(), 'cloud-backup-shards-'));
@@ -43,14 +43,10 @@ test('backup partitions execute every current and future file once while dividin
       const selected = [...output.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]);
       assert.ok(selected.length > 0, `Empty backup partition ${row.shard}`);
       assert.ok(selected.length <= Math.ceil(files.length / 7), `Oversized backup partition ${row.shard}`);
-      assert.ok(selected.filter(name => expensive.has(name)).length <= 1,
-        'Each expensive guard file must have its own job');
-      if (selected.includes('venue-service-capture-guards.test.ts')) {
-        assert.deepEqual(selected.filter(name => expensive.has(name)), ['venue-service-capture-guards.test.ts'],
-          'Capture guards must stay separate from catalogue and stream guards');
-      }
+      assert.deepEqual(selected.filter(name => retired.has(name)), [],
+        'Retired mutation files must not reenter ordinary package work');
       t.diagnostic(JSON.stringify({shard: row.shard, files: selected.length,
-        expensive: selected.filter(name => expensive.has(name))}));
+        retired: selected.filter(name => retired.has(name))}));
       for (const kind of ['fail', 'cancelled', 'skipped']) assert.match(output, new RegExp(`^# ${kind} 0$`, 'm'));
       seen.push(...selected);
     }
