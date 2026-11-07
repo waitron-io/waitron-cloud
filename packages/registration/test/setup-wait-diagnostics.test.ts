@@ -3,6 +3,7 @@ import {randomUUID, createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import {Pool} from 'pg';
+import {migrationNames} from '../src/migrate.ts';
 import {observeSetup,migrate} from './fixtures/setup-waits.ts';
 
 const url=process.env.TEST_DATABASE_URL;
@@ -16,6 +17,8 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
  t.mock.method(console,'error',(line:string)=>lines.push(line));
  const blocker=await admin.connect();
  try{
+  const target=(await pool.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  await pool.query('SELECT pg_advisory_lock(783,key) FROM generate_series(1,24) AS key');
   await admin.query(`CREATE SCHEMA ${schema}`);
   await blocker.query('BEGIN');
   const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
@@ -27,16 +30,18 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
    await blocker.query('SELECT pg_advisory_xact_lock(782,19)');
    sql="SELECT 'private row value', pg_advisory_xact_lock(782,19)";
   }
-  await assert.rejects(observeSetup(pool,()=>pool.query(sql)),{code:'57014'});
+  await assert.rejects(known?migrate(pool):observeSetup(pool,()=>pool.query(sql)),{code:'57014'});
+  if(known)assert.ok(lines.some(line=>JSON.parse(line).stage==='migration-apply'&&JSON.parse(line).migrationOrdinal===24));
   const report=JSON.parse(lines.find(line=>line.includes('cloud-test-setup-waits'))??'null');
   assert.ok(report,'a timeout must retain the observation from before cancellation');
   assert.ok(report.samples.length>0&&report.samples.length<=8);
+  assert.ok(report.samples.every((row:any)=>row.pid===target),'only this setup pool is observed');
   const sample=report.samples.find((row:any)=>row.blockers.includes(blockerPid));
   assert.ok(sample,'the waiting backend identifies its real blocker');
   assert.equal(sample.waitType,'Lock');
   assert.equal(sample.querySha256,createHash('sha256').update(sql).digest('hex'));
   assert.ok(sample.locks.some((lock:any)=>lock.granted===false));
-  assert.ok(sample.locks.length<=16);
+  assert.equal(sample.locks.length,16,'the retained lock list is capped even when this backend owns more locks');
   assert.ok(lines.join('').length<24000);
   assert.ok(!lines.join('').includes('private row value'));
   if(known){assert.equal(sample.migration,'024_remote_configuration_jobs.sql');assert.equal(sample.statement,sql.slice(0,1000));}
@@ -51,11 +56,18 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
 
 test('successful setup stays silent and releases its observer',async t=>{
  const pool=new Pool({connectionString:url});const lines:unknown[]=[];
+ const observerPids:number[]=[];
+ const emit=Pool.prototype.emit;
+ t.mock.method(Pool.prototype,'emit',function(this:Pool,event:string|symbol,...args:any[]){
+  if(event==='connect'&&this.options.application_name==='cloud-test-setup-observer')observerPids.push(args[0].processID);
+  return emit.call(this,event,...args);
+ });
  t.mock.method(console,'error',(...args:unknown[])=>lines.push(args));
  try{
   assert.equal(await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');return 17;}),17);
   assert.deepEqual(lines,[]);assert.equal(pool.listenerCount('acquire'),0);
-  assert.equal((await pool.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name='cloud-test-setup-observer'")).rows[0].n,0);
+  assert.ok(observerPids.length>0,'observe the real connections owned by this setup');
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=ANY($1::int[])',[observerPids])).rows[0].n,0);
  }finally{await pool.end();}
 });
 
@@ -73,7 +85,7 @@ test('migration setup retains the advisory wait before rollback and still migrat
   assert.ok(lines.some(line=>JSON.parse(line).samples?.some((row:any)=>row.waitEvent==='advisory')));
   await blocker.query('ROLLBACK');lines.length=0;
   await migrate(pool);assert.deepEqual(lines,[]);
-  assert.equal((await pool.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,51);
+  assert.equal((await pool.query('SELECT count(*)::int AS n FROM schema_migrations')).rows[0].n,migrationNames.length);
  }finally{
   await blocker.query('ROLLBACK');blocker.release();await pool.end();
   await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();
