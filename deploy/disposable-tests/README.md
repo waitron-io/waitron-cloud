@@ -24,7 +24,7 @@ If a version leaves your package mirror, stop and review a replacement pin. `--m
 
 Copy `harden-ssh.sh` and `ssh-policy.conf` beside the host recipe and run the former through the shared connection. It disables password and keyboard-interactive authentication, permits root only with a public key, validates the effective policy and reloads SSH while preserving existing sessions. It refuses an unrelated existing drop-in and removes only its own new file if validation fails. Prove a fresh key login after applying it. Keep Hetzner Robot's rescue system as the supported recovery path; do not enable passwords or add an alternate port to bypass a network problem. Read authentication logs for your controller's source address so internet password attempts do not obscure its evidence.
 
-The controller's `LocalLeases` ledger lives in a private directory on the Mac. Each reservation records its lane, turn, source digest, command, host/slot generation and deadline. An occupied or uncertain slot stays unavailable until the host adapter observes all its recorded resources absent. Expiry alone cannot free it. A ledger lock left by controller death closes admission until recovery reconciles it; automatic Mac recovery remains open.
+The controller's `LocalLeases` ledger lives in a private directory on the Mac. Each reservation records its lane, turn, source digest, command, host/slot generation and deadline. An occupied or uncertain slot stays unavailable until the host adapter observes all its recorded resources absent. Expiry alone cannot free it. The replacement Mac controller holds one operating-system lock across each turn. A foreground call refuses an occupied ledger; background `--once` recovery destroys and independently inspects its exact resource before freeing the slot. Legacy gates cause refusal and remain untouched. Run `node --test scripts/ci-disposable-local.test.mjs` for the controller checks.
 
 Run the ownership and prerequisite planning checks locally:
 
@@ -86,9 +86,9 @@ The server installs a two-minute transfer watchdog before reading input. After v
 
 A reboot removes the transient timers, so their absence cannot prove that an interrupted turn is clean. `startup.py` inventories the host's recorded active turn, VM disks, transfer directories and operation records. It destroys the active turn first, then unfinished recorded generations, using the existing exact-resource cleanup and an independent inspection. Completed operation fences remain on disk to refuse delayed work; a single systemd inventory lets startup skip those with no remaining owned unit, control directory, disk or active record. It never resumes a candidate command. Unknown inventory entries, links, failed cleanup or an uncertain observation keep admission closed. The portable checks run through `node --test scripts/disposable-tests/session.test.mjs`.
 
-The readiness record names the current Linux boot ID. The new session entry point refuses transfers, preparation and execution until that record qualifies; health also reports unavailable. Inspection, result readback and cleanup remain available. Restarting the service during the same boot preserves live work because the existing readiness record already qualifies. The Mac still has to reconcile its own lease after a server reboot; automatic Mac startup remains open.
+The readiness record names the current Linux boot ID. The new session entry point refuses transfers, preparation and execution until that record qualifies; health also reports unavailable. Inspection, result readback and cleanup remain available. Restarting the service during the same boot preserves live work because the existing readiness record already qualifies. The Mac also has to reconcile its recorded lease after a server reboot. The replacement controller below implements that path; coupled publication and actual reboot qualification remain open.
 
-Install the service from a frozen, root-owned recipe directory. Hold the controller's normal manual gate and verify that its ledger has no occupied lease while installing or replacing this service. That prevents the old manual recipe from starting work while its replacement inventories the host. Render the template with that recipe's absolute path, then verify it before enabling it:
+Install the service from a frozen, root-owned recipe directory. During the coupled cutover below, hold the frozen helper's manual gate and verify that its ledger has no occupied lease while installing or replacing this service. That prevents the old manual recipe from starting work while its replacement inventories the host. Render the template with that recipe's absolute path, then verify it before enabling it:
 
 ```sh
 sed 's|@RECIPE@|/opt/waitron-disposable-REVIEWED_RECIPE|g' \
@@ -110,9 +110,11 @@ node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST 
   /tmp/cloud-private-packages/ui-core-0.1.0.tgz /tmp/cloud-cancel-ledger
 ```
 
+Use a new absent private ledger path for each opt-in proof. Explicit bootstrap refuses a directory left by an earlier proof so it cannot forget an old lease.
+
 The proof waits for an actual guest command to start, cancels its SSH channel and requires status 143, a free ledger slot and an independent absence readback. A shared SSH master can retain output pipes after its client exits; failed transport closes its own handles so cleanup can use a fresh channel without stopping that master. Dedicated-host tests also cancel during transfer and package installation and verify autonomous cleanup of an abandoned transfer at its deadline.
 
-The installed manual helper below still uses its previous immutable host recipe. Automatic Mac reconciliation, publication of the new coupled host recipe, actual reboot and the frozen transitive package inventory remain open. Automatic routing and GitHub runners remain closed.
+The installed manual helper below still uses its previous immutable host recipe. Publication of the coupled Mac controller and host recipe, actual reboot qualification and the frozen transitive package inventory remain open. Automatic routing and GitHub runners remain closed.
 
 
 For one manual Cloud job, use the shared helper from the Mac. It runs frozen controller bytes, verifies the checkout belongs to Cloud, then snapshots that checkout into a fresh guest:
@@ -125,17 +127,46 @@ For one manual Cloud job, use the shared helper from the Mac. It runs frozen con
 
 You receive the command’s verified exit status after independent cleanup verification. The guest completes ten seconds before the fixed host deadline so its result can be read back. The new `execute-v2` operation rejects old execution clients; a root-owned result record, checked through a separate read, distinguishes command status from SSH or supervisor failure. A second lane gets 75 immediately, before source copying or package downloads. The helper prints its manual mode, host generation and source digest. Combined guest stdout/stderr is limited to 64 MiB per stage to bound logs on the shared Mac; exceeding it fails the command and runs normal cleanup. It accepts literal arguments; keep shell interpretation explicit inside your guest command when you need it. The Mac downloads only reviewed private package bytes; its package token stays on the Mac.
 
-This installed helper has one slot and no automatic crash or reboot recovery. A dead Mac owner leaves its manual lock closed; a failed or uncertain destruction leaves the recorded lease occupied. Do not erase a lock or free a lease because it is old. Read the exact resource from the private ledger, use the trusted host recipe to destroy and independently inspect it, then reconcile that same lease before reopening admission. Automatic Mac reconciliation, actual reboot and frozen transitive packages remain on D592. Current guest tools have direct version pins but still resolve transitives from current signed Debian indexes. This manual release makes no measured capacity or unattended-service claim.
+The currently published helper still uses the frozen manual release. It has one slot and no automatic crash or reboot recovery. Do not erase a gate or free a lease because it is old. Until the coupled cutover, only that frozen helper accepts `--recover RESOURCE_ID`; report an interrupted manual turn to the watcher before repair. The replacement below does not accept an explicit resource argument. Current guest tools have direct version pins but still resolve transitives from signed Debian indexes. This release makes no measured capacity or unattended-service claim.
 
+Only source receipt allows up to five seconds of incoming clock skew. It uses one host timestamp, clamps the deadline to at most 55 minutes, and atomically persists that strict value before arming the turn timer. Preparation, execution, the VM and guest retain strict deadlines. SIGTERM, SIGINT and SIGHUP report 143 during a handled cancellation; a closed terminal pipe cannot abort cleanup.
 
-For an occupied or quarantined slot, read the exact resource ID from the ledger path printed by the installed configuration. Recover it explicitly:
+## Recover interrupted Mac turns automatically
+
+A killed controller can leave its guest and durable reservation behind. The replacement uses one kernel lock, an operating-system lock released when Node dies, to exclude a live owner. It retains the durable ledger because an unlocked controller does not prove that its guest is absent. Python replaces itself with Node after removing the four Node/Python injection variables and normalizing the working directory; Node opens and holds the lock itself. Its isolated flock helper uses `/usr/bin/python3`, so a different `python3` on PATH cannot substitute for the lock. Direct `manual.mjs` calls take that same lock. The real-process controls run with `node --test scripts/disposable-tests/kernel-lock.test.mjs scripts/disposable-tests/manual-pipeline.test.mjs`.
+
+Bootstrap an absent private state path once, using a reviewed immutable configuration with a new host generation:
 
 ```sh
-~/waitron-campaign-shared/disposable-test-run.sh --recover RESOURCE_ID
+python3 -I -B /PATH/TO/CONTROLLER/deploy/disposable-tests/mac-controller.py \
+  /ABSOLUTE/PATH/TO/node /PATH/TO/IMMUTABLE/config.json --bootstrap
 ```
 
-Recovery skips the normal health check because an active guest is exactly what it must destroy. It takes a separate recovery guard, refuses a live or unknown ordinary owner, destroys and independently inspects only the recorded resource, then releases that same lease. A quarantined lease without an ordinary gate is also supported. Only a PID lookup returning `ESRCH` proves an owner dead; a reused or inaccessible PID keeps admission closed. Normal failure removes its own recovery guard and retains the ordinary gate and lease for a retry. If recovery itself dies, its guard stays closed too.
+Bootstrap creates the state directory with mode 0700, its lock file with mode 0600 and a fresh ledger. An existing state path returns 125, including after an interrupted bootstrap; choose another new path instead of deleting state. Ordinary and recovery calls refuse missing state, a missing lock or a missing/damaged ledger. They never initialize an empty slot. Do not remove `mac-controller.lock`: its persistent presence is normal. Any legacy `manual.lock`, `recovery.lock` or `ledger/lock` causes 125 before cleanup, and remains untouched.
 
-If recovery reports a locked or unreadable ledger, keep admission closed. Read `manual.lock/owner.json`, `recovery.lock/owner.json` when present, and `ledger/state.json` under the private state directory named by the immutable configuration. Check the recorded PID with `ps -p PID -o pid,ppid,command`. A live or inaccessible process prevents repair. An ownerless legacy gate or ledger lock cannot be cleared on age: require the creator’s recorded process proof and independently inspect its exact host resource first. The manual command deliberately refuses an unknown ledger instead of inventing an empty slot. Automatic crash/startup repair remains later D592 work.
+Use the same entry point with the helper's ordinary `LANE CHECKOUT -- COMMAND` arguments. A held lock or occupied slot returns 75 before packaging or host contact. The initial lock-helper, Git and first-health work share a 7.5-second abort budget plus the existing two-second forced-stop grace, inside ten seconds. A genuine Git or packaging failure remains 125; the admission clock does not reclassify later command failures. Each turn's source, bundle and process directories live under owned `STATE/tmp`. Locked entries sweep interrupted private files and owned uncommitted ledger files. An undeletable private child produces a warning and is retried later; housekeeping cannot block guest recovery or replace a verified command result. Unsafe containers still refuse work. Global temporary files remain untouched.
 
-Only source receipt allows up to five seconds of incoming clock skew. It uses one host timestamp, clamps the deadline to at most 55 minutes, and atomically persists that strict value before arming the turn timer. Preparation, execution, the VM and guest retain strict deadlines. Transfer acknowledgment is small even for a maximum-size argument request. SIGTERM, SIGINT and SIGHUP all report 143; a closed terminal output pipe cannot abort cleanup.
+Background recovery runs separately:
+
+```sh
+python3 -I -B /PATH/TO/CONTROLLER/deploy/disposable-tests/mac-controller.py \
+  /ABSOLUTE/PATH/TO/node /PATH/TO/IMMUTABLE/config.json --once
+```
+
+An idle slot returns zero without output or host contact, and does not rewrite an unchanged ledger. An interrupted or quarantined turn is destroyed and independently inspected by its recorded resource ID before that exact lease is freed. Recovery skips health because an active guest is precisely what it must destroy. Failed or foreign absence retains quarantine and returns 125. An unavailable SSH channel stops after its first failed request; the next agent attempt retries recovery. A busy host operation can still retry inside the existing cleanup budget. A live controller returns 75 and keeps its guest. Recovery never replays the interrupted command. Foreground calls keep returning 75 until background recovery succeeds; the next turn uses the next generation. Run `node --test scripts/ci-disposable-local.test.mjs` for these behavioral checks, including Node death while its detached child survives.
+
+Use `com.waitron.disposable-recovery.plist.in` for a launchd agent. Render absolute executable, immutable controller/configuration, home-directory and trusted PATH placeholders as escaped XML. `@HOME@` must be the controller user's absolute home directory, which supplies its normal SSH configuration and identity. It runs at login and every 30 seconds afterward. A user agent resumes after the Mac's user session returns; it does not run before login. Checking out this repository does not install the template. The agent creates no stdout/stderr log file. Read its job's `last exit code` with:
+
+```sh
+launchctl print "gui/$(id -u)/com.waitron.disposable-recovery"
+```
+
+A last exit code of 75 is normal while a foreground turn holds the lock. For a persistent 125 or quarantined lease, compare HOME and PATH in that output with the rendered configuration, then run the explicit `--once` command to see its refusal. That command performs recovery; it is not a status-only read.
+
+For coupled publication, follow this order:
+
+1. Drain the frozen helper by atomically creating its private `manual.lock` directory. The frozen release checks that gate before packaging, and its old recovery command refuses an ownerless gate. If the directory already exists, keep admission closed and wait for its existing owner; do not replace or remove its gate. Read the committed ledger while the gate is held and require every slot to be free.
+2. Install the matching frozen host recipe and startup service using the commands above. Verify readiness before switching the Mac configuration.
+3. Write the immutable configuration with a different private state path and a new `hostGeneration`, then run `--bootstrap`. Use the same recipe in the host service and Mac configuration.
+4. Switch the shared helper to the new immutable controller/configuration. Confirm that no old helper process remains. Keep the retired state gated permanently; never point the replacement at it.
+5. Only then load the rendered launchd agent with explicit HOME and no log file. Qualify its real SSH identity, interrupted-turn cleanup and a fresh successor. Actual server reboot still waits for the watcher's coordinated window; measured capacity and GitHub activation retain their later gates.

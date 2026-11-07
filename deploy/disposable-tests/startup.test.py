@@ -15,6 +15,9 @@ import startup
 
 class Startup(unittest.TestCase):
     def setUp(self):
+        # Inventory fixtures stay private regardless of the invoking shell's umask.
+        previous_umask = os.umask(0o077)
+        self.addCleanup(os.umask, previous_umask)
         self.assertIsNotNone(startup, 'The server needs boot reconciliation before admitting work')
         self.temporary = tempfile.TemporaryDirectory(prefix='disposable-startup-')
         self.addCleanup(self.temporary.cleanup)

@@ -9,7 +9,7 @@ import {LocalLeases} from './leases.mjs';
 async function fixture(t, changes = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'disposable-local-'));
   t.after(() => rmSync(directory, {recursive: true, force: true}));
-  const leases = new LocalLeases(directory, {hostGeneration: 'bridge-1', slots: 1});
+  const leases = new LocalLeases(join(directory, 'ledger'), {hostGeneration: 'bridge-1', slots: 1, bootstrap:true});
   const request = {lane: 'I', turn: 'local-1', snapshot: 'a'.repeat(64), argv: ['node', '-e', 'process.exit(3)']};
   const occupied = new Set();
   const transport = {

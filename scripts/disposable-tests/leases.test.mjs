@@ -1,19 +1,64 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, readFileSync, rmSync, mkdirSync} from 'node:fs';
+import {mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync, statSync, utimesSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawn} from 'node:child_process';
 
 const module = new URL('./leases.mjs', import.meta.url);
 const request = (turn = 'turn-1') => ({lane: 'I', turn, snapshot: 'a'.repeat(64), argv: ['node', '--version']});
 const config = {hostGeneration: 'bridge-1', slots: 1};
-async function setup(t, extra = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'disposable-leases-'));
-  t.after(() => rmSync(dir, {recursive: true, force: true}));
+
+test('ordinary ledger reads refuse missing state without inventing an empty slot', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'disposable-missing-ledger-'));
+  t.after(() => rmSync(root, {recursive:true, force:true}));
   const {LocalLeases} = await import(module);
-  return {dir, leases: new LocalLeases(dir, {...config, ...extra})};
+  const dir = join(root, 'ledger');
+  assert.throws(() => new LocalLeases(dir, config).inspect(), /missing|ENOENT/i);
+  assert.equal(existsSync(dir), false);
+});
+
+test('explicit ledger bootstrap persists fresh state and refuses an existing directory', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'disposable-bootstrap-ledger-'));
+  t.after(() => rmSync(root, {recursive:true, force:true}));
+  const {LocalLeases} = await import(module);
+  const dir = join(root, 'ledger');
+  const leases = new LocalLeases(dir, {...config, bootstrap:true});
+  assert.equal(existsSync(join(dir, 'state.json')), true);
+  assert.equal(leases.inspect().slots[0].state, 'free');
+  assert.throws(() => new LocalLeases(dir, {...config, bootstrap:true}), /EEXIST|existing/i);
+  rmSync(join(dir, 'state.json'));
+  assert.throws(() => leases.inspect(), /missing|ENOENT/i);
+  assert.equal(existsSync(join(dir, 'state.json')), false);
+});
+async function setup(t, extra = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'disposable-leases-'));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const dir = join(root, 'ledger');
+  const {LocalLeases} = await import(module);
+  return {dir, leases: new LocalLeases(dir, {...config, ...extra, bootstrap:true})};
 }
+
+test('idle inspection leaves the durable ledger untouched', async t => {
+  const {leases,dir}=await setup(t);const path=join(dir,'state.json');
+  const before=readFileSync(path,'utf8');utimesSync(path,new Date(0),new Date(0));
+  assert.equal(leases.inspect().slots[0].state,'free');
+  assert.equal(statSync(path).mtimeMs,0);assert.equal(readFileSync(path,'utf8'),before);
+});
+
+test('malformed retained turn entries cannot be accepted as an empty or valid history', async t => {
+  const valid={fingerprint:'a'.repeat(64),slot:0,generation:1};
+  for(const [key,entry] of [
+    ['I:damaged',null],['I:damaged',[]],['I:damaged',{}],
+    ['I:damaged',{...valid,fingerprint:'bad'}],['I:damaged',{...valid,slot:1}],
+    ['I:damaged',{...valid,generation:0}],['I:damaged',{...valid,generation:2}],['bad-key',valid]
+  ]){
+    const {leases,dir}=await setup(t);leases.reserveLocal(request());const path=join(dir,'state.json');
+    const state=JSON.parse(readFileSync(path,'utf8'));state.turns[key]=entry;
+    const before=JSON.stringify(state);writeFileSync(path,before);
+    assert.throws(()=>leases.inspect(),/invalid.*turn/i);
+    assert.equal(readFileSync(path,'utf8'),before);
+  }
+});
 
 test('another lane cannot claim an occupied slot, including across controller restarts', async t => {
   // Removing the persistent occupancy check would admit two owners.
@@ -80,17 +125,16 @@ test('expiry quarantines work instead of treating the deadline as proof of absen
   assert.equal(lease.deadline, 1100);
   now = 1100;
   assert.equal(leases.start(lease), false);
+  assert.equal(JSON.parse(readFileSync(join(leases.directory,'state.json'),'utf8')).slots[0].state,'quarantined');
   assert.equal(leases.reserveLocal(request('turn-2')).code, 75);
   assert.equal(leases.inspect().slots[0].state, 'quarantined');
 });
 
-test('host down and held ledger lock return busy promptly without reserving', async t => {
-  const {leases, dir} = await setup(t);
+test('host down returns busy promptly without reserving', async t => {
+  const {leases} = await setup(t);
   const begin = performance.now();
   assert.equal(leases.reserveLocal(request(), {healthy: false}).code, 75);
   assert.equal(leases.inspect().slots[0].state, 'free');
-  mkdirSync(join(dir, 'lock'));
-  assert.equal(leases.reserveLocal(request()).code, 75);
   assert.ok(performance.now() - begin < 1000);
 });
 
@@ -113,36 +157,6 @@ test('host generation or slot budget changes refuse an existing ledger', async t
   assert.throws(() => new LocalLeases(dir, {...config, hostGeneration: 'replacement-2'}).inspect(), /configuration/i);
   assert.throws(() => new LocalLeases(dir, {...config, slots: 2}).inspect(), /configuration/i);
   assert.equal(leases.inspect().slots[0].lease.turn, 'turn-1');
-});
-
-test('simultaneous processes admit exactly one owner', async t => {
-  const {leases, dir} = await setup(t);
-  leases.inspect();
-  const children = Array.from({length: 8}, (_, i) => new Promise((resolve, reject) => {
-    const program = `import {LocalLeases} from ${JSON.stringify(module.href)}; console.log(JSON.stringify(new LocalLeases(process.argv[1], ${JSON.stringify(config)}).reserveLocal(${JSON.stringify(request(`parallel-${i}`))})));`;
-    const child = spawn(process.execPath, ['--input-type=module', '-e', program, dir], {stdio: ['ignore', 'pipe', 'pipe']});
-    let out = '', err = '';
-    // Delay reading until exit so parsing must wait for stream closure.
-    child.stdout.pause();
-    child.once('exit', () => child.stdout.resume());
-    child.stdout.on('data', b => out += b);
-    child.stderr.on('data', b => err += b);
-    child.on('error', reject);
-    child.on('close', (code, signal) => code === 0 ? resolve(JSON.parse(out)) : reject(new Error(err || `Lease child failed (${signal ?? code})`)));
-  }));
-  const results = await Promise.all(children);
-  assert.equal(results.filter(r => r.code === 0).length, 1);
-  assert.equal(results.filter(r => r.code === 75).length, 7);
-  const state = JSON.parse(readFileSync(join(dir, 'state.json')));
-  assert.equal(state.slots.filter(s => s.state !== 'free').length, 1);
-});
-
-test('a busy ledger cannot be mistaken for permission to start or release a guest', async t => {
-  const {leases, dir} = await setup(t);
-  const lease = leases.reserveLocal(request()).lease;
-  mkdirSync(join(dir, 'lock'));
-  assert.equal(leases.start(lease), false);
-  assert.equal(leases.release(lease, {absent: true, resourceId: lease.resourceId}), false);
 });
 
 test('an unreadable or incomplete occupied ledger refuses admission', async t => {

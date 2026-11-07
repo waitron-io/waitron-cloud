@@ -1,121 +1,141 @@
 import assert from 'node:assert/strict';
-import {mkdirSync, lstatSync, rmdirSync, mkdtempSync, rmSync, readFileSync, realpathSync, existsSync, writeFileSync, unlinkSync, openSync, fsyncSync, closeSync} from 'node:fs';
-import {join, resolve} from 'node:path';
+import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync} from 'node:fs';
+import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {LocalLeases} from './leases.mjs';
+import {withKernelLock} from './kernel-lock.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport, runProcess, protectOutputStreams} from './transport.mjs';
 
-function privateState(directory) {
-  mkdirSync(directory, {recursive:true,mode:0o700});
-  const info=lstatSync(directory);
-  assert.ok(info.isDirectory()&&!info.isSymbolicLink()&&info.uid===process.getuid()&&(info.mode&0o077)===0,'Manual state must be a private owned directory');
-}
-function readOwner(path) {
-  const info=lstatSync(join(path,'owner.json'));
-  assert.ok(info.isFile()&&!info.isSymbolicLink()&&info.uid===process.getuid()&&info.size<=1024&&(info.mode&0o077)===0,'Unknown manual gate owner');
-  const owner=JSON.parse(readFileSync(join(path,'owner.json'),'utf8'));
-  assert.ok(owner.version===1&&Number.isSafeInteger(owner.pid)&&owner.pid>0&&typeof owner.nonce==='string'&&/^[a-f0-9-]{36}$/.test(owner.nonce),'Unknown manual gate owner');
-  return owner;
-}
-function claimGate(directory,name) {
-  const path=join(directory,name);
-  try {mkdirSync(path,{mode:0o700});}
-  catch(error) {if(error.code==='EEXIST')return;throw error;}
-  const owner={version:1,pid:process.pid,nonce:randomUUID()};
-  const fd=openSync(join(path,'owner.json'),'wx',0o600);
-  try {writeFileSync(fd,JSON.stringify(owner));fsyncSync(fd);} finally {closeSync(fd);}
-  const parent=openSync(path,'r');try {fsyncSync(parent);} finally {closeSync(parent);}
-  return {path,owner};
-}
-function releaseGate(gate) {
-  assert.deepEqual(readOwner(gate.path),gate.owner,'Another process owns this manual gate');
-  unlinkSync(join(gate.path,'owner.json'));rmdirSync(gate.path);
-}
-function ownerDead(owner) {
-  try {process.kill(owner.pid,0);return false;}
-  catch(error) {return error.code==='ESRCH';}
+function refuseLegacy(state) {
+  for (const name of ['manual.lock','recovery.lock','ledger/lock']) {
+    try { lstatSync(join(state,name)); }
+    catch (error) { if (error.code==='ENOENT') continue; throw error; }
+    throw new Error('Legacy gate present; leave it untouched: '+name);
+  }
 }
 
-// The gate covers packaging as well as work. A dead owner retains its record;
-// only exact-lease recovery may remove it, never an age-based successor.
-export async function withManualSlot(directory,work) {
-  privateState(directory);
-  if(existsSync(join(directory,'recovery.lock')))return {code:75,reason:'manual-recovery-owned'};
-  const gate=claimGate(directory,'manual.lock');
-  if(!gate)return {code:75,reason:'manual-slot-busy-or-needs-recovery'};
-  try {
-    if(existsSync(join(directory,'recovery.lock')))return {code:75,reason:'manual-recovery-owned'};
-    return await work();
-  } finally {releaseGate(gate);}
+function privateDirectory(path) {
+  const info=lstatSync(path);
+  assert.ok(info.isDirectory() && !info.isSymbolicLink() && info.uid===process.getuid() &&
+    (info.mode&0o077)===0,'Temporary state must be a private owned directory');
 }
 
-export async function recoverManual({state,leases,transport,resourceId,signal=AbortSignal.timeout(120000)}) {
-  privateState(state);
-  const recovery=claimGate(state,'recovery.lock');
-  if(!recovery)return {code:75,reason:'recovery-already-owned-or-needs-inspection'};
-  let gate;
-  try {
-    const path=join(state,'manual.lock');
-    if(existsSync(path)) {
-      let owner;
-      try {owner=readOwner(path);} catch {return {code:75,reason:'manual-owner-unknown'};}
-      if(!ownerDead(owner))return {code:75,reason:'manual-owner-still-live-or-unknown'};
-      gate={path,owner};
-    } else {
-      gate=claimGate(state,'manual.lock');
-      if(!gate)return {code:75,reason:'manual-owner-raced-recovery'};
-    }
-    const ledger=leases.inspect();
-    assert.ok(Array.isArray(ledger.slots),'Ledger is locked or unknown; inspect its owner before recovery');
-    const lease=ledger.slots.find(slot=>slot.lease?.resourceId===resourceId)?.lease;
-    assert.ok(lease,'No matching recorded lease; recovery refused');
+async function withTemporaryState(state,work) {
+  const temporary=join(state,'tmp'),ledger=join(state,'ledger');
+  try { privateDirectory(temporary); }
+  catch(error) { if(error.code!=='ENOENT') throw error;mkdirSync(temporary,{mode:0o700}); }
+  // Only this private owned container has its owner access restored. Orphan
+  // children may retain files, but their housekeeping cannot stop guest recovery.
+  chmodSync(temporary,0o700);
+  let hasLedger=true;
+  try { privateDirectory(ledger); }
+  catch(error) { if(error.code!=='ENOENT') throw error;hasLedger=false; }
+  const sweep=()=>{
+    let incomplete=false;
     try {
-      await transport.destroy(lease,{signal});
-      const observed=await transport.inspect(lease,{signal});
-      assert.ok(observed.resourceId===resourceId&&observed.absent===true,'Exact resource absence was not proved');
-      assert.equal(leases.release(lease,observed),true,'Recorded lease release refused');
-    } catch(error) {leases.release(lease,undefined);throw error;}
-    releaseGate(gate);
-    return {code:0,cleanup:'absent',resourceId};
-  } finally {releaseGate(recovery);}
+      for(const name of readdirSync(temporary)) {
+        try { rmSync(join(temporary,name),{recursive:true,force:true}); }
+        catch { incomplete=true; }
+      }
+      if(hasLedger) {
+        privateDirectory(ledger);
+        for(const name of readdirSync(ledger)) if(/^state-[a-f0-9-]{36}\.tmp$/.test(name)) {
+          try {
+            const path=join(ledger,name),info=lstatSync(path);
+            assert.ok(info.isFile() && !info.isSymbolicLink() && info.uid===process.getuid() &&
+              (info.mode&0o077)===0,'Unowned ledger temporary');
+            unlinkSync(path);
+          } catch { incomplete=true; }
+        }
+      }
+    } catch { incomplete=true; }
+    if(incomplete) console.error('Temporary cleanup incomplete; private files retained');
+  };
+  sweep();
+  const previous=process.env.TMPDIR;
+  process.env.TMPDIR=temporary;
+  try { return await work(); }
+  finally {
+    if(previous===undefined) delete process.env.TMPDIR; else process.env.TMPDIR=previous;
+    sweep();
+  }
+}
+
+async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)}) {
+  const occupied=leases.inspect().slots.filter(slot=>slot.state!=='free');
+  assert.ok(occupied.length<=1,'Automatic recovery supports one slot');
+  const lease=occupied[0]?.lease;
+  if (!lease) return {code:0,cleanup:'absent'};
+  try {
+    await transport.destroy(lease,{signal});
+    const observed=await transport.inspect(lease,{signal});
+    assert.ok(observed.resourceId===lease.resourceId && observed.absent===true,'Exact resource absence was not proved');
+    assert.equal(leases.release(lease,observed),true,'Recorded lease release refused');
+  } catch(error) { leases.release(lease,undefined); throw error; }
+  return {code:0,cleanup:'absent',resourceId:lease.resourceId};
+}
+
+export async function reconcileManual({state,hostGeneration,transport,signal,deadline}) {
+  protectOutputStreams();
+  return withKernelLock(state,async()=>{
+    refuseLegacy(state);
+    return withTemporaryState(state,()=>{
+      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots:1});
+      const cleanup=AbortSignal.timeout(120000);
+      return recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
+    });
+  },{deadline,signal});
 }
 
 export async function main(args) {
   protectOutputStreams();
-  const recovering=args.length===3&&args[1]==='--recover';
-  assert.ok(recovering||(args.length>=5&&args[3]==='--'),'Usage: manual.mjs CONFIG LANE CLOUD_CHECKOUT -- COMMAND [ARGS] | CONFIG --recover RESOURCE');
-  const [configuration, lane, checkout, , ...argv] = args;
-  if(!recovering)assert.match(lane, /^[A-K]$/, 'Invalid campaign lane');
-  if(!recovering)assert.ok(argv.length>0&&argv[0]&&argv.every(v=>!v.includes('\0')),'A literal command argument list is required');
-  const config = JSON.parse(readFileSync(configuration, 'utf8'));
-  assert.deepEqual(Object.keys(config).sort(), ['host', 'hostGeneration', 'mode', 'recipe', 'repository', 'state', 'version']);
-  assert.ok(config.version === 2 && config.mode === 'manual-one-slot', 'Only manual single-slot use is enabled');
-  const cancellation = new AbortController();
-  const cancel = () => cancellation.abort();
-  process.on('SIGTERM', cancel);
-  process.on('SIGINT', cancel);
-  process.on('SIGHUP', cancel);
+  const bootstrap=args.length===2 && args[1]==='--bootstrap';
+  const reconciling=args.length===2 && args[1]==='--once';
+  assert.ok(bootstrap || reconciling || (args.length>=5 && args[3]==='--'),
+    'Usage: manual.mjs CONFIG LANE CLOUD_CHECKOUT -- COMMAND [ARGS] | CONFIG --once | CONFIG --bootstrap');
+  const [configuration,lane,checkout,,...argv]=args;
+  if (!bootstrap && !reconciling) {
+    assert.match(lane,/^[A-K]$/,'Invalid campaign lane');
+    assert.ok(argv.length>0 && argv[0] && argv.every(v=>!v.includes('\0')),'A literal command argument list is required');
+  }
+  const config=JSON.parse(readFileSync(configuration,'utf8'));
+  assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository','state','version']);
+  assert.ok(config.version===2 && config.mode==='manual-one-slot','Only manual single-slot use is enabled');
+  assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
+  const cancellation=new AbortController();
+  const cancel=()=>cancellation.abort();
+  for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.on(signal,cancel);
+  const deadline=Date.now()+7500;
+  const budget=AbortSignal.timeout(7500);
+  const admission=AbortSignal.any([cancellation.signal,budget]);
+  let admitted=false;
   try {
-    console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
-    if(recovering) {
-      const recovered=await recoverManual({state:resolve(config.state),leases:new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1}),transport:new SSHTransport({host:config.host,recipe:config.recipe}),resourceId:checkout,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
-      console.log(JSON.stringify(recovered));return recovered.code;
-    }
-    const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(5000)])});
-    assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');
-    assert.equal(realpathSync(commonRead.stdout.trim()),realpathSync(config.repository),'This manual helper accepts only the configured Cloud repository');
-    const result = await withManualSlot(resolve(config.state), async () => {
-      const leases = new LocalLeases(join(config.state, 'ledger'), {hostGeneration: config.hostGeneration, slots: 1});
-      const state = leases.inspect();
-      if (!state.slots || state.slots.some(slot => slot.state !== 'free')) return {code: 75, reason: 'recorded-slot-busy-or-quarantined'};
-      const transport = new SSHTransport({host: config.host, recipe: config.recipe});
+    const result=reconciling
+      ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,
+          transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline})
+      : await withKernelLock(config.state,async()=>{
+      cancellation.signal.throwIfAborted();
+      refuseLegacy(config.state);
+      return withTemporaryState(config.state,async()=>{
+      if (bootstrap) {
+        new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1,bootstrap:true});
+        return {code:0};
+      }
+      const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:admission});
+      assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');
+      assert.equal(realpathSync(commonRead.stdout.trim()),realpathSync(config.repository),'This manual helper accepts only the configured Cloud repository');
+      const leases=new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1});
+      const state=leases.inspect();
+      if (state.slots.some(slot=>slot.state!=='free')) return {code:75,reason:'recorded-slot-busy-or-quarantined'};
+      const transport=new SSHTransport({host:config.host,recipe:config.recipe});
       let healthy;
-      try { healthy = await transport.healthy({signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(8000)])}); }
-      catch { healthy = false; }
-      if (!healthy) return {code: cancellation.signal.aborted ? 143 : 75, reason: 'host-unavailable'};
+      try { healthy=await transport.healthy({signal:admission}); } catch { healthy=false; }
+      if (!healthy) return {code:cancellation.signal.aborted?143:75,reason:'host-unavailable'};
+      admitted=true;
+      console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
       const temporary = mkdtempSync(join(tmpdir(), 'disposable-manual-'));
       try {
         const source = join(temporary, 'source.tar');
@@ -130,22 +150,23 @@ export async function main(args) {
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
       } finally { rmSync(temporary, {recursive: true, force: true}); }
-    });
-    console.log(JSON.stringify({code: result.code, reason: result.reason, cleanup: result.cleanup,
-      resourceId: result.lease?.resourceId, snapshot: result.lease?.snapshot, error: result.error}));
+      });
+    },{bootstrap,deadline,signal:cancellation.signal});
+    if(!reconciling || result.code!==0 || result.resourceId)
+      console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
+        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error}));
     return result.code;
-  } catch (error) {
-    if (!cancellation.signal.aborted) throw error;
-    console.log(JSON.stringify({code:143,reason:'cancelled'}));
-    return 143;
+  } catch(error) {
+    const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:
+      budget.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
+    if(refusal){console.log(JSON.stringify(refusal));return refusal.code;}
+    throw error;
   } finally {
-    process.off('SIGTERM', cancel);
-    process.off('SIGINT', cancel);
-    process.off('SIGHUP', cancel);
+    for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.off(signal,cancel);
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
-  try { process.exitCode = await main(process.argv.slice(2)); }
-  catch (error) { console.error(error.message); process.exitCode = 125; }
+if (process.argv[1] && process.argv[1]!=='-' && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href) {
+  try { process.exitCode=await main(process.argv.slice(2)); }
+  catch(error) { console.error(error.message);process.exitCode=125; }
 }

@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +21,8 @@ import startup
 
 class Guards(unittest.TestCase):
  def setUp(self):
+  # Inventory fixtures stay private regardless of the invoking shell's umask.
+  previous_umask=os.umask(0o077);self.addCleanup(os.umask,previous_umask)
   self.temp=tempfile.TemporaryDirectory(prefix='disposable-host-policy-');self.addCleanup(self.temp.cleanup)
   self.root=Path(self.temp.name);self.control=self.root/'control';self.control.mkdir();self.ops=self.root/'operations'
   self.resource='dt-policy-0-1';self.live=set();self.active=False;self.transferred=False;self.order=[]

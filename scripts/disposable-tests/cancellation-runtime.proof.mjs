@@ -9,7 +9,7 @@ import {SSHTransport} from './transport.mjs';
 
 const [host, recipe, source, privatePackage, ledger] = process.argv.slice(2);
 test('SSH cancellation stops owned remote work before the Mac ledger grants reuse', {timeout: 900000}, async () => {
-  const leases = new LocalLeases(ledger, {hostGeneration: 'cancel-'+Date.now(), slots: 1});
+  const leases = new LocalLeases(ledger, {hostGeneration: 'cancel-'+Date.now(), slots: 1, bootstrap:true});
   const cancellation = new AbortController();
   let ready = false, output = '';
   class ObservedTransport extends SSHTransport {
