@@ -1185,7 +1185,7 @@ export async function removeManualFirstSetup(options) {
     if (result.Stacks[0].StackStatus === 'DELETE_COMPLETE') return { ...inspection, stackId, directory, deleted: true };
     check(result.Stacks[0].StackStatus === 'DELETE_IN_PROGRESS'); await sleep(15000);
   }
-  refuse();
+  refuse('stack');
 }
 
 async function privateWrite(path, body) {
@@ -1240,7 +1240,7 @@ async function runManualCommandInContext(options) {
   const fresh = () => ({ ...common, aws, now: stamp() });
   const save = (name, value) => privateWrite(join(base, name), JSON.stringify(value) + '\n');
   if (command === 'up') {
-    try { await lstat(join(base, 'setup')); refuse(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try { await lstat(join(base, 'setup')); refuse('booking'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const opening = await inspectManualOpening({ ...fresh(), explanations });
     const prices = await mkdtemp(join(base, 'prices-')), catalogues = {};
     for (const service of ['AmazonEC2', 'AmazonS3', 'AWSLambda', 'AmazonCloudWatch']) {
@@ -1267,7 +1267,7 @@ async function runManualCommandInContext(options) {
     const launch = await privateJson(join(base, 'launch.json'));
     return inspectManualFirstBilling({ ...fresh(), setup, launch });
   }
-  try { await lstat(join(base, 'launch.json')); refuse(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  try { await lstat(join(base, 'launch.json')); refuse('ec2 launch'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const launch = await launchManualFirstDrill({ ...fresh(), setup, uuid: options.uuid });
   await save('launch.json', launch);
   async function poll(read, code, until) {
@@ -1276,7 +1276,7 @@ async function runManualCommandInContext(options) {
       catch (error) { if (error?.code !== code) throw error; }
       const remaining = until - clock(); check(remaining > 0); await sleep(Math.min(5000, remaining));
     }
-    refuse();
+    refuse('ec2 observation');
   }
   const ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch }), 'D570_NOT_READY', instant(launch.guestExpiry));
   await save('ready.json', ready);
