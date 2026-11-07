@@ -80,6 +80,8 @@ version. Both numerical boundaries are inclusive. One database statement reads t
 comparison, and later predecessor reports can change the result. The query first
 chooses a qualifying predecessor, then aggregates only those two versions through
 an index that also holds the fields needed for counting. Reports within either version still contribute to read cost.
+The comparison skips history when either side is absent and computes each aggregate
+once. The numerical hold rule stays the same.
 
 These are lifetime counts from error-reporting boxes. Older versions have longer
 to accumulate errors, which can delay a hold on a young release. Fixing other
@@ -99,3 +101,66 @@ before database overhead; this is not a production capacity qualification.
 
 Paging, the investigator, release waves, the staff problem-report form and
 Waitron's sender/updater remain separate work.
+
+## Measure storage and reads before sizing a service
+
+Run the volume measurement through the throwaway PostgreSQL wrapper:
+
+```sh
+node scripts/test-postgres.mjs exec node packages/registration/scripts/measure-box-error-reports.mjs
+```
+
+The runner creates and removes its own schema using the real migrations. It loads
+1,000 installations, 20 equally represented releases and five error codes with a
+60/20/10/7/3 percent spread. The 10,000-row sample has 500 reporting installations;
+the larger samples have 1,000. Each report has one source, two structured log
+entries and one to five occurrences. Bulk loading includes foreign keys, indexes
+and commit time, but excludes signing and HTTP. The runner then submits signed
+reports, retries one and reads the latest, first and absent versions through the
+real HTTP routes. Each request captures and explains all eight actual reads with
+`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`; `BOX_REPORT_COST` contains the full plans.
+
+On 7 November 2026, this command used PostgreSQL 18.6 in the Mac's ARM Docker
+environment, Node 26 and an 18-core host. A Debian x86 baseline also ran, but the
+shared test box was busy for the final comparison. Sizes below include table
+overhead and indexes; one MiB is 1,048,576 bytes.
+
+| Reports | Table MiB | Index MiB | Total MiB | Bulk insert seconds |
+| --- | --- | --- | --- | --- |
+| 10,000 | 4.38 | 1.77 | 6.16 | 0.134 |
+| 100,000 | 43.45 | 16.67 | 60.12 | 1.284 |
+| 1,000,000 | 434.18 | 150.41 | 584.59 | 14.478 |
+
+These are PostgreSQL execution milliseconds after `VACUUM ANALYZE`, with cached
+reads and no competing requests. Shared lookup rows show the largest observation
+across the five request probes; the hold rows show their individual comparison.
+Report deduplication includes the duplicate retry.
+
+| Read | 10,000 | 100,000 | 1,000,000 |
+| --- | --- | --- | --- |
+| Shared IP allowance | 0.020 | 0.017 | 0.029 |
+| Report IP allowance | 0.016 | 0.098 | 0.021 |
+| Installation authentication | 0.011 | 0.012 | 0.135 |
+| Installation allowance | 0.016 | 0.014 | 0.023 |
+| Installation binding | 0.025 | 0.014 | 0.014 |
+| Venue shared lock | 0.018 | 0.016 | 0.021 |
+| Installation update lock | 0.016 | 0.022 | 0.019 |
+| Report deduplication | 0.016 | 0.019 | 0.015 |
+| Latest hold comparison | 1.428 | 11.785 | 118.722 |
+| First version, no predecessor | 0.128 | 0.156 | 0.154 |
+| Absent requested version | 0.119 | 0.122 | 0.114 |
+
+The original query at commit `4d0eb9a5e` repeatedly aggregated comparison rows and
+scanned history even when one side was missing. At one million reports, the same
+Mac command measured 30.936 ms without a predecessor and 32.912 ms for an absent
+version, before the existence probes. The latest comparison measured 112.837 ms
+before and 118.722 ms after; this run establishes no improvement for that case.
+Its cost still grows with reports in the two compared versions. The focused test
+checks that aggregates execute once and missing comparisons avoid history scans.
+
+Use these as local synthetic measurements, not a production capacity limit or a
+concurrent throughput estimate. A different version distribution, longer sources,
+eight log entries, cold storage, waiting locks, transport and concurrent writes
+can change the result. Table size excludes WAL, backups and replicas. Assess
+matched-window error shares after real reports exist; this experiment changes no
+retention or reporting policy.
