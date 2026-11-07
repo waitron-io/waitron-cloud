@@ -2,9 +2,9 @@
 
 ## Disposable test slots and repository runners (D592)
 
-The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. One manual slot is available; its concurrent-admission test drains child output before reading the result. The host startup service is implemented; publication with its coupled immutable configuration remains open.
+The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
-Publish and qualify automatic Mac recovery with the coupled service/helper, then qualify an actual server reboot in the watcher-coordinated window. Freeze transitive guest packages, measure multiple-slot capacity, then address contributor approval, the public-repository scheduling risk and outage/hosted rollback before CI activation. Reproduce and move to the permanent host under the same design. D570's EC2 proof and D591's selection work stay separate.
+Build and qualify the [first Cloud CI canary and hosted fallback](superpowers/plans/2026-11-07-disposable-ci-canary.md) before multiple-slot capacity. App credential handoff, returning-contributor refusal, public-repository scheduling risk and ordinary CI mode-switch gates remain. Then freeze transitive guest packages, measure capacity and reproduce the permanent host. D570’s EC2 proof and D591’s selection work stay separate.
 
 ## Keep the private shared UI release current (D579)
 
