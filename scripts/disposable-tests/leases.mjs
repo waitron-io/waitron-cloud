@@ -4,6 +4,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {constants, fstatSync, mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync, readdirSync} from 'node:fs';
 import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {withKernelLock} from './kernel-lock.mjs';
 
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -241,4 +242,30 @@ export class LocalLeases {
       ...(scoped.ciInvocation===undefined?{}:{ciInvocation:scoped.ciInvocation}),
       ...(scoped.orphanRunners===undefined?{}:{orphanRunners:scoped.orphanRunners})};
   }); }
+}
+
+export function refuseLegacy(state) {
+  for (const name of ['manual.lock','recovery.lock','ledger/lock']) {
+    try { lstatSync(join(state,name)); }
+    catch (error) { if (error.code==='ENOENT') continue; throw error; }
+    throw new Error('Legacy gate present; leave it untouched: '+name);
+  }
+}
+
+// The slot lock lives through cleanup; the shared ledger lock covers only updates.
+export async function withAvailableSlot({state,hostGeneration,slots},work,{signal}={}) {
+  assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
+  refuseLegacy(state);
+  for(let slot=0;slot<slots;slot++){
+    let admitted=false;
+    const result=await withKernelLock(join(state,'slot-'+slot),async()=>{
+      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});
+      const current=leases.inspect();
+      if(current.ciInvocation || current.slots[0].state!=='free')return {code:75,reason:'recorded-slot-busy-or-quarantined'};
+      admitted=true;
+      return work({leases,slot,temporaryState:join(state,'slot-'+slot)});
+    },{signal});
+    if(admitted || result.code!==75)return result;
+  }
+  return {code:75,reason:'capacity-busy'};
 }

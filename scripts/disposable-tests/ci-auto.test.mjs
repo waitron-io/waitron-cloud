@@ -314,3 +314,19 @@ test('a refused cancellation that is still settling retains its intent until rec
  assert.equal(reruns,1);assert.ok(leases.inspect().slots.every(s=>!s.ciInvocation));
  await reconcileManual({...config,transport:{},api:f.api});assert.equal(reruns,1);
 });
+
+test('the real recovery CLI finishes a refused-workflow hosted retry without an import cycle',async t=>{
+ const {writeFileSync}=await import('node:fs'),{spawnSync}=await import('node:child_process');
+ const config=await refusalPool(t),configuration=config.state+'/configuration.json';
+ writeFileSync(configuration,JSON.stringify({...config,host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:config.state,ci:{...policy,appEnv:config.state+'/app.env',appKey:config.state+'/app.pem'}}));
+ const manual=new URL('./manual.mjs',import.meta.url),app=new URL('./github-app.mjs',import.meta.url),transport=new URL('./transport.mjs',import.meta.url);
+ const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};import {CITransport} from ${JSON.stringify(transport.href)};
+ const head=${JSON.stringify(head)},execution=${JSON.stringify(execution)},workflow=${JSON.stringify(workflow)},policy=${JSON.stringify(policy)};
+ const f=(${fixture.toString()})();const get=f.api.get;let cancelled=0,reruns=0;
+ GithubApp.prototype.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/contents/')?{encoding:'base64',content:Buffer.from('changed').toString('base64')}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:get(path);
+ GithubApp.prototype.post=async path=>{if(path.endsWith('/cancel'))cancelled++;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
+ CITransport.prototype.healthy=async()=>true;
+ process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(configuration)},'--once'];await import(${JSON.stringify(manual.href)});assert.equal(cancelled,1);assert.equal(reruns,1);console.log('REFUSED_CLI_FINISHED');`;
+ const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:15000});
+ assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/REFUSED_CLI_FINISHED/);assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+});

@@ -3,7 +3,7 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp} from './github-app.mjs';
-import {LocalLeases,configuredSlots} from './leases.mjs';
+import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary} from './ci-canary.mjs';
@@ -62,7 +62,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  return {code:0,served:jobs.length};
 }
 async function fallbackRefused({config,api,runId,jobId,name,label,signal}){
- const {withAvailableSlot}=await import('./manual.mjs'),{randomBytes}=await import('node:crypto');
+ const {randomBytes}=await import('node:crypto');
  const policy=config.ci,base=`/repos/${policy.repository}`;
  // Refusal may prevent execution, but cancellation still needs a current owned label.
  const run=await api.get(`${base}/actions/runs/${runId}`,{signal});
