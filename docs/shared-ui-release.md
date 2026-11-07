@@ -60,6 +60,10 @@ leaves the deadline unchecked. A known overdue publication still fails even
 if another publication's timestamp is missing. The check runs during ordinary
 CI, with no new schedule. Older pull request branches that lack the script
 print a skip message so they can still reach test selection.
+The [older-head rehearsal](https://github.com/waitron-io/waitron-cloud/actions/runs/42324680039)
+printed that notice and completed planning. Its [temporary PR](https://github.com/waitron-io/waitron-cloud/pull/1046)
+was closed without merging; the remaining general and AWS jobs were stopped
+after that compatibility check, so it does not prove complete CI.
 
 ## Earlier Cloud publication workflow
 
