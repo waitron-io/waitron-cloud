@@ -269,9 +269,15 @@ the original check. The venue proof now retains the actual and expected four-val
 assertion for this case when its output contains only the worker’s fixed messages
 (`node --test scripts/translation-disconnect-diagnostics.test.mjs`). Other output
 remains private. Details beyond 400 output characters or the proof’s existing
-16 failure slots are omitted; the ordinary failure row keeps priority. Selected
-backend ids and termination results still need capture. Active-job failure
-ordering at direct pool queries remains separately unqualified; the reviewed idle scenario leases no job.
+16 failure slots are omitted; the ordinary failure row keeps priority. The next
+assertion failure also retains its zero-based iteration and up to four selected
+backend IDs with their termination results. The sender and parent accept only
+bounded integer IDs and booleans; other fields and private output remain refused.
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec node --test test/worker-diagnostic-binding.test.ts`
+to force this exact assertion to fail after a real backend termination and check
+that its safe details survive the proof. This qualifies evidence capture, not the
+historical cause. Active-job failure ordering at direct pool queries remains
+separately unqualified; the reviewed idle scenario leases no job.
 A later CI disconnect failure retains the reverse output: a pass-retry line before
 that fatal line. A local real PostgreSQL lease-query termination reproduces this
 ordering when the client error event arrives later. The query reports `57P01`,

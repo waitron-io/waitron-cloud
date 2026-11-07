@@ -20,7 +20,7 @@ function refusal(actual,name=title,options={}){
   const file=join(directory,'packages/translation/test',options.file??'worker-cli.test.ts');
   writeFileSync(file,`import {test} from 'node:test';import assert from 'node:assert/strict';
  ${options.prior?`for(let n=0;n<${options.prior};n++)test('earlier failure '+n,()=>assert.fail());`:''}
- test(${JSON.stringify(name)},()=>{${options.code?`throw Object.assign(new Error('private-error'),{code:${JSON.stringify(options.code)},actual:${JSON.stringify(actual)},expected:[1,null,'',${JSON.stringify(failed)}]});`:`assert.deepEqual(${JSON.stringify(actual)},${JSON.stringify(options.expected??[1,null,'',failed])});`}});`);
+ test(${JSON.stringify(name)},()=>{try{${options.code?`throw Object.assign(new Error('private-error'),{code:${JSON.stringify(options.code)},actual:${JSON.stringify(actual)},expected:[1,null,'',${JSON.stringify(failed)}]});`:`assert.deepEqual(${JSON.stringify(actual)},${JSON.stringify(options.expected??[1,null,'',failed])});`}}catch(error){Object.assign(error,${JSON.stringify(options.termination===undefined?{}:{termination:options.termination})});throw error;}});`);
   const driver=join(directory,'driver.mjs');
   writeFileSync(driver,`import {run} from 'node:test';import {summariseServiceMatrix} from './scripts/test-cloud-free-services.mjs';
  try{await summariseServiceMatrix(run({files:[${JSON.stringify(file)}],execArgv:[]}),[{id:'translation',files:[${JSON.stringify(file)}]}]);}catch{process.exitCode=1;}`);
@@ -103,4 +103,33 @@ test('the actual worker refusal message remains eligible for the diagnostic',()=
  assert.equal(worker.status,1);assert.equal(worker.stdout,'');
  const result=refusal([1,null,'',worker.stderr+worker.stderr]);
  assert.ok(result.stderr.split('\n').map(parseServiceProofFailure).some(row=>row?.kind==='translation-disconnect'),result.stderr);
+});
+
+const termination={iteration:1,backends:[{pid:321,killed:true},{pid:654,killed:false}]};
+test('the proof retains only bounded backend termination facts beside the safe assertion',()=>{
+ const result=refusal([1,null,'',retry+failed],title,{termination});
+ const rows=result.stderr.trim().split('\n').map(parseServiceProofFailure).filter(Boolean);
+ assert.equal(result.status,1);assert.equal(result.stdout,'');
+ assert.deepEqual(rows.find(row=>row.kind==='translation-disconnect'),{
+  kind:'translation-disconnect',actual:[1,null,'',retry+failed],expected:[1,null,'',failed],termination,
+ });
+});
+
+test('the parent preserves valid termination facts and rejects private or malformed additions',()=>{
+ const row={kind:'translation-disconnect',actual:[1,null,'',retry+failed],expected:[1,null,'',failed],termination};
+ assert.deepEqual(parseServiceProofFailure('SERVICE_PROOF_FAILURE '+JSON.stringify(row)),row);
+ for(const invalid of [
+  {...termination,iteration:-1},{...termination,iteration:3},{...termination,iteration:0.5},
+  {...termination,private:'private-sentinel'}, {...termination,backends:'private-sentinel'},
+  {...termination,backends:Array(5).fill({pid:123,killed:true})},
+  ...[0,-1,1.5,2147483648,'private-sentinel'].map(pid=>({...termination,backends:[{pid,killed:true}]})),
+  ...[null,1,'private-sentinel'].map(killed=>({...termination,backends:[{pid:123,killed}]})),
+  {...termination,backends:[{pid:123,killed:true,query:'private-sentinel'}]},
+ ]){
+  assert.equal(parseServiceProofFailure('SERVICE_PROOF_FAILURE '+JSON.stringify({...row,termination:invalid})),undefined);
+  const result=refusal(row.actual,title,{termination:invalid});
+  assert.equal(result.status,1);assert.ok(!result.stderr.includes('private-sentinel'),result.stderr);
+  const diagnostic=result.stderr.trim().split('\n').map(parseServiceProofFailure).find(value=>value?.kind==='translation-disconnect');
+  assert.deepEqual(diagnostic,{kind:'translation-disconnect',actual:row.actual,expected:row.expected});
+ }
 });

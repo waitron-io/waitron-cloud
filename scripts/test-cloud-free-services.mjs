@@ -31,12 +31,26 @@ function validDisconnectTuple(value){
     typeof value[3]==='string'&&value[3].length<=400&&
     value[3].split(/(?<=\n)/).every(line=>line===''||workerLines.includes(line));
 }
+function validDisconnectTermination(value){
+  try{
+    keys(value,['iteration','backends']);
+    assert.ok(Number.isInteger(value.iteration)&&value.iteration>=0&&value.iteration<3);
+    assert.ok(Array.isArray(value.backends)&&value.backends.length<=4);
+    for(const backend of value.backends){
+      keys(backend,['pid','killed']);
+      assert.ok(Number.isInteger(backend.pid)&&backend.pid>0&&backend.pid<=2147483647);
+      assert.equal(typeof backend.killed,'boolean');
+    }
+    return true;
+  }catch{return false;}
+}
 function disconnectAssertion(error){
   for(let depth=0;depth<4&&error&&typeof error==='object';depth++,error=error.cause){
     if(error.code!=='ERR_ASSERTION'||!validDisconnectTuple(error.actual))continue;
     try{assert.deepEqual(error.expected,[1,null,'',workerFailure]);}
     catch{continue;}
-    return {kind:'translation-disconnect',actual:error.actual,expected:error.expected};
+    return {kind:'translation-disconnect',actual:error.actual,expected:error.expected,
+      ...(validDisconnectTermination(error.termination)?{termination:error.termination}:{})};
   }
 }
 let proofStage;
@@ -74,7 +88,9 @@ export function parseServiceProofFailure(line) {
   try {
     const value=JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length));
     if(value.kind==='translation-disconnect'){
-      keys(value,['kind','actual','expected']);assert.ok(validDisconnectTuple(value.actual));
+      keys(value,value.termination===undefined?['kind','actual','expected']:['kind','actual','expected','termination']);
+      if(value.termination!==undefined)assert.ok(validDisconnectTermination(value.termination));
+      assert.ok(validDisconnectTuple(value.actual));
       assert.deepEqual(value.expected,[1,null,'',workerFailure]);return value;
     }
     if(value.kind==='truncated'){
