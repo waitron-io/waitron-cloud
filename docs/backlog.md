@@ -4682,18 +4682,6 @@ a passing remote-guidance qualification does not establish a repair.
 
 ## CI mutation checks (D591)
 
-The approved split removes recurring product-source mutation work associated
-with 30 files, retains six files for nightly checks, and keeps the password and
-relay diagnostics on their affected pull-request paths. Ordinary behavior tests
-keep their assertions. Required-case receipts must reject a missing, skipped or
-unexecuted case without copying or mutating the product. The password diagnostic
-also watches the session implementation it changes.
-
-The eight historical allowance failures occurred on unfinished PR #858 revisions:
-four incomplete guard lists, three missing schema prerequisites and one serial
-qualification exceeding its child deadline. The delivered PR filled the list and
-schema prerequisites and split the serial qualification; the full current nightly
-set passes on Debian. Moving those checks to nightly gets no credit for that
-earlier repair. Compare healthy full runs after landing before claiming elapsed
+Compare healthy full runs after the approved split lands before claiming elapsed
 or aggregate job-time savings. The 38-minute assessment totals reported test-body
 work, which overlaps across jobs.
