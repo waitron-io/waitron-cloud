@@ -3156,7 +3156,8 @@ implementation or production evidence.
   availability checks for sign-in, remote access and backups. Full service/fault proof
   and the strict common verifier remain unbuilt. D570's
   [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
-  still needs the reviewed owner-run handoff and a live payload-free ARM run,
+  still needs a live payload-free ARM run after the billing-response correction
+  and named refusal steps,
   explained existing account charges within the unchanged monthly cap, measured
   shutdown and disk/interface absence, actual itemised billing and removal.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions

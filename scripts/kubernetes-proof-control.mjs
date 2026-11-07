@@ -17,11 +17,13 @@ import { renderDeadlineBootstrap } from '../deploy/kubernetes/proof/bootstrap.mj
 const execute = promisify(execFile);
 const mainChecks = new AsyncLocalStorage();
 const account = '462991287391', region = 'eu-north-1';
-const refuse = () => { throw new Error('D570 controller refused'); };
-const check = value => { if (!value) refuse(); };
-const pending = code => { throw Object.assign(new Error('D570 controller refused'), { code }); };
+const refuse = (reason = 'control input') => { throw new Error(`D570 controller refused: ${reason}`); };
+const checkControl = (value, reason = 'control input') => { if (!value) refuse(reason); };
+const check = checkControl;
+const pending = (code, reason) => { throw Object.assign(new Error(`D570 controller refused: ${reason}`), { code }); };
 const iso = instant => new Date(instant).toISOString().replace('.000Z', 'Z');
 function instant(value) {
+  const check = (value, reason = 'clock') => checkControl(value, reason);
   check(typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value));
   const result = Date.parse(value);
   check(Number.isFinite(result) && iso(result) === value);
@@ -160,6 +162,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
 }
 
 async function checkedMain(checkout, { forceRemote = false } = {}) {
+  const check = (value, reason = 'checkout') => checkControl(value, reason);
   const cwd = await realpath(checkout);
   async function git(...args) {
     try {
@@ -167,7 +170,7 @@ async function checkedMain(checkout, { forceRemote = false } = {}) {
         killSignal: 'SIGKILL', maxBuffer: 1024 * 1024,
         env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
       return stdout.trim();
-    } catch { refuse(); }
+    } catch { refuse('checkout'); }
   }
   const values = (await git('rev-parse', '--show-toplevel', 'HEAD', 'HEAD^{tree}', 'refs/remotes/origin/main')).split('\n');
   check(values.length === 4 && await realpath(values[0]) === cwd);
@@ -188,8 +191,9 @@ async function checkedMain(checkout, { forceRemote = false } = {}) {
 }
 
 function billingObservation(response, period, now) {
-  check(response && !response.NextPageToken && Array.isArray(response.GroupDefinitions)
-    && response.GroupDefinitions.length === 0 && Array.isArray(response.ResultsByTime) && response.ResultsByTime.length === 1);
+  const check = (value, reason = 'ce billing shape') => checkControl(value, reason);
+  check(response && !response.NextPageToken && (response.GroupDefinitions === undefined
+    || Array.isArray(response.GroupDefinitions) && response.GroupDefinitions.length === 0) && Array.isArray(response.ResultsByTime) && response.ResultsByTime.length === 1);
   const row = response.ResultsByTime[0], total = row?.Total?.UnblendedCost;
   check(row?.TimePeriod?.Start === period.Start && row.TimePeriod.End === period.End
     && typeof row.Estimated === 'boolean' && Array.isArray(row.Groups) && row.Groups.length === 0
@@ -209,7 +213,8 @@ function billingObservation(response, period, now) {
 }
 
 async function inspectManualOwner({ checkout, region: requestedRegion, now, aws, environment = process.env, clock = Date.now }, withBilling) {
-  check(requestedRegion === region && !environment.GITHUB_ACTIONS && !environment.GITHUB_EVENT_NAME);
+  const check = (value, reason = 'clock') => checkControl(value, reason);
+  check(requestedRegion === region && !environment.GITHUB_ACTIONS && !environment.GITHUB_EVENT_NAME, 'control input');
   const current = instant(now);
   check(current < Date.parse('2027-02-28T23:59:00Z') && typeof aws?.call === 'function');
   const fresh = () => {
@@ -222,16 +227,16 @@ async function inspectManualOwner({ checkout, region: requestedRegion, now, aws,
   fresh();
   const identity = await aws.call('sts', 'get-caller-identity', {});
   check(identity?.Account === account && typeof identity.Arn === 'string'
-    && /^arn:aws:sts::462991287391:assumed-role\/[\w+=,.@/-]+\/[\w+=,.@-]+$/.test(identity.Arn));
+    && /^arn:aws:sts::462991287391:assumed-role\/[\w+=,.@/-]+\/[\w+=,.@-]+$/.test(identity.Arn), 'sts identity');
   fresh();
-  check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
+  check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source), 'checkout');
   fresh();
   if (!withBilling) return { account, region, ...source };
   const period = { Start: now.slice(0, 7) + '-01', End: iso(current + 86400_000).slice(0, 10) };
   const response = await aws.call('ce', 'get-cost-and-usage', { TimePeriod: period, Granularity: 'MONTHLY',
     Metrics: ['UnblendedCost'], Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [account] } } });
   fresh();
-  check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
+  check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source), 'checkout');
   fresh();
   return { account, region, ...source, billing: billingObservation(response, period, now) };
 }
@@ -239,6 +244,7 @@ async function inspectManualOwner({ checkout, region: requestedRegion, now, aws,
 export async function inspectManualControl(options) { return inspectManualOwner(options, true); }
 
 export async function inspectManualOpening(options) {
+  const check = (value, reason = 'ce grouped shape') => checkControl(value, reason);
   const inspection = await inspectManualControl(options), { aws, checkout, now, clock = Date.now } = options;
   const explanations = structuredClone(options.explanations ?? []), items = [];
   if (inspection.billing.microUsd > 0) {
@@ -304,27 +310,29 @@ export async function inspectManualSetup(options) {
   const parameterName = '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64';
   const parameter = (await read('ssm', 'get-parameter', { Name: parameterName, WithDecryption: false }))?.Parameter;
   check(parameter?.Name === parameterName && parameter.Type === 'String'
-    && typeof parameter.Value === 'string' && /^ami-[a-f0-9]{17}$/.test(parameter.Value));
+    && typeof parameter.Value === 'string' && /^ami-[a-f0-9]{17}$/.test(parameter.Value), 'ssm parameter');
   const images = await read('ec2', 'describe-images', { ImageIds: [parameter.Value], Owners: [policy.officialImageOwner] });
   check(!images?.NextToken && Array.isArray(images?.Images) && images.Images.length === 1
-    && images.Images[0]?.ImageId === parameter.Value);
+    && images.Images[0]?.ImageId === parameter.Value, 'ec2 image');
   const input = { account, region, now, repository: { fullName: policy.repository, id: policy.repositoryId,
     ownerId: policy.repositoryOwnerId }, image: images.Images[0] };
   // Validate the provider image before any further discovery, using the renderer's same image contract.
-  renderManualSetup({ ...input, s3PrefixListId: 'pl-00000000' });
+  try { renderManualSetup({ ...input, s3PrefixListId: 'pl-00000000' }); }
+  catch { refuse('ec2 image'); }
   const types = await read('ec2', 'describe-instance-types', { InstanceTypes: [policy.instanceType] });
-  check(!types?.NextToken && Array.isArray(types?.InstanceTypes) && types.InstanceTypes.length === 1);
+  check(!types?.NextToken && Array.isArray(types?.InstanceTypes) && types.InstanceTypes.length === 1, 'ec2 capacity');
   const machine = types.InstanceTypes[0];
   check(machine?.InstanceType === policy.instanceType && machine.MemoryInfo?.SizeInMiB === 32768
     && machine.VCpuInfo?.DefaultVCpus === 8 && Array.isArray(machine.ProcessorInfo?.SupportedArchitectures)
     && machine.ProcessorInfo.SupportedArchitectures.includes('arm64')
-    && Array.isArray(machine.SupportedUsageClasses) && machine.SupportedUsageClasses.includes('on-demand'));
+    && Array.isArray(machine.SupportedUsageClasses) && machine.SupportedUsageClasses.includes('on-demand'), 'ec2 capacity');
   const prefixName = `com.amazonaws.${region}.s3`;
   const prefixes = await read('ec2', 'describe-managed-prefix-lists', { Filters: [
     { Name: 'prefix-list-name', Values: [prefixName] }, { Name: 'owner-id', Values: ['AWS'] }] });
-  check(!prefixes?.NextToken && Array.isArray(prefixes?.PrefixLists) && prefixes.PrefixLists.length === 1);
+  check(!prefixes?.NextToken && Array.isArray(prefixes?.PrefixLists) && prefixes.PrefixLists.length === 1, 'ec2 prefix');
   const prefix = prefixes.PrefixLists[0];
-  check(prefix?.OwnerId === 'AWS' && prefix.PrefixListName === prefixName && prefix.AddressFamily === 'IPv4');
+  check(prefix?.OwnerId === 'AWS' && prefix.PrefixListName === prefixName && prefix.AddressFamily === 'IPv4'
+    && typeof prefix.PrefixListId === 'string' && /^pl-[0-9a-f]{8,17}$/.test(prefix.PrefixListId), 'ec2 prefix');
   return { ...inspection, template: renderManualSetup({ ...input, s3PrefixListId: prefix.PrefixListId }) };
 }
 
@@ -332,33 +340,35 @@ async function readManualProtection(read, stackId, states) {
   const described = await read('cloudformation', 'describe-stacks', { StackName: stackId });
   check(!described?.NextToken && Array.isArray(described?.Stacks) && described.Stacks.length === 1
     && described.Stacks[0]?.StackId === stackId
-    && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(described.Stacks[0].StackStatus));
+    && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(described.Stacks[0].StackStatus), 'stack');
   const inventory = await read('cloudformation', 'describe-stack-resources', { StackName: stackId });
-  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
+  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100, 'stack resources');
   function resource(logicalId, type, pattern) {
     const rows = inventory.StackResources.filter(row => row?.LogicalResourceId === logicalId);
     check(rows.length === 1 && rows[0].StackId === stackId && rows[0].ResourceType === type
       && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(rows[0].ResourceStatus)
-      && typeof rows[0].PhysicalResourceId === 'string' && pattern.test(rows[0].PhysicalResourceId));
+      && typeof rows[0].PhysicalResourceId === 'string' && pattern.test(rows[0].PhysicalResourceId), 'stack resources');
     return rows[0].PhysicalResourceId;
   }
   const bucket = resource('Bucket', 'AWS::S3::Bucket', /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
   const ruleName = resource('ExpiryRule', 'AWS::Events::Rule', /^[A-Za-z0-9_.-]{1,64}$/);
   const functionName = resource('ExpiryFunction', 'AWS::Lambda::Function', /^[A-Za-z0-9_-]{1,64}$/);
+  // The explicit default bus and its exact rule ARN identify the bus even when the reply omits its name.
   const rule = await read('events', 'describe-rule', { Name: ruleName, EventBusName: 'default' });
   check(rule?.Name === ruleName && rule.Arn === `arn:aws:events:${region}:${account}:rule/${ruleName}`
     && states.includes(rule.State) && rule.ScheduleExpression === 'rate(1 minute)'
-    && rule.EventBusName === 'default' && !rule.EventPattern);
+    && (rule.EventBusName === undefined || rule.EventBusName === 'default') && !rule.EventPattern, 'events rule');
   const targets = await read('events', 'list-targets-by-rule', { Rule: ruleName, EventBusName: 'default', Limit: 100 });
-  check(!targets?.NextToken && Array.isArray(targets?.Targets) && targets.Targets.length === 1);
+  check(!targets?.NextToken && Array.isArray(targets?.Targets) && targets.Targets.length === 1, 'events targets');
   const target = targets.Targets[0];
   check(target?.Id === 'D570Expiry' && target.Arn === `arn:aws:lambda:${region}:${account}:function:${functionName}`
     && target.RetryPolicy?.MaximumEventAgeInSeconds === 60 && target.RetryPolicy.MaximumRetryAttempts === 0
-    && !Object.hasOwn(target, 'Input') && !Object.hasOwn(target, 'InputPath') && !Object.hasOwn(target, 'InputTransformer'));
+    && !Object.hasOwn(target, 'Input') && !Object.hasOwn(target, 'InputPath') && !Object.hasOwn(target, 'InputTransformer'), 'events targets');
   return { bucket, ruleName };
 }
 
 export async function inspectManualProtection(options) {
+  const check = (value, reason = 's3 object') => checkControl(value, reason);
   const { stackId, checkout, aws, now, clock = Date.now } = options;
   check(typeof stackId === 'string'
     && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(stackId));
@@ -385,7 +395,7 @@ export async function inspectManualProtection(options) {
   check(object?.Body instanceof Uint8Array && object.Body.byteLength > 0 && object.Body.byteLength <= 1024 * 1024
     && object.ServerSideEncryption === 'AES256' && object.ContentType === 'application/json');
   let heartbeat;
-  try { heartbeat = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(object.Body)); } catch { refuse(); }
+  try { heartbeat = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(object.Body)); } catch { refuse('s3 object'); }
   check(heartbeat?.schema === 'd570-sweep-v1' && heartbeat.account === account
     && heartbeat.region === region && heartbeat.stackId === stackId);
   function serviceTime(value) {
@@ -418,6 +428,7 @@ export function createManualLedgerStore({ bucket, aws }) {
 }
 
 export async function inspectManualBudget(options) {
+  const check = (value, reason = 's3 ledger') => checkControl(value, reason);
   const inspection = await inspectManualProtection(options);
   const { now, checkout, store, clock = Date.now } = options;
   const scope = { account, region, stackId: inspection.stackId };
@@ -432,6 +443,7 @@ export async function inspectManualBudget(options) {
 }
 
 export async function bookManualSetup(options) {
+  const check = (value, reason = 'booking') => checkControl(value, reason);
   const { now, directory, clock = Date.now } = options;
   check(options.priceInputs === undefined || options.cost === undefined);
   const priceInputs = structuredClone(options.priceInputs);
@@ -447,7 +459,7 @@ export async function bookManualSetup(options) {
       && Number.isSafeInteger(item.upperMicroUsd) && item.upperMicroUsd > 0
       && typeof item.digest === 'string' && /^[a-f0-9]{64}$/.test(item.digest)
       && typeof item.source === 'string' && item.source.length <= 2048);
-    let source; try { source = new URL(item.source); } catch { refuse(); }
+    let source; try { source = new URL(item.source); } catch { refuse('booking'); }
     check(source.protocol === 'https:' && ['pricing.us-east-1.amazonaws.com', 'aws.amazon.com'].includes(source.hostname)
       && !source.username && !source.password && !source.port && !source.search && !source.hash);
     upperMicroUsd += item.upperMicroUsd;
@@ -482,6 +494,7 @@ export async function bookManualSetup(options) {
 }
 
 export async function bookManualFirstSetup(options) {
+  const check = (value, reason = 'booking') => checkControl(value, reason);
   check(['cost', 'priceInputs', 'quantities', 'fixed'].every(name => options[name] === undefined));
   return bookManualSetup({ ...options, priceInputs: firstSetupPriceInputs(options.catalogues) });
 }
@@ -504,6 +517,7 @@ function firstSetupPriceInputs(catalogues) {
 }
 
 export async function createManualFirstSetup(options) {
+  const check = (value, reason = 'stack') => checkControl(value, reason);
   const { aws, checkout, now, clock = Date.now, sleep = delay } = options;
   const opening = await inspectManualOpening(options);
   const booking = await bookManualFirstSetup({ ...options, expectedOpening: opening.billing,
@@ -555,6 +569,7 @@ export async function createManualFirstSetup(options) {
 }
 
 export async function initializeManualFirstSetup(options) {
+  const check = (value, reason = 's3 ledger') => checkControl(value, reason);
   const setup = await createManualFirstSetup(options);
   const { checkout, now, clock = Date.now } = options;
   async function unchanged() {
@@ -597,6 +612,7 @@ export async function initializeManualFirstSetup(options) {
 }
 
 export async function launchManualFirstDrill(options) {
+  const check = (value, reason = 'ec2 launch') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now, uuid = randomUUID() } = options;
   const setup = structuredClone(options.setup);
   const inspection = await inspectManualBudget({ ...options, stackId: setup?.stackId, store: undefined });
@@ -663,6 +679,7 @@ export async function launchManualFirstDrill(options) {
 }
 
 export async function inspectManualFirstGuest(options) {
+  const check = (value, reason = 'ec2 observation') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now } = options, launch = structuredClone(options.launch);
   const inspection = await inspectManualBudget({ ...options, stackId: launch?.stackId, store: undefined });
   const reservation = launch.reservation;
@@ -700,18 +717,20 @@ export async function inspectManualFirstGuest(options) {
       const matches = instance.Tags.filter(tag => tag?.Key === key);
       return matches.length === 1 && matches[0].Value === value;
     }));
-    if (instance.State?.Name === 'pending') pending('D570_NOT_READY');
+    if (instance.State?.Name === 'pending') pending('D570_NOT_READY', 'readiness pending');
     check(instance.State?.Name === 'running');
     check(Array.isArray(instance.BlockDeviceMappings) && instance.BlockDeviceMappings.length === 1
       && Array.isArray(instance.NetworkInterfaces) && instance.NetworkInterfaces.length === 1);
     const disk = instance.BlockDeviceMappings[0], network = instance.NetworkInterfaces[0];
     check(disk?.DeviceName === '/dev/xvda' && disk.Ebs?.DeleteOnTermination === true && disk.Ebs.Status === 'attached'
       && typeof disk.Ebs.VolumeId === 'string' && /^vol-[a-f0-9]{17}$/.test(disk.Ebs.VolumeId));
+    // DescribeInstances nests the attachment under the already checked instance.
     check(typeof network?.NetworkInterfaceId === 'string' && /^eni-[a-f0-9]{17}$/.test(network.NetworkInterfaceId)
       && network.OwnerId === account && network.SubnetId === launch.subnetId && network.Status === 'in-use' && !network.Association
       && (!network.Ipv6Addresses || Array.isArray(network.Ipv6Addresses) && network.Ipv6Addresses.length === 0)
       && Array.isArray(network.Groups) && network.Groups.length === 1 && network.Groups[0].GroupId === launch.groupId
-      && network.Attachment?.InstanceId === launch.instanceId && network.Attachment.DeviceIndex === 0
+      && (network.Attachment?.InstanceId === undefined || network.Attachment.InstanceId === launch.instanceId)
+      && network.Attachment?.DeviceIndex === 0
       && network.Attachment.Status === 'attached' && network.Attachment.DeleteOnTermination === true);
     return { volumeIds: [disk.Ebs.VolumeId], interfaceIds: [network.NetworkInterfaceId] };
   }
@@ -722,7 +741,7 @@ export async function inspectManualFirstGuest(options) {
   const consoleOutput = await call('get-console-output', { InstanceId: launch.instanceId, Latest: true });
   const timestamp = Date.parse(consoleOutput?.Timestamp);
   check(consoleOutput?.InstanceId === launch.instanceId);
-  if (consoleOutput.Output === undefined || consoleOutput.Output === '') pending('D570_NOT_READY');
+  if (consoleOutput.Output === undefined || consoleOutput.Output === '') pending('D570_NOT_READY', 'readiness pending');
   check(Number.isFinite(timestamp)
     && timestamp >= instant(reservation.startedAt) && timestamp <= clock()
     && typeof consoleOutput.Output === 'string' && Buffer.byteLength(consoleOutput.Output) <= 1024 * 1024);
@@ -731,7 +750,7 @@ export async function inspectManualFirstGuest(options) {
   const boots = new Set(lines.map(line => line.slice(prefix.length)));
   if (boots.size === 0) {
     check(!consoleOutput.Output.split(/\r?\n/).some(line => line.startsWith('D570_DEADLINE_READY ')));
-    pending('D570_NOT_READY');
+    pending('D570_NOT_READY', 'readiness pending');
   }
   check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
   check(isDeepStrictEqual(await liveResources(), resources));
@@ -740,6 +759,7 @@ export async function inspectManualFirstGuest(options) {
 }
 
 export async function observeManualFirstShutdown(options) {
+  const check = (value, reason = 'ec2 observation') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now, sleep = delay } = options, ready = structuredClone(options.ready);
   const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
   const reservation = ready.reservation;
@@ -799,10 +819,11 @@ export async function observeManualFirstShutdown(options) {
     check(remaining > 0);
     await sleep(Math.min(5000, remaining));
   }
-  refuse();
+  refuse('ec2 observation');
 }
 
 export async function inspectManualFirstGuestCleanup(options) {
+  const check = (value, reason = 'ec2 cleanup') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now } = options, ready = structuredClone(options.ready);
   const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
   const reservation = ready.reservation;
@@ -847,7 +868,7 @@ export async function inspectManualFirstGuestCleanup(options) {
   check(!volumes?.NextToken && Array.isArray(volumes?.Volumes));
   if (volumes.Volumes.length) {
     check(volumes.Volumes.every(row => ready.volumeIds.includes(row?.VolumeId)));
-    pending('D570_CLEANUP_PENDING');
+    pending('D570_CLEANUP_PENDING', 'cleanup pending');
   }
   // Interfaces are not tagged by the template; the owned subnet also exposes leftovers after controller loss.
   const interfaces = await call('describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [ready.subnetId] }], MaxResults: 100 });
@@ -855,7 +876,7 @@ export async function inspectManualFirstGuestCleanup(options) {
   if (interfaces.NetworkInterfaces.length) {
     check(interfaces.NetworkInterfaces.every(row => ready.interfaceIds.includes(row?.NetworkInterfaceId)
       && row.SubnetId === ready.subnetId && row.OwnerId === account));
-    pending('D570_CLEANUP_PENDING');
+    pending('D570_CLEANUP_PENDING', 'cleanup pending');
   }
   // An OS actor and absent resources do not establish when the guest stopped or reconcile its bill.
   return { ...ready, ...inspection, stateReason: instance.StateReason, terminated: true, volumesAbsent: true, interfacesAbsent: true,
@@ -863,6 +884,7 @@ export async function inspectManualFirstGuestCleanup(options) {
 }
 
 export async function inspectManualFirstBilling(options) {
+  const check = (value, reason = 'ce grouped shape') => checkControl(value, reason);
   const { checkout, aws, now, clock = Date.now } = options;
   const setup = structuredClone(options.setup), launch = structuredClone(options.launch);
   const inspection = await inspectManualBudget({ ...options, stackId: setup?.stackId, store: undefined });
@@ -954,6 +976,7 @@ export async function inspectManualFirstBilling(options) {
 const removalExport = Symbol('owned removal export');
 
 export async function retainManualHistory(options) {
+  const check = (value, reason = 'private history') => checkControl(value, reason);
   const { checkout, directory, aws, now, clock = Date.now } = options, cleanup = options[removalExport];
   check(typeof directory === 'string' && directory === resolve(directory));
   const parent = await lstat(dirname(directory));
@@ -1074,6 +1097,7 @@ export async function retainManualHistory(options) {
 }
 
 export async function removeManualFirstSetup(options) {
+  const check = (value, reason = 'ec2 cleanup') => checkControl(value, reason);
   const { checkout, aws, directory, now, clock = Date.now, sleep = delay } = options;
   const setup = structuredClone(options.setup), inspection = await inspectManualOwner(options, false);
   check(setup?.account === account && setup.region === region && /^[a-f0-9]{40}$/.test(setup.head)
@@ -1172,6 +1196,7 @@ async function privateWrite(path, body) {
 }
 
 async function privateJson(path) {
+  const check = (value, reason = 'private history') => checkControl(value, reason);
   const info = await lstat(path);
   check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600 && info.size > 0 && info.size <= 1024 * 1024);
   return JSON.parse(await readFile(path, 'utf8'));

@@ -20,7 +20,7 @@ const definitions = {
     logStorage: ['GB-Mo', { usagetype: 'EUN1-TimedStorage-ByteHrs', operation: '' }],
   },
 };
-const check = condition => { if (!condition) throw new Error('D570 price evidence refused'); };
+const check = condition => { if (!condition) throw new Error('D570 price evidence refused: price file'); };
 const plain = value => value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 function time(value) {
   check(typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value));
