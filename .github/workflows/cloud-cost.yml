@@ -112,9 +112,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
+      - id: conformance
+        run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLOUD_NIGHTLY_STORAGE_OUTPUT: ${{ inputs.full && matrix.file == 'paced-replay-conformance.test.mjs' && format('{0}/nightly-storage.json', runner.temp) || '' }}
       # Cache publication is optional; a stalled save must not cancel completed tests.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
@@ -124,6 +126,16 @@ jobs:
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
+      - name: Retain generated storage observation
+        if: ${{ always() && inputs.full && matrix.file == 'paced-replay-conformance.test.mjs' && steps.conformance.outcome == 'success' }}
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-storage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nightly-storage.json
+          if-no-files-found: warn
+          retention-days: 14
   summary:
     if: ${{ always() }}
     needs: [discover, conformance]

@@ -60,6 +60,39 @@ uncertain evidence retains full work. Cost and venue do not trigger on main push
 Read the [merge evidence checklist](ci-merge-evidence.md) before interpreting a
 skipped job. The nightly run always executes full work and never grants reuse.
 
+## Generated storage warning
+
+A passing nightly can still hide a large change in storage use. Open the run's
+Summary page and read **Cloud cost advisory**, from the `storage-advisory` job.
+It compares the generated replay with the last usable main measurement for the
+same workload, cadence and configured windows. Runtime upgrades stay visible
+in the report and do not suppress the comparison.
+
+You see a range in byte-seconds: one byte kept for one second. The range includes
+stream storage and its cleanup tail. A warning requires the entire new range
+to exceed double the previous range, or fall below half of it. Overlapping ranges
+do not establish that change. For example, a previous range of `[100, 110]` and
+a new range of `[230, 240]` establish an increase of at least 2.09 times. The
+warning names both runs so you can inspect what changed. Repeated smaller
+increases can go unnoticed because the comparison uses the last usable run.
+
+Missing or unreadable measurements remain visible. You get a warning when the
+last usable measurement is older than 72 hours, or no usable baseline exists in
+the retained 14-day history. Pull-request rehearsals report their current
+measurement without entering main history. Read the first main nightlies before
+treating the local Debian spread as hosted-runner variation.
+When a partial rerun keeps an earlier export, the report links its original
+attempt and keeps its timestamp. Rerunning other jobs does not make that
+measurement fresh.
+
+This measures generated storage only. Requests, compute, transfer, archives and
+other service costs remain unknown; the report contains no dollar estimate.
+The warning has its own summary and Actions annotation. It does not join the
+five required workflow families or block a pull request or merge. Run
+`node --test scripts/ci-nightly-storage.test.mjs scripts/ci-workflow.test.mjs`
+for its comparison and wiring checks. Inspect the real nightly rehearsal to
+check artifact delivery.
+
 ## Verified manual run
 
 The [6 November manual run 42165813178](https://github.com/waitron-io/waitron-cloud/actions/runs/42165813178),

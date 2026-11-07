@@ -197,6 +197,43 @@ test('nightly final gate always receives every workflow and mutation result', ()
   assert.match(job('summary'), /CI_JOB_PREFIX: \$\{\{ inputs.job-prefix \}\}/);
 });
 
+test('storage advisory runs after failed cost work and stays outside the nightly gate', () => {
+  const advisory = nightlyJob('storage-advisory');
+  assert.match(advisory, /needs: cost/);
+  assert.match(advisory, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(advisory, /^    continue-on-error: true$/m);
+  assert.match(advisory, /node scripts\/ci-nightly-storage\.mjs/);
+  assert.match(advisory, /GH_TOKEN: \$\{\{ secrets.GITHUB_TOKEN \}\}/);
+  assert.doesNotMatch(nightlyJob('summary'), /storage-advisory/);
+});
+for (const present of [false, true]) test(`storage advisory handles ${present ? 'a current' : 'an older'} head without a missing-file failure`, () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-storage-advisory-head-'));
+  try {
+    if (present) {
+      mkdirSync(join(root, 'scripts'));
+      writeFileSync(join(root, 'scripts/ci-nightly-storage.mjs'), readFileSync(new URL('./ci-nightly-storage.mjs', import.meta.url)));
+    }
+    const command = nightlyJob('storage-advisory').match(/- name: Report generated storage changes\n\s+run: \|\n([\s\S]*?)(?=\n\s+env:)/)?.[1];
+    assert.ok(command, 'The advisory must handle a head that predates its script');
+    const summary = join(root, 'summary.md');
+    const result = spawnSync('sh', ['-c', command.split('\n').map(line => line.replace(/^ {10}/, '')).join('\n')],
+      {cwd: root, encoding: 'utf8', env: {...process.env, GITHUB_REPOSITORY: '', GITHUB_RUN_ID: '', GITHUB_RUN_ATTEMPT: '', GITHUB_STEP_SUMMARY: summary}});
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(readFileSync(summary, 'utf8'), /# Cloud cost advisory/);
+    assert.match(result.stdout, present ? /advisory evidence unavailable/ : /unavailable for this head/);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+test('only the full nightly paced cell exports a successful measurement with attempt-specific optional upload', () => {
+  const cost = readFileSync(new URL('../.github/workflows/cloud-cost.yml', import.meta.url), 'utf8');
+  const upload = cost.match(/- name: Retain generated storage observation\n([\s\S]*?)(?=\n  [a-z]|$)/)?.[1] ?? '';
+  assert.match(cost, /CLOUD_NIGHTLY_STORAGE_OUTPUT:.*inputs.full.*matrix.file == 'paced-replay-conformance.test.mjs'/);
+  assert.match(upload, /inputs.full && matrix.file == 'paced-replay-conformance.test.mjs'.*steps.conformance.outcome == 'success'/);
+  assert.match(upload, /continue-on-error: true/);
+  assert.match(upload, /name: nightly-storage-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
+  assert.match(upload, /if-no-files-found: warn/);
+  assert.match(upload, /retention-days: 14/);
+});
+
 
 test('the shared UI deadline is required before test selection', () => {
   const changes = job('changes');
