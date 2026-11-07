@@ -3283,6 +3283,38 @@ test('removal accepts a legacy cleanup record without a no-run marker', async t 
   assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
 });
 
+test('removal resumes an unreleased legacy record without inventing run evidence', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'delete-stack') throw new Error('synthetic legacy interrupted deletion');
+    return prior(...args);
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic legacy interrupted deletion/);
+  const path = join(f.parent, 'setup-removal.json'), record = JSON.parse(readFileSync(path));
+  delete record.noRun; writeFileSync(path, JSON.stringify(record)); f.aws.call = prior;
+  assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+  const released = JSON.parse(readFileSync(path));
+  assert.equal(released.eligible, true); assert.equal(released.releasedAt, now);
+  assert.equal(f.deletions(), 1);
+  assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
+});
+
+for (const name of ['initialized.json', 'launch.json']) test(`removal refuses ${name} appearing during stack deletion without releasing its booking`, async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await prior(...args);
+    if (args[1] === 'delete-stack') writeFileSync(join(f.parent, name), JSON.stringify(name === 'initialized.json'
+      ? { ...JSON.parse(f.original), directory: join(realpathSync(f.parent), 'setup') } : {}), { mode: 0o600 });
+    return result;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: booking/);
+  const record = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+  assert.equal(record.noRun, true); assert.equal(record.eligible, false); assert.equal(record.releasedAt, null);
+  assert.equal(f.deletions(), 1);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
 async function lateConsoleFixture(t){
  const f=await guestCleanupFixture(t);
  const stamp=seconds=>new Date(Date.parse(now)+seconds*1000).toISOString().replace('.000Z','Z');

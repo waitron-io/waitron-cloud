@@ -1494,6 +1494,7 @@ export async function removeManualFirstSetup(options) {
   await capturedAbsent();
   const at = iso(Math.floor(clock() / 1000) * 1000), deletedAt = priorCleanup?.deletedAt ?? at;
   if (ended) { const history = await launchedHistory(base, qualifiedRecord); stoppedInstance(ended, history.launch, qualifiedRecord.subnet); }
+  check(!eligible || !await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json')), 'booking');
   await replacePrivateJson(cleanupPath, { ...qualifiedRecord, eligible, deletedAt, releasedAt: eligible ? priorCleanup?.releasedAt ?? at : null,
     ...(ended && !eligible ? { retryAt: priorCleanup?.retryAt ?? at } : {}),
     reason: priorCleanup?.reason ?? (eligible ? 'failed setup removed without a run' : 'setup removed; booking retained') });
