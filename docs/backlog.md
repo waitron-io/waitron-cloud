@@ -18,8 +18,14 @@ a version known to be overdue fails. Lane F/A1412 owns the Waitron changes.
 Cloud's Dependabot configuration checks the shared UI package every day, including
 weekends, from the pnpm workspace root. It covers both consumers and the shared
 lockfile, using the existing package access grant confirmed on 6 November.
-A real authenticated update run remains unproved. The lag check and removal
-remain open in separate PRs.
+The [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
+authenticated and found only `0.1.0`, so it opened no update PR. A newer-version
+update for both consumers and its private CI install remain unproved.
+Normal CI checks both exact pins against the earliest known newer stable
+publication and fails only after seven days. Registry failures and missing
+metadata warn and pass; later releases do not restart the deadline. Focused
+checks cover version order, the boundary, both consumers and unknown results.
+Removal of the superseded Cloud publisher remains open in its own PR.
 Dependency PR review must renew ordinary records and update the smoke test’s
 version/source expectations without removing assertions. Remove
 the unused ledger and artifact machinery from #978, #995 and #1001, the old

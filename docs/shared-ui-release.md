@@ -33,8 +33,31 @@ Before merging:
    [documentation](ci-documentation-audit.md) records for the reviewed changes.
 5. Push the reviewed changes and wait for normal CI on that final commit.
 
-The configuration does not merge PRs automatically. A real authenticated
-update run has not yet been qualified.
+The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
+authenticated to the private registry and found only `0.1.0`, so it opened no
+update PR. A newer-version update covering both consumers and a private-package
+CI install remains unproved.
+
+## Keep Cloud within seven days of a release
+
+Every normal CI run checks both consumers' exact package pins against the
+GitHub package versions API before selecting tests. Its version creation dates
+supply publication times, which [GitHub omits from npm metadata](https://github.blog/changelog/2021-03-05-packages-time-has-been-dropped-from-npm-package-metadata-responses/). You can run the same check locally
+with an existing package-read token in `NODE_AUTH_TOKEN`:
+
+```sh
+node scripts/ci-ui-lag.mjs
+```
+
+An old current version does not expire. Once a newer stable version exists,
+you have seven days from its earliest publication to update. Later releases
+do not restart that window, and prereleases do not start one. Exactly seven
+days still passes; the next millisecond fails CI.
+
+A registry error or missing version metadata warns and passes, so an outage
+leaves the deadline unchecked. A known overdue publication still fails even
+if another publication's timestamp is missing. The check runs during ordinary
+CI, with no new schedule.
 
 ## Earlier Cloud publication workflow
 
