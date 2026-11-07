@@ -25,7 +25,7 @@ import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride
 export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const origin = 'https://waitron.local:3000', defaultWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
@@ -110,6 +110,8 @@ export function checkProtectedContainers(before, after, ids) {
 
 export async function runTestCloudClients(options = {}) {
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
+  const revision = process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
+  assert.match(revision, /^[a-f0-9]{40}$/, 'integration.waitron_revision_invalid');
   const stop = new AbortController(), shutdown = () => stop.abort(Error('integration.cancelled'));
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
   try {
@@ -120,7 +122,7 @@ export async function runTestCloudClients(options = {}) {
         const waitronSource = options.sourceProvenance ? await captureWaitronSource(checkout, revision) : undefined;
         stop.signal.throwIfAborted();
         const result = options.fixedProject ? await withFixedIntegrationProject({docker: command,
-          run: project => runClients(options, project, waitronSource)}) : await runClients(options, undefined, waitronSource);
+          run: project => runClients({...options, revision}, project, waitronSource)}) : await runClients({...options, revision}, undefined, waitronSource);
         stop.signal.throwIfAborted();
         return result;
       } catch (error) {
@@ -131,7 +133,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject, waitronSource) {
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;

@@ -102,6 +102,13 @@ waiting for its whole turn after stop reaches the existing three-request guard
 in all six profiled trials. The writers exit zero. These results identify the
 controlled task, not the natural cause of the historical 743-byte refusal.
 
+Retesting the same three held-LIST orderings on Debian 13 with the official,
+checksum-verified 0.5.18 release leaves this boundary open. Both releases still
+acknowledge database stop with a held LIST; signalling cancels the partial reply,
+and releasing it to idle still permits a later cancelled level-1 LIST. Waiting
+through the final level passes on each release. This one comparison does not
+qualify a drain for the full smoke; the cost experiments remain pinned to 0.5.17.
+
 Completing that same held retention sequence before requesting stop passes
 three controls on each platform. Both independent counters pair every LIST,
 all four maintenance tasks then wait between turns, and no request enters the
