@@ -1,10 +1,10 @@
 # Staff problem reports implementation plan
 
-D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection. No runtime yet; no AI, paging, mail, accounts, spending or Waitron implementation. Watcher, lane D questions 2026-11-07 14:21: “Write its one-page plan now and get the Claude read; build once lane K’s D601 lands, reusing D601’s table and cleaning.” D603 queue: “do not build a second one.”
+D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md): Cloud receiving/local owner inspection. No AI, paging, mail, accounts, spending or Waitron implementation. Owner local-build approval: design, 2026-10-24. Watcher, lane D questions 2026-11-07 15:09: “Branch D603’s build from #1073’s current head … and build … now”; publish only after D601 lands, rebased onto main. D603 queue: “do not build a second one.”
 
 ## Contract and gate
 
-- [ ] Claude reads before build. Await D601/#1073; compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. Any difference amends this plan for Claude before build.
+- [ ] Claude reads before build. Stack on D601/#1073 `7b1201e7c75e17447432e4f990ec4784835e9d48`; only historical migration tests changed from reviewed candidate `c0f96898`. Before publishing compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. If #1073 changes, rebase onto it and compare again. Any difference amends this plan for a Claude read; rework affected code before publishing.
 
 Provisional builder defaults for A1047: POST `/api/installations/staff-report` and `/api/installations/staff-description`, corresponding signed actions. Follow `account-http/src/translation.ts` and `translation/src/submit-proof.ts`: external string `body`, signed `{version:1,bodySha256,bodyBytes}`. Body ≤16384 bytes; request ≤65536 bytes/5 seconds. Preserve shared envelope/automatic limits and installation-ip/key allowances. Reuse proof/lease locks/rechecks; authenticate venue/environment. Return `{received:true}` after commit.
 
