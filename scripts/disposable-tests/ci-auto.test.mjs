@@ -892,12 +892,14 @@ for(const failure of ['write','readback','assigned','advanced'])test(`overflow d
  await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}));assert.equal(posts,0);
 });
 
-for(const state of ['running','completed','assigned','young','late-assignment'])test(`overflow preserves a ${state} server run`,async()=>{
+for(const state of ['running','completed','assigned','young','late-assignment','waiting','cancelled'])test(`overflow preserves a ${state} server run`,async()=>{
  const f=fixture(),get=f.api.get;f.run.created_at=new Date(Date.now()-120000).toISOString();
  const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let writes=0,posts=0,marker='{}';
  const start=()=>{f.jobs[1].runner_id=42;f.jobs[1].status=state==='completed'?'completed':state==='assigned'?'queued':'in_progress';};
  if(['running','completed','assigned'].includes(state))start();
  if(state==='young')f.run.created_at=new Date().toISOString();
+ if(state==='waiting')f.jobs[1].status='waiting';
+ if(state==='cancelled'){f.jobs[1].status='completed';f.jobs[1].conclusion='cancelled';}
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{writes++;marker=body.value;if(state==='late-assignment')start();};f.api.post=async()=>{posts++;};
  await controller.overflowOrdinary({api:f.api,policy,ci});
@@ -988,4 +990,46 @@ test('a rate-limit callback stops recovery reads until its caller can release th
  const errors=[];
  await controller.recoverHostedAttempts({api:f.api,policy,onError:(error,id)=>{errors.push(id);return false;}});
  assert.deepEqual(reads,['/repos/fixture/waitron/actions/runs/789']);assert.deepEqual(errors,[789]);
+});
+
+for(const ownership of ['invocation','lease'])test(`overflow recovery preserves a live ${ownership} before assignment`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ const slot=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0});
+ if(ownership==='lease')slot.reserveLocal(ciRequest('I',ci));
+ else slot.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ const posts=[];
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'hosted'}:get(path);
+ f.api.post=async path=>{posts.push(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api});assert.deepEqual(posts,[]);
+});
+
+test('overflow rechecks free capacity after scanning and before writing its marker',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ const slots=Array.from({length:6},(_,slot)=>new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}));
+ const reserved=slots.map((slot,i)=>slot.reserveLocal({lane:'I',turn:'manual-'+i,snapshot:'a'.repeat(64),argv:['true']}).lease);
+ let released=false;const writes=[];
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/runs?') && !released){released=true;assert.equal(slots[0].release(reserved[0],{absent:true,resourceId:reserved[0].resourceId}),true);}
+  if(path.endsWith('/actions/jobs/901'))return f.jobs[0];
+  return get(path);
+ };
+ f.api.patch=async(path)=>{writes.push(path);};f.api.post=async path=>{writes.push(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api});assert.equal(released,true);assert.deepEqual(writes,[]);
+});
+
+test('an exact marked hosted attempt is excluded from server pickup even if a job still has server labels',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.run.run_attempt=2;f.jobs.forEach(job=>{job.run_attempt=2;job.labels=job.labels.map(label=>label.replace('-789-1-','-789-2-'));});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ let starts=0;await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>{starts++;return {code:0};}});
+ assert.equal(starts,0);
+});
+
+test('manual selected-head admission refuses changed workflow bytes that automatic pickup may accept',async()=>{
+ const f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.includes('/contents/')?{encoding:'base64',content:Buffer.from(workflow+' changed').toString('base64')}:get(path);
+ await assert.rejects(controller.findOrdinary({api:f.api,policy,approvedHead:head,runId:789,jobId:901}),/workflow definition changed/);
 });

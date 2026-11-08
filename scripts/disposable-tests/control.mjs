@@ -50,7 +50,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  try{
  await recover?.();
  const pending=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
- const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId).filter(Boolean));
+ const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean));
  let hosted=await read(()=>hostedAttempts({api,policy,signal}));
  if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
   let retryAt=0;

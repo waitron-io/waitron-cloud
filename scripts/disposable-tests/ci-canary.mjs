@@ -287,7 +287,7 @@ export async function qualifyOrdinaryHosted({api,policy,retry,signal,wait=delay}
  const base=`/repos/${policy.repository}`,end=Date.now()+3300000;
  while(true){
   const run=await api.get(`${base}/actions/runs/${retry.runId}`,{signal});
-  assert.ok(run.id===retry.runId && run.head_sha===retry.sourceSha && run.workflow_id===policy.workflowId && run.event==='pull_request' &&
+  assert.ok(run.id===retry.runId && run.head_sha===retry.sourceSha && run.workflow_id===policy.workflowId && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
    run.path===policy.workflowPath && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
    [retry.previousAttempt,retry.previousAttempt+1].includes(run.run_attempt),'Hosted retry identity or attempt differs');
   if(run.run_attempt===retry.previousAttempt+1 && run.status==='completed'){
