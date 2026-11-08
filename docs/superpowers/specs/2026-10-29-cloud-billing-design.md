@@ -72,7 +72,7 @@ the sign-up themselves. It should require zero work from us"
 
 | Level | Name in this design | Who it belongs to | What it includes |
 | --- | --- | --- | --- |
-| 1 | Registered | the Cloud account | the email gateway, address lookup, automatic upgrades; free |
+| 1 | Registered | the Cloud account | the email gateway, address lookup, automatic upgrades and [SMS codes](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures); free |
 | 2 | Connected | one venue | level 1, plus remote access, automatic translation, the rota solver, off-box backups with the live stream, and the possibility of failing over to the cloud |
 | 3 | Hosted | one venue | level 2, with the venue's server running in Cloud |
 
@@ -113,8 +113,8 @@ enforcement points are reconciled is left to the builder.
 ## 3. Allowances (owner)
 
 - The email gateway and the AI features (translation, the rota solver) each have a
-  **monthly allowance, which can differ by level**. SMS follows the owner's
-  [8 November decision](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
+  **monthly allowance, which can differ by level**. SMS follows the
+  [8 November decisions](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
   account-counted codes, initially unenforced monthly figures and enforced request/guess
   controls. Booking messages are outside that revision. The gateway remains unbuilt.
 - **The allowances exist to stop abuse, not to make money.** They are set high enough that
