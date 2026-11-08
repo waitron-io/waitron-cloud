@@ -145,7 +145,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),o
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
- for(const run of runs.values()){
+ for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
   let candidate;
   try{
   if(run.event!=='pull_request' || run.run_attempt!==1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||

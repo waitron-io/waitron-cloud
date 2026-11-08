@@ -23,6 +23,10 @@ IMAGE_URL = 'https://cloud.debian.org/images/cloud/trixie/20261103-2651/debian-1
 IMAGE_SHA512 = 'd25999de0770d4cde1be72c299ba3ad94eac7ea8fd4d18f8cc86c69df69337e2e8a91d64465a9bfd8f2a78c566fcbcb0842eacc91c09efdef72d719d9f13b535'
 
 
+GUEST_MEMORY_MIB = 16384
+HOST_CAP_MIB = 18432
+
+
 def resource_id(value):
     if not isinstance(value, str) or not re.fullmatch(r'dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-(?:[0-9]|1[0-5])-[1-9][0-9]{0,14}', value):
         raise ValueError('Invalid local resource ID or slot')
@@ -196,9 +200,12 @@ def budget(slots, *, memory, threads, disk_total, disk_free, allocated):
         raise ValueError('Invalid host slot budget')
     if any(type(v) is not int or v < 0 for v in [memory, threads, disk_total, disk_free, allocated]):
         raise ValueError('Invalid host resource measurement')
-    if slots*18*1024**3+16*1024**3 > memory:
+    if slots > 10:
+        raise ValueError('Ten-slot operating limit exceeded')
+    if slots*HOST_CAP_MIB*1024**2+16*1024**3 > memory:
         raise ValueError('Insufficient memory for guest caps and host reserve')
-    if slots*4+8 > threads:
+    # On the 32-thread host, guests share 24; four complete cores stay reserved.
+    if min(slots*4, 24)+8 > threads:
         raise ValueError('Insufficient execution threads after host reserve')
     remaining = max(0, slots*64*1024**3-allocated)
     if disk_free-remaining < (disk_total+4)//5:
@@ -275,7 +282,7 @@ def plan(request):
     directory = ROOT / 'turns' / resource
     uid, port = 62000+slot_id(resource), 22000+slot_id(resource)
     qemu = ['/usr/bin/qemu-system-x86_64', '-no-user-config', '-nodefaults',
-            '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', '16384',
+            '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', str(GUEST_MEMORY_MIB),
             '-display', 'none', '-monitor', 'none',
             '-chardev', 'ringbuf,id=serial0,size=16384', '-serial', 'chardev:serial0',
             '-device', 'VGA',
@@ -287,7 +294,7 @@ def plan(request):
             '-device', 'virtio-net-pci,netdev=net0',
             '-sandbox', 'on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny']
     service = [f'User={uid}', 'Group=kvm', 'KillMode=control-group', 'TimeoutStopSec=30',
-               f'RuntimeMaxSec={(deadline - now) // 1000}', 'MemoryMax=18G', 'CPUQuota=400%',
+               f'RuntimeMaxSec={(deadline - now) // 1000}', f'MemoryMax={HOST_CAP_MIB}M', 'CPUQuota=400%',
                'NoNewPrivileges=yes', 'ProtectSystem=strict', f'ReadWritePaths={directory}',
                'ProtectHome=yes', 'PrivateTmp=yes', 'DevicePolicy=closed', 'DeviceAllow=/dev/kvm rw']
     cloud = {'users': [{'name': 'root', 'lock_passwd': True, 'ssh_authorized_keys': [key]}],

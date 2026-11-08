@@ -38,7 +38,7 @@ test('a local guest uses a private disk, bounded unprivileged service and loopba
   assert.ok(q.includes('file=/var/lib/waitron-disposable/turns/dt-bridge-1-0-1/disk.qcow2,format=qcow2,if=virtio'));
   assert.ok(p.service.includes('User=62000'));
   assert.ok(p.service.includes('KillMode=control-group'));
-  assert.ok(p.service.includes('MemoryMax=18G'));
+  assert.ok(p.service.includes('MemoryMax=18432M'));
   const runtime = p.service.find(v => v.startsWith('RuntimeMaxSec='));
   assert.ok(Number(runtime.split('=')[1]) > 0 && Number(runtime.split('=')[1]) <= 600);
   assert.deepEqual(JSON.parse(p.userData.slice('#cloud-config\n'.length)).users[0].ssh_authorized_keys, [key]);
@@ -52,4 +52,13 @@ test('parallel slots use distinct loopback ports, host accounts and egress ident
   assert.ok(p.service.includes('User='+uid));
   assert.equal(p.qemu[p.qemu.indexOf('-netdev')+1],`user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:${port}-:22`);
  }
+});
+
+test('the tenth-slot plan sets bounded memory and CPU with its own identity',()=>{
+ const result=plan({...request(),resourceId:'dt-bridge-1-9-1'});assert.equal(result.status,0,result.stderr);
+ const p=JSON.parse(result.stdout);
+ assert.equal(p.qemu[p.qemu.indexOf('-m')+1],'16384');
+ assert.ok(p.service.includes('MemoryMax=18432M'));
+ assert.equal(p.uid,62009);assert.equal(p.port,22009);
+ assert.ok(p.service.includes('CPUQuota=400%'));
 });

@@ -162,10 +162,16 @@ export async function main(args) {
   const withController=work=>!bootstrap && slots>1
     ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal})
     :withKernelLock(config.state,()=>{refuseLegacy(config.state);return withTemporaryState(config.state,()=>work());},{bootstrap,deadline,signal:cancellation.signal});
+  let lastRecovery=-Infinity;
+  const recover=async()=>{
+    if(Date.now()-lastRecovery<30000)return;
+    lastRecovery=Date.now();
+    return reconcileManual({state:config.state,hostGeneration:config.hostGeneration,slots,
+      transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
+  };
   try {
     const result=reconciling
-      ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,slots,
-          transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline,ci:config.ci})
+      ? await recover()
       : await withController(async selected=>{
       cancellation.signal.throwIfAborted();
       refuseLegacy(config.state);
@@ -210,7 +216,7 @@ export async function main(args) {
         ...(result.pending?{pending:result.pending,busy:result.busy}:{})}));
     if(reconciling && result.code===0 && slots>1 && config.ci?.workflowPath==='.github/workflows/ci.yml'){
       const {automaticTick}=await import('./control.mjs'),{GithubApp}=await import('./github-app.mjs');
-      await automaticTick({configuration,config,api:new GithubApp(config.ci),signal:cancellation.signal});
+      await automaticTick({configuration,config,api:new GithubApp(config.ci),signal:cancellation.signal,recover});
     }
     return result.code;
   } catch(error) {
