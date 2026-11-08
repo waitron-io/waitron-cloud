@@ -669,13 +669,13 @@ order. Remote access matters most because Waitron's customer-facing features wai
    support takeover or operator, fiscal or activation permission follows from ownership.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
-6. **Support and the operator console.** The [D609 proposed design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
+6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
    reflects the owner's 2026-11-08 paired-box reporting, automatic sending with exact Sent
    reports, country feature lists and standard 24-hour support access choices. Box forms,
    checked Cloud sending, private bugs/status, features/votes/comments, GitHub links,
    console/common country routes, grant integration and customer-visible staff history remain
-   unbuilt. A982's planned local preview is not Cloud sending. No author name and staff hiding
-   personal-data text remain proposals. Joining country lists waits for a second country and
+   unbuilt. A982's planned local preview is not Cloud sending. The owner approved the design, including no author name and staff hiding
+   personal-data text. Build starts with box sending and exact Sent reports, under its own plan. Joining country lists waits for a second country and
    an owner decision; privacy/retention and qualified country support authority remain prerequisites.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
