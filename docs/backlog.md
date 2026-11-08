@@ -1591,7 +1591,7 @@ implementation or production evidence.
   independently qualify identical-tree sources, and recheck them in the final
   summary before accepting skipped work. Main readback verifies the hosted
   artifact, every final job and the reconstructed push range or full inventory.
-  AWS and applicable download diagnostics have their own planners and summaries.
+  AWS has its own planner and summary.
   Cost and venue retain part 4's removed main triggers and their input selection;
   they cannot borrow standard CI's evidence. Historical proof reconstruction
   reads its explicit immutable range, independently of the operator checkout.

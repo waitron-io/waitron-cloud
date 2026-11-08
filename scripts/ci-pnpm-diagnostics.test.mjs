@@ -111,7 +111,7 @@ test('setup reports a child process signal and spawn refusal without command arg
 });
 
 test('every workflow setup invocation loads the observer in the installer process', async () => {
-  for (const workflow of ['ci.yml', 'cloud-cost.yml', 'aws-infrastructure.yml', 'browser-reconnect-diagnostic.yml', 'venue-services-proof.yml']) {
+  for (const workflow of ['nightly.yml', 'ci.yml', 'cloud-cost.yml', 'aws-infrastructure.yml', 'browser-reconnect-diagnostic.yml', 'venue-services-proof.yml']) {
     const configurations = setupOptions(workflow);
     assert.ok(configurations.length > 0, workflow);
     for (const options of configurations) {

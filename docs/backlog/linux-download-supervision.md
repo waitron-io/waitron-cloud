@@ -32,7 +32,7 @@ and supervisor checks. You can run them with
 `node --test --test-timeout=30000 scripts/ci-download.test.mjs scripts/ci-download-linux.test.mjs scripts/ci-download-diagnostics.test.mjs`.
 The retained [Linux contention run40427348212](https://github.com/waitron-io/waitron-cloud/actions/runs/40427348212)
 also passes all 32 cases with eight workers sharing one CPU. Use the
-`nightly-mutations` diagnostic logs for that contention run; normal root checks
+`nightly-mutations` diagnostic logs for later contention runs; normal root checks
 retain the nine Linux ownership cases. The historical results do not identify
 the failure's stalled phase.
 

@@ -288,7 +288,7 @@ test('nightly mutation job runs all four approved wrappers and the allowance hel
 });
 
 
-test('nightly retains all three diagnostic programs and always uploads their logs', () => {
+test('nightly wires three diagnostic steps and always uploads their logs', () => {
   const mutations = nightlyJob('mutations');
   const checkout = mutations.match(/      - uses: actions\/checkout@v5\n([\s\S]*?)(?=      - )/)?.[1];
   assert.match(checkout ?? '', /^\s+fetch-depth: 0$/m, 'Relay migration fixtures require historical commits');
