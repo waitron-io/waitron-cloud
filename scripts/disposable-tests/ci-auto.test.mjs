@@ -814,7 +814,7 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state==='foreign-workflow')f.run.workflow_id=987;
  if(state==='foreign-path')f.run.path='other.yml';
  if(state==='foreign-event')f.run.event='workflow_run';
- if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='failure';}
+ if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  if(state==='running-sibling'){f.jobs[1].status='in_progress';f.jobs[1].runner_id=42;}
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
@@ -828,9 +828,23 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state.startsWith('foreign-') || state==='incomplete-jobs'){await assert.rejects(recover());assert.deepEqual(actions,[]);return;}
  if(state==='rerun-ack-lost'){await assert.rejects(recover(),/Reply lost/);await recover();}
  else await recover();
- const expected=['cancel-not-sent','running-sibling'].includes(state)?['cancel']:state==='force-queued'?['force-cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
+ const expected=state==='cancel-not-sent'?['cancel']:state==='force-queued'?['force-cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
  assert.deepEqual(actions,expected);
- assert.equal(value,['newer-attempt','stale-head','closed'].includes(state)?'{}':'{"789":2}');
+ assert.equal(value,['newer-attempt','stale-head','closed','running-sibling'].includes(state)?'{}':'{"789":2}');
+});
+
+test('full-pool overflow preserves a run already preparing a guest before runner assignment',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ for(let slot=1;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots:config.slots,slot:0});
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:ci.runId,attempt:1,jobId:ci.jobId,ordinaryStage:'admitted'});
+ let writes=0,posts=0,marker='{}';
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/actions/jobs/')?f.jobs.find(job=>path.endsWith('/'+job.id)):get(path);
+ f.api.patch=async(path,body)=>{writes++;marker=body.value;};f.api.post=async()=>{posts++;};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('No slot is free'),transport:{healthy:async()=>true}});
+ assert.equal(writes,0);assert.equal(posts,0);
 });
 
 test('hosted overflow recovery still requires external contributor approval before retrying',async()=>{

@@ -114,10 +114,14 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
   }
   else {
+   const inventory=await api.get(path+`/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
+   if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha ||
+    job.labels?.includes('self-hosted') && (job.runner_id || job.status==='in_progress' || job.status==='completed' && !['cancelled','skipped'].includes(job.conclusion)))){
+    delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+   }
    let force=false;
    if(run.status==='queued'){
-    const inventory=await api.get(path+`/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
-    assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
     force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
      (job.status==='completed' || job.status==='queued' && !job.runner_id));
    }

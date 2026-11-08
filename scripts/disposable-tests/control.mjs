@@ -65,6 +65,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values())await withKernelLock(config.state,async()=>{
    const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
+   if(fresh.slots.some(slot=>(slot.ciInvocation?.runId??slot.lease?.ci?.runId)===ci.runId) || [...active.values()].some(job=>job.runId===ci.runId))return;
    await overflowOrdinary({api,policy,ci,signal});
   },{signal});
   if(active.size){await waitForWorker();continue;}break;
