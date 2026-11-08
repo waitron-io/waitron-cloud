@@ -132,7 +132,15 @@ for(const [jobKey,apiJobName,label] of [
  const f=fixture(t,{identity,apiJobName}),post=f.api.post,execute=f.transport.execute;
  f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted',label]);return post(path,body,options);};
  f.transport.execute=async(lease,options)=>{assert.deepEqual(lease.argv,['/opt/actions-runner/bin/Runner.Listener','run']);return execute(lease,options);};
- f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ f.leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});assert.equal(result.code,0,result.error);
  assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+});
+
+test('an ordinary runner cannot borrow another repository invocation with matching numeric job fields',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha},f=fixture(t,{identity});
+ f.leases.setInvocation({repositoryId:999,nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ await assert.rejects(runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'}),/recorded.*CI|CI.*intent/i);
+ assert.deepEqual(f.events,[]);assert.equal(f.leases.inspect().slots[0].state,'free');
 });

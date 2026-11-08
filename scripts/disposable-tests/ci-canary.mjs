@@ -318,7 +318,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
  ci=ciIdentity(ci);
  if(ci.workflowPath==='.github/workflows/ci.yml'){
   const pending=leases.inspect().ciInvocation;
-  assert.ok(pending && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId &&
+  assert.ok(pending && pending.repositoryId===ci.repositoryId && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId &&
    pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
  }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
