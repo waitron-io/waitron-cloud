@@ -108,7 +108,8 @@ matrix placeholder; no compatibility code is added.
 Kubernetes proof files and flat `scripts/kubernetes-proof-*` files have their
 own workflow. Proof-only edits, with regular prose, use the existing script job
 for module syntax and workflow controls. Mixed package edits keep their package
-owners. Attributes, unknown inputs and failed ownership checks keep full work.
+owners. Attributes, unknown inputs and failed ownership checks keep full work
+in the main CI workflow. The separate proofs omit this family independently.
 Read every separate Kubernetes result before merging; the required `summary`
 check does not certify it. Workflow-only edits omit the generic pnpm-bootstrap
 PR test; the full nightly still runs it.
