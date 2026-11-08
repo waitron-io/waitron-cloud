@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import time
+from xml.parsers.expat import ExpatError
 
 UNKNOWN = 'unknown'
 
@@ -24,7 +25,7 @@ def command(args, deadline, **kwargs):
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=remaining, **kwargs)
         return result.stdout if result.returncode == 0 else None
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return None
 
 
@@ -42,7 +43,7 @@ def mask_ip(text):
             return '[IP]'
         except ValueError:
             return match.group()
-    return re.sub(r'(?:[0-9]{1,3}\.){3}[0-9]{1,3}|[0-9a-fA-F]*:[0-9a-fA-F:]+', replace, text)[:200]
+    return re.sub(r'(?<![\w:])[0-9a-fA-F]*:[0-9a-fA-F:.]+|(?:[0-9]{1,3}\.){3}[0-9]{1,3}', replace, text[:256])[:200]
 
 
 def host_status(request):
@@ -54,25 +55,28 @@ def host_status(request):
     def observe(resource):
         directory = session.CONTROL/resource
         result = dict(state=UNKNOWN, workerStart=UNKNOWN, executionRequested=UNKNOWN)
-        if not directory.is_dir():
-            result['state'] = 'absent'
-        elif (directory/'result.json').is_file():
-            result['state'] = 'completed'
-        elif (directory/'prepared').is_file():
-            result['state'] = 'prepared'
-            if (directory/'command.json').is_file():
-                result['executionRequested'] = int((directory/'command.json').stat().st_mtime * 1000)
+        try:
+            if not directory.is_dir():
+                result['state'] = 'absent'
+            elif (directory/'result.json').is_file():
+                result['state'] = 'completed'
+            elif (directory/'prepared').is_file():
+                result['state'] = 'prepared'
+                if (directory/'command.json').is_file():
+                    result['executionRequested'] = int((directory/'command.json').stat().st_mtime * 1000)
+                else:
+                    script = "import glob,json,os;print(json.dumps([os.path.basename(p) for p in glob.glob('/opt/actions-runner/_diag/Worker_*-utc.log')]))"
+                    raw = command([*session.guest_ssh(directory), 'python3 -c '+shlex.quote(script)], deadline)
+                    try:
+                        names = json.loads(raw)
+                        if len(names) == 1 and re.fullmatch(r'Worker_[0-9]{8}-[0-9]{6}-utc.log', names[0]):
+                            result['workerStart'] = int(datetime.strptime(names[0], 'Worker_%Y%m%d-%H%M%S-utc.log').replace(tzinfo=timezone.utc).timestamp()*1000)
+                    except (TypeError, ValueError):
+                        pass
             else:
-                script = "import glob,json,os;print(json.dumps([os.path.basename(p) for p in glob.glob('/opt/actions-runner/_diag/Worker_*-utc.log')]))"
-                raw = command([*session.guest_ssh(directory), 'python3 -c '+shlex.quote(script)], deadline)
-                try:
-                    names = json.loads(raw)
-                    if len(names) == 1 and re.fullmatch(r'Worker_[0-9]{8}-[0-9]{6}-utc.log', names[0]):
-                        result['workerStart'] = int(datetime.strptime(names[0], 'Worker_%Y%m%d-%H%M%S-utc.log').replace(tzinfo=timezone.utc).timestamp()*1000)
-                except (TypeError, ValueError):
-                    pass
-        else:
-            result['state'] = 'preparing'
+                result['state'] = 'preparing'
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
         return resource, result
     with ThreadPoolExecutor(max_workers=8) as pool:
         return dict(pool.map(observe, sorted(resources)))
@@ -92,7 +96,7 @@ def collect(home=None):
         total = config['slots']
         assert type(total) is int and 1 <= total <= 16
         result['slots']['total'] = total
-    except (OSError, ValueError, KeyError, IndexError, TypeError, AssertionError):
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AssertionError, ExpatError):
         return result
     observed = command(['launchctl', 'print', f'gui/{os.getuid()}/com.waitron.disposable-recovery'], deadline)
     if observed is not None:
@@ -113,7 +117,9 @@ def collect(home=None):
             if lease:
                 assert lease['resourceId'] == f"dt-{config['hostGeneration']}-{index}-{slot['generation']}"
                 assert type(lease['createdAt']) is int and type(lease['deadline']) is int and lease['deadline'] > lease['createdAt']
-            intent = slot.get('ciInvocation') or {}
+            intent = slot.get('ciInvocation')
+            assert intent is None or isinstance(intent, dict)
+            intent = intent or {}
             if slot['state'] == 'free' and not intent and not slot.get('orphanRunners'):
                 continue
             lease = lease or {}
@@ -121,13 +127,14 @@ def collect(home=None):
             assert created is None or type(created) is int and created >= 0
             if lease and created is not None:
                 admitted.append(created)
-            jobs.append(dict(slot=index, state=slot['state'], job=lease.get('ci', intent or dict(lane=lease.get('lane', UNKNOWN), turn=lease.get('turn', UNKNOWN))), resource=lease.get('resourceId', UNKNOWN),
+            identity = lease.get('ci', intent or dict(lane=lease.get('lane', UNKNOWN), turn=lease.get('turn', UNKNOWN)))
+            jobs.append(dict(slot=index, state=slot['state'], job={key: identity[key] for key in ['runId', 'attempt', 'jobId', 'jobKey', 'lane', 'turn'] if key in identity}, resource=lease.get('resourceId', UNKNOWN),
                              admittedAt=created if created is not None else UNKNOWN, admissionAgeSeconds=(now-created)/1000 if created is not None else UNKNOWN,
-                             expired=lease.get('deadline', now+1) <= now, start=UNKNOWN, runtimeSeconds=UNKNOWN,
+                             expired=lease.get('deadline', now+1) <= now, start=UNKNOWN, runtimeSeconds=UNKNOWN, guestState=UNKNOWN, executionRequested=UNKNOWN,
                              pendingIntent=bool(intent), retainedRunners=bool(slot.get('orphanRunners'))))
         assert total == 1 or not ledger.get('ciInvocation') and not ledger.get('orphanRunners')
         if total == 1 and (ledger.get('ciInvocation') or ledger.get('orphanRunners')) and not jobs:
-            jobs.append(dict(slot=0, state='legacy-gate', resource=UNKNOWN, start=UNKNOWN, runtimeSeconds=UNKNOWN))
+            jobs.append(dict(slot=0, state='legacy-gate', job=UNKNOWN, resource=UNKNOWN, start=UNKNOWN, runtimeSeconds=UNKNOWN, guestState=UNKNOWN, executionRequested=UNKNOWN, pendingIntent=bool(ledger.get('ciInvocation')), retainedRunners=bool(ledger.get('orphanRunners'))))
         result.update(jobs=jobs, slots=dict(total=total, busy=len(jobs), free=total-len(jobs)))
     except (OSError, ValueError, KeyError, TypeError, AssertionError):
         admitted = []

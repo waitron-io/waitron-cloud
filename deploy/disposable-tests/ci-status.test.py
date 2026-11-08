@@ -1,8 +1,10 @@
 import importlib.util
+import base64
 import json
 import os
 from pathlib import Path
 import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -45,7 +47,7 @@ class StatusTests(unittest.TestCase):
         if args[0] == 'launchctl':
             return subprocess.CompletedProcess(args, 0, self.agent, '')
         self.assertEqual(args[0], 'ssh')
-        for option in ['ControlMaster=no', 'ProxyCommand=false', 'ControlPersist=600', 'StrictHostKeyChecking=yes']:
+        for option in ['ControlMaster=no', 'ProxyCommand=false', 'ControlPersist=600', 'StrictHostKeyChecking=yes', 'BatchMode=yes', 'ForwardAgent=no', 'ForwardX11=no', 'ClearAllForwardings=yes', 'ControlPath='+str(self.home/'.cache/wt-ssh/%C')]:
             self.assertIn(option, args)
         self.assertIn('root@fixture.invalid', args)
         self.assertIn('--host', args[-1])
@@ -74,6 +76,8 @@ class StatusTests(unittest.TestCase):
         self.assertTrue(r['controller']['registered'])
         self.assertEqual(r['lastAdmission'], 900000)
         self.assertEqual(r['controller']['version'], str(self.config.parent))
+        self.assertEqual(r['jobs'][0]['guestState'], 'prepared'); self.assertTrue(r['jobs'][1]['pendingIntent'])
+        self.assertEqual(r['jobs'][0]['job'], dict(jobId=42, jobKey='test-ui-1'))
 
     def test_idle_errors_and_last_admission_read_existing_tails(self):
         (self.state/'out').write_text('not json\n'+json.dumps(dict(code=0, lease=dict(createdAt=800000)))+'\n'+json.dumps(dict(event='automatic-ci-job', at='later'))+'\n')
@@ -98,6 +102,7 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(r['jobs'][0]['job'], dict(lane='I', turn='manual-check'))
         self.assertEqual(r['jobs'][0]['runtimeSeconds'], 'unknown')
         self.assertEqual(r['lastAdmission'], 100000)
+        self.assertTrue(r['jobs'][1]['retainedRunners'])
 
     def test_corrupt_ledger_never_reports_free_capacity(self):
         self.slots[0]['lease'] = dict(createdAt=1)
@@ -139,6 +144,78 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(result['host'], 'unknown')
         self.assertEqual([args[0] for args in self.calls], ['launchctl'])
 
+    def test_malformed_intent_or_plist_reports_unknown(self):
+        for intent in [42, 'broken', ['broken'], 0, '', []]:
+            with self.subTest(intent=intent):
+                self.slots[0]['ciInvocation'] = intent; self.write_ledger(); self.calls = []
+                self.assertEqual(self.collect()['slots']['free'], 'unknown')
+        self.plist.write_bytes(b'<?xml version="1.0"?><plist><dict>')
+        self.assertEqual(status.collect(self.home)['controller']['state'], 'unknown')
+
+    def test_invalid_command_bytes_report_unknown(self):
+        self.assertIsNone(status.command([sys.executable, '-c', 'import os;os.write(1,b"\\xff")'], time.monotonic()+2))
+
+    def test_mapped_address_is_fully_masked(self):
+        self.assertEqual(status.mask_ip('connect ::ffff:192.0.2.1 refused'), 'connect [IP] refused')
+        self.assertEqual(status.mask_ip('Foo::bar'), 'Foo::bar')
+
+    def test_long_error_is_bounded(self):
+        code = 'import importlib.util;s=importlib.util.spec_from_file_location("s",'+repr(str(Path(__file__).with_name('ci-status.py')))+');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.mask_ip("a"*200000))'
+        try:
+            result = subprocess.run([sys.executable, '-I', '-B', '-c', code], capture_output=True, text=True, timeout=2)
+        except subprocess.TimeoutExpired:
+            self.fail('A long error must not prevent bounded status output')
+        self.assertEqual(result.returncode, 0, result.stderr); self.assertEqual(result.stdout.strip(), 'a'*200)
+
+    def test_failed_host_read_keeps_unknown_fields_and_only_job_identity(self):
+        self.slots[0]['ciInvocation'] = dict(jobId=43, runId=12, attempt=1, createdAt=950000, nonce='private', ordinaryStage='admitted')
+        self.write_ledger(); self.remote = 'unavailable'; r = self.collect(); job = r['jobs'][0]
+        self.assertEqual(job['job'], dict(jobId=43, runId=12, attempt=1))
+        self.assertEqual(job['guestState'], 'unknown'); self.assertEqual(job['executionRequested'], 'unknown')
+
+    def test_bad_guest_directory_does_not_hide_other_host_facts(self):
+        root = self.home/'host'; root.mkdir(); (root/'dt-bad').mkdir(); (root/'dt-bad/prepared').touch()
+        (root/'dt-done').mkdir(); (root/'dt-done/result.json').write_text('{}')
+        def broken(directory):
+            raise OSError('unreadable guest')
+        with patch.dict('sys.modules', session=types.SimpleNamespace(CONTROL=root, guest_ssh=broken)):
+            r = status.host_status(dict(recipe='/fixture', resources=['missing'], budget=1))
+        self.assertEqual(r['dt-done']['state'], 'completed'); self.assertEqual(r['missing']['state'], 'absent')
+        self.assertEqual(r['dt-bad']['workerStart'], 'unknown')
+
+    def test_legacy_gate_keeps_capacity_busy_and_has_unknown_job_facts(self):
+        config = json.loads(self.config.read_text()); config['slots'] = 1; self.config.write_text(json.dumps(config))
+        self.slots = self.slots[:1]; self.write_ledger(); path = self.state/'ledger/state.json'
+        ledger = json.loads(path.read_text()); ledger['ciInvocation'] = dict(jobId=7); path.write_text(json.dumps(ledger))
+        r = self.collect(); self.assertEqual(r['slots'], dict(total=1, busy=1, free=0))
+        self.assertTrue(r['jobs'][0]['pendingIntent']); self.assertEqual(r['jobs'][0]['job'], 'unknown')
+        config['slots'] = 3; self.config.write_text(json.dumps(config)); ledger['slots'] += [dict(id=i,generation=1,state='free',lease=None) for i in [1,2]]; path.write_text(json.dumps(ledger)); self.calls = []
+        self.assertEqual(self.collect()['slots']['free'], 'unknown')
+
+    def test_one_budget_is_shared_by_local_and_host_reads(self):
+        clock = [100]; original = self.invoke
+        def delayed(args, **kw):
+            if args[0] == 'launchctl': clock[0] += 2
+            else:
+                self.assertLessEqual(kw['timeout'], 2.5)
+                payload = json.loads(base64.b64decode(shlex.split(args[-1])[-1])); self.assertLessEqual(payload['budget'], 2.3)
+            return original(args, **kw)
+        self.invoke = delayed
+        with patch.object(status.time, 'monotonic', side_effect=lambda:clock[0]): self.collect()
+
+    def test_history_tail_error_limit_and_future_start(self):
+        (self.state/'out').write_text(json.dumps(dict(code=0,lease=dict(createdAt=999999)))+'\n'+'x'*1048576+'\n'+json.dumps(dict(code=0,lease=dict(createdAt=800000)))+'\n'+json.dumps(dict(lease=dict(createdAt=999999)))+'\n')
+        (self.state/'err').write_text('\n'.join('error '+str(i) for i in range(8)))
+        self.slots[0].update(state='running', lease=dict(resourceId='dt-test-0-1',generation=1,createdAt=700000,deadline=1100000,ci=dict(jobId=42)))
+        self.write_ledger(); self.remote = {'dt-test-0-1':dict(state='prepared',workerStart=1000001,executionRequested=900000)}
+        r = self.collect(); self.assertEqual(r['lastAdmission'],800000); self.assertEqual([e['message'] for e in r['errors']],['error '+str(i) for i in range(3,8)])
+        self.assertEqual(r['jobs'][0]['start'],'unknown'); self.assertEqual(r['jobs'][0]['executionRequested'],900000)
+        for key,value in [('hostGeneration','wrong')]:
+            path=self.state/'ledger/state.json'; ledger=json.loads(path.read_text()); ledger[key]=value; path.write_text(json.dumps(ledger)); self.calls=[]
+            self.assertEqual(self.collect()['slots']['free'],'unknown')
+        self.slots[0]['lease']['resourceId']='dt-wrong-0-1'; self.write_ledger(); self.calls=[]
+        self.assertEqual(self.collect()['slots']['free'],'unknown')
+
     def test_real_command_timeout_reaps_its_child(self):
         started = time.monotonic()
         self.assertIsNone(status.command([sys.executable, '-c', 'import time; time.sleep(5)'], started + 0.05))
@@ -156,18 +233,24 @@ class StatusTests(unittest.TestCase):
         root = self.home/'host'; root.mkdir()
         for name in ['ci', 'manual', 'ambiguous']:
             d = root/name; d.mkdir(); (d/'prepared').touch()
+            (d/'_diag').mkdir(); (d/'_diag/Worker_19700101-001630-utc.log').write_text('private diagnostics')
+        (root/'ambiguous/_diag/Worker_19700101-001631-utc.log').write_text('private diagnostics')
+        (root/'preparing').mkdir()
         (root/'manual/command.json').write_text('{}'); os.utime(root/'manual/command.json', (980, 980))
         fake = types.SimpleNamespace(CONTROL=root, guest_ssh=lambda d: ['ssh', d.name])
+        execute = subprocess.run
         def read(args, **kw):
-            names = ['Worker_19700101-001630-utc.log']
-            if args[1] == 'ambiguous': names.append('Worker_19700101-001631-utc.log')
-            return subprocess.CompletedProcess(args, 0, json.dumps(names), '')
+            self.assertLessEqual(kw['timeout'], 4)
+            script = shlex.split(args[-1])[2].replace('/opt/actions-runner/_diag', str(root/args[1]/'_diag'))
+            return execute([sys.executable,'-I','-B','-c',script],**kw)
+        before = {str(p):p.read_bytes() for p in root.rglob('*') if p.is_file()}
         with patch.dict('sys.modules', session=fake), patch.object(status.subprocess, 'run', read):
-            r = status.host_status(dict(recipe='/fixture', resources=['ci', 'manual', 'ambiguous'], budget=3))
+            r = status.host_status(dict(recipe='/fixture', resources=['ci', 'manual', 'ambiguous', 'preparing'], budget=99))
         self.assertEqual(r['ci']['workerStart'], 990000)
         self.assertEqual(r['manual']['executionRequested'], 980000)
         self.assertEqual(r['ambiguous']['workerStart'], 'unknown')
-        self.assertEqual(sorted(p.name for p in (root/'ci').iterdir()), ['prepared'])
+        self.assertEqual(r['preparing']['state'],'preparing')
+        self.assertEqual(before,{str(p):p.read_bytes() for p in root.rglob('*') if p.is_file()})
 
 
 if __name__ == '__main__':
