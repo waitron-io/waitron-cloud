@@ -49,7 +49,7 @@ test('siblings require independent complete native matrices and reject unknown o
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/download-supervision-diagnostic.yml', range), {
     required: ['changes', 'linux-contention', 'summary'], skipped: []});
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/venue-services-proof.yml', range), {
-    required: ['changes', 'service-receipts (legacy)', 'service-receipts (venue)', 'summary'], skipped: []});
+    required: ['changes', 'service-receipts (venue)', 'summary'], skipped: []});
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/venue-services-proof.yml', {...range, required: false}), {
     required: ['changes', 'summary'], skipped: ['service-receipts (${{ matrix.receipt }})']});
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/cloud-cost.yml', {...range, required: false}), {

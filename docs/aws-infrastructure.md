@@ -143,11 +143,15 @@ The separate dependency install supplies Ajv for contract validation and YAML fo
 workflow checks. It leaves the application workspace dependencies unchanged. Their
 versions and dependency checksums are pinned in `deploy/aws/pnpm-lock.yaml`.
 
-## Keep a check for each published revision
+## Check changed infrastructure revisions
 
 A passing local plan covers one checkout. The
 [AWS infrastructure workflow](../.github/workflows/aws-infrastructure.yml) checks the
-exact pull-request head and every push to `main`, including documentation changes.
+exact pull-request head and main pushes when `deploy/aws/**`, its own workflow,
+`scripts/ci-setup-pnpm.mjs`, `scripts/ci-pnpm-bootstrap-lock.json`,
+`scripts/ci-pnpm-diagnostics.cjs` or root `package.json` changes. Its isolated
+install ignores the application workspace. Other changes do not start this
+workflow; the nightly full run still checks every AWS cell.
 An updated pull request cancels its older check; each main push keeps its own result.
 Every job has repository read permission and retains no checkout credential. It receives
 no AWS secret or identity-token permission.

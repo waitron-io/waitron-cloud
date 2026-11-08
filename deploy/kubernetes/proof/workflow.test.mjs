@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, matchesGlob } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
@@ -59,3 +59,19 @@ function checkFiles(missing, expectedTests, extra = []) {
     else assert.notEqual(result.status, 0, 'a missing explicitly required file must fail the workflow');
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
+
+// Evaluate the declared path filters for both event types, independently of the unit-test shell.
+test('prerequisite pushes and PRs select only their proof inputs', () => {
+  const triggers = /^on:\n([\s\S]*?)(?=^\S)/m.exec(workflow)[1];
+  for (const event of ['push', 'pull_request']) {
+    const eventBlock = new RegExp(`^  ${event}:\\n([\\s\\S]*?)(?=^  [a-z_]+:|$(?![\\s\\S]))`, 'm').exec(triggers)[1];
+    const paths = [...eventBlock.matchAll(/^      - '([^']+)'$/gm)].map(match => match[1]);
+    for (const [file, expected] of [
+      ['deploy/kubernetes/proof/setup.yaml', true], ['deploy/kubernetes/proof/test-fixtures/prices.json', true],
+      ['scripts/kubernetes-proof-budget.mjs', true], ['scripts/kubernetes-proof-budget.test.mjs', true],
+      ['scripts/kubernetes-proof-control.mjs', true], ['scripts/kubernetes-proof-control.test.mjs', true],
+      ['.github/workflows/kubernetes-proof.yml', true], ['docs/backlog.md', false],
+      ['packages/registration/src/signup.ts', false], ['deploy/aws/main.tf', false], ['package.json', false],
+    ]) assert.equal(paths.length === 0 || paths.some(pattern => matchesGlob(file, pattern)), expected, `${event}: ${file}`);
+  }
+});

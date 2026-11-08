@@ -20,8 +20,9 @@ independently verify merge evidence or select their actual changed range; the
 You review actual readers instead of generating review records. The old record
 folders, JSON metadata and their writers have been removed. Their former paths
 have no exemption. Former record paths and other unknown JSON at the repository
-root or under `scripts/` retain full work and both cost and venue proofs when
-changed alone or alongside prose, scripts or registered root tests.
+root or under `scripts/` retain full standard work and the venue proof when
+changed alone or alongside prose, scripts or registered root tests. Cost selectors
+retain these inputs for historical evidence; cost now runs manually and nightly.
 
 The owner accepted removing the automatic pause before changed readers inherit
 an exemption. Review imports, directory scans, file reads, generated programs,

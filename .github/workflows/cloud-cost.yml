@@ -8,7 +8,6 @@ on:
       job-prefix:
         type: string
         default: ''
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

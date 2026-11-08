@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile, readdir, mkdtemp, mkdir, writeFile, chmod, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, matchesGlob } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parse } from 'yaml';
@@ -23,12 +23,27 @@ async function workflow() {
   }
 }
 
-// Omitting either event or filtering paths would leave some merge SHAs unchecked.
-test('AWS checks cover every main push and pull request', async () => {
+test('AWS checks cover infrastructure and bootstrap inputs on main pushes and pull requests', async () => {
   const value = await workflow();
-  assert.deepEqual(value.on, { workflow_call: {inputs: {full: {type: 'boolean', default: true}, 'job-prefix': {type: 'string', default: ''}}}, push: { branches: ['main'] }, pull_request: null });
+  const paths = ['deploy/aws/**', '.github/workflows/aws-infrastructure.yml', 'scripts/ci-setup-pnpm.mjs',
+    'scripts/ci-pnpm-bootstrap-lock.json', 'scripts/ci-pnpm-diagnostics.cjs', 'package.json'];
+  assert.deepEqual(value.on, { workflow_call: {inputs: {full: {type: 'boolean', default: true}, 'job-prefix': {type: 'string', default: ''}}}, push: { branches: ['main'], paths }, pull_request: {paths} });
   assert.equal(value.concurrency.group, "aws-infrastructure-${{ inputs.full && 'nightly-' || '' }}${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
   assert.equal(value.concurrency['cancel-in-progress'], "${{ !inputs.full && github.event_name == 'pull_request' }}");
+});
+
+test('AWS path triggers keep actual infrastructure readers and omit unrelated changes', async () => {
+  const {on: events} = await workflow();
+  for (const [file, expected] of [
+    ['deploy/aws/country-cell/main.tf', true], ['deploy/aws/package.json', true],
+    ['.github/workflows/aws-infrastructure.yml', true], ['scripts/ci-setup-pnpm.mjs', true],
+    ['scripts/ci-pnpm-bootstrap-lock.json', true], ['scripts/ci-pnpm-diagnostics.cjs', true], ['package.json', true],
+    ['README.md', false], ['packages/registration/src/signup.ts', false], ['scripts/ci-evidence.mjs', false],
+    ['scripts/cloud-cost/cli.mjs', false], ['pnpm-lock.yaml', false], ['deploy/kubernetes/proof/setup.yaml', false],
+  ]) for (const event of ['push', 'pull_request']) {
+    const paths = events[event]?.paths;
+    assert.equal(!paths || paths.some(pattern => matchesGlob(file, pattern)), expected, `${event}: ${file}`);
+  }
 });
 
 // The checkout action receives the PR candidate, never GitHub's synthetic merge.

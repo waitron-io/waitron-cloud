@@ -8,7 +8,7 @@ import {reuseProof} from './fixtures/ci-evidence.mjs';
 
 const cases = [
   ['aws-infrastructure', 'changes', 'verify', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']],
-  ['venue-services-proof', 'changes', 'service-receipts', ['service-receipts (legacy)', 'service-receipts (venue)']],
+  ['venue-services-proof', 'changes', 'service-receipts', ['service-receipts (venue)']],
   ['download-supervision-diagnostic', 'changes', 'linux-contention', ['linux-contention']],
 ];
 for (const [key, planner, work, names] of cases) {
@@ -50,6 +50,7 @@ for (const [key, planner, work, names] of cases) {
         assert.equal(execute(jobs.map(job => ({...job, name: prefix + job.name})), results, prefix).status, 0);
       }
       if (key === 'venue-services-proof') {
+        assert.equal(execute([...jobs, {...jobs[1], id: 99, name: 'service-receipts (legacy)'}]).status, 1);
         const unselected = {base: 'b'.repeat(40), head: 'a'.repeat(40), paths: ['apps/portal/src/account.ts'], required: false};
         const skipped = {...jobs[1], name: 'service-receipts (${{ matrix.receipt }})', conclusion: 'skipped'};
         assert.equal(execute([jobs[0], skipped], {...results, [work]: {result: 'skipped'}}, '', unselected).status, 0);
@@ -100,7 +101,7 @@ test('native summary survives slow large job pages without extending its publica
   const {createCurrentJobReader} = await import('./ci-reuse-api.mjs');
   const identity = {runId: 42, runAttempt: 1, headSha: 'a'.repeat(40)};
   const names = [...Array.from({length: 69}, (_, i) => `standard / package ${i}`),
-    'venue / changes', 'venue / service-receipts (legacy)', 'venue / service-receipts (venue)', 'venue / summary'];
+    'venue / changes', 'venue / service-receipts (venue)', 'venue / summary'];
   const jobs = names.map((name, i) => ({id: i + 1, name, run_id: 42, run_attempt: 1, head_sha: identity.headSha,
     status: 'completed', conclusion: 'success'}));
   let time = 0, truncate = false, unavailable = false;

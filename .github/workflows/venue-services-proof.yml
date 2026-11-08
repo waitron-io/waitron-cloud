@@ -71,8 +71,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - receipt: legacy
-            file: scripts/legacy-service-proof.test.ts
           - receipt: venue
             file: scripts/venue-service-proof.test.ts
     runs-on: ubuntu-latest

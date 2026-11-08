@@ -134,9 +134,10 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
   everything locally before a push. The repository is public, so GitHub's standard runners bill
   nothing. Run a whole package only when chasing a failure.
 - **A pull request runs only what its changed files select**: the changed package and one level of
-  packages that use it ([ci-package-selection.md](docs/ci-package-selection.md)). The cost and venue
-  proofs select separately ([ci-proof-selection.md](docs/ci-proof-selection.md)). A green pull request
-  says nothing about what was not selected.
+  packages that use it ([ci-package-selection.md](docs/ci-package-selection.md)). The venue proof
+  selects separately; cost conformance runs manually and nightly, outside PRs
+  ([ci-proof-selection.md](docs/ci-proof-selection.md)). AWS and Kubernetes workflows start only
+  for their declared paths. A green pull request says nothing about checks that did not run.
 - **The nightly run at 03:17 UTC runs everything** ([ci-nightly.md](docs/ci-nightly.md)). Start one with
   `gh workflow run nightly.yml --ref main`.
 - **Review changed code's actual readers and test owners.**

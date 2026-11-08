@@ -100,7 +100,7 @@ const refusal = f => {const value = verify(f); assert.equal(value?.reuse, null, 
 
 const siblingCases = [
   ['aws-infrastructure', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']],
-  ['venue-services-proof', ['service-receipts (legacy)', 'service-receipts (venue)']],
+  ['venue-services-proof', ['service-receipts (venue)']],
   ['download-supervision-diagnostic', ['linux-contention']],
   ['cloud-cost', [
     ...['cadence', 'day', 'foreground'].map(name => `cost (${name}-conformance.test.mjs, 1/1)`),

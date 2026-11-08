@@ -3103,11 +3103,10 @@ implementation or production evidence.
   availability checks for sign-in, remote access and backups. Full service/fault proof
   and the strict common verifier remain unbuilt. D570's
   [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
-  still needs a live payload-free ARM run after the billing-response and Lambda
-  reservation corrections, with named failure steps and a failed-setup retry
-  only after verified removal in the original private folder,
-  explained existing account charges within the unchanged monthly cap, measured
-  shutdown and disk/interface absence, actual itemised billing and removal.
+  is paused by the owner on 2026-11-08. Restart it as a small new item when
+  production deployment is close: one self-removing machine template, shutdown
+  timer, budget email and cleanup tag, then the D110 three-node proof with its
+  result and measured cost.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1
   service/fault proof and measured build/steady/fault/verifier/healing peaks remain
@@ -3466,6 +3465,14 @@ child exits. See [the investigation and remaining work](backlog/storage-cache-fi
 
 The qualified current browser fixture and identity-port repair retain separate
 historical bind and reconnect investigations. See [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
+
+## Reduce unnecessary CI work (D613)
+
+Retire resolved diagnostic workflows after moving their retained checks into
+existing root or nightly jobs. Add a weekly estimated-cost report with an
+operator alert at 10% above the last alert's figure, first measurement silent;
+show when email is not configured. Cost figures never fail a run. Qualify the
+PR and merge job-time savings on matched samples during healthy GitHub operation.
 
 ## Dependency-cache miss job budgets (D507)
 

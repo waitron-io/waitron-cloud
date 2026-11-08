@@ -8,8 +8,8 @@ delay scheduled work; the configured time is not a completion guarantee.
 
 The run calls standard CI, Cloud cost conformance, Venue service proof and
 AWS infrastructure workflows from the same revision. It runs every package partition, compiler
-and root check, all six standard receipt suites, the complete cost matrix and both
-venue proof cases, plus all four AWS guard and plan cells. It always executes the full work, even when the source tree
+and root check, all six standard receipt suites, the complete cost matrix and the
+venue receipt, plus all four AWS guard and plan cells. It always executes the full work, even when the source tree
 has not changed since the previous successful night. The selected product assertions and time limits stay in force.
 
 A separate `nightly-mutations` job retains the two remote-wait checks, billing
@@ -56,7 +56,8 @@ workflows use distinct groups, so they do not cancel the parent's standalone CI.
 
 Standard CI and AWS can reuse independently verified identical-tree PR evidence
 on main pushes. Other valid pushes select checks from their actual changed range;
-uncertain evidence retains full work. Cost and venue do not trigger on main pushes.
+uncertain evidence retains full work. AWS starts only for its infrastructure and
+bootstrap inputs. Cost has no PR trigger; cost and venue have no main-push trigger.
 Read the [merge evidence checklist](ci-merge-evidence.md) before interpreting a
 skipped job. The nightly run always executes full work and never grants reuse.
 
