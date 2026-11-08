@@ -14,6 +14,14 @@ def request(resource):return {'resourceId':resource,'snapshot':hashlib.sha256(js
 class CISession(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name);self.resource='dt-ci-0-1'
+ def test_ci_accepts_push_schedule_and_retries_for_routing_and_summary_jobs(self):
+  for event in ['push','schedule','workflow_dispatch','pull_request']:
+   for key in ['changes-1','ci-1','test-server-stream-1','test-server-merge-1','publish-1','image-smoke-1']:
+    with self.subTest(event=event,key=key):
+     ci={**CI,'workflowPath':'.github/workflows/ci.yml','event':event,'attempt':2,'jobKey':key}
+     value={**request(self.resource),'ci':ci,
+      'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
+     self.assertEqual(session.request_identity(value,self.resource)['ci'],ci)
  def test_ci_request_is_preserved_and_identity_mismatch_refuses(self):
   value=request(self.resource)
   self.assertEqual(session.request_identity(value,self.resource),value)
@@ -59,7 +67,9 @@ class CISession(unittest.TestCase):
     with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create'),patch.object(session.time,'time',side_effect=lambda:now),patch.object(session.time,'sleep',side_effect=sleep):
      if statuses==[255,0]:session.prepare(self.resource);self.assertTrue((directory/'prepared').exists());self.assertEqual(len(readiness),2);self.assertEqual(readiness[0],readiness[1])
      else:
-      with self.assertRaisesRegex((RuntimeError,TimeoutError),'status 2$|within120seconds'):session.prepare(self.resource)
+      expected=ValueError if statuses==[2] else TimeoutError
+      message='status 2$' if statuses==[2] else 'within120seconds'
+      with self.assertRaisesRegex(expected,message):session.prepare(self.resource)
       self.assertFalse((directory/'prepared').exists());self.assertEqual(len(readiness),1)
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):
   self.assertTrue(callable(getattr(guest,'complete_ci',None)),'CI execution entry point missing')
@@ -164,9 +174,9 @@ class CISession(unittest.TestCase):
     ci={**CI,'workflowPath':'.github/workflows/ci.yml','event':'pull_request','jobKey':key}
     value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
     self.assertEqual(session.request_identity(value,self.resource),value)
- def test_new_routed_families_refuse_extra_shards_and_hosted_exceptions(self):
+ def test_new_routed_families_refuse_extra_shards_and_malformed_keys(self):
   for key in ['lint-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
-              'test-server-stream-1','mutation-shared-aggregate-1','test-server-merge-1','test-till-merge-1','test-dashboard-merge-1','test-light-a-01','test-bookings-1\n']:
+              'test-server-stream-2','mutation-shared-aggregate-2','test-server-merge-2','test-till-merge-2','test-dashboard-merge-2','test-light-a-01','test-bookings-1\n']:
    ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
    value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
    with self.assertRaises(ValueError):session.request_identity(value,self.resource)

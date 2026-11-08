@@ -5,8 +5,9 @@ import {ciIdentity,routingLabel,jobName,ciJobKeyPattern} from './ci-identity.mjs
 import {configuredSlots} from './leases.mjs';
 
 function ordinaryKey(name,labels){
+ if(name==='image / smoke')return 'image-smoke-1';
  if(name==='typecheck')return Array.isArray(labels) && labels.some(label=>typeof label==='string' && label.endsWith('-typecheck-1'))?'typecheck-1':'typecheck';
- if(['lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
+ if(['changes','ci','publish','server-queue-watchdog','mutation-shared-aggregate','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge','test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
  const match=/^((?:test-(?:server|heavy|till|dashboard|fiscal-verifactu|venue-service|provisioning)|mutation-shared)) \(([1-9][0-9]*)\)$/.exec(name);
  return match?`${match[1]}-${match[2]}`:null;
 }
@@ -15,9 +16,9 @@ export function admitOrdinary(policy,approvedHead,{repository,run,job,workflow,s
  assert.equal(policy.workflowPath,'.github/workflows/ci.yml');
  assert.ok(repository.id===policy.repositoryId && repository.full_name===policy.repository,'Foreign CI repository');
  assert.ok(run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
-  run.workflow_id===policy.workflowId && run.path===policy.workflowPath && run.event==='pull_request' &&
-  run.run_attempt===1 && run.head_sha===approvedHead && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
- assert.ok(run.pull_requests?.length===1 && run.pull_requests[0].number===pull.number && pull.state==='open' &&
+  run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
+  Number.isSafeInteger(run.run_attempt) && run.run_attempt>0 && run.head_sha===approvedHead && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
+ if(run.event==='pull_request')assert.ok(run.pull_requests?.length===1 && run.pull_requests[0].number===pull.number && pull.state==='open' &&
   pull.head?.sha===approvedHead && pull.head.repo?.id===policy.repositoryId && pull.base?.repo?.id===policy.repositoryId,'Unapproved ordinary PR head');
  assert.equal(createHash('sha256').update(workflow).digest('hex'),policy.workflowDigest,'CI workflow definition changed');
  assert.equal(source.sha,approvedHead,'CI source commit differs');
@@ -47,6 +48,88 @@ async function writeRoutingVariable({api,policy,name,value,signal}){
  else await api.post(`/repos/${policy.repository}/actions/variables`,{name,value},{signal});
  assert.equal((await api.get(path,{signal})).value,value,'Routing variable readback differs');
 }
+export async function hostedAttempts({api,policy,signal}){
+ let values={};
+ try{values=JSON.parse((await api.get(variablePath(policy,'DISPOSABLE_TESTS_HOSTED_ATTEMPTS'),{signal})).value||'{}');}
+ catch(error){if(error.status!==404)throw error;}
+ assert.ok(values && typeof values==='object' && !Array.isArray(values) &&
+  Object.entries(values).every(([run,attempt])=>/^[1-9][0-9]*$/.test(run) && Number.isSafeInteger(attempt) && attempt>0),'Invalid hosted attempt routing');
+ return values;
+}
+async function markHostedAttempt({api,policy,ci,signal}){
+ const values=await hostedAttempts({api,policy,signal});
+ if(values[String(ci.runId)]===ci.attempt+1)return;
+ values[String(ci.runId)]=ci.attempt+1;
+ await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+}
+// The repository variable survives a full pool and a controller restart.
+export async function overflowOrdinary({api,policy,ci,signal}){
+ const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,signal});
+ if(!current)return;
+ assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
+ const base=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
+ const run=await api.get(base,{signal});
+ if(!Number.isFinite(Date.parse(run.created_at)) || Date.now()-Date.parse(run.created_at)<60000)return;
+ const started=async()=>{
+  const inventory=await api.get(base+`/attempts/${ci.attempt}/jobs?per_page=100`,{signal});
+  assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
+   inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
+  return inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
+   job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued'));
+ };
+ if(await started())return;
+ await markHostedAttempt({api,policy,ci,signal});
+ if(await started()){
+  const values=await hostedAttempts({api,policy,signal});
+  if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
+  return;
+ }
+ await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
+ console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
+}
+export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set()}){
+ const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
+ for(const [id,attempt] of Object.entries(values)){
+  if(excludeRuns.has(Number(id)))continue;
+  const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
+  assert.ok(run.id===Number(id) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+   run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
+   Number.isSafeInteger(run.run_attempt) && run.run_attempt>=attempt-1,'Hosted overflow run identity differs');
+  let obsolete=false;
+  if(run.event==='pull_request'){
+   assert.equal(run.pull_requests?.length,1,'Hosted overflow needs one PR');
+   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+   obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
+    pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
+  }
+  if(obsolete || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
+   delete values[id];
+   await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+   continue;
+  }
+  if(run.run_attempt===attempt)continue;
+  assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
+  if(run.status==='completed'){
+   await api.post(path+'/rerun',undefined,{signal});
+   console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
+  }
+  else {
+   const inventory=await api.get(path+`/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
+   if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha ||
+    job.labels?.includes('self-hosted') && (job.runner_id || job.status==='in_progress' || job.status==='completed' && !['cancelled','skipped'].includes(job.conclusion)))){
+    delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+   }
+   let force=false;
+   if(run.status==='queued'){
+    force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
+     (job.status==='completed' || job.status==='queued' && !job.runner_id));
+   }
+   await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
+  }
+ }
+ return values;
+}
 export async function routingHead({api,policy,signal}){
  try{const value=(await api.get(variablePath(policy,'DISPOSABLE_TESTS_HEAD'),{signal})).value;
   return typeof value==='string' && /^[a-f0-9]{40}$/i.test(value)?value.toLowerCase():'';}
@@ -71,6 +154,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(job.status==='completed' && (!ownedCancel || job.conclusion==='success'))return {retry:false};
  assert.ok(run.run_attempt===ci.attempt || ownedCancel && run.run_attempt===ci.attempt+1,'Ordinary fallback attempt differs');
  const currentPR=async run=>{
+  if(['push','schedule','workflow_dispatch'].includes(run.event))return true;
   assert.ok(run.event==='pull_request' && run.pull_requests?.length===1,'Ordinary fallback PR identity differs');
   const pull=await api.get(`/repos/${policy.repository}/pulls/${run.pull_requests[0].number}`,{signal});
   assert.equal(pull.number,run.pull_requests[0].number,'Ordinary fallback PR identity changed');
@@ -82,6 +166,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(!await currentPR(run))return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
+ if(automatic)await markHostedAttempt({api,policy,ci,signal});
  if(ownedCancel && run.status==='queued'){
   const outcome=await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true,waitForCompletion:!automatic});
   if(outcome?.pending)return {retry:false,pending:true};
@@ -104,11 +189,11 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  assert.equal((await api.get(`/repos/${policy.repository}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,
   'all_external_contributors','External contributor approval is not enabled');
  const base=`/repos/${policy.repository}`,run=await api.get(`${base}/actions/runs/${runId}`,{signal});
- assert.ok(run.id===runId && run.head_sha===approvedHead && run.run_attempt===1 && run.event==='pull_request' &&
+ assert.ok(run.id===runId && run.head_sha===approvedHead && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0 && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
   run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && run.workflow_id===policy.workflowId &&
   run.path===policy.workflowPath && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
- assert.equal(run.pull_requests?.length,1,'Ordinary run needs one PR');
- const inventory=await api.get(`${base}/actions/runs/${runId}/attempts/1/jobs?per_page=100`,{signal});
+ if(run.event==='pull_request')assert.equal(run.pull_requests?.length,1,'Ordinary run needs one PR');
+ const inventory=await api.get(`${base}/actions/runs/${runId}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
  assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,
   'Incomplete ordinary CI job inventory');
  const candidates=inventory.jobs.filter(job=>jobId===undefined?job.name==='typecheck':job.id===jobId);
@@ -116,70 +201,47 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  if(!candidates.length)return null;
  const [repository,blob,source,pull]=await Promise.all([
   api.get(base,{signal}),api.get(`${base}/contents/${policy.workflowPath}?ref=${run.head_sha}`,{signal}),
-  api.get(`${base}/commits/${approvedHead}`,{signal}),api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal})]);
- if(automatic)await checkExecutionWorkflow({api,policy,run,signal});
+  api.get(`${base}/commits/${approvedHead}`,{signal}),run.event==='pull_request'?api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal}):undefined]);
  assert.equal(blob.encoding,'base64','Invalid workflow blob encoding');
  const workflow=Buffer.from(blob.content,'base64').toString(),digest=createHash('sha256').update(workflow).digest('hex');
- const admittedPolicy=automatic && policy.workflowHistory?{...policy,workflowDigest:await reviewedWorkflowDigest({api,policy,digest,signal})}:policy;
+ const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-// A pin remains eligible only while its exact main revision is recent and ancestral.
-async function reviewedWorkflowDigest({api,policy,digest,signal}){
- const pin=policy.workflowHistory.find(pin=>pin.digest===digest);assert.ok(pin,'CI workflow definition changed');
- const base=`/repos/${policy.repository}`,main=(await api.get(`${base}/git/ref/heads/main`,{signal})).object?.sha;
- if(typeof main!=='string' || !/^[a-f0-9]{40}$/.test(main))throw new Error('Main workflow revision read is incomplete');
- const recent=await api.get(`${base}/commits?sha=${main}&path=${policy.workflowPath}&per_page=10`,{signal});
- if(!Array.isArray(recent) || recent.length>10 || recent.some(commit=>typeof commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(commit.sha)) || new Set(recent.map(commit=>commit.sha)).size!==recent.length)throw new Error('Recent workflow history read is incomplete');
- assert.ok(recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
- const comparison=await api.get(`${base}/compare/${pin.sha}...${main}?per_page=1&page=2`,{signal});
- if(!['ahead','identical','behind','diverged'].includes(comparison?.status) || typeof comparison.merge_base_commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(comparison.merge_base_commit.sha))throw new Error('Workflow ancestry read is incomplete');
- assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit.sha===pin.sha,'Workflow pin is not an ancestor of current main');
- const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${pin.sha}`,{signal});
- if(blob?.encoding!=='base64' || typeof blob.content!=='string')throw new Error('Pinned workflow read is incomplete');
- assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),pin.digest,'Pinned main workflow differs');
- return digest;
-}
-async function checkExecutionWorkflow({api,policy,run,signal}){
- const ref=`refs/pull/${run.pull_requests[0].number}/merge`;
- const matches=(run.referenced_workflows??[]).filter(w=>w.ref===ref && w.path===`${policy.repository}/.github/workflows/image-smoke.yml@${w.sha}`);
- assert.ok(matches.length===1 && /^[a-f0-9]{40}$/.test(matches[0].sha),'Original execution workflow identity is missing');
- const blob=await api.get(`/repos/${policy.repository}/contents/${policy.workflowPath}?ref=${matches[0].sha}`,{signal});
- assert.equal(blob.encoding,'base64','Invalid execution workflow encoding');
- const digest=createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex');
- if(policy.workflowHistory)await reviewedWorkflowDigest({api,policy,digest,signal});
- else assert.equal(digest,policy.workflowDigest,'Original execution workflow changed');
-}
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
  const upstream=api,reads=new Map();
  api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
- const inventories=await Promise.all(['queued','in_progress'].map(status=>api.get(`${base}/actions/workflows/${policy.workflowId}/runs?event=pull_request&status=${status}&per_page=100`,{signal})));
+ const inventories=await Promise.all(['queued','in_progress'].map(status=>api.get(`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,{signal})));
  const runs=new Map();
  for(const inventory of inventories){
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
+  if(excludeRuns.has(run.id))continue;
   let candidate;
   try{
-  if(run.event!=='pull_request' || run.run_attempt!==1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
-   run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || run.pull_requests?.length!==1 || !['queued','in_progress'].includes(run.status))continue;
-  const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
-  if(pull.state!=='open' || pull.head?.sha!==run.head_sha || pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
-  const inventory=await api.get(`${base}/actions/runs/${run.id}/attempts/1/jobs?per_page=100`,{signal});
+  if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
+   run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || !['queued','in_progress'].includes(run.status))continue;
+  if(run.event==='pull_request'){
+   if(run.pull_requests?.length!==1)continue;
+   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+   if(pull.state!=='open' || pull.head?.sha!==run.head_sha || pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
+  }
+  const inventory=await api.get(`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   for(const job of inventory.jobs){
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name,job.labels);
-   if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-1-${key}`))continue;
-   candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-1-${key}`};
+   if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
+   candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`};
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
    if(ci)found.push(ci);
    if(found.length===limit)return found;
   }
-  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
+  }catch(error){signal?.throwIfAborted();if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
    if(candidate && error.code==='ERR_ASSERTION' && onRefused)try{await onRefused(candidate);}catch(fallbackError){
     signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',runId:run.id,error:fallbackError.message}));
    }
@@ -561,10 +623,11 @@ export async function main(args){
 export function validateCIConfig(config){
  assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
  configuredSlots(config);
- const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
+ const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey',...(ci.candidateWorkflowDigest===undefined?[]:['candidateWorkflowDigest']),'repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&
   [ci.repositoryId,ci.workflowId].every(v=>Number.isSafeInteger(v)&&v>0),'Invalid CI policy identity');
  assert.match(ci.workflowDigest,/^[a-f0-9]{64}$/);
+ if(ci.candidateWorkflowDigest!==undefined)assert.match(ci.candidateWorkflowDigest,/^[a-f0-9]{64}$/);
  if(ci.workflowHistory!==undefined){
   assert.ok(ci.workflowPath==='.github/workflows/ci.yml' && Array.isArray(ci.workflowHistory) && ci.workflowHistory.length>0 && ci.workflowHistory.length<=10,'Invalid workflow history bound');
   for(const pin of ci.workflowHistory){

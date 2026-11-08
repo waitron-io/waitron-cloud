@@ -4,10 +4,26 @@ import {createHash} from 'node:crypto';
 import * as controller from './ci-canary.mjs';
 const head='1'.repeat(40),execution='2'.repeat(40),workflow='reviewed workflow';
 const policy={repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex')};
+const routingStores=new WeakMap();
+function routingVariables(api){
+ if(!routingStores.has(api))routingStores.set(api,{value:'{}'});
+ const stored=routingStores.get(api);
+ return new Proxy(api,{get(target,key){
+  if(key==='get')return (path,...args)=>path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?Promise.resolve({value:stored.value}):target.get(path,...args);
+  if(key==='patch')return (path,body,...args)=>{
+   if(!path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return target.patch(path,body,...args);
+   assert.equal(body.name,'DISPOSABLE_TESTS_HOSTED_ATTEMPTS');
+   assert.ok(Object.values(JSON.parse(body.value)).every(attempt=>Number.isSafeInteger(attempt) && attempt>0));
+   stored.value=body.value;return Promise.resolve(null);
+  };
+  return Reflect.get(target,key);
+ }});
+}
 function fixture(){
- const run={id:789,run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/12/merge',sha:execution}]};
+ const run={id:789,created_at:new Date(Date.now()-120000).toISOString(),run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/12/merge',sha:execution}]};
  const jobs=[['test-server (24)','test-server-24'],['test-heavy (3)','test-heavy-3'],['test-till (7)','test-till-7'],['test-ui','test-ui-1'],['test-dashboard (4)','test-dashboard-4']].map(([name,key],i)=>({id:901+i,name,run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-'+key]}));
  const api={get:async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};
   if(path.endsWith('fork-pr-contributor-approval'))return {approval_policy:'all_external_contributors'};
   if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:1,workflow_runs:path.includes('status=queued')?[]:[run]};
   if(path.endsWith('/actions/runs/789'))return run;
@@ -22,9 +38,33 @@ function fixture(){
 }
 test('automatic pickup admits each routed shard on the current same-repository PR without a chosen head',async()=>{
  const {api}=fixture();assert.equal(typeof controller.findAutomatic,'function');
- const jobs=await controller.findAutomatic({api,policy,limit:6});
+ const jobs=await controller.findAutomatic({api:routingVariables(api),policy,limit:6});
  assert.deepEqual(jobs.map(j=>[j.jobId,j.jobKey]),[[901,'test-server-24'],[902,'test-heavy-3'],[903,'test-till-7'],[904,'test-ui-1'],[905,'test-dashboard-4']]);
  assert.ok(jobs.every(j=>j.sourceSha===head && j.runId===789 && j.attempt===1));
+});
+test('an incomplete run inventory does not hold free capacity behind a still-running sibling',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const {automaticTick}=await import('./control.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
+ const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release;
+ const held=new Promise(resolve=>release=resolve),ids=[];
+ const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/runs?') && path.includes('status=queued')){
+   if(++scans===2)return {total_count:1,workflow_runs:[]};
+  }
+  if(path.includes('/jobs?'))return {total_count:scans<3?2:3,jobs:scans<3?[first,second]:[first,second,third]};
+  return get(path);
+ };
+ let failure;
+ try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
+  api:routingVariables(f.api),transport:{healthy:async()=>true},wait:async()=>{},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903)release();return {code:0};}});}
+ catch(error){failure=error;}
+ assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);
 });
 for(const change of ['fork','retry','assigned','hosted','unsupported','stale'])test(`automatic pickup leaves ${change} jobs alone`,async()=>{
  const f=fixture();
@@ -34,17 +74,18 @@ for(const change of ['fork','retry','assigned','hosted','unsupported','stale'])t
  if(change==='assigned')f.jobs.forEach(j=>j.runner_id=42);
  if(change==='hosted')f.jobs.forEach(j=>j.labels=['ubuntu-latest']);
  if(change==='unsupported')f.jobs.forEach(j=>{j.name='test-setup (1)';j.labels=['self-hosted','dt-123-789-1-test-setup-1'];});
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6}),[]);
+ assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6}),[]);
 });
-test('automatic pickup pins the original merge workflow and rejects changed execution bytes',async()=>{
- const f=fixture(),get=f.api.get;
- f.api.get=async path=>path.endsWith('?ref='+execution)?{encoding:'base64',content:Buffer.from('changed workflow').toString('base64')}:get(path);
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6}),[]);
+test('automatic pickup accepts same-repository workflow edits without an execution pin',async()=>{
+ const f=fixture(),get=f.api.get,changed='changed same-repository workflow';
+ f.api.get=async path=>path.includes('/contents/')?{encoding:'base64',content:Buffer.from(changed).toString('base64')}:get(path);
  f.run.referenced_workflows=[];
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6}),[]);
+ const jobs=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6});
+ assert.deepEqual(jobs.map(ci=>ci.jobId),[901,902,903,904,905]);
+ assert.ok(jobs.every(ci=>ci.workflowDigest===createHash('sha256').update(changed).digest('hex')));
 });
 test('automatic pickup never starts beyond the free-slot count',async()=>{
- const f=fixture();assert.deepEqual((await controller.findAutomatic({api:f.api,policy,limit:2})).map(j=>j.jobId),[901,902]);
+ const f=fixture();assert.deepEqual((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:2})).map(j=>j.jobId),[901,902]);
  assert.deepEqual(await controller.findAutomatic({api:{get:async()=>assert.fail('Full pool must not poll GitHub')},policy,limit:0}),[]);
 });
 
@@ -55,7 +96,7 @@ test('automatic pickup serves older waiting PR runs before newer runs fill the p
  const jobs=f.jobs.map(job=>({...job,id:job.id+10,run_id:790,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
  f.api.get=async path=>path.includes('/runs?')?{total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[newer,f.run]}:
   path.endsWith('/actions/runs/790')?newer:path.includes('/runs/790/attempts/1/jobs?')?{total_count:jobs.length,jobs}:get(path);
- assert.deepEqual((await controller.findAutomatic({api:f.api,policy,limit:1})).map(ci=>[ci.runId,ci.jobId]),[[789,901]]);
+ assert.deepEqual((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1})).map(ci=>[ci.runId,ci.jobId]),[[789,901]]);
 });
 
 test('automatic recovery retains cancellation intent when the job stops before its workflow settles',async()=>{
@@ -66,7 +107,7 @@ test('automatic recovery retains cancellation intent when the job stops before i
  api.post=async path=>{if(path.endsWith('/cancel'))cancelled=true;else{reruns++;assert.ok(path.endsWith('/rerun'));}};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:stage,runId:789,attempt:1,jobId:901}}),setInvocation:v=>{stage=v.ordinaryStage;}};
  // The job has stopped but the workflow's summary has not yet settled.
- const result=await controller.fallbackOrdinary({api,policy,ci,leases,automatic:true,wait:async()=>{}});
+ const result=await controller.fallbackOrdinary({api:routingVariables(api),policy,ci,leases,automatic:true,wait:async()=>{}});
  assert.equal(cancelled,true);assert.equal(stage,'cancel-requested');assert.equal(reruns,0);assert.equal(result.pending,true);
 });
 
@@ -74,7 +115,7 @@ test('one automatic recovery retries the completed old attempt without switching
  const f=fixture();let reruns=0;
  const api={get:async path=>path.endsWith('/actions/jobs/901')?{id:901,name:'test-server (24)',run_id:789,run_attempt:1,head_sha:head,status:'completed',conclusion:'cancelled'}:path.endsWith('/actions/runs/789')?{...f.run,status:'completed'}:f.api.get(path),post:async path=>{assert.ok(path.endsWith('/rerun'));reruns++;},patch:async()=>assert.fail('No global mode flip')};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
- const result=await controller.fallbackOrdinary({api,policy,ci:{repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901},leases,automatic:true});
+ const result=await controller.fallbackOrdinary({api:routingVariables(api),policy,ci:{repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901},leases,automatic:true});
  assert.equal(result.retry,true);assert.equal(reruns,1);
 });
 
@@ -89,18 +130,18 @@ test('automatic pickup fills free slots while an independent manual test keeps i
  const lease=manual.reserveLocal({lane:'I',turn:'manual-test',snapshot:'a'.repeat(64),argv:['true']}).lease;
  const f=fixture(),get=f.api.get;f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  let active=0,peak=0,release;const ready=new Promise(r=>release=r),ids=[];
- const result=await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},
+ const result=await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},
  runWorker:async(ci)=>{ids.push(ci.jobId);active++;peak=Math.max(peak,active);if(active===5)release();await ready;active--;return {code:0};}});
  assert.deepEqual(ids,[901,902,903,904,905]);assert.equal(peak,5);assert.equal(result.served,5);
  assert.equal(manual.inspect().slots[0].lease.resourceId,lease.resourceId);
  const pending=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:1});
  pending.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
- const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
+ const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
  assert.deepEqual(next,[902,903,904,905],'A pending job must not be admitted again on a different slot');
  const {ciRequest}=await import('./ci-identity.mjs'),finished=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:2});
- const complete=(await controller.findAutomatic({api:f.api,policy,limit:6})).find(ci=>ci.jobId===905);
+ const complete=(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6})).find(ci=>ci.jobId===905);
  const reserved=finished.reserveLocal(ciRequest('I',complete)).lease;finished.release(reserved,{resourceId:reserved.resourceId,absent:true});
- const after=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{after.push(ci.jobId);return {code:0};}});
+ const after=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{after.push(ci.jobId);return {code:0};}});
  assert.deepEqual(after,[902,903,904],'Completed turn history must prevent replay even if the API still says queued');
 });
 
@@ -114,7 +155,7 @@ test('the installed recovery entry also polls automatic CI after reconciling its
  const config=directory+'/configuration.json';writeFileSync(config,JSON.stringify({version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:directory,
  ci:{...policy,appEnv:directory+'/app.env',appKey:directory+'/app.pem'}}));
  let reads=0;const get=GithubApp.prototype.get;t.after(()=>{GithubApp.prototype.get=get;});
- GithubApp.prototype.get=async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));reads++;return {value:'hosted'};};
+ GithubApp.prototype.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));reads++;return {value:'hosted'};};
  const result=await main([config,'--once']);assert.equal(result,0);assert.equal(reads,1);
 });
 
@@ -135,7 +176,7 @@ for(const obsolete of ['advanced','closed','unavailable'])test(`automatic recove
  assert.equal(modeReads,2);if(obsolete==='unavailable')assert.equal(leases.inspect().ciInvocation.jobId,901);else assert.equal(leases.inspect().ciInvocation,undefined);
 });
 
-test('a PR with changed workflow bytes cannot stop another approved PR from using capacity',async()=>{
+test('a PR with mismatched source evidence cannot stop another approved PR from using capacity',async()=>{
  const f=fixture(),get=f.api.get,otherHead='5'.repeat(40);
  const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
  const job={...f.jobs[0],id:911,run_id:790,head_sha:otherHead,labels:['self-hosted','dt-123-790-1-test-server-24']};
@@ -145,16 +186,16 @@ test('a PR with changed workflow bytes cannot stop another approved PR from usin
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   return get(path);
  };
- const selected=await controller.findAutomatic({api:f.api,policy,limit:6});assert.deepEqual(selected.map(j=>j.jobId),[911]);
+ const selected=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6});assert.deepEqual(selected.map(j=>j.jobId),[911]);
 });
 
 
 test('one pickup reads shared run evidence once before workers independently recheck admission',async()=>{
  const f=fixture(),get=f.api.get,reads=new Map();f.api.get=async path=>{reads.set(path,(reads.get(path)??0)+1);return get(path);};
- assert.equal((await controller.findAutomatic({api:f.api,policy,limit:6})).length,5);
+ assert.equal((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6})).length,5);
  assert.equal(reads.get('/repos/fixture/waitron/actions/runs/789/attempts/1/jobs?per_page=100'),1);
  assert.equal(reads.get('/repos/fixture/waitron/actions/permissions/fork-pr-contributor-approval'),1);
 });
@@ -183,7 +224,7 @@ test('stopping automatic pickup lets its owned worker finish cleanup beyond the 
  t.after(()=>{process.execPath=node;});process.execPath=worker;
  const f=fixture(),get=f.api.get;f.jobs.splice(1);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const cancel=new AbortController();
- const running=automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,transport:{healthy:async()=>true},signal:cancel.signal}).then(value=>({value}),error=>({error}));
+ const running=automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},signal:cancel.signal}).then(value=>({value}),error=>({error}));
  try{const end=Date.now()+5000;while(!existsSync(ready)){assert.ok(Date.now()<end,'Worker never started');await delay(20);}cancel.abort();const result=await running;
   assert.equal(readFileSync(cleaned,'utf8'),'cleaned');assert.match(result.error?.message??'',/abort/i);
  }finally{cancel.abort();await running;process.execPath=node;}
@@ -197,7 +238,7 @@ test('an automatic server failure requests exactly one cancellation and same-hea
  f.api.post=async path=>{if(path.endsWith('/cancel')){assert.equal(stage,'cancel-requested');cancelled++;}else{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/rerun');assert.equal(cancelled,1);reruns++;}};
  f.api.patch=async()=>assert.fail('Automatic routing must stay on');
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:stage,runId:789,attempt:1,jobId:901}}),setInvocation:v=>{stage=v.ordinaryStage;}};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>{}});
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true,wait:async()=>{}});
  assert.equal(cancelled,1);assert.equal(reruns,1);assert.equal(result.retry,true);assert.equal(result.sourceSha,head);
 });
 
@@ -209,7 +250,7 @@ test('the real CLI completes its automatic recovery import instead of exiting wi
  for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
  const config=directory+'/configuration.json';writeFileSync(config,JSON.stringify({version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:directory,ci:{...policy,appEnv:directory+'/app.env',appKey:directory+'/app.pem'}}));
  const manual=new URL('./manual.mjs',import.meta.url),app=new URL('./github-app.mjs',import.meta.url);
- const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};GithubApp.prototype.get=async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));return {value:'hosted'}};process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(config)},'--once'];await import(${JSON.stringify(manual.href)});console.log('CLI_FINISHED');`;
+ const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};GithubApp.prototype.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));return {value:'hosted'}};process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(config)},'--once'];await import(${JSON.stringify(manual.href)});console.log('CLI_FINISHED');`;
  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:15000});
  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/CLI_FINISHED/);assert.doesNotMatch(result.stderr,/unsettled top-level await/);
 });
@@ -219,17 +260,18 @@ test('an unhealthy or unreachable host selects hosted before polling or starting
  const {LocalLeases}=await import('./leases.mjs'),{automaticTick}=await import('./control.mjs');
  for(const failure of ['unhealthy','unreachable']){
   const root=mkdtempSync(tmpdir()+'/auto-health-');t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const {writeFileSync}=await import('node:fs');writeFileSync(root+'/mac-controller.lock','',{mode:0o600});
   const leases=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});let mode='server',checks=0,writes=0;
-  const api={get:async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE') || path.endsWith('DISPOSABLE_TESTS_HEAD'),'Must not poll runs or jobs');return {value:path.endsWith('DISPOSABLE_TESTS_HEAD')?'':mode};},patch:async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));assert.equal(body.value,'hosted');mode=body.value;writes++;},post:async()=>assert.fail('Must not cancel or rerun a workflow')};
-  const result=await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api,transport:{healthy:async()=>{checks++;if(failure==='unreachable')throw new Error('Host unreachable');return false;}},runWorker:async()=>assert.fail('Must not start a guest')});
+  const api={get:async path=>{if(path.includes('/runs?'))return {total_count:0,workflow_runs:[]};assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE') || path.endsWith('DISPOSABLE_TESTS_HEAD'),'Unexpected host health API read');return {value:path.endsWith('DISPOSABLE_TESTS_HEAD')?'':mode};},patch:async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));assert.equal(body.value,'hosted');mode=body.value;writes++;},post:async()=>assert.fail('Must not cancel or rerun a workflow')};
+  const result=await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api:routingVariables(api),transport:{healthy:async()=>{checks++;if(failure==='unreachable')throw new Error('Host unreachable');return false;}},runWorker:async()=>assert.fail('Must not start a guest')});
   assert.equal(result.served,0);assert.equal(mode,'hosted');assert.equal(checks,1);assert.equal(writes,1);assert.ok(leases.inspect().slots.every(s=>s.state==='free' && !s.ciInvocation));
   for(let slot=0;slot<6;slot++)new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'full-'+slot,snapshot:'a'.repeat(64),argv:['true']});
-  mode='server';await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api,transport:{healthy:async()=>assert.fail('A full healthy pool is busy, not unavailable')}});
+  mode='server';await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state:root,hostGeneration:'test',ci:policy},api:routingVariables(api),transport:{healthy:async()=>assert.fail('A full healthy pool is busy, not unavailable')}});
   assert.equal(mode,'server');assert.equal(writes,1);
  }
 });
 
-for(const race of ['none','assigned','assigned-later','changed-label','advanced'])test(`refused workflow fallback handles ${race} race without running unreviewed code`,async t=>{
+for(const race of ['none','assigned','assigned-later','changed-label','advanced'])test(`refused source fallback handles ${race} race without running mismatched code`,async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-refused-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
@@ -239,15 +281,15 @@ for(const race of ['none','assigned','assigned-later','changed-label','advanced'
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('unreviewed workflow').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/jobs/901')){jobReads++;return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null,...(race==='assigned' || race==='assigned-later' && jobReads>1?{runner_id:42}:{}),...(race==='changed-label'?{labels:['self-hosted','dt-123-789-1-test-heavy-3']}: {})};}
   if(path.endsWith('/pulls/12') && race==='advanced' && pullReads++)return {number:12,state:'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   return get(path);
  };
  f.api.post=async path=>{if(path.endsWith('/cancel'))cancelled=true;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
- f.api.patch=async()=>assert.fail('A refused workflow must not disable routing for other reviewed PRs');
- await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unreviewed workflow must never execute on the server')});
+ f.api.patch=async()=>assert.fail('A refused source must not disable routing for other approved PRs');
+ await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Mismatched source must never execute on the server')});
  assert.equal(cancelled,race==='none','Only a still-queued job on the unchanged PR may be cancelled');
  assert.equal(reruns,race==='none'?1:0,'Only the unchanged refused PR retries using the existing hosted route');
  const ledger=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
@@ -264,7 +306,7 @@ test('recovery of a refused intent preserves a job assigned after its previous A
  leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'refused'});
  const f=fixture(),get=f.api.get;f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:'in_progress',runner_id:42}:get(path);
  f.api.post=async()=>assert.fail('An assigned job must survive recovery without cancellation or rerun');
- const result=await reconcileManual({state,hostGeneration:'test',slots:6,slot:1,transport:{destroy:async()=>assert.fail('A refused job has no guest to remove')},ci:policy,api:f.api});
+ const result=await reconcileManual({state,hostGeneration:'test',slots:6,slot:1,transport:{destroy:async()=>assert.fail('A refused job has no guest to remove')},ci:policy,api:routingVariables(f.api)});
  assert.equal(result.code,0);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
 });
 
@@ -286,7 +328,7 @@ test('automatic pickup refills a completed slot before a slow sibling finishes',
  let finishSlow,thirdStarted,healthChecks=0;
  const slow=new Promise(resolve=>{finishSlow=resolve;}),third=new Promise(resolve=>{thirdStarted=resolve;});
  const started=[];
- const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>{healthChecks++;return true;}},runWorker:ci=>withAvailableSlot(config,async({leases})=>{
+ const running=automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>{healthChecks++;return true;}},runWorker:ci=>withAvailableSlot(config,async({leases})=>{
   const lease=leases.reserveLocal(ciRequest('I',ci)).lease;started.push(ci.jobId);
   if(ci.jobId===901)await slow;
   if(ci.jobId===903)thirdStarted(true);
@@ -307,7 +349,7 @@ for(const status of [502,429])test(`a transient GitHub ${status} leaves queued w
  const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;let mutations=0;
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/contents/')?Promise.reject(Object.assign(new Error('Temporary GitHub error'),{status})):path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:mutations?'completed':'queued',conclusion:mutations?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:mutations?'completed':'in_progress'}:get(path);
  f.api.post=async()=>{mutations++;};
- await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unavailable evidence cannot admit a server worker')});
+ await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unavailable evidence cannot admit a server worker')});
  assert.equal(mutations,0,'A temporary API error must not restart the PR');
 });
 
@@ -322,13 +364,13 @@ for(const busy of ['none','busy','retired','pending'])test(`reviewed workers sta
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null};
   return get(path);
  };
  f.api.post=async path=>{assert.equal(started,true,'Known good work must start before refusal cleanup');if(path.endsWith('/cancel'))cancelled=true;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
- const result=await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
+ const result=await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{
   assert.equal(ci.jobId,911);started=true;tries++;
   if(tries===1 && ['retired','pending'].includes(busy)){
    const {LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5});
@@ -345,29 +387,30 @@ test('a refused cancellation that is still settling retains its intent until rec
  const config=await refusalPool(t),f=fixture(),get=f.api.get;let jobReads=0,settled=false,reruns=0;
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:++jobReads>=3?'completed':'queued',conclusion:jobReads>=3?'cancelled':null};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:settled?'completed':'in_progress'};
   return get(path);
  };
  f.api.post=async path=>{assert.ok(path.endsWith('/rerun'));reruns++;};
- await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unreviewed workflow')});
+ await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Mismatched source')});
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
  assert.equal(leases.inspect().slots.filter(s=>s.ciInvocation?.ordinaryStage==='cancel-requested').length,1);assert.equal(reruns,0);
- settled=true;await reconcileManual({...config,transport:{},api:f.api});
+ settled=true;await reconcileManual({...config,transport:{},api:routingVariables(f.api)});
  assert.equal(reruns,1);assert.ok(leases.inspect().slots.every(s=>!s.ciInvocation));
- await reconcileManual({...config,transport:{},api:f.api});assert.equal(reruns,1);
+ await reconcileManual({...config,transport:{},api:routingVariables(f.api)});assert.equal(reruns,1);
 });
 
-test('the real recovery CLI finishes a refused-workflow hosted retry without an import cycle',async t=>{
+test('the real recovery CLI finishes a refused-source hosted retry without an import cycle',async t=>{
  const {writeFileSync}=await import('node:fs'),{spawnSync}=await import('node:child_process');
  const config=await refusalPool(t),configuration=config.state+'/configuration.json';
  writeFileSync(configuration,JSON.stringify({...config,host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:config.state,ci:{...policy,appEnv:config.state+'/app.env',appKey:config.state+'/app.pem'}}));
  const manual=new URL('./manual.mjs',import.meta.url),app=new URL('./github-app.mjs',import.meta.url),transport=new URL('./transport.mjs',import.meta.url);
  const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};import {CITransport} from ${JSON.stringify(transport.href)};
  const head=${JSON.stringify(head)},execution=${JSON.stringify(execution)},workflow=${JSON.stringify(workflow)},policy=${JSON.stringify(policy)};
- const f=(${fixture.toString()})();const get=f.api.get;let cancelled=0,reruns=0;
- GithubApp.prototype.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/contents/')?{encoding:'base64',content:Buffer.from('changed').toString('base64')}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:get(path);
+ const f=(${fixture.toString()})();const get=f.api.get;let cancelled=0,reruns=0,marker='{}';
+ GithubApp.prototype.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/commits/'+head)?{sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:get(path);
+ GithubApp.prototype.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;};
  GithubApp.prototype.post=async path=>{if(path.endsWith('/cancel'))cancelled++;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
  CITransport.prototype.healthy=async()=>true;
  process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(configuration)},'--once'];await import(${JSON.stringify(manual.href)});assert.equal(cancelled,1);assert.equal(reruns,1);console.log('REFUSED_CLI_FINISHED');`;
@@ -381,7 +424,7 @@ test('owned cancellation bypasses an always-run summary queue before requesting 
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:'completed',conclusion:'cancelled'}:path.endsWith('/actions/runs/789')?{...f.run,status:forced?'completed':'queued'}:get(path);
  f.api.post=async path=>{if(path.endsWith('/force-cancel'))forced=true;else if(path.endsWith('/rerun')){assert.equal(forced,true);reruns++;}else assert.fail('Normal cancellation is already recorded');};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>{}});
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true,wait:async()=>{}});
  assert.equal(forced,true,'An always-run summary must not hold a cancelled source in the runner queue');assert.equal(reruns,1);assert.equal(result.retry,true);
 });
 
@@ -393,7 +436,7 @@ test('pickup counts a worker waiting for admission against free capacity',async 
  for(let slot=0;slot<4;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
  let releaseFirst,active=0,peak=0;const first=new Promise(resolve=>{releaseFirst=resolve;}),results=[];
  const timer=setTimeout(releaseFirst,1000);t.after(()=>clearTimeout(timer));
- await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
+ await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{
   active++;peak=Math.max(peak,active);if(ci.jobId===901)await first;if(ci.jobId===903)releaseFirst();
   try{const result=await withAvailableSlot(config,async({leases})=>{
    const lease=leases.reserveLocal(ciRequest('I',ci)).lease;
@@ -413,7 +456,7 @@ test('pickup recovers an interrupted slot while a slower worker still owns its s
  const interrupted=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:3}),nonce='c'.repeat(32);
  interrupted.setInvocation({nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});
  let finish,fourthStarted,fastDone=false;const held=new Promise(resolve=>{finish=resolve;}),fourth=new Promise(resolve=>{fourthStarted=resolve;});
- const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},recover:async()=>{
+ const running=automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},recover:async()=>{
   if(fastDone && interrupted.inspect().ciInvocation)interrupted.clearInvocation(nonce);
  },runWorker:ci=>withAvailableSlot(config,async({leases})=>{
   const lease=leases.reserveLocal(ciRequest('I',ci)).lease;
@@ -452,7 +495,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:jobs.length,jobs};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   const matched=f.jobs.find(job=>path.endsWith('/actions/jobs/'+job.id));
   if(matched){const n=(reads.get(matched.id)??0)+1;reads.set(matched.id,n);const complete=settled || n>=(refusalRead==='persisted-failure'?4:3);if(complete)cancelled();return {...matched,status:complete?'completed':'queued',conclusion:complete?'cancelled':null};}
   return get(path);
@@ -464,7 +507,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
   cancelled();
  };
  if(refusalRead==='existing-pending')new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5}).setInvocation({nonce:'e'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
- const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
+ const running=automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{
   if(ci.jobId===912){if(refusalRead==='ready')await cancel;if(refusalRead==='admitted-sibling')await firstReadFailed;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
   return {code:0};
  }});
@@ -483,7 +526,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
  if(refusalRead==='admitted-sibling')assert.equal(intents.filter(slot=>slot.ciInvocation.ordinaryStage==='admitted').length,1,'Refusal bookkeeping cannot clear the independently owned sibling');
  if(refusalRead==='persisted-failure'){
   assert.equal(posts,1,'The fixture must fail a real cancellation POST after saving its intent');
-  settled=true;const {reconcileManual}=await import('./manual.mjs');await reconcileManual({...config,transport:{},api:f.api});
+  settled=true;const {reconcileManual}=await import('./manual.mjs');await reconcileManual({...config,transport:{},api:routingVariables(f.api)});
   assert.equal(reruns,1);assert.ok(new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().slots.every(slot=>!slot.ciInvocation));
  }
  }finally{clearTimeout(timeout);finish();releaseSibling();await sibling;}
@@ -507,15 +550,21 @@ function historicalFixture({headVersion=8,executionVersion=11,changedHead=false,
  return {...f,policy:trusted};
 }
 
-test('automatic pickup independently accepts an older reviewed head and newer reviewed execution workflow',async()=>{
- const f=historicalFixture();const found=await controller.findAutomatic({api:f.api,policy:f.policy,limit:1});
- assert.equal(found.length,1);assert.equal(found[0].jobId,901);
- assert.equal(found[0].workflowDigest,createHash('sha256').update('reviewed workflow 8').digest('hex'));
-});
-for(const [name,options] of [['PR-edited workflow',{changedHead:true}],['commit not ancestral to main',{foreign:true}],['eleventh oldest workflow',{headVersion:1,oldest:true}]])test(`automatic pickup keeps ${name} on hosted fallback`,async()=>{
- const f=historicalFixture(options),refused=[];
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.equal(refused.length,1);assert.equal(refused[0].runId,789);
+for(const [name,options,bytes] of [
+ ['older head',{headVersion:8},'reviewed workflow 8'],
+ ['edited head',{changedHead:true},'PR-edited workflow'],
+ ['branch outside main',{foreign:true},'reviewed workflow 8'],
+ ['older than the history window',{headVersion:1,oldest:true},'reviewed workflow 1']
+])test(`automatic pickup binds the actual workflow digest for a same-repository ${name}`,async()=>{
+ const f=historicalFixture(options),get=f.api.get,refused=[];
+ f.api.get=async path=>{
+  assert.ok(!path.includes('/compare/') && !path.includes('/commits?') && !path.endsWith('/git/ref/heads/main'),'Automatic trust must not depend on a main-history pin');
+  return get(path);
+ };
+ const jobs=await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)});
+ assert.deepEqual(jobs.map(ci=>ci.jobId),[901]);
+ assert.equal(jobs[0].workflowDigest,createHash('sha256').update(bytes).digest('hex'));
+ assert.deepEqual(refused,[]);
 });
 
 test('workflow history configuration cannot exceed ten immutable main versions or contain malformed pins',()=>{
@@ -525,47 +574,33 @@ test('workflow history configuration cannot exceed ten immutable main versions o
   assert.throws(()=>controller.validateCIConfig({...config,ci:{...config.ci,workflowHistory}}),/history|workflow|pin|version/i);
 });
 
-test('an oversized ancestry response leaves PRs for a later pickup without cancellation',async t=>{
+test('a temporary workflow HTTP refusal leaves PRs for a later pickup without cancellation',async t=>{
  const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
- const server=createServer((req,res)=>res.end('x'.repeat(3*1024*1024)));
+ const server=createServer((req,res)=>{res.statusCode=502;res.end('Temporary fixture failure');});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- const f=historicalFixture(),get=f.api.get,refused=[];
- f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.deepEqual(refused,[],'A transport limit is not an unreviewed workflow');
+ const f=fixture(),get=f.api.get,refused=[];
+ f.api.get=path=>path.includes('/contents/')?app.get(path):get(path);
+ assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[],'A temporary API refusal must not cancel the run');
 });
 
-test('a configured hash cannot vouch for different bytes at its recorded main commit',async()=>{
- const f=historicalFixture({changedHead:true}),refused=[];
- f.policy.workflowHistory[3].digest=createHash('sha256').update('PR-edited workflow').digest('hex');
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.equal(refused.length,1);
-});
-
-test('ancestry reads request a single commit on the page without file patches',async t=>{
- const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');const seen=[];
- const server=createServer((req,res)=>{
-  seen.push(req.url);if(!req.url.endsWith('?per_page=1&page=2')){res.statusCode=400;res.end();return;}
-  res.setHeader('content-type','application/json');res.end(JSON.stringify({status:'ahead',merge_base_commit:{sha:req.url.match(/compare\/([a-f0-9]{40})/)[1]}}));
- });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
- const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- const f=historicalFixture(),get=f.api.get;f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
- assert.equal((await controller.findAutomatic({api:f.api,policy:f.policy,limit:1})).length,1);
- assert.equal(seen.length,2);assert.ok(seen.every(path=>path.endsWith('?per_page=1&page=2')));
-});
-
-for(const unclear of ['main','recent','comparison','pin-blob'])test(`an unclear ${unclear} reply leaves work for a later pickup without cancellation`,async()=>{
- const f=historicalFixture(),get=f.api.get,refused=[];
+for(const changed of ['repository','workflow-id','workflow-path','event','PR-head','PR-fork','contributor-approval'])test(`automatic workflow trust retains the ${changed} refusal`,async()=>{
+ const f=fixture(),get=f.api.get;
+ if(changed==='repository')f.run.repository.id=999;
+ if(changed==='workflow-id')f.run.workflow_id=999;
+ if(changed==='workflow-path')f.run.path='.github/workflows/foreign.yml';
+ if(changed==='event')f.run.event='pull_request_target';
  f.api.get=async path=>{
-  if(unclear==='main' && path.endsWith('/git/ref/heads/main'))return {object:{}};
-  if(unclear==='recent' && path.includes('/commits?'))return {};
-  if(unclear==='comparison' && path.includes('/compare/'))return {status:'ahead'};
-  if(unclear==='pin-blob' && path.endsWith('?ref='+(11).toString(16).padStart(40,'0')))return {encoding:'unknown',content:'unknown'};
-  return get(path);
+  if(changed==='contributor-approval' && path.endsWith('fork-pr-contributor-approval'))return {approval_policy:'first_time_contributors'};
+  const value=await get(path);
+  if(path.endsWith('/pulls/12')){
+   if(changed==='PR-head')value.head.sha='9'.repeat(40);
+   if(changed==='PR-fork')value.head.repo.id=999;
+  }
+  return value;
  };
- assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.deepEqual(refused,[]);
+ assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1}),[]);
 });
 
 for(const [name,key] of [
@@ -577,7 +612,7 @@ for(const [name,key] of [
 ])test(`automatic pickup serves the routed ${name} label without changing its API name`,async()=>{
  const f=fixture(),get=f.api.get,job={id:901,name,run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-'+key]};
  f.api.get=async path=>path.includes('/jobs?')?{total_count:1,jobs:[job]}:get(path);
- const jobs=await controller.findAutomatic({api:f.api,policy,limit:1});assert.equal(jobs.length,1);assert.equal(jobs[0].jobKey,key);assert.equal(jobs[0].jobId,901);
+ const jobs=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1});assert.equal(jobs.length,1);assert.equal(jobs[0].jobKey,key);assert.equal(jobs[0].jobId,901);
 });
 
 // An invalid matrix neighbour must not abort pickup of a valid job in the same run.
@@ -586,7 +621,7 @@ test('automatic pickup skips an extra provisioning shard and serves its valid me
  const jobs=[{id:901,name:'test-provisioning (7)',run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-test-provisioning-7']},
   {id:902,name:'test-media',run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-test-media-1']}];
  f.api.get=async path=>path.includes('/jobs?')?{total_count:2,jobs}:get(path);
- const found=await controller.findAutomatic({api:f.api,policy,limit:1,onRefused:value=>refused.push(value)});
+ const found=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1,onRefused:value=>refused.push(value)});
  assert.deepEqual(found.map(ci=>[ci.jobId,ci.jobKey]),[[902,'test-media-1']]);assert.deepEqual(refused,[]);
 });
 
@@ -594,7 +629,7 @@ for(const admitted of [false,true])test(`pickup ${admitted?'does not replay an a
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(2);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const counts=new Map(),stop=new AbortController();let finish;const held=new Promise(r=>finish=r);stop.signal.addEventListener('abort',finish,{once:true});const timer=setTimeout(()=>stop.abort(),2000);let failure;const waits=[];
- try{await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal,wait:async ms=>{waits.push(ms);await new Promise(r=>setTimeout(r,1));},runWorker:async ci=>{
+ try{await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},signal:stop.signal,wait:async ms=>{waits.push(ms);await new Promise(r=>setTimeout(r,1));},runWorker:async ci=>{
   const count=(counts.get(ci.jobId)??0)+1;counts.set(ci.jobId,count);
   if(ci.jobId===901 && count===1){
    if(admitted){const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots:6,slot:0}),lease=leases.reserveLocal(ciRequest('I',ci)).lease;leases.release(lease,{resourceId:lease.resourceId,absent:true});setTimeout(finish,40);}
@@ -609,23 +644,41 @@ test('shutdown during an unadmitted worker wait records cancellation rather than
  const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(1);
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const stop=new AbortController(),events=[];t.mock.method(console,'log',value=>events.push(JSON.parse(value)));
- await assert.rejects(automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal,
+ await assert.rejects(automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},signal:stop.signal,
   runWorker:async()=>({code:75,reason:'capacity-busy'}),wait:async(ms,value,{signal})=>{assert.equal(ms,30000);stop.abort();signal.throwIfAborted();}}),{name:'AbortError'});
  assert.deepEqual(events.map(e=>({code:e.code,reason:e.reason})),[{code:143,reason:'cancelled'}]);
 });
 
-for(const fault of ['inventory','run-http','mode-http','head-http','network','timeout','json'])test(`a ${fault} failure does not hold free capacity behind a still-running sibling`,async t=>{
+for(const fault of ['inventory','run-http','mode-http','head-http','network','timeout','json','body-fixed','body-chunked','rate-retry-after','rate-reset','rate-429','rate-pr'])test(`a ${fault} failure does not hold free capacity behind a still-running sibling`,async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
  const {automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
  await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
+ let interrupted;
+ if(fault.startsWith('body-') || fault.startsWith('rate-')){
+  const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
+  const server=createServer((req,res)=>{
+   if(fault.startsWith('rate-')){
+    res.statusCode=fault==='rate-429'?429:403;
+    if(fault==='rate-reset'){res.setHeader('x-ratelimit-remaining','0');res.setHeader('x-ratelimit-reset',String(Math.floor(Date.now()/1000)+90));}
+    else res.setHeader('retry-after','75');
+    res.end('{"message":"Rate limited"}');return;
+   }
+   if(fault==='body-fixed')res.setHeader('content-length','1000');
+   res.writeHead(200,{'content-type':'application/json'});res.write('{"workflow_runs":[');
+   setTimeout(()=>res.destroy(),30);
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+  interrupted=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});interrupted.token=async()=>'synthetic';
+ }
  const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release,heldActive=true,thirdWhileHeld=false,injected=false;
  const held=new Promise(resolve=>release=()=>{heldActive=false;resolve();}),ids=[];
- const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
+ const timeout=setTimeout(release,2000);t.after(()=>clearTimeout(timeout));
  f.api.get=async path=>{
-  if(!injected && ids.includes(902) && ((fault==='mode-http' && path.endsWith('DISPOSABLE_TESTS_MODE')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('mode') && !fault.startsWith('head') && path.includes('/runs?')))){
+  if(!injected && ids.includes(902) && ((fault==='mode-http' && path.endsWith('DISPOSABLE_TESTS_MODE')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('mode') && !fault.startsWith('head') && (fault==='rate-pr'?path.endsWith('/pulls/12'):path.includes('/runs?'))))){
    injected=true;
+   if(interrupted)return interrupted.get(path);
    if(fault==='inventory')return {total_count:1,workflow_runs:[]};
    if(fault.endsWith('http'))throw Object.assign(new Error('Unavailable'),{status:503});
    if(fault==='network')throw new TypeError('fetch failed');
@@ -640,7 +693,7 @@ for(const fault of ['inventory','run-http','mode-http','head-http','network','ti
  };
  let failure;
  try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
-  api:f.api,transport:{healthy:async()=>true},wait:async ms=>assert.equal(ms,30000),runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903){thirdWhileHeld=heldActive;release();}return {code:0};}});}
+  api:f.api,transport:{healthy:async()=>true},wait:async ms=>{if(fault.startsWith('rate-'))assert.ok(ms>=(fault==='rate-reset'?88000:74000) && ms<=(fault==='rate-reset'?90000:75000),'Respect the server retry time');else assert.equal(ms,30000);},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903){thirdWhileHeld=heldActive;release();}return {code:0};}});}
  catch(error){failure=error;}
  assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);assert.equal(thirdWhileHeld,true,'The third job starts before the first finishes');
 });
@@ -650,41 +703,174 @@ test('automatic cancellation yields its persisted intent while GitHub is still c
  const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{assert.ok(path.endsWith('/cancel'));posts++;};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases:{inspect:()=>({ciInvocation:pending}),setInvocation:value=>pending=value},automatic:true,
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases:{inspect:()=>({ciInvocation:pending}),setInvocation:value=>pending=value},automatic:true,
   wait:async()=>assert.fail('A remote cancellation must not hold the shared admission lock')});
  assert.deepEqual(result,{retry:false,pending:true});assert.equal(posts,1);assert.equal(pending.ordinaryStage,'cancel-requested');
 });
-for(const active of [false,true])test(`owned cancellation of a queued job ${active?'preserves an active sibling':'finishes when all siblings have stopped'}`,async()=>{
+for(const state of ['completed','running','assigned-queued','other-attempt','other-run'])test(`owned queued cancellation handles a ${state} sibling`,async()=>{
  const f=fixture(),get=f.api.get;let forced=false;
  const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ const sibling={...f.jobs[1],status:state==='running'?'in_progress':state==='assigned-queued'?'queued':'completed',runner_id:['running','assigned-queued'].includes(state)?77:0,
+  ...(state==='other-attempt'?{run_attempt:2}:state==='other-run'?{run_id:790}:{})};
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:path.endsWith('/actions/runs/789')?{...f.run,status:forced?'completed':'queued'}:
-  path.includes('/jobs?')?{total_count:2,jobs:[f.jobs[0],{...f.jobs[1],status:active?'in_progress':'completed',runner_id:active?77:0}]}:get(path);
- f.api.post=async path=>{if(path.endsWith('/force-cancel')){assert.equal(active,false);forced=true;}else assert.ok(path.endsWith('/rerun'));};
+  path.includes('/jobs?')?{total_count:2,jobs:[f.jobs[0],sibling]}:get(path);
+ f.api.post=async path=>{if(path.endsWith('/force-cancel')){assert.equal(state,'completed');forced=true;}else assert.ok(path.endsWith('/rerun'));};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>assert.fail('Recovery must yield')});
- assert.equal(forced,!active);assert.equal(result.retry,!active);if(active)assert.equal(result.pending,true);
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true,wait:async()=>assert.fail('Recovery must yield')});
+ assert.equal(forced,state==='completed');assert.equal(result.retry,state==='completed');if(state!=='completed')assert.equal(result.pending,true);
 });
 
-for(const status of [401,403])test(`pickup reports permanent HTTP ${status} failures`,async t=>{
- const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;
- f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?'))throw Object.assign(new Error('Forbidden'),{status});return get(path);};
- await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),error=>error.status===status);
+test('automatic force cancellation yields while the queued run is still settling',async()=>{
+ const f=fixture(),get=f.api.get,posts=[];
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:path.endsWith('/actions/runs/789')?{...f.run,status:'queued'}:
+  path.includes('/jobs?')?{total_count:1,jobs:[f.jobs[0]]}:get(path);
+ f.api.post=async path=>posts.push(path);
+ const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true,wait:async()=>assert.fail('Force cancellation must release admission before waiting')});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);assert.deepEqual(result,{retry:false,pending:true});
+});
+
+for(const status of [401,403])for(const phase of ['runs','PR'])test(`pickup reports permanent HTTP ${status} failures during ${phase} reads`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ const server=createServer((req,res)=>{res.statusCode=status;if(status===401)res.setHeader('retry-after','75');res.end('{"message":"Not authorised"}');});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(phase==='runs'?path.includes('/runs?'):path.endsWith('/pulls/12'))return app.get(path);return get(path);};
+ await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true}}),error=>error.status===status);
+});
+
+test('a rate-limited pickup with no workers waits until the supplied retry time',async t=>{
+ const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,waits=[];
+ f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?'))throw Object.assign(new Error('Rate limited'),{status:403,retryAt:Date.now()+75000});return get(path);};
+ const result=await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},wait:async ms=>waits.push(ms)});
+ assert.deepEqual(result,{code:0,served:0,reason:'inventory-unavailable'});assert.equal(waits.length,1);assert.ok(waits[0]>=74000 && waits[0]<=75000);
 });
 
 for(const abort of [false,true])test(`a transient inventory failure without workers ${abort?'preserves shutdown':'returns for the next service tick'}`,async t=>{
  const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,stop=new AbortController();
  f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?')){if(abort)stop.abort();throw Object.assign(new Error('Unavailable'),{status:503});}return get(path);};
- const result=automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal});
+ const result=automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},signal:stop.signal});
  if(abort)await assert.rejects(result,{name:'AbortError'});else assert.deepEqual(await result,{code:0,served:0,reason:'inventory-unavailable'});
 });
-for(const change of ['missing','short','foreign','new-attempt'])test(`queued cancellation refuses ${change} inventory authority`,async()=>{
+for(const change of ['missing','short','foreign','new-attempt','assigned-target'])test(`queued cancellation refuses ${change} inventory authority`,async()=>{
  const f=fixture(),get=f.api.get;let posts=0;
  const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
- f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:path.endsWith('/actions/runs/789')?{...f.run,status:'queued',run_attempt:change==='new-attempt'?3:1}:
- path.includes('/jobs?')?{total_count:change==='short'?2:1,jobs:change==='short'?[]:[{...f.jobs[0],...(change==='missing'?{id:902}:change==='foreign'?{head_sha:'2'.repeat(40)}:{})}]}:get(path);
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],runner_id:change==='assigned-target'?77:0}:path.endsWith('/actions/runs/789')?{...f.run,status:'queued',run_attempt:change==='new-attempt'?3:1}:
+ path.includes('/jobs?')?{total_count:change==='short'?2:1,jobs:change==='short' && !path.endsWith('page=1')?[]:[{...f.jobs[0],...(change==='missing'?{id:902}:change==='foreign'?{head_sha:'2'.repeat(40)}:{})}]}:get(path);
  f.api.post=async()=>{posts++;};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
- const work=controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true});
- if(change==='foreign')assert.equal((await work).pending,true);else await assert.rejects(work,/inventory|missing|attempt/i);
+ const work=controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true});
+ if(change==='foreign')assert.equal((await work).pending,true);else await assert.rejects(work,change==='short'?/Incomplete cancellation job inventory/:change==='assigned-target'?/unassigned queued job/:/inventory|missing|attempt/i);
  assert.equal(posts,0);
+});
+
+test('pickup does not hide malformed local state as a temporary API read',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{writeFileSync}=await import('node:fs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ writeFileSync(config.state+'/ledger/state.json','{');
+ await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),SyntaxError);
+});
+
+test('a full manual pool moves a waiting run to its exact hosted attempt and recovers after restart',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-overflow-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const config={version:2,mode:'manual-slots',slots:2,state:root,hostGeneration:'test',ci:policy};
+ await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
+ for(let slot=0;slot<2;slot++)new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ const leases=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2}),before=leases.inspect();
+ const f=fixture(),get=f.api.get,actions=[];let marker='{}';
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
+  if(path.includes('/actions/jobs/'))return f.jobs.find(job=>path.endsWith('/'+job.id));
+  return get(path);
+ };
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;actions.push(['marker',JSON.parse(marker)]);};
+ f.api.post=async path=>{
+  if(path.endsWith('/cancel')){actions.push(['cancel',f.run.run_attempt]);f.run.status='completed';f.run.conclusion='cancelled';f.jobs.forEach(job=>{job.status='completed';job.conclusion='cancelled';});}
+  else if(path.endsWith('/rerun')){actions.push(['rerun',f.run.run_attempt]);f.run.run_attempt++;f.run.status='queued';f.run.conclusion=null;f.jobs.forEach(job=>{job.run_attempt=2;job.labels=['ubuntu-latest'];job.status='queued';});}
+  else assert.fail(path);
+ };
+ const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>assert.fail('A busy pool needs no health probe')},runWorker:async()=>assert.fail('No free server slot')});
+ await tick();
+ assert.deepEqual(actions.slice(0,2),[['marker',{'789':2}],['cancel',1]]);
+ await tick();assert.equal(actions.filter(([kind])=>kind==='rerun').length,1);assert.equal(f.run.run_attempt,2);
+ await tick();assert.equal(marker,'{"789":2}');assert.equal(actions.filter(([kind])=>kind==='rerun').length,1);
+ f.run.status='completed';f.run.conclusion='success';await tick();assert.equal(marker,'{}');
+ assert.deepEqual(leases.inspect(),before,'Overflow must leave manual guests and their ownership untouched');
+});
+
+for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
+ const f=fixture(),get=f.api.get,actions=[];let value='{"789":2}';
+ if(['cancel-ack-lost','rerun-ack-lost'].includes(state)){f.run.status='completed';f.run.conclusion='cancelled';}
+ if(state==='active-hosted')f.run.run_attempt=2;
+ if(state==='newer-attempt')f.run.run_attempt=3;
+ if(state==='foreign-repository')f.run.repository.id=987;
+ if(state==='foreign-workflow')f.run.workflow_id=987;
+ if(state==='foreign-path')f.run.path='other.yml';
+ if(state==='foreign-event')f.run.event='workflow_run';
+ if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
+ if(state==='running-sibling'){f.jobs[1].status='in_progress';f.jobs[1].runner_id=42;}
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
+  if(path.endsWith('/pulls/12') && ['stale-head','closed'].includes(state))return {number:12,state:state==='closed'?'closed':'open',head:{sha:state==='stale-head'?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.includes('/jobs?') && state==='incomplete-jobs')return {total_count:7,jobs:f.jobs};
+  return get(path);
+ };
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));value=body.value;};
+ f.api.post=async path=>{actions.push(path.split('/').at(-1));if(path.endsWith('/rerun')){f.run.run_attempt=2;f.run.status='queued';if(state==='rerun-ack-lost')throw new Error('Reply lost');}};
+ const recover=()=>controller.recoverHostedAttempts({api:f.api,policy});
+ if(state.startsWith('foreign-') || state==='incomplete-jobs'){await assert.rejects(recover());assert.deepEqual(actions,[]);return;}
+ if(state==='rerun-ack-lost'){await assert.rejects(recover(),/Reply lost/);await recover();}
+ else await recover();
+ const expected=state==='cancel-not-sent'?['cancel']:state==='force-queued'?['force-cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
+ assert.deepEqual(actions,expected);
+ assert.equal(value,['newer-attempt','stale-head','closed','running-sibling'].includes(state)?'{}':'{"789":2}');
+});
+
+test('full-pool overflow preserves a run already preparing a guest before runner assignment',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ for(let slot=1;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots:config.slots,slot:0});
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:ci.runId,attempt:1,jobId:ci.jobId,ordinaryStage:'admitted'});
+ let writes=0,posts=0,marker='{}';
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/actions/jobs/')?f.jobs.find(job=>path.endsWith('/'+job.id)):get(path);
+ f.api.patch=async(path,body)=>{writes++;marker=body.value;};f.api.post=async()=>{posts++;};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('No slot is free'),transport:{healthy:async()=>true}});
+ assert.equal(writes,0);assert.equal(posts,0);
+});
+
+test('hosted overflow recovery still requires external contributor approval before retrying',async()=>{
+ const f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('fork-pr-contributor-approval')?{approval_policy:'first_time_contributors'}:get(path);
+ f.run.status='completed';f.run.conclusion='cancelled';
+ let posts=0;f.api.post=async()=>{posts++;};
+ await assert.rejects(controller.recoverHostedAttempts({api:f.api,policy}),/contributor approval/);assert.equal(posts,0);
+});
+for(const failure of ['write','readback','assigned','advanced'])test(`overflow does not cancel when ${failure} authority is missing`,async()=>{
+ const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let posts=0;
+ f.api.patch=async()=>{if(failure==='write')throw new Error('Write refused');};f.api.post=async()=>{posts++;};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ if(failure==='assigned')f.jobs[0].runner_id=42;
+ if(failure==='advanced')f.run.run_attempt=2;
+ await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}));assert.equal(posts,0);
+});
+
+for(const state of ['running','completed','assigned','young','late-assignment'])test(`overflow preserves a ${state} server run`,async()=>{
+ const f=fixture(),get=f.api.get;f.run.created_at=new Date(Date.now()-120000).toISOString();
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let writes=0,posts=0,marker='{}';
+ const start=()=>{f.jobs[1].runner_id=42;f.jobs[1].status=state==='completed'?'completed':state==='assigned'?'queued':'in_progress';};
+ if(['running','completed','assigned'].includes(state))start();
+ if(state==='young')f.run.created_at=new Date().toISOString();
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.patch=async(path,body)=>{writes++;marker=body.value;if(state==='late-assignment')start();};f.api.post=async()=>{posts++;};
+ await controller.overflowOrdinary({api:f.api,policy,ci});
+ assert.equal(posts,0);assert.equal(marker,'{}');if(state!=='late-assignment')assert.equal(writes,0);
 });

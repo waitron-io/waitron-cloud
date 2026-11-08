@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,recoverHostedAttempts,hostedAttempts} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -40,17 +40,36 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  };
  let served=0,healthy;
  try{do{
+ let readFailed=false;
+ const read=async work=>{try{return await work();}catch(error){readFailed=true;throw error;}};
  try{
  await recover?.();
- if(await routingMode({api,policy,signal})!=='server')return {code:0,served};
- assert.equal(await routingHead({api,policy,signal}),'','Automatic CI requires unrestricted same-repository routing');
+ const pending=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+ const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId).filter(Boolean));
+ let hosted=await read(()=>hostedAttempts({api,policy,signal}));
+ if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
+  const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api:new Proxy(api,{get(target,key){return key==='get'?(...args)=>read(()=>target.get(...args)):Reflect.get(target,key);}}),policy,signal,excludeRuns:ownedRuns}),{signal});
+  if(recovered.code!==75)hosted=recovered;
+ }
+ const excludeRuns=new Set(Object.keys(hosted).map(Number));
+ if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
+ assert.equal(await read(()=>routingHead({api,policy,signal})),'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)recorded.add(Number(match[1]));}
  const exclude=new Set([...seen,...recorded]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
- if(!free){if(active.size){await waitForWorker();continue;}break;}
+ if(!free){
+  const queued=await read(()=>findAutomatic({api,policy,limit:16,exclude,excludeRuns,signal}));
+  for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values())await withKernelLock(config.state,async()=>{
+   const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
+   if(fresh.slots.some(slot=>(slot.ciInvocation?.runId??slot.lease?.ci?.runId)===ci.runId) || [...active.values()].some(job=>job.runId===ci.runId))return;
+   await overflowOrdinary({api,policy,ci,signal});
+  },{signal});
+  if(active.size){await waitForWorker();continue;}break;
+ }
  transport??=new CITransport(config);
  if(healthy===undefined){
   healthy=false;
@@ -61,8 +80,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const refused=[];
- const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});
+ const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,excludeRuns,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
+  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}}));
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  let cleanup;
@@ -100,13 +119,18 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  signal?.throwIfAborted();
  }catch(error){
   signal?.throwIfAborted();
-  const transient=error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
-   error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
+  if(!readFailed)throw error;
+  const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
+   error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
    ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
-  if(!active.size)return {code:0,served,reason:'inventory-unavailable'};
-  await wait(30000,undefined,{signal});
+  const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);
+  if(!active.size){
+   if(Number.isFinite(error.retryAt))await wait(retryDelay,undefined,{signal});
+   return {code:0,served,reason:'inventory-unavailable'};
+  }
+  await wait(retryDelay,undefined,{signal});
  }
  }while(active.size);
  }finally{await Promise.allSettled([...active.keys(),...cleanups]);}
@@ -117,14 +141,14 @@ async function fallbackRefused({config,api,runId,jobId,name,label,signal}){
  const policy=config.ci,base=`/repos/${policy.repository}`;
  // Refusal may prevent execution, but cancellation still needs a current owned label.
  const run=await api.get(`${base}/actions/runs/${runId}`,{signal});
- assert.ok(run.id===runId && run.run_attempt===1 && run.workflow_id===policy.workflowId && run.path===policy.workflowPath &&
-  run.event==='pull_request' && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && run.pull_requests?.length===1,'Refused run identity differs');
+ assert.ok(run.id===runId && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0 && run.workflow_id===policy.workflowId && run.path===policy.workflowPath &&
+  ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && (run.event!=='pull_request' || run.pull_requests?.length===1),'Refused run identity differs');
  const job=await api.get(`${base}/actions/jobs/${jobId}`,{signal});
- assert.ok(job.id===jobId && job.name===name && job.run_id===runId && job.run_attempt===1 && job.head_sha===run.head_sha && job.status==='queued' && !job.runner_id &&
+ assert.ok(job.id===jobId && job.name===name && job.run_id===runId && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha && job.status==='queued' && !job.runner_id &&
   job.labels?.length===2 && job.labels.includes('self-hosted') && job.labels.includes(label),'Refused job identity differs');
- const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:1,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
+ const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:run.run_attempt,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
  return withAvailableSlot(config,async({leases})=>{
-  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:1,jobId,ordinaryStage:'refused'};
+  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:run.run_attempt,jobId,ordinaryStage:'refused'};
   leases.setInvocation(invocation);
   const result=await withKernelLock(config.state,()=>fallbackOrdinary({api,policy,ci,leases,automatic:true,signal:AbortSignal.timeout(240000)}));
   if(!result.pending)leases.clearInvocation(invocation.nonce);

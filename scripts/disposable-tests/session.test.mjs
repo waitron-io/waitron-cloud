@@ -21,7 +21,7 @@ for (const [file,count] of [['capacity.test.py',8],['completion.test.py',6],['gu
   assert.match(result.stderr,new RegExp('Ran '+count+' tests'));
 });
 
-test('CI host preparation and memory-only credentials execute all thirteen portable cases',()=>{
+test('CI host preparation and memory-only credentials execute all fourteen portable cases',()=>{
  const result=spawnSync('python3',['-B',new URL('../../deploy/disposable-tests/ci-session.test.py',import.meta.url).pathname],{encoding:'utf8',timeout:15000});
- assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/Ran 13 tests/);
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/Ran 14 tests/);
 });

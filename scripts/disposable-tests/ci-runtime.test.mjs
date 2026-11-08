@@ -6,6 +6,27 @@ import {join,posix} from 'node:path';
 import {LocalLeases} from './leases.mjs';
 const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',workflowSha:'1'.repeat(40),
  workflowDigest:'2'.repeat(64),event:'workflow_dispatch',sourceSha:'3'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
+test('a cancelled concrete job aborts its idle guest instead of retaining a slot until the guest deadline',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),get=f.api.get;
+ f.api.get=async(path,options)=>{if(path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:false};
+  const value=await get(path,options);
+  return path.includes('/jobs/')?{...value,status:'completed',conclusion:'cancelled',runner_id:0}:value;};
+ let executing=false;
+ const inspect=f.transport.inspect,destroy=f.transport.destroy;
+ f.transport.inspect=async(lease,options)=>executing?{resourceId:lease.resourceId,running:true}:inspect(lease,options);
+ f.transport.destroy=async(...args)=>{executing=false;return destroy(...args);};
+ const read=f.api.get;
+ f.api.get=async(path,options)=>{const value=await read(path,options);
+  return path.includes('/jobs/') && !executing?{...value,status:'queued',conclusion:null}:value;};
+ f.transport.execute=async(_lease,{signal})=>{
+  executing=true;
+  await new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>reject(new Error('External deadline elapsed')),{once:true});});
+ };
+ const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',signal:AbortSignal.timeout(300),
+  wait:async()=>new Promise(resolve=>setTimeout(resolve,1))});
+ assert.equal(result.code,125);assert.match(result.error,/job.*completed|job.*cancelled/i);
+ assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().slots[0].state,'free');
+});
 function fixture(t,{lost=false,uncertain=false,identity=ci,apiJobName}={}){
  const ci=identity;
  const root=mkdtempSync(join(tmpdir(),'ci-runtime-'));t.after(()=>rmSync(root,{recursive:true,force:true}));

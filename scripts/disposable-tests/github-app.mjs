@@ -19,10 +19,21 @@ export class GithubApp {
    headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'waitron-disposable-ci',
     authorization:'Bearer '+authorization,...(body===undefined?{}:{'content-type':'application/json'})},
    ...(body===undefined?{}:{body:JSON.stringify(body)})});
-  if(!response.ok){await response.body?.cancel();const error=new Error(`GitHub ${method} refused (${response.status})`);error.status=response.status;throw error;}
+  if(!response.ok){
+   await response.body?.cancel();const error=new Error(`GitHub ${method} refused (${response.status})`);error.status=response.status;
+   const after=response.headers.get('retry-after'),remaining=response.headers.get('x-ratelimit-remaining'),reset=response.headers.get('x-ratelimit-reset');
+   if(response.status===429 || response.status===403 && (after!==null || remaining==='0')){
+    const now=Date.now(),times=[];
+    if(after!==null && /^[0-9]+$/.test(after) && Number.isSafeInteger(Number(after)*1000))times.push(now+Number(after)*1000);
+    if(remaining==='0' && reset!==null && /^[0-9]+$/.test(reset) && Number.isSafeInteger(Number(reset)*1000))times.push(Number(reset)*1000);
+    error.retryAt=times.length?Math.max(...times):now+60000;
+   }
+   throw error;
+  }
   let bytes;
   try{bytes=await boundedBody(response,2*1024*1024);}
   catch(error){
+   if(error instanceof TypeError)throw Object.assign(new Error('GitHub response interrupted',{cause:error}),{code:'GITHUB_RESPONSE_INTERRUPTED'});
    if(comparison && error.message==='GitHub response byte limit exceeded')throw Object.assign(new Error('GitHub ancestry response exceeded its byte limit',{cause:error}),{code:'GITHUB_RESPONSE_LIMIT'});
    throw error;
   }
