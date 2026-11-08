@@ -57,7 +57,7 @@ for (const path of ['scripts/cloud-cost/conformance-prepare.mjs', 'scripts/cloud
   }));
 }
 
-for (const path of ['scripts/venue-service-proof.test.ts', 'scripts/legacy-service-proof.test.ts',
+for (const path of ['scripts/venue-service-proof.test.ts',
   'scripts/fixtures/service-proof.ts', 'scripts/test-cloud-free-services.mjs', 'scripts/test-cloud-venue-services.test.mjs',
   'packages/registration/test/venue-service-rules.test.ts', 'deploy/test-cloud/free-services-mail.test.mjs']) {
   test(`venue selects its proof code ${path}`, () => fixture(({put, commit, plan, pr}) => {
@@ -242,12 +242,13 @@ function workflowSchedules(name, event, required) {
 }
 
 for (const [kind, name] of [['cost', 'cloud-cost.yml'], ['venue', 'venue-services-proof.yml']]) {
-  test(`${kind} workflow schedules selected PRs and manual full runs, without main-push repetition`, () => fixture(({put, commit, plan, pr}) => {
+  test(`${kind} workflow keeps full manual runs and ${kind === 'cost' ? 'omits every PR' : 'selects affected PRs'}, without main-push repetition`, () => fixture(({put, commit, plan, pr}) => {
     put('apps/portal/src/account.ts'); const unrelated = commit();
     assert.equal(workflowSchedules(name, 'pull_request', plan(kind, pr(unrelated)).required), false);
     put(`.github/workflows/${name}`); const own = commit();
-    assert.equal(workflowSchedules(name, 'pull_request', plan(kind, pr(own, unrelated)).required), true);
+    assert.equal(workflowSchedules(name, 'pull_request', plan(kind, pr(own, unrelated)).required), kind === 'venue');
     assert.equal(workflowSchedules(name, 'workflow_dispatch', plan(kind, {}).required), true);
+    assert.equal(workflowSchedules(name, 'workflow_call', plan(kind, {}).required), true);
     assert.equal(workflowSchedules(name, 'push', plan(kind, {}).required), false);
   }));
 }

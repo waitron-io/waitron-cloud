@@ -10,7 +10,21 @@ on:
         default: ''
   push:
     branches: [main]
+    paths:
+      - 'deploy/aws/**'
+      - '.github/workflows/aws-infrastructure.yml'
+      - 'scripts/ci-setup-pnpm.mjs'
+      - 'scripts/ci-pnpm-bootstrap-lock.json'
+      - 'scripts/ci-pnpm-diagnostics.cjs'
+      - 'package.json'
   pull_request:
+    paths:
+      - 'deploy/aws/**'
+      - '.github/workflows/aws-infrastructure.yml'
+      - 'scripts/ci-setup-pnpm.mjs'
+      - 'scripts/ci-pnpm-bootstrap-lock.json'
+      - 'scripts/ci-pnpm-diagnostics.cjs'
+      - 'package.json'
 permissions:
   contents: read
   actions: read

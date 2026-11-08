@@ -103,7 +103,7 @@ export function expectedJobContract(workflowPath, selection) {
         add(true, selection.matrix.map(row => `cost (${row.file}, ${row.group})`));
       } else add(false, [], ['cost (${{ matrix.file }}, ${{ matrix.group }})']);
     } else if (workflowPath.endsWith('/venue-services-proof.yml')) {
-      add(selection.required, ['service-receipts (legacy)', 'service-receipts (venue)'], ['service-receipts (${{ matrix.receipt }})']);
+      add(selection.required, ['service-receipts (venue)'], ['service-receipts (${{ matrix.receipt }})']);
     } else if (workflowPath.endsWith('/aws-infrastructure.yml')) {
       assert.ok(selection.required || selection.reuse, 'AWS source must run its checks');
       add(selection.required, ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)'], ['verify (${{ matrix.cell }})']);

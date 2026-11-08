@@ -1,8 +1,8 @@
 # Select the separate proof workflows
 
-A portal edit should not repeat the backend cost rehearsals or the venue service
-matrix. Each pull request still starts a small planner in the two separate
-workflows. It runs their test jobs only when their reviewed inputs change.
+Pull requests start a small venue-proof planner and run its test job only when
+reviewed inputs change. Cost conformance runs through manual invocation and the
+nightly backstop, so backend edits no longer start that separate PR workflow.
 The ordinary CI workflow keeps its own package and receipt selection.
 
 You can run either complete proof manually with **Run workflow** in GitHub Actions.
@@ -33,18 +33,18 @@ The remaining inputs are:
 - The cost workflow and the shared proof planner.
 
 The broad backend ownership is deliberate: this part does not prove individual
-source files irrelevant to the account server. A backend source edit still runs
-cost conformance. A portal edit or an ordinary unrelated package-test edit does
-not. The pinned Waitron checkout is a separate input: changing the pinned release
-changes its Cloud preparation program and selects the rehearsals.
+source files irrelevant to the account server. These cost selectors remain for
+reading historical PR and merge evidence; they do not start a current PR workflow.
+Manual and nightly invocations run the complete cost matrix. The pinned Waitron
+checkout remains a separate input to its Cloud preparation program.
 
 ## Venue proof inputs
 
-The venue matrix checks the composition of its existing legacy and venue suites.
+The venue matrix checks the composition of the venue suites.
 Its own wrappers, `scripts/fixtures/service-proof.ts`, `scripts/test-cloud-*`,
 `scripts/venue-service-*` and `deploy/test-cloud/` select it. So do the package
-`venue-service-*` test files and both suite matrices' explicitly listed package
-tests, including translation's `worker-cli` case. Shared backend test helpers
+`venue-service-*` test files and the selector's named package tests. That list
+still includes former receipt inputs, whose package CI remains in place. Shared backend test helpers
 and fixture data, installation inputs, the workflow and planner also select it. This includes the registration venue-service
 fixture, backup verification helpers and fake translation provider. The imported
 `deploy/local-stack/{runtime,lease,bootstrap}.mjs` helpers and
@@ -94,7 +94,13 @@ tests. Further controls cover deletion, renaming, advanced main, missing history
 the PR merge environment and workflow-specific selection. These are local
 selection receipts. GitHub job counts and timings must be measured separately.
 
-Changing when a proof runs does not change its cases, assertions, time limits,
-proof commands. The lightweight planner and summary have read access to Actions
+The retired pre-venue receipt no longer runs. Its package suites keep their
+package and local-stack checks, and the free-services command remains available.
+The current venue receipt keeps its cases, assertions, time limits and command. The lightweight planner and summary have read access to Actions
 and pull-request metadata so they can verify attempt-bound evidence. A skipped matrix means it was not selected. It does not
 prove those tests passed on that revision.
+
+An older selected venue PR can fail with `Incomplete native job inventory`
+after this matrix change. Rebase that branch onto main so its strict summary
+expects the current venue receipt. Unselected older branches keep their skipped
+matrix placeholder; no compatibility code is added.

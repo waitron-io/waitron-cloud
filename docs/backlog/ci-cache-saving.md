@@ -16,10 +16,11 @@ deliberate-fault controls and diagnostic artifacts.
 The root checks, type checking, receipt suites, package matrix, relay-counter
 diagnostic and venue-service proofs use the same separate restore and final save.
 These are six job definitions, including the venue proof added after the earlier
-five-consumer inventory. Their mandatory steps, permissions, matrices, artifacts,
-assertions and eight-minute job limits remain unchanged. The relay diagnostic
+five-consumer inventory. Cache saving keeps the retained jobs' mandatory steps,
+permissions, artifacts, assertions and eight-minute limits. The relay diagnostic
 still checks its baseline, four deliberate faults and restored PostgreSQL case.
-The venue proof still runs both legacy and venue groups and records runner capacity.
+The venue proof runs its current venue receipt and records runner capacity; the
+retired pre-venue receipt no longer consumes a matrix job.
 
 Each job selects the stable store before installation. A cache hit skips saving;
 a miss can save only after successful mandatory work. A failed optional save stays

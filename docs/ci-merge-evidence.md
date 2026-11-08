@@ -6,10 +6,12 @@ can reuse that workflow's successful PR attempt when the Git trees match.
 The main run still executes a planner and a strict summary. Neither a green
 label nor a skipped product job proves reuse by itself.
 
-Cost and venue workflows do not trigger on main pushes. Their PR planners
-select their own proof inputs; manual runs and the nightly backstop run both
-complete matrices. Record those absent main workflows as excluded by their
-actual trigger, rather than as missing or inherited checks.
+Cost has no PR trigger, and cost and venue have no main-push trigger. Venue PRs
+select their own proof inputs; manual and nightly runs execute both complete
+proofs. AWS starts only for its infrastructure and bootstrap paths; Kubernetes
+prerequisites start only for their proof paths on PRs and main pushes. Record an
+absent workflow as excluded only after checking its actual trigger against the
+changed paths. An excluded workflow supplies no inherited tests.
 
 ## Read the decision before counting tests
 
