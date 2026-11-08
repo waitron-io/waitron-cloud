@@ -30,7 +30,7 @@ export async function withOrdinaryController({state,hostGeneration,api,policy,ap
 }
 
 // Each child owns one slot lock and its temporary directory through guest cleanup.
-export async function automaticTick({configuration,config,api,signal,runWorker,transport,recover}){
+export async function automaticTick({configuration,config,api,signal,runWorker,transport,recover,wait=delay}){
  const policy=config.ci,slots=configuredSlots(config);
  const active=new Map(),seen=new Set(),refusedRuns=new Set(),cleanups=[];
  const waitForWorker=async()=>{
@@ -68,13 +68,21 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  jobs.forEach(ci=>{
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
-  const result=await runWorker(ci);
+  let result=await runWorker(ci);
+  const recorded=()=>{
+   const latest=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   return latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
+    Object.keys(latest.turns).some(turn=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`));
+  };
   if(refused.length && result.code===75){
    await cleanup;signal?.throwIfAborted();
-   const latest=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-   const recorded=latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
-    Object.keys(latest.turns).some(turn=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`));
-   if(!recorded)return runWorker(ci);
+   if(!recorded())result=await runWorker(ci);
+  }
+  // Refused work without a job admission stays eligible at the normal polling interval.
+  if(result.code===75 && !recorded()){
+   try{await wait(30000,undefined,{signal});}
+   catch(error){if(signal?.aborted)return {code:143,reason:'cancelled'};throw error;}
+   seen.delete(ci.jobId);
   }
   return result;
   })().then(result=>console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,...result})),

@@ -589,3 +589,27 @@ test('automatic pickup skips an extra provisioning shard and serves its valid me
  const found=await controller.findAutomatic({api:f.api,policy,limit:1,onRefused:value=>refused.push(value)});
  assert.deepEqual(found.map(ci=>[ci.jobId,ci.jobKey]),[[902,'test-media-1']]);assert.deepEqual(refused,[]);
 });
+
+for(const admitted of [false,true])test(`pickup ${admitted?'does not replay an admitted 75 result':'reconsiders a capacity-only rejection while another job stays active'}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(2);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const counts=new Map(),stop=new AbortController();let finish;const held=new Promise(r=>finish=r);stop.signal.addEventListener('abort',finish,{once:true});const timer=setTimeout(()=>stop.abort(),2000);let failure;const waits=[];
+ try{await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal,wait:async ms=>{waits.push(ms);await new Promise(r=>setTimeout(r,1));},runWorker:async ci=>{
+  const count=(counts.get(ci.jobId)??0)+1;counts.set(ci.jobId,count);
+  if(ci.jobId===901 && count===1){
+   if(admitted){const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots:6,slot:0}),lease=leases.reserveLocal(ciRequest('I',ci)).lease;leases.release(lease,{resourceId:lease.resourceId,absent:true});setTimeout(finish,40);}
+   return {code:75,reason:'capacity-busy'};
+  }
+  if(ci.jobId===902)await held;else finish();f.jobs.find(j=>j.id===ci.jobId).status='completed';return {code:0};
+ }});}catch(error){failure=error;}finally{clearTimeout(timer);stop.abort();finish();}
+ assert.deepEqual([...counts],[[901,admitted?1:2],[902,1]]);assert.equal(failure,undefined);assert.deepEqual(waits,admitted?[]:[30000]);
+});
+
+test('shutdown during an unadmitted worker wait records cancellation rather than a server failure',async t=>{
+ const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(1);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const stop=new AbortController(),events=[];t.mock.method(console,'log',value=>events.push(JSON.parse(value)));
+ await assert.rejects(automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal,
+  runWorker:async()=>({code:75,reason:'capacity-busy'}),wait:async(ms,value,{signal})=>{assert.equal(ms,30000);stop.abort();signal.throwIfAborted();}}),{name:'AbortError'});
+ assert.deepEqual(events.map(e=>({code:e.code,reason:e.reason})),[{code:143,reason:'cancelled'}]);
+});
