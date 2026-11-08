@@ -999,7 +999,7 @@ for(const ownership of ['invocation','lease'])test(`overflow recovery preserves 
  if(ownership==='lease')slot.reserveLocal(ciRequest('I',ci));
  else slot.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
  const posts=[];
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'hosted'}:get(path);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2,"790":2}'}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'hosted'}:path.endsWith('/runs/790')?{...f.run,id:790,event:'push',pull_requests:[],run_attempt:2}:get(path);
  f.api.post=async path=>{posts.push(path);};
  await automaticTick({configuration:'/fixture/config',config,api:f.api});assert.deepEqual(posts,[]);
 });
