@@ -41,6 +41,26 @@ class CISession(unittest.TestCase):
   joined='\n'.join(' '.join(argv) for argv in calls)
   self.assertIn('runner-tools.sh',joined)
   for forbidden in ['source.tar','ui.tgz','pnpm install','snapshot.py extract']:self.assertNotIn(forbidden,joined)
+ def test_preparation_waits_through_only_ssh_boot_resets_within_the_original_deadline(self):
+  for statuses in [[255,0],[2],[255,255]]:
+   with self.subTest(statuses=statuses),tempfile.TemporaryDirectory() as temporary:
+    directory=Path(temporary)/self.resource;directory.mkdir();value=request(self.resource);(directory/'request.json').write_text(json.dumps(value))
+    remaining=list(statuses);readiness=[];now=time.time()
+    def command(argv,deadline,stdin=None,capture=False,check=True):
+     if argv[0]=='ssh-keygen':(directory/'key.pub').write_text('ssh-ed25519 fake')
+     if argv[-1]=='cloud-init status --wait':
+      readiness.append(deadline);code=remaining.pop(0)
+      if check and code:raise RuntimeError(f'Turn stage failed with status {code}')
+      return code,b''
+     return 0,b'guest-key\n' if argv[0]=='ssh-keyscan' else b''
+    def sleep(_):
+     nonlocal now
+     now+=0.25 if remaining==[0] else 121
+    with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create'),patch.object(session.time,'time',side_effect=lambda:now),patch.object(session.time,'sleep',side_effect=sleep):
+     if statuses==[255,0]:session.prepare(self.resource);self.assertTrue((directory/'prepared').exists());self.assertEqual(len(readiness),2);self.assertEqual(readiness[0],readiness[1])
+     else:
+      with self.assertRaisesRegex((RuntimeError,TimeoutError),'status 2$|within120seconds'):session.prepare(self.resource)
+      self.assertFalse((directory/'prepared').exists());self.assertEqual(len(readiness),1)
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):
   self.assertTrue(callable(getattr(guest,'complete_ci',None)),'CI execution entry point missing')
   output=self.root/'result.json';value={'deadline':int(time.time()*1000)+5000,'nonce':'a'*32,'jitconfig':'synthetic-base64'}

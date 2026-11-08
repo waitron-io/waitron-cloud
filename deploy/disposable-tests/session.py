@@ -231,7 +231,16 @@ def prepare(resource):
     else:
         raise TimeoutError('Guest did not boot within120seconds')
     ssh = guest_ssh(directory)
-    command([*ssh, 'cloud-init status --wait'], boot_end)
+    # Cloud-init can restart sshd after keyscan succeeds; retry only its read-only readiness check.
+    while int(time.time()*1000) < boot_end:
+        code, _ = command([*ssh, 'cloud-init status --wait'], boot_end, check=False)
+        if code == 0:
+            break
+        if code != 255:
+            raise RuntimeError(f'Turn stage failed with status {code}')
+        time.sleep(0.25)
+    else:
+        raise TimeoutError('Guest did not boot within120seconds')
     with (RECIPE/'guest-tools.sh').open('rb') as source:
         command([*ssh, 'bash -s'], min(deadline, int(time.time()*1000)+360000), stdin=source)
     command([*ssh, 'mkdir -p /work/source /work/private /opt/waitron-disposable'], deadline)

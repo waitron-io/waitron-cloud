@@ -614,27 +614,77 @@ test('shutdown during an unadmitted worker wait records cancellation rather than
  assert.deepEqual(events.map(e=>({code:e.code,reason:e.reason})),[{code:143,reason:'cancelled'}]);
 });
 
-test('an incomplete run inventory does not hold free capacity behind a still-running sibling',async t=>{
+for(const fault of ['inventory','run-http','mode-http','head-http','network','timeout','json'])test(`a ${fault} failure does not hold free capacity behind a still-running sibling`,async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
  const {automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
  await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
- const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release;
- const held=new Promise(resolve=>release=resolve),ids=[];
+ const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release,heldActive=true,thirdWhileHeld=false,injected=false;
+ const held=new Promise(resolve=>release=()=>{heldActive=false;resolve();}),ids=[];
  const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
  f.api.get=async path=>{
+  if(!injected && ids.includes(902) && ((fault==='mode-http' && path.endsWith('DISPOSABLE_TESTS_MODE')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('mode') && !fault.startsWith('head') && path.includes('/runs?')))){
+   injected=true;
+   if(fault==='inventory')return {total_count:1,workflow_runs:[]};
+   if(fault.endsWith('http'))throw Object.assign(new Error('Unavailable'),{status:503});
+   if(fault==='network')throw new TypeError('fetch failed');
+   if(fault==='timeout')throw new DOMException('Timed out','TimeoutError');
+   throw new SyntaxError('Truncated JSON');
+  }
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/runs?') && path.includes('status=queued')){
-   if(++scans===2)return {total_count:1,workflow_runs:[]};
-  }
-  if(path.includes('/jobs?'))return {total_count:scans<3?2:3,jobs:scans<3?[first,second]:[first,second,third]};
+  if(path.includes('/runs?') && path.includes('status=queued'))scans++;
+  if(path.includes('/jobs?'))return {total_count:!injected?2:3,jobs:!injected?[first,second]:[first,second,third]};
   return get(path);
  };
  let failure;
  try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
-  api:f.api,transport:{healthy:async()=>true},wait:async()=>{},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903)release();return {code:0};}});}
+  api:f.api,transport:{healthy:async()=>true},wait:async ms=>assert.equal(ms,30000),runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903){thirdWhileHeld=heldActive;release();}return {code:0};}});}
  catch(error){failure=error;}
- assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);
+ assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);assert.equal(thirdWhileHeld,true,'The third job starts before the first finishes');
+});
+
+test('automatic cancellation yields its persisted intent while GitHub is still cancelling',async()=>{
+ const f=fixture(),get=f.api.get;let pending={ordinaryStage:'admitted',runId:789,attempt:1,jobId:901},posts=0;
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.post=async path=>{assert.ok(path.endsWith('/cancel'));posts++;};
+ const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases:{inspect:()=>({ciInvocation:pending}),setInvocation:value=>pending=value},automatic:true,
+  wait:async()=>assert.fail('A remote cancellation must not hold the shared admission lock')});
+ assert.deepEqual(result,{retry:false,pending:true});assert.equal(posts,1);assert.equal(pending.ordinaryStage,'cancel-requested');
+});
+for(const active of [false,true])test(`owned cancellation of a queued job ${active?'preserves an active sibling':'finishes when all siblings have stopped'}`,async()=>{
+ const f=fixture(),get=f.api.get;let forced=false;
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:path.endsWith('/actions/runs/789')?{...f.run,status:forced?'completed':'queued'}:
+  path.includes('/jobs?')?{total_count:2,jobs:[f.jobs[0],{...f.jobs[1],status:active?'in_progress':'completed',runner_id:active?77:0}]}:get(path);
+ f.api.post=async path=>{if(path.endsWith('/force-cancel')){assert.equal(active,false);forced=true;}else assert.ok(path.endsWith('/rerun'));};
+ const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}};
+ const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>assert.fail('Recovery must yield')});
+ assert.equal(forced,!active);assert.equal(result.retry,!active);if(active)assert.equal(result.pending,true);
+});
+
+for(const status of [401,403])test(`pickup reports permanent HTTP ${status} failures`,async t=>{
+ const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?'))throw Object.assign(new Error('Forbidden'),{status});return get(path);};
+ await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),error=>error.status===status);
+});
+
+for(const abort of [false,true])test(`a transient inventory failure without workers ${abort?'preserves shutdown':'returns for the next service tick'}`,async t=>{
+ const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,stop=new AbortController();
+ f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?')){if(abort)stop.abort();throw Object.assign(new Error('Unavailable'),{status:503});}return get(path);};
+ const result=automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal});
+ if(abort)await assert.rejects(result,{name:'AbortError'});else assert.deepEqual(await result,{code:0,served:0,reason:'inventory-unavailable'});
+});
+for(const change of ['missing','short','foreign','new-attempt'])test(`queued cancellation refuses ${change} inventory authority`,async()=>{
+ const f=fixture(),get=f.api.get;let posts=0;
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:path.endsWith('/actions/runs/789')?{...f.run,status:'queued',run_attempt:change==='new-attempt'?3:1}:
+ path.includes('/jobs?')?{total_count:change==='short'?2:1,jobs:change==='short'?[]:[{...f.jobs[0],...(change==='missing'?{id:902}:change==='foreign'?{head_sha:'2'.repeat(40)}:{})}]}:get(path);
+ f.api.post=async()=>{posts++;};
+ const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
+ const work=controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true});
+ if(change==='foreign')assert.equal((await work).pending,true);else await assert.rejects(work,/inventory|missing|attempt/i);
+ assert.equal(posts,0);
 });

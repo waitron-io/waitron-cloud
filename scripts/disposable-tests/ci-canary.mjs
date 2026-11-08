@@ -82,22 +82,18 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(!await currentPR(run))return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
- if(job.status!=='completed'){
+ if(ownedCancel && run.status==='queued'){
+  const outcome=await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true,waitForCompletion:!automatic});
+  if(outcome?.pending)return {retry:false,pending:true};
+ }else if(job.status!=='completed'){
   assert.ok(pending?.ordinaryStage==='admitted' || refused || ownedCancel,'Ordinary fallback needs its persisted intent');
   if(!automatic)await setRoutingMode({api,policy,mode:'hosted',signal});
   leases.setInvocation({...pending,ordinaryStage:'cancel-requested'});
-  await cancelCIJob({api,repository:policy.repository,ci,signal,wait});
+  await cancelCIJob({api,repository:policy.repository,ci,signal,wait,waitForCompletion:!automatic});
  }
- if(ownedCancel && run.status==='queued' && job.conclusion==='cancelled')
-  await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true});
  run=await api.get(path,{signal});check(run);
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt changed before retry');
- if(run.status!=='completed'){
-  const completed=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
-  assert.ok(completed.id===ci.jobId && completed.run_id===ci.runId && completed.run_attempt===ci.attempt &&
-   completed.head_sha===ci.workflowSha && completed.status==='completed','Ordinary fallback cancellation is unfinished');
-  return {retry:false,pending:true};
- }
+ if(run.status!=='completed')return {retry:false,pending:true};
  if(!await currentPR(run))return {retry:false,obsolete:true};
  await api.post(path+'/rerun',undefined,{signal});
  return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
@@ -269,7 +265,7 @@ export async function fallbackCI({api,policy,invocation,dispatch,signal,wait=del
  return dispatch({sourceSha:invocation.sourceSha,route:'hosted'});
 }
 
-export async function cancelCIJob({api,repository,ci,signal,wait=delay,force=false}){
+export async function cancelCIJob({api,repository,ci,signal,wait=delay,force=false,waitForCompletion=true}){
  assert.ok(Number.isSafeInteger(ci.jobId) && ci.jobId>0,'Recorded CI job identity is missing');
  const path=`/repos/${repository}/actions/runs/${ci.runId}`;
  const run=await api.get(path,{signal});
@@ -280,10 +276,26 @@ export async function cancelCIJob({api,repository,ci,signal,wait=delay,force=fal
  if(job.status==='completed' && !force)return;
  assert.equal(run.run_attempt,ci.attempt,'Recorded CI cancellation attempt differs');
  if(run.status==='completed')return;
- assert.ok(!force || run.status==='queued' && job.status==='completed' && job.conclusion==='cancelled','Force cancellation needs a cancelled job and queued run');
+ if(force){
+  assert.equal(run.status,'queued','Force cancellation needs a queued run');
+  if(job.status!=='completed' || job.conclusion!=='cancelled'){
+   assert.ok(job.status==='queued' && !job.runner_id,'Force cancellation needs an unassigned queued job');
+   const jobs=[];let total;
+   for(let page=1;page<=10;page++){
+    const data=await api.get(path+`/attempts/${ci.attempt}/jobs?per_page=100&page=${page}`,{signal});
+    assert.ok(Array.isArray(data.jobs) && Number.isSafeInteger(data.total_count) && data.total_count<=1000,'Invalid cancellation job inventory');
+    total=data.total_count;jobs.push(...data.jobs);if(jobs.length>=total)break;
+   }
+   assert.equal(jobs.length,total,'Incomplete cancellation job inventory');
+   assert.ok(jobs.some(candidate=>candidate.id===ci.jobId),'Cancellation job missing from inventory');
+   if(jobs.some(candidate=>candidate.run_id!==ci.runId || candidate.run_attempt!==ci.attempt || candidate.head_sha!==ci.workflowSha ||
+    !(candidate.status==='completed' || candidate.status==='queued' && !candidate.runner_id)))return {pending:true};
+  }
+ }
  await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});const end=Date.now()+120000;
  while(true){const current=await api.get(path,{signal});assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during cancellation');
   if(current.status==='completed')return;
+  if(!waitForCompletion)return {pending:true};
   assert.ok(Date.now()<end,'CI cancellation readback deadline exceeded');await wait(15000,undefined,{signal});}
 }
 
