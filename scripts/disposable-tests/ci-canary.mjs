@@ -130,38 +130,10 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const [repository,blob,source,pull]=await Promise.all([
   api.get(base,{signal}),api.get(`${base}/contents/${policy.workflowPath}?ref=${run.head_sha}`,{signal}),
   api.get(`${base}/commits/${approvedHead}`,{signal}),run.event==='pull_request'?api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal}):undefined]);
- if(automatic && run.event==='pull_request')await checkExecutionWorkflow({api,policy,run,signal});
  assert.equal(blob.encoding,'base64','Invalid workflow blob encoding');
  const workflow=Buffer.from(blob.content,'base64').toString(),digest=createHash('sha256').update(workflow).digest('hex');
- const admittedPolicy=automatic && policy.workflowHistory?{...policy,workflowDigest:await reviewedWorkflowDigest({api,policy,digest,signal})}:policy;
+ const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
-}
-// A pin remains eligible only while its exact main revision is recent and ancestral.
-async function reviewedWorkflowDigest({api,policy,digest,signal}){
- if(digest===policy.candidateWorkflowDigest)return digest;
- const pin=policy.workflowHistory.find(pin=>pin.digest===digest);assert.ok(pin,'CI workflow definition changed');
- const base=`/repos/${policy.repository}`,main=(await api.get(`${base}/git/ref/heads/main`,{signal})).object?.sha;
- if(typeof main!=='string' || !/^[a-f0-9]{40}$/.test(main))throw new Error('Main workflow revision read is incomplete');
- const recent=await api.get(`${base}/commits?sha=${main}&path=${policy.workflowPath}&per_page=10`,{signal});
- if(!Array.isArray(recent) || recent.length>10 || recent.some(commit=>typeof commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(commit.sha)) || new Set(recent.map(commit=>commit.sha)).size!==recent.length)throw new Error('Recent workflow history read is incomplete');
- assert.ok(recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
- const comparison=await api.get(`${base}/compare/${pin.sha}...${main}?per_page=1&page=2`,{signal});
- if(!['ahead','identical','behind','diverged'].includes(comparison?.status) || typeof comparison.merge_base_commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(comparison.merge_base_commit.sha))throw new Error('Workflow ancestry read is incomplete');
- assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit.sha===pin.sha,'Workflow pin is not an ancestor of current main');
- const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${pin.sha}`,{signal});
- if(blob?.encoding!=='base64' || typeof blob.content!=='string')throw new Error('Pinned workflow read is incomplete');
- assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),pin.digest,'Pinned main workflow differs');
- return digest;
-}
-async function checkExecutionWorkflow({api,policy,run,signal}){
- const ref=`refs/pull/${run.pull_requests[0].number}/merge`;
- const matches=(run.referenced_workflows??[]).filter(w=>w.ref===ref && w.path===`${policy.repository}/.github/workflows/image-smoke.yml@${w.sha}`);
- assert.ok(matches.length===1 && /^[a-f0-9]{40}$/.test(matches[0].sha),'Original execution workflow identity is missing');
- const blob=await api.get(`/repos/${policy.repository}/contents/${policy.workflowPath}?ref=${matches[0].sha}`,{signal});
- assert.equal(blob.encoding,'base64','Invalid execution workflow encoding');
- const digest=createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex');
- if(policy.workflowHistory)await reviewedWorkflowDigest({api,policy,digest,signal});
- else assert.equal(digest,policy.workflowDigest,'Original execution workflow changed');
 }
 export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');

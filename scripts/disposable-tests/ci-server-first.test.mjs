@@ -42,7 +42,7 @@ test('the reusable image smoke job keeps its actual GitHub name and a label with
  const f=evidence('push',2,'image / smoke');f.job.labels=['self-hosted','dt-123-789-2-image-smoke-1'];
  assert.equal(admitOrdinary(policy,sha,f).jobKey,'image-smoke-1');
 });
-test('the configured reviewed workflow can run before its branch reaches main while other bytes still refuse',async()=>{
+test('automatic pickup accepts changed same-repository workflow bytes and binds their actual digest',async()=>{
  const f=evidence('push',1),candidate={...policy,candidateWorkflowDigest:policy.workflowDigest,workflowHistory:[{sha:'f'.repeat(40),digest:'f'.repeat(64)}]};
  let bytes=workflow;
  const api={get:async path=>{
@@ -53,11 +53,13 @@ test('the configured reviewed workflow can run before its branch reaches main wh
   if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from(bytes).toString('base64')};
   if(path.endsWith('/commits/'+sha))return f.source;
   if(path==='/repos/fixture/waitron')return f.repository;
-  assert.fail('Unreviewed workflow cannot be vouched for by this fixture: '+path);
+  assert.fail('Automatic pickup must not ask for history pins: '+path);
  }};
  assert.deepEqual((await findAutomatic({api,policy:candidate,limit:1})).map(ci=>ci.jobId),[901]);
- bytes+='unreviewed';
- assert.deepEqual(await findAutomatic({api,policy:candidate,limit:1}),[]);
+ bytes+='changed';
+ const jobs=await findAutomatic({api,policy:candidate,limit:1});
+ assert.deepEqual(jobs.map(ci=>ci.jobId),[901]);
+ assert.equal(jobs[0].workflowDigest,createHash('sha256').update(bytes).digest('hex'));
 });
 for(const event of ['pull_request','push','schedule','workflow_dispatch'])test(`automatic pickup finds ${event} retry routing jobs`,async()=>{
  const f=evidence(event,2),execution='e'.repeat(40),paths=[];

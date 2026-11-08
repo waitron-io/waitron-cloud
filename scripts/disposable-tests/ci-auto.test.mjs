@@ -75,12 +75,13 @@ for(const change of ['fork','retry','assigned','hosted','unsupported','stale'])t
  if(change==='unsupported')f.jobs.forEach(j=>{j.name='test-setup (1)';j.labels=['self-hosted','dt-123-789-1-test-setup-1'];});
  assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6}),[]);
 });
-test('automatic pickup pins the original merge workflow and rejects changed execution bytes',async()=>{
- const f=fixture(),get=f.api.get;
- f.api.get=async path=>path.endsWith('?ref='+execution)?{encoding:'base64',content:Buffer.from('changed workflow').toString('base64')}:get(path);
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6}),[]);
+test('automatic pickup accepts same-repository workflow edits without an execution pin',async()=>{
+ const f=fixture(),get=f.api.get,changed='changed same-repository workflow';
+ f.api.get=async path=>path.includes('/contents/')?{encoding:'base64',content:Buffer.from(changed).toString('base64')}:get(path);
  f.run.referenced_workflows=[];
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6}),[]);
+ const jobs=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6});
+ assert.deepEqual(jobs.map(ci=>ci.jobId),[901,902,903,904,905]);
+ assert.ok(jobs.every(ci=>ci.workflowDigest===createHash('sha256').update(changed).digest('hex')));
 });
 test('automatic pickup never starts beyond the free-slot count',async()=>{
  const f=fixture();assert.deepEqual((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:2})).map(j=>j.jobId),[901,902]);
@@ -174,7 +175,7 @@ for(const obsolete of ['advanced','closed','unavailable'])test(`automatic recove
  assert.equal(modeReads,2);if(obsolete==='unavailable')assert.equal(leases.inspect().ciInvocation.jobId,901);else assert.equal(leases.inspect().ciInvocation,undefined);
 });
 
-test('a PR with changed workflow bytes cannot stop another approved PR from using capacity',async()=>{
+test('a PR with mismatched source evidence cannot stop another approved PR from using capacity',async()=>{
  const f=fixture(),get=f.api.get,otherHead='5'.repeat(40);
  const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
  const job={...f.jobs[0],id:911,run_id:790,head_sha:otherHead,labels:['self-hosted','dt-123-790-1-test-server-24']};
@@ -184,7 +185,7 @@ test('a PR with changed workflow bytes cannot stop another approved PR from usin
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   return get(path);
  };
  const selected=await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6});assert.deepEqual(selected.map(j=>j.jobId),[911]);
@@ -268,7 +269,7 @@ test('an unhealthy or unreachable host selects hosted before polling or starting
  }
 });
 
-for(const race of ['none','assigned','assigned-later','changed-label','advanced'])test(`refused workflow fallback handles ${race} race without running unreviewed code`,async t=>{
+for(const race of ['none','assigned','assigned-later','changed-label','advanced'])test(`refused source fallback handles ${race} race without running mismatched code`,async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-refused-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
@@ -278,15 +279,15 @@ for(const race of ['none','assigned','assigned-later','changed-label','advanced'
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('unreviewed workflow').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/jobs/901')){jobReads++;return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null,...(race==='assigned' || race==='assigned-later' && jobReads>1?{runner_id:42}:{}),...(race==='changed-label'?{labels:['self-hosted','dt-123-789-1-test-heavy-3']}: {})};}
   if(path.endsWith('/pulls/12') && race==='advanced' && pullReads++)return {number:12,state:'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   return get(path);
  };
  f.api.post=async path=>{if(path.endsWith('/cancel'))cancelled=true;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
- f.api.patch=async()=>assert.fail('A refused workflow must not disable routing for other reviewed PRs');
- await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unreviewed workflow must never execute on the server')});
+ f.api.patch=async()=>assert.fail('A refused source must not disable routing for other approved PRs');
+ await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy},api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Mismatched source must never execute on the server')});
  assert.equal(cancelled,race==='none','Only a still-queued job on the unchanged PR may be cancelled');
  assert.equal(reruns,race==='none'?1:0,'Only the unchanged refused PR retries using the existing hosted route');
  const ledger=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
@@ -361,7 +362,7 @@ for(const busy of ['none','busy','retired','pending'])test(`reviewed workers sta
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null};
   return get(path);
@@ -384,13 +385,13 @@ test('a refused cancellation that is still settling retains its intent until rec
  const config=await refusalPool(t),f=fixture(),get=f.api.get;let jobReads=0,settled=false,reruns=0;
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:++jobReads>=3?'completed':'queued',conclusion:jobReads>=3?'cancelled':null};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:settled?'completed':'in_progress'};
   return get(path);
  };
  f.api.post=async path=>{assert.ok(path.endsWith('/rerun'));reruns++;};
- await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Unreviewed workflow')});
+ await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async()=>assert.fail('Mismatched source')});
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
  assert.equal(leases.inspect().slots.filter(s=>s.ciInvocation?.ordinaryStage==='cancel-requested').length,1);assert.equal(reruns,0);
  settled=true;await reconcileManual({...config,transport:{},api:routingVariables(f.api)});
@@ -398,7 +399,7 @@ test('a refused cancellation that is still settling retains its intent until rec
  await reconcileManual({...config,transport:{},api:routingVariables(f.api)});assert.equal(reruns,1);
 });
 
-test('the real recovery CLI finishes a refused-workflow hosted retry without an import cycle',async t=>{
+test('the real recovery CLI finishes a refused-source hosted retry without an import cycle',async t=>{
  const {writeFileSync}=await import('node:fs'),{spawnSync}=await import('node:child_process');
  const config=await refusalPool(t),configuration=config.state+'/configuration.json';
  writeFileSync(configuration,JSON.stringify({...config,host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:config.state,ci:{...policy,appEnv:config.state+'/app.env',appKey:config.state+'/app.pem'}}));
@@ -406,7 +407,7 @@ test('the real recovery CLI finishes a refused-workflow hosted retry without an 
  const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};import {CITransport} from ${JSON.stringify(transport.href)};
  const head=${JSON.stringify(head)},execution=${JSON.stringify(execution)},workflow=${JSON.stringify(workflow)},policy=${JSON.stringify(policy)};
  const f=(${fixture.toString()})();const get=f.api.get;let cancelled=0,reruns=0,marker='{}';
- GithubApp.prototype.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/contents/')?{encoding:'base64',content:Buffer.from('changed').toString('base64')}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:get(path);
+ GithubApp.prototype.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/commits/'+head)?{sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}}:path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:path.endsWith('/actions/runs/789')?{...f.run,status:cancelled?'completed':'in_progress'}:get(path);
  GithubApp.prototype.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;};
  GithubApp.prototype.post=async path=>{if(path.endsWith('/cancel'))cancelled++;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
  CITransport.prototype.healthy=async()=>true;
@@ -492,7 +493,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:jobs.length,jobs};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
+  if(path.endsWith('/commits/'+head))return {sha:'9'.repeat(40),commit:{tree:{sha:'4'.repeat(40)}}};
   const matched=f.jobs.find(job=>path.endsWith('/actions/jobs/'+job.id));
   if(matched){const n=(reads.get(matched.id)??0)+1;reads.set(matched.id,n);const complete=settled || n>=(refusalRead==='persisted-failure'?4:3);if(complete)cancelled();return {...matched,status:complete?'completed':'queued',conclusion:complete?'cancelled':null};}
   return get(path);
@@ -547,15 +548,21 @@ function historicalFixture({headVersion=8,executionVersion=11,changedHead=false,
  return {...f,policy:trusted};
 }
 
-test('automatic pickup independently accepts an older reviewed head and newer reviewed execution workflow',async()=>{
- const f=historicalFixture();const found=await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1});
- assert.equal(found.length,1);assert.equal(found[0].jobId,901);
- assert.equal(found[0].workflowDigest,createHash('sha256').update('reviewed workflow 8').digest('hex'));
-});
-for(const [name,options] of [['PR-edited workflow',{changedHead:true}],['commit not ancestral to main',{foreign:true}],['eleventh oldest workflow',{headVersion:1,oldest:true}]])test(`automatic pickup keeps ${name} on hosted fallback`,async()=>{
- const f=historicalFixture(options),refused=[];
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.equal(refused.length,1);assert.equal(refused[0].runId,789);
+for(const [name,options,bytes] of [
+ ['older head',{headVersion:8},'reviewed workflow 8'],
+ ['edited head',{changedHead:true},'PR-edited workflow'],
+ ['branch outside main',{foreign:true},'reviewed workflow 8'],
+ ['older than the history window',{headVersion:1,oldest:true},'reviewed workflow 1']
+])test(`automatic pickup binds the actual workflow digest for a same-repository ${name}`,async()=>{
+ const f=historicalFixture(options),get=f.api.get,refused=[];
+ f.api.get=async path=>{
+  assert.ok(!path.includes('/compare/') && !path.includes('/commits?') && !path.endsWith('/git/ref/heads/main'),'Automatic trust must not depend on a main-history pin');
+  return get(path);
+ };
+ const jobs=await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)});
+ assert.deepEqual(jobs.map(ci=>ci.jobId),[901]);
+ assert.equal(jobs[0].workflowDigest,createHash('sha256').update(bytes).digest('hex'));
+ assert.deepEqual(refused,[]);
 });
 
 test('workflow history configuration cannot exceed ten immutable main versions or contain malformed pins',()=>{
@@ -565,47 +572,33 @@ test('workflow history configuration cannot exceed ten immutable main versions o
   assert.throws(()=>controller.validateCIConfig({...config,ci:{...config.ci,workflowHistory}}),/history|workflow|pin|version/i);
 });
 
-test('an oversized ancestry response leaves PRs for a later pickup without cancellation',async t=>{
+test('a temporary workflow HTTP refusal leaves PRs for a later pickup without cancellation',async t=>{
  const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
- const server=createServer((req,res)=>res.end('x'.repeat(3*1024*1024)));
+ const server=createServer((req,res)=>{res.statusCode=502;res.end('Temporary fixture failure');});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- const f=historicalFixture(),get=f.api.get,refused=[];
- f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.deepEqual(refused,[],'A transport limit is not an unreviewed workflow');
+ const f=fixture(),get=f.api.get,refused=[];
+ f.api.get=path=>path.includes('/contents/')?app.get(path):get(path);
+ assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[],'A temporary API refusal must not cancel the run');
 });
 
-test('a configured hash cannot vouch for different bytes at its recorded main commit',async()=>{
- const f=historicalFixture({changedHead:true}),refused=[];
- f.policy.workflowHistory[3].digest=createHash('sha256').update('PR-edited workflow').digest('hex');
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.equal(refused.length,1);
-});
-
-test('ancestry reads request a single commit on the page without file patches',async t=>{
- const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');const seen=[];
- const server=createServer((req,res)=>{
-  seen.push(req.url);if(!req.url.endsWith('?per_page=1&page=2')){res.statusCode=400;res.end();return;}
-  res.setHeader('content-type','application/json');res.end(JSON.stringify({status:'ahead',merge_base_commit:{sha:req.url.match(/compare\/([a-f0-9]{40})/)[1]}}));
- });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
- const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- const f=historicalFixture(),get=f.api.get;f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
- assert.equal((await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1})).length,1);
- assert.equal(seen.length,2);assert.ok(seen.every(path=>path.endsWith('?per_page=1&page=2')));
-});
-
-for(const unclear of ['main','recent','comparison','pin-blob'])test(`an unclear ${unclear} reply leaves work for a later pickup without cancellation`,async()=>{
- const f=historicalFixture(),get=f.api.get,refused=[];
+for(const changed of ['repository','workflow-id','workflow-path','event','PR-head','PR-fork','contributor-approval'])test(`automatic workflow trust retains the ${changed} refusal`,async()=>{
+ const f=fixture(),get=f.api.get;
+ if(changed==='repository')f.run.repository.id=999;
+ if(changed==='workflow-id')f.run.workflow_id=999;
+ if(changed==='workflow-path')f.run.path='.github/workflows/foreign.yml';
+ if(changed==='event')f.run.event='pull_request_target';
  f.api.get=async path=>{
-  if(unclear==='main' && path.endsWith('/git/ref/heads/main'))return {object:{}};
-  if(unclear==='recent' && path.includes('/commits?'))return {};
-  if(unclear==='comparison' && path.includes('/compare/'))return {status:'ahead'};
-  if(unclear==='pin-blob' && path.endsWith('?ref='+(11).toString(16).padStart(40,'0')))return {encoding:'unknown',content:'unknown'};
-  return get(path);
+  if(changed==='contributor-approval' && path.endsWith('fork-pr-contributor-approval'))return {approval_policy:'first_time_contributors'};
+  const value=await get(path);
+  if(path.endsWith('/pulls/12')){
+   if(changed==='PR-head')value.head.sha='9'.repeat(40);
+   if(changed==='PR-fork')value.head.repo.id=999;
+  }
+  return value;
  };
- assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
- assert.deepEqual(refused,[]);
+ assert.deepEqual(await controller.findAutomatic({api:routingVariables(f.api),policy,limit:1}),[]);
 });
 
 for(const [name,key] of [
