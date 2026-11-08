@@ -427,15 +427,16 @@ test('pickup recovers an interrupted slot while a slower worker still owns its s
 });
 
 
-test('a refused run retains only one cancellation intent across refills',async t=>{
+for(const refusalRead of ['ready','transient-failure'])test(`a refused run retains only one cancellation intent across refills after ${refusalRead}`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get,otherHead='5'.repeat(40),reads=new Map();
  const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
  const jobs=f.jobs.slice(0,3).map(job=>({...job,id:job.id+10,run_id:790,head_sha:otherHead,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
- let finish,cancelled,scans=0;const held=new Promise(resolve=>{finish=resolve;}),cancel=new Promise(resolve=>{cancelled=resolve;});
+ let finish,cancelled,scans=0,runReads=0;const held=new Promise(resolve=>{finish=resolve;}),cancel=new Promise(resolve=>{cancelled=resolve;});
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
   if(path.includes('/runs?')){if(path.includes('status=queued') && ++scans===2)setTimeout(finish,100);return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};}
+  if(path.endsWith('/actions/runs/789') && ++runReads===2 && refusalRead==='transient-failure')throw Object.assign(new Error('Temporary GitHub error'),{status:502});
   if(path.endsWith('/actions/runs/790'))return good;
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:jobs.length,jobs};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
@@ -447,7 +448,7 @@ test('a refused run retains only one cancellation intent across refills',async t
  };
  f.api.post=async path=>{assert.ok(path.endsWith('/cancel'));cancelled();};
  const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
-  if(ci.jobId===912){await cancel;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
+  if(ci.jobId===912){if(refusalRead==='ready')await cancel;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
   return {code:0};
  }});
  const timeout=setTimeout(finish,5000);try{await running;}finally{clearTimeout(timeout);finish();}
