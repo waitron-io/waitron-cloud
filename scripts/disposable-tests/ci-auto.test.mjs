@@ -554,3 +554,16 @@ test('ancestry reads request a single commit on the page without file patches',a
  assert.equal((await controller.findAutomatic({api:f.api,policy:f.policy,limit:1})).length,1);
  assert.equal(seen.length,2);assert.ok(seen.every(path=>path.endsWith('?per_page=1&page=2')));
 });
+
+for(const unclear of ['main','recent','comparison','pin-blob'])test(`an unclear ${unclear} reply leaves work for a later pickup without cancellation`,async()=>{
+ const f=historicalFixture(),get=f.api.get,refused=[];
+ f.api.get=async path=>{
+  if(unclear==='main' && path.endsWith('/git/ref/heads/main'))return {object:{}};
+  if(unclear==='recent' && path.includes('/commits?'))return {};
+  if(unclear==='comparison' && path.includes('/compare/'))return {status:'ahead'};
+  if(unclear==='pin-blob' && path.endsWith('?ref='+(11).toString(16).padStart(40,'0')))return {encoding:'unknown',content:'unknown'};
+  return get(path);
+ };
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[]);
+});

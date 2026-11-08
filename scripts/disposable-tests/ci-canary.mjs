@@ -131,13 +131,15 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
 async function reviewedWorkflowDigest({api,policy,digest,signal}){
  const pin=policy.workflowHistory.find(pin=>pin.digest===digest);assert.ok(pin,'CI workflow definition changed');
  const base=`/repos/${policy.repository}`,main=(await api.get(`${base}/git/ref/heads/main`,{signal})).object?.sha;
- assert.match(main,/^[a-f0-9]{40}$/,'Main workflow revision is missing');
+ if(typeof main!=='string' || !/^[a-f0-9]{40}$/.test(main))throw new Error('Main workflow revision read is incomplete');
  const recent=await api.get(`${base}/commits?sha=${main}&path=${policy.workflowPath}&per_page=10`,{signal});
- assert.ok(Array.isArray(recent) && recent.length<=10 && recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
+ if(!Array.isArray(recent) || recent.length>10 || recent.some(commit=>typeof commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(commit.sha)) || new Set(recent.map(commit=>commit.sha)).size!==recent.length)throw new Error('Recent workflow history read is incomplete');
+ assert.ok(recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
  const comparison=await api.get(`${base}/compare/${pin.sha}...${main}?per_page=1&page=2`,{signal});
- assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit?.sha===pin.sha,'Workflow pin is not an ancestor of current main');
+ if(!['ahead','identical','behind','diverged'].includes(comparison?.status) || typeof comparison.merge_base_commit?.sha!=='string' || !/^[a-f0-9]{40}$/.test(comparison.merge_base_commit.sha))throw new Error('Workflow ancestry read is incomplete');
+ assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit.sha===pin.sha,'Workflow pin is not an ancestor of current main');
  const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${pin.sha}`,{signal});
- assert.equal(blob.encoding,'base64','Invalid pinned workflow encoding');
+ if(blob?.encoding!=='base64' || typeof blob.content!=='string')throw new Error('Pinned workflow read is incomplete');
  assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),pin.digest,'Pinned main workflow differs');
  return digest;
 }
