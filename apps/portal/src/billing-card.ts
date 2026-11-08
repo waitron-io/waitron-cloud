@@ -13,10 +13,11 @@ function sdk():Promise<CardApi>{
 }
 class BillingCard extends HTMLElement{
  #checkout='';#locale='en';#revision=0;#widget:ReturnType<CardApi['mount']>|undefined;
+ readonly #hide=()=>this.#stop();
  set checkoutId(value:string){if(value!==this.#checkout){this.#checkout=value;this.#start();}}
  set locale(value:string){if(value!==this.#locale){this.#locale=value;this.#start();}}
- connectedCallback(){this.#start();}
- disconnectedCallback(){this.#stop();}
+ connectedCallback(){window.addEventListener('pagehide',this.#hide);this.#start();}
+ disconnectedCallback(){window.removeEventListener('pagehide',this.#hide);this.#stop();}
  #stop(){this.#revision++;try{this.#widget?.unmount();}catch{/* Removing the owned container also removes any remaining provider frame. */}finally{this.#widget=undefined;this.replaceChildren();}}
  #start(){
   this.#stop();if(!this.isConnected||!this.#checkout)return;

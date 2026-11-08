@@ -70,7 +70,7 @@ for(const boundary of ['venue','account','pagehide'] as const)test(`card widget 
  const browser=await chromium.launch({headless:true});try{
   const page=await browser.newPage();page.setDefaultTimeout(5000);const server=await fixture(page);await page.goto('https://portal.test/account');await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();
   await page.evaluate(boundary=>{const app=(window as any).app;if(boundary==='venue')app.billing.select('22222222-2222-4222-8222-222222222222');else if(boundary==='account'){app.billing.account('other');app.draw();}else window.dispatchEvent(new PageTransitionEvent('pagehide'));},boundary);
-  await page.waitForFunction(()=>(window as any).unmounts===1);await page.evaluate(()=>(window as any).cardReply('success',{}));await page.waitForLoadState('networkidle');assert.equal(server.verifies,0);assert.equal(await page.locator('billing-card iframe').count(),0);
+  assert.equal(await page.evaluate(()=>(window as any).unmounts),1);await page.evaluate(()=>(window as any).cardReply('success',{}));await page.waitForLoadState('networkidle');assert.equal(server.verifies,0);assert.equal(await page.locator('billing-card iframe').count(),0);
  }finally{await browser.close();}
 });
 
@@ -95,5 +95,26 @@ test('a failed provider script can be retried only by starting a fresh setup',as
   await page.route('https://gateway.sumup.com/**/sdk.js',route=>++scripts===1?route.abort():route.fulfill({contentType:'text/javascript',body:sdk}));
   await page.goto('https://portal.test/account');const start=page.getByRole('button',{name:'Add or switch test card',exact:true});await start.click();await page.getByRole('alert').filter({hasText:'We could not confirm the setup.'}).waitFor();
   await start.click();await page.locator('billing-card iframe').waitFor();assert.equal(server.starts,2);assert.equal(scripts,2);
+ }finally{await browser.close();}
+});
+
+test('navigation away from account discards an in-flight Stripe redirect',async()=>{
+ const browser=await chromium.launch({headless:true});let release!:()=>void;const delayed=new Promise<void>(resolve=>release=resolve);try{
+  const page=await browser.newPage();page.setDefaultTimeout(5000);await fixture(page);let entered!:()=>void;const waiting=new Promise<void>(resolve=>entered=resolve);
+  await page.route('**/api/account/billing/method/start',async route=>{entered();await delayed;await route.fulfill({json:{url:'https://checkout.stripe.com/c/pay/late'}});});
+  await page.goto('https://portal.test/account');await page.getByRole('button',{name:'Add or switch test direct debit',exact:true}).click();await waiting;
+  await page.evaluate(()=>(window as any).app.navigate('/login'));release();await page.waitForLoadState('networkidle');assert.equal(page.url(),'https://portal.test/login');
+ }finally{release();await browser.close();}
+});
+
+test('a reopened card still tears down on the next pagehide after a history return',async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage();page.setDefaultTimeout(5000);const server=await fixture(page);await page.goto('https://portal.test/account');
+  await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));
+  assert.equal(await page.evaluate(()=>(window as any).unmounts),1);
+  await page.evaluate(async()=>{const app=(window as any).app;app.billing.account('owner');await app.billing.load();});
+  await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();
+  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));assert.equal(await page.evaluate(()=>(window as any).unmounts),2);assert.equal(await page.locator('billing-card iframe').count(),0);
+  await page.evaluate(()=>(window as any).cardReply('success',{}));await page.waitForLoadState('networkidle');assert.equal(server.verifies,0);
  }finally{await browser.close();}
 });
