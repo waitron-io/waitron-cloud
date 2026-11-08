@@ -263,7 +263,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
 }
 export async function executeOrdinary({api,policy,leases,ci,lane,transport,signal,automatic=false,fallback}){
  assert.ok(!leases.inspect().ciInvocation && leases.inspect().slots.every(slot=>slot.state==='free'),'CI capacity is occupied');
- assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission is closed');
+ if(!automatic)assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission is closed');
  assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head differs');
  const {randomBytes}=await import('node:crypto');
  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
@@ -272,7 +272,7 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
  try{
   const health=signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500);
   assert.equal(await transport.healthy({signal:health}),true,'CI server unavailable');
-  assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
+  if(!automatic)assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
   assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head changed during health check');
   const result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
   assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');

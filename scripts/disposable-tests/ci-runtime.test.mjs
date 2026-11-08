@@ -179,3 +179,18 @@ test('a cancelled concrete job aborts its idle guest instead of retaining a slot
  assert.equal(result.code,125);assert.match(result.error,/job.*completed|job.*cancelled/i);
  assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().slots[0].state,'free');
 });
+
+for(const automatic of [true,false])for(const changesDuringHealth of [false,true])test(`${automatic?'automatic':'manual'} admission with hosted mode ${changesDuringHealth?'during':'before'} health`,async t=>{
+ const {executeOrdinary}=await import('./ci-canary.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'pull_request'};
+ const f=fixture(t,{identity}),get=f.api.get,healthy=f.transport.healthy;let mode=changesDuringHealth?'server':'hosted';
+ f.api.get=async(path,options)=>path.endsWith('/DISPOSABLE_TESTS_MODE')?{value:mode}:path.endsWith('/DISPOSABLE_TESTS_HEAD')?{value:automatic?'':identity.sourceSha}:get(path,options);
+ f.transport.healthy=async options=>{mode='hosted';return healthy(options);};
+ const work=()=>executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic,fallback:async()=>({retry:false})});
+ if(!automatic && !changesDuringHealth)await assert.rejects(work(),/admission is closed/);
+ else {
+  const result=await work();assert.equal(result.code,automatic?0:125);
+  if(!automatic)assert.match(result.error,/admission closed during health/);
+ }
+ assert.deepEqual(f.events,automatic?['transfer','prepare','register','execute','destroy','inspect','deregister']:[]);
+});

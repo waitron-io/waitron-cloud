@@ -61,7 +61,6 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(retryAt)await wait(Math.max(30000,retryAt-Date.now()),undefined,{signal});
  }
  const excludeRuns=new Set(Object.keys(hosted).map(Number));
- if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
  assert.equal(await read(()=>routingHead({api,policy,signal})),'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
