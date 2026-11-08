@@ -7,7 +7,7 @@ import {configuredSlots} from './leases.mjs';
 function ordinaryKey(name,labels){
  if(name==='image / smoke')return 'image-smoke-1';
  if(name==='typecheck')return Array.isArray(labels) && labels.some(label=>typeof label==='string' && label.endsWith('-typecheck-1'))?'typecheck-1':'typecheck';
- if(['changes','ci','publish','server-queue-watchdog','mutation-shared-aggregate','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge','test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
+ if(['server-probe','changes','ci','publish','server-queue-watchdog','mutation-shared-aggregate','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge','test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
  const match=/^((?:test-(?:server|heavy|till|dashboard|fiscal-verifactu|venue-service|provisioning)|mutation-shared)) \(([1-9][0-9]*)\)$/.exec(name);
  return match?`${match[1]}-${match[2]}`:null;
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:image-smoke|changes|ci|publish|server-queue-watchdog|mutation-shared-aggregate|test-server-stream|test-(?:server|heavy|fiscal-verifactu|till|dashboard|venue-service|provisioning)-merge|lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
+export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:server-probe|image-smoke|changes|ci|publish|server-queue-watchdog|mutation-shared-aggregate|test-server-stream|test-(?:server|heavy|fiscal-verifactu|till|dashboard|venue-service|provisioning)-merge|lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
 
 export const runnerCommand=['/opt/actions-runner/bin/Runner.Listener','run'];
 export function ciIdentity(value) {

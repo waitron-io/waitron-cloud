@@ -16,7 +16,7 @@ class CISession(unittest.TestCase):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name);self.resource='dt-ci-0-1'
  def test_ci_accepts_push_schedule_and_retries_for_routing_and_summary_jobs(self):
   for event in ['push','schedule','workflow_dispatch','pull_request']:
-   for key in ['changes-1','ci-1','test-server-stream-1','test-server-merge-1','publish-1','image-smoke-1']:
+   for key in ['server-probe-1','changes-1','ci-1','test-server-stream-1','test-server-merge-1','publish-1','image-smoke-1']:
     with self.subTest(event=event,key=key):
      ci={**CI,'workflowPath':'.github/workflows/ci.yml','event':event,'attempt':2,'jobKey':key}
      value={**request(self.resource),'ci':ci,
