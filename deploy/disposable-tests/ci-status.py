@@ -148,6 +148,8 @@ def collect(home=None):
         result['errorsWrittenAt'] = int(Path(agent['StandardErrorPath']).stat().st_mtime*1000)
     except (OSError, KeyError, TypeError):
         pass
+    if not isinstance(config.get('host'), str) or not config['host']:
+        return result
     payload = dict(recipe=config['recipe'], resources=[job['resource'] for job in result['jobs'] if job['resource'] != UNKNOWN], budget=max(0, deadline-time.monotonic()-0.2))
     options = ['BatchMode=yes', 'StrictHostKeyChecking=yes', 'ConnectTimeout=3', 'ServerAliveInterval=15', 'ServerAliveCountMax=2',
                'ForwardAgent=no', 'ForwardX11=no', 'ClearAllForwardings=yes', 'ControlMaster=no', 'ControlPersist=600',

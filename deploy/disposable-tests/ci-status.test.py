@@ -130,6 +130,15 @@ class StatusTests(unittest.TestCase):
         self.remote = {'broken': 'not an observation'}
         self.assertEqual(self.collect()['host'], 'unknown')
 
+    def test_missing_host_keeps_local_facts_without_an_ssh_call(self):
+        config = json.loads(self.config.read_text()); del config['host']
+        self.config.write_text(json.dumps(config))
+        with patch.object(status.subprocess, 'run', self.invoke):
+            result = status.collect(self.home)
+        self.assertEqual(result['slots']['free'], 3)
+        self.assertEqual(result['host'], 'unknown')
+        self.assertEqual([args[0] for args in self.calls], ['launchctl'])
+
     def test_real_command_timeout_reaps_its_child(self):
         started = time.monotonic()
         self.assertIsNone(status.command([sys.executable, '-c', 'import time; time.sleep(5)'], started + 0.05))
