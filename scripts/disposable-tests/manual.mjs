@@ -101,7 +101,7 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
         const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary}=await import('./ci-canary.mjs');
         api??=new GithubApp(ci);
         const reconcileCI=async()=>{
-        await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
+        await cleanupRunners({leases,api,repository:ci.repository,repositoryId:ci.repositoryId,signal:cleanup});
         if(ci.workflowPath==='.github/workflows/ci.yml'){
           const pending=leases.inspect().ciInvocation;
           if(pending){

@@ -94,7 +94,7 @@ test('automatic pickup fills free slots while an independent manual test keeps i
  assert.deepEqual(ids,[901,902,903,904,905]);assert.equal(peak,5);assert.equal(result.served,5);
  assert.equal(manual.inspect().slots[0].lease.resourceId,lease.resourceId);
  const pending=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:1});
- pending.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
+ pending.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
  const next=[];await automaticTick({configuration:'/fixture/config.json',config:{state:root,hostGeneration:'test',slots:6,version:2,mode:'manual-slots',ci:policy},api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{next.push(ci.jobId);return {code:0};}});
  assert.deepEqual(next,[902,903,904,905],'A pending job must not be admitted again on a different slot');
  const {ciRequest}=await import('./ci-identity.mjs'),finished=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:2});
@@ -126,7 +126,7 @@ for(const obsolete of ['advanced','closed','unavailable'])test(`automatic recove
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
  for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
  const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,slot:1});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
  const config=directory+'/configuration.json';writeFileSync(config,JSON.stringify({version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:directory,ci:{...policy,appEnv:directory+'/app.env',appKey:directory+'/app.pem'}}));
  const originalGet=GithubApp.prototype.get,originalPost=GithubApp.prototype.post;t.after(()=>{GithubApp.prototype.get=originalGet;GithubApp.prototype.post=originalPost;});let modeReads=0;
  const f=fixture();GithubApp.prototype.get=async path=>{if(obsolete==='unavailable' && path.includes('/actions/jobs/'))throw new Error('Fixture API unavailable');return path.endsWith('DISPOSABLE_TESTS_MODE')?(modeReads++,{value:'hosted'}):path.includes('/actions/jobs/')?{id:901,name:'test-server (24)',run_id:789,run_attempt:1,head_sha:head,status:'completed',conclusion:'cancelled'}:path.endsWith('/pulls/12')?{number:12,state:obsolete==='closed'?'closed':'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}}:{...f.run,status:'completed'};};
@@ -165,7 +165,7 @@ test('two workers cannot record the same GitHub job on different slots',async t=
  const root=mkdtempSync(tmpdir()+'/auto-duplicate-');t.after(()=>rmSync(root,{recursive:true,force:true}));
  new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});
  const first=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:0}),second=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:6,slot:1});
- const intent={nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'};
+ const intent={repositoryId:123,nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'};
  first.setInvocation(intent);
  assert.throws(()=>second.setInvocation({...intent,nonce:'b'.repeat(32)}),/job.*recorded/i);
  assert.equal(second.inspect().ciInvocation,undefined);assert.equal(first.inspect().ciInvocation.jobId,901);
@@ -261,7 +261,7 @@ test('recovery of a refused intent preserves a job assigned after its previous A
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
  for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
  const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,slot:1});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'refused'});
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'refused'});
  const f=fixture(),get=f.api.get;f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:'in_progress',runner_id:42}:get(path);
  f.api.post=async()=>assert.fail('An assigned job must survive recovery without cancellation or rerun');
  const result=await reconcileManual({state,hostGeneration:'test',slots:6,slot:1,transport:{destroy:async()=>assert.fail('A refused job has no guest to remove')},ci:policy,api:f.api});
@@ -333,7 +333,7 @@ for(const busy of ['none','busy','retired','pending'])test(`reviewed workers sta
   if(tries===1 && ['retired','pending'].includes(busy)){
    const {LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5});
    if(busy==='retired'){const lease=leases.reserveLocal(ciRequest('I',ci)).lease;leases.release(lease,{resourceId:lease.resourceId,absent:true});}
-   else leases.setInvocation({nonce:'b'.repeat(32),sourceSha:otherHead,workflowSha:otherHead,route:'server',createdAt:Date.now(),runId:790,attempt:1,jobId:911,ordinaryStage:'cancel-requested'});
+   else leases.setInvocation({repositoryId:123,nonce:'b'.repeat(32),sourceSha:otherHead,workflowSha:otherHead,route:'server',createdAt:Date.now(),runId:790,attempt:1,jobId:911,ordinaryStage:'cancel-requested'});
   }
   return {code:busy!=='none' && tries===1?75:0};
  }});
@@ -411,7 +411,7 @@ test('pickup recovers an interrupted slot while a slower worker still owns its s
  f.jobs.splice(4);f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  for(let slot=0;slot<3;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
  const interrupted=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:3}),nonce='c'.repeat(32);
- interrupted.setInvocation({nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});
+ interrupted.setInvocation({repositoryId:123,nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});
  let finish,fourthStarted,fastDone=false;const held=new Promise(resolve=>{finish=resolve;}),fourth=new Promise(resolve=>{fourthStarted=resolve;});
  const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},recover:async()=>{
   if(fastDone && interrupted.inspect().ciInvocation)interrupted.clearInvocation(nonce);
@@ -441,7 +441,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
    if(++runReads===2 && ['transient-failure','admitted-sibling','ledger-failure'].includes(refusalRead)){
     if(refusalRead==='admitted-sibling'){
      let ready;const started=new Promise(resolve=>{ready=resolve;});
-     sibling=withAvailableSlot(config,async({leases})=>{const nonce='f'.repeat(32);leases.setInvocation({nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});ready();await siblingHeld;leases.clearInvocation(nonce);return {code:0};});
+     sibling=withAvailableSlot(config,async({leases})=>{const nonce='f'.repeat(32);leases.setInvocation({repositoryId:123,nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});ready();await siblingHeld;leases.clearInvocation(nonce);return {code:0};});
      await started;
     }
     if(refusalRead==='ledger-failure'){renameSync(config.state+'/ledger/state.json',config.state+'/ledger/saved.json');missing();}
@@ -463,7 +463,7 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
   if(refusalRead==='persisted-failure')throw Object.assign(new Error('Temporary cancellation response failure'),{status:502});
   cancelled();
  };
- if(refusalRead==='existing-pending')new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5}).setInvocation({nonce:'e'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
+ if(refusalRead==='existing-pending')new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5}).setInvocation({repositoryId:123,nonce:'e'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
  const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
   if(ci.jobId===912){if(refusalRead==='ready')await cancel;if(refusalRead==='admitted-sibling')await firstReadFailed;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
   return {code:0};

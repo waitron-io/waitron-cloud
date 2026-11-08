@@ -212,7 +212,7 @@ test('slot-scoped CI intent and cleanup never overwrite a running neighbor',asyn
  const {leases,dir}=await setup(t,{slots:4});
  const {LocalLeases}=await import(module);
  const first=new LocalLeases(dir,{...config,slots:4,slot:1}),second=new LocalLeases(dir,{...config,slots:4,slot:2});
- const invocation={nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ const invocation={repositoryId:123,nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
  first.setInvocation(invocation);second.setInvocation({...invocation,nonce:'b'.repeat(32),jobId:902});
  assert.equal(first.inspect().ciInvocation.jobId,901);assert.equal(second.inspect().ciInvocation.jobId,902);
  const a=first.reserveLocal(request('scoped-a')).lease,b=second.reserveLocal(request('scoped-b')).lease;
@@ -228,7 +228,7 @@ test('slot-scoped CI intent and cleanup never overwrite a running neighbor',asyn
 test('multi-slot CI metadata must be scoped and malformed shared records stay intact',async t=>{
  const {leases,dir}=await setup(t,{slots:4});const {LocalLeases}=await import(module);
  const slot=new LocalLeases(dir,{...config,slots:4,slot:2});
- const invocation={nonce:'c'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ const invocation={repositoryId:123,nonce:'c'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
  assert.throws(()=>leases.setInvocation(invocation),/scoped|slot/i);
  assert.equal(slot.inspect().state,undefined);assert.equal(slot.inspect().id,undefined);
  slot.setInvocation(invocation);assert.equal(slot.inspect().ciInvocation.jobId,901);

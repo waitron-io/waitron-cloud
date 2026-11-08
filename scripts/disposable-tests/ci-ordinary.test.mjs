@@ -21,7 +21,7 @@ function evidence(){return {repository:{id:123,full_name:'fixture/cloud'},workfl
 function pending(t,ordinaryStage='admitted'){
  const root=mkdtempSync(join(tmpdir(),'ordinary-intent-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage});
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage});
  return leases;
 }
 
@@ -208,4 +208,40 @@ for(const [name,key,allowed] of [['test-adjustments','test-adjustments-1',true],
   patch:async(path,body)=>{writes.push(path);mode=body.value;},post:async path=>{writes.push(path);if(path.endsWith('/cancel'))cancelled=true;}};
  if(allowed){assert.equal((await controller.fallbackOrdinary({api,policy,ci,leases})).retry,true);assert.deepEqual(writes,['/repos/fixture/cloud/actions/variables/DISPOSABLE_TESTS_MODE','/repos/fixture/cloud/actions/runs/789/cancel','/repos/fixture/cloud/actions/runs/789/rerun']);}
  else {await assert.rejects(controller.fallbackOrdinary({api,policy,ci,leases}),/job differs/);assert.deepEqual(writes,[]);}
+});
+
+// Forgetting a peer orphan without asking its repository leaks its runner.
+test('foreground runner cleanup leaves another repository orphan for its own App',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');
+ const root=mkdtempSync(join(tmpdir(),'ordinary-peer-orphan-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
+ const first=controller.admitOrdinary(policy,head,evidence());
+ for(const identity of [first,{...first,repositoryId:999,jobId:902}]){
+  const lease=leases.reserveLocal(ciRequest('I',identity)).lease;
+  leases.release(lease,{resourceId:lease.resourceId,absent:true});
+ }
+ let present=true;const deleted=[];
+ const api={get:async()=>({total_count:present?1:0,runners:present?[{id:1001,name:'dt-123-789-1-901'}]:[]}),delete:async path=>{deleted.push(path);present=false;}};
+ await controller.cleanupRunners({leases,api,repository:policy.repository,repositoryId:123});
+ assert.deepEqual(deleted,['/repos/fixture/cloud/actions/runners/1001']);
+ assert.deepEqual(leases.inspect().orphanRunners.map(o=>o.ci.repositoryId),[999]);
+});
+
+test('bounded fallback cancels its closed unchanged-head queued job without retry',async t=>{
+ const leases=pending(t);let mode='server',cancelled=false;const writes=[];
+ const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ const api={get:async path=>path.includes('/pulls/')?{...evidence().pull,state:'closed'}:path.includes('/variables/')?{value:mode}:
+  path.includes('/jobs/')?{...evidence().job,status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:
+  {...evidence().run,status:cancelled?'completed':'in_progress'},patch:async(path,body)=>{mode=body.value;},post:async path=>{assert.equal(mode,'hosted');writes.push(path);cancelled=true;}};
+ const result=await controller.fallbackOrdinary({api,policy,ci,leases});
+ assert.equal(result.retry,false);assert.equal(result.obsolete,true);
+ assert.deepEqual(writes,['/repos/fixture/cloud/actions/runs/789/cancel']);
+});
+
+test('the shared pool accepts a separately pinned Cloud policy and refuses ambiguous repository identities',()=>{
+ const config={version:2,mode:'manual-slots',slots:6,host:'fixture.invalid',hostGeneration:'fixture',recipe:'/fixture/recipe',repository:'/fixture/repo.git',state:'/fixture/state',
+  ci:{...policy,appEnv:'/fixture/waitron.env',appKey:'/fixture/key'},cloudCi:{...policy,repository:'fixture/second',repositoryId:999,appEnv:'/fixture/cloud.env',appKey:'/fixture/key'}};
+ assert.doesNotThrow(()=>controller.validateCIConfig(config));
+ assert.throws(()=>controller.validateCIConfig({...config,cloudCi:{...config.cloudCi,repositoryId:123}}),/repository|policy/i);
+ assert.throws(()=>controller.validateCIConfig({...config,cloudCi:{...config.cloudCi,workflowDigest:'bad'}}),/digest|match/i);
 });

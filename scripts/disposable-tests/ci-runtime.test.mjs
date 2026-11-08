@@ -52,7 +52,7 @@ test('uncertain cleanup preserves the original preparation failure in the report
  const {executeCanary}=await import('./ci-canary.mjs');assert.equal(typeof executeCanary,'function');const f=fixture(t,{uncertain:true});
  const {createHash}=await import('node:crypto');const workflow='reviewed workflow';
  const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:ci.workflowPath,workflowDigest:createHash('sha256').update(workflow).digest('hex')};
- const invocation={nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1};
+ const invocation={repositoryId:123,nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1};
  f.leases.setInvocation(invocation);f.transport.prepare=async()=>{throw new Error('original preparation refusal');};
  f.api.get=async path=>path.includes('/contents/')?{content:Buffer.from(workflow).toString('base64'),encoding:'base64'}:
  path.includes('/commits/')?{sha:ci.sourceSha,commit:{tree:{sha:ci.sourceTree}}}:
@@ -88,7 +88,7 @@ test('ordinary job admission requires its concrete persisted Mac intent before a
  const f=fixture(t,{identity});
  await assert.rejects(runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'}),/recorded.*CI|CI.*intent/i);
  assert.deepEqual(f.events,[]);assert.equal(f.leases.inspect().slots[0].state,'free');
- f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ f.leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,0);
 });
 test('a busy runner with an unassigned intended job aborts the active guest promptly',async t=>{
@@ -108,7 +108,7 @@ for(const [jobKey,apiJobName] of [['test-till-1','test-till (1)'],['test-till-7'
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey};
  const f=fixture(t,{identity,apiJobName});
- f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ f.leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});
  assert.equal(result.code,0,result.error);assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
  assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
@@ -119,7 +119,7 @@ test('UI refuses a matrix-looking API job name before registering',async t=>{
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-ui-1'};
  const f=fixture(t,{identity,apiJobName:'test-ui (1)'});
- f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ f.leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,125);
  assert.equal(f.events.includes('register'),false);assert.equal(f.leases.inspect().slots[0].state,'free');
 });

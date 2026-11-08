@@ -31,7 +31,7 @@ test('automatic manual reconciliation retries orphan removal after freeing a CI 
  const lease=leases.reserveLocal(ciRequest('I',ci)).lease;leases.start(lease);let gone=false,registered=true;
  const api={get:async()=>({total_count:registered?1:0,runners:registered?[{id:1001,name:'dt-123-789-1-901'}]:[]}),
  delete:async()=>{assert.equal(gone,true);registered=false;}};
- const result=await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/cloud'},api,
+ const result=await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/cloud',repositoryId:123},api,
  transport:{destroy:async()=>{gone=true;},inspect:async()=>({resourceId:lease.resourceId,absent:true})}});
  assert.equal(result.code,0);assert.equal(registered,false);assert.deepEqual(leases.inspect().orphanRunners,[]);
 });
@@ -40,7 +40,7 @@ test('a hosted canary waits without holding the slot controller lock',async t=>{
  const {withKernelLock}=await import('./kernel-lock.mjs'),{LocalLeases}=await import('./leases.mjs');
  const root=mkdtempSync(join(tmpdir(),'ci-hosted-lock-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
  await withKernelLock(state,async()=>{new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
- const invocation={nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'hosted',createdAt:Date.now(),runId:789,attempt:1};
+ const invocation={repositoryId:123,nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'hosted',createdAt:Date.now(),runId:789,attempt:1};
  let ready,finish;const waiting=new Promise(r=>ready=r),done=new Promise(r=>finish=r);
  const job=name=>({id:name==='summary'?902:901,name,run_id:789,run_attempt:1,head_sha:invocation.workflowSha,status:'completed',conclusion:'success',labels:['ubuntu-latest'],runner_id:1001});
  const api={get:async path=>{
@@ -59,7 +59,7 @@ test('background recovery cancels only the recorded Waitron attempt after guest 
  const root=mkdtempSync(join(tmpdir(),'waitron-ci-recovery-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');let leases;
  await withKernelLock(state,async()=>{leases=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
  const identity={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowSha:'1'.repeat(40),workflowDigest:'2'.repeat(64),event:'workflow_dispatch',sourceSha:'1'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'test-dashboard-1'};
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  const lease=leases.reserveLocal(ciRequest('I',identity)).lease;leases.start(lease);let gone=false,cancelled=false;
  const api={get:async path=>path.includes('/runners?')?{total_count:0,runners:[]}:
  path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,head_sha:identity.workflowSha,status:cancelled?'completed':'queued'}:
@@ -73,7 +73,7 @@ for(const attempt of [1,2])test(`a completed ordinary job retires its intent wit
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
  const root=mkdtempSync(join(tmpdir(),'completed-ci-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');let leases;
  await withKernelLock(state,async()=>{leases=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});let cancelled=false;
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});let cancelled=false;
  const api={get:async path=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:'completed',conclusion:'success'}:
  {id:789,run_attempt:attempt,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:'in_progress'},post:async()=>{cancelled=true;throw new Error('Completed job was cancelled');}};
  await reconcileManual({state,hostGeneration:'test',ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,transport:{destroy:async()=>assert.fail('No guest is present')}});
@@ -84,7 +84,7 @@ test('background recovery switches a lost ordinary typecheck to hosted and retri
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
  const root=mkdtempSync(join(tmpdir(),'ordinary-recovery-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');let leases;
  await withKernelLock(state,async()=>{leases=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:1,bootstrap:true});return {code:0};},{bootstrap:true});
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ leases.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
  let mode='server',cancelled=false,retried=false;
  const api={get:async path=>path.includes('/pulls/')?{number:12,state:'open',head:{sha:'1'.repeat(40),repo:{id:123}},base:{repo:{id:123}}}:path.includes('/variables/')?{value:mode}:path.includes('/jobs/')?
  {id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:cancelled?'completed':'queued'}:
@@ -107,7 +107,7 @@ test('CI control reads configured capacity and refuses a mode change with any pe
  const original=GithubApp.prototype.get;GithubApp.prototype.get=async path=>({value:path.endsWith('_HEAD')?'1'.repeat(40):'hosted'});t.after(()=>{GithubApp.prototype.get=original;});
  const status=await main([config,'status']);assert.equal(status.state.slots.length,4);assert.equal(status.mode,'hosted');
  const slot=new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,slot:3});
- slot.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ slot.setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  await assert.rejects(main([config,'mode','hosted','--reason','fixture']),/CI work must finish/);
  assert.equal(slot.inspect().ciInvocation.jobId,901);
 });
@@ -119,7 +119,7 @@ test('recovery serializes run cancellation across independently owned slots',asy
  await withKernelLock(state,async()=>{new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,bootstrap:true});
   for(let slot=0;slot<4;slot++)await withKernelLock(join(state,'slot-'+slot),async()=>({code:0}),{bootstrap:true});
  },{bootstrap:true});
- for(let slot=0;slot<2;slot++)new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,slot}).setInvocation({nonce:String(slot+1).repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901+slot});
+ for(let slot=0;slot<2;slot++)new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,slot}).setInvocation({repositoryId:123,nonce:String(slot+1).repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901+slot});
  let finish,ready,posts=0,done=false;const gate=new Promise(r=>finish=r),entered=new Promise(r=>ready=r);
  const api={get:async path=>path.includes('/jobs/')?{id:Number(path.split('/').at(-1)),run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:done?'completed':'queued'}:
  {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:done?'completed':'in_progress'},
@@ -143,7 +143,7 @@ test('pool recovery distinguishes pending CI cleanup from live slot owners',asyn
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,bootstrap:true});
   for(let slot=0;slot<4;slot++)await withKernelLock(state+'/slot-'+slot,async()=>({code:0}),{bootstrap:true});
  },{bootstrap:true});
- new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,slot:2}).setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,slot:2}).setInvocation({repositoryId:123,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  const api={get:async path=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:'completed',conclusion:'success'}:
  {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:'in_progress'}};
  const config={state,hostGeneration:'test',slots:4,ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,transport:{destroy:async()=>assert.fail('No guest remains')}};

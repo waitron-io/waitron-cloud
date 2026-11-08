@@ -29,11 +29,20 @@ export function orphanRunner(value) {
 }
 
 export function ciInvocation(value){
- assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId','ordinaryStage'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
- if(value.ordinaryStage!==undefined)assert.ok(['admitted','refused','cancel-requested'].includes(value.ordinaryStage) &&
-  value.route==='server' && Number.isSafeInteger(value.jobId) && value.sourceSha===value.workflowSha,'Invalid ordinary CI stage');
+ assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId','ordinaryStage','afterRunId','label'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,repositoryId,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ if(value.ordinaryStage!==undefined){
+  assert.ok(['awaiting-run','admitted','refused','cancel-requested'].includes(value.ordinaryStage) &&
+   value.route==='server' && value.sourceSha===value.workflowSha,'Invalid ordinary CI stage');
+  if(value.ordinaryStage==='awaiting-run')assert.ok(value.runId===null && value.attempt===null && value.jobId===undefined && value.label===undefined && value.afterRunId!==undefined,'Invalid awaiting invocation');
+  else assert.ok(Number.isSafeInteger(value.jobId),'Invalid ordinary CI job');
+ }
+ if(value.afterRunId!==undefined){
+  assert.ok(Number.isSafeInteger(value.afterRunId) && value.afterRunId>=0 && value.ordinaryStage!==undefined,'Invalid invocation inventory');
+  if(value.ordinaryStage!=='awaiting-run')assert.ok(value.runId>value.afterRunId && value.attempt===1 && value.label===`dt-${value.repositoryId}-${value.runId}-1-typecheck`,'Invalid invocation label');
+ }else assert.equal(value.label,undefined,'Unexpected invocation label');
  if(value.jobId!==undefined)assert.ok(Number.isSafeInteger(value.jobId) && value.jobId>0,'Invalid recorded CI job');
  if(value.serverRunnerId!==undefined)assert.ok(value.route==='server' && Number.isSafeInteger(value.serverRunnerId) && value.serverRunnerId>0,'Invalid completed CI runner');
+ assert.ok(Number.isSafeInteger(value.repositoryId) && value.repositoryId>0,'Invalid invocation repository identity');
  assert.match(value.nonce,/^[a-f0-9]{32}$/,'Invalid CI invocation nonce');
  for(const key of ['sourceSha','workflowSha'])assert.match(value[key],/^[a-f0-9]{40}$/,'Invalid CI invocation Git identity');
  assert.ok(['hosted','server'].includes(value.route) && Number.isSafeInteger(value.createdAt) && value.createdAt>=0 &&

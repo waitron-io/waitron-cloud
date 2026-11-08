@@ -55,7 +55,7 @@ test('returned runner ID is durable before execution and stale identity cannot o
  assert.equal(leases.inspect().orphanRunners[0].runnerId,1001);
 });
 test('dispatch identity is persisted before API calls and stale cleanup cannot erase a successor',t=>{
- const leases=setup(t),invocation={nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:null,attempt:null};
+ const leases=setup(t),invocation={repositoryId:123,nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:null,attempt:null};
  assert.equal(typeof leases.setInvocation,'function','Dispatch needs recoverable identity');
  leases.setInvocation(invocation);assert.deepEqual(leases.inspect().ciInvocation,invocation);
  leases.setInvocation({...invocation,runId:789,attempt:1});
@@ -141,4 +141,25 @@ test('routed keys still refuse extra shards and the jobs deliberately kept hoste
  for(const jobKey of ['lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
   'test-server-stream-1','mutation-shared-aggregate-1','test-server-merge-1','test-till-merge-1','test-dashboard-merge-1','test-light-a-01','test-bookings-1\n'])
   assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
+});
+
+// A missing repository makes background recovery choose the wrong App.
+test('invocation recovery refuses missing repository identity without writing state',t=>{
+ const leases=setup(t),before=readFileSync(join(leases.directory,'state.json'),'utf8');
+ const value={nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:null,attempt:null};
+ assert.throws(()=>leases.setInvocation(value),/repository|invocation/i);
+ assert.equal(readFileSync(join(leases.directory,'state.json'),'utf8'),before);
+});
+
+// Losing the initial HEAD inventory during binding leaves later selected jobs unserved.
+test('Cloud awaiting and concrete intents retain their original recovery inventory',t=>{
+ const leases=setup(t),awaiting={repositoryId:123,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:null,attempt:null,ordinaryStage:'awaiting-run',afterRunId:700};
+ leases.setInvocation(awaiting);assert.deepEqual(leases.inspect().ciInvocation,awaiting);
+ for(const ordinaryStage of ['admitted','refused','cancel-requested']){
+  const bound={...awaiting,ordinaryStage,runId:789,attempt:1,jobId:901,label:'dt-123-789-1-typecheck'};
+  leases.setInvocation(bound);assert.deepEqual(leases.inspect().ciInvocation,bound);
+ }
+ for(const bad of [{...awaiting,afterRunId:-1},{...awaiting,afterRunId:'700'},{...awaiting,runId:789,attempt:1},{...awaiting,jobId:901},
+  {...awaiting,ordinaryStage:'admitted',runId:789,attempt:1,jobId:901,label:'dt-999-789-1-typecheck'}])assert.throws(()=>leases.setInvocation(bad),/invocation|ordinary|awaiting|label|inventory/i);
+ assert.equal(leases.inspect().ciInvocation.createdAt,1000);
 });

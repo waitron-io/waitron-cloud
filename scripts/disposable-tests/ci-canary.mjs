@@ -74,12 +74,15 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
   assert.ok(run.event==='pull_request' && run.pull_requests?.length===1,'Ordinary fallback PR identity differs');
   const pull=await api.get(`/repos/${policy.repository}/pulls/${run.pull_requests[0].number}`,{signal});
   assert.equal(pull.number,run.pull_requests[0].number,'Ordinary fallback PR identity changed');
-  const current=pull.state==='open' && pull.head?.sha===(ci.sourceSha??ci.workflowSha) &&
+  const current=pull.head?.sha===(ci.sourceSha??ci.workflowSha) &&
    pull.head.repo?.id===ci.repositoryId && pull.base?.repo?.id===ci.repositoryId;
   if(!automatic)assert.ok(current,'Ordinary fallback PR head changed');
-  return current;
+  return current && (pull.state==='open'?'open':!automatic && pull.state==='closed'?'closed':false);
  };
- if(!await currentPR(run))return {retry:false,obsolete:true};
+ const initialPR=await currentPR(run);
+ if(!initialPR)return {retry:false,obsolete:true};
+ if(initialPR==='closed')assert.ok(job.labels?.length===2 && job.labels.includes('self-hosted') && job.labels.includes(`dt-${ci.repositoryId}-${ci.runId}-${ci.attempt}-typecheck`),'Closed PR fallback label differs');
+ if(ownedCancel && run.run_attempt===ci.attempt+1 && initialPR==='closed')return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
  if(job.status!=='completed'){
@@ -98,7 +101,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
    completed.head_sha===ci.workflowSha && completed.status==='completed','Ordinary fallback cancellation is unfinished');
   return {retry:false,pending:true};
  }
- if(!await currentPR(run))return {retry:false,obsolete:true};
+ if(await currentPR(run)!=='open')return {retry:false,obsolete:true};
  await api.post(path+'/rerun',undefined,{signal});
  return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
 }
@@ -196,7 +199,7 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
  assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission is closed');
  assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head differs');
  const {randomBytes}=await import('node:crypto');
- const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
+ const invocation={repositoryId:policy.repositoryId,nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
   route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,ordinaryStage:'admitted'};
  leases.setInvocation(invocation);
  try{
@@ -297,8 +300,9 @@ async function namedRunners(api,repository,name,signal){
  }
  throw new Error('Incomplete runner inventory');
 }
-export async function cleanupRunners({leases,api,repository,signal}){
+export async function cleanupRunners({leases,api,repository,repositoryId,signal}){
  for(const orphan of leases.inspect().orphanRunners??[]){
+  if(orphan.ci.repositoryId!==repositoryId)continue;
   const found=await namedRunners(api,repository,orphan.runnerName,signal);
   assert.ok(found.length<=1,'Duplicate CI runner name');
   for(const runner of found){assert.ok(Number.isSafeInteger(runner.id) && runner.id>0 &&
@@ -372,7 +376,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
  if(result.cleanup==='absent'){
-  try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}
+  try{await cleanupRunners({leases,api,repository,repositoryId:ci.repositoryId,signal:AbortSignal.timeout(120000)});}
   catch{return {...result,code:125,runnerCleanup:'pending'};}
  }
  return result;
@@ -381,7 +385,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
 export async function dispatchCanary({api,leases,policy,sourceSha,workflowSha,route,signal,wait=delay}){
  const {randomBytes}=await import('node:crypto');
  let invocation=leases.inspect().ciInvocation;
- if(!invocation){invocation={nonce:randomBytes(16).toString('hex'),sourceSha,workflowSha,route,createdAt:Date.now(),runId:null,attempt:null};
+ if(!invocation){invocation={repositoryId:policy.repositoryId,nonce:randomBytes(16).toString('hex'),sourceSha,workflowSha,route,createdAt:Date.now(),runId:null,attempt:null};
   leases.setInvocation(invocation);
   // A lost dispatch response is ambiguous. Persist before sending, and never
   // repeat this POST: reconcile the unique run-name or leave the intent intact.
@@ -546,12 +550,13 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 export function validateCIConfig(config){
- assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+ assert.deepEqual(Object.keys(config).sort(),['ci',...(config.cloudCi===undefined?[]:['cloudCi']),'host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
  configuredSlots(config);
- const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
+ for(const ci of [config.ci,...(config.cloudCi===undefined?[]:[config.cloudCi])]){
+ assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&
   [ci.repositoryId,ci.workflowId].every(v=>Number.isSafeInteger(v)&&v>0),'Invalid CI policy identity');
- assert.match(ci.workflowDigest,/^[a-f0-9]{64}$/);
+ assert.match(ci.workflowDigest,/^[a-f0-9]{64}$/,'Invalid workflow digest');
  if(ci.workflowHistory!==undefined){
   assert.ok(ci.workflowPath==='.github/workflows/ci.yml' && Array.isArray(ci.workflowHistory) && ci.workflowHistory.length>0 && ci.workflowHistory.length<=10,'Invalid workflow history bound');
   for(const pin of ci.workflowHistory){
@@ -560,7 +565,10 @@ export function validateCIConfig(config){
   assert.ok(new Set(ci.workflowHistory.map(pin=>pin.sha)).size===ci.workflowHistory.length && new Set(ci.workflowHistory.map(pin=>pin.digest)).size===ci.workflowHistory.length && ci.workflowHistory[0].digest===ci.workflowDigest,'Invalid workflow history versions');
  }
  for(const path of [config.state,ci.appEnv,ci.appKey])assert.ok(typeof path==='string' && path.startsWith('/'),'CI paths must be absolute');
+ }
+ if(config.cloudCi)assert.ok(config.cloudCi.repositoryId!==config.ci.repositoryId && config.cloudCi.repository!==config.ci.repository && config.cloudCi.workflowPath==='.github/workflows/ci.yml','Cloud policy needs a distinct ordinary repository');
 }
+
 const cli=process.argv[1];
 if(cli && cli!=='-'){
  const {realpathSync}=await import('node:fs'),{pathToFileURL}=await import('node:url');
