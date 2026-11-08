@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
+import type {Pool} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
 import {AllowanceConfigStore,reserveAllowance,BillingStore,transaction} from '@waitron-cloud/registration';
@@ -38,8 +39,8 @@ function provider(){
   },
  }};
 }
-function app(f:Awaited<ReturnType<typeof owner>>,p=provider(),enabled=true){
- return createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
+function app(f:Awaited<ReturnType<typeof owner>>,p=provider(),enabled=true,pool:Pool=db.pool){
+ return createAccountApp({pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
   planMode:'test-venue-levels',billingAccount:{accountIds:[f.accountId]},...(enabled?{billingMethods:{stripeAccount:'stripe-test:acct_synthetic',sumupAccount:'sumup-sandbox:MSYNTHETIC',client:p.client}}:{})});
 }
 function request(target:ReturnType<typeof app>,session:SessionCredentials,path:string,body:unknown,headers:Record<string,string>={}){
@@ -192,4 +193,52 @@ test('route verification unlocks the existing full trial allowance without refil
  assert.equal((await request(target,f.session,verify,{venueId:f.venueId})).status,200);
  assert.equal((await reserve(4n)).units,'4');
  assert.equal((await db.pool.query("SELECT sum(units)::text AS units FROM billing_allowance_reservations WHERE account_id=$1 AND state='held'",[f.accountId])).rows[0].units,'6');
+});
+
+test('reading a start still waiting on the provider reports an unconfirmed setup rather than failure',async()=>{
+ const f=await owner(),p=provider(),g=gate();p.setPause(g.pause);const target=app(f,p);
+ const pending=request(target,f.session,start,{venueId:f.venueId,kind:'card'});
+ try{
+  await g.waiting;const response=await request(target,f.session,'/api/account/billing/read',{});assert.equal(response.status,200);
+  assert.deepEqual((await response.json()).venues[0].paymentMethods,{selected:null,setup:{kind:'card',state:'pending'}});
+ }finally{g.release();await pending;}
+});
+
+function observeTransactions(afterQuery:(sql:string)=>Promise<void>):Pool{
+ return new Proxy(db.pool,{get(target,key){
+  if(key==='connect')return async()=>{
+   const client=await target.connect(),query=client.query.bind(client),release=client.release.bind(client);
+   client.query=(async(...args:unknown[])=>{
+    const result=await (query as (...args:unknown[])=>Promise<unknown>)(...args);
+    if(typeof args[0]==='string')await afterQuery(args[0]);return result;
+   }) as typeof client.query;
+   client.release=(error?:Error|boolean)=>{client.query=query;client.release=release;release(error);};return client;
+  };
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});
+}
+
+test('an already verified shortcut refuses a venue moved after its first read in the final transaction',async()=>{
+ const f=await owner(),p=provider(),original=app(f,p),nextBusiness=randomUUID();
+ await request(original,f.session,start,{venueId:f.venueId,kind:'card'});await request(original,f.session,verify,{venueId:f.venueId});
+ await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[nextBusiness,f.organisationId]);
+ let reads=0;const calls=p.calls.length;
+ const pool=observeTransactions(async sql=>{
+  if(sql==='SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1'&&++reads===2)
+   await db.secondPool.query('UPDATE venues SET legal_business_id=$1 WHERE id=$2',[nextBusiness,f.venueId]);
+ });
+ const response=await request(app(f,p,true,pool),f.session,verify,{venueId:f.venueId});
+ assert.equal(reads,2);assert.equal(response.status,403);assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod?.kind,'card');
+});
+
+test('an already verified shortcut rechecks a session that expired after reading the saved setup',async()=>{
+ const f=await owner(),p=provider(),original=app(f,p);
+ await request(original,f.session,start,{venueId:f.venueId,kind:'card'});await request(original,f.session,verify,{venueId:f.venueId});
+ let setupRead=false,expired=false;const calls=p.calls.length;
+ const pool=observeTransactions(async sql=>{
+  if(sql.startsWith('SELECT * FROM billing_method_setups '))setupRead=true;
+  if(sql==='COMMIT'&&setupRead&&!expired){expired=true;await db.secondPool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1",[f.accountId]);}
+ });
+ const response=await request(app(f,p,true,pool),f.session,verify,{venueId:f.venueId});
+ assert.equal(expired,true);assert.equal(response.status,401);assert.equal(p.calls.length,calls);
 });

@@ -672,7 +672,9 @@ With methods enabled, billing/read adds `paymentMethods` to test venues, for exa
 `{"selected":"card","setup":{"kind":"direct_debit","state":"pending"}}`.
 This view contains no private provider references. Read state is derived from the
 saved binding and completed method row; a provider refusal appears in the verify
-reply. Each provider request rechecks authority, and the final transaction checks it
+reply. A local read reports any unconfirmed setup as pending; it cannot distinguish
+a provider still working from a refused or interrupted setup. Use verify for a
+current provider result. Each provider request rechecks authority, and the final transaction checks it
 again before returning setup details or selecting a method. Both method routes share
 the chooser's limit of 30 requests per account per minute. They leave renewal dates
 and paid periods unchanged.
@@ -694,8 +696,7 @@ With test methods enabled, every portal document and asset, including error repl
 uses the same policy with exact sandbox hosts. Script loading is restricted to
 `gateway.sumup.com`; frames can also use `api.sumup.com`, `eu-test.oppwa.com`,
 `test.oppwa.com` and `test.ppipe.net`. Connections can reach `api.sumup.com`,
-`gateway.sumup.com` and `js.sumup.com`; images can use `static.sumup.com` and data
-URLs. The sandbox run in the receipt observed these hosts through card confirmation.
+`gateway.sumup.com` and `js.sumup.com`; images can use `static.sumup.com`. The sandbox run in the receipt observed these hosts through card confirmation.
 Forms still submit only to Cloud. When test methods are off, these exceptions are
 absent. Changing account, venue or page removes the card widget and discards its
 late replies.

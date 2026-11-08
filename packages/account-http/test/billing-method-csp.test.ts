@@ -12,6 +12,7 @@ for(const enabled of [false,true])test(`portal method policy ${enabled?'enabled'
  for(const csp of policies){
   const directives=Object.fromEntries(csp.split(';').map(part=>part.trim().split(/\s+/)).map(([name,...values])=>[name,values]));
   assert.deepEqual(directives['form-action'],["'self'"]);assert.deepEqual(directives['frame-ancestors'],["'none'"]);assert.deepEqual(directives['object-src'],["'none'"]);assert.equal(csp.includes('*'),false);assert.equal(csp.includes('unsafe-eval'),false);
+  assert.deepEqual(directives['img-src'],enabled?["'self'",'https://static.sumup.com']:["'self'"]);
   assert.deepEqual(directives['script-src'],enabled?["'self'",'https://gateway.sumup.com']:["'self'"]);
   if(enabled){assert.ok(directives['frame-src']?.includes('https://gateway.sumup.com'));assert.ok(directives['connect-src']?.includes('https://api.sumup.com'));}
   else assert.equal(csp.includes('sumup.com'),false);
@@ -35,4 +36,13 @@ for(const enabled of [false,true])test(`the HTTP server propagates payment polic
    assert.equal(result.status,status);assert.equal(result.policy.includes('https://gateway.sumup.com'),enabled);
   }
  }finally{await running.close();await pool.end();}
+});
+
+test('the HTTP server refuses method settings without the synthetic-account chooser before listening',async()=>{
+ const pool=new Pool({connectionString:'postgres://synthetic@127.0.0.1:1/synthetic'});let running:Awaited<ReturnType<typeof startAccountServer>>|undefined;
+ try{
+  await assert.rejects(async()=>{running=await startAccountServer({pool,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'a'.repeat(64)}}),port:0,
+   config:{portalOrigin:'http://localhost',production:false,rateKey:'b'.repeat(64),trustedProxyIps:[]},portalAssets:assets,planMode:'test-venue-levels',
+   billingMethods:{stripeAccount:'stripe-test:acct_synthetic',sumupAccount:'sumup-sandbox:MSYNTHETIC',client:{async start(){throw new Error('not called');},async verify(){throw new Error('not called');}}}});},/billing_methods.test_mode_required/);
+ }finally{await running?.close();await pool.end();}
 });

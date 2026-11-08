@@ -33,15 +33,16 @@ async function readView(client:PoolClient,accountId:string,methodsEnabled=false)
   let paymentMethods:MethodPanel|undefined;
   if(methodsEnabled&&row.environment==='test'){
    const method=(await client.query(`SELECT selected.kind AS selected,setup.kind AS setup_kind,
-    setup.customer_id,setup.provider_reference,completed.id AS completed
+    completed.id AS completed
     FROM legal_businesses business
     LEFT JOIN billing_businesses billing ON billing.organisation_id=business.organisation_id AND billing.legal_business_id=business.id
     LEFT JOIN billing_payment_methods selected ON selected.organisation_id=business.organisation_id AND selected.legal_business_id=business.id AND selected.id=billing.current_method_id
     LEFT JOIN billing_method_setups setup ON setup.organisation_id=business.organisation_id AND setup.legal_business_id=business.id AND setup.owner_id=$3
     LEFT JOIN billing_payment_methods completed ON completed.organisation_id=business.organisation_id AND completed.legal_business_id=business.id AND completed.id=setup.method_id
     WHERE business.organisation_id=$1 AND business.id=$2`,[scope.organisationId,scope.legalBusinessId,accountId])).rows[0];
+   // A saved intent does not say whether the provider is still working or has refused it.
    paymentMethods={selected:method?.selected??null,setup:method?.setup_kind?{kind:method.setup_kind,
-    state:method.completed?'verified':method.customer_id&&method.provider_reference?'pending':'failed'}:null};
+    state:method.completed?'verified':'pending'}:null};
   }
   result.venues.push({...(paymentMethods?{paymentMethods}:{}),venueId:row.id,level:effectiveVenueLevel(venue.level,history.trials,today),
    trial:history.trials.find(trial=>trial.level==='connected'&&trial.state==='active'&&trial.startedOn<=today&&today<trial.endsOn)??null,

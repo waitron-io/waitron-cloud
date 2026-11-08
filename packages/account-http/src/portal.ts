@@ -7,7 +7,7 @@ export const securityHeaders = {
 };
 export function portalSecurityHeaders(testBillingMethods=false){
   if(!testBillingMethods)return securityHeaders;
-  return {...securityHeaders,'Content-Security-Policy':"default-src 'none'; script-src 'self' https://gateway.sumup.com; connect-src 'self' https://api.sumup.com https://gateway.sumup.com https://js.sumup.com; frame-src https://gateway.sumup.com https://api.sumup.com https://eu-test.oppwa.com https://test.oppwa.com https://test.ppipe.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static.sumup.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"};
+  return {...securityHeaders,'Content-Security-Policy':"default-src 'none'; script-src 'self' https://gateway.sumup.com; connect-src 'self' https://api.sumup.com https://gateway.sumup.com https://js.sumup.com; frame-src https://gateway.sumup.com https://api.sumup.com https://eu-test.oppwa.com https://test.oppwa.com https://test.ppipe.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://static.sumup.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"};
 }
 export async function loadPortalAssets(directory: string): Promise<PortalAssets> {
   const assets = new Map<string, {body: Uint8Array; contentType: string}>();

@@ -133,7 +133,7 @@ for its published timing; slice A's production timing assumption is unqualified 
 these tests. Test-mode availability also does not qualify live-account enablement,
 production fees, supplier/privacy work or real-money billing.
 
-## Local account panel, 7 November 2026
+## Local account panel, 7–8 November 2026
 
 The separately scoped payment-method piece ran through a local Cloud server and a
 throwaway PostgreSQL database. The command was
@@ -152,3 +152,8 @@ Policy violations: scripts from `gateway.sumup.com`; connections to `api.sumup.c
 `eu-test.oppwa.com`, `test.oppwa.com` and `test.ppipe.net`; images from
 `static.sumup.com`. These exact hosts qualify this sandbox run only. The policy
 keeps forms on Cloud and adds no wildcard or live-provider qualification.
+
+After the review removed the unmeasured `data:` image allowance, the same command
+ran again. `sandbox-policy-tightened.log` records card selection at 00:11:36 UTC
+and mandate selection at 00:11:49 UTC on 8 November, with zero policy violations
+and successful fixture cleanup.

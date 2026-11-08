@@ -33,7 +33,7 @@ async function fixture(page:Page,ordinary=false){
  });
  await page.route('https://gateway.sumup.com/**',route=>route.fulfill({contentType:route.request().resourceType()==='script'?'text/javascript':'text/html',body:route.request().resourceType()==='script'?sdk:'<!doctype html><title>Synthetic card fields</title><p>Provider test fields</p>'}));
  await page.route('https://checkout.stripe.com/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic mandate</title><p>Provider test mandate</p><a href="https://portal.test/account">Return</a>'}));
- return {set state(value:string){verifyState=value;},get starts(){return starts;},get verifies(){return verifies;}};
+ return {set pending(kind:'card'|'direct_debit'){setup={kind,state:'pending'};},set state(value:string){verifyState=value;},get starts(){return starts;},get verifies(){return verifies;}};
 }
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: test payment panel preserves a method through pending and failed card setup`,async()=>{
  const browser=await chromium.launch({headless:true});
@@ -47,6 +47,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.evaluate(()=>(window as any).cardOptions.locale),locale==='en'?'en-GB':'es-ES');
   await refresh.click();await page.waitForFunction(()=>(window as any).app.billing.methodState==='pending');
   assert.equal(await panel.locator('iframe').count(),1);assert.equal(await page.evaluate(()=>(window as any).app.billing.venue.paymentMethods.selected),'direct_debit');
+  if(process.env.BILLING_METHOD_RECEIPT_DIR){await mkdir(process.env.BILLING_METHOD_RECEIPT_DIR,{recursive:true});await panel.screenshot({path:process.env.BILLING_METHOD_RECEIPT_DIR+'/pending-'+locale+'-'+theme+'-'+width+'.png'});}
   server.state='failed';await refresh.click();await page.waitForFunction(()=>(window as any).app.billing.methodState==='failed');assert.equal(await panel.locator('iframe').count(),0);
   assert.equal(await page.evaluate(()=>(window as any).app.billing.venue.paymentMethods.selected),'direct_debit');
   await card.click();await panel.locator('iframe').waitFor();server.state='verified';await page.evaluate(()=>(window as any).cardReply('success',{token:'untrusted-browser-value'}));
@@ -116,5 +117,13 @@ test('a reopened card still tears down on the next pagehide after a history retu
   await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();
   await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));assert.equal(await page.evaluate(()=>(window as any).unmounts),2);assert.equal(await page.locator('billing-card iframe').count(),0);
   await page.evaluate(()=>(window as any).cardReply('success',{}));await page.waitForLoadState('networkidle');assert.equal(server.verifies,0);
+ }finally{await browser.close();}
+});
+
+for(const locale of ['en','es'] as const)test(`${locale}: an unverified setup read gives a neutral refresh instruction without claiming provider progress`,async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage({locale});page.setDefaultTimeout(5000);const server=await fixture(page);server.pending='card';await page.goto('https://portal.test/account');
+  await page.getByText(locale==='en'?'Setup is not confirmed. Check the saved method before starting again. Your previous method stays selected.':'La configuración no está confirmada. Consulta el método guardado antes de volver a empezar. El anterior sigue seleccionado.',{exact:true}).waitFor();
+  assert.equal(server.verifies,0);assert.equal(server.starts,0);
  }finally{await browser.close();}
 });
