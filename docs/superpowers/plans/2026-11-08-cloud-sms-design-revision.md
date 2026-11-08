@@ -1,50 +1,36 @@
-# D610: Short SMS design revision for draft #1093
+# D610: SMS design revision for draft #1093
 
-**Scope:** Revise documentation only. The parent obtains Claude's plan read and
-watcher approval before making the revision. No implementation is authorised.
-Use Lane G's 8 November notes at 10:55, 10:58, 11:11 and 11:16; the last two replace earlier purposes and paid-only availability.
+**Documentation only; awaiting watcher approval.** Update the existing draft so the owner can review at most two pages of plain English. Build and landing remain unauthorised.
 
-## What changes
+## Recorded decisions
 
-- Choose GatewayAPI. Password alone signs in; a passkey can also sign in alone.
-  SMS only confirms an added phone or supplies strongest proof on an SMS-only account.
-  Never offer SMS-only login or invent venue staff sign-in purposes.
-- Every Cloud plan includes SMS. State and count both uses per account each month:
-  free 10, first paid 25. Initially unenforced, with configurable figures and switchable enforcement. Leave higher-tier numbers unchosen.
-  Make SMS's initial non-enforcement explicit beside billing's general refusal rule.
-- Propose a minimum 60-second resend wait and at most five guesses per challenge
-  and session, enforced from day one. Resending does not reset the session cap.
-- Cloud stores fixed templates. Requests name a template and supply variables;
-  reject free text and values outside checked types and lengths (digit codes, valid times).
-  Record the owner's 8 November fixed-template rule for every venue email and SMS; leave email code alone.
-- Booking reminders have no default SMS; any future offer needs guest opt-in.
-  Remove extra-paid-booking machinery, provider survey, WhatsApp and AWS-specific onboarding; design no booking product or price.
-- Retain concise safety boundaries: authorised account/venue requests, checked
-  recipients, bounded messages, refusal of expired codes, no sensitive logs, no duplicate uncertain sends,
-  and provider/privacy/sender qualification before enablement. Refresh retained external claims against official public sources during revision, not planning.
+Lane G questions.md records the watcher quoting the owner on 8 November:
+- 10:55: “Gateway sounds good”; booking reminders are not SMS by default and require guest opt-in.
+- 10:58: “SMS requests would follow a template on our server”; the watcher explicitly applies this to every venue email and SMS, with typed, length-limited values.
+- 11:11: “count every send per account”; free 10/month, first paid 25/month, initially unenforced; “make the limit a setting that can be switched on and raised”.
+- 11:25 settled rules replace 11:16 and the hold: “email before SMS, it costs less”. The shared `sign-in-rules-20261108.md` limits SMS to phone confirmation and a second check chosen by the person. These are design decisions, not provider or build approval.
+
+## Revision
+
+- Choose GatewayAPI. Describe phone confirmation and optional second-check codes; email is the default fallback. Do not offer SMS-only sign-in or replace an enrolled app with SMS. Keep the full sign-in/recovery rules in D608's separate #1090 revision.
+- Every plan includes SMS. State the owner’s 10/25 monthly figures once in this spec, count per account and leave higher-tier figures undecided. One send is one encoded message part; keep messages to one part. State that monthly enforcement is initially off and configurable.
+- Propose 60 seconds between requests per phone/account/purpose across browser sessions, and five wrong codes per sign-in attempt. The service checking the code enforces guesses; resending does not restart that attempt or its cap. No extra hourly/daily quota is introduced without an owner decision.
+- Cloud owns fixed templates; callers send a template name and checked variables, never arbitrary text. Add only the requested email-and-SMS template decision to the backlog; preserve bounded legitimate variables.
+- Remove the paid-booking purchase design, provider survey, WhatsApp and AWS-specific onboarding. Booking messages of any kind are outside this gateway revision; a future offer requires guest opt-in.
+- Retain current authority/consent checks, expiry refusals, stable retry identity, unknown-submission protection and no sensitive logs. Spanish recipients initially; qualify other countries separately. Provider privacy, sender eligibility and encoding remain unqualified before enablement. Keep factual detail only when needed; verify any retained external claim from official public sources.
 
 ## Files and size
 
-Only these five files may change in the full candidate:
+Only these five files may change in the complete candidate:
 
-- `docs/superpowers/plans/2026-11-08-cloud-sms-design-revision.md` (this plan).
-- `docs/superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md` (short design).
-- `docs/superpowers/specs/2026-10-29-cloud-billing-design.md` (SMS allowances and existing allowance-slot wording/cross-reference).
-- `docs/backlog/free-services.md` (SMS paragraph only).
-- `docs/backlog.md` (own SMS index text and fixed-template decision only).
+- This plan: `docs/superpowers/plans/2026-11-08-cloud-sms-design-revision.md`.
+- `docs/superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md`: at most two pages, plain English.
+- `docs/superpowers/specs/2026-10-29-cloud-billing-design.md`: SMS exception to account/venue counting in §2; references in non-goals, §3 and §11; both reached-allowance statements (§3/§14); preserve/update both SMS anchors. Link to the SMS figures rather than repeat them.
+- `docs/backlog/free-services.md`: SMS paragraph becomes a short link to the spec.
+- `docs/backlog.md`: only own SMS index text becomes a short link; add the fixed-template decision under Decisions and deliberate limits. Preserve every other byte.
 
-Estimate: zero production-code lines, zero test-code lines; about 140 changed documentation lines, additions plus deletions, including this plan and current branch changes.
-No other backlog bytes, new mechanism or extra approval steps. No accounts, senders, spending, sending or enablement. Recovery and handover choices stay open.
-D608/#1090 is separate: its current spec still requires extra sign-in proofs,
-mailbox-plus-proof reset and separate SMS capacity, and describes AWS onboarding.
-Parent reports these mismatches in progress.log; its separately authorised revision reconciles 11:16. Do not copy or edit that spec in #1093.
+Estimate: 0 production-code lines, 0 test-code lines, about 140 changed documentation lines including existing branch changes and this plan. No accounts, sending, spending, runtime mechanisms or new recovery/handover choices. Cross-check #1090 read-only; report mismatches in progress.log without copying its spec here.
 
 ## Checks and finish line
 
-After revision, inspect the full candidate diff and links for consistent purposes,
-figures and boundaries; verify only the listed files and permitted backlog text changed.
-Use signed-off commits (`git commit -s`), then run the existing immutable document
-check (`node scripts/ci-docs.mjs`) with the planner's exact committed base/head/paths,
-`node --test scripts/ci-docs.test.mjs` and `git diff --check`; no broad suites. Have Claude read the revised design before returning it to the watcher.
-Finish: owner can review a short, consistent SMS design in existing draft #1093;
-no design landing or build until the owner approves.
+Inspect the complete diff, local links, purposes, counting exceptions and two-page/plain-English limit. Run immutable `node scripts/ci-docs.mjs` with the planner’s committed base/head/paths and `git diff --check`; retain the already passing 15-case `node --test scripts/ci-docs.test.mjs` result unless relevant inputs change. Use signed-off commits and a Claude read of the revised design, then update existing draft #1093. Finish: the owner can review a consistent SMS design. No implementation or landing until approved.
