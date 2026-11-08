@@ -286,3 +286,19 @@ test('nightly mutation job runs all four approved wrappers and the allowance hel
   assert.match(allowance, /scripts\/allowance-traffic-guard-probes\.nightly\.mjs/);
   assert.match(allowance, /scripts\/allowance-traffic-guard-probes\.mjs/);
 });
+
+
+test('nightly retains all three diagnostic programs and always uploads their logs', () => {
+  const mutations = nightlyJob('mutations');
+  for (const name of ['Exercise stale ownership under bounded CPU contention',
+    'Check password snapshot ordering and deliberate faults', 'Prove counter rollback, retry and deleted-guard refusal']) {
+    assert.ok(mutations.includes(`      - name: ${name}\n        run: |\n`), `Missing executable nightly step: ${name}`);
+  }
+  assert.equal([...mutations.matchAll(/node scripts\/test-postgres\.mjs exec python3 -u - <<'PYTHON'/g)].length, 2);
+  const upload = mutations.match(/      - name: Retain diagnostic logs\n([\s\S]*)$/)?.[1];
+  assert.ok(upload, 'Nightly must retain diagnostic logs even after failure');
+  assert.match(upload, /if: always\(\)/);
+  assert.match(upload, /uses: actions\/upload-artifact@v4/);
+  assert.match(upload, /name: nightly-diagnostics-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
+  assert.match(upload, /path: diagnostics\//);
+});

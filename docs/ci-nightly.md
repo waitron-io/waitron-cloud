@@ -16,7 +16,10 @@ A separate `nightly-mutations` job retains the two remote-wait checks, billing
 qualification and the complete allowance checks, including the rendered gateway.
 These checks deliberately remove protections in disposable copies. Ordinary pull
 requests run the underlying behavior tests with required-case receipts instead.
-The password and relay diagnostics retain their existing affected-path checks.
+The same job runs the 32-case Linux download-contention check and the password
+and relay deliberate faults, retaining their diagnostic logs on failure. These
+fault programs run nightly, while their underlying behavior tests stay in normal
+PR checks.
 Kubernetes prerequisites are separate: only changes matching their PR/main-push
 paths start them. They have no scheduled or manual trigger, so this nightly
 backstop does not check their external tool dependencies for drift.

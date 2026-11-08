@@ -3468,9 +3468,8 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Reduce unnecessary CI work (D613)
 
-Retire resolved diagnostic workflows after moving their retained checks into
-existing root or nightly jobs. Add a weekly estimated-cost report with an
-operator alert at 10% above the last alert's figure, first measurement silent;
+Requalify the browser-reconnect diagnostic before retiring it. Add a weekly
+estimated-cost report with an operator alert at 10% above the last alert's figure, first measurement silent;
 show when email is not configured. Cost figures never fail a run. Qualify the
 PR and merge job-time savings, including hosted browser preparation, on matched
 samples during healthy GitHub operation; remove retained apt-only browser setup
