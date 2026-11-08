@@ -67,7 +67,23 @@ export async function overflowOrdinary({api,policy,ci,signal}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
+ const base=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
+ const run=await api.get(base,{signal});
+ if(!Number.isFinite(Date.parse(run.created_at)) || Date.now()-Date.parse(run.created_at)<60000)return;
+ const started=async()=>{
+  const inventory=await api.get(base+`/attempts/${ci.attempt}/jobs?per_page=100`,{signal});
+  assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
+   inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
+  return inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
+   job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued'));
+ };
+ if(await started())return;
  await markHostedAttempt({api,policy,ci,signal});
+ if(await started()){
+  const values=await hostedAttempts({api,policy,signal});
+  if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
+  return;
+ }
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }

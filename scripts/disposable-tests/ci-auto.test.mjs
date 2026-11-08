@@ -20,7 +20,7 @@ function routingVariables(api){
  }});
 }
 function fixture(){
- const run={id:789,run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/12/merge',sha:execution}]};
+ const run={id:789,created_at:new Date(Date.now()-120000).toISOString(),run_attempt:1,head_sha:head,repository:{id:123},head_repository:{id:123},workflow_id:456,path:policy.workflowPath,event:'pull_request',status:'in_progress',pull_requests:[{number:12}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/12/merge',sha:execution}]};
  const jobs=[['test-server (24)','test-server-24'],['test-heavy (3)','test-heavy-3'],['test-till (7)','test-till-7'],['test-ui','test-ui-1'],['test-dashboard (4)','test-dashboard-4']].map(([name,key],i)=>({id:901+i,name,run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-'+key]}));
  const api={get:async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};
@@ -847,4 +847,16 @@ for(const failure of ['write','readback','assigned','advanced'])test(`overflow d
  if(failure==='assigned')f.jobs[0].runner_id=42;
  if(failure==='advanced')f.run.run_attempt=2;
  await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}));assert.equal(posts,0);
+});
+
+for(const state of ['running','completed','assigned','young','late-assignment'])test(`overflow preserves a ${state} server run`,async()=>{
+ const f=fixture(),get=f.api.get;f.run.created_at=new Date(Date.now()-120000).toISOString();
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let writes=0,posts=0,marker='{}';
+ const start=()=>{f.jobs[1].runner_id=42;f.jobs[1].status=state==='completed'?'completed':state==='assigned'?'queued':'in_progress';};
+ if(['running','completed','assigned'].includes(state))start();
+ if(state==='young')f.run.created_at=new Date().toISOString();
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.patch=async(path,body)=>{writes++;marker=body.value;if(state==='late-assignment')start();};f.api.post=async()=>{posts++;};
+ await controller.overflowOrdinary({api:f.api,policy,ci});
+ assert.equal(posts,0);assert.equal(marker,'{}');if(state!=='late-assignment')assert.equal(writes,0);
 });
