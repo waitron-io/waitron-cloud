@@ -61,7 +61,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }
  const refused=[];
  const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId)){refusedRuns.add(job.runId);refused.push(job);}}});
+  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  let cleanup;
@@ -84,8 +84,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  });
  cleanup=Promise.allSettled(refused.map(job=>fallbackRefused({config,api,...job,signal})));
  cleanups.push(cleanup.then(fallbacks=>{for(let i=0;i<fallbacks.length;i++)if(fallbacks[i].status==='rejected'){
-  const retained=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect().slots.some(slot=>slot.ciInvocation?.runId===refused[i].runId);
-  if(!retained)refusedRuns.delete(refused[i].runId);
+  refusedRuns.delete(refused[i].runId);
   console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',...refused[i],error:fallbacks[i].reason.message}));
  }}));
  if(active.size)await waitForWorker();

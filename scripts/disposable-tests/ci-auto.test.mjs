@@ -427,32 +427,64 @@ test('pickup recovers an interrupted slot while a slower worker still owns its s
 });
 
 
-for(const refusalRead of ['ready','transient-failure'])test(`a refused run retains only one cancellation intent across refills after ${refusalRead}`,async t=>{
- const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+for(const refusalRead of ['ready','transient-failure','admitted-sibling','persisted-failure','existing-pending','ledger-failure'])test(`a refused run retains only one cancellation intent across refills after ${refusalRead}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{renameSync}=await import('node:fs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get,otherHead='5'.repeat(40),reads=new Map();
  const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
  const jobs=f.jobs.slice(0,3).map(job=>({...job,id:job.id+10,run_id:790,head_sha:otherHead,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
- let finish,cancelled,scans=0,runReads=0;const held=new Promise(resolve=>{finish=resolve;}),cancel=new Promise(resolve=>{cancelled=resolve;});
+ let finish,cancelled,scans=0,runReads=0,posts=0,reruns=0,settled=false,sibling,releaseSibling,missing,readFailed;const firstReadFailed=new Promise(resolve=>{readFailed=resolve;});const siblingHeld=new Promise(resolve=>{releaseSibling=resolve;}),ledgerMissing=new Promise(resolve=>{missing=resolve;});const held=new Promise(resolve=>{finish=resolve;}),cancel=new Promise(resolve=>{cancelled=resolve;});
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
   if(path.includes('/runs?')){if(path.includes('status=queued') && ++scans===2)setTimeout(finish,100);return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};}
-  if(path.endsWith('/actions/runs/789') && ++runReads===2 && refusalRead==='transient-failure')throw Object.assign(new Error('Temporary GitHub error'),{status:502});
+  if(path.endsWith('/actions/runs/789')){
+   if(settled)return {...f.run,status:'completed'};
+   if(++runReads===2 && ['transient-failure','admitted-sibling','ledger-failure'].includes(refusalRead)){
+    if(refusalRead==='admitted-sibling'){
+     let ready;const started=new Promise(resolve=>{ready=resolve;});
+     sibling=withAvailableSlot(config,async({leases})=>{const nonce='f'.repeat(32);leases.setInvocation({nonce,sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});ready();await siblingHeld;leases.clearInvocation(nonce);return {code:0};});
+     await started;
+    }
+    if(refusalRead==='ledger-failure'){renameSync(config.state+'/ledger/state.json',config.state+'/ledger/saved.json');missing();}
+    readFailed();throw Object.assign(new Error('Temporary GitHub error'),{status:502});
+   }
+  }
   if(path.endsWith('/actions/runs/790'))return good;
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:jobs.length,jobs};
   if(path.endsWith('/pulls/13'))return {number:13,state:'open',head:{sha:otherHead,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+otherHead))return {sha:otherHead,commit:{tree:{sha:'4'.repeat(40)}}};
   if(path.includes('/contents/') && path.endsWith('?ref='+head))return {encoding:'base64',content:Buffer.from('changed').toString('base64')};
   const matched=f.jobs.find(job=>path.endsWith('/actions/jobs/'+job.id));
-  if(matched){const n=(reads.get(matched.id)??0)+1;reads.set(matched.id,n);if(n>=3)cancelled();return {...matched,status:n>=3?'completed':'queued',conclusion:n>=3?'cancelled':null};}
+  if(matched){const n=(reads.get(matched.id)??0)+1;reads.set(matched.id,n);const complete=settled || n>=(refusalRead==='persisted-failure'?4:3);if(complete)cancelled();return {...matched,status:complete?'completed':'queued',conclusion:complete?'cancelled':null};}
   return get(path);
  };
- f.api.post=async path=>{assert.ok(path.endsWith('/cancel'));cancelled();};
+ f.api.post=async path=>{
+  if(path.endsWith('/rerun')){assert.equal(settled,true);reruns++;return;}
+  assert.ok(path.endsWith('/cancel'));posts++;
+  if(refusalRead==='persisted-failure')throw Object.assign(new Error('Temporary cancellation response failure'),{status:502});
+  cancelled();
+ };
+ if(refusalRead==='existing-pending')new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5}).setInvocation({nonce:'e'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'cancel-requested'});
  const running=automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
-  if(ci.jobId===912){if(refusalRead==='ready')await cancel;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
+  if(ci.jobId===912){if(refusalRead==='ready')await cancel;if(refusalRead==='admitted-sibling')await firstReadFailed;await new Promise(resolve=>setTimeout(resolve,60));}else await held;
   return {code:0};
  }});
- const timeout=setTimeout(finish,5000);try{await running;}finally{clearTimeout(timeout);finish();}
+ const timeout=setTimeout(finish,5000);
+ if(refusalRead==='ledger-failure'){
+  let joined=false;const result=running.then(()=>assert.fail('Missing ledger must refuse pickup'),error=>{joined=true;return error;});
+  try{await ledgerMissing;await new Promise(resolve=>setTimeout(resolve,150));assert.equal(joined,false,'A ledger read failure must still join its live children');finish();assert.match((await result).message,/Recorded ledger is missing/);}
+  finally{clearTimeout(timeout);finish();renameSync(config.state+'/ledger/saved.json',config.state+'/ledger/state.json');}
+  return;
+ }
+ try{
+ await running;
  const intents=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().slots.filter(slot=>slot.ciInvocation);
- assert.ok(scans>=2);assert.equal(intents.length,1,'A later scan must not reserve another cancellation slot for the same refused run');
- assert.equal(intents[0].ciInvocation.ordinaryStage,'cancel-requested');
+ assert.ok(scans>=2);assert.equal(intents.length,refusalRead==='admitted-sibling'?2:1,'A later scan must retain exactly one cancellation intent beside any admitted sibling');
+ assert.equal(intents.filter(slot=>slot.ciInvocation.ordinaryStage==='cancel-requested').length,1);
+ if(refusalRead==='admitted-sibling')assert.equal(intents.filter(slot=>slot.ciInvocation.ordinaryStage==='admitted').length,1,'Refusal bookkeeping cannot clear the independently owned sibling');
+ if(refusalRead==='persisted-failure'){
+  assert.equal(posts,1,'The fixture must fail a real cancellation POST after saving its intent');
+  settled=true;const {reconcileManual}=await import('./manual.mjs');await reconcileManual({...config,transport:{},api:f.api});
+  assert.equal(reruns,1);assert.ok(new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().slots.every(slot=>!slot.ciInvocation));
+ }
+ }finally{clearTimeout(timeout);finish();releaseSibling();await sibling;}
 });
