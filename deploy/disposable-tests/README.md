@@ -248,3 +248,20 @@ Guest startup can restart SSH after host-key discovery. Preparation retries only
 | Rate-limit source | Source words | Controller rule |
 | --- | --- | --- |
 | [GitHub REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), read 2026-11-08 | “you will receive a `403` or `429` response” | Distinguish rate-limit headers from an ordinary permission refusal and wait for the supplied retry/reset time. |
+
+
+## Read CI slot status without changing it
+
+When GitHub shows waiting jobs, first check whether the server is preparing a guest, executing work, or keeping a slot closed for cleanup. On the controller Mac, run the published command:
+
+```sh
+python3 -I -B ~/waitron-campaign-shared/disposable-ci-status.py
+```
+
+It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
+
+Times are Unix milliseconds; durations are seconds. `admissionAgeSeconds` starts when the slot was reserved. `start` and `runtimeSeconds` come from a single worker log filename in that guest, which does not establish when GitHub acknowledged the job. Manual commands instead report `executionRequested`, the command-file timestamp. Missing or ambiguous evidence stays `unknown`. `lastAdmission` is the newest lease time in the current ledger or the last 1 MiB of successful or failed job-result output. Errors keep unknown times, show the error file's last-write time separately, mask IP addresses and stop at 200 characters.
+
+The command uses the existing `~/.cache/wt-ssh/%C` connection with `ControlMaster=no`, `ControlPersist=600` and `ProxyCommand=false`. It keeps strict host-key checks and disables forwarding. An expired connection returns `host: "unknown"` instead of opening a fresh connection. Collection shares a 4.5-second budget; the command returns the local facts it obtained if the host read times out. It reads host preparation and result markers, never changes admission or recovery, and does not call GitHub.
+
+Run its focused checks with `node --test scripts/disposable-tests/ci-status.test.mjs`.
