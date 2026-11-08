@@ -275,6 +275,7 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
   if(!automatic)assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
   assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head changed during health check');
   const result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
+  if(result.completion)return result;
   assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');
   leases.clearInvocation(invocation.nonce);return result;
  }catch(error){
@@ -404,7 +405,8 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
  }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
- const result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
+ let completion;
+ let result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
   healthy:options=>transport.healthy(options),transfer:(lease,options)=>transport.transfer(lease,options),
   prepare:(lease,options)=>transport.prepare(lease,options),
   execute:async(lease,options)=>{
@@ -451,13 +453,29 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    catch(error){throw monitorFailure??error;}
    finally{ended=true;monitor.abort();await watching;}
    if(monitorFailure)throw monitorFailure;
-   const observed=await api.get(`${base}/jobs/${ci.jobId}`,options);
-   assert.ok(code===0 && observed.id===ci.jobId && observed.run_id===ci.runId && observed.run_attempt===ci.attempt &&
-    observed.head_sha===ci.workflowSha && observed.runner_id===registration.runner.id && observed.runner_name===name &&
-    observed.status==='completed' && observed.conclusion==='success','CI assignment or job completion did not qualify');
+   completion={code,observations:[],expected:{id:ci.jobId,run_id:ci.runId,run_attempt:ci.attempt,head_sha:ci.workflowSha,
+    runner_id:registration.runner.id,runner_name:name,status:'completed',conclusion:'success'}};
+   // Final readback cannot justify cancelling siblings. Retire the fallback
+   // intent before that read; the lease and orphan runner still own cleanup.
+   if(ci.workflowPath==='.github/workflows/ci.yml'){
+    const pending=leases.inspect().ciInvocation;
+    assert.ok(pending && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId,'Completion intent differs');
+    assert.ok(leases.clearInvocation(pending.nonce),'Completion intent was not retired');
+   }
+   for(let attempt=0;attempt<5;attempt++){
+    const observed=await api.get(`${base}/jobs/${ci.jobId}`,options);
+    completion.observations.push(Object.fromEntries(Object.keys(completion.expected).map(key=>[key,observed[key]??null])));
+    const assigned=observed.id===ci.jobId && observed.run_id===ci.runId && observed.run_attempt===ci.attempt &&
+     observed.head_sha===ci.workflowSha && observed.runner_id===registration.runner.id && observed.runner_name===name;
+    if(code===0 && assigned && observed.status==='completed' && observed.conclusion==='success')return code;
+    assert.ok(code===0 && assigned && ['queued','in_progress'].includes(observed.status) && attempt<4,
+     'CI assignment or job completion did not qualify');
+    await wait(2000,undefined,options);
+   }
    return code;
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
+ if(completion)result={...result,completion};
  if(result.cleanup==='absent'){
   try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}
   catch{return {...result,code:125,runnerCleanup:'pending'};}
