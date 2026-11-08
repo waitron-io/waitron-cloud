@@ -34,10 +34,11 @@ the sign-up themselves. It should require zero work from us"
 
 ### Non-goals
 
-- **Setting prices or allowance sizes.** Prices wait for cost measurements
-  (`docs/backlog.md:189`). This design holds named slots; §11 lists them.
+- **Setting prices or allowance sizes**, apart from the owner's separate
+  [SMS decision](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures).
+  Other prices wait for cost measurements (`docs/backlog.md:189`); §11 holds their slots.
 - Selling to venues outside Spain, and the VAT rules for doing so.
-- Building the SMS service. This design only gives it an allowance slot.
+- Building the SMS service. Its separate design holds the decided policy and remaining gates.
 - Paid longer retention for chosen snapshots (`docs/product-and-platform.md:224-231`) —
   a later add-on.
 - Yearly billing and multi-venue discounts.
@@ -77,6 +78,8 @@ the sign-up themselves. It should require zero work from us"
 
 - **Level 1's allowances count per Cloud account**, so an owner with many venues has a
   reason to bring them all into Cloud (owner). Levels 2 and 3 are per venue (owner).
+  SMS is the exception: its [monthly figures](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures)
+  count per Cloud account at every level, initially without monthly refusal.
 - **Failing over to the cloud is part of what level 2 promises.** No one agrees to it in
   advance, because nothing has to happen until it is needed: the live stream is already in
   Cloud (owner).
@@ -111,16 +114,16 @@ enforcement points are reconciled is left to the builder.
 
 - The email gateway and the AI features (translation, the rota solver) each have a
   **monthly allowance, which can differ by level**. SMS follows the owner's
-  [7 November decision](2026-11-07-cloud-venue-sms-gateway-design.md#two-separate-uses):
-  free sign-in/security codes with hourly/daily abuse limits, and a separate extra paid
-  booking allowance included in no level by default. The gateway remains unbuilt.
+  [8 November decision](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
+  account-counted codes, initially unenforced monthly figures and enforced request/guess
+  controls. Booking messages are outside that revision. The gateway remains unbuilt.
 - **The allowances exist to stop abuse, not to make money.** They are set high enough that
   a normal venue never meets them. The AI features cost us very little so far.
 - **What happens when a venue reaches an allowance is not designed now.** "Later, when we
   see how they actually get used, we can decide whether there are separate levels or like
   upgrades" (owner). Until then a reached allowance refuses further use of that service
   until the allowance resets, as translation's existing monthly cap already does
-  (driver's call).
+  (driver's call). SMS's initially unenforced monthly figures are the exception above.
 - **Trial allowances are tighter** for translation and the rota solver, but only for a trial
   with no payment method behind it (owner; §4).
 - The sizes, reset periods and units are §11 slots. The translation cap of US$5 per venue
@@ -486,7 +489,7 @@ enrolment and environment-backed settings still need joint formats and tests.
 | --- | --- | --- |
 | Level-2 monthly price | about €10 | cost measurement; the deployment design estimates $2–4 a month of cost per on-prem venue (`docs/superpowers/specs/2026-10-22-cloud-production-deployment-design.md:419-442`) |
 | Level-3 monthly price (daily = ÷30) | about €30 | the same, plus about $6 a month for each hosted venue beyond the first machines' capacity |
-| Allowances per level and service (email, translation, rota solver, address lookup); SMS follows [D610](2026-11-07-cloud-venue-sms-gateway-design.md#two-separate-uses) | translation: US$5 per venue per month | usage once venues are live; SMS booking amount/price and security abuse limits remain open |
+| Allowances per level and service (email, translation, rota solver, address lookup); SMS figures are in [D610](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures) | translation: US$5 per venue per month | usage once venues are live; SMS delivery qualification and build remain open; bookings are outside its revision |
 | Trial allowances for translation and the rota solver | — | the same |
 
 ## 12. Questions for others
@@ -519,7 +522,7 @@ For the owner to check while reading:
 2. The hosted trial is for a venue that starts in the cloud, not for a failover; it follows
    the level-2 trial's rules, stops hosting at the quiet hour if unpaid at its end, and is
    counted separately from the level-2 trial (§4).
-3. A reached allowance refuses further use until it resets (§3).
+3. A reached allowance refuses further use until it resets (§3), except SMS while monthly enforcement is off.
 4. The trial lasts 30 days, once per venue; reminder emails a week before and on the last
    day (§4).
 5. Remote access counts as really used after traffic on three different days; backups never
