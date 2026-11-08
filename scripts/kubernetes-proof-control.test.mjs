@@ -1305,14 +1305,16 @@ test('manual creation books once, waits for its completed stack, enables expiry 
   await assert.rejects(f.create()); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
 });
 
-for (const health of ['stale', 'future']) test(`manual readiness waits for ${health} health then returns fresh protection without another create`, async t => {
+for (const health of ['stale', 'future', 'stale write']) test(`manual readiness waits for ${health} health then returns fresh protection without another create`, async t => {
   const f = await creationFixture(t), previous = f.aws.call; let reads = 0;
   f.aws.call = async (...args) => {
     const r = await previous(...args);
     if (args[1] === 'get-object' && reads++ === 0) {
       const h = JSON.parse(Buffer.from(r.Body));
       if (health === 'stale') h.startedAt = '2026-11-06T11:58:00Z';
-      else { h.completedAt = '2026-11-06T12:00:00.001Z'; r.LastModified = now; }
+      else if (health === 'future') { h.completedAt = '2026-11-06T12:00:00.001Z'; r.LastModified = now; }
+      else { h.startedAt = '2026-11-06T11:58:00.001Z'; h.completedAt = '2026-11-06T11:58:00.999Z';
+        r.LastModified = '2026-11-06T11:58:00Z'; }
       r.Body = Buffer.from(JSON.stringify(h));
     }
     return r;
@@ -1387,6 +1389,23 @@ test('manual readiness keeps freshness equality at 120 seconds stale', async t =
   await assert.rejects(f.observe(), { code: 'D570_PROTECTION_PENDING' });
   assert.equal((await f.observe({ clock: () => Date.parse(now) - 1, now: '2026-11-06T11:59:59Z' })).stackId, f.stackId);
 });
+
+test('manual readiness accepts completion exactly at the observation time', async t => {
+  const f = protectionFixture(t); f.health.completedAt = now;
+  Object.assign(f.responses['s3api/get-object'], { Body: Buffer.from(JSON.stringify(f.health)), LastModified: now });
+  assert.equal((await f.observe()).stackId, f.stackId);
+});
+
+for (const [name, status] of [['NoSuchKey', 403], ['AccessDenied', 404]]) {
+  test(`manual readiness refuses nonmissing ${name}/${status} without retrying`, async t => {
+    const f = await creationFixture(t), previous = f.aws.call;
+    const error = Object.assign(new Error('synthetic provider refusal'), { name, $metadata: { httpStatusCode: status } });
+    f.aws.call = async (...args) => { if (args[1] === 'get-object') throw error; return previous(...args); };
+    await assert.rejects(f.create(), e => e === error);
+    assert.deepEqual(f.sleeps, [15000]);
+    assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+  });
+}
 
 for (const [label, mutate, expectedCreates, expectedEnables] of [
   ['unknown opening', (f, response, operation) => { if (operation === 'get-cost-and-usage') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01'; }, 0, 0],
@@ -1499,10 +1518,10 @@ async function initializationFixture(t) {
   return { ...f, objects, writes, initialize };
 }
 
-test('initialization heartbeat expiry names the reason and refuses before writing history', async t => {
+for (const age of [120000, 180000]) test(`initialization heartbeat expiry at ${age} ms refuses before writing history`, async t => {
   const f = await initializationFixture(t), previous = f.aws.call; let at = Date.parse(now);
   f.aws.call = async (...args) => { const r = await previous(...args);
-    if (args[1] === 'list-objects-v2') at += 120000; return r; };
+    if (args[1] === 'list-objects-v2') at += age - 60000; return r; };
   await assert.rejects(f.initialize({ clock: () => at }), {
     message: 'D570 controller refused: initialization heartbeat is stale' });
   assert.deepEqual(f.writes, []);

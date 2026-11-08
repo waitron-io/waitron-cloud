@@ -382,7 +382,6 @@ async function readManualProtection(read, stackId, states) {
 }
 
 export async function inspectManualProtection(options) {
-  const check = (value, reason) => checkControl(value, reason);
   const { stackId, checkout, aws, now, clock = Date.now } = options;
   check(typeof stackId === 'string'
     && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(stackId), 'protection stack id');
