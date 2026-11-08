@@ -4,6 +4,8 @@ Documentation only. Lane G questions.md records watcher 8 November 12:12 quoting
 
 **Build approval:** Watcher, 8 November 13:13: approved UTC day and bilingual warning; keep the owner-requested warning on the fourth distinct phone per account/day, once, without phones or codes. Four staff confirming phones may legitimately trigger it. “Revise the draft; no further Claude read.” This resolves the reviewer’s simpler-alternative recommendation and supersedes this plan’s separate design-read step. No runtime or landing authority.
 
+Watcher 13:17 additionally directs this next Cloud documentation change to mark D570 paused in its existing backlog paragraph, with restart as a new small item. That small `docs/backlog.md` edit is authorised separately from the SMS scope; no new entry or D570 work.
+
 ## Revision after approval
 
 - Replace uncapped and Spain-only wording: 10 texts/account/day enforced from day one; propose a UTC calendar day. Destinations must be positively classified EU numbers, independently of the account country. EU is a ceiling: each destination country still needs qualification. Keep “This is not a spending cap”; multiple free accounts remain possible. Do not extend the old Spanish price assumption to other routes.
