@@ -40,6 +40,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  };
  let served=0,healthy;
  try{do{
+ try{
  await recover?.();
  if(await routingMode({api,policy,signal})!=='server')return {code:0,served};
  assert.equal(await routingHead({api,policy,signal}),'','Automatic CI requires unrestricted same-repository routing');
@@ -60,16 +61,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const refused=[];
- let jobs;
- try{jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});}
- catch(error){
-  signal?.throwIfAborted();
-  if(error.status===undefined && !/Incomplete automatic run inventory/.test(error.message))throw error;
-  console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
-  if(!active.size)return {code:0,served,reason:'inventory-unavailable'};
-  await wait(1000,undefined,{signal});continue;
- }
+ const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
+  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  let cleanup;
@@ -105,6 +98,16 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }}));
  if(active.size)await waitForWorker();
  signal?.throwIfAborted();
+ }catch(error){
+  signal?.throwIfAborted();
+  const transient=error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
+   error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
+   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
+  if(!transient)throw error;
+  console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
+  if(!active.size)return {code:0,served,reason:'inventory-unavailable'};
+  await wait(30000,undefined,{signal});
+ }
  }while(active.size);
  }finally{await Promise.allSettled([...active.keys(),...cleanups]);}
  return {code:0,served};
