@@ -57,8 +57,10 @@ node scripts/kubernetes-proof-control.mjs up "$HOME/.local/state/waitron-d570" \
 
 Duplicate explanations, unused rows and charges above their explained ceilings
 refuse. The cap uses observed charges, so a larger explained ceiling never grants
-more room. A credit bill still refuses and shows its observed aggregate; credits
-never become a zero opening or increase allowance. Save the printed service,
+more room. A negative bill is a credit if it rounds to a tenth of a cent
+(US$0.001), with half units rounding away from zero. A smaller rounding residue
+is zero; a credit still refuses and shows its observed aggregate, without
+increasing allowance. Save the printed service,
 amount and reason list for the watcher and the owner. The successful response also shows the opening, reserved upper cost
 and remaining headroom. Opening plus reservation must stay strictly below US$20.
 

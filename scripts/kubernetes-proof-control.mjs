@@ -202,11 +202,16 @@ function billingObservation(response, period, now) {
   check(row?.TimePeriod?.Start === period.Start && row.TimePeriod.End === period.End
     && typeof row.Estimated === 'boolean' && Array.isArray(row.Groups) && row.Groups.length === 0
     && total?.Unit === 'USD' && typeof total.Amount === 'string');
-  const amount = /^-0(\.0{1,10})?$/.test(total.Amount) ? total.Amount.slice(1) : total.Amount;
+  let amount = total.Amount;
   if (/^-(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(amount)) {
-    throw Object.assign(new Error('D570 controller refused: account bill contains a credit'), {
-      opening: { billing: { observedAt: now, period, rawUsd: total.Amount, estimated: row.Estimated }, items: [] },
-    });
+    const [whole, fraction = ''] = amount.slice(1).split('.');
+    // Credit decisions round to US$0.001, with exact half units rounding away from zero.
+    if (BigInt(whole + fraction.padEnd(10, '0')) < 5_000_000n) amount = '0';
+    else {
+      throw Object.assign(new Error('D570 controller refused: account bill contains a credit'), {
+        opening: { billing: { observedAt: now, period, rawUsd: total.Amount, estimated: row.Estimated }, items: [] },
+      });
+    }
   }
   check(/^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(amount));
   const [whole, fraction = ''] = amount.split('.');

@@ -32,6 +32,34 @@ test('GroupDefinitions also accepts an explicit empty ungrouped array', async t 
   assert.deepEqual((await inspect(f)).billing, { observedAt: now, period, microUsd: 1234568, estimated: true });
 });
 
+test('the owner estimated rounding residue is a zero opening at tenth-cent precision', async t => {
+  const f = fixture(t), observedAt = '2026-11-08T09:48:10Z';
+  const ownerPeriod = { Start: '2026-11-01', End: '2026-11-09' };
+  for (const amount of ['-0.0000000003', '-0.0000000001', '-0.0004999999']) {
+    const response = { ResultsByTime: [{ TimePeriod: ownerPeriod, Estimated: true, Groups: [],
+      Total: { UnblendedCost: { Amount: amount, Unit: 'USD' } } }] };
+    f.aws.call = async service => service === 'sts' ? identity : response;
+    const result = await control.inspectManualOpening({ checkout: f.root, region: 'eu-north-1',
+      now: observedAt, clock: () => Date.parse(observedAt), aws: f.aws, environment: {} });
+    assert.deepEqual(result.billing, { observedAt, period: ownerPeriod, microUsd: 0, estimated: true });
+    assert.deepEqual(result.openingExplanations, []);
+  }
+});
+
+test('credits that round to a tenth of a cent refuse with their original amount', async t => {
+  const f = fixture(t);
+  for (const amount of ['-0.0005', '-0.001', '-0.01']) {
+    const response = bill(); response.ResultsByTime[0].Total.UnblendedCost.Amount = amount;
+    f.aws.call = async service => service === 'sts' ? identity : response;
+    await assert.rejects(inspect(f), error => {
+      assert.match(error.message, /D570 controller refused.*credit/);
+      assert.equal(error.opening.billing.rawUsd, amount);
+      assert.equal(Object.hasOwn(error.opening.billing, 'microUsd'), false);
+      return true;
+    });
+  }
+});
+
 test('the owner estimated negative-zero bill is a zero opening without charge explanations', async t => {
   const f = fixture(t), observedAt = '2026-11-07T21:42:36Z';
   const ownerPeriod = { Start: '2026-11-01', End: '2026-11-08' };
@@ -44,7 +72,7 @@ test('the owner estimated negative-zero bill is a zero opening without charge ex
     assert.deepEqual(result.billing, { observedAt, period: ownerPeriod, microUsd: 0, estimated: true });
     assert.deepEqual(result.openingExplanations, []);
   }
-  for (const amount of ['-0.01', '-0.0000000001']) {
+  for (const amount of ['-0.01', '-0.001']) {
     const response = bill(); response.ResultsByTime[0].Total.UnblendedCost.Amount = amount;
     f.aws.call = async service => service === 'sts' ? identity : response;
     await assert.rejects(inspect(f), error => {

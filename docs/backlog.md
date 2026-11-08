@@ -3188,7 +3188,8 @@ implementation or production evidence.
   independently observed shutdown and a retained-evidence retry in the original
   private folder, under the approved US$20 cap. Keep every launched reservation,
   explain existing account charges and qualify shutdown, disk/interface absence,
-  actual itemised billing and removal. The [retry plan](superpowers/plans/2026-11-07-kubernetes-launched-retry.md)
+  actual itemised billing and removal, including a physical retry after the billing
+  rounding correction. The [retry plan](superpowers/plans/2026-11-07-kubernetes-launched-retry.md)
   records the owner's timing and saved-response authority. After the first physical run,
   remove the retained-file cleanup dependency and finish the missing guard checks
   recorded in [PR #1089](https://github.com/waitron-io/waitron-cloud/pull/1089), as the owner directed.
