@@ -242,6 +242,16 @@ stays unknown, and a run with gaps cannot replace a published cost figure.
   This also means a refusal in another operation cannot transfer or clear that wait.
 
 
+### Service monitoring
+
+Owner decision, 8 November 2026:
+
+No cost alert until a real cost figure exists: the calculator over committed inputs
+cannot see a cost change (about 90% of its USD 18.44/month is one fixed server
+charge; 100 times the orders moves it 5.7%). Reopen with measured storage and
+request counts priced nightly.
+
+
 ## Installation deployment qualification
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
@@ -3198,6 +3208,7 @@ implementation or production evidence.
   cell; track errors, response times, queued work, backup freshness and capacity.
   Production observation, phone delivery, recovery targets and C39 plan/build approval
   remain open; see [the requirements and deliberate limits](backlog/service-monitoring.md).
+  See [the cost-alert decision](#service-monitoring).
 - **Usage metering.** Local totals cover snapshot storage and transfer, installation
   operations, monitoring probes and administrative alerts. Native controller tests
   hold old totals, permission refusals and rate limits across account or organisation
@@ -3468,12 +3479,10 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Reduce unnecessary CI work (D613)
 
-Requalify the browser-reconnect diagnostic before retiring it. Add a weekly
-estimated-cost report with an operator alert at 10% above the last alert's figure, first measurement silent;
-show when email is not configured. Cost figures never fail a run. Qualify the
-PR and merge job-time savings, including hosted browser preparation, on matched
-samples during healthy GitHub operation; remove retained apt-only browser setup
-after hosted qualification.
+Requalify the browser-reconnect diagnostic before retiring it. Qualify PR and
+merge job-time savings, including hosted browser preparation, on matched samples
+during healthy GitHub operation. Remove retained apt-only browser setup after
+hosted qualification.
 
 Record D614's first natural proof-only PR hosted selection after the planner
 controls pass; the policy-change PR itself keeps full work.
