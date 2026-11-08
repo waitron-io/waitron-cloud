@@ -48,15 +48,67 @@ async function writeRoutingVariable({api,policy,name,value,signal}){
  else await api.post(`/repos/${policy.repository}/actions/variables`,{name,value},{signal});
  assert.equal((await api.get(path,{signal})).value,value,'Routing variable readback differs');
 }
-async function markHostedAttempt({api,policy,ci,signal}){
- const name='DISPOSABLE_TESTS_HOSTED_ATTEMPTS';let values={};
- try{values=JSON.parse((await api.get(variablePath(policy,name),{signal})).value||'{}');}
+export async function hostedAttempts({api,policy,signal}){
+ let values={};
+ try{values=JSON.parse((await api.get(variablePath(policy,'DISPOSABLE_TESTS_HOSTED_ATTEMPTS'),{signal})).value||'{}');}
  catch(error){if(error.status!==404)throw error;}
  assert.ok(values && typeof values==='object' && !Array.isArray(values) &&
   Object.entries(values).every(([run,attempt])=>/^[1-9][0-9]*$/.test(run) && Number.isSafeInteger(attempt) && attempt>0),'Invalid hosted attempt routing');
+ return values;
+}
+async function markHostedAttempt({api,policy,ci,signal}){
+ const values=await hostedAttempts({api,policy,signal});
  if(values[String(ci.runId)]===ci.attempt+1)return;
  values[String(ci.runId)]=ci.attempt+1;
- await writeRoutingVariable({api,policy,name,value:JSON.stringify(values),signal});
+ await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+}
+// The repository variable survives a full pool and a controller restart.
+export async function overflowOrdinary({api,policy,ci,signal}){
+ const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,signal});
+ if(!current)return;
+ assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
+ await markHostedAttempt({api,policy,ci,signal});
+ await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
+ console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
+}
+export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set()}){
+ const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
+ for(const [id,attempt] of Object.entries(values)){
+  if(excludeRuns.has(Number(id)))continue;
+  const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
+  assert.ok(run.id===Number(id) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+   run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
+   Number.isSafeInteger(run.run_attempt) && run.run_attempt>=attempt-1,'Hosted overflow run identity differs');
+  let obsolete=false;
+  if(run.event==='pull_request'){
+   assert.equal(run.pull_requests?.length,1,'Hosted overflow needs one PR');
+   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+   obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
+    pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
+  }
+  if(obsolete || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
+   delete values[id];
+   await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+   continue;
+  }
+  if(run.run_attempt===attempt)continue;
+  assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
+  if(run.status==='completed'){
+   await api.post(path+'/rerun',undefined,{signal});
+   console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
+  }
+  else {
+   let force=false;
+   if(run.status==='queued'){
+    const inventory=await api.get(path+`/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+    assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
+    force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
+     (job.status==='completed' || job.status==='queued' && !job.runner_id));
+   }
+   await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
+  }
+ }
+ return values;
 }
 export async function routingHead({api,policy,signal}){
  try{const value=(await api.get(variablePath(policy,'DISPOSABLE_TESTS_HEAD'),{signal})).value;
@@ -135,7 +187,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -148,6 +200,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),o
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
+  if(excludeRuns.has(run.id))continue;
   let candidate;
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||

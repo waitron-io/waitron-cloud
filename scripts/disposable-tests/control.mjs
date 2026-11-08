@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,recoverHostedAttempts,hostedAttempts} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -44,6 +44,14 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const read=async work=>{try{return await work();}catch(error){readFailed=true;throw error;}};
  try{
  await recover?.();
+ const pending=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+ const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId).filter(Boolean));
+ let hosted=await read(()=>hostedAttempts({api,policy,signal}));
+ if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
+  const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api:new Proxy(api,{get(target,key){return key==='get'?(...args)=>read(()=>target.get(...args)):Reflect.get(target,key);}}),policy,signal,excludeRuns:ownedRuns}),{signal});
+  if(recovered.code!==75)hosted=recovered;
+ }
+ const excludeRuns=new Set(Object.keys(hosted).map(Number));
  if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
  assert.equal(await read(()=>routingHead({api,policy,signal})),'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
@@ -52,7 +60,15 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const exclude=new Set([...seen,...recorded]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
- if(!free){if(active.size){await waitForWorker();continue;}break;}
+ if(!free){
+  const queued=await read(()=>findAutomatic({api,policy,limit:16,exclude,excludeRuns,signal}));
+  for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values())await withKernelLock(config.state,async()=>{
+   const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
+   await overflowOrdinary({api,policy,ci,signal});
+  },{signal});
+  if(active.size){await waitForWorker();continue;}break;
+ }
  transport??=new CITransport(config);
  if(healthy===undefined){
   healthy=false;
@@ -63,7 +79,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const refused=[];
- const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
+ const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,excludeRuns,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
   onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}}));
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
