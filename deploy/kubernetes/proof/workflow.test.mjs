@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { join, matchesGlob } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -27,6 +27,16 @@ for (const [label, missing, expectedTests] of [
   ['older budget-only head', files.slice(5), 4],
 ]) test(`prerequisite workflow ${label} ${expectedTests ? 'executes its required files' : 'refuses before accepting results'}`, () => {
   checkFiles(missing, expectedTests);
+  if (label === 'current complete head') {
+    const discovered = [
+      ...readdirSync(new URL('.', import.meta.url), {recursive: true}).filter(name => name.endsWith('.test.mjs')).map(name => 'deploy/kubernetes/proof/' + name),
+      ...readdirSync(new URL('../../../scripts/', import.meta.url)).filter(name => /^kubernetes-proof-[^/]+\.test\.mjs$/.test(name)).map(name => 'scripts/' + name),
+    ];
+    const extra = ['deploy/kubernetes/proof/prices.mjs', 'deploy/kubernetes/proof/prices.test.mjs',
+      'deploy/kubernetes/proof/test-fixtures/prices.json', 'scripts/kubernetes-proof-control.mjs',
+      'scripts/kubernetes-proof-control.test.mjs', ...discovered];
+    checkFiles([], new Set([...files, ...extra].filter(path => path.endsWith('.test.mjs'))).size, extra);
+  }
 });
 
 const priceFiles = ['deploy/kubernetes/proof/prices.mjs', 'deploy/kubernetes/proof/prices.test.mjs', 'deploy/kubernetes/proof/test-fixtures/prices.json'];

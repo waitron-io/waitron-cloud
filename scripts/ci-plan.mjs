@@ -8,7 +8,7 @@ import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
 import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
-import {scriptPlan} from './ci-scripts.mjs';
+import {scriptPlan, isKubernetesProofPath} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
@@ -17,10 +17,12 @@ import {unreadMarkdown} from './ci-input-audit.mjs';
 
 function mixedCodePaths(paths, base, head, git) {
   const prose = paths.filter(unreadMarkdown);
-  if (!prose.length || prose.length === paths.length) return paths;
   try {
-    documentationPlan(prose, base, head, git);
-    return paths.filter(path => !prose.includes(path));
+    if (prose.length) documentationPlan(prose, base, head, git);
+    const proof = paths.filter(isKubernetesProofPath);
+    if (proof.length) scriptPlan(proof, base, head, git);
+    const remaining = paths.filter(path => !prose.includes(path) && !proof.includes(path));
+    return remaining.length ? remaining : paths;
   } catch { return paths; }
 }
 

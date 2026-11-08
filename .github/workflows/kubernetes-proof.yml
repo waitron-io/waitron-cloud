@@ -3,19 +3,13 @@ on:
   pull_request:
     paths:
       - 'deploy/kubernetes/proof/**'
-      - 'scripts/kubernetes-proof-budget.mjs'
-      - 'scripts/kubernetes-proof-budget.test.mjs'
-      - 'scripts/kubernetes-proof-control.mjs'
-      - 'scripts/kubernetes-proof-control.test.mjs'
+      - 'scripts/kubernetes-proof-*'
       - '.github/workflows/kubernetes-proof.yml'
   push:
     branches: [main]
     paths:
       - 'deploy/kubernetes/proof/**'
-      - 'scripts/kubernetes-proof-budget.mjs'
-      - 'scripts/kubernetes-proof-budget.test.mjs'
-      - 'scripts/kubernetes-proof-control.mjs'
-      - 'scripts/kubernetes-proof-control.test.mjs'
+      - 'scripts/kubernetes-proof-*'
       - '.github/workflows/kubernetes-proof.yml'
 permissions:
   contents: read
