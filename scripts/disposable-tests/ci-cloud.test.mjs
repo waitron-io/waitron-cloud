@@ -71,18 +71,20 @@ for(const occupied of ['full','cloud-intent','cloud-lease'])test(`Cloud admissio
  if(occupied==='cloud-intent')f.scoped(4).setInvocation(f.intent());
  else if(occupied==='full')for(let slot=0;slot<6;slot++)f.scoped(slot).reserveLocal({lane:'D',turn:'fixture-'+slot,snapshot:'b'.repeat(64),argv:['true']});
  else {const {ciRequest}=await import('./ci-identity.mjs');f.scoped(4).reserveLocal(ciRequest('I',{repositoryId:123,workflowId:456,workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceSha:head,workflowSha:head,sourceTree:'4'.repeat(40),runId:700,attempt:1,jobId:800,jobKey:'typecheck'}));}
- const result=await control.withCloudController({...f,approvedHead:head,lane:'I'});assert.equal(result.code,75);assert.deepEqual(f.writes,[]);
+ const result=await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>assert.fail('Refused admission waited for a run')});assert.equal(result.code,75);assert.deepEqual(f.writes,[]);
 });
 
 test('a prior incomplete run refuses Cloud admission without intent or routing writes',async t=>{
  assert.equal(typeof control.withCloudController,'function');const f=await fixture(t);f.add(700,{job:false});
- assert.equal((await control.withCloudController({...f,approvedHead:head,lane:'I'})).code,75);assert.deepEqual(f.writes,[]);assert.ok(f.leases.inspect().slots.every(s=>!s.ciInvocation));
+ assert.equal((await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>assert.fail('Earlier run was admitted')})).code,75);assert.deepEqual(f.writes,[]);assert.ok(f.leases.inspect().slots.every(s=>!s.ciInvocation));
 });
 
 test('two simultaneous Cloud callers cannot pass the unscoped fence on different slots',async t=>{
  assert.equal(typeof control.withCloudController,'function');const f=await fixture(t);let ready,finish;const entered=new Promise(r=>ready=r),held=new Promise(r=>finish=r);
  const first=control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>{ready();await held;f.add();}});
- await entered;const second=await control.withCloudController({...f,approvedHead:head,lane:'I'});assert.equal(second.code,75);finish();assert.equal((await first).code,0);
+ await entered;try{const second=await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>assert.fail('Second Cloud caller was admitted')});assert.equal(second.code,75);}
+ finally{finish();await first;}
+ assert.equal((await first).code,0);
 });
 
 for(const obsolete of ['closed','advanced','foreign-label','foreign-repository'])test(`Cloud drain handles ${obsolete} without taking unowned work`,async t=>{
