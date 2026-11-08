@@ -847,6 +847,31 @@ test('full-pool overflow preserves a run already preparing a guest before runner
  assert.equal(writes,0);assert.equal(posts,0);
 });
 
+test('a busy run with more than sixteen waiting jobs cannot hide an untouched run from overflow',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ for(let slot=1;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0}).setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:999,ordinaryStage:'admitted'});
+ const run={...f.run,id:790,event:'workflow_dispatch',pull_requests:[]},job={...f.jobs[0],id:1001,run_id:790,name:'server-probe',labels:['self-hosted','dt-123-790-1-server-probe-1']};
+ f.jobs.splice(0,f.jobs.length,...Array.from({length:20},(_,i)=>({...job,id:901+i,run_id:789,name:`test-server (${i+1})`,labels:['self-hosted',`dt-123-789-1-test-server-${i+1}`]})));
+ const actions=[];let marker='{}';
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,run]};
+  if(path.endsWith('/runs/790'))return run;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  if(path.endsWith('/actions/jobs/1001'))return job;
+  return get(path);
+ };
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;};
+ f.api.post=async path=>{actions.push(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('No slot is free'),transport:{healthy:async()=>true}});
+ assert.equal(marker,'{"790":2}');
+ assert.deepEqual(actions,['/repos/fixture/waitron/actions/runs/790/cancel']);
+});
+
 test('hosted overflow recovery still requires external contributor approval before retrying',async()=>{
  const f=fixture(),get=f.api.get;
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('fork-pr-contributor-approval')?{approval_policy:'first_time_contributors'}:get(path);

@@ -138,7 +138,7 @@ test('newly routed ordinary families keep their exact GitHub names and routing l
 
 test('routed keys still refuse extra shards and malformed job labels',async()=>{
  const {ciIdentity}=await import('./ci-identity.mjs');
- for(const jobKey of ['lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
+ for(const jobKey of ['server-probe-2','lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
   'test-server-stream-2','mutation-shared-aggregate-2','test-server-merge-2','test-till-merge-2','test-dashboard-merge-2','test-light-a-01','test-bookings-1\n'])
   assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
 });

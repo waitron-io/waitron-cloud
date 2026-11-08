@@ -61,7 +61,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  if(!free){
-  const queued=await read(()=>findAutomatic({api,policy,limit:16,exclude,excludeRuns,signal}));
+  const occupiedRuns=new Set([...excludeRuns,...state.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean),...[...active.values()].map(ci=>ci.runId)]);
+  const queued=await read(()=>findAutomatic({api,policy,limit:16,exclude,excludeRuns:occupiedRuns,signal}));
   for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values())await withKernelLock(config.state,async()=>{
    const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
