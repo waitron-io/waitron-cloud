@@ -115,10 +115,11 @@ enforcement points are reconciled is left to the builder.
 - The email gateway and the AI features (translation, the rota solver) each have a
   **monthly allowance, which can differ by level**. SMS follows the
   [8 November decisions](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
-  account-counted codes, initially unenforced monthly figures and enforced request/guess
-  controls. Booking messages are outside that revision. The gateway remains unbuilt.
+  account-counted codes, initially unenforced monthly figures, an enforced daily cap,
+  EU-only eligible destinations, usage warnings and enforced request/guess controls. Booking messages are outside that revision. The gateway remains unbuilt.
 - **The allowances exist to stop abuse, not to make money.** They are set high enough that
-  a normal venue never meets them. The AI features cost us very little so far.
+  a normal venue never meets them; SMS’s daily cap can stop ordinary use. The AI
+  features cost us very little so far.
 - **What happens when a venue reaches an allowance is not designed now.** "Later, when we
   see how they actually get used, we can decide whether there are separate levels or like
   upgrades" (owner). Until then a reached allowance refuses further use of that service
