@@ -690,7 +690,7 @@ test('automatic cancellation yields its persisted intent while GitHub is still c
  const ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{assert.ok(path.endsWith('/cancel'));posts++;};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases:{inspect:()=>({ciInvocation:pending}),setInvocation:value=>pending=value},automatic:true,
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases:{inspect:()=>({ciInvocation:pending}),setInvocation:value=>pending=value},automatic:true,
   wait:async()=>assert.fail('A remote cancellation must not hold the shared admission lock')});
  assert.deepEqual(result,{retry:false,pending:true});assert.equal(posts,1);assert.equal(pending.ordinaryStage,'cancel-requested');
 });
@@ -701,20 +701,20 @@ for(const active of [false,true])test(`owned cancellation of a queued job ${acti
   path.includes('/jobs?')?{total_count:2,jobs:[f.jobs[0],{...f.jobs[1],status:active?'in_progress':'completed',runner_id:active?77:0}]}:get(path);
  f.api.post=async path=>{if(path.endsWith('/force-cancel')){assert.equal(active,false);forced=true;}else assert.ok(path.endsWith('/rerun'));};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}};
- const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>assert.fail('Recovery must yield')});
+ const result=await controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true,wait:async()=>assert.fail('Recovery must yield')});
  assert.equal(forced,!active);assert.equal(result.retry,!active);if(active)assert.equal(result.pending,true);
 });
 
 for(const status of [401,403])test(`pickup reports permanent HTTP ${status} failures`,async t=>{
  const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get;
  f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?'))throw Object.assign(new Error('Forbidden'),{status});return get(path);};
- await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),error=>error.status===status);
+ await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true}}),error=>error.status===status);
 });
 
 for(const abort of [false,true])test(`a transient inventory failure without workers ${abort?'preserves shutdown':'returns for the next service tick'}`,async t=>{
  const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,stop=new AbortController();
  f.api.get=async path=>{if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};if(path.includes('/runs?')){if(abort)stop.abort();throw Object.assign(new Error('Unavailable'),{status:503});}return get(path);};
- const result=automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},signal:stop.signal});
+ const result=automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},signal:stop.signal});
  if(abort)await assert.rejects(result,{name:'AbortError'});else assert.deepEqual(await result,{code:0,served:0,reason:'inventory-unavailable'});
 });
 for(const change of ['missing','short','foreign','new-attempt'])test(`queued cancellation refuses ${change} inventory authority`,async()=>{
@@ -724,7 +724,7 @@ for(const change of ['missing','short','foreign','new-attempt'])test(`queued can
  path.includes('/jobs?')?{total_count:change==='short'?2:1,jobs:change==='short'?[]:[{...f.jobs[0],...(change==='missing'?{id:902}:change==='foreign'?{head_sha:'2'.repeat(40)}:{})}]}:get(path);
  f.api.post=async()=>{posts++;};
  const leases={inspect:()=>({ciInvocation:{ordinaryStage:'cancel-requested',runId:789,attempt:1,jobId:901}})};
- const work=controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true});
+ const work=controller.fallbackOrdinary({api:routingVariables(f.api),policy,ci,leases,automatic:true});
  if(change==='foreign')assert.equal((await work).pending,true);else await assert.rejects(work,/inventory|missing|attempt/i);
  assert.equal(posts,0);
 });
