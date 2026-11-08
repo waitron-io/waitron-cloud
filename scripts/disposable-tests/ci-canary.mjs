@@ -79,7 +79,8 @@ export async function overflowOrdinary({api,policy,ci,signal}){
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
    inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
   return inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
-   job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued'));
+   job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued' &&
+    !(job.status==='completed' && job.conclusion==='skipped')));
  };
  if(await started())return;
  await markHostedAttempt({api,policy,ci,signal});
@@ -269,19 +270,20 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
   route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,ordinaryStage:'admitted'};
  leases.setInvocation(invocation);
+ let result;
  try{
   const health=signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500);
   assert.equal(await transport.healthy({signal:health}),true,'CI server unavailable');
   if(!automatic)assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
   assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head changed during health check');
-  const result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
-  if(result.completion)return result;
+  result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
+  if(result.completion?.code===0)return result;
   assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');
   leases.clearInvocation(invocation.nonce);return result;
  }catch(error){
   assert.ok(leases.inspect().slots.every(slot=>slot.state==='free'),`Ordinary CI cleanup remains uncertain: ${error.message}`);
   const retry=await (fallback??fallbackOrdinary)({api,policy,ci,leases,automatic,signal:AbortSignal.timeout(240000)});
-  if(!retry.pending && retry.code!==75)leases.clearInvocation(invocation.nonce);return {code:125,error:error.message,...retry};
+  if(!retry.pending && retry.code!==75)leases.clearInvocation(invocation.nonce);return {...result,code:125,error:error.message,...retry};
  }
 }
 export async function qualifyOrdinaryHosted({api,policy,retry,signal,wait=delay}){
@@ -455,9 +457,9 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    if(monitorFailure)throw monitorFailure;
    completion={code,observations:[],expected:{id:ci.jobId,run_id:ci.runId,run_attempt:ci.attempt,head_sha:ci.workflowSha,
     runner_id:registration.runner.id,runner_name:name,status:'completed',conclusion:'success'}};
-   // Final readback cannot justify cancelling siblings. Retire the fallback
-   // intent before that read; the lease and orphan runner still own cleanup.
-   if(ci.workflowPath==='.github/workflows/ci.yml'){
+   // A zero-exit listener’s final readback cannot justify cancelling siblings.
+   // Retire fallback first; the lease and orphan runner still own cleanup.
+   if(code===0 && ci.workflowPath==='.github/workflows/ci.yml'){
     const pending=leases.inspect().ciInvocation;
     assert.ok(pending && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId,'Completion intent differs');
     assert.ok(leases.clearInvocation(pending.nonce),'Completion intent was not retired');
@@ -472,7 +474,6 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
      'CI assignment or job completion did not qualify');
     await wait(2000,undefined,options);
    }
-   return code;
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
  if(completion)result={...result,completion};

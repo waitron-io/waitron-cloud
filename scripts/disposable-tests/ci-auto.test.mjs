@@ -1084,3 +1084,18 @@ test('the real automatic job entry serves a labelled job in hosted mode and clea
  assert.deepEqual(events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
  assert.ok(new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().slots.every(slot=>slot.state==='free'&&!slot.ciInvocation));
 });
+
+for(const [label,conclusion,runner,late,wantCancel] of [
+ ['skipped without runner', 'skipped',null,false,true],['skipped with zero runner','skipped',0,false,true],
+ ['skipped after assignment','skipped',42,false,false],['failed without runner','failure',null,false,false],
+ ['cancelled without runner','cancelled',null,false,false],['assigned after marker','skipped',null,true,false]
+])test(`overflow handles a completed ${label}`,async()=>{
+ const f=fixture(),get=f.api.get,api=routingVariables(f.api),ci=(await controller.findAutomatic({api,policy,limit:1}))[0];
+ const skipped={...f.jobs[0],id:999,name:'server-probe',labels:['self-hosted','dt-123-789-1-server-probe-1'],status:'completed',conclusion,runner_id:runner};
+ f.jobs.push(skipped);let posts=0,marker='{}';
+ f.api.get=async path=>path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;if(late)skipped.runner_id=42;};
+ f.api.post=async path=>{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');assert.equal(marker,'{"789":2}');posts++;};
+ await controller.overflowOrdinary({api:f.api,policy,ci});
+ assert.equal(posts,wantCancel?1:0);assert.equal(marker,wantCancel?'{"789":2}':'{}');
+});
