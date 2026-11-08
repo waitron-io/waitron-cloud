@@ -49,17 +49,7 @@ export function scriptPlan(paths, base, head, git) {
       const entry = entries.find(entry => entry.path === path);
       assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular script target: ${path}`);
     }
-    if (family === proofFamily) {
-      const workflow = git('show', `${sha}:${proofFamily.callers[0]}`);
-      for (const event of ['pull_request', 'push']) {
-        const block = new RegExp(`^  ${event}:\\n([\\s\\S]*?)(?=^  [a-z_]+:|^permissions:)`, 'm').exec(workflow)?.[1];
-        const declared = /^    paths:\n((?:      - '[^'\n]+'\n)+)/m.exec(block ?? '')?.[1] ?? '';
-        const patterns = [...declared.matchAll(/^      - '([^']+)'$/gm)].map(match => match[1]);
-        for (const pattern of ['deploy/kubernetes/proof/**', 'scripts/kubernetes-proof-*', proofFamily.callers[0]]) {
-          assert.ok(patterns.includes(pattern), 'Kubernetes owner does not cover its inputs');
-        }
-      }
-    }
+
   }
   if (family === proofFamily) {
     for (const path of paths) assert.ok(trees.some(entries => entries.some(entry => entry.path === path)) && trees.every(entries => {

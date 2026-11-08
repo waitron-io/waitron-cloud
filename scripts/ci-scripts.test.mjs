@@ -224,6 +224,16 @@ test('Kubernetes proof and prose changes run only their owning script checks', (
     execFileSync(process.execPath, args, {cwd: root, env, stdio: 'pipe'});
   });
   assert.deepEqual(commands, [['--check', 'scripts/kubernetes-proof-budget.mjs'], ['--test', checks]]);
+  put(workflow, readFileSync(join(root, workflow), 'utf8').replaceAll("      - 'scripts/kubernetes-proof-*'\n", ''));
+  const narrowed = plan(commit(), base);
+  assert.deepEqual(narrowed.packages, []);
+  assert.throws(() => checkScripts(narrowed, git, args => {
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    execFileSync(process.execPath, args, {cwd: root, env, stdio: 'pipe'});
+  }), error => {
+    assert.match(error.stdout.toString(), /prerequisite pushes and PRs select only their proof inputs/);
+    return true;
+  });
 }));
 
 test('package edits keep their package owners when Kubernetes proof paths accompany them', () => fixture(({root, git, put, commit}) => {
