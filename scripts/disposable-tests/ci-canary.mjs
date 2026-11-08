@@ -346,6 +346,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
       assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');
       const job=await api.get(`${base}/jobs/${ci.jobId}`,{signal:work});
       assert.ok(!job.runner_id || job.runner_id===registration.runner.id,'CI runner assignment differs');
+      assert.ok(job.status!=='completed' || job.conclusion==='success','CI job assignment completed without success');
       if(!job.runner_id){
        const runner=await api.get(`${base}/runners/${registration.runner.id}`,{signal:work});
        assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');

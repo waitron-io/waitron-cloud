@@ -136,3 +136,25 @@ for(const [jobKey,apiJobName,label] of [
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});assert.equal(result.code,0,result.error);
  assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
+
+test('a cancelled concrete job aborts its idle guest instead of retaining a slot until the guest deadline',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),get=f.api.get;
+ f.api.get=async(path,options)=>{if(path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:false};
+  const value=await get(path,options);
+  return path.includes('/jobs/')?{...value,status:'completed',conclusion:'cancelled',runner_id:0}:value;};
+ let executing=false;
+ const inspect=f.transport.inspect,destroy=f.transport.destroy;
+ f.transport.inspect=async(lease,options)=>executing?{resourceId:lease.resourceId,running:true}:inspect(lease,options);
+ f.transport.destroy=async(...args)=>{executing=false;return destroy(...args);};
+ const read=f.api.get;
+ f.api.get=async(path,options)=>{const value=await read(path,options);
+  return path.includes('/jobs/') && !executing?{...value,status:'queued',conclusion:null}:value;};
+ f.transport.execute=async(_lease,{signal})=>{
+  executing=true;
+  await new Promise((resolve,reject)=>{signal.addEventListener('abort',()=>reject(new Error('External deadline elapsed')),{once:true});});
+ };
+ const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',signal:AbortSignal.timeout(300),
+  wait:async()=>new Promise(resolve=>setTimeout(resolve,1))});
+ assert.equal(result.code,125);assert.match(result.error,/job.*completed|job.*cancelled/i);
+ assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().slots[0].state,'free');
+});

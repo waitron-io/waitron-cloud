@@ -613,3 +613,28 @@ test('shutdown during an unadmitted worker wait records cancellation rather than
   runWorker:async()=>({code:75,reason:'capacity-busy'}),wait:async(ms,value,{signal})=>{assert.equal(ms,30000);stop.abort();signal.throwIfAborted();}}),{name:'AbortError'});
  assert.deepEqual(events.map(e=>({code:e.code,reason:e.reason})),[{code:143,reason:'cancelled'}]);
 });
+
+test('an incomplete run inventory does not hold free capacity behind a still-running sibling',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const {automaticTick}=await import('./control.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
+ const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release;
+ const held=new Promise(resolve=>release=resolve),ids=[];
+ const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/runs?') && path.includes('status=queued')){
+   if(++scans===2)return {total_count:1,workflow_runs:[]};
+  }
+  if(path.includes('/jobs?'))return {total_count:scans<3?2:3,jobs:scans<3?[first,second]:[first,second,third]};
+  return get(path);
+ };
+ let failure;
+ try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
+  api:f.api,transport:{healthy:async()=>true},wait:async()=>{},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903)release();return {code:0};}});}
+ catch(error){failure=error;}
+ assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);
+});

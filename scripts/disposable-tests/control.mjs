@@ -60,8 +60,16 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const refused=[];
- const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});
+ let jobs;
+ try{jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
+  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});}
+ catch(error){
+  signal?.throwIfAborted();
+  if(error.status===undefined && !/Incomplete automatic run inventory/.test(error.message))throw error;
+  console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
+  if(!active.size)return {code:0,served,reason:'inventory-unavailable'};
+  await wait(1000,undefined,{signal});continue;
+ }
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  let cleanup;
