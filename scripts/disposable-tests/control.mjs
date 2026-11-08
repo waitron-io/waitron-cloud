@@ -103,13 +103,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }catch(error){
   signal?.throwIfAborted();
   if(!readFailed)throw error;
-  const transient=error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
-   error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
+  const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
+   error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
    ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
-  if(!active.size)return {code:0,served,reason:'inventory-unavailable'};
-  await wait(30000,undefined,{signal});
+  const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);
+  if(!active.size){
+   if(Number.isFinite(error.retryAt))await wait(retryDelay,undefined,{signal});
+   return {code:0,served,reason:'inventory-unavailable'};
+  }
+  await wait(retryDelay,undefined,{signal});
  }
  }while(active.size);
  }finally{await Promise.allSettled([...active.keys(),...cleanups]);}

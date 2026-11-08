@@ -237,7 +237,7 @@ def prepare(resource):
         if code == 0:
             break
         if code != 255:
-            raise RuntimeError(f'Turn stage failed with status {code}')
+            raise ValueError(f'Turn stage failed with status {code}')
         time.sleep(0.25)
     else:
         raise TimeoutError('Guest did not boot within120seconds')

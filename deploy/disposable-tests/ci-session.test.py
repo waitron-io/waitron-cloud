@@ -67,7 +67,9 @@ class CISession(unittest.TestCase):
     with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create'),patch.object(session.time,'time',side_effect=lambda:now),patch.object(session.time,'sleep',side_effect=sleep):
      if statuses==[255,0]:session.prepare(self.resource);self.assertTrue((directory/'prepared').exists());self.assertEqual(len(readiness),2);self.assertEqual(readiness[0],readiness[1])
      else:
-      with self.assertRaisesRegex((RuntimeError,TimeoutError),'status 2$|within120seconds'):session.prepare(self.resource)
+      expected=ValueError if statuses==[2] else TimeoutError
+      message='status 2$' if statuses==[2] else 'within120seconds'
+      with self.assertRaisesRegex(expected,message):session.prepare(self.resource)
       self.assertFalse((directory/'prepared').exists());self.assertEqual(len(readiness),1)
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):
   self.assertTrue(callable(getattr(guest,'complete_ci',None)),'CI execution entry point missing')

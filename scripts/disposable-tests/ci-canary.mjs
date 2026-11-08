@@ -168,7 +168,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),o
    if(ci)found.push(ci);
    if(found.length===limit)return found;
   }
-  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
+  }catch(error){signal?.throwIfAborted();if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
    if(candidate && error.code==='ERR_ASSERTION' && onRefused)try{await onRefused(candidate);}catch(fallbackError){
     signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',runId:run.id,error:fallbackError.message}));
    }
