@@ -684,15 +684,15 @@ order. Remote access matters most because Waitron's customer-facing features wai
    owner in its country, with no invitations, manager accounts or concurrent second owner
    (owner, 2026-10-24). Two countries mean two accounts. The
    [D608 lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
-   records owner direction from watcher 2026-11-07 21:29 and 21:32: strongest-factor
-   sign-in/reset, factor enrolment before box/remote/payment actions, same-owner recovery
-   through a paired-box administrator, and sole-owner replacement at recipient acceptance.
-   SMS alone counts for sign-in/reset only when it is the sole enrolled factor; reset also
-   needs the verified-mailbox link. The revised SMS, paired-box and handover draft awaits
-   final review. Proposed mailbox-plus-box recovery and recovery codes for all factor
-   types are explicit choices, not existing capabilities or owner approvals.
-   Nothing is built. Total loss without the mailbox or a usable paired box/administrator
-   stays unresolved.
+   follows the settled 8 November sign-in/reset rules: passkey alone, app plus
+   password, and a new-device email check for password-only accounts, with SMS
+   when chosen. Before box connection, remote access or adding a payment method,
+   existing owners and handover recipients need at least one enrolled proof:
+   app, passkey or SMS. Risky actions ask for proof again; a mailbox reset keeps
+   enrolled proofs. The same-owner mailbox-plus-paired-box recovery and handover
+   draft remains for owner review. Manual recovery, one box's reach across other
+   organisations, recovery-code expansion, remembered-device reset effects and
+   handover defaults stay open. Nothing is built or approved for landing.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
    activation permission.

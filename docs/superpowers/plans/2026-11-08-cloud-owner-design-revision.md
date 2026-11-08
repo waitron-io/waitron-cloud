@@ -1,12 +1,14 @@
 # D608: revise the Cloud owner design
 
-**Documentation only; awaiting watcher approval.** Revise draft #1090 to the settled sign-in rules. No implementation, provider access or landing.
+**Documentation only; approved for revision.** Revise draft #1090 to the settled sign-in rules. No implementation, provider access or landing.
 
 ## Direction and scope
 
 Lane G watcher 2026-11-08 11:25: “Revise #1090 to it”, the shared `sign-in-rules-20261108.md`, owner 11:25 (“email before SMS, it costs less”). This replaces earlier sign-in/reset rules. Watcher 7 November 21:54 accepted mailbox-plus-box recovery, subject to owner overrule. Watcher 11:25 leaves manual staff checks, recovery codes, handover defaults and one box recovering every organisation open.
 
 Owner 11:39 settled Registered (level 1, free) 10 texts/account/month, Connected (level 2) 25, Hosted (level 3) includes Connected; stated, initially unenforced. Counting/configurability are watcher 11:11 directions; D610 owns delivery detail. No build authority.
+
+**Approval:** Watcher 8 November 13:13 approves the revision with the corrected 12:08 rule: at least one proof (app, passkey **or SMS**) before connecting a box, remote access or adding a payment method, including existing owners and handover recipients. This replaces the stricter app/passkey wording below. Existing app recovery codes remain; expansion and remembered-device reset effects stay open. “Revise the draft; no further Claude read” supersedes the design-read step. No implementation or landing authority.
 
 ## Revision after approval
 
