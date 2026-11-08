@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
+export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:image-smoke|changes|ci|publish|server-queue-watchdog|mutation-shared-aggregate|test-server-stream|test-(?:server|heavy|fiscal-verifactu|till|dashboard|venue-service|provisioning)-merge|lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
 
 export const runnerCommand=['/opt/actions-runner/bin/Runner.Listener','run'];
 export function ciIdentity(value) {
@@ -11,7 +11,7 @@ export function ciIdentity(value) {
   for(const key of ['repositoryId','workflowId','runId','attempt','jobId'])
     assert.ok(Number.isSafeInteger(value[key]) && value[key]>0,'Invalid CI numeric identity');
   assert.ok(['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(value.workflowPath) &&
-    ['workflow_dispatch','pull_request'].includes(value.event) && typeof value.jobKey==='string' && ciJobKeyPattern.test(value.jobKey),'Invalid CI workflow identity');
+    ['workflow_dispatch','pull_request','push','schedule'].includes(value.event) && typeof value.jobKey==='string' && ciJobKeyPattern.test(value.jobKey),'Invalid CI workflow identity');
   for(const key of ['workflowSha','sourceSha','sourceTree']) assert.match(value[key],/^[a-f0-9]{40}$/,'Invalid CI Git identity');
   assert.match(value.workflowDigest,/^[a-f0-9]{64}$/,'Invalid CI workflow digest');
   return Object.fromEntries(keys.map(key=>[key,value[key]]));
@@ -43,6 +43,7 @@ export function ciInvocation(value){
 
 export function jobName(value){
  const ci=ciIdentity(value);if(ci.jobKey==='typecheck')return 'typecheck';
+ if(ci.jobKey==='image-smoke-1')return 'image / smoke';
  const match=/^((?:test-(?:dashboard|server|heavy|till|fiscal-verifactu|venue-service|provisioning)|mutation-shared))-([0-9]+)$/.exec(ci.jobKey);
  return match?`${match[1]} (${match[2]})`:ci.jobKey.slice(0,-2);
 }

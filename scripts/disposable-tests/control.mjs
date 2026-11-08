@@ -117,14 +117,14 @@ async function fallbackRefused({config,api,runId,jobId,name,label,signal}){
  const policy=config.ci,base=`/repos/${policy.repository}`;
  // Refusal may prevent execution, but cancellation still needs a current owned label.
  const run=await api.get(`${base}/actions/runs/${runId}`,{signal});
- assert.ok(run.id===runId && run.run_attempt===1 && run.workflow_id===policy.workflowId && run.path===policy.workflowPath &&
-  run.event==='pull_request' && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && run.pull_requests?.length===1,'Refused run identity differs');
+ assert.ok(run.id===runId && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0 && run.workflow_id===policy.workflowId && run.path===policy.workflowPath &&
+  ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && (run.event!=='pull_request' || run.pull_requests?.length===1),'Refused run identity differs');
  const job=await api.get(`${base}/actions/jobs/${jobId}`,{signal});
- assert.ok(job.id===jobId && job.name===name && job.run_id===runId && job.run_attempt===1 && job.head_sha===run.head_sha && job.status==='queued' && !job.runner_id &&
+ assert.ok(job.id===jobId && job.name===name && job.run_id===runId && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha && job.status==='queued' && !job.runner_id &&
   job.labels?.length===2 && job.labels.includes('self-hosted') && job.labels.includes(label),'Refused job identity differs');
- const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:1,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
+ const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:run.run_attempt,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
  return withAvailableSlot(config,async({leases})=>{
-  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:1,jobId,ordinaryStage:'refused'};
+  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:run.run_attempt,jobId,ordinaryStage:'refused'};
   leases.setInvocation(invocation);
   const result=await withKernelLock(config.state,()=>fallbackOrdinary({api,policy,ci,leases,automatic:true,signal:AbortSignal.timeout(240000)}));
   if(!result.pending)leases.clearInvocation(invocation.nonce);
