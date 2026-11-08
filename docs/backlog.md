@@ -669,21 +669,11 @@ order. Remote access matters most because Waitron's customer-facing features wai
    support takeover or operator, fiscal or activation permission follows from ownership.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
-6. **Support and the operator console.** Open: the [D609 proposed design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
-   awaits owner approval. Owner via watcher 2026-11-08 12:33 and 13:24 chose signed-in
-   free/paid Cloud forms in Waitron's dashboard and the account site, own private bug
-   reports with status, shared feature requests with votes/comments, and sanitised
-   GitHub issues with status returned to Cloud. Venues without accounts register free;
-   reports are rate-limited per account. Every outgoing diagnostic and stored Cloud
-   summary needs explicit permitted fields/values and preview; A982 owns box policy.
-   Retain the choice each time of a one-off copy or venue-only summary access, now
-   24 hours from approval with shorter choices; extension needs fresh agreement.
-   Retain recorded verified-owner email displays and common customer-visible history
-   for console/CLI reads, with country-owned customer data and qualified staff authority.
-   Cross-country feature/comment publication scope needs owner approval. Both forms,
-   shared features, private report view, GitHub status link and console/grant/history
-   integration remain unbuilt; later automated GitHub copying is separate. No help desk
-   or ticket workflow is proposed.
+6. **Support and the operator console.** The [D609 proposed design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
+   reflects the owner's 2026-11-08 reporting, sanitisation and 24-hour access choices.
+   Forms, shared features/votes/comments, private reports, GitHub status and console/grant/history
+   integration remain unbuilt. Automatic-report preview and cross-country publication scope
+   need decisions; privacy/retention and qualified country support authority remain open.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
