@@ -55,7 +55,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
   let retryAt=0;
   const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api,policy,signal,excludeRuns:ownedRuns,onError:(error,runId)=>{
-   pendingFailure(error,runId);if(Number.isFinite(error.retryAt))retryAt=Math.max(retryAt,error.retryAt);
+   pendingFailure(error,runId);if(Number.isFinite(error.retryAt)){retryAt=error.retryAt;return false;}
   }}),{signal});
   if(recovered.code!==75)hosted=recovered;
   if(retryAt)await wait(Math.max(30000,retryAt-Date.now()),undefined,{signal});

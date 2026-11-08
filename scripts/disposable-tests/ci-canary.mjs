@@ -136,7 +136,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    }
    await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
   }
-  }catch(error){signal?.throwIfAborted();if(!onError)throw error;await onError(error,Number(id));}
+  }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
  }
  return values;
 }

@@ -977,3 +977,15 @@ test('overflow leaves a workflow without hosted-attempt routing on the server',a
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
  await controller.overflowOrdinary({api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
 });
+
+test('a rate-limit callback stops recovery reads until its caller can release the lock and wait',async()=>{
+ const f=fixture(),get=f.api.get,reads=[];
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{"789":2,"790":2}'};
+  if(path.endsWith('/runs/789') || path.endsWith('/runs/790')){reads.push(path);throw Object.assign(new Error('Rate limited'),{status:403,retryAt:Date.now()+75000});}
+  return get(path);
+ };
+ const errors=[];
+ await controller.recoverHostedAttempts({api:f.api,policy,onError:(error,id)=>{errors.push(id);return false;}});
+ assert.deepEqual(reads,['/repos/fixture/waitron/actions/runs/789']);assert.deepEqual(errors,[789]);
+});
