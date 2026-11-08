@@ -13,13 +13,19 @@ export class GithubApp {
  constructor({appEnv,appKey,apiBase='https://api.github.com'}){Object.assign(this,{appEnv,appKey,apiBase});
   assert.ok(apiBase==='https://api.github.com' || /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(apiBase),'Untrusted GitHub API origin');}
  async request(path,{method='GET',body,authorization,signal}={}){
-  assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && !path.includes('..'),'Invalid GitHub API path');
+  const comparison=method==='GET' && /^\/repos\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1&page=2)?$/.test(path);
+  assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && (!path.includes('..') || comparison),'Invalid GitHub API path');
   const response=await fetch(this.apiBase+path,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
    headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'waitron-disposable-ci',
     authorization:'Bearer '+authorization,...(body===undefined?{}:{'content-type':'application/json'})},
    ...(body===undefined?{}:{body:JSON.stringify(body)})});
   if(!response.ok){await response.body?.cancel();const error=new Error(`GitHub ${method} refused (${response.status})`);error.status=response.status;throw error;}
-  const bytes=await boundedBody(response,2*1024*1024);
+  let bytes;
+  try{bytes=await boundedBody(response,2*1024*1024);}
+  catch(error){
+   if(comparison && error.message==='GitHub response byte limit exceeded')throw Object.assign(new Error('GitHub ancestry response exceeded its byte limit',{cause:error}),{code:'GITHUB_RESPONSE_LIMIT'});
+   throw error;
+  }
   return bytes.byteLength?JSON.parse(Buffer.from(bytes).toString()):null;
  }
  async token(){

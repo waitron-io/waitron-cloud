@@ -488,3 +488,82 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
  }
  }finally{clearTimeout(timeout);finish();releaseSibling();await sibling;}
 });
+
+function historicalFixture({headVersion=8,executionVersion=11,changedHead=false,foreign=false,oldest=false}={}){
+ const f=fixture(),get=f.api.get,sha=n=>n.toString(16).padStart(40,'0'),bytes=n=>'reviewed workflow '+n;
+ const records=Array.from({length:10},(_,i)=>({sha:sha(11-i),digest:createHash('sha256').update(bytes(11-i)).digest('hex')}));
+ if(oldest)records[9]={sha:sha(1),digest:createHash('sha256').update(bytes(1)).digest('hex')};
+ const trusted={...policy,workflowDigest:records[0].digest,workflowHistory:records};
+ f.api.get=async path=>{
+  if(path.endsWith('/git/ref/heads/main'))return {object:{sha:'e'.repeat(40)}};
+  if(path.includes('/commits?'))return Array.from({length:10},(_,i)=>({sha:sha(11-i)}));
+  if(path.includes('/compare/')){const commit=path.match(/compare\/([a-f0-9]{40})/)[1];return {status:foreign?'diverged':'ahead',merge_base_commit:{sha:foreign?'f'.repeat(40):commit}};}
+  if(path.includes('/contents/')){
+   const revision=path.split('?ref=')[1];const number=revision===head?headVersion:revision===execution?executionVersion:Number.parseInt(revision,16);
+   return {encoding:'base64',content:Buffer.from(changedHead && revision===head?'PR-edited workflow':bytes(number)).toString('base64')};
+  }
+  return get(path);
+ };
+ return {...f,policy:trusted};
+}
+
+test('automatic pickup independently accepts an older reviewed head and newer reviewed execution workflow',async()=>{
+ const f=historicalFixture();const found=await controller.findAutomatic({api:f.api,policy:f.policy,limit:1});
+ assert.equal(found.length,1);assert.equal(found[0].jobId,901);
+ assert.equal(found[0].workflowDigest,createHash('sha256').update('reviewed workflow 8').digest('hex'));
+});
+for(const [name,options] of [['PR-edited workflow',{changedHead:true}],['commit not ancestral to main',{foreign:true}],['eleventh oldest workflow',{headVersion:1,oldest:true}]])test(`automatic pickup keeps ${name} on hosted fallback`,async()=>{
+ const f=historicalFixture(options),refused=[];
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.equal(refused.length,1);assert.equal(refused[0].runId,789);
+});
+
+test('workflow history configuration cannot exceed ten immutable main versions or contain malformed pins',()=>{
+ const f=historicalFixture();const config={version:2,mode:'manual-slots',slots:6,state:'/fixture/state',hostGeneration:'fixture',host:'fixture.invalid',recipe:'/fixture/recipe',repository:'/fixture/repo.git',ci:{...f.policy,appEnv:'/fixture/app.env',appKey:'/fixture/key'}};
+ assert.doesNotThrow(()=>controller.validateCIConfig(config));
+ for(const workflowHistory of [[...config.ci.workflowHistory,{sha:'f'.repeat(40),digest:'f'.repeat(64)}],[],[{sha:'bad',digest:'a'.repeat(64)}],[{sha:'a'.repeat(40),digest:'bad'}],[config.ci.workflowHistory[0],config.ci.workflowHistory[0]]])
+  assert.throws(()=>controller.validateCIConfig({...config,ci:{...config.ci,workflowHistory}}),/history|workflow|pin|version/i);
+});
+
+test('an oversized ancestry response leaves PRs for a later pickup without cancellation',async t=>{
+ const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
+ const server=createServer((req,res)=>res.end('x'.repeat(3*1024*1024)));
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const f=historicalFixture(),get=f.api.get,refused=[];
+ f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[],'A transport limit is not an unreviewed workflow');
+});
+
+test('a configured hash cannot vouch for different bytes at its recorded main commit',async()=>{
+ const f=historicalFixture({changedHead:true}),refused=[];
+ f.policy.workflowHistory[3].digest=createHash('sha256').update('PR-edited workflow').digest('hex');
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.equal(refused.length,1);
+});
+
+test('ancestry reads request a single commit on the page without file patches',async t=>{
+ const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');const seen=[];
+ const server=createServer((req,res)=>{
+  seen.push(req.url);if(!req.url.endsWith('?per_page=1&page=2')){res.statusCode=400;res.end();return;}
+  res.setHeader('content-type','application/json');res.end(JSON.stringify({status:'ahead',merge_base_commit:{sha:req.url.match(/compare\/([a-f0-9]{40})/)[1]}}));
+ });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const f=historicalFixture(),get=f.api.get;f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
+ assert.equal((await controller.findAutomatic({api:f.api,policy:f.policy,limit:1})).length,1);
+ assert.equal(seen.length,2);assert.ok(seen.every(path=>path.endsWith('?per_page=1&page=2')));
+});
+
+for(const unclear of ['main','recent','comparison','pin-blob'])test(`an unclear ${unclear} reply leaves work for a later pickup without cancellation`,async()=>{
+ const f=historicalFixture(),get=f.api.get,refused=[];
+ f.api.get=async path=>{
+  if(unclear==='main' && path.endsWith('/git/ref/heads/main'))return {object:{}};
+  if(unclear==='recent' && path.includes('/commits?'))return {};
+  if(unclear==='comparison' && path.includes('/compare/'))return {status:'ahead'};
+  if(unclear==='pin-blob' && path.endsWith('?ref='+(11).toString(16).padStart(40,'0')))return {encoding:'unknown',content:'unknown'};
+  return get(path);
+ };
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[]);
+});
