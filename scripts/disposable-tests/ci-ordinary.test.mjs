@@ -184,13 +184,13 @@ test('ordinary execution refuses an unselected head before recording or preparin
  assert.equal(leases.inspect().ciInvocation,undefined);
 });
 
-test('hosted retry qualification requires its exact next attempt, checkout, hosted typecheck and summary',async()=>{
+for(const event of ['pull_request','push','schedule','workflow_dispatch'])test(`hosted ${event} retry qualification requires its exact next attempt, checkout, hosted typecheck and summary`,async()=>{
  assert.equal(typeof controller.qualifyOrdinaryHosted,'function');
  const retry={runId:789,previousAttempt:1,sourceSha:head};
  const job={...evidence().job,run_attempt:2,status:'completed',conclusion:'success',labels:['ubuntu-latest'],runner_id:1001};
  const summary={...job,id:902,name:'summary'};let log='[command]/usr/bin/git log -1 --format=%H\n'+head;
  const api={get:async path=>path.includes('/commits/')?evidence().source:path.includes('/jobs?')?{total_count:2,jobs:[job,summary]}:
- {...evidence().run,run_attempt:2,status:'completed',conclusion:'success'},jobLog:async()=>log};
+ {...evidence().run,event,run_attempt:2,status:'completed',conclusion:'success'},jobLog:async()=>log};
  assert.equal((await controller.qualifyOrdinaryHosted({api,policy,retry})).sourceTree,'4'.repeat(40));
  job.labels=['self-hosted'];await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/hosted/i);job.labels=['ubuntu-latest'];
  summary.conclusion='failure';await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/summary/i);summary.conclusion='success';

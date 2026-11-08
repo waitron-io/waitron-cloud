@@ -7,7 +7,7 @@ import {configuredSlots} from './leases.mjs';
 function ordinaryKey(name,labels){
  if(name==='image / smoke')return 'image-smoke-1';
  if(name==='typecheck')return Array.isArray(labels) && labels.some(label=>typeof label==='string' && label.endsWith('-typecheck-1'))?'typecheck-1':'typecheck';
- if(['changes','ci','publish','server-queue-watchdog','mutation-shared-aggregate','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge','test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
+ if(['server-probe','changes','ci','publish','server-queue-watchdog','mutation-shared-aggregate','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge','test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
  const match=/^((?:test-(?:server|heavy|till|dashboard|fiscal-verifactu|venue-service|provisioning)|mutation-shared)) \(([1-9][0-9]*)\)$/.exec(name);
  return match?`${match[1]}-${match[2]}`:null;
 }
@@ -50,7 +50,9 @@ async function writeRoutingVariable({api,policy,name,value,signal}){
 }
 export async function hostedAttempts({api,policy,signal}){
  let values={};
- try{values=JSON.parse((await api.get(variablePath(policy,'DISPOSABLE_TESTS_HOSTED_ATTEMPTS'),{signal})).value||'{}');}
+ try{const raw=(await api.get(variablePath(policy,'DISPOSABLE_TESTS_HOSTED_ATTEMPTS'),{signal})).value||'{}';
+  try{values=JSON.parse(raw);}catch{assert.fail('Invalid hosted attempt routing JSON');}
+ }
  catch(error){if(error.status!==404)throw error;}
  assert.ok(values && typeof values==='object' && !Array.isArray(values) &&
   Object.entries(values).every(([run,attempt])=>/^[1-9][0-9]*$/.test(run) && Number.isSafeInteger(attempt) && attempt>0),'Invalid hosted attempt routing');
@@ -64,12 +66,14 @@ async function markHostedAttempt({api,policy,ci,signal}){
 }
 // The repository variable survives a full pool and a controller restart.
 export async function overflowOrdinary({api,policy,ci,signal}){
- const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,signal});
+ const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
  const base=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
  const run=await api.get(base,{signal});
- if(!Number.isFinite(Date.parse(run.created_at)) || Date.now()-Date.parse(run.created_at)<60000)return;
+ const job=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
+ const queuedAt=Date.parse(job.started_at??run.run_started_at??run.created_at);
+ if(!Number.isFinite(queuedAt) || Date.now()-queuedAt<60000)return;
  const started=async()=>{
   const inventory=await api.get(base+`/attempts/${ci.attempt}/jobs?per_page=100`,{signal});
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
@@ -87,16 +91,21 @@ export async function overflowOrdinary({api,policy,ci,signal}){
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }
-export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set()}){
+export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set(),onError}){
  const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
  for(const [id,attempt] of Object.entries(values)){
   if(excludeRuns.has(Number(id)))continue;
-  const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
+  try{
+  const path=`${base}/actions/runs/${id}`;let run;
+  try{run=await api.get(path,{signal});}catch(error){
+   if(error.status!==404)throw error;
+   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+  }
   assert.ok(run.id===Number(id) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
    run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
    Number.isSafeInteger(run.run_attempt) && run.run_attempt>=attempt-1,'Hosted overflow run identity differs');
-  let obsolete=false;
-  if(run.event==='pull_request'){
+  let obsolete=run.event==='pull_request' && run.pull_requests?.length===0;
+  if(run.event==='pull_request' && !obsolete){
    assert.equal(run.pull_requests?.length,1,'Hosted overflow needs one PR');
    const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
    obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
@@ -127,6 +136,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    }
    await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
   }
+  }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
  }
  return values;
 }
@@ -183,7 +193,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  await api.post(path+'/rerun',undefined,{signal});
  return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
 }
-export async function findOrdinary({api,policy,approvedHead,runId,jobId,automatic=false,signal}){
+export async function findOrdinary({api,policy,approvedHead,runId,jobId,automatic=false,requireHostedRouting=false,signal}){
  assert.match(approvedHead,/^[a-f0-9]{40}$/);
  assert.ok(Number.isSafeInteger(runId) && runId>0,'Invalid ordinary run ID');
  assert.equal((await api.get(`/repos/${policy.repository}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,
@@ -204,10 +214,11 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
   api.get(`${base}/commits/${approvedHead}`,{signal}),run.event==='pull_request'?api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal}):undefined]);
  assert.equal(blob.encoding,'base64','Invalid workflow blob encoding');
  const workflow=Buffer.from(blob.content,'base64').toString(),digest=createHash('sha256').update(workflow).digest('hex');
+ if(requireHostedRouting && !workflow.includes('vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return null;
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),onePerRun=false,onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -240,6 +251,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
    if(ci)found.push(ci);
    if(found.length===limit)return found;
+   if(ci && onePerRun)break;
   }
   }catch(error){signal?.throwIfAborted();if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
    if(candidate && error.code==='ERR_ASSERTION' && onRefused)try{await onRefused(candidate);}catch(fallbackError){
@@ -275,7 +287,7 @@ export async function qualifyOrdinaryHosted({api,policy,retry,signal,wait=delay}
  const base=`/repos/${policy.repository}`,end=Date.now()+3300000;
  while(true){
   const run=await api.get(`${base}/actions/runs/${retry.runId}`,{signal});
-  assert.ok(run.id===retry.runId && run.head_sha===retry.sourceSha && run.workflow_id===policy.workflowId && run.event==='pull_request' &&
+  assert.ok(run.id===retry.runId && run.head_sha===retry.sourceSha && run.workflow_id===policy.workflowId && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
    run.path===policy.workflowPath && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
    [retry.previousAttempt,retry.previousAttempt+1].includes(run.run_attempt),'Hosted retry identity or attempt differs');
   if(run.run_attempt===retry.previousAttempt+1 && run.status==='completed'){

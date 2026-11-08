@@ -26,7 +26,7 @@ for(const event of ['pull_request','push','schedule','workflow_dispatch']){
   assert.equal(ci.sourceSha,sha);assert.equal(ci.sourceTree,'b'.repeat(40));
  });
 }
-for(const name of ['ci','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge',
+for(const name of ['server-probe','ci','test-server-stream','test-server-merge','test-heavy-merge','test-fiscal-verifactu-merge',
  'test-till-merge','test-dashboard-merge','test-venue-service-merge','test-provisioning-merge','mutation-shared-aggregate','publish']){
  test(`server admission accepts the ${name} job`,()=>{
   assert.equal(admitOrdinary(policy,sha,evidence('push',2,name)).jobKey,name+'-1');
