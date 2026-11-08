@@ -23,8 +23,8 @@ IMAGE_URL = 'https://cloud.debian.org/images/cloud/trixie/20261103-2651/debian-1
 IMAGE_SHA512 = 'd25999de0770d4cde1be72c299ba3ad94eac7ea8fd4d18f8cc86c69df69337e2e8a91d64465a9bfd8f2a78c566fcbcb0842eacc91c09efdef72d719d9f13b535'
 
 
-GUEST_MEMORY_MIB = 10752
-HOST_CAP_MIB = 11136
+GUEST_MEMORY_MIB = 16384
+HOST_CAP_MIB = 18432
 
 
 def resource_id(value):
@@ -200,10 +200,10 @@ def budget(slots, *, memory, threads, disk_total, disk_free, allocated):
         raise ValueError('Invalid host slot budget')
     if any(type(v) is not int or v < 0 for v in [memory, threads, disk_total, disk_free, allocated]):
         raise ValueError('Invalid host resource measurement')
-    if slots*HOST_CAP_MIB*1024**2+16*1024**3 > memory:
-        raise ValueError('Insufficient memory for guest caps and host reserve')
     if slots > 10:
         raise ValueError('Ten-slot operating limit exceeded')
+    if slots*HOST_CAP_MIB*1024**2+16*1024**3 > memory:
+        raise ValueError('Insufficient memory for guest caps and host reserve')
     # On the 32-thread host, guests share 24; four complete cores stay reserved.
     if min(slots*4, 24)+8 > threads:
         raise ValueError('Insufficient execution threads after host reserve')

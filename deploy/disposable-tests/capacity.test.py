@@ -9,18 +9,18 @@ class Capacity(unittest.TestCase):
         self.assertTrue(callable(getattr(host,'budget',None)), 'Host admission must enforce the agreed resource budget')
         self.assertTrue(callable(getattr(host,'guest_cpus',None)), 'Host admission must reserve complete physical cores')
 
-    def test_four_six_and_ten_fit_but_eleven_refuses_memory(self):
-        for slots in [4, 6, 10]:
+    def test_four_and_six_fit_but_seven_refuses_memory(self):
+        for slots in [4, 6]:
             host.budget(slots, memory=125*G, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
         with self.assertRaisesRegex(ValueError, 'memory'):
-            host.budget(11, memory=125*G, threads=64, disk_total=1800*G, disk_free=1700*G, allocated=0)
+            host.budget(7, memory=125*G, threads=64, disk_total=1800*G, disk_free=1700*G, allocated=0)
 
-    def test_ten_guests_fit_the_measured_host_without_using_its_reserve(self):
-        host.budget(10, memory=130989480*1024, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
-        # Ten 11,136 MiB host caps plus the untouched 16 GiB reserve need 124.75 GiB.
-        host.budget(10, memory=127744*1024**2, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
+    def test_six_guests_fit_the_measured_host_without_using_its_reserve(self):
+        host.budget(6, memory=130989480*1024, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
+        # Six 18 GiB host caps plus the untouched 16 GiB reserve need 124 GiB.
+        host.budget(6, memory=126976*1024**2, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
         with self.assertRaisesRegex(ValueError, 'memory'):
-            host.budget(10, memory=127744*1024**2-1, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
+            host.budget(6, memory=126976*1024**2-1, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
 
     def test_more_memory_cannot_expand_the_approved_ten_slot_operating_limit(self):
         for slots in [11, 12, 16]:
