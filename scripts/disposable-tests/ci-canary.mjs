@@ -123,7 +123,23 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
   api.get(`${base}/commits/${approvedHead}`,{signal}),api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal})]);
  if(automatic)await checkExecutionWorkflow({api,policy,run,signal});
  assert.equal(blob.encoding,'base64','Invalid workflow blob encoding');
- return admitOrdinary(policy,approvedHead,{repository,run,job:candidates[0],workflow:Buffer.from(blob.content,'base64').toString(),source,pull});
+ const workflow=Buffer.from(blob.content,'base64').toString(),digest=createHash('sha256').update(workflow).digest('hex');
+ const admittedPolicy=automatic && policy.workflowHistory?{...policy,workflowDigest:await reviewedWorkflowDigest({api,policy,digest,signal})}:policy;
+ return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
+}
+// A pin remains eligible only while its exact main revision is recent and ancestral.
+async function reviewedWorkflowDigest({api,policy,digest,signal}){
+ const pin=policy.workflowHistory.find(pin=>pin.digest===digest);assert.ok(pin,'CI workflow definition changed');
+ const base=`/repos/${policy.repository}`,main=(await api.get(`${base}/git/ref/heads/main`,{signal})).object?.sha;
+ assert.match(main,/^[a-f0-9]{40}$/,'Main workflow revision is missing');
+ const recent=await api.get(`${base}/commits?sha=${main}&path=${policy.workflowPath}&per_page=10`,{signal});
+ assert.ok(Array.isArray(recent) && recent.length<=10 && recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
+ const comparison=await api.get(`${base}/compare/${pin.sha}...${main}`,{signal});
+ assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit?.sha===pin.sha,'Workflow pin is not an ancestor of current main');
+ const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${pin.sha}`,{signal});
+ assert.equal(blob.encoding,'base64','Invalid pinned workflow encoding');
+ assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),pin.digest,'Pinned main workflow differs');
+ return digest;
 }
 async function checkExecutionWorkflow({api,policy,run,signal}){
  const ref=`refs/pull/${run.pull_requests[0].number}/merge`;
@@ -131,7 +147,9 @@ async function checkExecutionWorkflow({api,policy,run,signal}){
  assert.ok(matches.length===1 && /^[a-f0-9]{40}$/.test(matches[0].sha),'Original execution workflow identity is missing');
  const blob=await api.get(`/repos/${policy.repository}/contents/${policy.workflowPath}?ref=${matches[0].sha}`,{signal});
  assert.equal(blob.encoding,'base64','Invalid execution workflow encoding');
- assert.equal(createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex'),policy.workflowDigest,'Original execution workflow changed');
+ const digest=createHash('sha256').update(Buffer.from(blob.content,'base64')).digest('hex');
+ if(policy.workflowHistory)await reviewedWorkflowDigest({api,policy,digest,signal});
+ else assert.equal(digest,policy.workflowDigest,'Original execution workflow changed');
 }
 export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
@@ -528,10 +546,17 @@ export async function main(args){
 export function validateCIConfig(config){
  assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
  configuredSlots(config);
- const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest','workflowId','workflowPath']);
+ const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&
   [ci.repositoryId,ci.workflowId].every(v=>Number.isSafeInteger(v)&&v>0),'Invalid CI policy identity');
  assert.match(ci.workflowDigest,/^[a-f0-9]{64}$/);
+ if(ci.workflowHistory!==undefined){
+  assert.ok(ci.workflowPath==='.github/workflows/ci.yml' && Array.isArray(ci.workflowHistory) && ci.workflowHistory.length>0 && ci.workflowHistory.length<=10,'Invalid workflow history bound');
+  for(const pin of ci.workflowHistory){
+   assert.ok(pin && Object.keys(pin).sort().join(',')==='digest,sha' && /^[a-f0-9]{40}$/.test(pin.sha) && /^[a-f0-9]{64}$/.test(pin.digest),'Invalid workflow history pin');
+  }
+  assert.ok(new Set(ci.workflowHistory.map(pin=>pin.sha)).size===ci.workflowHistory.length && new Set(ci.workflowHistory.map(pin=>pin.digest)).size===ci.workflowHistory.length && ci.workflowHistory[0].digest===ci.workflowDigest,'Invalid workflow history versions');
+ }
  for(const path of [config.state,ci.appEnv,ci.appKey])assert.ok(typeof path==='string' && path.startsWith('/'),'CI paths must be absolute');
 }
 const cli=process.argv[1];

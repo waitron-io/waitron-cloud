@@ -13,7 +13,8 @@ export class GithubApp {
  constructor({appEnv,appKey,apiBase='https://api.github.com'}){Object.assign(this,{appEnv,appKey,apiBase});
   assert.ok(apiBase==='https://api.github.com' || /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(apiBase),'Untrusted GitHub API origin');}
  async request(path,{method='GET',body,authorization,signal}={}){
-  assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && !path.includes('..'),'Invalid GitHub API path');
+  const comparison=method==='GET' && /^\/repos\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}$/.test(path);
+  assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && (!path.includes('..') || comparison),'Invalid GitHub API path');
   const response=await fetch(this.apiBase+path,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
    headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'waitron-disposable-ci',
     authorization:'Bearer '+authorization,...(body===undefined?{}:{'content-type':'application/json'})},

@@ -31,3 +31,15 @@ test('job-log reads are bounded plain text without exposing token-bearing redire
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
  assert.equal(typeof app.jobLog,'function');assert.match(await app.jobLog('/job-log'),/^Source /);
 });
+
+// GitHub's compare separator is a literal triple dot, not a parent path.
+test('the App can read exact immutable Git comparisons without admitting parent paths',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');const seen=[];
+ const server=createServer((req,res)=>{seen.push(req.url);res.setHeader('content-type','application/json');res.end('{"status":"ahead"}');});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const path='/repos/fixture/waitron/compare/'+'1'.repeat(40)+'...'+'2'.repeat(40);
+ assert.deepEqual(await app.get(path),{status:'ahead'});
+ for(const bad of ['/repos/fixture/../private','/repos/fixture/waitron/compare/main...other',path+'/../private',path+'?extra=true'])await assert.rejects(app.get(bad),/API path/);
+ await assert.rejects(app.post(path,{}),/API path/);assert.deepEqual(seen,[path]);
+});

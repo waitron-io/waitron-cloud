@@ -488,3 +488,39 @@ for(const refusalRead of ['ready','transient-failure','admitted-sibling','persis
  }
  }finally{clearTimeout(timeout);finish();releaseSibling();await sibling;}
 });
+
+function historicalFixture({headVersion=8,executionVersion=11,changedHead=false,foreign=false,oldest=false}={}){
+ const f=fixture(),get=f.api.get,sha=n=>n.toString(16).padStart(40,'0'),bytes=n=>'reviewed workflow '+n;
+ const records=Array.from({length:10},(_,i)=>({sha:sha(11-i),digest:createHash('sha256').update(bytes(11-i)).digest('hex')}));
+ if(oldest)records[9]={sha:sha(1),digest:createHash('sha256').update(bytes(1)).digest('hex')};
+ const trusted={...policy,workflowDigest:records[0].digest,workflowHistory:records};
+ f.api.get=async path=>{
+  if(path.endsWith('/git/ref/heads/main'))return {object:{sha:'e'.repeat(40)}};
+  if(path.includes('/commits?'))return Array.from({length:10},(_,i)=>({sha:sha(11-i)}));
+  if(path.includes('/compare/')){const commit=path.match(/compare\/([a-f0-9]{40})/)[1];return {status:foreign?'diverged':'ahead',merge_base_commit:{sha:foreign?'f'.repeat(40):commit}};}
+  if(path.includes('/contents/')){
+   const revision=path.split('?ref=')[1];const number=revision===head?headVersion:revision===execution?executionVersion:Number.parseInt(revision,16);
+   return {encoding:'base64',content:Buffer.from(changedHead && revision===head?'PR-edited workflow':bytes(number)).toString('base64')};
+  }
+  return get(path);
+ };
+ return {...f,policy:trusted};
+}
+
+test('automatic pickup independently accepts an older reviewed head and newer reviewed execution workflow',async()=>{
+ const f=historicalFixture();const found=await controller.findAutomatic({api:f.api,policy:f.policy,limit:1});
+ assert.equal(found.length,1);assert.equal(found[0].jobId,901);
+ assert.equal(found[0].workflowDigest,createHash('sha256').update('reviewed workflow 8').digest('hex'));
+});
+for(const [name,options] of [['PR-edited workflow',{changedHead:true}],['commit not ancestral to main',{foreign:true}],['eleventh oldest workflow',{headVersion:1,oldest:true}]])test(`automatic pickup keeps ${name} on hosted fallback`,async()=>{
+ const f=historicalFixture(options),refused=[];
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.equal(refused.length,1);assert.equal(refused[0].runId,789);
+});
+
+test('workflow history configuration cannot exceed ten immutable main versions or contain malformed pins',()=>{
+ const f=historicalFixture();const config={version:2,mode:'manual-slots',slots:6,state:'/fixture/state',hostGeneration:'fixture',host:'fixture.invalid',recipe:'/fixture/recipe',repository:'/fixture/repo.git',ci:{...f.policy,appEnv:'/fixture/app.env',appKey:'/fixture/key'}};
+ assert.doesNotThrow(()=>controller.validateCIConfig(config));
+ for(const workflowHistory of [[...config.ci.workflowHistory,{sha:'f'.repeat(40),digest:'f'.repeat(64)}],[],[{sha:'bad',digest:'a'.repeat(64)}],[{sha:'a'.repeat(40),digest:'bad'}],[config.ci.workflowHistory[0],config.ci.workflowHistory[0]]])
+  assert.throws(()=>controller.validateCIConfig({...config,ci:{...config.ci,workflowHistory}}),/history|workflow|pin|version/i);
+});
