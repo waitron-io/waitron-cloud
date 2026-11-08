@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {isKubernetesProofPath} from './ci-scripts.mjs';
 
 const revision = /^[a-f0-9]{40}$/;
 const backend = /^packages\/(account-http|backups|identity|operations|registration|remote-access|translation)\//;
@@ -14,6 +15,7 @@ const packageProofCases = new Set([
 ]);
 
 function consumes(kind, path) {
+  if (isKubernetesProofPath(path)) return false;
   if (/^[^/]+\.md$/.test(path)) return false;
   // Every workspace manifest can change installation or execution.
   if (/^(apps|packages)\/[^/]+\/package\.json$/.test(path)) return true;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {readInputInventory} from './ci-input-audit.mjs';
+import {readInputInventory, unreadMarkdown} from './ci-input-audit.mjs';
+import {documentationPlan} from './ci-docs.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
@@ -9,10 +10,18 @@ const families = [
   {targets: ['scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'],
     callers: ['scripts/gateway-reconnection-receipt.mjs']},
 ];
+const proofFamily = {targets: ['deploy/kubernetes/proof/workflow.test.mjs'], callers: ['.github/workflows/kubernetes-proof.yml']};
+
+export function isKubernetesProofPath(path) {
+  return typeof path === 'string' && !/[\\\0\r\n]/.test(path) &&
+    !path.split('/').some(part => !part || part === '.' || part === '..' || part === '.gitattributes') &&
+    (path.startsWith('deploy/kubernetes/proof/') || /^scripts\/kubernetes-proof-[^/]+$/.test(path) || path === proofFamily.callers[0]);
+}
 
 function familyForPaths(paths) {
   assert.ok(Array.isArray(paths) && paths.length > 0 && new Set(paths).size === paths.length, 'Invalid script paths');
-  const family = families.find(family => paths.every(path => family.targets.includes(path)));
+  const family = families.find(family => paths.every(path => family.targets.includes(path))) ??
+    (paths.some(isKubernetesProofPath) && paths.every(path => isKubernetesProofPath(path) || unreadMarkdown(path)) ? proofFamily : null);
   assert.ok(family, 'Invalid script paths');
   return family;
 }
@@ -28,16 +37,37 @@ export function assertScriptWork(plan) {
 }
 
 export function scriptPlan(paths, base, head, git) {
-  if (!paths.length || !families.some(family => paths.every(path => family.targets.includes(path)))) return null;
+  let family;
+  try {family = familyForPaths(paths);} catch {return null;}
   const scripts = {base, head, paths};
   assertScriptWork({scripts, packages: [], receipts: [], typecheck: false});
-  const family = familyForPaths(paths);
+  const trees = [];
   for (const sha of [base, head]) {
     const entries = readInputInventory(sha, git);
+    trees.push(entries);
     for (const path of [...family.targets, ...family.callers ?? []]) {
       const entry = entries.find(entry => entry.path === path);
       assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular script target: ${path}`);
     }
+    if (family === proofFamily) {
+      const workflow = git('show', `${sha}:${proofFamily.callers[0]}`);
+      for (const event of ['pull_request', 'push']) {
+        const block = new RegExp(`^  ${event}:\\n([\\s\\S]*?)(?=^  [a-z_]+:|^permissions:)`, 'm').exec(workflow)?.[1];
+        const declared = /^    paths:\n((?:      - '[^'\n]+'\n)+)/m.exec(block ?? '')?.[1] ?? '';
+        const patterns = [...declared.matchAll(/^      - '([^']+)'$/gm)].map(match => match[1]);
+        for (const pattern of ['deploy/kubernetes/proof/**', 'scripts/kubernetes-proof-*', proofFamily.callers[0]]) {
+          assert.ok(patterns.includes(pattern), 'Kubernetes owner does not cover its inputs');
+        }
+      }
+    }
+  }
+  if (family === proofFamily) {
+    for (const path of paths) assert.ok(trees.some(entries => entries.some(entry => entry.path === path)) && trees.every(entries => {
+      const entry = entries.find(entry => entry.path === path);
+      return !entry || entry.mode === '100644' && entry.type === 'blob';
+    }), 'Proof input must be regular wherever it exists');
+    const prose = paths.filter(unreadMarkdown);
+    if (prose.length) documentationPlan(prose, base, head, git);
   }
   return scripts;
 }
@@ -52,8 +82,11 @@ export function checkScripts(plan, git, execute) {
   assert.equal(git('rev-parse', 'HEAD').trim(), head, 'Root script job requires the exact head checkout');
   git('diff', '--exit-code', head, '--');
   const family = familyForPaths(paths);
-  for (const target of [...family.targets, ...family.callers ?? []]) execute(['--check', target]);
-  execute(['--test', family.targets[1]]);
+  const current = family === proofFamily ? readInputInventory(head, git) : [];
+  const targets = family === proofFamily ? paths.filter(path => path.endsWith('.mjs') && current.some(entry => entry.path === path))
+    : [...family.targets, ...family.callers ?? []];
+  for (const target of targets) execute(['--check', target]);
+  execute(['--test', family === proofFamily ? proofFamily.targets[0] : family.targets[1]]);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

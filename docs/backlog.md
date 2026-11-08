@@ -3474,6 +3474,11 @@ operator alert at 10% above the last alert's figure, first measurement silent;
 show when email is not configured. Cost figures never fail a run. Qualify the
 PR and merge job-time savings on matched samples during healthy GitHub operation.
 
+## Kubernetes proof CI ownership (D614)
+
+Record the first natural proof-only PR's hosted selection after the planner
+controls pass; the policy-change PR itself keeps full work.
+
 ## Dependency-cache miss job budgets (D507)
 
 Healthy runs cover 67 cache-consuming jobs across all ten definitions. Each fits

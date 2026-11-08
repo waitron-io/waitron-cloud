@@ -7,6 +7,8 @@ import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
+import {checkScripts} from './ci-scripts.mjs';
+import {proofInputPlanRange} from './ci-proof-inputs.mjs';
 
 const workspace = loadWorkspace();
 const helper = 'scripts/identity-upstream.mjs';
@@ -196,4 +198,57 @@ test('executed planner emits the script-only job and summary consumes its needs 
   const summary = spawnSync(process.execPath, [resolve('scripts/ci-summary.mjs')], {cwd: root, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: '', CI_PLAN: output.plan, CI_RESULTS: JSON.stringify({changes: {result: 'success'}, scripts: {result: 'success'}, packages: {result: 'skipped'}, receipts: {result: 'skipped'}, typecheck: {result: 'skipped'}, documentation: {result: 'skipped'}})}, encoding: 'utf8'});
   assert.equal(summary.status, 0, summary.stderr);
   assert.match(summary.stdout, /Passed root script checks/);
+}));
+
+
+test('Kubernetes proof and prose changes run only their owning script checks', () => fixture(({root, git, put, commit, plan}) => {
+  const workflow = '.github/workflows/kubernetes-proof.yml';
+  const checks = 'deploy/kubernetes/proof/workflow.test.mjs';
+  for (const path of [workflow, checks]) put(path, readFileSync(resolve(path), 'utf8'));
+  put('scripts/kubernetes-proof-budget.mjs', 'export const cap = 10;\n');
+  const base = commit();
+  put('scripts/kubernetes-proof-budget.mjs', 'export const cap = 11;\n');
+  put('deploy/kubernetes/proof/new-input.json', '{}\n');
+  put('docs/backlog.md', '# Proof work\n');
+  const head = commit(), selected = plan(head, base);
+  assert.deepEqual(selected.packages, []);
+  assert.deepEqual(selected.receipts, []);
+  assert.equal(selected.typecheck, false);
+  assert.deepEqual(selected.scripts, {base, head, paths: [
+    'deploy/kubernetes/proof/new-input.json', 'docs/backlog.md', 'scripts/kubernetes-proof-budget.mjs']});
+  for (const kind of ['venue', 'cost']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, false);
+  const commands = [];
+  checkScripts(selected, git, args => {
+    commands.push(args);
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    execFileSync(process.execPath, args, {cwd: root, env, stdio: 'pipe'});
+  });
+  assert.deepEqual(commands, [['--check', 'scripts/kubernetes-proof-budget.mjs'], ['--test', checks]]);
+}));
+
+test('package edits keep their package owners when Kubernetes proof paths accompany them', () => fixture(({root, git, put, commit}) => {
+  put('package.json', JSON.stringify({name: 'proof-package-fixture', private: true}));
+  put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n");
+  for (const name of ['catalogue', 'consumer', 'unrelated']) {
+    put(`packages/${name}/package.json`, JSON.stringify({name: `@waitron-cloud/${name}`, private: true,
+      scripts: {test: 'node --test test/index.test.mjs'}}));
+    put(`packages/${name}/src/index.mjs`, 'export const value = 1;\n');
+    put(`packages/${name}/test/index.test.mjs`, 'export {};\n');
+  }
+  put('packages/consumer/src/index.mjs', "import {value} from '../../catalogue/src/index.mjs';\nconsole.log(value);\n");
+  for (const path of ['.github/workflows/kubernetes-proof.yml', 'deploy/kubernetes/proof/workflow.test.mjs']) {
+    put(path, readFileSync(resolve(path), 'utf8'));
+  }
+  put('scripts/kubernetes-proof-budget.mjs', 'export const cap = 10;\n');
+  const base = commit();
+  const plan = head => createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, loadWorkspace(root), git);
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const packageOnly = plan(commit());
+  assert.deepEqual(packageOnly.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
+  put('scripts/kubernetes-proof-budget.mjs', 'export const cap = 11;\n');
+  put('docs/backlog.md', '# Mixed proof change\n');
+  const mixed = plan(commit());
+  assert.deepEqual(mixed.packages, packageOnly.packages);
+  assert.equal(mixed.typecheck, true);
+  assert.equal(mixed.scripts, undefined);
 }));
