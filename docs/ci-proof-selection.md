@@ -43,8 +43,8 @@ checkout remains a separate input to its Cloud preparation program.
 The venue matrix checks the composition of the venue suites.
 Its own wrappers, `scripts/fixtures/service-proof.ts`, `scripts/test-cloud-*`,
 `scripts/venue-service-*` and `deploy/test-cloud/` select it. So do the package
-`venue-service-*` test files and the shared helper's explicitly listed package
-tests, including translation's `worker-cli` case. Shared backend test helpers
+`venue-service-*` test files and the selector's named package tests. That list
+still includes former receipt inputs, whose package CI remains in place. Shared backend test helpers
 and fixture data, installation inputs, the workflow and planner also select it. This includes the registration venue-service
 fixture, backup verification helpers and fake translation provider. The imported
 `deploy/local-stack/{runtime,lease,bootstrap}.mjs` helpers and
@@ -99,3 +99,8 @@ package and local-stack checks, and the free-services command remains available.
 The current venue receipt keeps its cases, assertions, time limits and command. The lightweight planner and summary have read access to Actions
 and pull-request metadata so they can verify attempt-bound evidence. A skipped matrix means it was not selected. It does not
 prove those tests passed on that revision.
+
+An older selected venue PR can fail with `Incomplete native job inventory`
+after this matrix change. Rebase that branch onto main so its strict summary
+expects the current venue receipt. Unselected older branches keep their skipped
+matrix placeholder; no compatibility code is added.

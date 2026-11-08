@@ -17,6 +17,9 @@ qualification and the complete allowance checks, including the rendered gateway.
 These checks deliberately remove protections in disposable copies. Ordinary pull
 requests run the underlying behavior tests with required-case receipts instead.
 The password and relay diagnostics retain their existing affected-path checks.
+Kubernetes prerequisites are separate: only changes matching their PR/main-push
+paths start them. They have no scheduled or manual trigger, so this nightly
+backstop does not check their external tool dependencies for drift.
 
 You can start the same full run manually:
 
