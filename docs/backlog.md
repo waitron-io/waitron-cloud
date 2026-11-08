@@ -141,7 +141,7 @@ Three genuine native-smoke cases each change one observer record while restoring
 both sales with SQLite and fiscal checks and removing owned resources. The
 replication case reported a byte discrepancy of 742 instead of -1 in
 [PR1050's cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/42332288959/job/128281835882).
-Its cause stays in D530. Capture the synthetic proof before asserting its exact
+Its natural cause remains in the closed D530 history. Capture the synthetic proof before asserting its exact
 discrepancy; keep that assertion.
 
 Real bucket-control billing remains unknown
@@ -274,8 +274,8 @@ revocation. Production provider delivery remains with D102's owner-only enableme
 gate. See [the acknowledgement boundaries and runnable checks](backlog/account-http-boundaries.md#signup-and-password-reset-http-acknowledgements-d423).
 
 The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702)
-was a prematurely closed LIST response during Litestream shutdown. D530 owns its
-cause investigation; successful delivery of these client tests does not repair it.
+was a prematurely closed LIST response during Litestream shutdown. Its natural
+cause remains unknown in the CI bundle; delivery of these client tests does not repair it.
 
 ## Current state
 
@@ -1432,7 +1432,35 @@ implementation or production evidence.
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
 
 - **CI execution budget.** You can read one summary job and the individual package
-  and receipt jobs to check a candidate. The summary also checks the plan's
+  and receipt jobs to check a candidate.
+
+  **Closed failure sweep (D530).** The sweep is closed; the existing investigations
+  retain their limits. This is the historical cause/fix summary, not new qualification.
+  Handle a matching recurrence from that run's log under the existing CI-failure rules;
+  preserve the original assertions, deadlines and cleanup checks.
+
+  | Boundary | Retained cause or uncertainty | Disposition |
+  | --- | --- | --- |
+  | Translation disconnect (D201) | Natural cause unknown. | Retain the existing disconnect evidence; no guessed worker change. |
+  | Registration migrations and usage-worker termination | Natural causes unknown. | Keep existing diagnostics; investigate a matching recurrence. |
+  | Storage LIST during stop | Interrupted replies observed; natural cause unknown. | Keep strict accounting refusals and the existing 0.5.17/0.5.18 comparison. |
+  | First storage PUT after stop | A held initial upload can arrive after stop. | Retain the boundary work in [#1016](https://github.com/waitron-io/waitron-cloud/pull/1016). |
+  | Archive-header cancellation timer | Two timers share one event loop. | Controlled ordering is delivered in [#1072](https://github.com/waitron-io/waitron-cloud/pull/1072). |
+  | Native storage listener/admin | Address-in-use observed; competing socket owner unknown. | Preserve ownership and cleanup assertions. |
+  | Missing reset/close email | Natural cause unknown. | [#1024](https://github.com/waitron-io/waitron-cloud/pull/1024) bounds diagnostic acquisition, not the email cause. |
+  | Browser reconnect and panels | Natural causes unknown. | Preserve the original waits. |
+  | Paced replay cleanup and early wake | Natural causes unknown. | Preserve existing completion checks. |
+  | Ownership and result boundaries | Natural causes unknown. | Preserve ownership assertions. |
+  | Authority/startup, HTTP/2 and body metering | Separate boundaries; natural causes unknown. | Do not assume a common repair. |
+  | Offline packages and package authentication | Missing prerequisite and placeholder-token boundaries were addressed. | Retain #892/#880/#931; historical refetch cause remains unknown. |
+  | Source/install/termination and APT | Historical causes unknown. | Retain bounded acquisition, cancellation and source-state work. |
+  | Registry/image and archive acquisition | Upstream refusals observed; service causes unknown. | Retain existing acquisition bounds and recovery. |
+  | Missing logs, fiscal before-hooks and SIGINT | Natural causes unknown. | Preserve existing checks; no fiscal change is authorised. |
+  | Source JSON/gateway, cleanup and cache publication | Separate fixture fixes; historical scheduling causes unknown. | Keep delivered fixes and the existing non-recurrence history. |
+  | Session clocks, foreign-container inventory, venue cutoff, child output and UI fixture | Reproduced fixture causes. | Retain #1002/#890/#1034/#1055/#1040; do not repeat those repairs. |
+  | Concurrent documentation suites | Shared commit-hash output path; exact deleting process untraced. | Use separate temporary directories; passing isolation is not a test-source repair. |
+
+  The summary also checks the plan's
   package allocation against the planner's registered package names and shard
   counts. Registration uses six partitions, account HTTP uses three, portal uses six
   and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
@@ -3338,8 +3366,8 @@ The oversized-daemon inspection case reads an incomplete generated state file
 at `ci-test-postgres.test.mjs:146`. The test, launcher and diagnostic source are
 unchanged from its base and import no SDK. Twenty unchanged native comparisons
 and one Linux comparison pass; they do not establish the historical cause.
-Investigate the fixture writer and its termination boundary under D530, retaining
-every diagnostic, refusal, cleanup and deadline assertion.
+On a matching recurrence, investigate the fixture writer and its termination boundary
+from that run's log, retaining every diagnostic, refusal, cleanup and deadline assertion.
 
 
 ## Relay reservation admission timestamp (D530)
@@ -4201,7 +4229,7 @@ See [the native read boundaries](backlog/remote-access-http.md#remote-status-and
 An earlier remote-guidance qualification failed in
 `isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership`: the fixture did not
 observe the replay worker's started journal state (conformance run 40265731418,
-job 121387722438). The cause remains unknown and belongs to D530's investigation.
+job 121387722438). The cause remains unknown in the retained D530 history.
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
