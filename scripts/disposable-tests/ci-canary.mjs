@@ -134,7 +134,7 @@ async function reviewedWorkflowDigest({api,policy,digest,signal}){
  assert.match(main,/^[a-f0-9]{40}$/,'Main workflow revision is missing');
  const recent=await api.get(`${base}/commits?sha=${main}&path=${policy.workflowPath}&per_page=10`,{signal});
  assert.ok(Array.isArray(recent) && recent.length<=10 && recent.some(commit=>commit.sha===pin.sha),'Workflow pin is outside recent main history');
- const comparison=await api.get(`${base}/compare/${pin.sha}...${main}`,{signal});
+ const comparison=await api.get(`${base}/compare/${pin.sha}...${main}?per_page=1&page=2`,{signal});
  assert.ok(['ahead','identical'].includes(comparison.status) && comparison.merge_base_commit?.sha===pin.sha,'Workflow pin is not an ancestor of current main');
  const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${pin.sha}`,{signal});
  assert.equal(blob.encoding,'base64','Invalid pinned workflow encoding');

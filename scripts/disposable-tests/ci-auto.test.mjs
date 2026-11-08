@@ -524,3 +524,33 @@ test('workflow history configuration cannot exceed ten immutable main versions o
  for(const workflowHistory of [[...config.ci.workflowHistory,{sha:'f'.repeat(40),digest:'f'.repeat(64)}],[],[{sha:'bad',digest:'a'.repeat(64)}],[{sha:'a'.repeat(40),digest:'bad'}],[config.ci.workflowHistory[0],config.ci.workflowHistory[0]]])
   assert.throws(()=>controller.validateCIConfig({...config,ci:{...config.ci,workflowHistory}}),/history|workflow|pin|version/i);
 });
+
+test('an oversized ancestry response leaves PRs for a later pickup without cancellation',async t=>{
+ const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');
+ const server=createServer((req,res)=>res.end('x'.repeat(3*1024*1024)));
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const f=historicalFixture(),get=f.api.get,refused=[];
+ f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.deepEqual(refused,[],'A transport limit is not an unreviewed workflow');
+});
+
+test('a configured hash cannot vouch for different bytes at its recorded main commit',async()=>{
+ const f=historicalFixture({changedHead:true}),refused=[];
+ f.policy.workflowHistory[3].digest=createHash('sha256').update('PR-edited workflow').digest('hex');
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
+ assert.equal(refused.length,1);
+});
+
+test('ancestry reads request a single commit on the page without file patches',async t=>{
+ const {createServer}=await import('node:http'),{GithubApp}=await import('./github-app.mjs');const seen=[];
+ const server=createServer((req,res)=>{
+  seen.push(req.url);if(!req.url.endsWith('?per_page=1&page=2')){res.statusCode=400;res.end();return;}
+  res.setHeader('content-type','application/json');res.end(JSON.stringify({status:'ahead',merge_base_commit:{sha:req.url.match(/compare\/([a-f0-9]{40})/)[1]}}));
+ });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const f=historicalFixture(),get=f.api.get;f.api.get=path=>path.includes('/compare/')?app.get(path):get(path);
+ assert.equal((await controller.findAutomatic({api:f.api,policy:f.policy,limit:1})).length,1);
+ assert.equal(seen.length,2);assert.ok(seen.every(path=>path.endsWith('?per_page=1&page=2')));
+});
