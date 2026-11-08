@@ -38,6 +38,11 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   try{await Promise.race([...active.keys(),delay(30000,undefined,{signal:signal?AbortSignal.any([signal,wake.signal]):wake.signal})]);}
   finally{wake.abort();}
  };
+ const pendingFailure=(error,runId)=>{
+  signal?.throwIfAborted();
+  if(error.status===401 || error.status===403 && !Number.isFinite(error.retryAt))throw error;
+  console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId,error:error.message}));
+ };
  let served=0,healthy;
  try{do{
  let readFailed=false;
@@ -48,8 +53,12 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId).filter(Boolean));
  let hosted=await read(()=>hostedAttempts({api,policy,signal}));
  if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
-  const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api:new Proxy(api,{get(target,key){return key==='get'?(...args)=>read(()=>target.get(...args)):Reflect.get(target,key);}}),policy,signal,excludeRuns:ownedRuns}),{signal});
+  let retryAt=0;
+  const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api,policy,signal,excludeRuns:ownedRuns,onError:(error,runId)=>{
+   pendingFailure(error,runId);if(Number.isFinite(error.retryAt))retryAt=Math.max(retryAt,error.retryAt);
+  }}),{signal});
   if(recovered.code!==75)hosted=recovered;
+  if(retryAt)await wait(Math.max(30000,retryAt-Date.now()),undefined,{signal});
  }
  const excludeRuns=new Set(Object.keys(hosted).map(Number));
  if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
@@ -62,13 +71,16 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  if(!free){
   const occupiedRuns=new Set([...excludeRuns,...state.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean),...[...active.values()].map(ci=>ci.runId)]);
-  const queued=await read(()=>findAutomatic({api,policy,limit:16,exclude,excludeRuns:occupiedRuns,signal}));
-  for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values())await withKernelLock(config.state,async()=>{
+  const queued=await read(()=>findAutomatic({api,policy,limit:16,onePerRun:true,exclude,excludeRuns:occupiedRuns,signal}));
+  for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values()){
+  const outcome=await withKernelLock(config.state,async()=>{
    const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
    if(fresh.slots.some(slot=>(slot.ciInvocation?.runId??slot.lease?.ci?.runId)===ci.runId) || [...active.values()].some(job=>job.runId===ci.runId))return;
-   await overflowOrdinary({api,policy,ci,signal});
+   try{await overflowOrdinary({api,policy,ci,signal});}catch(error){return {error};}
   },{signal});
+  if(outcome?.error){pendingFailure(outcome.error,ci.runId);if(Number.isFinite(outcome.error.retryAt))await wait(Math.max(30000,outcome.error.retryAt-Date.now()),undefined,{signal});}
+  }
   if(active.size){await waitForWorker();continue;}break;
  }
  transport??=new CITransport(config);
