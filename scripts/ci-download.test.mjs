@@ -35,7 +35,7 @@ root = pathlib.Path(os.environ['DOWNLOAD_FIXTURE'])
 count = root / 'attempts'
 n = int(count.read_text()) + 1 if count.exists() else 1
 count.write_text(str(n))
-assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', '--with-deps', 'chromium']
+assert sys.argv[1:] == ['--filter', '@waitron-cloud/ui-smoke', 'exec', 'playwright', 'install', 'chromium']
 if os.environ.get('DOWNLOAD_SOURCE_REQUIRED') == '1':
     source = (root / 'sources.list.d' / 'ubuntu.sources').read_text()
     uri = source.split('URIs: ', 1)[1].splitlines()[0]
