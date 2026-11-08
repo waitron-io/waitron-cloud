@@ -359,7 +359,7 @@ jobs:
             --grace 10 --lock-wait 30 --retry-delay 5 \
             --lock /var/lib/dpkg/lock-frontend --lock /var/lib/dpkg/lock \
             --lock /var/lib/apt/lists/lock --lock /var/cache/apt/archives/lock \
-            -- pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
+            -- pnpm --filter @waitron-cloud/ui-smoke exec playwright install chromium
       - if: ${{ !matrix.shards && !matrix.members }}
         run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
         env:

@@ -87,7 +87,7 @@ test('browser setup is limited to browser packages and bounded across two attemp
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/portal' \|\| matrix.package == '@waitron-cloud\/ui-smoke'/);
   assert.match(packages,/python3 scripts\/ci-download.py --timeout 120 --attempts 2/);
   assert.match(packages,/--grace 10 --lock-wait 30 --retry-delay 5/);
-  assert.match(packages,/-- pnpm --filter @waitron-cloud\/ui-smoke exec playwright install --with-deps chromium/);
+  assert.match(packages,/-- pnpm --filter @waitron-cloud\/ui-smoke exec playwright install chromium/);
 });
 test('strict summary always runs and receives the plan and every dependency result',()=>{
   assert.match(job('summary'),/if: \$\{\{ always\(\) \}\}/);

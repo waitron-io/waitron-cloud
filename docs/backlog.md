@@ -3472,7 +3472,9 @@ Retire resolved diagnostic workflows after moving their retained checks into
 existing root or nightly jobs. Add a weekly estimated-cost report with an
 operator alert at 10% above the last alert's figure, first measurement silent;
 show when email is not configured. Cost figures never fail a run. Qualify the
-PR and merge job-time savings on matched samples during healthy GitHub operation.
+PR and merge job-time savings, including hosted browser preparation, on matched
+samples during healthy GitHub operation; remove retained apt-only browser setup
+after hosted qualification.
 
 Record D614's first natural proof-only PR hosted selection after the planner
 controls pass; the policy-change PR itself keeps full work.
