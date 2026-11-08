@@ -78,9 +78,11 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    await cleanup;signal?.throwIfAborted();
    if(!recorded())result=await runWorker(ci);
   }
-  // A busy slot lock admits no job; keep it eligible after the normal polling interval.
+  // Refused work without a job admission stays eligible at the normal polling interval.
   if(result.code===75 && !recorded()){
-   await wait(30000,undefined,{signal});seen.delete(ci.jobId);
+   try{await wait(30000,undefined,{signal});}
+   catch(error){if(signal?.aborted)return {code:143,reason:'cancelled'};throw error;}
+   seen.delete(ci.jobId);
   }
   return result;
   })().then(result=>console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,...result})),

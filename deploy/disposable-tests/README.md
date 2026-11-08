@@ -192,7 +192,7 @@ Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hoste
 
 The guest recipe also pins `zip`, `unzip` and `jq` for archive fixtures and shell guards. Run each newly routed family’s actual job commands in a guest before enabling its cap so missing operating-system tools fail qualification.
 
-A temporary busy slot lock leaves an unadmitted job eligible after the 30-second polling interval. A recorded admission still prevents replay. Run `node --test scripts/disposable-tests/ci-auto.test.mjs` to check both cases. During publication, acquire all slot locks and the controller lock in one attempt; release the whole set before waiting if any is busy.
+A worker exit of 75 without a job admission record leaves the job eligible after the 30-second polling interval, including when a publication holds the slot locks. The wait counts against starting capacity to limit repeated requests; recorded admissions still prevent replay. Run `node --test scripts/disposable-tests/ci-auto.test.mjs` to check both cases.
 
 The runner archive is version 2.338.2 with a SHA256 pin in `runner-tools.sh`. Run `node --test scripts/disposable-tests/ci-admission.test.mjs scripts/disposable-tests/ci-runtime.test.mjs scripts/disposable-tests/ci-dispatch.test.mjs` for the portable admission and failure controls. These checks do not establish a real GitHub assignment or cold private-package install.
 
