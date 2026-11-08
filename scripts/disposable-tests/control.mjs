@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-export {withCloudController,drainCloud} from './cloud.mjs';
+import {withCloudController,drainCloud} from './cloud.mjs';
+export {withCloudController,drainCloud};
 import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -134,10 +135,23 @@ async function automaticJob({config,api,runId,jobId,signal}){
 export async function main(args){
  const {refuseLegacy}=await import('./manual.mjs');
  const [configuration,command,...values]=args;
- assert.ok(configuration?.startsWith('/') && ['status','mode','run','job'].includes(command),
+ assert.ok(configuration?.startsWith('/') && ['status','mode','run','job','cloud'].includes(command),
   'Usage: control.mjs CONFIG status | mode hosted --reason REASON | mode server --reason REASON --head SHA | run LANE APPROVED_HEAD RUN_ID');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);const slots=configuredSlots(config);
  assert.equal(config.ci.workflowPath,'.github/workflows/ci.yml','Ordinary CI needs its reviewed workflow configuration');
+ if(command==='cloud'){
+  const policy=config.cloudCi;assert.ok(policy,'Cloud CI policy is missing');
+  const hosted=values.length===4 && values[0]==='mode' && values[1]==='hosted' && values[2]==='--reason' && /^[a-z0-9-]{1,80}$/.test(values[3]);
+  const run=values.length===3 && values[0]==='run' && /^[A-K]$/.test(values[1]) && /^[a-f0-9]{40}$/.test(values[2]);
+  assert.ok(hosted || run,'Cloud requires run LANE HEAD or mode hosted --reason REASON');
+  const api=new GithubApp(policy);
+  if(hosted)return withKernelLock(config.state,async()=>({code:0,mode:await setRoutingMode({api,policy,mode:'hosted'}),reason:values[3]}));
+  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
+  for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
+  protectOutputStreams();
+  try{return await withCloudController({config,api,lane:values[1],approvedHead:values[2],transport:new CITransport(config),signal:cancellation.signal});}
+  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
+ }
  const api=new GithubApp(config.ci),policy=config.ci;
  if(command==='job'){
   assert.ok(values.length===2 && values.every(v=>/^[1-9][0-9]*$/.test(v)) && values.every(v=>Number.isSafeInteger(Number(v))),'Invalid automatic job identity');

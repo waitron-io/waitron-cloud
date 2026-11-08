@@ -12,7 +12,7 @@ const head='1'.repeat(40),workflow='reviewed Cloud workflow';
 const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex'),appEnv:'/fixture/cloud.env',appKey:'/fixture/key'};
 async function fixture(t){
  const root=mkdtempSync(join(tmpdir(),'cloud-ci-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
- const config={version:2,mode:'manual-slots',slots:6,state,hostGeneration:'fixture',host:'fixture.invalid',recipe:'/fixture/recipe',repository:root,ci:{...policy,repository:'fixture/waitron',repositoryId:999},cloudCi:policy};
+ const config={version:2,mode:'manual-slots',slots:6,state,hostGeneration:'fixture',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:root,ci:{...policy,repository:'fixture/waitron',repositoryId:999},cloudCi:policy};
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'fixture',slots:6,bootstrap:true});return {code:0};},{bootstrap:true});
  for(let slot=0;slot<6;slot++)await withKernelLock(state+'/slot-'+slot,async()=>({code:0}),{bootstrap:true});
  const leases=new LocalLeases(state+'/ledger',{hostGeneration:'fixture',slots:6});
@@ -121,4 +121,54 @@ test('a crashed cancellation preserves HEAD inventory and original age while lat
  assert.equal(f.scoped(0).inspect().ciInvocation.ordinaryStage,'cancel-requested');
  assert.equal((await control.drainCloud({api:f.api,policy,leases:f.scoped(0),wait:async()=>{}})).code,0);
  assert.equal(f.scoped(0).inspect().ciInvocation,undefined);assert.equal(f.runs[1].run_attempt,2);
+});
+
+// Recovery must resolve the persisted repository before choosing an App or policy.
+test('background recovery drains a Cloud pre-run intent with its own App and leaves Waitron live',async t=>{
+ const {reconcileManual}=await import('./manual.mjs'),{GithubApp}=await import('./github-app.mjs');
+ const f=await fixture(t);f.mode='server';f.scoped(0).setInvocation(f.intent());f.add(789,{prState:'closed'});
+ f.scoped(4).reserveLocal({lane:'D',turn:'waitron-live',snapshot:'b'.repeat(64),argv:['true']});
+ const originals={};for(const method of ['get','post','patch','delete']){originals[method]=GithubApp.prototype[method];GithubApp.prototype[method]=async function(...args){assert.equal(this.appEnv,'/fixture/cloud.env');return f.api[method](...args);};}
+ t.after(()=>{for(const [method,fn] of Object.entries(originals))GithubApp.prototype[method]=fn;});
+ const result=await reconcileManual({...f.config,slot:0,api:{get:async()=>assert.fail('Waitron App used for Cloud intent')},transport:{destroy:async()=>assert.fail('No Cloud guest remains')}});
+ assert.equal(result.code,0);assert.equal(f.mode,'hosted');assert.equal(f.scoped(0).inspect().ciInvocation,undefined);assert.equal(f.scoped(4).inspect().slots[0].state,'reserved');
+ assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/cancel')).map(([p])=>p),['/repos/fixture/cloud/actions/runs/789/cancel']);
+});
+
+test('background recovery refuses an unknown recorded repository before any API write',async t=>{
+ const {reconcileManual}=await import('./manual.mjs');const f=await fixture(t);f.scoped(0).setInvocation(f.intent({repositoryId:777}));
+ await assert.rejects(reconcileManual({...f.config,slot:0,api:f.api,transport:{}}),/repository.*policy|policy.*repository/i);
+ assert.deepEqual(f.writes,[]);assert.equal(f.scoped(0).inspect().ciInvocation.repositoryId,777);
+});
+
+async function cloudCLI(t,f){
+ const {GithubApp}=await import('./github-app.mjs'),originals={};
+ for(const method of ['get','post','patch','delete']){originals[method]=GithubApp.prototype[method];GithubApp.prototype[method]=async function(...args){assert.equal(this.appEnv,'/fixture/cloud.env');return f.api[method](...args);};}
+ t.after(()=>{for(const [method,fn] of Object.entries(originals))GithubApp.prototype[method]=fn;});
+ const path=join(f.config.repository,'config.json');writeFileSync(path,JSON.stringify(f.config));return path;
+}
+test('Cloud hosted escape changes only Cloud even while another slot has Waitron work',async t=>{
+ const f=await fixture(t);f.mode='server';f.scoped(4).setInvocation({...f.intent(),repositoryId:999});const path=await cloudCLI(t,f);
+ const result=await control.main([path,'cloud','mode','hosted','--reason','fixture']);
+ assert.equal(result.code,0);assert.equal(f.mode,'hosted');assert.equal(f.scoped(4).inspect().ciInvocation.repositoryId,999);
+ assert.deepEqual(f.writes.map(([p])=>p),['/repos/fixture/cloud/actions/variables/DISPOSABLE_TESTS_MODE']);
+});
+for(const values of [['mode','server','--reason','fixture','--head',head],['status']])test(`Cloud ${values[0]} outside admission refuses before API access`,async t=>{
+ const f=await fixture(t),path=await cloudCLI(t,f);f.api.get=async()=>assert.fail('Forbidden Cloud command reached API');
+ await assert.rejects(control.main([path,'cloud',...values]),/Cloud.*run|Cloud.*hosted/i);assert.deepEqual(f.writes,[]);
+});
+test('Cloud CLI run admits before a new planner and restores hosted after skipped typecheck',async t=>{
+ const f=await fixture(t),patch=f.api.patch;f.api.patch=async(path,body)=>{await patch(path,body);if(body.value==='server')f.add(789,{jobStatus:'completed'}),f.jobs.get(789)[0].conclusion='skipped';};
+ const path=await cloudCLI(t,f),result=await control.main([path,'cloud','run','I',head]);
+ assert.equal(result.code,0);assert.equal(result.reason,'typecheck-skipped');assert.equal(f.mode,'hosted');assert.ok(f.leases.inspect().slots.every(s=>!s.ciInvocation));
+});
+
+for(const phase of ['head-write','server-write','caller-stop','health','transfer','execute'])test(`Cloud restores hosted and drains its intent after ${phase}`,async t=>{
+ const f=await fixture(t),stop=new AbortController(),patch=f.api.patch;
+ if(phase.endsWith('write')){let fail=true;f.api.patch=async(path,body)=>{if(fail && path.endsWith(phase==='head-write'?'DISPOSABLE_TESTS_HEAD':'DISPOSABLE_TESTS_MODE')){fail=false;throw new Error('fixture write failure');}return patch(path,body);};}
+ if(phase==='health')f.transport.healthy=async()=>false;
+ if(phase==='transfer' || phase==='execute')f.transport[phase]=async()=>{throw new Error('fixture guest failure');};
+ const result=await control.withCloudController({...f,approvedHead:head,lane:'I',signal:stop.signal,wait:async()=>{f.add();if(phase==='caller-stop')stop.abort();}});
+ assert.equal(result.code,125);assert.equal(f.mode,'hosted');assert.ok(f.leases.inspect().slots.every(s=>s.state==='free' && !s.ciInvocation));assert.equal(f.registered,false);
+ if(!phase.endsWith('write'))assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/rerun')).map(([p])=>p),['/repos/fixture/cloud/actions/runs/789/rerun']);
 });

@@ -73,13 +73,13 @@ export async function recoverState({leases,transport,signal=AbortSignal.timeout(
   return {code:0,cleanup:'absent',resourceId:lease.resourceId};
 }
 
-export async function reconcileManual({state,hostGeneration,slots=1,slot,transport,signal,deadline,ci,api}) {
+export async function reconcileManual({state,hostGeneration,slots=1,slot,transport,signal,deadline,ci,cloudCi,api}) {
   protectOutputStreams();
   if(slots>1 && slot===undefined){
     let busy=0,pending=0;
     for(let selected=0;selected<slots;selected++){
       let result;
-      try{result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});}
+      try{result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,cloudCi,api});}
       catch(error){signal?.throwIfAborted();pending++;console.error(JSON.stringify({event:'slot-recovery-pending',slot:selected,error:error.message}));continue;}
       if(result.code===75){if(result.reason==='controller-busy')busy++;else pending++;continue;}
       assert.equal(result.code,0,'Slot recovery failed');
@@ -96,32 +96,39 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
       const result=await recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
       const current=leases.inspect();
       if(current.ciInvocation || current.orphanRunners?.length || recorded?.ci){
-        assert.ok(ci,'CI recovery requires the immutable App configuration');
         const {GithubApp}=await import('./github-app.mjs');
         const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary}=await import('./ci-canary.mjs');
-        api??=new GithubApp(ci);
+        const policies=[ci,cloudCi].filter(Boolean),clients=new Map();
+        const policyFor=id=>{const found=policies.filter(policy=>policy.repositoryId===id);assert.equal(found.length,1,'Recorded repository needs one configured policy');return found[0];};
+        const ids=new Set([current.ciInvocation?.repositoryId,recorded?.ci?.repositoryId,...(current.orphanRunners??[]).map(orphan=>orphan.ci.repositoryId)].filter(id=>id!==undefined));
+        for(const id of ids)policyFor(id);
+        const client=policy=>{if(!clients.has(policy.repositoryId))clients.set(policy.repositoryId,policy===ci && api?api:new GithubApp(policy));return clients.get(policy.repositoryId);};
         const reconcileCI=async()=>{
-        await cleanupRunners({leases,api,repository:ci.repository,repositoryId:ci.repositoryId,signal:cleanup});
-        if(ci.workflowPath==='.github/workflows/ci.yml'){
-          const pending=leases.inspect().ciInvocation;
-          if(pending){
-            assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
-            const identity={repositoryId:ci.repositoryId,workflowId:ci.workflowId,workflowSha:pending.workflowSha,
-              runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
-            if(pending.ordinaryStage!==undefined){
-              const outcome=await fallbackOrdinary({api,policy:ci,ci:identity,leases,automatic:slots>1,signal:cleanup});
-              if(outcome.pending)return {code:75,reason:'ci-recovery-pending'};
-            }
-            else await cancelCIJob({api,repository:ci.repository,ci:identity,signal:cleanup});
-            leases.clearInvocation(pending.nonce);
-          }
-          return result;
+        for(const id of ids){const policy=policyFor(id);await cleanupRunners({leases,api:client(policy),repository:policy.repository,repositoryId:id,signal:cleanup});}
+        const pending=leases.inspect().ciInvocation;
+        if(!pending)return result;
+        const policy=policyFor(pending.repositoryId),selectedApi=client(policy);
+        if(policy===cloudCi){
+          const {drainCloud}=await import('./cloud.mjs');
+          const outcome=await drainCloud({api:selectedApi,policy,leases,signal:cleanup});
+          return outcome.code===75?{...outcome,reason:'ci-recovery-pending'}:result;
         }
-        const invocation=await recoverCanary({api,leases,policy:ci,signal:cleanup});
+        if(policy.workflowPath==='.github/workflows/ci.yml'){
+          assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
+          const identity={repositoryId:policy.repositoryId,workflowId:policy.workflowId,workflowSha:pending.workflowSha,
+            runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
+          if(pending.ordinaryStage!==undefined){
+            const outcome=await fallbackOrdinary({api:selectedApi,policy,ci:identity,leases,automatic:slots>1,signal:cleanup});
+            if(outcome.pending)return {code:75,reason:'ci-recovery-pending'};
+          }
+          else await cancelCIJob({api:selectedApi,repository:policy.repository,ci:identity,signal:cleanup});
+          leases.clearInvocation(pending.nonce);return result;
+        }
+        const invocation=await recoverCanary({api:selectedApi,leases,policy,signal:cleanup});
         if(invocation){
-          const run=await api.get(`/repos/${ci.repository}/actions/runs/${invocation.runId}`,{signal:cleanup});
+          const run=await selectedApi.get(`/repos/${policy.repository}/actions/runs/${invocation.runId}`,{signal:cleanup});
           if(run.status==='completed'){
-            await qualifyCanary({api,policy:ci,invocation,signal:cleanup});
+            await qualifyCanary({api:selectedApi,policy,invocation,signal:cleanup});
             leases.clearInvocation(invocation.nonce);
           }
         }
@@ -167,7 +174,7 @@ export async function main(args) {
     if(Date.now()-lastRecovery<30000)return;
     lastRecovery=Date.now();
     return reconcileManual({state:config.state,hostGeneration:config.hostGeneration,slots,
-      transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
+      transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci,cloudCi:config.cloudCi});
   };
   try {
     const result=reconciling

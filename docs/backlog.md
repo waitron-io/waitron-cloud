@@ -6,7 +6,7 @@ The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-
 
 Record the first server assignment for each enabled job family, then hourly server-versus-hosted jobs, server-caused failures and host memory/load for [automatic same-repository PR pickup](../deploy/disposable-tests/README.md#pick-up-ordinary-pr-jobs-automatically), and qualify full browser coverage after the ten-slot trial exhausted guest memory. Keep the larger guest profile until smaller guests complete coverage without OOM kills. Qualify changed guest dependencies with the affected job commands before restoring their routing caps. Keep the reviewed main workflow pins current as Waitron’s workflow changes. The first ordinary Cloud typecheck with hosted fallback, frozen transitive guest packages and permanent-host reproduction remain open. Retain contributor approval and the accepted public-repository limits. D570’s EC2 proof and D591’s selection work stay separate.
 
-Use the [first ordinary Cloud job amendment](superpowers/plans/2026-11-08-first-ordinary-cloud-job.md) for the next Cloud admission step beside Waitron’s live pool.
+Qualify the [first ordinary Cloud job](superpowers/plans/2026-11-08-first-ordinary-cloud-job.md) with its admission before the first code PR opens, per-repository recovery, actual server assignment and same-head hosted fallback. Keep Waitron pickup running beside it.
 
 ## Keep the private shared UI release current (D579)
 
