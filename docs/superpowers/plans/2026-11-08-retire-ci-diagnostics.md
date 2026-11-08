@@ -1,6 +1,6 @@
 # Retire CI diagnostics: D613 B
 
-**Authority:** watcher2026-11-08 15:58 approved deleting the three workflows after retaining download checks in root and password/relay faults in nightly. This revised proposal puts download contention in nightly too, following Claude’s333-second source read; that change needs watcher approval. Watcher18:01 caps build-to-PR at60minutes. No implementation or execution claim: driver obtains exact-plan approval before build.
+**Authority:** watcher2026-11-08 15:58 approved retiring the three workflows while retaining their checks. After Claude’s333-second source read, watcher18:09 approved putting all three programs in nightly and accepted the later fault-control timing. Watcher18:01 caps build-to-PR at60minutes. Watcher18:26 also approved retaining relay’s full-history checkout (`fetch-depth: 0`) and one wiring assertion, after a shallow-clone migration-pin refusal.
 
 **Outcome:** fewer affected-PR jobs without adding contention work to unrelated PRs. Keep root’s nine Linux modes, including the single stale case, unchanged; the32-case stress run moves from affected PRs/main pushes to nightly. Password/relay faults move from seven affected paths to nightly as already approved; changed guards may consequently fail after merge rather than on their PR.
 

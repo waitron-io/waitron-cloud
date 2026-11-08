@@ -290,6 +290,8 @@ test('nightly mutation job runs all four approved wrappers and the allowance hel
 
 test('nightly retains all three diagnostic programs and always uploads their logs', () => {
   const mutations = nightlyJob('mutations');
+  const checkout = mutations.match(/      - uses: actions\/checkout@v5\n([\s\S]*?)(?=      - )/)?.[1];
+  assert.match(checkout ?? '', /^\s+fetch-depth: 0$/m, 'Relay migration fixtures require historical commits');
   for (const name of ['Exercise stale ownership under bounded CPU contention',
     'Check password snapshot ordering and deliberate faults', 'Prove counter rollback, retry and deleted-guard refusal']) {
     assert.ok(mutations.includes(`      - name: ${name}\n        run: |\n`), `Missing executable nightly step: ${name}`);
