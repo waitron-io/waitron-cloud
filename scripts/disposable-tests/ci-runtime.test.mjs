@@ -123,3 +123,16 @@ test('UI refuses a matrix-looking API job name before registering',async t=>{
  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,125);
  assert.equal(f.events.includes('register'),false);assert.equal(f.leases.inspect().slots[0].state,'free');
 });
+
+for(const [jobKey,apiJobName,label] of [
+ ['lint-1','lint','dt-123-789-1-lint-1'],['typecheck-1','typecheck','dt-123-789-1-typecheck-1'],
+ ['test-venue-service-4','test-venue-service (4)','dt-123-789-1-test-venue-service-4'],['test-adjustments-1','test-adjustments','dt-123-789-1-test-adjustments-1']
+])test(`the routed ${apiJobName} keeps the fixed executor, exact label and cleanup`,async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey};
+ const f=fixture(t,{identity,apiJobName}),post=f.api.post,execute=f.transport.execute;
+ f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted',label]);return post(path,body,options);};
+ f.transport.execute=async(lease,options)=>{assert.deepEqual(lease.argv,['/opt/actions-runner/bin/Runner.Listener','run']);return execute(lease,options);};
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});assert.equal(result.code,0,result.error);
+ assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+});

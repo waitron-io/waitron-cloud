@@ -120,7 +120,7 @@ test('till and UI admission refuse unselected families, extra shards and noncano
   assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
 });
 
-// The merged workflow names unsharded jobs with a -1 label and bounds its matrices.
+// Unsharded jobs use a -1 label; each matrix keeps its approved shard range.
 test('newly routed ordinary families keep their exact GitHub names and routing labels',async()=>{
  const {ciIdentity,routingLabel,jobName}=await import('./ci-identity.mjs');
  for(const [jobKey,name] of [
@@ -129,7 +129,8 @@ test('newly routed ordinary families keep their exact GitHub names and routing l
   ['test-payments-stripe-1','test-payments-stripe'],['test-payments-sumup-1','test-payments-sumup'],['test-identity-1','test-identity'],['test-workforce-1','test-workforce'],
   ['test-light-a-1','test-light-a'],['test-light-b-1','test-light-b'],
   ['test-fiscal-verifactu-1','test-fiscal-verifactu (1)'],['test-fiscal-verifactu-4','test-fiscal-verifactu (4)'],
-  ['test-provisioning-1','test-provisioning (1)'],['test-provisioning-6','test-provisioning (6)'],['mutation-shared-1','mutation-shared (1)'],['mutation-shared-4','mutation-shared (4)']]){
+  ['test-provisioning-1','test-provisioning (1)'],['test-provisioning-6','test-provisioning (6)'],['mutation-shared-1','mutation-shared (1)'],['mutation-shared-4','mutation-shared (4)'],
+  ['test-venue-service-1','test-venue-service (1)'],['test-venue-service-2','test-venue-service (2)'],['test-venue-service-3','test-venue-service (3)'],['test-venue-service-4','test-venue-service (4)'],['test-adjustments-1','test-adjustments']]){
   const identity=ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',event:'pull_request',jobKey});
   assert.equal(jobName(identity),name);assert.equal(routingLabel(identity),'dt-123-789-1-'+jobKey);
  }
@@ -137,7 +138,7 @@ test('newly routed ordinary families keep their exact GitHub names and routing l
 
 test('routed keys still refuse extra shards and the jobs deliberately kept hosted',async()=>{
  const {ciIdentity}=await import('./ci-identity.mjs');
- for(const jobKey of ['lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5',
+ for(const jobKey of ['lint-2','root-guards-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
   'test-server-stream-1','mutation-shared-aggregate-1','test-server-merge-1','test-till-merge-1','test-dashboard-merge-1','test-light-a-01','test-bookings-1\n'])
   assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
 });

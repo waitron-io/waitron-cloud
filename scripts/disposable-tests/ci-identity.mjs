@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b))-1|test-fiscal-verifactu-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
+export const ciJobKeyPattern=/^(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])$/;
 
 export const runnerCommand=['/opt/actions-runner/bin/Runner.Listener','run'];
 export function ciIdentity(value) {
@@ -43,6 +43,6 @@ export function ciInvocation(value){
 
 export function jobName(value){
  const ci=ciIdentity(value);if(ci.jobKey==='typecheck')return 'typecheck';
- const match=/^((?:test-(?:dashboard|server|heavy|till|fiscal-verifactu|provisioning)|mutation-shared))-([0-9]+)$/.exec(ci.jobKey);
+ const match=/^((?:test-(?:dashboard|server|heavy|till|fiscal-verifactu|venue-service|provisioning)|mutation-shared))-([0-9]+)$/.exec(ci.jobKey);
  return match?`${match[1]} (${match[2]})`:ci.jobKey.slice(0,-2);
 }

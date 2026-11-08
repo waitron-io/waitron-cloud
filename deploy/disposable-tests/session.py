@@ -51,7 +51,7 @@ def request_identity(value, resource, now=None):
                 any(type(ci[k]) is not int or not 0 < ci[k] <= 9007199254740991 for k in ['repositoryId','workflowId','runId','attempt','jobId']) or
                 ci['workflowPath'] not in ['.github/workflows/disposable-ci-canary.yml', '.github/workflows/ci.yml'] or
                 ci['event'] not in ['workflow_dispatch', 'pull_request'] or not isinstance(ci['jobKey'],str) or
-                not re.fullmatch(r'(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b))-1|test-fiscal-verifactu-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])',ci['jobKey']) or
+                not re.fullmatch(r'(?:typecheck(?:-1)?|test-dashboard-[1-4]|test-server-(?:[1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1|(?:lint|root-guards|bundle-smoke|test-(?:setup|staffing|bookings|media|payments-stripe|payments-sumup|identity|workforce|light-a|light-b|adjustments))-1|test-fiscal-verifactu-[1-4]|test-venue-service-[1-4]|test-provisioning-[1-6]|mutation-shared-[1-4])',ci['jobKey']) or
                 any(not isinstance(ci[k],str) or not re.fullmatch(r'[a-f0-9]{40}',ci[k]) for k in ['workflowSha','sourceSha','sourceTree']) or
                 not isinstance(ci['workflowDigest'],str) or not re.fullmatch(r'[a-f0-9]{64}',ci['workflowDigest'])):
             raise ValueError('Invalid CI identity')

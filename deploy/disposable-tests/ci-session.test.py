@@ -138,13 +138,14 @@ class CISession(unittest.TestCase):
  def test_new_routed_families_preserve_the_fixed_executor_and_request_identity(self):
   for key in ['lint-1','root-guards-1','bundle-smoke-1','typecheck-1','test-setup-1','test-staffing-1','test-bookings-1','test-media-1',
               'test-payments-stripe-1','test-payments-sumup-1','test-identity-1','test-workforce-1','test-light-a-1','test-light-b-1',
-              'test-fiscal-verifactu-1','test-fiscal-verifactu-4','test-provisioning-1','test-provisioning-6','mutation-shared-1','mutation-shared-4']:
+              'test-fiscal-verifactu-1','test-fiscal-verifactu-4','test-provisioning-1','test-provisioning-6','mutation-shared-1','mutation-shared-4',
+              'test-venue-service-1','test-venue-service-2','test-venue-service-3','test-venue-service-4','test-adjustments-1']:
    with self.subTest(key=key):
     ci={**CI,'workflowPath':'.github/workflows/ci.yml','event':'pull_request','jobKey':key}
     value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
     self.assertEqual(session.request_identity(value,self.resource),value)
  def test_new_routed_families_refuse_extra_shards_and_hosted_exceptions(self):
-  for key in ['lint-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5',
+  for key in ['lint-2','typecheck-2','test-setup-2','test-fiscal-verifactu-5','test-provisioning-7','mutation-shared-5','test-venue-service-5','test-adjustments-2',
               'test-server-stream-1','mutation-shared-aggregate-1','test-server-merge-1','test-till-merge-1','test-dashboard-merge-1','test-light-a-01','test-bookings-1\n']:
    ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
    value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
