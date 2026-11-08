@@ -19,6 +19,7 @@ timeout 120s apt-get update -qq
 # Include Chromium libraries and fonts before candidate browser tests start.
 timeout 180s apt-get install -y --no-install-recommends \
   'docker.io=26.1.5+dfsg1-9+deb13u1' 'docker-cli=26.1.5+dfsg1-9+deb13u1' 'docker-compose=2.26.1-4' 'git=1:2.47.3-0+deb13u1' \
+  'zip=3.0-15+deb13u1' 'unzip=6.0-29+deb13u1' 'jq=1.7.1-6+deb13u4' \
   'fonts-dejavu-core=2.37-8' \
   'xvfb=2:21.1.16-1.3+deb13u4' 'fonts-noto-color-emoji=2.051-0+deb13u1' \
   'fonts-unifont=1:15.1.01-1' 'libfontconfig1=2.15.0-2.3' \
