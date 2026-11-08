@@ -92,19 +92,19 @@ save log and runner diagnostics before cancellation; a later pass is not a fix.
 ### Cache-miss job budget qualification (D507)
 
 **Open.** Retain healthy cache-miss timings for the root, type-check, receipt,
-package, cost, password and venue definitions; their sampled saves are skipped.
-Keep the observed UI, browser and relay misses and the deliberate-stall and
-mandatory-failure controls above. Compare setup, mandatory work, save and final
+package, cost and venue definitions; their sampled saves are skipped.
+Keep the historical UI, browser and retired relay miss samples, plus the
+deliberate-stall and mandatory-failure controls above. Compare setup, mandatory work, save and final
 cleanup with each job's existing limit, especially registration partition 1/6.
 Any proposed limit, matrix or check change needs a separate owner decision.
 These successful samples do not establish that every future job fits its cap.
 
-All ten store-location steps preserve a failed pnpm lookup's exit status and
+The retained store-location steps preserve a failed pnpm lookup's exit status and
 refuse an empty path before publishing cache inputs. Native shell controls run
 the actual configured steps with failed, empty and successful lookups, including
 paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
-The controls cover the six new cache consumers and the four earlier bounded-cache
-workflows, with every existing mandatory step and publication gate preserved.
+The controls cover the configured cache consumers, with every retained mandatory
+step and publication gate preserved.
 
 Keep two native harness observations separate from the cache transport cause.
 During review, `ci-setup-pnpm.test.mjs` reports two descendant-test attempts

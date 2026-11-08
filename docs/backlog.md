@@ -3480,10 +3480,10 @@ controls pass; the policy-change PR itself keeps full work.
 
 ## Dependency-cache miss job budgets (D507)
 
-Healthy runs cover 67 cache-consuming jobs across all ten definitions. Each fits
-its cap, but registration partition 1/6 takes 445 of 480 seconds with saving
-skipped, leaving less than a full save allowance. **Open.** Qualify healthy miss
-paths for the seven definitions sampled only on hits; preserve existing limits,
+The 6 November sample covered 67 cache-consuming jobs across ten definitions.
+Each fit its cap, but registration partition 1/6 took 445 of 480 seconds with
+saving skipped, leaving less than a full save allowance. **Open.** Qualify healthy
+miss paths for the retained definitions sampled only on hits; preserve limits,
 matrices and checks pending a separate decision.
 See [the phase timings and remaining qualification](backlog/ci-cache-saving.md#healthy-run-timing-sample-6-november-2026).
 
