@@ -567,3 +567,14 @@ for(const unclear of ['main','recent','comparison','pin-blob'])test(`an unclear 
  assert.deepEqual(await controller.findAutomatic({api:f.api,policy:f.policy,limit:1,onRefused:value=>refused.push(value)}),[]);
  assert.deepEqual(refused,[]);
 });
+
+for(const [name,key] of [
+ ['lint','lint-1'],['root-guards','root-guards-1'],['bundle-smoke','bundle-smoke-1'],['typecheck','typecheck-1'],
+ ['test-setup','test-setup-1'],['test-staffing','test-staffing-1'],['test-bookings','test-bookings-1'],['test-media','test-media-1'],
+ ['test-payments-stripe','test-payments-stripe-1'],['test-payments-sumup','test-payments-sumup-1'],['test-identity','test-identity-1'],['test-workforce','test-workforce-1'],
+ ['test-light-a','test-light-a-1'],['test-light-b','test-light-b-1'],['test-fiscal-verifactu (4)','test-fiscal-verifactu-4'],['test-provisioning (6)','test-provisioning-6'],['mutation-shared (4)','mutation-shared-4']
+])test(`automatic pickup serves the routed ${name} label without changing its API name`,async()=>{
+ const f=fixture(),get=f.api.get,job={id:901,name,run_id:789,run_attempt:1,head_sha:head,status:'queued',runner_id:null,labels:['self-hosted','dt-123-789-1-'+key]};
+ f.api.get=async path=>path.includes('/jobs?')?{total_count:1,jobs:[job]}:get(path);
+ const jobs=await controller.findAutomatic({api:f.api,policy,limit:1});assert.equal(jobs.length,1);assert.equal(jobs[0].jobKey,key);assert.equal(jobs[0].jobId,901);
+});
