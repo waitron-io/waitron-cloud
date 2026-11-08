@@ -1,7 +1,7 @@
 # Verify a merge's CI evidence
 
 A squash commit can contain exactly the files already checked on its pull
-request. Standard CI, AWS infrastructure and applicable download diagnostics
+request. Standard CI and AWS infrastructure
 can reuse that workflow's successful PR attempt when the Git trees match.
 The main run still executes a planner and a strict summary. Neither a green
 label nor a skipped product job proves reuse by itself.
@@ -11,7 +11,10 @@ select their own proof inputs; manual and nightly runs execute both complete
 proofs. AWS starts only for its infrastructure and bootstrap paths; Kubernetes
 prerequisites start only for their proof paths on PRs and main pushes. Record an
 absent workflow as excluded only after checking its actual trigger against the
-changed paths. An excluded workflow supplies no inherited tests.
+changed paths. An excluded workflow supplies no inherited tests. Historical download-diagnostic
+records keep the same expected fields. Hosted readback still requires an active
+workflow (`scripts/ci-decision.mjs:79`); if GitHub reports the deleted workflow as
+inactive, readback refuses those older records.
 
 ## Read the decision before counting tests
 
@@ -37,7 +40,7 @@ git checkout --detach <merge-sha>
 node scripts/ci-evidence.mjs --readback <new-directory>/plan.json
 ```
 
-Use the corresponding workflow key for AWS or diagnostics. The reader needs
+For AWS, use its workflow key. The reader needs
 GitHub API read access through `gh`. It binds the local decision to the hosted
 artifact and exact main run, reconstructs selected or full work, and requires
 every final native job. For reuse, it rechecks the source independently. Save

@@ -1591,7 +1591,7 @@ implementation or production evidence.
   independently qualify identical-tree sources, and recheck them in the final
   summary before accepting skipped work. Main readback verifies the hosted
   artifact, every final job and the reconstructed push range or full inventory.
-  AWS and applicable download diagnostics have their own planners and summaries.
+  AWS has its own planner and summary.
   Cost and venue retain part 4's removed main triggers and their input selection;
   they cannot borrow standard CI's evidence. Historical proof reconstruction
   reads its explicit immutable range, independently of the operator checkout.
@@ -3468,9 +3468,8 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Reduce unnecessary CI work (D613)
 
-Retire resolved diagnostic workflows after moving their retained checks into
-existing root or nightly jobs. Add a weekly estimated-cost report with an
-operator alert at 10% above the last alert's figure, first measurement silent;
+Requalify the browser-reconnect diagnostic before retiring it. Add a weekly
+estimated-cost report with an operator alert at 10% above the last alert's figure, first measurement silent;
 show when email is not configured. Cost figures never fail a run. Qualify the
 PR and merge job-time savings, including hosted browser preparation, on matched
 samples during healthy GitHub operation; remove retained apt-only browser setup
@@ -3481,10 +3480,10 @@ controls pass; the policy-change PR itself keeps full work.
 
 ## Dependency-cache miss job budgets (D507)
 
-Healthy runs cover 67 cache-consuming jobs across all ten definitions. Each fits
-its cap, but registration partition 1/6 takes 445 of 480 seconds with saving
-skipped, leaving less than a full save allowance. **Open.** Qualify healthy miss
-paths for the seven definitions sampled only on hits; preserve existing limits,
+The 6 November sample covered 67 cache-consuming jobs across ten definitions.
+Each fit its cap, but registration partition 1/6 took 445 of 480 seconds with
+saving skipped, leaving less than a full save allowance. **Open.** Qualify healthy
+miss paths for the retained definitions sampled only on hits; preserve limits,
 matrices and checks pending a separate decision.
 See [the phase timings and remaining qualification](backlog/ci-cache-saving.md#healthy-run-timing-sample-6-november-2026).
 

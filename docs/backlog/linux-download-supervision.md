@@ -31,10 +31,10 @@ test box: nine Linux ownership cases, four diagnostic checks and sixteen workflo
 and supervisor checks. You can run them with
 `node --test --test-timeout=30000 scripts/ci-download.test.mjs scripts/ci-download-linux.test.mjs scripts/ci-download-diagnostics.test.mjs`.
 The retained [Linux contention run40427348212](https://github.com/waitron-io/waitron-cloud/actions/runs/40427348212)
-also passes all 32 cases with eight workers sharing one CPU. Its fixture,
-supervisor, event helper and diagnostic workflow match current main and the tested
-candidate. These results qualify the existing checks; they do not identify the
-historical failure's stalled phase.
+also passes all 32 cases with eight workers sharing one CPU. Use the
+`nightly-mutations` diagnostic logs for later contention runs; normal root checks
+retain the nine Linux ownership cases. The historical results do not identify
+the failure's stalled phase.
 
 One broader macOS workflow check also exhausted its separate one-second attempts;
 subsequent exact-main and feature single-case checks passed. Its cause remains

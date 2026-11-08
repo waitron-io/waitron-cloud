@@ -6,7 +6,7 @@ const workflow = key => readFileSync(new URL(`../.github/workflows/${key}.yml`, 
 const job = (text, name) => {const block = text.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'm'))?.[1]; assert.ok(block, `Missing ${name}`); return block;};
 const field = (text, key, indent = 4) => text.match(new RegExp(`^${' '.repeat(indent)}${key}: (.+)$`, 'm'))?.[1];
 const cases = [['ci', 'changes', 'packages'], ['cloud-cost', 'discover', 'conformance'], ['venue-services-proof', 'changes', 'service-receipts'],
-  ['aws-infrastructure', 'changes', 'verify'], ['download-supervision-diagnostic', 'changes', 'linux-contention']];
+  ['aws-infrastructure', 'changes', 'verify']];
 for (const [key, planner, work] of cases) {
   test(`${key} executes work only after selected planner output and always verifies the result`, () => {
     const text = workflow(key), workBlock = job(text, work), summary = job(text, 'summary');

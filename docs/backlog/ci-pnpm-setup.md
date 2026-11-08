@@ -44,10 +44,10 @@ binary-safe, including uncommitted non-UTF-8 bytes. The historical package in
 is still unknown because its Buffer output was truncated. A controlled cold-store
 run names `undici-types` 7.18.2; that does not recover the lost historical output.
 
-The two manual diagnostic workflows, `password-derivation-diagnostic.yml` and
-`relay-counter-diagnostic.yml`, still install nested checkouts from the offline
-store. Their cold-store behaviour is unqualified; they remain outside this fixture
-repair. The independent cache-upload stall also remains open.
+The password and relay fault programs in `nightly-mutations` still install
+nested checkouts from the offline store. Qualify that path in the hosted nightly
+rehearsal, including its initial cold-store install; it remains outside this
+fixture repair. The independent cache-upload stall also remains open.
 
 The package-test and grouped receipt steps now pass the same package token as the initial install.
 You need that token when a test installs dependencies in a temporary checkout
