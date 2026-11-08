@@ -40,10 +40,12 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  };
  let served=0,healthy;
  try{do{
+ let readFailed=false;
+ const read=async work=>{try{return await work();}catch(error){readFailed=true;throw error;}};
  try{
  await recover?.();
- if(await routingMode({api,policy,signal})!=='server')return {code:0,served};
- assert.equal(await routingHead({api,policy,signal}),'','Automatic CI requires unrestricted same-repository routing');
+ if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
+ assert.equal(await read(()=>routingHead({api,policy,signal})),'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)recorded.add(Number(match[1]));}
@@ -61,8 +63,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const refused=[];
- const jobs=await findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}});
+ const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
+  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}}));
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
  let cleanup;
@@ -100,6 +102,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  signal?.throwIfAborted();
  }catch(error){
   signal?.throwIfAborted();
+  if(!readFailed)throw error;
   const transient=error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
    error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
    ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);

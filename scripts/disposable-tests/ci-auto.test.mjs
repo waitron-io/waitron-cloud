@@ -728,3 +728,11 @@ for(const change of ['missing','short','foreign','new-attempt'])test(`queued can
  if(change==='foreign')assert.equal((await work).pending,true);else await assert.rejects(work,/inventory|missing|attempt/i);
  assert.equal(posts,0);
 });
+
+test('pickup does not hide malformed local state as a temporary API read',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{writeFileSync}=await import('node:fs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ writeFileSync(config.state+'/ledger/state.json','{');
+ await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),SyntaxError);
+});
