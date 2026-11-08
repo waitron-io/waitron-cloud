@@ -1043,3 +1043,44 @@ for(const mode of ['hosted','server'])test(`automatic pickup serves existing ser
  const result=await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
  assert.deepEqual(served,[901,902,903,904,905]);assert.equal(result.served,5);
 });
+
+for(const mode of ['hosted','server'])test(`a retained manual selection leaves automatic pickup closed in ${mode} mode`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:mode}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:head}:get(path);
+ const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>assert.fail('A selected head must not start automatic host work')},runWorker:async()=>assert.fail('No automatic worker for a manual selection')});
+ if(mode==='hosted')assert.deepEqual(await tick(),{code:0,served:0});
+ else await assert.rejects(tick(),/unrestricted same-repository routing/);
+});
+
+test('a host outage does not rewrite an already hosted routing setting',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'hosted'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ f.api.patch=async()=>assert.fail('Hosted mode must not be rewritten');
+ for(let i=0;i<2;i++)assert.deepEqual(await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>false},runWorker:async()=>assert.fail('No guest on a down host')}),{code:0,served:0,route:'hosted',reason:'host-unavailable'});
+});
+
+test('the real automatic job entry serves a labelled job in hosted mode and cleans its slot',async t=>{
+ const {main}=await import('./control.mjs'),{GithubApp}=await import('./github-app.mjs'),{CITransport}=await import('./transport.mjs'),{LocalLeases}=await import('./leases.mjs'),{writeFileSync}=await import('node:fs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,events=[];let registered=false,completed=false;
+ Object.assign(config,{host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:config.state,ci:{...policy,appEnv:config.state+'/app.env',appKey:config.state+'/app.pem'}});
+ const file=config.state+'/config.json';writeFileSync(file,JSON.stringify(config));
+ const override=(object,key,value)=>{const old=object[key];object[key]=value;t.after(()=>{object[key]=old;});};
+ override(GithubApp.prototype,'get',async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'hosted'};
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/runners?'))return {total_count:registered?1:0,runners:registered?[{id:1001,name:'dt-123-789-1-901'}]:[]};
+  if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:completed?'completed':'queued',conclusion:completed?'success':null,runner_id:completed?1001:0,runner_name:completed?'dt-123-789-1-901':null};
+  return get(path);
+ });
+ override(GithubApp.prototype,'post',async(path,body)=>{assert.ok(path.endsWith('/runners/generate-jitconfig'));assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-test-server-24']);registered=true;events.push('register');return {runner:{id:1001,name:'dt-123-789-1-901'},encoded_jit_config:'synthetic'};});
+ override(GithubApp.prototype,'delete',async path=>{assert.ok(path.endsWith('/runners/1001'));registered=false;events.push('deregister');});
+ for(const method of ['healthy','transfer','prepare','execute','destroy','inspect'])override(CITransport.prototype,method,async lease=>{
+  if(method==='healthy')return true;
+  events.push(method);
+  if(method==='execute'){completed=true;return 0;}
+  if(method==='inspect')return {resourceId:lease.resourceId,absent:true};
+ });
+ const result=await main([file,'job','789','901']);assert.equal(result.code,0);assert.equal(result.cleanup,'absent');
+ assert.deepEqual(events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
+ assert.ok(new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().slots.every(slot=>slot.state==='free'&&!slot.ciInvocation));
+});
