@@ -145,7 +145,7 @@ export async function main(args){
   const run=values.length===3 && values[0]==='run' && /^[A-K]$/.test(values[1]) && /^[a-f0-9]{40}$/.test(values[2]);
   assert.ok(hosted || run,'Cloud requires run LANE HEAD or mode hosted --reason REASON');
   const api=new GithubApp(policy);
-  if(hosted)return withKernelLock(config.state,async()=>({code:0,mode:await setRoutingMode({api,policy,mode:'hosted'}),reason:values[3]}));
+  if(hosted)return {code:0,mode:await setRoutingMode({api,policy,mode:'hosted'}),reason:values[3]};
   const cancellation=new AbortController(),cancel=()=>cancellation.abort();
   for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
   protectOutputStreams();
@@ -172,7 +172,10 @@ export async function main(args){
    refuseLegacy(config.state);
    const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots});
    const current=leases.inspect();
-   assert.ok(!current.ciInvocation && current.slots.every(slot=>slot.state==='free' && !slot.ciInvocation),'CI work must finish before changing selection');
+   const peer=values[0]==='hosted'?config.cloudCi?.repositoryId:undefined;
+   assert.ok(!current.ciInvocation && current.slots.every(slot=>
+    (slot.state==='free' || peer!==undefined && slot.lease?.ci?.repositoryId===peer) &&
+    (!slot.ciInvocation || peer!==undefined && slot.ciInvocation.repositoryId===peer)),'CI work must finish before changing selection');
    if(values[0]==='server')await setRoutingHead({api,policy,approvedHead:values[4]});
    return {code:0,mode:await setRoutingMode({api,policy,mode:values[0]}),reason:values[2]};
   });

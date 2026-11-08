@@ -163,3 +163,9 @@ test('Cloud awaiting and concrete intents retain their original recovery invento
   {...awaiting,ordinaryStage:'admitted',runId:789,attempt:1,jobId:901,label:'dt-999-789-1-typecheck'}])assert.throws(()=>leases.setInvocation(bad),/invocation|ordinary|awaiting|label|inventory/i);
  assert.equal(leases.inspect().ciInvocation.createdAt,1000);
 });
+
+for(const repositoryId of [0,-1,1.5,'123',null,undefined])test(`invocation repository identity refuses ${String(repositoryId)} without changing its ledger`,t=>{
+ const leases=setup(t),before=readFileSync(join(leases.directory,'state.json'),'utf8');
+ const value={repositoryId,nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:null,attempt:null};
+ assert.throws(()=>leases.setInvocation(value),/repository|invocation/i);assert.equal(readFileSync(join(leases.directory,'state.json'),'utf8'),before);
+});

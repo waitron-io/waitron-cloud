@@ -12,7 +12,7 @@ const head='1'.repeat(40),workflow='reviewed Cloud workflow';
 const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex'),appEnv:'/fixture/cloud.env',appKey:'/fixture/key'};
 async function fixture(t){
  const root=mkdtempSync(join(tmpdir(),'cloud-ci-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
- const config={version:2,mode:'manual-slots',slots:6,state,hostGeneration:'fixture',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:root,ci:{...policy,repository:'fixture/waitron',repositoryId:999},cloudCi:policy};
+ const config={version:2,mode:'manual-slots',slots:6,state,hostGeneration:'fixture',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:root,ci:{...policy,repository:'fixture/waitron',repositoryId:999,appEnv:'/fixture/waitron.env'},cloudCi:policy};
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'fixture',slots:6,bootstrap:true});return {code:0};},{bootstrap:true});
  for(let slot=0;slot<6;slot++)await withKernelLock(state+'/slot-'+slot,async()=>({code:0}),{bootstrap:true});
  const leases=new LocalLeases(state+'/ledger',{hostGeneration:'fixture',slots:6});
@@ -173,4 +173,91 @@ for(const phase of ['head-write','server-write','caller-stop','health','transfer
  const result=await control.withCloudController({...f,approvedHead:head,lane:'I',signal:stop.signal,wait:async()=>{f.add();if(phase==='caller-stop')stop.abort();}});
  assert.equal(result.code,125);assert.equal(f.mode,'hosted');assert.ok(f.leases.inspect().slots.every(s=>s.state==='free' && !s.ciInvocation));assert.equal(f.registered,false);
  if(!phase.endsWith('write'))assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/rerun')).map(([p])=>p),['/repos/fixture/cloud/actions/runs/789/rerun']);
+});
+
+
+test('Cloud exit restores hosted even while Waitron recovery owns the shared controller lock',async t=>{
+ const f=await fixture(t),stop=new AbortController();let locked,release;const ready=new Promise(r=>locked=r),gate=new Promise(r=>release=r);let busy;
+ try{
+  const result=await control.withCloudController({...f,approvedHead:head,lane:'I',signal:stop.signal,wait:async()=>{
+   busy=withKernelLock(f.config.state,async()=>{locked();await gate;return {code:0};});await ready;stop.abort();
+  }});
+  assert.equal(result.code,75);assert.equal(result.cleanup,'pending');assert.equal(f.mode,'hosted');assert.equal(f.scoped(0).inspect().ciInvocation.ordinaryStage,'awaiting-run');
+ }finally{release();await busy;}
+ const before=f.writes.length;
+ const refused=await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>assert.fail('Deferred cleanup must fence admission')});
+ assert.equal(refused.code,75);assert.equal(f.mode,'hosted');assert.equal(f.writes.length,before);
+});
+
+test('Cloud hosted escape does not wait for another repository controller lock',async t=>{
+ const f=await fixture(t),path=await cloudCLI(t,f);f.mode='server';let entered,release;const ready=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
+ const busy=withKernelLock(f.config.state,async()=>{entered();await gate;return {code:0};});
+ try{await ready;const result=await control.main([path,'cloud','mode','hosted','--reason','fixture']);assert.equal(result.code,0);assert.equal(f.mode,'hosted');}
+ finally{release();await busy;}
+});
+
+for(const peer of ['intent','lease'])test(`Waitron hosted escape ignores a Cloud ${peer} and changes only its own variable`,async t=>{
+ const f=await fixture(t);f.mode='server';
+ if(peer==='intent')f.scoped(4).setInvocation(f.intent());else{const {ciRequest}=await import('./ci-identity.mjs');f.scoped(4).reserveLocal(ciRequest('I',{repositoryId:123,workflowId:456,workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceSha:head,workflowSha:head,sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'}));}
+ const path=join(f.config.repository,'config.json');writeFileSync(path,JSON.stringify(f.config));const {GithubApp}=await import('./github-app.mjs'),get=GithubApp.prototype.get,patch=GithubApp.prototype.patch;let primary='server';
+ t.after(()=>{GithubApp.prototype.get=get;GithubApp.prototype.patch=patch;});
+ GithubApp.prototype.get=async function(path){assert.equal(this.appEnv,'/fixture/waitron.env');assert.equal(path,'/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_MODE');return {value:primary};};
+ GithubApp.prototype.patch=async function(path,body){assert.equal(this.appEnv,'/fixture/waitron.env');assert.equal(path,'/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_MODE');primary=body.value;};
+ const result=await control.main([path,'mode','hosted','--reason','fixture']);assert.equal(result.code,0);assert.equal(primary,'hosted');assert.equal(f.mode,'server');
+});
+
+for(const status of ['queued','in_progress','completed'])test(`Cloud ends caller waiting for a ${status} hosted typecheck without starting a guest`,async t=>{
+ const f=await fixture(t);let waits=0;f.transport.healthy=async()=>assert.fail('Hosted job must not start a server guest');
+ const result=await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>{assert.equal(waits++,0,'Hosted label must end waiting');f.add(789,{labels:['ubuntu-latest'],jobStatus:status,status:status==='completed'?'completed':'in_progress'});if(status==='completed')f.jobs.get(789)[0].conclusion='success';}});
+ assert.equal(result.code,0);assert.equal(result.route,'hosted');assert.equal(result.reason,'hosted-typecheck');assert.equal(f.mode,'hosted');assert.equal(f.scoped(0).inspect().ciInvocation,undefined);assert.equal(f.registered,false);
+});
+
+test('background Cloud recovery closes selection before deferring a busy shared cleanup lock',async t=>{
+ const f=await fixture(t);f.mode='server';f.scoped(0).setInvocation(f.intent());await cloudCLI(t,f);const {reconcileManual}=await import('./manual.mjs');let entered,release;const ready=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
+ const busy=withKernelLock(f.config.state,async()=>{entered();await gate;return {code:0};});
+ try{await ready;const result=await reconcileManual({...f.config,slot:0,transport:{}});assert.equal(result.code,75);assert.equal(f.mode,'hosted');assert.ok(f.scoped(0).inspect().ciInvocation);}
+ finally{release();await busy;}
+});
+
+for(const status of ['queued','in_progress'])test(`recorded Cloud recovery preserves an assigned ${status} job on a closed PR`,async t=>{
+ const f=await fixture(t);f.add(789,{prState:'closed',jobStatus:status});f.jobs.get(789)[0].runner_id=1001;
+ f.scoped(0).setInvocation(f.intent({runId:789,attempt:1,jobId:901,label:'dt-123-789-1-typecheck',ordinaryStage:'admitted'}));
+ const result=await control.drainCloud({api:f.api,policy,leases:f.scoped(0),wait:async()=>{}});
+ assert.equal(result.code,75);assert.ok(f.scoped(0).inspect().ciInvocation);assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/cancel')||p.endsWith('/rerun')),[]);
+});
+
+test('Cloud inventory recovery keeps an assigned job and its pending inventory untouched',async t=>{
+ const f=await fixture(t);f.add(789,{status:'in_progress',jobStatus:'in_progress'});f.jobs.get(789)[0].runner_id=1001;f.scoped(0).setInvocation(f.intent());
+ const result=await control.drainCloud({api:f.api,policy,leases:f.scoped(0),wait:async()=>{}});
+ assert.equal(result.code,75);assert.equal(f.scoped(0).inspect().ciInvocation.ordinaryStage,'awaiting-run');assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/cancel')||p.endsWith('/rerun')),[]);
+});
+
+for(const selection of ['mode','head'])test(`Cloud rechecks ${selection} after health before any guest work`,async t=>{
+ const f=await fixture(t);let touched=false;f.transport.healthy=async()=>{if(selection==='mode')f.mode='hosted';else f.selected='5'.repeat(40);return true;};f.transport.transfer=async()=>{touched=true;};
+ const result=await control.withCloudController({...f,approvedHead:head,lane:'I',wait:async()=>{f.add();}});
+ assert.equal(result.code,125);assert.equal(touched,false);assert.equal(f.mode,'hosted');assert.equal(f.registered,false);
+});
+
+test('Cloud drain never reads historical job inventories at or before its admission marker',async t=>{
+ const f=await fixture(t),run=f.add(700,{status:'completed',jobStatus:'completed'});run.conclusion='success';f.jobs.get(700)[0].conclusion='success';f.scoped(0).setInvocation(f.intent({afterRunId:700}));const get=f.api.get;
+ f.api.get=async(path,...args)=>{assert.ok(!path.includes('/runs/700/attempts/'),'Historical inventory must not be read');return get(path,...args);};
+ assert.equal((await control.drainCloud({api:f.api,policy,leases:f.scoped(0),wait:async()=>{}})).code,0);assert.equal(f.scoped(0).inspect().ciInvocation,undefined);assert.deepEqual(f.writes.filter(([p])=>p.endsWith('/cancel')||p.endsWith('/rerun')),[]);
+});
+
+test('background recovery resolves every orphan policy before deleting any known runner',async t=>{
+ const f=await fixture(t),{ciRequest}=await import('./ci-identity.mjs'),{reconcileManual}=await import('./manual.mjs');
+ for(const [repositoryId,jobId] of [[123,901],[777,902]]){const lease=f.scoped(0).reserveLocal(ciRequest('I',{repositoryId,workflowId:456,workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceSha:head,workflowSha:head,sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId,jobKey:'typecheck'})).lease;f.scoped(0).release(lease,{resourceId:lease.resourceId,absent:true});}
+ f.registered=true;await cloudCLI(t,f);
+ await assert.rejects(reconcileManual({...f.config,slot:0,transport:{}}),/repository.*policy|policy.*repository/i);
+ assert.equal(f.registered,true);assert.equal(f.scoped(0).inspect().orphanRunners.length,2);assert.deepEqual(f.writes,[]);
+});
+
+
+for(const owner of ['waitron','manual','unknown'])test(`Waitron hosted escape retains its refusal for ${owner} work`,async t=>{
+ const f=await fixture(t),slot=f.scoped(4);
+ if(owner==='manual')slot.reserveLocal({lane:'D',turn:'manual-busy',snapshot:'b'.repeat(64),argv:['true']});
+ else{const {ciRequest}=await import('./ci-identity.mjs');slot.reserveLocal(ciRequest('I',{repositoryId:owner==='waitron'?999:777,workflowId:456,workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,event:'pull_request',sourceSha:head,workflowSha:head,sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'}));}
+ const path=join(f.config.repository,'config.json');writeFileSync(path,JSON.stringify(f.config));
+ const {GithubApp}=await import('./github-app.mjs'),get=GithubApp.prototype.get;t.after(()=>{GithubApp.prototype.get=get;});GithubApp.prototype.get=async()=>assert.fail('Occupied selection must refuse before API access');
+ await assert.rejects(control.main([path,'mode','hosted','--reason','fixture']),/CI work must finish/);assert.deepEqual(f.writes,[]);
 });

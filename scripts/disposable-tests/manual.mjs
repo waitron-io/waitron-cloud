@@ -97,12 +97,14 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
       const current=leases.inspect();
       if(current.ciInvocation || current.orphanRunners?.length || recorded?.ci){
         const {GithubApp}=await import('./github-app.mjs');
-        const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary}=await import('./ci-canary.mjs');
+        const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary,setRoutingMode}=await import('./ci-canary.mjs');
         const policies=[ci,cloudCi].filter(Boolean),clients=new Map();
         const policyFor=id=>{const found=policies.filter(policy=>policy.repositoryId===id);assert.equal(found.length,1,'Recorded repository needs one configured policy');return found[0];};
         const ids=new Set([current.ciInvocation?.repositoryId,recorded?.ci?.repositoryId,...(current.orphanRunners??[]).map(orphan=>orphan.ci.repositoryId)].filter(id=>id!==undefined));
         for(const id of ids)policyFor(id);
         const client=policy=>{if(!clients.has(policy.repositoryId))clients.set(policy.repositoryId,policy===ci && api?api:new GithubApp(policy));return clients.get(policy.repositoryId);};
+        if(cloudCi && current.ciInvocation?.repositoryId===cloudCi.repositoryId)
+          await setRoutingMode({api:client(cloudCi),policy:cloudCi,mode:'hosted',signal:cleanup});
         const reconcileCI=async()=>{
         for(const id of ids){const policy=policyFor(id);await cleanupRunners({leases,api:client(policy),repository:policy.repository,repositoryId:id,signal:cleanup});}
         const pending=leases.inspect().ciInvocation;

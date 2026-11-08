@@ -245,3 +245,11 @@ test('the shared pool accepts a separately pinned Cloud policy and refuses ambig
  assert.throws(()=>controller.validateCIConfig({...config,cloudCi:{...config.cloudCi,repositoryId:123}}),/repository|policy/i);
  assert.throws(()=>controller.validateCIConfig({...config,cloudCi:{...config.cloudCi,workflowDigest:'bad'}}),/digest|match/i);
 });
+
+test('closed PR fallback refuses a foreign label before cancellation or routing writes',async t=>{
+ const leases=pending(t),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};let mode='server',cancelled=false;const writes=[];
+ const api={get:async path=>path.includes('/pulls/')?{...evidence().pull,state:'closed'}:path.includes('/variables/')?{value:mode}:
+  path.includes('/jobs/')?{...evidence().job,labels:['self-hosted','foreign'],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:
+  {...evidence().run,status:cancelled?'completed':'in_progress'},patch:async(path,body)=>{writes.push(path);mode=body.value;},post:async path=>{writes.push(path);cancelled=true;}};
+ await assert.rejects(controller.fallbackOrdinary({api,policy,ci,leases,wait:async()=>{}}),/label differs/);assert.deepEqual(writes,[]);
+});

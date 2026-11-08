@@ -99,6 +99,7 @@ export async function withCloudController({config,api,approvedHead,lane,transpor
     const candidates=(await inventory({api,policy,head:approvedHead,signal})).filter(run=>run.id>pending.afterRunId);
     for(const run of candidates){
      const job=await typecheck({api,policy,run,signal});
+     if(run.run_attempt===1 && job?.run_id===run.id && job.run_attempt===1 && job.head_sha===approvedHead && job.labels?.length===1 && job.labels[0]==='ubuntu-latest'){result={code:0,route:'hosted',reason:'hosted-typecheck',runId:run.id,jobId:job.id,status:job.status,conclusion:job.conclusion};break;}
      if(job?.status==='completed' && job.conclusion==='skipped'){result={code:0,reason:'typecheck-skipped'};break;}
      if(!job || !ownedJob(policy,run,job) || job.status!=='queued' || job.runner_id || run.run_attempt!==1)continue;
      const ci=await findOrdinary({api,policy,approvedHead,runId:run.id,signal});if(!ci)continue;
@@ -114,7 +115,12 @@ export async function withCloudController({config,api,approvedHead,lane,transpor
   }catch(error){result={code:125,error:error.message};}
   finally{
    if(admitted){
-    try{drain=await withKernelLock(config.state,()=>drainCloud({api,policy,leases,signal:AbortSignal.timeout(240000),wait}));}
+    try{
+     const cleanup=AbortSignal.timeout(240000);
+     // This slot still owns the Cloud intent, so another Cloud admission cannot reopen it.
+     await setRoutingMode({api,policy,mode:'hosted',signal:cleanup});
+     drain=await withKernelLock(config.state,()=>drainCloud({api,policy,leases,signal:cleanup,wait}));
+    }
     catch(error){drain={code:125,error:error.message};}
    }
   }
