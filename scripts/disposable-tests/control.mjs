@@ -61,8 +61,9 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(retryAt)await wait(Math.max(30000,retryAt-Date.now()),undefined,{signal});
  }
  const excludeRuns=new Set(Object.keys(hosted).map(Number));
- if(await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
- assert.equal(await read(()=>routingHead({api,policy,signal})),'','Automatic CI requires unrestricted same-repository routing');
+ const selectedHead=await read(()=>routingHead({api,policy,signal}));
+ if(selectedHead && await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
+ assert.equal(selectedHead,'','Automatic CI requires unrestricted same-repository routing');
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)recorded.add(Number(match[1]));}
@@ -88,7 +89,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   healthy=false;
   try{healthy=await transport.healthy({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});}catch{signal?.throwIfAborted();}
   if(!healthy){
-   await setRoutingMode({api,policy,mode:'hosted',signal});
+   if(await read(()=>routingMode({api,policy,signal}))!=='hosted')await setRoutingMode({api,policy,mode:'hosted',signal});
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
