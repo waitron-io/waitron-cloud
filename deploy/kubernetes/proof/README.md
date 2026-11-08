@@ -70,6 +70,16 @@ fresh heartbeat and initializes the existing ledger. It launches no guest. Its
 source is `scripts/kubernetes-proof-control.mjs`; the synthetic checks are
 `node --test --test-name-pattern='^owner command up|^explained opening' scripts/kubernetes-proof-control.test.mjs`.
 
+Protection can take time to report a fresh sweep. After enabling expiry, `up`
+allows seven 15-second waits and eight observations for a missing heartbeat or
+otherwise valid stale or future heartbeat, plus the existing bounded reads.
+Malformed or foreign protection refuses immediately. The final refusal names
+the failed check; synthetic tests are `node --test --test-name-pattern='^heartbeat refusal|^manual readiness|^initialization heartbeat expiry' scripts/kubernetes-proof-control.test.mjs`.
+If initialization reports `initialization heartbeat is stale`, or another setup
+check refuses, save the exact reason and run `down` before trying `up` again.
+The owner's earlier `s3 object` refusal remains unexplained; this bounded wait
+does not establish its cause.
+
 Start the single drill from the same reviewed head and UTC day:
 
 ```sh

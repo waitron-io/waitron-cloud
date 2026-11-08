@@ -382,20 +382,20 @@ async function readManualProtection(read, stackId, states) {
 }
 
 export async function inspectManualProtection(options) {
-  const check = (value, reason = 's3 object') => checkControl(value, reason);
+  const check = (value, reason) => checkControl(value, reason);
   const { stackId, checkout, aws, now, clock = Date.now } = options;
   check(typeof stackId === 'string'
-    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(stackId));
+    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(stackId), 'protection stack id');
   const inspection = await inspectManualControl(options);
   async function unchanged() {
     const at = clock();
     check(Number.isSafeInteger(at) && at >= instant(now) && at < Date.parse(policy.accessExpiry)
-      && iso(at).slice(0, 10) === now.slice(0, 10));
+      && iso(at).slice(0, 10) === now.slice(0, 10), 'protection clock');
     const source = await checkedMain(checkout);
-    check(source.head === inspection.head && source.tree === inspection.tree);
+    check(source.head === inspection.head && source.tree === inspection.tree, 'protection source');
     const after = clock();
     check(Number.isSafeInteger(after) && after >= at && after < Date.parse(policy.accessExpiry)
-      && iso(after).slice(0, 10) === now.slice(0, 10));
+      && iso(after).slice(0, 10) === now.slice(0, 10), 'protection clock');
   }
   async function read(service, operation, input) {
     await unchanged();
@@ -406,28 +406,36 @@ export async function inspectManualProtection(options) {
   const { bucket } = await readManualProtection(read, stackId, ['ENABLED']);
   const object = await read('s3api', 'get-object', { Bucket: bucket, Key: 'd570/health/reaper.json',
     ExpectedBucketOwner: account, Range: 'bytes=0-1048576' });
-  check(object?.Body instanceof Uint8Array && object.Body.byteLength > 0 && object.Body.byteLength <= 1024 * 1024
-    && object.ServerSideEncryption === 'AES256' && object.ContentType === 'application/json');
+  check(object?.Body instanceof Uint8Array && object.Body.byteLength > 0 && object.Body.byteLength <= 1024 * 1024, 'heartbeat body');
+  check(object.ServerSideEncryption === 'AES256', 'heartbeat encryption');
+  check(object.ContentType === 'application/json', 'heartbeat content type');
   let heartbeat;
-  try { heartbeat = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(object.Body)); } catch { refuse('s3 object'); }
-  check(heartbeat?.schema === 'd570-sweep-v1' && heartbeat.account === account
-    && heartbeat.region === region && heartbeat.stackId === stackId);
-  function serviceTime(value) {
-    check(typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value));
+  try { heartbeat = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(object.Body)); } catch { refuse('heartbeat JSON'); }
+  check(heartbeat?.schema === 'd570-sweep-v1', 'heartbeat schema');
+  check(heartbeat.account === account, 'heartbeat account');
+  check(heartbeat.region === region, 'heartbeat region');
+  check(heartbeat.stackId === stackId, 'heartbeat stack');
+  function serviceTime(value, reason) {
+    check(typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(value), reason);
     const parsed = Date.parse(value);
-    check(Number.isSafeInteger(parsed) && new Date(parsed).toISOString().replace('.000Z', 'Z') === value.replace('.000Z', 'Z'));
+    check(Number.isSafeInteger(parsed) && new Date(parsed).toISOString().replace('.000Z', 'Z') === value.replace('.000Z', 'Z'), reason);
     return parsed;
   }
-  const started = serviceTime(heartbeat.startedAt), completed = serviceTime(heartbeat.completedAt);
-  const modified = serviceTime(object.LastModified), observed = clock();
-  check(Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)
-    && started <= completed && completed <= observed && observed - started < 120_000
-    && modified >= Math.floor(completed / 1000) * 1000 && modified <= observed && observed - modified < 120_000);
+  const started = serviceTime(heartbeat.startedAt, 'heartbeat start time'), completed = serviceTime(heartbeat.completedAt, 'heartbeat completion time');
+  const modified = serviceTime(object.LastModified, 'heartbeat write time'), observed = clock();
+  check(Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry), 'protection clock');
+  check(started <= completed, 'heartbeat sweep order');
+  check(modified >= Math.floor(completed / 1000) * 1000, 'heartbeat write order');
   for (const [key, pattern] of [['terminationRequested', /^i-[a-f0-9]{17}$/], ['volumeDeletionRequested', /^vol-[a-f0-9]{17}$/]]) {
     const rows = heartbeat[key];
     check(Array.isArray(rows) && rows.length <= 2000 && new Set(rows).size === rows.length
-      && rows.every(id => typeof id === 'string' && pattern.test(id)));
+      && rows.every(id => typeof id === 'string' && pattern.test(id)), key + ' observations');
   }
+  // Only otherwise valid protection can become ready through another observation.
+  if (completed > observed) pending('D570_PROTECTION_PENDING', 'heartbeat completion is in the future');
+  if (observed - started >= 120_000) pending('D570_PROTECTION_PENDING', 'heartbeat sweep is stale');
+  if (modified > observed) pending('D570_PROTECTION_PENDING', 'heartbeat write is in the future');
+  if (observed - modified >= 120_000) pending('D570_PROTECTION_PENDING', 'heartbeat write is stale');
   // Accepted sweep requests establish health only; separate live reads must establish cleanup.
   return { ...inspection, stackId, bucket, heartbeat };
 }
@@ -611,8 +619,12 @@ export async function createManualFirstSetup(options) {
       manualSetupBound(options, protection.billing.microUsd, booking.upperMicroUsd);
       return { ...booking, ...protection, openingBilling: booking.billing };
     } catch (error) {
-      if (error.name !== 'NoSuchKey' || error.$metadata?.httpStatusCode !== 404) throw error;
-      check(attempt < 7);
+      const missing = error.name === 'NoSuchKey' && error.$metadata?.httpStatusCode === 404;
+      if (!missing && error.code !== 'D570_PROTECTION_PENDING') throw error;
+      if (attempt >= 7) {
+        if (missing) refuse('heartbeat is missing after readiness waits');
+        throw error;
+      }
       await sleep(15000);
     }
   }
@@ -624,10 +636,10 @@ export async function initializeManualFirstSetup(options) {
   const { checkout, now, clock = Date.now } = options;
   async function unchanged() {
     const before = clock(), source = await checkedMain(checkout), after = clock();
-    check(source.head === setup.head && source.tree === setup.tree
-      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
-      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
-      && after - Date.parse(setup.heartbeat.startedAt) < 120_000);
+    check(source.head === setup.head && source.tree === setup.tree, 'initialization source');
+    check(Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10), 'initialization clock');
+    check(after - Date.parse(setup.heartbeat.startedAt) < 120_000, 'initialization heartbeat is stale');
   }
   const aws = { async call(...args) {
     await unchanged();

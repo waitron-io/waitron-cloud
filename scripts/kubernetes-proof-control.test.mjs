@@ -604,6 +604,47 @@ test('a checkout changed while reading the heartbeat cannot establish health', a
   assert.equal(f.calls.at(-1).operation, 'get-object');
 });
 
+for (const [reason, mutate] of [
+  ['heartbeat body', (h, o) => delete o.Body],
+  ['heartbeat encryption', (h, o) => delete o.ServerSideEncryption],
+  ['heartbeat content type', (h, o) => o.ContentType = 'text/plain'],
+  ['heartbeat JSON', (h, o) => o.Body = Buffer.from('{private provider content')],
+  ['heartbeat schema', h => h.schema = 'other'],
+  ['heartbeat account', h => h.account = '949687825720'],
+  ['heartbeat region', h => h.region = 'eu-south-2'],
+  ['heartbeat stack', h => h.stackId += '-foreign'],
+  ['heartbeat start time', h => h.startedAt = 'invalid'],
+  ['heartbeat completion time', h => h.completedAt = '2026-02-30T12:00:00Z'],
+  ['heartbeat write time', (h, o) => o.LastModified = 'invalid'],
+  ['heartbeat sweep order', h => h.completedAt = '2026-11-06T11:58:59Z'],
+  ['heartbeat write order', (h, o) => o.LastModified = '2026-11-06T11:59:00Z'],
+  ['terminationRequested observations', h => h.terminationRequested = ['i-invalid']],
+  ['volumeDeletionRequested observations', h => h.volumeDeletionRequested = null],
+  ['heartbeat completion is in the future', (h, o) => { h.completedAt = '2026-11-06T12:00:00.001Z'; o.LastModified = now; }],
+  ['heartbeat sweep is stale', h => h.startedAt = '2026-11-06T11:58:00Z'],
+  ['heartbeat write is in the future', (h, o) => o.LastModified = '2026-11-06T12:00:00.001Z'],
+  ['heartbeat write is stale', (h, o) => { h.startedAt = '2026-11-06T11:58:00.001Z';
+    h.completedAt = '2026-11-06T11:58:00.999Z'; o.LastModified = '2026-11-06T11:58:00Z'; }],
+]) test(`heartbeat refusal names ${reason} without bare s3 object or private content`, async t => {
+  const f = protectionFixture(t), object = f.responses['s3api/get-object'];
+  const health = structuredClone(f.health); mutate(health, object);
+  if (object.Body?.toString() === JSON.stringify(f.health)) object.Body = Buffer.from(JSON.stringify(health));
+  await assert.rejects(f.observe(), { message: 'D570 controller refused: ' + reason });
+});
+
+test('heartbeat refusal classifies the recorded owner times as pending until the reader catches up', async t => {
+  const f = protectionFixture(t), stamp = '2026-11-08T10:41:49Z';
+  f.health.startedAt = '2026-11-08T10:41:49.125Z';
+  f.health.completedAt = '2026-11-08T10:41:49.999Z'; // Synthetic completion; the owner's exact value was not retained.
+  Object.assign(f.responses['s3api/get-object'], { Body: Buffer.from(JSON.stringify(f.health)), LastModified: '2026-11-08T10:41:50Z' });
+  const previous = f.aws.call;
+  f.aws.call = async (...args) => { const r = await previous(...args);
+    if (args[0] === 'ce') r.ResultsByTime[0].TimePeriod.End = '2026-11-09'; return r; };
+  await assert.rejects(f.observe({ now: stamp, clock: () => Date.parse(stamp) }), {
+    code: 'D570_PROTECTION_PENDING', message: 'D570 controller refused: heartbeat completion is in the future' });
+  assert.deepEqual((await f.observe({ now: stamp, clock: () => Date.parse('2026-11-08T10:41:50Z') })).heartbeat, f.health);
+});
+
 for (const stackId of ['d570-first', 'arn:aws:cloudformation:eu-north-1:949687825720:stack/d570/00000000-0000-4000-8000-000000000000']) {
   test(`unbound stack identity refuses before provider access: ${stackId}`, async t => {
     const f = protectionFixture(t);
@@ -1264,6 +1305,89 @@ test('manual creation books once, waits for its completed stack, enables expiry 
   await assert.rejects(f.create()); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
 });
 
+for (const health of ['stale', 'future']) test(`manual readiness waits for ${health} health then returns fresh protection without another create`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call; let reads = 0;
+  f.aws.call = async (...args) => {
+    const r = await previous(...args);
+    if (args[1] === 'get-object' && reads++ === 0) {
+      const h = JSON.parse(Buffer.from(r.Body));
+      if (health === 'stale') h.startedAt = '2026-11-06T11:58:00Z';
+      else { h.completedAt = '2026-11-06T12:00:00.001Z'; r.LastModified = now; }
+      r.Body = Buffer.from(JSON.stringify(h));
+    }
+    return r;
+  };
+  assert.deepEqual((await f.create()).heartbeat, f.p.health);
+  assert.deepEqual(f.sleeps, [15000, 15000, 15000]);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+  assert.equal(f.calls.some(r => ['run-instances', 'put-object', 'delete-stack'].includes(r.operation)), false);
+});
+
+for (const [stage, reason] of [
+  ['missing', 'heartbeat is missing after readiness waits'],
+  ['stale', 'heartbeat sweep is stale'],
+  ['future', 'heartbeat write is in the future'],
+]) test(`manual readiness bounds ${stage} health and preserves its final specific refusal`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call; let reads = 0;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'get-object') {
+      reads++;
+      if (stage === 'missing') throw Object.assign(new Error('private provider text'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+    }
+    const r = await previous(...args);
+    if (args[1] === 'get-object') {
+      const h = JSON.parse(Buffer.from(r.Body));
+      if (stage === 'stale') h.startedAt = '2026-11-06T11:58:00Z';
+      else r.LastModified = '2026-11-06T12:00:00.001Z';
+      r.Body = Buffer.from(JSON.stringify(h));
+    }
+    return r;
+  };
+  await assert.rejects(f.create(), { message: 'D570 controller refused: ' + reason });
+  assert.equal(reads, 8); assert.deepEqual(f.sleeps, Array(8).fill(15000));
+  assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+  assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 9313491);
+});
+
+for (const [reason, mutate] of [
+  ['terminationRequested observations', h => h.terminationRequested = null],
+  ['heartbeat sweep order', h => h.completedAt = '2026-11-06T11:57:59Z'],
+  ['heartbeat write order', (h, r) => r.LastModified = '2026-11-06T11:59:00Z'],
+  ['heartbeat stack', h => h.stackId += '-foreign'],
+]) test(`manual readiness refuses ${reason} immediately even with stale health`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const r = await previous(...args);
+    if (args[1] === 'get-object') { const h = JSON.parse(Buffer.from(r.Body));
+      h.startedAt = '2026-11-06T11:58:00Z'; mutate(h, r); r.Body = Buffer.from(JSON.stringify(h)); }
+    return r;
+  };
+  await assert.rejects(f.create(), { message: 'D570 controller refused: ' + reason });
+  assert.deepEqual(f.sleeps, [15000, 15000]);
+});
+
+for (const change of ['source', 'clock']) test(`manual readiness rechecks ${change} after stale health waits`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call; let at = Date.parse(now);
+  f.aws.call = async (...args) => { const r = await previous(...args);
+    if (args[1] === 'get-object') { const h = JSON.parse(Buffer.from(r.Body)); h.startedAt = '2026-11-06T11:58:00Z';
+      r.Body = Buffer.from(JSON.stringify(h)); } return r; };
+  await assert.rejects(f.create({ clock: () => at, sleep: async ms => {
+    f.sleeps.push(ms);
+    if (f.sleeps.length === 3) {
+      if (change === 'source') writeFileSync(join(f.root, 'controller.txt'), 'changed while health was stale\n');
+      else at = Date.parse(now) - 1;
+    }
+  } }), { message: 'D570 controller refused: ' + (change === 'source' ? 'checkout' : 'setup time') });
+  assert.deepEqual(f.sleeps, [15000, 15000, 15000]);
+});
+
+test('manual readiness keeps freshness equality at 120 seconds stale', async t => {
+  const f = protectionFixture(t); f.health.startedAt = '2026-11-06T11:58:00Z';
+  f.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.health));
+  await assert.rejects(f.observe(), { code: 'D570_PROTECTION_PENDING' });
+  assert.equal((await f.observe({ clock: () => Date.parse(now) - 1, now: '2026-11-06T11:59:59Z' })).stackId, f.stackId);
+});
+
 for (const [label, mutate, expectedCreates, expectedEnables] of [
   ['unknown opening', (f, response, operation) => { if (operation === 'get-cost-and-usage') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01'; }, 0, 0],
   ['foreign created stack', (f, response, operation) => { if (operation === 'create-stack') response.StackId = f.p.stackId.replace('462991287391', '949687825720'); }, 1, 0],
@@ -1374,6 +1498,16 @@ async function initializationFixture(t) {
   };
   return { ...f, objects, writes, initialize };
 }
+
+test('initialization heartbeat expiry names the reason and refuses before writing history', async t => {
+  const f = await initializationFixture(t), previous = f.aws.call; let at = Date.parse(now);
+  f.aws.call = async (...args) => { const r = await previous(...args);
+    if (args[1] === 'list-objects-v2') at += 120000; return r; };
+  await assert.rejects(f.initialize({ clock: () => at }), {
+    message: 'D570 controller refused: initialization heartbeat is stale' });
+  assert.deepEqual(f.writes, []);
+  assert.equal(f.calls.some(r => r.operation === 'run-instances'), false);
+});
 
 test('first ledger keeps the original opening when the bill rises during stack creation', async t => {
   const f = await initializationFixture(t), previous = f.aws.call;
