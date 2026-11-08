@@ -204,3 +204,100 @@ for(const automatic of [true,false])test(`${automatic?'automatic':'manual'} admi
  const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic,fallback:async()=>({retry:false})});
  assert.equal(result.code,125);assert.match(result.error,/selected head changed/);assert.deepEqual(f.events,[]);
 });
+
+for(const failure of ['stale status','read failure','uncertain cleanup'])test(`completed ordinary execution reports ${failure} without run-wide fallback`,async t=>{
+ const {executeOrdinary}=await import('./ci-canary.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'pull_request'};
+ const f=fixture(t,{identity,uncertain:failure==='uncertain cleanup'}),get=f.api.get,execute=f.transport.execute;
+ let completed=false,fallbacks=0;
+ f.transport.execute=async(...args)=>{await execute(...args);assert.ok(f.leases.inspect().ciInvocation);completed=true;return 0;};
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(completed && path.includes('/jobs/')){
+   assert.equal(f.leases.inspect().ciInvocation,undefined,'Final API reads must follow retirement of the fallback intent');
+   if(failure==='read failure')throw new Error('completion API unavailable');
+   const job=await get(path,options);
+   return {...job,status:'in_progress',conclusion:null};
+  }
+  return get(path,options);
+ };
+ const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic:true,
+  fallback:async()=>{fallbacks++;return {retry:true};}}).catch(error=>({code:125,error:error.message}));
+ assert.equal(fallbacks,0,'A completion doubt must not cancel a running sibling');
+ assert.equal(result.code,125);assert.ok(result.completion,'Retain the final execution receipt even when cleanup is uncertain');assert.equal(result.completion.code,0);
+ assert.equal(result.completion.expected.runner_id,1001);
+ if(failure!=='read failure'){assert.equal(result.completion.observations.at(-1).status,'in_progress');assert.equal(result.completion.observations.length,5);}
+ assert.equal(result.cleanup,failure==='uncertain cleanup'?'quarantined':'absent');
+ assert.equal(f.leases.inspect().ciInvocation,undefined,'Recovery must not retain a cancellation intent after execution ends');
+ assert.equal(f.leases.inspect().slots[0].state,failure==='uncertain cleanup'?'quarantined':'free');
+ if(failure==='uncertain cleanup'){
+  const {writeFileSync}=await import('node:fs'),{dirname}=await import('node:path');
+  const {reconcileManual}=await import('./manual.mjs'),state=dirname(f.leases.directory);
+  writeFileSync(join(state,'mac-controller.lock'),'',{mode:0o600});
+  f.transport.inspect=async lease=>({resourceId:lease.resourceId,absent:true});
+  f.api.get=async(path,options)=>{assert.ok(path.includes('/runners'),'Recovery must only remove the recorded runner');return get(path,options);};
+  assert.equal((await reconcileManual({...f,state,hostGeneration:'fixture',slots:1,ci:{repository:'fixture/cloud',workflowPath:identity.workflowPath}})).code,0);
+  assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+ }
+});
+
+test('a completed listener waits for an exact GitHub success after a stale status read',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),get=f.api.get;
+ let completedReads=0;
+ f.api.get=async(path,options)=>{const job=await get(path,options);
+  if(path.includes('/jobs/') && job.runner_id && ++completedReads===1)return {...job,status:'in_progress',conclusion:null};
+  return job;
+ };
+ const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',wait:async(ms,_value,{signal}={})=>{if(ms===15000)await new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('monitor ended')),{once:true}));}});
+ assert.equal(result.code,0,result.error);assert.equal(completedReads,2);assert.equal(result.completion.observations[0].status,'in_progress');
+ assert.equal(result.completion.observations.at(-1).status,'completed');assert.equal(result.completion.observations.at(-1).conclusion,'success');
+});
+
+for(const [field,value] of [['id',902],['run_id',790],['run_attempt',2],['head_sha','9'.repeat(40)],
+ ['runner_id',2002],['runner_name','foreign-runner'],['conclusion','failure'],['status','unknown']])test(`completion never accepts a changed ${field}`,async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),get=f.api.get;
+ f.api.get=async(path,options)=>{const job=await get(path,options);return path.includes('/jobs/') && job.runner_id?{...job,[field]:value}:job;};
+ const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud'});
+ assert.equal(result.code,125);assert.match(result.error,/did not qualify/);
+ assert.equal(result.completion.observations.length,1);assert.equal(result.completion.observations[0][field],value);
+ assert.equal(result.cleanup,'absent');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+});
+
+for(const status of ['in_progress','completed'])test(`a failed listener keeps ordinary recovery when GitHub is ${status}`,async t=>{
+ const {executeOrdinary}=await import('./ci-canary.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'push'};
+ const f=fixture(t,{identity}),get=f.api.get,post=f.api.post,execute=f.transport.execute;
+ let ended=false,marker='{}';const writes=[];
+ f.transport.execute=async(...args)=>{await execute(...args);ended=true;return 137;};
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
+  const value=await get(path,options);
+  if(path.endsWith('/runs/789'))return {...value,event:'push'};
+  return ended && path.includes('/jobs/')?{...value,status,conclusion:status==='completed'?'success':null}:value;
+ };
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));writes.push('marker');marker=body.value;};
+ f.api.post=async(path,...args)=>{if(path.endsWith('/cancel')){writes.push('cancel');return;}return post(path,...args);};
+ const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic:true});
+ assert.deepEqual(writes,status==='completed'?[]:['marker','cancel']);
+ assert.equal(result.code,125);assert.equal(result.completion.code,137);
+ assert.equal(result.cleanup,'absent');assert.equal(result.pending,status==='completed'?undefined:true);
+ assert.equal(f.leases.inspect().ciInvocation?.ordinaryStage,status==='completed'?undefined:'cancel-requested');
+});
+
+test('stopping final readback still cleans up without cancelling the run',async t=>{
+ const {executeOrdinary}=await import('./ci-canary.mjs'),stop=new AbortController();
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'pull_request'};
+ const f=fixture(t,{identity}),get=f.api.get;let stopped=false;
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  const value=await get(path,options);
+  if(path.includes('/jobs/') && value.runner_id){setImmediate(()=>{stopped=true;stop.abort();});return {...value,status:'in_progress',conclusion:null};}
+  return value;
+ };
+ const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic:true,
+  signal:stop.signal,fallback:async()=>assert.fail('A final-read stop must not cancel siblings')});
+ assert.equal(stopped,true);assert.equal(result.code,143);assert.equal(result.completion.code,0);
+ assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().ciInvocation,undefined);
+ assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+});
