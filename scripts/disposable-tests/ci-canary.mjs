@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {ciIdentity,routingLabel,jobName} from './ci-identity.mjs';
+import {ciIdentity,routingLabel,jobName,ciJobKeyPattern} from './ci-identity.mjs';
 import {configuredSlots} from './leases.mjs';
 
-function ordinaryKey(name){
- if(name==='typecheck')return 'typecheck';
- if(name==='test-ui')return 'test-ui-1';
- const match=/^(test-(?:server|heavy|till|dashboard)) \(([1-9][0-9]*)\)$/.exec(name);
+function ordinaryKey(name,labels){
+ if(name==='typecheck')return Array.isArray(labels) && labels.some(label=>typeof label==='string' && label.endsWith('-typecheck-1'))?'typecheck-1':'typecheck';
+ if(['lint','root-guards','bundle-smoke','test-ui','test-setup','test-staffing','test-bookings','test-media','test-payments-stripe','test-payments-sumup','test-identity','test-workforce','test-light-a','test-light-b','test-adjustments'].includes(name))return name+'-1';
+ const match=/^((?:test-(?:server|heavy|till|dashboard|fiscal-verifactu|venue-service|provisioning)|mutation-shared)) \(([1-9][0-9]*)\)$/.exec(name);
  return match?`${match[1]}-${match[2]}`:null;
 }
 
@@ -23,7 +23,7 @@ export function admitOrdinary(policy,approvedHead,{repository,run,job,workflow,s
  assert.equal(source.sha,approvedHead,'CI source commit differs');
  const ci=ciIdentity({repositoryId:repository.id,workflowId:run.workflow_id,workflowPath:run.path,
   workflowSha:run.head_sha,workflowDigest:policy.workflowDigest,event:run.event,sourceSha:source.sha,sourceTree:source.commit.tree.sha,
-  runId:run.id,attempt:run.run_attempt,jobId:job.id,jobKey:ordinaryKey(job.name)});
+  runId:run.id,attempt:run.run_attempt,jobId:job.id,jobKey:ordinaryKey(job.name,job.labels)});
  assert.ok(job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha &&
   job.name===jobName(ci) && job.status==='queued' && !job.runner_id && Array.isArray(job.labels) &&
   job.labels.length===2 && job.labels.includes('self-hosted') && job.labels.includes(routingLabel(ci)),'Foreign or already assigned ordinary CI job');
@@ -62,7 +62,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
   run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Ordinary fallback identity differs');
  let run=await api.get(path,{signal});check(run);
  const job=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
- assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha && (ci.jobKey?job.name===jobName(ci):/^(typecheck|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-dashboard-[1-4]|test-ui-1)$/.test(ordinaryKey(job.name)??'')),'Ordinary fallback job differs');
+ assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha && (ci.jobKey?job.name===jobName(ci):ciJobKeyPattern.test(ordinaryKey(job.name,job.labels)??'')),'Ordinary fallback job differs');
  const pending=leases?.inspect().ciInvocation;
  const ownedCancel=pending?.ordinaryStage==='cancel-requested' && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId;
  const refused=pending?.ordinaryStage==='refused' && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId;
@@ -175,9 +175,9 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),o
   const inventory=await api.get(`${base}/actions/runs/${run.id}/attempts/1/jobs?per_page=100`,{signal});
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   for(const job of inventory.jobs){
-   if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
-   const key=ordinaryKey(job.name);
-   if(!/^(typecheck|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-dashboard-[1-4]|test-ui-1)$/.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-1-${key}`))continue;
+   if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
+   const key=ordinaryKey(job.name,job.labels);
+   if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-1-${key}`))continue;
    candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-1-${key}`};
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
    if(ci)found.push(ci);

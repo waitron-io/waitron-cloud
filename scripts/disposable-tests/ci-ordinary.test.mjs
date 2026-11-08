@@ -197,3 +197,15 @@ test('hosted retry qualification requires its exact next attempt, checkout, host
  log='[command]/usr/bin/git log -1 --format=%H\n'+'5'.repeat(40);
  await assert.rejects(controller.qualifyOrdinaryHosted({api,policy,retry}),/checkout/i);
 });
+
+// Background recovery reconstructs the concrete identity without a saved job key.
+for(const [name,key,allowed] of [['test-adjustments','test-adjustments-1',true],['test-provisioning (7)','test-provisioning-7',false]])test(`keyless recovery ${allowed?'retries an owned adjustments job':'refuses an unapproved shard without writes'}`,async t=>{
+ const leases=pending(t),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ let mode='server',cancelled=false;const writes=[];
+ const api={get:async path=>path.includes('/pulls/')?evidence().pull:path.includes('/variables/')?{value:mode}:
+  path.includes('/jobs/')?{...evidence().job,name,labels:['self-hosted','dt-123-789-1-'+key],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:
+  {...evidence().run,status:cancelled?'completed':'in_progress'},
+  patch:async(path,body)=>{writes.push(path);mode=body.value;},post:async path=>{writes.push(path);if(path.endsWith('/cancel'))cancelled=true;}};
+ if(allowed){assert.equal((await controller.fallbackOrdinary({api,policy,ci,leases})).retry,true);assert.deepEqual(writes,['/repos/fixture/cloud/actions/variables/DISPOSABLE_TESTS_MODE','/repos/fixture/cloud/actions/runs/789/cancel','/repos/fixture/cloud/actions/runs/789/rerun']);}
+ else {await assert.rejects(controller.fallbackOrdinary({api,policy,ci,leases}),/job differs/);assert.deepEqual(writes,[]);}
+});
