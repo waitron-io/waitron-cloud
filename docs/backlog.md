@@ -4,6 +4,8 @@
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
+The pickup loop now retries incomplete run inventories while other workers finish, and releases a guest when its concrete job finishes without success. Portable regressions exercise both stalls; publish this controller and record sustained assignment before calling the live recurrence fixed.
+
 Record the first server assignment for each enabled job family, then hourly server-versus-hosted jobs, server-caused failures and host memory/load for [automatic same-repository PR pickup](../deploy/disposable-tests/README.md#pick-up-ordinary-pr-jobs-automatically), and qualify full browser coverage after the ten-slot trial exhausted guest memory. Keep the larger guest profile until smaller guests complete coverage without OOM kills. Qualify changed guest dependencies with the affected job commands before restoring their routing caps. Keep the reviewed main workflow pins current as Waitron’s workflow changes. The first ordinary Cloud typecheck with hosted fallback, frozen transitive guest packages and permanent-host reproduction remain open. Retain contributor approval and the accepted public-repository limits. D570’s EC2 proof and D591’s selection work stay separate.
 
 ## Keep the private shared UI release current (D579)
