@@ -51,6 +51,7 @@ download() {
     http=$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
       --connect-timeout 10 --max-time "$remaining" --max-filesize "$limit" \
       --write-out '%{http_code}' "$url" -o "$output" 2>/dev/null) || status=$?
+    http=${http:-000}
     case "$http" in 4??) reason='HTTP request refused'; break;; esac
     if ((status == 0)); then return 0; fi
     reason='request failed'

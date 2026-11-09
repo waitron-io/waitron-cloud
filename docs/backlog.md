@@ -24,7 +24,6 @@ those transfers' existing budgets, with HTTP 4xx and integrity failures refusing
 The controlled dependency tests exercise retries and refusals; a healthy cold guest usually
 uses only its first attempt. Frozen host recipes still change only through explicit publication.
 
-
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
 ## Keep the private shared UI release current (D579)

@@ -26,7 +26,7 @@ errors and HTTP 5xx responses can retry; HTTP 4xx and other curl failures stop i
 Each attempt removes partial bytes first. HTTPS-only redirects, transfer-size limits and
 pinned digests still apply; an integrity failure stops before extraction and is not retried.
 A final failure names the tool and numeric curl/HTTP result without raw response bodies.
-Bash whole-second accounting can overrun by less than a second; the existing outer stage
+Bash whole-second accounting may differ by less than a second; the existing outer stage
 and session deadlines still apply. Healthy cold guests normally exercise attempt 1 only.
 
 If a version leaves your package mirror, stop and review a replacement pin. `--metadata` refreshes the host's signed package indexes and prints current candidates; it never rewrites the committed pins. Do not substitute candidates silently.

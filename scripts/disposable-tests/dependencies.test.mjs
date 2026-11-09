@@ -140,7 +140,9 @@ $report && printf '%s' "$code"
 if ((status)); then echo 'SECRET provider-body https://private.example/?signature=SECRET' >&2; fi
 exit "$status"
 `, {mode:0o755});
-  writeFileSync(join(root,'sleep'),'#!/bin/bash\nexit 0\n',{mode:0o755});
+  writeFileSync(join(root,'sleep'),`#!/bin/bash
+printf '%s\\n' "$*" >> "$ROOT/sleeps"
+`,{mode:0o755});
   const source=readFileSync(new URL('../../deploy/disposable-tests/guest-tools.sh',import.meta.url),'utf8');
   const fn=source.match(/# BEGIN bounded download\n([\s\S]*?)# END bounded download/);
   const command=fn ? fn[1]+'\ndownload Node "$BUDGET" 134217728 https://nodejs.org/tool "$ROOT/node.tar.xz"' : source.match(/curl --fail[\s\S]*?-o "\$temporary\/node.tar.xz"/)[0];
@@ -162,7 +164,7 @@ for(const code of [6,7,18,28,52,55,56])test(`guest downloads retry network exit 
  const result=toolDownload(t,`${code}:000,0:200`);assert.equal(result.status,0,result.stderr);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'2');assert.equal(result.stderr,'');
 });
-for(const [code,http] of [[0,404],[22,401],[22,404],[22,408],[22,429],[6,404],[35,'000'],[60,'000'],[63,'000']])test(`guest downloads refuse curl ${code} HTTP ${http} immediately`,t=>{
+for(const [code,http] of [[22,600],[0,404],[22,401],[22,404],[22,408],[22,429],[6,404],[35,'000'],[60,'000'],[63,'000']])test(`guest downloads refuse curl ${code} HTTP ${http} immediately`,t=>{
  const result=toolDownload(t,`${code}:${http},0:200`);assert.notEqual(result.status,0);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'1');
  assert.match(result.stderr,/Node download failed/);assert.match(result.stderr,new RegExp(`curl ${code}`));
@@ -171,6 +173,7 @@ for(const [code,http] of [[0,404],[22,401],[22,404],[22,408],[22,429],[6,404],[3
 test('guest downloads stop after three failed attempts',t=>{
  const result=toolDownload(t,'22:503,22:502,22:504,0:200');assert.notEqual(result.status,0);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'3');
+ assert.deepEqual(readFileSync(join(result.root,'sleeps'),'utf8').trim().split('\n'),['1','1']);
  assert.match(result.stderr,/Node download failed.*curl 22.*HTTP 504/);assert.doesNotMatch(result.stderr,/SECRET|https:/);
 });
 test('a zero download budget makes no curl request',t=>{
@@ -194,6 +197,7 @@ test('an attempt that spends its budget makes no retry',t=>{
  const result=toolDownload(t,'28:000,0:200',1,1);assert.notEqual(result.status,0);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'1');
  assert.match(result.stderr,/Node download failed.*budget exhausted/);
+ assert.throws(()=>readFileSync(join(result.root,'sleeps')),{code:'ENOENT'});
 });
 test('corrupt Node, pnpm and runner bytes fail with the tool named before extraction',t=>{
  const root=mkdtempSync(join(tmpdir(),'guest-integrity-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -207,7 +211,8 @@ test('corrupt Node, pnpm and runner bytes fail with the tool named before extrac
   const check=file==='pnpm.tgz' ? source.match(/python3 - "\$temporary\/pnpm.tgz" <<'PY'\n[\s\S]*?\nPY/)[0] : source.split('\n').find(line=>line.startsWith('printf ') && line.includes(file));
   const result=spawnSync('bash',['-c','set -euo pipefail\ntemporary="$ROOT"\n'+check],{encoding:'utf8',timeout:5000,env:{...process.env,PATH:checksumPath,ROOT:root}});
   assert.notEqual(result.status,0);assert.match(result.stderr,message);
-  assert.ok(source.indexOf(check)<source.indexOf('tar --extract',source.indexOf(check)));
+  const extraction=source.split('\n').find(line=>line.startsWith('tar --extract') && line.includes(file));assert.ok(extraction);
+  assert.ok(source.indexOf(check)<source.indexOf(extraction));
  }
 });
 
@@ -227,4 +232,17 @@ ${call}
  const args=result.stdout.split('\0');args.pop();
  assert.equal(args.length,5);assert.equal(args[0],tool);assert.equal(args[1],budget);
  assert.equal(args[4],'/tmp/fixture-tools/'+output);
+});
+
+for(const code of [2,127])test(`an empty HTTP report retains numeric diagnostics for curl ${code}`,t=>{
+ const result=toolDownload(t,`${code}:`);assert.notEqual(result.status,0);
+ assert.match(result.stderr,new RegExp(`curl ${code} HTTP 000\\)`));
+});
+
+test('retry curl timeouts share the original two-second budget',{timeout:5000},async t=>{
+ // Keep both requests away from Bash's whole-second boundary in this short fixture.
+ while(Date.now()%1000>100)await new Promise(resolve=>setTimeout(resolve,5));
+ const result=toolDownload(t,'22:503,0:200',2,1.05);assert.equal(result.status,0,result.stderr);
+ const timeouts=readFileSync(join(result.root,'args'),'utf8').trim().split('\n').map(line=>Number(line.match(/--max-time (\d+)/)[1]));
+ assert.deepEqual(timeouts,[2,1]);
 });
