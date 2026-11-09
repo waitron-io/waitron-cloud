@@ -1,9 +1,10 @@
 // Local only: prebuild the existing Cloud and pinned Waitron images, then run
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
+// --worker-loss adds a three-node rehearsal; plan for 10 GiB RAM and 30 GiB disk, using the approved shared Docker wrapper.
 // Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
 import assert from 'node:assert/strict';
 import {execFile, spawn} from 'node:child_process';
-import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -59,7 +60,9 @@ export function createKubernetesVerifier({template, kube, pod, loadImage}) {
 
 async function verifierDiagnostics(kube, pod) {
   try {
-    const state = (await pod('verifier', true)).status.containerStatuses.find(row => row.name === 'verifier').state;
+    const previous = await pod('verifier', true, true);
+    if (!previous) return;
+    const state = previous.status.containerStatuses.find(row => row.name === 'verifier').state;
     const reason = ['Completed', 'Error', 'OOMKilled', 'ContainerCannotRun', 'StartError'].includes(state.terminated?.reason) ? state.terminated.reason : 'OTHER';
     const exitCode = Number.isInteger(state.terminated?.exitCode) ? state.terminated.exitCode : null;
     process.stderr.write('Kubernetes verifier termination ' + JSON.stringify({reason, exitCode}) + '\n');
@@ -85,6 +88,7 @@ const directory = await mkdtemp(join(tmpdir(), 'cloud-kubernetes-'));
 const env = {...process.env, KUBECONFIG: join(directory, 'kubeconfig')};
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
+let sharedVolume;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
   cluster + (workerLoss && ['manifest', 'verifier'].includes(role) ? role === 'manifest' ? '-worker2' : '-worker' : '-control-plane')]));
 const stop = new AbortController(), shutdown = () => stop.abort();
@@ -98,8 +102,9 @@ async function run(binary, args, input, cleanup = false) {
   });
 }
 const kube = (args, input, cleanup = false) => run('kubectl', ['--context', 'kind-' + cluster, '--namespace', 'default', ...args], input, cleanup);
-const pod = async (role, cleanup = false) => {
+const pod = async (role, cleanup = false, optional = false) => {
   const rows = JSON.parse(await kube(['get', 'pods', '-l', 'app=' + role, '-o', 'json'], undefined, cleanup)).items;
+  if (optional && rows.length === 0) return;
   assert.equal(rows.length, 1, 'kubernetes.replica_count');
   assert.equal(rows[0].spec.nodeName, roleNodes[role], 'kubernetes.node_binding');
   return rows[0];
@@ -129,19 +134,22 @@ try {
   await run('docker', ['tag', image, tag]); tagged = true;
   created = true;
   process.stderr.write('Creating owned local Kubernetes cluster\n');
-  const shared = join(directory, 'config');
-  await mkdir(shared, {mode: 0o700});
+  let shared;
+  if (workerLoss) {
+    sharedVolume = cluster + '-config';
+    await run('docker', ['volume', 'create', '--label', 'cloud.campaign=D618', '--label', 'cloud.d618.run=' + cluster, sharedVolume]);
+    process.stderr.write('Owned D618 shared volume ' + sharedVolume + '\n');
+    shared = await run('docker', ['volume', 'inspect', '--format', '{{.Mountpoint}}', sharedVolume]);
+  }
   const configuration = {kind: 'Cluster', apiVersion: 'kind.x-k8s.io/v1alpha4', nodes: ['control-plane', 'worker', 'worker'].map(role => ({role,
     extraMounts: [{hostPath: shared, containerPath: '/var/local/d620-config'}]}))};
   await run('kind', ['create', 'cluster', '--name', cluster, '--image', 'kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48', '--wait', '120s',
     ...(workerLoss ? ['--config', '-'] : [])], workerLoss ? JSON.stringify(configuration) : undefined);
   if (workerLoss) {
     await kube(['taint', 'node', cluster + '-control-plane', 'node-role.kubernetes.io/control-plane:NoSchedule-']);
-    await writeFile(join(shared, 'mount-check'), 'shared', {mode: 0o600});
     for (const node of [cluster + '-control-plane', cluster + '-worker', cluster + '-worker2']) {
-      await run('docker', ['exec', node, 'sh', '-ec', 'cd /var/local/d620-config; test "$(stat -c %a mount-check)" = 600; test "$(cat mount-check)" = shared; mv mount-check mount-renamed; mv mount-renamed mount-check']);
+      await run('docker', ['exec', node, 'sh', '-ec', 'cd /var/local/d620-config; chmod 700 .; umask 077; printf shared > mount-check; test "$(stat -c %a mount-check)" = 600; test "$(cat mount-check)" = shared; mv mount-check mount-renamed; rm mount-renamed']);
     }
-    await rm(join(shared, 'mount-check'));
   }
   await run('kind', ['load', 'docker-image', '--name', cluster, tag]);
   const node = JSON.parse(await run('docker', ['inspect', cluster + '-control-plane']))[0];
@@ -215,6 +223,11 @@ try {
       if (result) result.kubernetes.removed = true;
     }
   } finally {
+    if (sharedVolume) {
+      const owned = await run('docker', ['volume', 'ls', '--filter', 'label=cloud.d618.run=' + cluster, '--filter', 'name=' + sharedVolume, '--format', '{{.Name}}'], undefined, true);
+      if (owned.split('\n').includes(sharedVolume)) await run('docker', ['volume', 'rm', sharedVolume], undefined, true);
+      if (result) result.kubernetes.volumeRemoved = true;
+    }
     if (tagged) await run('docker', ['image', 'rm', tag], undefined, true);
     await rm(directory, {recursive: true, force: true});
     process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);

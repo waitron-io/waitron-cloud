@@ -11,6 +11,7 @@ test('three owned nodes repeat both complete journeys after the manifest host is
   const result = JSON.parse(run.stdout);
   assert.equal(result.journeys.length, 2);
   for (const reply of result.journeys) {
+  assert.match(reply.kubernetes.cluster, /^d620-/);
   assert.equal(reply.accountMail.free, 'proved'); assert.equal(reply.accountMail.paid, 'proved');
   assert.equal(reply.clients.demoVenues, 2); assert.equal(reply.clients.restartIdentity, 'proved');
   assert.deepEqual(reply.freeRemote.submit, {status: 403, error: 'permission_denied'});
@@ -33,4 +34,6 @@ test('three owned nodes repeat both complete journeys after the manifest host is
   assert.ok(result.workerLoss.offBeforeSecondMs >= 900000);
   assert.equal(result.workerLoss.runningAfterSecond, false);
   assert.equal(result.kubernetes.removed, true);
+  assert.equal(result.kubernetes.volumeRemoved, true);
+  process.stdout.write(JSON.stringify(result) + '\n');
 });

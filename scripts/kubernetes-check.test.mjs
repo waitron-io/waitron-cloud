@@ -110,6 +110,9 @@ if(name==='docker'&&a[0]==='save'&&mode==='load-exit'){record({exporter:process.
 if(name==='kind'&&a[0]==='version')console.log('kind v0.31.0');
 if(name==='kind'&&a[0]==='create'&&a.includes('--config'))record({configuration:JSON.parse(fs.readFileSync(0,'utf8'))});
 if(name==='kind'&&a[0]==='create'&&mode==='create-fails')process.exit(17);
+if(name==='docker'&&a[0]==='volume'&&a[1]==='create')console.log(a.at(-1));
+if(name==='docker'&&a[0]==='volume'&&a[1]==='inspect')console.log('/var/lib/docker/volumes/'+a.at(-1)+'/_data');
+if(name==='docker'&&a[0]==='volume'&&a[1]==='ls')console.log(a.find(v=>v.startsWith('name=')).slice(5));
 if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSettings:{Networks:{kind:{IPAddress:'172.18.0.2'}}}}]));
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
@@ -157,6 +160,7 @@ for (const mode of ['create-fails', 'signal', 'apply-fails']) test('local comman
   const create = rows.find(row => row.name === 'kind' && row.args[0] === 'create').args;
   const remove = rows.find(row => row.name === 'kind' && row.args[0] === 'delete').args;
   assert.equal(remove[remove.indexOf('--name') + 1], create[create.indexOf('--name') + 1]);
+  assert.equal(create.includes('--config'), false, 'the default target retains one node');
   assert.equal(rows.find(row => row.name === 'docker' && row.args[0] === 'image').args.at(-1), rows.find(row => row.name === 'docker' && row.args[0] === 'tag').args.at(-1));
   assert.equal((await readdir(fixture.directory)).some(name => name.startsWith('cloud-kubernetes-')), false);
 });
@@ -170,7 +174,16 @@ test('three-node target mounts one private configuration directory into every no
   assert.deepEqual(config?.nodes.map(row => row.role), ['control-plane', 'worker', 'worker']);
   const source = config.nodes[0].extraMounts[0].hostPath;
   for (const node of config.nodes) assert.deepEqual(node.extraMounts, [{hostPath: source, containerPath: '/var/local/d620-config'}]);
-  assert.ok(source.startsWith(fixture.directory + '/cloud-kubernetes-'));
+  const volume = rows.find(row => row.name === 'docker' && row.args[0] === 'volume' && row.args[1] === 'create');
+  assert.ok(volume, 'create an owned Linux volume before kind');
+  const name = volume.args.at(-1);
+  assert.match(name, /^d620-[a-f0-9-]+-config$/);
+  assert.ok(volume.args.includes('cloud.campaign=D618'));
+  assert.ok(volume.args.includes('cloud.d618.run=' + name.slice(0, -7)));
+  assert.equal(source, '/var/lib/docker/volumes/' + name + '/_data');
+  const removed = rows.findIndex(row => row.name === 'docker' && row.args[0] === 'volume' && row.args[1] === 'rm');
+  assert.deepEqual(rows[removed]?.args, ['volume', 'rm', name]);
+  assert.ok(removed > rows.findIndex(row => row.name === 'kind' && row.args[0] === 'delete'), 'the owned volume outlives cluster teardown');
   assert.ok(rows.some(row => row.args?.[0] === 'delete'), 'failed creation still removes its own cluster');
 });
 
@@ -179,6 +192,14 @@ test('three-node target rejects a manifest worker on the data node', async t => 
   const run = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', '--worker-loss'], {env: fixture.env, encoding: 'utf8', timeout: 10000});
   assert.equal(run.status, 1, run.stderr);
   assert.match(run.stderr, /kubernetes.node_binding/);
+  const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  const create = rows.find(row => row.name === 'kind' && row.args[0] === 'create').args;
+  const cluster = create[create.indexOf('--name') + 1], items = rows.find(row => row.manifest).manifest.items;
+  for (const name of ['cloud', 'gateway']) assert.deepEqual(items.find(row => row.metadata.name === name).spec.nodeSelector, {'kubernetes.io/hostname': cluster + '-control-plane'});
+  const affinity = items.find(row => row.metadata.name === 'manifest').spec.template.spec.affinity.nodeAffinity;
+  assert.deepEqual(affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions, [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker', cluster + '-worker2']}]);
+  assert.deepEqual(affinity.preferredDuringSchedulingIgnoredDuringExecution[0], {weight: 100, preference: {matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker2']}]}});
+  assert.deepEqual(rows.filter(row => row.name === 'docker' && row.args[0] === 'exec').map(row => row.args[1]), [cluster + '-control-plane', cluster + '-worker', cluster + '-worker2']);
 });
 
 test('an unsupported Kubernetes target reaches no external commands', async t => {
@@ -265,7 +286,8 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   finishLoad(); assert.equal(await starting, 'kube-verifier');
   assert.deepEqual(calls.find(args => args[0] === 'delete'), ['delete', 'pod/verifier', '--ignore-not-found', '--wait=true', '--timeout=30s']);
   assert.ok(calls.findIndex(args => args[0] === 'delete') < calls.findIndex(args => args[0] === 'apply'), 'a finished Pod must be removed before new immutable environment is applied');
-  assert.ok(calls.findIndex(args => args[0] === 'logs') < calls.findIndex(args => args[0] === 'delete'), 'retain the previous worker output before deleting it');
+  const previousLog = calls.findIndex(args => args[0] === 'logs');
+  assert.ok(previousLog >= 0 && previousLog < calls.findIndex(args => args[0] === 'delete'), 'retain the previous worker output before deleting it');
   assert.ok(calls.some(args => args.includes('require("node:fs").writeFileSync("/run/backup-verifier/image-loaded","")')), 'successful import must release the worker');
   const worker = applied.spec.containers.find(row => row.name === 'verifier');
   const environment = Object.fromEntries(worker.env.map(row => [row.name, row.value]));
@@ -297,6 +319,18 @@ test('Kubernetes verification needs the complete nested adapter before any Docke
   assert.equal(await readFile(fixture.log, 'utf8').catch(() => ''), '');
   await assert.rejects(runTestCloudClients({...options, kubernetes: target}), /integration.invalid_json/);
   assert.ok((await readFile(fixture.log, 'utf8')).includes('inspect'));
+});
+
+test('first verifier start has no previous diagnostics to lose', async t => {
+  const {createKubernetesVerifier} = await import('./kubernetes-check.mjs');
+  const manifest = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
+  const diagnostics = [];
+  t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); return true;});
+  const adapter = createKubernetesVerifier({template: manifest.items.find(row => row.metadata.name === 'verifier'),
+    pod: async role => role === 'cloud' ? {status: {podIP: '10.244.0.5'}} : undefined,
+    kube: async () => '', loadImage: async () => {}});
+  await adapter.start('12345678-1234-4234-8234-123456789abc', {image: 'sha256:' + 'b'.repeat(64), revision: 'c'.repeat(40)});
+  assert.deepEqual(diagnostics, []);
 });
 
 test('malformed private verifier identity has a fixed error without its contents', async () => {
