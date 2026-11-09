@@ -1147,3 +1147,49 @@ for(const count of [1000,1001])test(`force cancellation preserves the ${count}-j
  if(count===1000){await work;assert.equal(posts,1);assert.equal(f.pages.length,34);}
  else {await assert.rejects(work,/Incomplete cancellation job inventory/);assert.equal(posts,0);}
 });
+
+for(const assigned of [true,false])test(`overflow reads the page-three sibling before ${assigned?'preserving':'cancelling'} the run`,async()=>{
+ const f=pagedJobFixture(),get=f.api.get,posts=[];
+ f.jobs[82]={...f.target,id:2000,status:assigned?'in_progress':'queued',runner_id:assigned?77:0};
+ f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
+ f.api.post=async path=>{posts.push(path);f.run.status='completed';};
+ const api=routingVariables(f.api),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
+ await controller.overflowOrdinary({api,policy,ci});
+ assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
+ assert.deepEqual(await controller.hostedAttempts({api,policy}),assigned?{}:{789:2});
+});
+
+for(const assigned of [true,false])test(`hosted-attempt recovery reads the page-three sibling before ${assigned?'retiring':'cancelling'} the run`,async()=>{
+ const f=pagedJobFixture(),posts=[];f.run.status='queued';
+ f.jobs[82]={...f.target,id:2000,status:assigned?'in_progress':'queued',runner_id:assigned?77:0};
+ f.api.post=async path=>{posts.push(path);};
+ const api=routingVariables(f.api);
+ await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
+ assert.deepEqual(await controller.recoverHostedAttempts({api,policy}),assigned?{}:{789:2});
+ assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.deepEqual(f.pages,[1,2,3]);
+});
+
+for(const success of [true,false])test(`hosted-retry qualification checks the ${success?'successful':'failed'} summary on page three`,async()=>{
+ const f=pagedJobFixture();Object.assign(f.run,{run_attempt:2,status:'completed',conclusion:'success'});
+ for(const job of f.jobs)Object.assign(job,{run_attempt:2,status:'completed',conclusion:'success',runner_id:42,labels:['ubuntu-latest']});
+ f.jobs[0].name='typecheck';f.jobs[83].name='summary';f.jobs[83].conclusion=success?'success':'failure';
+ f.api.jobLog=async()=>`git log -1 --format=%H\n${head}`;
+ const result=controller.qualifyOrdinaryHosted({api:f.api,policy,retry:{runId:789,sourceSha:head,previousAttempt:1}});
+ if(success)assert.deepEqual(await result,{runId:789,attempt:2,sourceSha:head,sourceTree:'4'.repeat(40),route:'hosted',typecheck:1000,summary:901});
+ else await assert.rejects(result,/Hosted retry summary did not qualify/);
+ assert.deepEqual(f.pages,[1,2,3]);
+});
+
+for(const abort of [false,true])test(`job pages ${abort?'stop after an abort':'all receive the caller signal'}`,async()=>{
+ const f=pagedJobFixture(),get=f.api.get,stop=new AbortController(),signals=[];
+ f.api.get=async(path,options)=>{
+  if(path.includes('/jobs?')){signals.push(options?.signal);assert.equal(options?.signal,stop.signal);options.signal.throwIfAborted();}
+  const answer=await get(path,options);
+  if(abort && path.includes('/jobs?'))stop.abort();
+  return answer;
+ };
+ const result=controller.findOrdinary({api:f.api,policy,approvedHead:head,runId:789,jobId:901,automatic:true,signal:stop.signal});
+ if(abort){await assert.rejects(result,{name:'AbortError'});assert.deepEqual(f.pages,[1]);}
+ else {assert.equal((await result).jobId,901);assert.equal(signals.length,3);assert.deepEqual(f.pages,[1,2,3]);}
+});

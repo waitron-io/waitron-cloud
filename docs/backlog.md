@@ -11,8 +11,8 @@ Record the first server assignment for each enabled job family, then hourly serv
 
 A1440's attempt-job reader now uses 30-record pages after reproduced 100-record HTTP 502 failures
 on 84/87-job runs. Every consumer keeps its completeness, trust and admission checks, including
-later siblings that bar cancellation. Qualify the matching published controller against the waiting
-jobs of run `42580703144`; local paginated admission tests alone do not prove fleet recovery.
+later siblings observed as assigned that bar cancellation. Source tests exercise paginated
+admission and refusal; keep actual published pickup as separate operating evidence.
 
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
