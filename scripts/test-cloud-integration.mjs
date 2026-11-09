@@ -60,7 +60,7 @@ function command(args, input = '', phase = args[0], env = {}) {
     child.once('error', () => {invalid = true;});
     child.once('close', code => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_legacy_builder' : '')));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
       else resolve(output.trim());
     });
     child.stdin.end(input);
@@ -112,11 +112,11 @@ export function checkProtectedContainers(before, after, ids) {
 export async function runTestCloudClients(options = {}) {
   if (options.kubernetes) {
     const k = options.kubernetes;
-    assert.ok(/^d620-[a-f0-9-]+$/.test(k.cluster) && k.namespace === 'default' &&
+    assert.ok(/^d620-[a-f0-9-]+$/.test(k.cluster) && k.namespace === 'default' && k.account === 'kube-account' && k.network === 'kind' &&
       ['account', 'ca', 'network', 'proxyIp'].every(key => typeof k[key] === 'string' && k[key].length > 0) &&
       Number.isInteger(k.port) && Number.isInteger(k.mailPort) && typeof k.exec === 'function' &&
       typeof k.remote?.worker === 'function', 'integration.kubernetes_binding');
-    assert.ok(!options.paidVerification && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
+    assert.ok(!options.paidSnapshot && !options.paidVerification && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
       !options.measureCapacity && !options.measureIntegration && !options.cloudRollback && !options.schemaRollback &&
       !options.fixedProject && !options.pairedExpiry, 'integration.kubernetes_scope');
   }

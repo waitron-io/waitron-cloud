@@ -1,163 +1,214 @@
-# Ephemeral, single-node service checks. The kind node owns and deletes this private directory.
-apiVersion: v1
-kind: List
-items:
-  - apiVersion: v1
-    kind: Service
-    metadata: {name: postgres}
-    spec: {selector: {app: cloud}, ports: [{port: 5432, targetPort: 5432}]}
-  - apiVersion: v1
-    kind: Pod
-    metadata: {name: cloud, labels: {app: cloud}}
-    spec:
-      terminationGracePeriodSeconds: 15
-      hostAliases: [{ip: '127.0.0.1', hostnames: [postgres, storage, waitron.local]}]
-      volumes:
-        - &config {name: config, hostPath: {path: /var/local/d620-config, type: DirectoryOrCreate}}
-        - {name: postgres, emptyDir: {}}
-        - {name: storage, emptyDir: {}}
-        - {name: proxy, configMap: {name: proxy}}
-      initContainers:
-        - name: bootstrap
-          image: CLOUD_IMAGE
-          imagePullPolicy: Never
-          command: [node, deploy/test-cloud/bootstrap.mjs]
-          volumeMounts: [&mount {name: config, mountPath: /run/local-stack}]
-          resources: {limits: {memory: 128Mi}}
-        - name: postgres
-          image: postgres:18-alpine
-          restartPolicy: Always
-          env:
-            - {name: POSTGRES_USER, value: cloud}
-            - {name: POSTGRES_DB, value: cloud}
-            - {name: POSTGRES_PASSWORD_FILE, value: /run/local-stack/postgres-password}
-          volumeMounts: [*mount, {name: postgres, mountPath: /var/lib/postgresql}]
-          startupProbe: {exec: {command: [pg_isready, -U, cloud, -d, cloud]}, periodSeconds: 1, failureThreshold: 60}
-          resources: {limits: {memory: 256Mi}}
-        - name: migrate
-          image: CLOUD_IMAGE
-          imagePullPolicy: Never
-          command: [node, deploy/test-cloud/runtime.mjs, migrate]
-          env: &mode [{name: CLOUD_TEST_SERVICE_PLANS, value: '1'}]
-          volumeMounts: [*mount]
-          resources: {limits: {memory: 160Mi}}
-      containers:
-        - &worker
-          name: account
-          image: CLOUD_IMAGE
-          imagePullPolicy: Never
-          command: [node, deploy/test-cloud/runtime.mjs, account]
-          env: [ {name: CLOUD_TEST_SERVICE_PLANS, value: '1'}, {name: CLOUD_HTTP_TRUSTED_PROXY_IPS, value: '127.0.0.1'} ]
-          volumeMounts: [*mount]
-          resources: {limits: {memory: 384Mi}}
-          readinessProbe: {httpGet: {port: 3000, path: /api/health/ready, httpHeaders: [{name: Host, value: 'waitron.local:3000'}]}, periodSeconds: 2}
-        - <<: *worker
-          name: storage
-          command: [node, deploy/test-cloud/runtime.mjs, storage]
-          env: *mode
-          volumeMounts: [*mount, {name: storage, mountPath: /data}]
-          ports: [{containerPort: 8333, hostPort: 8333}, {containerPort: 8444, hostPort: 8444}]
-          readinessProbe: {exec: {command: [test, -f, /tmp/test-cloud-storage-ready]}, periodSeconds: 2}
-        - <<: *worker
-          name: email
-          command: [node, deploy/test-cloud/email-worker.mjs]
-          env: *mode
-          resources: {limits: {memory: 96Mi}}
-          readinessProbe: null
-        - name: mailpit
-          image: axllent/mailpit:v1.31.1
-          env: [{name: MP_MAX_MESSAGE_SIZE, value: '1'}]
-          resources: {limits: {memory: 64Mi}}
-          readinessProbe: {httpGet: {port: 8025, path: /readyz}, periodSeconds: 2}
-        - <<: *worker
-          name: monitor
-          command: [node, deploy/test-cloud/runtime.mjs, monitor]
-          env: *mode
-          resources: {limits: {memory: 96Mi}}
-          readinessProbe: null
-        - <<: *worker
-          name: usage
-          command: [node, deploy/test-cloud/runtime.mjs, usage]
-          env: *mode
-          resources: {limits: {memory: 96Mi}}
-          readinessProbe: null
-        - <<: *worker
-          name: probe
-          command: [node, deploy/test-cloud/runtime.mjs, probe]
-          env: *mode
-          resources: {limits: {memory: 96Mi}}
-          readinessProbe: null
-        - name: proxy
-          image: CLOUD_IMAGE
-          imagePullPolicy: Never
-          command: [haproxy, -W, -db, -f, /proxy/proxy.cfg]
-          volumeMounts: [*mount, {name: proxy, mountPath: /proxy, readOnly: true}]
-          ports: [{containerPort: 3443, hostPort: 3000}]
-          resources: {limits: {memory: 64Mi}}
-          readinessProbe: {exec: {command: [curl, --fail, --silent, --cacert, /run/local-stack/lan/ca.pem, --resolve, 'waitron.local:3443:127.0.0.1', --header, 'Host: waitron.local:3000', 'https://waitron.local:3443/api/health/ready']}, periodSeconds: 2}
-  - apiVersion: apps/v1
-    kind: Deployment
-    metadata: {name: manifest}
-    spec:
-      replicas: 1
-      selector: {matchLabels: {app: manifest}}
-      template:
-        metadata: {labels: {app: manifest}}
-        spec:
-          terminationGracePeriodSeconds: 10
-          volumes: [*config]
-          containers:
-            - name: manifest
-              image: CLOUD_IMAGE
-              imagePullPolicy: Never
-              command: [node, deploy/test-cloud/runtime.mjs, manifest]
-              env: *mode
-              volumeMounts: [*mount]
-              resources: {limits: {memory: 96Mi}}
-  - apiVersion: v1
-    kind: Pod
-    metadata: {name: gateway, labels: {app: gateway}}
-    spec:
-      terminationGracePeriodSeconds: 10
-      volumes: [*config, {name: state, emptyDir: {}}]
-      containers:
-        - name: gateway
-          image: CLOUD_IMAGE
-          imagePullPolicy: Never
-          command: [node, deploy/test-cloud/runtime.mjs, gateway]
-          env: *mode
-          securityContext: {capabilities: {add: [NET_ADMIN]}}
-          volumeMounts: [*mount, {name: config, mountPath: /input, readOnly: true}, {name: state, mountPath: /state}]
-          ports: [{containerPort: 443, hostPort: 443}, {containerPort: 51820, hostPort: 51820, protocol: UDP}]
-          resources: {limits: {memory: 160Mi}}
-          readinessProbe: {exec: {command: [node, deploy/test-cloud/gateway-health.mjs]}, periodSeconds: 2}
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata: {name: proxy}
-    data:
-      proxy.cfg: |
-        global
-          maxconn 200
-          ssl-default-bind-options ssl-min-ver TLSv1.2
-        defaults
-          mode http
-          timeout connect 5s
-          timeout client 15s
-          timeout server 15s
-        frontend account_https
-          bind :3443 ssl crt /run/local-stack/lan/proxy.pem
-          http-request deny deny_status 403 unless { req.hdr_cnt(host) eq 1 }
-          http-request deny deny_status 403 unless { req.hdr(host) -m str waitron.local:3000 }
-          http-request deny deny_status 403 if { req.hdr_cnt(origin) gt 1 }
-          http-request deny deny_status 403 if { req.hdr_cnt(origin) gt 0 } !{ req.hdr(origin) -m str https://waitron.local:3000 }
-          http-request del-header forwarded
-          http-request del-header x-forwarded-for
-          http-request del-header x-forwarded-host
-          http-request del-header x-forwarded-proto
-          http-request del-header x-forwarded-port
-          http-request del-header x-real-ip
-          http-request set-header x-forwarded-for %[src]
-          http-request set-header x-forwarded-proto https
-          default_backend account
-        backend account
-          server account 127.0.0.1:3000 check
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {"name": "postgres"},
+      "spec": {
+        "selector": {"app": "cloud"},
+        "ports": [{"port": 5432, "targetPort": 5432}]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {"name": "cloud", "labels": {"app": "cloud"}},
+      "spec": {
+        "terminationGracePeriodSeconds": 15,
+        "hostAliases": [{"ip": "127.0.0.1", "hostnames": ["postgres", "storage", "waitron.local"]}],
+        "volumes": [
+          {
+            "name": "config",
+            "hostPath": {"path": "/var/local/d620-config", "type": "DirectoryOrCreate"}
+          },
+          {
+            "name": "postgres",
+            "emptyDir": {}
+          },
+          {
+            "name": "storage",
+            "emptyDir": {}
+          },
+          {
+            "name": "proxy",
+            "configMap": {"name": "proxy"}
+          }
+        ],
+        "initContainers": [
+          {
+            "name": "bootstrap",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/bootstrap.mjs"],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "128Mi"}}
+          },
+          {
+            "name": "postgres",
+            "image": "postgres:18-alpine",
+            "restartPolicy": "Always",
+            "env": [{"name": "POSTGRES_USER", "value": "cloud"}, {"name": "POSTGRES_DB", "value": "cloud"}, {"name": "POSTGRES_PASSWORD_FILE", "value": "/run/local-stack/postgres-password"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "postgres", "mountPath": "/var/lib/postgresql"}],
+            "startupProbe": {"exec": {"command": ["pg_isready", "-U", "cloud", "-d", "cloud"]}, "periodSeconds": 1, "failureThreshold": 60},
+            "resources": {"limits": {"memory": "256Mi"}}
+          },
+          {
+            "name": "migrate",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "migrate"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "160Mi"}}
+          }
+        ],
+        "containers": [
+          {
+            "name": "account",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "account"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}, {"name": "CLOUD_HTTP_TRUSTED_PROXY_IPS", "value": "127.0.0.1"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "384Mi"}},
+            "readinessProbe": {"httpGet": {"port": 3000, "path": "/api/health/ready", "httpHeaders": [{"name": "Host", "value": "waitron.local:3000"}]}, "periodSeconds": 2}
+          },
+          {
+            "name": "storage",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "storage"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "storage", "mountPath": "/data"}],
+            "resources": {"limits": {"memory": "384Mi"}},
+            "readinessProbe": {"exec": {"command": ["test", "-f", "/tmp/test-cloud-storage-ready"]}, "periodSeconds": 2},
+            "ports": [{"containerPort": 8333, "hostPort": 8333}, {"containerPort": 8444, "hostPort": 8444}]
+          },
+          {
+            "name": "email",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/email-worker.mjs"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "96Mi"}},
+            "readinessProbe": null
+          },
+          {
+            "name": "mailpit",
+            "image": "axllent/mailpit:v1.31.1",
+            "env": [{"name": "MP_MAX_MESSAGE_SIZE", "value": "1"}],
+            "resources": {"limits": {"memory": "64Mi"}},
+            "readinessProbe": {"httpGet": {"port": 8025, "path": "/readyz"}, "periodSeconds": 2}
+          },
+          {
+            "name": "monitor",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "monitor"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "96Mi"}},
+            "readinessProbe": null
+          },
+          {
+            "name": "usage",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "usage"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "96Mi"}},
+            "readinessProbe": null
+          },
+          {
+            "name": "probe",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "probe"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+            "resources": {"limits": {"memory": "96Mi"}},
+            "readinessProbe": null
+          },
+          {
+            "name": "proxy",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["haproxy", "-W", "-db", "-f", "/proxy/proxy.cfg"],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "proxy", "mountPath": "/proxy", "readOnly": true}],
+            "ports": [{"containerPort": 3443, "hostPort": 3000}],
+            "resources": {"limits": {"memory": "64Mi"}},
+            "readinessProbe": {"exec": {"command": ["curl", "--fail", "--silent", "--cacert", "/run/local-stack/lan/ca.pem", "--resolve", "waitron.local:3443:127.0.0.1", "--header", "Host: waitron.local:3000", "https://waitron.local:3443/api/health/ready"]}, "periodSeconds": 2}
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {"name": "manifest"},
+      "spec": {
+        "replicas": 1,
+        "selector": {"matchLabels": {"app": "manifest"}},
+        "template": {
+          "metadata": {"labels": {"app": "manifest"}},
+          "spec": {
+            "terminationGracePeriodSeconds": 10,
+            "volumes": [
+              {
+                "name": "config",
+                "hostPath": {"path": "/var/local/d620-config", "type": "DirectoryOrCreate"}
+              }
+            ],
+            "containers": [
+              {
+                "name": "manifest",
+                "image": "CLOUD_IMAGE",
+                "imagePullPolicy": "Never",
+                "command": ["node", "deploy/test-cloud/runtime.mjs", "manifest"],
+                "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}],
+                "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
+                "resources": {"limits": {"memory": "96Mi"}}
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {"name": "gateway", "labels": {"app": "gateway"}},
+      "spec": {
+        "terminationGracePeriodSeconds": 10,
+        "volumes": [
+          {
+            "name": "config",
+            "hostPath": {"path": "/var/local/d620-config", "type": "DirectoryOrCreate"}
+          },
+          {
+            "name": "state",
+            "emptyDir": {}
+          }
+        ],
+        "containers": [
+          {
+            "name": "gateway",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["node", "deploy/test-cloud/runtime.mjs", "gateway"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "0"}],
+            "securityContext": {"capabilities": {"add": ["NET_ADMIN"]}},
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "config", "mountPath": "/input", "readOnly": true}, {"name": "state", "mountPath": "/state"}],
+            "ports": [{"containerPort": 443, "hostPort": 443}, {"containerPort": 51820, "hostPort": 51820, "protocol": "UDP"}],
+            "resources": {"limits": {"memory": "160Mi"}},
+            "readinessProbe": {"exec": {"command": ["node", "deploy/test-cloud/gateway-health.mjs"]}, "periodSeconds": 2}
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {spawnSync} from 'node:child_process';
-import {mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {spawn, spawnSync} from 'node:child_process';
+import {mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {bootstrap} from '../deploy/local-stack/bootstrap.mjs';
@@ -24,7 +24,7 @@ test('Kubernetes account selects its proxy while other roles discard that input 
   }
 });
 
-test('client build reports a missing builder without disclosing private Docker output', async t => {
+for (const detail of ['', ' npm E404']) test('client build records the observed builder without disclosing private output' + detail, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'cloud-kube-build-'));
   const before = process.env.PATH;
   t.after(async () => {process.env.PATH = before; await rm(directory, {recursive: true, force: true});});
@@ -32,11 +32,11 @@ test('client build reports a missing builder without disclosing private Docker o
   await writeFile(join(directory, 'docker'), `#!${process.execPath}
 const a=process.argv.slice(2);
 if(a[0]==='image'&&a[1]==='inspect')console.log(JSON.stringify([{Id:${JSON.stringify(image)},RepoTags:['d620-pinned:local'],Config:{Labels:{'cloud.waitron-revision':'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7'}}}]));
-if(a[0]==='build'){process.stderr.write('DEPRECATED: The legacy builder is deprecated. Install the buildx component. PRIVATE_BUILD_CANARY');process.exit(17);}
+if(a[0]==='build'){process.stderr.write(${JSON.stringify('DEPRECATED: The legacy builder is deprecated. Install the buildx component.' + detail + ' PRIVATE_BUILD_CANARY')});process.exit(17);}
 `, {mode: 0o700});
   process.env.PATH = directory + ':' + before;
   await assert.rejects(runTestCloudClients({image: 'sha256:' + 'a'.repeat(64), waitronImage: image}), error => {
-    assert.equal(error.message, 'integration.command_failed:client-build:integration.client_build_legacy_builder');
+    assert.equal(error.message, 'integration.command_failed:client-build:integration.client_build_used_legacy_builder');
     assert.equal(String(error.stack).includes('PRIVATE_BUILD_CANARY'), false);
     return true;
   });
@@ -67,10 +67,93 @@ test('one-node Kubernetes services sign in, pair, carry remote traffic and withd
   assert.equal(reply.kubernetes.removed, true);
 });
 
-test('PR1 refuses authorised recovery rather than reaching a Compose-only verifier', async () => {
-  await assert.rejects(runTestCloudClients({image: 'sha256:' + 'a'.repeat(64), waitronImage: 'sha256:' + 'b'.repeat(64),
-    paidAuthorisedRecovery: true, kubernetes: {cluster: 'd620-abc', namespace: 'default', account: 'kube-account',
-      ca: 'not-consumed', network: 'kind', proxyIp: '172.18.0.2', port: 3000, mailPort: 8025,
-      exec: () => assert.fail('must not reach cluster'), remote: {worker: () => assert.fail('must not reach worker')}}}),
-  /integration.kubernetes_scope/);
+test('PR1 refuses every later journey mode and a target outside its owned cluster', async t => {
+  const fixture = await commandFixture(t, 'guards'), before = process.env.PATH;
+  process.env.PATH = fixture.env.PATH; t.after(() => {process.env.PATH = before;});
+  const target = {cluster: 'd620-abc', namespace: 'default', account: 'kube-account', ca: 'not-consumed',
+    network: 'kind', proxyIp: '172.18.0.2', port: 3000, mailPort: 8025,
+    exec: () => assert.fail('must not reach cluster'), remote: {worker: () => assert.fail('must not reach worker')}};
+  const options = {image: 'sha256:' + 'a'.repeat(64), waitronImage: 'sha256:' + 'b'.repeat(64), kubernetes: target};
+  for (const flag of ['paidVerification', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery',
+    'measureCapacity', 'measureIntegration', 'cloudRollback', 'schemaRollback', 'fixedProject', 'pairedExpiry', 'paidSnapshot']) {
+    await assert.rejects(runTestCloudClients({...options, [flag]: true}), /integration.kubernetes_scope/, flag);
+  }
+  for (const change of [{account: 'some-real-container'}, {network: 'bridge'}]) {
+    await assert.rejects(runTestCloudClients({...options, kubernetes: {...target, ...change}}), /integration.kubernetes_binding/);
+  }
+  assert.equal(await readFile(fixture.log, 'utf8').catch(() => ''), '', 'invalid targets must reach no external tool');
+});
+
+async function commandFixture(t, mode) {
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-kube-commands-')), log = join(directory, 'calls');
+  t.after(async () => {
+    for (const line of (await readFile(log, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)) {
+      const row = JSON.parse(line); if (row.forward) {try {process.kill(row.forward, 'SIGKILL');} catch {}}
+    }
+    await rm(directory, {recursive: true, force: true});
+  });
+  const source = `#!${process.execPath}
+const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]);
+const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.appendFileSync(log,JSON.stringify(row)+'\\n');
+record({name,args:a});
+if(name==='kind'&&a[0]==='version')console.log('kind v0.31.0');
+if(name==='kind'&&a[0]==='create'&&mode==='create-fails')process.exit(17);
+if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSettings:{Networks:{kind:{IPAddress:'172.18.0.2'}}}}]));
+if(name==='kubectl'){
+ const b=a[0]==='--context'?a.slice(4):a;
+ if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
+ if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
+ if(b[0]==='get'){
+  const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=a[1].slice(5);
+  console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:cluster+'-control-plane',containers:[{name:'account',image:cluster+':cloud'}]}}]}));
+ }
+ if(b[0]==='port-forward'){
+  process.on('SIGTERM',()=>{});record({forward:process.pid});
+  for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
+  setInterval(()=>{},1000);
+ }
+ if(b[0]==='exec')process.kill(process.ppid,'SIGTERM');
+}
+`;
+  for (const name of ['kind', 'kubectl', 'docker']) await writeFile(join(directory, name), source, {mode: 0o700});
+  return {directory, log, env: {...process.env, TMPDIR: directory, PATH: directory + ':' + process.env.PATH,
+    TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}};
+}
+for (const mode of ['create-fails', 'signal', 'apply-fails']) test('local command cleans owned cluster, tag and scratch after ' + mode, async t => {
+  const fixture = await commandFixture(t, mode);
+  const child = spawn(process.execPath, ['scripts/kubernetes-check.mjs'], {env: fixture.env, stdio: ['ignore', 'ignore', 'pipe']});
+  let error = ''; child.stderr.on('data', part => {error += part;});
+  const timer = setTimeout(() => child.kill('SIGKILL'), 8000);
+  const code = await new Promise(resolve => child.once('close', resolve)); clearTimeout(timer);
+  assert.equal(code, 1, error);
+  if (mode === 'apply-fails') assert.match(error, /kubernetes.command_failed:kubectl:apply/);
+  const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  if (mode === 'apply-fails') {
+    const config = rows.find(row => row.manifest).manifest.items.find(item => item.kind === 'ConfigMap').data['proxy.cfg'];
+    const original = await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8');
+    for (const line of original.split('\n').filter(line => !line.includes('bind :3000') && !line.includes('server account account:3000'))) assert.ok(config.includes(line));
+    assert.ok(config.includes('bind :3443')); assert.ok(config.includes('server account 127.0.0.1:3000'));
+  }
+  assert.ok(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), 'owned cluster deletion must run');
+  assert.ok(rows.some(row => row.name === 'docker' && row.args[0] === 'image' && row.args[1] === 'rm'), 'owned tag removal must run');
+  const create = rows.find(row => row.name === 'kind' && row.args[0] === 'create').args;
+  const remove = rows.find(row => row.name === 'kind' && row.args[0] === 'delete').args;
+  assert.equal(remove[remove.indexOf('--name') + 1], create[create.indexOf('--name') + 1]);
+  assert.equal(rows.find(row => row.name === 'docker' && row.args[0] === 'image').args.at(-1), rows.find(row => row.name === 'docker' && row.args[0] === 'tag').args.at(-1));
+  assert.equal((await readdir(fixture.directory)).some(name => name.startsWith('cloud-kubernetes-')), false);
+});
+
+test('local manifest keeps one instance per role and only the three paid-service adapters enabled', async () => {
+  const value = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
+  const roles = [];
+  for (const item of value.items.filter(item => ['Pod', 'Deployment'].includes(item.kind))) {
+    if (item.kind === 'Deployment') assert.equal(item.spec.replicas, 1);
+    const spec = item.kind === 'Pod' ? item.spec : item.spec.template.spec;
+    for (const container of [...(spec.initContainers ?? []), ...spec.containers]) {
+      roles.push(container.name);
+      const flag = container.env?.find(entry => entry.name === 'CLOUD_TEST_SERVICE_PLANS')?.value;
+      if (flag !== undefined) assert.equal(flag, ['account', 'storage', 'manifest'].includes(container.name) ? '1' : '0', container.name);
+    }
+  }
+  assert.deepEqual(roles.sort(), ['bootstrap', 'postgres', 'migrate', 'account', 'storage', 'email', 'mailpit', 'monitor', 'usage', 'probe', 'proxy', 'manifest', 'gateway'].sort());
 });

@@ -1,6 +1,6 @@
 // Local only: prebuild the existing Cloud and pinned Waitron images, then run
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
-// Requires kind 0.31.0, kubectl 1.34.3 and Docker. This deletes only its newly created kind cluster.
+// Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
 import assert from 'node:assert/strict';
 import {execFile, spawn} from 'node:child_process';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
@@ -19,7 +19,7 @@ async function run(binary, args, input, cleanup = false) {
   if (!cleanup) stop.signal.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = execFile(binary, args, {env, timeout: 180000, maxBuffer: 2 * 1024 * 1024,
-      ...(cleanup ? {} : {signal: stop.signal})}, (error, stdout) => error ? reject(Error('kubernetes.command_failed:' + binary + ':' + args[0])) : resolve(stdout.trim()));
+      ...(cleanup ? {} : {signal: stop.signal})}, (error, stdout) => error ? reject(Error('kubernetes.command_failed:' + binary + ':' + (args[0] === '--context' ? args[4] : args[0]))) : resolve(stdout.trim()));
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
 }
@@ -60,8 +60,11 @@ try {
   const node = JSON.parse(await run('docker', ['inspect', cluster + '-control-plane']))[0];
   const address = node.NetworkSettings.Networks.kind.IPAddress;
   assert.match(address, /^(?:\d{1,3}\.){3}\d{1,3}$/);
-  const manifest = (await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8')).replaceAll('CLOUD_IMAGE', tag);
-  await kube(['apply', '-f', '-'], manifest);
+  const manifest = JSON.parse((await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8')).replaceAll('CLOUD_IMAGE', tag));
+  const proxy = (await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8'))
+    .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
+  manifest.items.push({apiVersion: 'v1', kind: 'ConfigMap', metadata: {name: 'proxy'}, data: {'proxy.cfg': proxy}});
+  await kube(['apply', '-f', '-'], JSON.stringify(manifest));
   await kube(['wait', '--for=condition=Ready', 'pod/cloud', '--timeout=180s']);
   await kube(['rollout', 'status', 'deployment/manifest', '--timeout=120s']);
   await kube(['wait', '--for=condition=Ready', 'pod/gateway', '--timeout=120s']);
@@ -80,8 +83,11 @@ try {
   result = await runTestCloudClients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true,
     kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: 'kind', proxyIp: address,
       port: ports[3443], mailPort: ports[8025], exec, remote}});
+} catch (error) {
+  if (created && !stop.signal.aborted) {try {process.stderr.write(await kube(['get', 'pods', '--request-timeout=5s']) + '\n');} catch {}}
+  throw error;
 } finally {
-  for (const {child, closed} of forwards) {child.kill('SIGTERM'); await closed;}
+  for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {
     if (created) {
       await run('kind', ['delete', 'cluster', '--name', cluster], undefined, true);
