@@ -301,3 +301,58 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().ciInvocation,undefined);
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
+
+async function monitorReadFailure(t, {failure, guestRunning=true}={}) {
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
+ const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
+ f.leases.setInvocation({nonce:'c'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0;
+ Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
+ f.api.get=async(path,options)=>{
+  if(executing && failure && path.endsWith('/runs/789'))throw failure;
+  const value=await get(path,options);
+  return executing && path.includes('/jobs/')?{...value,status:'in_progress',conclusion:null}:value;
+ };
+ f.transport.execute=async(_lease,{signal})=>{
+  executing=true;
+  try {await new Promise((resolve,reject)=>{finish=resolve;signal.addEventListener('abort',()=>{aborted=true;reject(new Error('execution aborted'));},{once:true});});return 0;}
+  finally {executing=false;}
+ };
+ f.transport.inspect=async(lease,options)=>{
+  if(executing){liveInspections++;if(guestRunning && liveInspections===3)finish();return {resourceId:lease.resourceId,running:guestRunning};}
+  return inspect(lease,options);
+ };
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),wait:async(ms)=>{if(ms===15000)elapsed+=61000;await new Promise(resolve=>setTimeout(resolve,1));}});
+ return {...result,aborted,liveInspections,events:f.events};
+}
+
+for(const [label,failure] of [
+ ['network',new TypeError('fetch failed')],
+ ['timeout',Object.assign(new Error('request timed out'),{name:'TimeoutError'})],
+ ['HTTP 500',Object.assign(new Error('GitHub GET refused (500)'),{status:500})],
+ ['HTTP 503',Object.assign(new Error('GitHub GET refused (503)'),{status:503})],
+ ['HTTP 599',Object.assign(new Error('GitHub GET refused (599)'),{status:599})],
+ ['interrupted body',Object.assign(new Error('GitHub response interrupted'),{code:'GITHUB_RESPONSE_INTERRUPTED'})],
+])test(`transient GitHub reads (${label}) preserve an independently healthy ordinary guest`,async t=>{
+ const result=await monitorReadFailure(t,{failure});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);
+ assert.equal(result.cleanup,'absent');assert.ok(result.events.includes('deregister'));
+});
+
+test('transient GitHub reads still stop an independently missing ordinary guest',async t=>{
+ const result=await monitorReadFailure(t,{failure:new TypeError('fetch failed'),guestRunning:false});
+ assert.equal(result.code,125);assert.equal(result.aborted,true);assert.equal(result.liveInspections,1);
+ assert.match(result.error,/guest is no longer running/);assert.equal(result.cleanup,'absent');
+});
+
+for(const status of [401,403])test(`permanent GitHub HTTP ${status} retains the existing monitor stop`,async t=>{
+ const result=await monitorReadFailure(t,{failure:Object.assign(new Error('GitHub read refused'),{status})});
+ assert.equal(result.code,125);assert.equal(result.aborted,true);assert.equal(result.liveInspections,0);
+ assert.equal(result.error,'GitHub read refused');assert.equal(result.cleanup,'absent');
+});
+
+test('ordinary monitor checks retain a healthy guest with the same elapsed clock',async t=>{
+ const result=await monitorReadFailure(t);assert.equal(result.code,0,result.error);
+ assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);assert.equal(result.cleanup,'absent');
+});
