@@ -1,5 +1,68 @@
 # Select the separate proof workflows
 
+## Remaining CI work measured on 9 November 2026 (D613)
+
+Ordinary code changes still occupy many machines. Start with root-test selection:
+the registration and portal examples below each ran about 25 job-minutes of root
+tests. Package selection alone does not remove those jobs. The owner asked for
+root checks to follow their actual inputs first, then a measured proposal for
+splitting registration by area. These changes are proposed, not implemented.
+
+| Current example | Largest work | Does this change need it? | Next cut to assess |
+| --- | --- | --- | --- |
+| [Prose PR #1110](https://github.com/waitron-io/waitron-cloud/pull/1110) | General planner 18 seconds, documentation 13, general summary 12; venue planner and summary add 23 seconds. | Documentation and final checks are needed; venue planning selected no proof. | No substantial remaining path demonstrated in this example. |
+| [Registration PR #1121](https://github.com/waitron-io/waitron-cloud/actions/runs/42639938693) | Eight root jobs total 24.63 minutes; six registration jobs 24.38; receipts 6.15. Slowest registration job is 5.53 minutes. | Registration tests are needed. Running every root test is a broad current policy, not proof each reads these billing files. Receipt selection explicitly retained all suites while qualifying package readers. | Select root tests by their real readers. Model registration areas from file times and recent changes before moving code. Review the receipt fallback separately. |
+| [Portal PR #1122](https://github.com/waitron-io/waitron-cloud/actions/runs/42652536547) | Eight root jobs total 25.10 minutes; six portal jobs 19.90; receipts 6.35. Slowest portal job is 4.75 minutes. | Portal tests cover the changed passkey behavior. The root and receipt selections have the same broad policies as registration. | Apply the root-reader selection. Trace the portal receipt inputs before omitting unrelated proofs; profile the slow portal partition if it remains material. |
+| [Prose merge](https://github.com/waitron-io/waitron-cloud/actions/runs/42512021251) | Planner 22 seconds, summary 18. | They verify reuse of the identical PR tree. | No substantial remaining path demonstrated; no fresh product tests ran. |
+| [Registration merge](https://github.com/waitron-io/waitron-cloud/actions/runs/42641673180) | Registration 26.85 minutes; root 24.38; portal 18.33; backups 14.13; account HTTP 11.40; receipts 6.60. | The merge tree differs from its PR tree. The current main-range policy tests changed packages and direct consumers; PR evidence cannot simply replace it. | Apply root-reader selection to the actual main range only after proving its readers. Model registration areas. Any proposal to reduce dependent tests on main needs a separate owner decision. |
+| [Portal merge](https://github.com/waitron-io/waitron-cloud/actions/runs/42654462815) | Planner 28 seconds, summary 27. | They verify reuse of the identical PR tree. | No substantial remaining path demonstrated; no fresh product tests ran. |
+
+The receipts job runs six distinct command groups. On the registration and
+portal PRs, `test:cloud-cost` takes 340.831 and 352.079 seconds; `test:local-stack`
+takes 180.453 and 184.733 seconds. These commands overlap inside that job, so
+their times cannot be added as a possible job saving. They exercise cost tooling
+and composed local services, beyond the package's own test command. Removing
+the separate cost-conformance PR workflow did not remove `test:cloud-cost` from
+ordinary CI. The owner wants cost checks weekly; propose that scheduling change
+and review which other receipt inputs these two PRs actually change.
+
+Root and package test commands account for most of the long jobs. For example,
+registration's slowest job spends 313 of 332 seconds in its test wrapper;
+portal's spends 254 of 285. Fewer jobs could avoid repeated setup, but merely
+combining partitions cannot establish a large reduction in test work. Keep
+the assertions and limits, and measure the proposed allocation first.
+
+### Before and after examples
+
+A job-minute is one job's elapsed minute, including its setup and cleanup.
+The totals sum all non-skipped jobs in the exact final attempts, excluding queue
+time. They describe machine occupancy, not the time a person waits or a bill.
+
+| Kind | Before PR | After PR | Before merge | After merge |
+| --- | ---: | ---: | ---: | ---: |
+| Prose, [#1091](https://github.com/waitron-io/waitron-cloud/pull/1091) / [#1110](https://github.com/waitron-io/waitron-cloud/pull/1110) | 44.32 | 1.10 | 62.48 | 0.67 |
+| Registration, [#1083](https://github.com/waitron-io/waitron-cloud/pull/1083) / [#1121](https://github.com/waitron-io/waitron-cloud/pull/1121) | 203.47 | 56.67 | 171.98 | 113.73 |
+| Portal, [#1067](https://github.com/waitron-io/waitron-cloud/pull/1067) / [#1122](https://github.com/waitron-io/waitron-cloud/pull/1122) | 96.32 | 52.83 | 105.67 | 0.92 |
+
+These are natural changes with matching workspace owners, different fixes and
+test workloads. Main ranges and merge topology also differ. The after prose
+and portal merges reused their checked PR trees and ran zero fresh product
+checks; both historical readback commands passed. Do not interpret the table
+as an isolated causal saving or a fleetwide percentage.
+
+The checked runs have no overlap with relevant published GitHub incidents,
+checkout takes at most nine seconds, and retained log scans found no external
+download HTTP 5xx. The per-run inventories, log classifications, source links
+and successful historical reuse readbacks are retained in Lane I's
+`receipts/d613-merge-measurement-20261109/` and Lane G's
+`receipts/d613/measurement-20261109/`. The rejected 4 November aggregate is unused.
+The watcher accepted these three measurement categories on 9 November at 21:22;
+the owner's later instruction keeps the work open for the proposed code-PR cuts.
+Check infrastructure and cost-input PRs as they arrive naturally for more slow
+paths, without making PRs or rerunning workflows just to obtain measurements.
+
+## Current proof selection
+
 Pull requests start a small venue-proof planner and run its test job only when
 reviewed inputs change. Cost conformance runs through manual invocation and the
 nightly backstop, so backend edits no longer start that separate PR workflow.
