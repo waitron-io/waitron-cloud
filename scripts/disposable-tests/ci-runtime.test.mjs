@@ -213,7 +213,6 @@ for(const failure of ['stale status','read failure','uncertain cleanup'])test(`c
  f.transport.execute=async(...args)=>{await execute(...args);assert.ok(f.leases.inspect().ciInvocation);completed=true;return 0;};
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   if(completed && path.includes('/jobs/')){
    assert.equal(f.leases.inspect().ciInvocation,undefined,'Final API reads must follow retirement of the fallback intent');
    if(failure==='read failure')throw new Error('completion API unavailable');
@@ -264,7 +263,7 @@ for(const [field,value] of [['id',902],['run_id',790],['run_attempt',2],['head_s
  assert.equal(result.cleanup,'absent');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-for(const status of ['in_progress','completed'])test(`a failed listener keeps ordinary recovery when GitHub is ${status}`,async t=>{
+for(const status of ['in_progress','completed'])test(`a failed listener cleans up without retrying assigned work when GitHub is ${status}`,async t=>{
  const {executeOrdinary}=await import('./ci-canary.mjs');
  const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'push'};
  const f=fixture(t,{identity}),get=f.api.get,post=f.api.post,execute=f.transport.execute;
@@ -293,7 +292,6 @@ test('stopping final readback still cleans up without cancelling the run',async 
  const f=fixture(t,{identity}),get=f.api.get;let stopped=false;
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   const value=await get(path,options);
   if(path.includes('/jobs/') && value.runner_id){setImmediate(()=>{stopped=true;stop.abort();});return {...value,status:'in_progress',conclusion:null};}
   return value;

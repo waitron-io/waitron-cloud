@@ -45,7 +45,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  };
  let served=0,healthy,lastCapacity=-Infinity;
  const publish=async()=>{
-  if(Date.now()-lastCapacity<30000)return;
+  if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
@@ -151,7 +151,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(!readFailed)throw error;
   const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
    error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
-   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete (automatic|hosted) run inventory/.test(error.message);
+   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
   const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);

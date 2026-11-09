@@ -104,6 +104,7 @@ function startedWork(job){
  if(job.name==='server-queue-watchdog'||job.name==='changes'&&job.status==='completed'&&job.conclusion==='success')return false;
  return job.runner_id>0 || job.status==='in_progress' || job.status==='completed'&&!['skipped','cancelled'].includes(job.conclusion);
 }
+const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
 export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
  const usable=healthy?state.slots.filter(s=>s.state!=='quarantined'&&!s.orphanRunners?.length):[];
  const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
@@ -200,7 +201,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
   assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
   const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100,'Incomplete overflow job inventory');
-  if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || startedWork(job))){
+  if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || blocksRecovery(job))){
    delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
   }
   if(run.status==='completed'){
@@ -255,12 +256,14 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(!await currentPR(run))return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
- if(automatic){
+ if(automatic)for(const marked of [false,true]){
   const inventory=await jobInventory(api,path+`/attempts/${ci.attempt}/jobs`,signal,1000,'Incomplete cancellation job inventory');
   if(!inventory.jobs.every(job=>job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha))return {retry:false,pending:true};
-  if(ownedCancel && run.status==='queued')assert.ok(!job.runner_id,'Force cancellation needs an unassigned queued job');
-  if(ci.attempt>1 || inventory.jobs.some(startedWork))return {retry:false,started:true};
-  await markHostedAttempt({api,policy,ci,signal});
+  if(ci.attempt>1 || inventory.jobs.some(ownedCancel?blocksRecovery:startedWork)){
+   if(marked){const values=await hostedAttempts({api,policy,signal});if(values[ci.runId]===ci.attempt+1){delete values[ci.runId];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}}
+   return {retry:false,started:true};
+  }
+  if(!marked)await markHostedAttempt({api,policy,ci,signal});
  }
  if(ownedCancel && run.status==='queued'){
   const outcome=await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true,waitForCompletion:!automatic});
