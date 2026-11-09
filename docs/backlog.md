@@ -4106,7 +4106,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   message cannot diagnose browser restrictions, configuration or transport faults.
   These failure checks explicitly provide a simulated passkey device; a paired
   native check records whether the machine can begin without it.
-  Request-body limits/formats/interruption still need cause-specific feedback.
+  Request-body refusals in other portal controllers and malformed JSON (400)
+  still need cause-specific feedback.
   An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
   refused with an accepted session and no page or relay error. Its historical
   cause remains unknown and belongs to the shared CI-failure investigation;
@@ -4142,8 +4143,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   panels, heading focus and cleared private state; real database/locking checks run
   in CI. Existing permission conditions remain; specific remote refusals get a
   fresh session and ownership check before their cause is returned. Shared
-  backup/installation reads on recovery/fiscal pages inherit the wording; their
-  request-specific guidance stays in R3/R6/R7. Pairing keeps its existing guidance.
+  backup/installation reads inherit the wording; recovery-specific guidance stays
+  in R3. Pairing keeps its existing guidance.
   Remote setup now explains a missing paid trial plan, missing gateway setup,
   a production venue outside the test-only trial and stopped installation access
   in English and Spanish. Account overview and a read-only installation refresh
@@ -4153,10 +4154,6 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   API/controller and browser checks cover the mapping; real database and late-DNS
   rechecks run in CI. Customer plan/setup/restart controls and membership changes
   still need real product paths and remain open.
-- R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
-  record missing provisioning paths without changing fiscal authority or history.
-- R7: distinguish temporary fiscal continuity access from missing configuration,
-  uncertain history and allocation contention; retain original-request inspection.
 - R8 delivered: the no-eligible-business message explains the existing sign-out
   and owning-account sign-in path in English and Spanish. Stubbed-browser checks
   cover the same-page account switch, retained connection request and recoverable

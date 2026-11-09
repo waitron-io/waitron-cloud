@@ -18,7 +18,8 @@ export function passkeySignInScreen(app: PortalApp) {
 export function passkeyAccountScreen(app: PortalApp) {
   const c = app.copy;
   const message = app.passkeys.error ?? app.passkeys.notice;
-  const check = app.passkeys.error === 'passkeyRegistrationRefused' || app.passkeys.error === 'passkeyRemovalRefused';
+  const check = app.passkeys.error === 'passkeyRegistrationRefused' || app.passkeys.error === 'passkeyRemovalRefused'
+    || ['passkeyRequestInterrupted', 'passkeyRequestSize', 'passkeyRequestFormat'].includes(app.passkeys.error ?? '');
   const date = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium'});
   const dateTime = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium', timeStyle: 'short'});
   return html`<section class="passkeys" aria-labelledby="passkeys-heading">

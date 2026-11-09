@@ -113,9 +113,15 @@ The browser's already-registered (`InvalidStateError`) refusal uses the same
 general registration guidance, without sending a verification request.
 Cancellations keep their existing feedback.
 Existing PostgreSQL store and HTTP tests run in CI.
-Oversized bodies (413), unsupported request formats (415) and interrupted bodies
-(408) still share generic feedback. Their cause-specific messages remain
-follow-ups. The server and its disclosure policy are unchanged.
+For passkey POST requests, `invalid_input` with status 413 names an unaccepted
+size, 415 names an unsupported format and 408 names an interruption. Sign-in
+points you to your password; management offers Check passkeys before another
+change. The list is a read and retains its existing Retry path. A refreshed list
+that confirms the change still reports success. The server and its disclosure
+policy are unchanged (`passkey-controller.ts`, `passkey-screen.ts`). Run
+`pnpm --dir apps/portal exec node --test test/passkey-refusal.test.ts` for the
+status/code boundaries; the two passkey guidance browser files exercise the
+English/Spanish actions with synthetic responses.
 
 Generic passkey failures say “Passkeys are unavailable. You can try again.
 Password sign-in remains available.” / “Las llaves de acceso no están disponibles.
@@ -127,8 +133,10 @@ synthetic HTTP responses to follow both paths, including a second refused
 passkey attempt and an incorrect password before a successful sign-in. The fixture explicitly provides a simulated passkey
 device, while a native check records whether the machine could begin the
 passkey journey without one. These checks do not qualify real credential
-verification or repair a browser or service restriction. Request-body limits, malformed requests
-and interrupted requests still need cause-specific feedback.
+verification or repair a browser or service restriction. Malformed JSON (400)
+and request-body refusals in the other portal controllers remain open:
+authenticator, sessions, alerts, backups, billing, diagnostics, installations,
+pairing, recovery, remote access, consent, usage, signup and password reset.
 
 ## Existing actions to preserve
 
@@ -144,15 +152,14 @@ existing behavioral coverage when an adjacent screen changes.
 | Remote `dns_not_verified`, `hostname_conflict`, revision conflict | Check both DNS records, choose another name, or refresh/review / Comprueba ambos registros, elige otro nombre o actualiza/revisa. | [Remote screen (remote-screen.ts:16)](../apps/portal/src/remote-screen.ts#L16) exposes the records, assigned-name switch and refresh. [Remote handler (remote-access.ts:58)](../packages/account-http/src/remote-access.ts#L58) distinguishes those outcomes. Gateway assignment and certificate installation remain operator tooling, as its trial notice says. |
 | Recovery `410`, missing code/link and unconfirmed result | Start a fresh request on the replacement, reopen its link, or inspect status / Inicia otra solicitud en el servidor de sustitución, abre su enlace o comprueba el estado. | [Recovery screen (recovery-screen.ts:11)](../apps/portal/src/recovery-screen.ts#L11) and [controller](../apps/portal/src/recovery-controller.ts#L40). An expired request cannot be revived by waiting. Existing guidance already says so. |
 | Unknown write result | Inspect/reconcile before retrying / Comprueba el resultado antes de reintentar. | Fiscal, recovery, remote, passkey, authenticator, translation and alert controllers retain explicit uncertain-result handling. Keep their action-specific distinctions; do not replace them with a generic “try again”. |
-| Read failure: sessions, snapshots, usage, diagnostics, venue list | Refresh/retry; diagnostics also says “Retry or refresh the status” / Reintenta o actualiza el estado. | These controls exist. Temporary transport or backend failure can clear. Permission/configuration outcomes need R5/R7 instead; a generic 503 does not establish a transient cause. |
+| Read failure: sessions, snapshots, usage, diagnostics, venue list | Refresh/retry; diagnostics also says “Retry or refresh the status” / Reintenta o actualiza el estado. | These controls exist. Temporary transport or backend failure can clear. Permission/configuration outcomes need R5 instead; a generic 503 does not establish a transient cause. |
 | Portal HTML `400`, `404`, `405`, `503` | Check the address or return to Waitron Cloud / Comprueba el enlace o vuelve a Waitron Cloud. | [Error renderer (portal.ts:48)](../packages/account-http/src/portal.ts#L48) always links to `/`; 503 adds Retry-After. All eight language/status responses were rendered natively. |
 | Verification/reset/password-changed emails | Open the single-use link, ignore an unrequested email, or request a fresh reset / Abre el enlace de un solo uso, ignora el correo no solicitado o solicita otro restablecimiento. | [Mail renderer](../packages/registration/src/account-mail.ts#L20) includes expiry and the password-change reset-request link. Rendering was exercised in both languages; delivery and provider behavior were not exercised. |
 
 ## Delivery boundaries
 
 Cloud owns these follow-ups. R1, R2, R3, R4, R5 and any fiscal change need the full
-authentication/recovery/authority review path. R6/R7 must first respect the owner's
-fiscal approval rule. A wording-only public-page change may use focused review;
+authentication/recovery/authority review path. A wording-only public-page change may use focused review;
 changing bot checks or permissions may not.
 
 R1's inventory and status-refresh path are delivered. Later server-code changes
