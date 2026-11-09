@@ -3525,8 +3525,10 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 The [9 November report](ci-proof-selection.md#remaining-ci-work-measured-on-9-november-2026-d613)
 closes the accepted three-category measurement. Ordinary code PRs still run about
-25 job-minutes of root tests and every receipt suite. First propose root checks
-selected by their actual inputs, retaining the rest in nightly runs. Then model
+25 job-minutes of root tests and every receipt suite in that sample. The first
+root cut omits nine audited synthetic suites on selected package-only PRs, keeps
+the live-reader suite and full-command fallback, and retains all tests nightly.
+Measure its hosted job-minute saving on a healthy natural eligible PR. Then model
 registration test times by area over recent merged PRs before proposing a package
 split; agree the boundary with pairing v2 before moving code. Review the retained
 receipt fallback and weekly cost-check policy separately. Sample infrastructure

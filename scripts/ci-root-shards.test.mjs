@@ -17,7 +17,7 @@ const jobs = ['changes', 'typecheck', 'package (@waitron-cloud/operations)',
 
 test('workflow root partitions execute every discovered check once and propagate failures', () => {
   // Dropping a selector or a partition loses a file; swallowing a child failure hides a broken check.
-  const command = rootJob.match(/run: (node --test[^\n]+)/)?.[1];
+  const command = rootJob.match(/- name: Run root checks[\s\S]*?        run: \|\n((?:          .*\n)+)/)?.[1].replace(/^          /gm, '');
   assert.ok(command, 'A separate root job must execute the original test inventory');
   const shards = JSON.parse(rootJob.match(/shard: (\[[^\]]+\])/)?.[1] ?? '[]');
   const root = mkdtempSync(join(tmpdir(), 'cloud-root-partitions-'));
@@ -25,11 +25,12 @@ test('workflow root partitions execute every discovered check once and propagate
     mkdirSync(join(root, 'scripts'));
     const files = ['ci-a.test.mjs', 'ci-b.test.mjs', 'ci-new-reader.test.mjs', 'ci-z.test.mjs',
       'ci-c.test.mjs', 'ci-d.test.mjs', 'ci-e.test.mjs', 'ci-f.test.mjs',
-      'identity-upstream.test.mjs', 'verify-gateway-reconnection-receipt.test.mjs'];
+      'identity-upstream.test.mjs', 'verify-gateway-reconnection-receipt.test.mjs',
+      'billing-display-guard-probes.test.mjs', 'venue-service-guard-probes.test.mjs'];
     for (const file of files) writeFileSync(join(root, 'scripts', file),
       `import test from 'node:test'; test(${JSON.stringify(file)}, () => {});\n`);
     const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
-    const execute = shard => spawnSync('sh', ['-c', command.replaceAll('${{ matrix.shard }}', String(shard))],
+    const execute = shard => spawnSync('bash', ['-e', '-c', command.replaceAll('${{ matrix.shard }}', String(shard))],
       {cwd: root, encoding: 'utf8', env, timeout: 10_000});
     const seen = [];
     for (const shard of shards) {

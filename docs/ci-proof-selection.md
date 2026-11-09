@@ -8,6 +8,16 @@ tests. Package selection alone does not remove those jobs. The owner asked for
 root checks to follow their actual inputs first, then a measured proposal for
 splitting registration by area. These changes are proposed, not implemented.
 
+**10 November update:** the first cut omits nine audited synthetic root suites
+inside selected package-only PR commands, with the original full command as
+fallback. The live-reader suite stays. See [root advice](ci-root-input-ownership.md#package-only-root-advice-10-november-2026).
+The unchanged nine-file local profile attributed 22.194 of 619.851 sampled
+seconds to Git initialisation/configuration and 13.240 to other non-child work;
+fixture setup was a much smaller opportunity than omitting the complete suites.
+That shared-Mac profile does not measure hosted job-minute savings. The historical
+table below remains unchanged; the new cut needs a healthy natural eligible PR.
+Receipt selection and the registration-area model remain open.
+
 | Current example | Largest work | Does this change need it? | Next cut to assess |
 | --- | --- | --- | --- |
 | [Prose PR #1110](https://github.com/waitron-io/waitron-cloud/pull/1110) | General planner 18 seconds, documentation 13, general summary 12; venue planner and summary add 23 seconds. | Documentation and final checks are needed; venue planning selected no proof. | No substantial remaining path demonstrated in this example. |

@@ -4,7 +4,7 @@
 
 **Evidence.** The unchanged nine-file local profile passed: [CPU stacks](/Users/clintongormley/waitron-campaign-i/receipts/d613-final-plan-20261109/profile-summary.json) total 619.851s: initial Git init/config 22.194s, other non-child 13.240s, case commits 51.971s, planner graph 416.369s, child/other Git 116.078s. Initial fixture setup is far smaller than omitting complete files. These are neither CI savings nor a concurrency-derived ceiling. Healthy natural PR job-minute saving still needs measurement; no removal gate is approved.
 
-The old 671-case audit deleted uncommitted live directories, missing the clone case at `scripts/ci-package-revisions.test.mjs:674–700`. Committed deletions in scratch `b78d2cd60602b4aeb4d9c39581657de57d33451f` reproduced [ENOENT](/Users/clintongormley/waitron-campaign-i/receipts/d613-final-plan-20261109/committed-live-reader-control.tap). Keep that whole file; move no tests. Nine-file committed-deletion control: **pending driver check**, not passed.
+The old 671-case audit deleted uncommitted live directories, missing the clone case at `scripts/ci-package-revisions.test.mjs:674–700`. Committed deletions in scratch `b78d2cd60602b4aeb4d9c39581657de57d33451f` reproduced [ENOENT](/Users/clintongormley/waitron-campaign-i/receipts/d613-final-plan-20261109/committed-live-reader-control.tap). Keep that whole file; move no tests. `node --test --test-reporter=tap --test-concurrency=2` over the nine named files passed 613 cases in that committed-deletion checkout: [receipt](/Users/clintongormley/waitron-campaign-i/receipts/d613-final-plan-20261109/nine-committed-deletion-control.tap).
 
 **Omissions: only these nine.**
 

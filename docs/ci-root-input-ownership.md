@@ -27,6 +27,32 @@ empty work and incomplete job results. Large markers retain full work.
 
 ## Review the actual readers
 
+### Package-only root advice (10 November 2026)
+
+After the existing root verification, a selected pull request that changes only
+regular source/test files in existing packages or apps, optionally with ordinary
+prose, can omit the nine synthetic suites named in the
+[D613 plan](superpowers/plans/2026-11-09-cloud-root-test-inputs.md).
+`ci-package-revisions.test.mjs` stays: its live-reader case clones the actual
+repository. The nine other files passed 613 cases after live source/test
+directories were removed in a committed temporary revision.
+
+`scripts/ci-root-selection.mjs` provides advice inside the existing command.
+Unknown inputs, full planner decisions, forced full runs, unavailable history,
+inventory uncertainty and loading failures use the original complete command.
+New tests remain in the inventory. Advice assigns files to their original sorted
+eight-way partitions before omitting anything; each job can independently fall
+back without losing another job's retained files. A retained test failure still
+fails its job, without retrying the full command.
+
+Plan fields, mandatory verification, summary and evidence comparisons do not
+change. Fresh main root jobs and nightly runs use full commands; an identical-tree
+merge may reuse its PR evidence. When you change a reader in an omitted file,
+trace its imports, copies, reads and children before keeping that omission.
+Run `node --test scripts/ci-root-selection.test.mjs scripts/ci-root-shards.test.mjs`
+for the selection and real-command controls. Hosted job-minute savings still
+need a healthy natural eligible PR; local profiling is not that measurement.
+
 Root ownership comes from the explicit mapping, not generated records.
 Consumed documents must be regular files wherever present in either saved tree.
 A missing named package or an unknown companion input retains full work.
