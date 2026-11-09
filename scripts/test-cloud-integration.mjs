@@ -55,12 +55,12 @@ function command(args, input = '', phase = args[0], env = {}) {
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', code => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '')));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
       else resolve(output.trim());
     });
     child.stdin.end(input);
@@ -110,6 +110,16 @@ export function checkProtectedContainers(before, after, ids) {
 }
 
 export async function runTestCloudClients(options = {}) {
+  if (options.kubernetes) {
+    const k = options.kubernetes;
+    assert.ok(/^d620-[a-f0-9-]+$/.test(k.cluster) && k.namespace === 'default' && k.account === 'kube-account' && k.network === 'kind' &&
+      ['account', 'ca', 'network', 'proxyIp'].every(key => typeof k[key] === 'string' && k[key].length > 0) &&
+      Number.isInteger(k.port) && Number.isInteger(k.mailPort) && typeof k.exec === 'function' &&
+      typeof k.remote?.worker === 'function', 'integration.kubernetes_binding');
+    assert.ok(!options.paidSnapshot && !options.paidVerification && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
+      !options.measureCapacity && !options.measureIntegration && !options.cloudRollback && !options.schemaRollback &&
+      !options.fixedProject && !options.pairedExpiry, 'integration.kubernetes_scope');
+  }
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
   const revision = process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
   assert.match(revision, /^[a-f0-9]{40}$/, 'integration.waitron_revision_invalid');
@@ -134,7 +144,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, kubernetes}, fixedProject, waitronSource) {
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
@@ -146,6 +156,10 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
   let cleanupCheckpoint;
   const docker = async (args, input = '', phase) => {
     try {
+      if (kubernetes && args[0] === 'exec' && ['kube-account', 'kube-gateway'].includes(args[args[1] === '-i' ? 2 : 1])) {
+        const offset = args[1] === '-i' ? 2 : 1;
+        return kubernetes.exec(args[offset].slice(5), args.slice(offset + 1), input);
+      }
       const creating = ['volume', 'network'].includes(args[0]) && args[1] === 'create';
       if (creating) args = [...args.slice(0, 2), '--label', 'cloud.integration.owner=' + runId, ...args.slice(2)];
       const result = await command(args, input, phase, {TEST_CLOUD_IMAGE: image});
@@ -266,6 +280,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         own: id => {owned.push(id); record('container', id);}});
       if (source) waitronAssets = {...integrationAssetSummary(await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
         own: id => {owned.push(id); record('container', id);}})), baseImage: waitronImage};
+      if (kubernetes) return;
       await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
       const ownership = join(directory, 'ownership.json');
       const rendered = parseIntegrationJson(await compose(['--profile', '*', 'config', '--format', 'json']));
@@ -274,6 +289,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     };
     const start = () => {
       started = true;
+      if (kubernetes) return;
       return compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
     };
     if (measureCapacity) {
@@ -285,12 +301,12 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     } else {await prepare(); await start();}
     let journeyStage = 'clients';
     const journey = async () => {
-    const account = await compose(['ps', '-q', 'account']), proxy = await compose(['ps', '-q', 'proxy']);
-    const network = project + '_default';
-    const ca = await docker(['exec', proxy, 'cat', '/run/local-stack/lan/ca.pem']);
+    const account = kubernetes?.account ?? await compose(['ps', '-q', 'account']);
+    const network = kubernetes?.network ?? project + '_default';
+    const ca = kubernetes?.ca ?? await docker(['exec', await compose(['ps', '-q', 'proxy']), 'cat', '/run/local-stack/lan/ca.pem']);
     assert.match(ca, /BEGIN CERTIFICATE/); assert.doesNotMatch(ca, /PRIVATE/);
-    let port = Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
-    const mailPort = Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
+    let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
+    const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local') => new Promise((resolve, reject) => {
       const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: runSignal(), method: body === undefined ? 'GET' : 'POST',
         headers: {host: 'waitron.local:3000', ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
@@ -333,7 +349,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       const captureSnapshot = (paidSnapshot || paidVerification || paidRecovery) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
-        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : '10.79.0.2'), '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
@@ -634,7 +650,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     if (paidRemote) {
       journeyStage = 'remote-withdrawal';
       const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
-      paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account,
+      paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account, target: kubernetes?.remote,
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId, storageWithdrawal: paidStream,
         own: id => {owned.push(id); record('container', id);}});
     }
@@ -691,6 +707,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       ...(cloudSource ? {cloudSource} : {}),
       ...(waitronBaseSource && waitronClientSource ? {waitronSource: {base: waitronBaseSource, client: waitronClientSource}} : {}),
       ...(cloudAssets && waitronAssets ? {assets: {cloud: cloudAssets, waitron: waitronAssets}} : {}),
+      ...(kubernetes ? {kubernetes: {cluster: kubernetes.cluster, namespace: kubernetes.namespace}} : {}),
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),

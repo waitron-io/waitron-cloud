@@ -5,12 +5,12 @@ import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
-export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false}) {
+export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false, target}) {
   const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
     JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase));
-  const gateway = await compose(['ps', '-q', 'gateway']);
-  const gatewayIp = await docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', gateway]);
-  const port = Number((await compose(['port', 'gateway', '443'])).split(':').at(-1));
+  const gateway = target ? 'kube-gateway' : await compose(['ps', '-q', 'gateway']);
+  const gatewayIp = target?.gatewayIp ?? await docker(['inspect', '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', gateway]);
+  const port = target?.port ?? Number((await compose(['port', 'gateway', '443'])).split(':').at(-1));
   const ca = await docker(['exec', gateway, 'cat', '/run/local-stack/lan/ca.pem']);
   const peer = await control(paid.id, 'paid-remote', {phase: 'key'});
   const sourceBefore = await control(paid.id, 'evidence');
@@ -69,9 +69,9 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     storageStartedAt = await docker(['inspect', '--format', '{{.State.StartedAt}}', storage]);
     await docker(['stop', '--time', '10', storage], '', 'storage-withdrawal-stop');
   }
-  const worker = await compose(['ps', '-q', 'gateway-manifest']);
-  const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
-  await docker(['stop', '--time', '10', worker]);
+  const worker = target ? undefined : await compose(['ps', '-q', 'gateway-manifest']);
+  const beforeRestart = target ? await target.worker('time') : await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
+  if (target) await target.worker('stop'); else await docker(['stop', '--time', '10', worker]);
   assert.deepEqual(await phase('paid-remote-downgrade'), {plan: 'free', configurationCleared: true, installationPreserved: true});
   const committed = Date.now();
   if (storageWithdrawal) {
@@ -80,8 +80,8 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     assert.ok(Date.parse(restartedAt) > Date.parse(storageStartedAt), 'integration.storage_restart_not_observed');
   }
 
-  await docker(['start', worker]);
-  const afterRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
+  if (target) await target.worker('start'); else await docker(['start', worker]);
+  const afterRestart = target ? await target.worker('time') : await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
   assert.ok(Date.parse(afterRestart) > Date.parse(beforeRestart), 'integration.remote_worker_restart');
   let withdrawn = false;
   while (Date.now() - committed < 30000) {
