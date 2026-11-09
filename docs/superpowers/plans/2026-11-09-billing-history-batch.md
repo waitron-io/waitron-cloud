@@ -1,27 +1,45 @@
-# Billing history batch implementation plan
+# D617: Measure and batch billing history reads
 
-Goal: bound database roundtrips and measure shorter lock-held reads while preserving exactly the authenticated, venue-scoped display. Authority: D617 watcher request; no separate spec.
+Keep the authenticated venue’s display unchanged while removing per-charge database roundtrips
+under shared locks. The watcher’s 9 November queue asks: measure synthetic long history, then
+one batched query, keeping every assertion. This page needs watcher approval before building.
 
-Read-only findings: `billing-display-machine.ts:40–53` selects IDs then makes four queries per charge; `billing-payments.ts:11–21` supplies two. `billing-display.ts:11–14` requires full `FrozenCharge` facts. These are source findings, not measurements.
+Source reading, not measurement: `packages/registration/src/billing-display-machine.ts:41` selects
+IDs then issues four queries per charge, including two in `billing-payments.ts:11`.
 
-## Files and budget
+**Files and budget** (paths under `packages/registration/`):
+`src/billing-display-machine.ts`, about 70 changed lines; `src/billing-payments.ts`, about 20;
+append to `test/billing-display-machine.test.ts`, about 180; `docs/backlog.md`, about 5.
+No new fixture, README, benchmark system or schema. Target 270 code/test lines; RUNNER controls growth.
 
-Paths below are under `packages/registration/` unless absolute from repository root.
+1. **Baseline and RED.** Keep helpers in the existing test. Seed valid synthetic events, prices,
+   charges, lines, attempts and hosted days using direct SQL inserts, preserving constraints.
+   Normal CI compares 12 and 120 contiguous monthly charges; 0 has its own unpaid expectation.
+   Use the same charge ID in sibling businesses/organisations with conflicting attempts, plus
+   sibling venues, multiple rows, sparse zero-cent days and repaired retries/refunds; only the
+   newest charge may remain unresolved. Attempts/days grow with charges.
+   Delegate every query to real PostgreSQL and count dispatches through signed
+   `BillingDisplayMachine.read`; assert constant counts and independent expected replies.
+   Export `facts` only from its internal module, not `index.ts`; compare complete facts against
+   the existing `readFrozenCharge` plus the two old queries, detecting duplicated/foreign rows,
+   mapping, ordering, timestamps and empty arrays. Observe query-growth RED before batching.
+2. **Measure once outside normal CI.** Opt in with `BILLING_HISTORY_MEASURE=1` for 0/12/120/1200
+   histories (1200 is stress, not a realistic lifetime). Warm once and collect five samples:
+   SQL counts, elapsed time and first-parent-lock completion through COMMIT, labelled
+   client-observed lock-held duration. SQL identification is allowed; SQL-text assertions and
+   timing thresholds are not. Retain baseline before editing; repeat identical samples afterward.
+3. **GREEN.** One SELECT joins independently grouped, scope-filtered derived tables by charge ID;
+   no per-charge correlated/LATERAL aggregates. Include hosted-day eligibility in the set-based
+   shape. Scope every aggregate by organisation/business; lines/days also by venue, retaining
+   hosted-day lines and omitted-zero-line eligibility. Order each array and charges explicitly.
+   Extract the existing pure frozen-charge row mapping unchanged and reuse it; preserve numeric,
+   date and timestamp conversions. Keep projector/types, transaction, locks and authority untouched.
+   Inspect `EXPLAIN (ANALYZE, BUFFERS)` at stress size for repeated history scans.
+4. **Verify and finish.** Through `scripts/test-postgres.mjs`, run unchanged named machine,
+   projection, proof and billing-payments test files plus additions; CI owns the full package.
+   Deliberately omit each tenant predicate in a disposable candidate and require failure.
+   Record measured before/after counts/timings and plan shape; investigate no improvement.
+   Update only launch item 3’s history clause, retaining production qualification. Then finish-branch.
 
-- Code: `src/billing-display-machine.ts`, ≤140 changed lines, replacing only history loading inside `facts`.
-- Tests: append to `test/billing-display-machine.test.ts` (≤180 lines); add `test/billing-display-history-fixture.ts` (≤180 lines) for synthetic seeding and delegating query instrumentation. Preserve every existing assertion.
-- Documentation: `docs/backlog.md`, ≤10 lines; `packages/registration/README.md` only if stale, ≤15 lines. Target ≤500 code/test lines, hard ceiling about 1,000; no metrics system.
-
-## Execute after approval
-
-- [ ] Gate: one Claude plan read via `~/workspace/tools/claude-seat.sh review-branch`, then watcher approval before building. No provider CLI access; later tests use only the authorized test box. Read TDD skill before code.
-- [ ] Baseline/RED: seed valid synthetic histories of 0/12/120/1200 charges with identical current outcomes; include sibling venues/businesses/organisations, multiple lines/attempts/days, refunds/retries and sparse zero-cent allocations. Through exported `BillingDisplayMachine.read` with signed proof/lease, collect every actual SQL dispatch, including transaction control, using a test-only wrapper that delegates to real PostgreSQL. Exclude seeding; use `performance.now()` for total elapsed and first parent-lock completion through COMMIT completion, labelled client-observed lock-held duration. Warm once; record five samples/size and medians. Collect all sizes before asserting constant roundtrips and independently expected complete replies; observe failure from query growth, never SQL-text assertions or timing thresholds.
-- [ ] GREEN: replace ID selection/loop with one SELECT over the same eligible charges, using separately aggregated lines, attempt state/succeeded_at and consumed hosted days to prevent join multiplication. Retain organisation/business predicates throughout, venue filters, OR eligibility for omitted lines, ordering, empty arrays, explicit date/timestamp and numeric conversions. Map locally to unchanged `BillingDisplayFacts`; leave `readFrozenCharge`, projector and types untouched. If disproportionate duplication/shared-mapper refactoring is needed, stop: recommend four fixed bulk queries (headers, lines, attempts, days) for watcher approval; do not claim one query.
-- [ ] Run unchanged machine/projection/proof tests plus additions:
-
-`node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/billing-display-machine.test.ts test/billing-display.test.ts test/billing-display-proof.test.ts`
-
-Retain scope, post-lock proof/lease/key checks, refunds/retries, sparse days and reader/writer concurrency. Repeat identical measurements after GREEN. Record counts, timings and commands in PR; investigate absent lock-duration improvement without weakening checks.
-- [ ] Update only launch item 3's history clause in `docs/backlog.md` with measured local results and remaining production qualification. Finish: focused tests pass, current-head CI full registration suite passes, then `finish-branch` review. No public performance promise before measurement.
-
-Stop for watcher if any schema/migration, fiscal/tax calculation, immutable record, expected fiscal value, business/auth/lock/gating/pagination change or relaxed assertion becomes necessary.
+Stop for watcher before changing fiscal/tax calculations, immutable records, existing checks,
+schema, business rules, authentication, locks or pagination. No provider calls or production claim.
