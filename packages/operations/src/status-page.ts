@@ -28,24 +28,39 @@ p{margin:12px 0}.service{font-weight:650}.time{font-size:.94rem;color:var(--mute
 @media(max-width:480px){main{padding:24px 16px}article{padding:24px 20px;margin-top:24px}header{gap:12px}}
 `;
 type Incident={state:keyof typeof states;service:keyof typeof services;impact:keyof typeof impacts;updatedAt:string};
-type Status=Incident|{state:'no_incident';updatedAt:string};
+type PastIncident={service:keyof typeof services;impact:keyof typeof impacts;startedAt:string;resolvedAt:string};
+type Status=(Incident|{state:'no_incident';updatedAt:string})&{history?:PastIncident[]};
 function invalid():never{throw new Error('Invalid public status input');}
+function checkTime(value:unknown):asserts value is string{
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value))invalid();
+ const date=new Date(value),next=new Date(date.getTime()+30*60_000);
+ if(!Number.isFinite(date.getTime())||date.toISOString().replace('.000Z','Z')!==value||!Number.isFinite(next.getTime())||next.getUTCFullYear()>9999)invalid();
+}
 function parse(input:unknown):Status{
  if(!input||typeof input!=='object'||Array.isArray(input))invalid();
  const value=input as Record<string,unknown>;
  const keys=value.state==='no_incident'?['state','updatedAt']:['state','service','impact','updatedAt'];
+ const history=Object.hasOwn(value,'history')?value.history:[];
+ if(Object.hasOwn(value,'history'))keys.push('history');
  if(Object.keys(value).length!==keys.length||!keys.every(key=>Object.hasOwn(value,key)))invalid();
  if(value.state!=='no_incident'&&(typeof value.state!=='string'||!Object.hasOwn(states,value.state)||typeof value.service!=='string'||!Object.hasOwn(services,value.service)||typeof value.impact!=='string'||!Object.hasOwn(impacts,value.impact)))invalid();
- if(typeof value.updatedAt!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value.updatedAt))invalid();
- const date=new Date(value.updatedAt),next=new Date(date.getTime()+30*60_000);
- if(!Number.isFinite(date.getTime())||date.toISOString().replace('.000Z','Z')!==value.updatedAt||!Number.isFinite(next.getTime())||next.getUTCFullYear()>9999)invalid();
- return value as Status;
+ checkTime(value.updatedAt);
+ if(!Array.isArray(history))invalid();
+ for(const input of history){
+  if(!input||typeof input!=='object'||Array.isArray(input))invalid();
+  const entry=input as Record<string,unknown>,fields=['service','impact','startedAt','resolvedAt'];
+  if(Object.keys(entry).length!==fields.length||!fields.every(field=>Object.hasOwn(entry,field))||typeof entry.service!=='string'||!Object.hasOwn(services,entry.service)||typeof entry.impact!=='string'||!Object.hasOwn(impacts,entry.impact))invalid();
+  checkTime(entry.startedAt);checkTime(entry.resolvedAt);
+  if(entry.startedAt>entry.resolvedAt)invalid();
+ }
+ return {...value,history} as Status;
 }
 const display=(timestamp:string)=>timestamp.replace('T',' ').replace('Z',' UTC');
 const time=(timestamp:string)=>`<time datetime="${timestamp}">${display(timestamp)}</time>`;
 
 export function renderStatusPage(input:unknown):{'index.html':string;'es/index.html':string}{
- const value=parse(input);
+ const value=parse(input),history=[...(value.history??[])].sort((a,b)=>b.resolvedAt.localeCompare(a.resolvedAt));
+ const historyCss=history.length?'\n.history{margin-top:36px}.history h2{font-size:1.5rem}.history ol{padding-left:24px}.history li{margin:16px 0;padding:24px;border:1px solid var(--line);border-radius:16px;background:var(--card)}':'';
  const render=(language:0|1)=>{
   const en=language===0;
   const heading=value.state==='no_incident'
@@ -56,7 +71,8 @@ export function renderStatusPage(input:unknown):{'index.html':string;'es/index.h
   const content=value.state==='no_incident'
    ?`<p>${en?'No incident reported.':'No hay incidencias notificadas.'}</p>${update}`
    :`<p class="service">${services[value.service][language]}</p><p>${(value.state==='resolved'?resolvedImpacts:impacts)[value.impact][language]}</p>${update}${value.state==='resolved'?'':`<p class="time">${en?'Next update by':'Próxima actualización antes de'}: ${time(new Date(Date.parse(value.updatedAt)+30*60_000).toISOString().replace('.000Z','Z'))}</p>`}`;
-  return `<!doctype html>\n<html lang="${en?'en':'es'}">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Waitron Cloud · ${en?'Service status':'Estado del servicio'}</title><style>${css}</style></head>\n<body><main><header><span class="brand">Waitron Cloud</span><nav aria-label="${en?'Language':'Idioma'}"><a href="${en?'es/index.html':'../index.html'}" hreflang="${en?'es':'en'}" lang="${en?'es':'en'}">${en?'Español':'English'}</a></nav></header><article><h1>${heading}</h1>${content}</article></main></body>\n</html>\n`;
+  const historyContent=history.length?`<section class="history"><h2>${en?'Past incidents':'Incidencias anteriores'}</h2><ol>${history.map(entry=>`<li><p class="service">${services[entry.service][language]}</p><p>${resolvedImpacts[entry.impact][language]}</p><p class="time">${en?'Started':'Inicio'}: ${time(entry.startedAt)}</p><p class="time">${en?'Resolved at':'Resuelto el'}: ${time(entry.resolvedAt)}</p></li>`).join('')}</ol></section>`:'';
+  return `<!doctype html>\n<html lang="${en?'en':'es'}">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Waitron Cloud · ${en?'Service status':'Estado del servicio'}</title><style>${css}${historyCss}</style></head>\n<body><main><header><span class="brand">Waitron Cloud</span><nav aria-label="${en?'Language':'Idioma'}"><a href="${en?'es/index.html':'../index.html'}" hreflang="${en?'es':'en'}" lang="${en?'es':'en'}">${en?'Español':'English'}</a></nav></header><article><h1>${heading}</h1>${content}</article>${historyContent}</main></body>\n</html>\n`;
  };
  return {'index.html':render(0),'es/index.html':render(1)};
 }

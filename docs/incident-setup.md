@@ -61,12 +61,13 @@ Use a new output directory each time; the command refuses an existing one. Open
 check the other language. Both pages work from the folder without a server or
 internet access. This generates files only; it does not publish them.
 
-For an incident post, provide exactly `state`, `service`, `impact` and `updatedAt`.
+For an incident post, provide `state`, `service`, `impact` and `updatedAt`,
+with optional `history` as described below.
 Choose `investigating`, `fix_being_applied`, `monitoring` or `resolved` for the state;
 `cloud`, `remote_access`, `backups`, `email` or `hosted_servers` for the service;
 and `some`, `all` or `unknown` for impact. `cloud` means Cloud overall. Supply only
 facts you have confirmed. `resolved` describes that incident, not universal health.
-For no incident, provide only the two fields in the example. It keeps the
+For no incident, provide the two current-post fields in the example; history is optional. It keeps the
 setup/unverified warning and makes no next-update promise.
 
 Use a real UTC timestamp in exactly `YYYY-MM-DDTHH:mm:ssZ` form. Open incident
@@ -75,6 +76,39 @@ passes. For `resolved`, supply the actual confirmed resolution time as `updatedA
 The post uses past impact and promises no next update. A future publisher must
 keep open posts' update promises; the generator schedules nothing. Extra fields and arbitrary text are rejected, so venue names, private
 notes and guessed recovery times cannot enter this fixed-text page.
+
+To keep past incidents visible, add a `history` array to either input shape:
+
+```json
+{
+  "state": "no_incident",
+  "updatedAt": "2026-11-09T10:00:00Z",
+  "history": [
+    {
+      "service": "backups",
+      "impact": "some",
+      "startedAt": "2026-11-07T23:50:00Z",
+      "resolvedAt": "2026-11-08T00:20:00Z"
+    }
+  ]
+}
+```
+
+Each entry has exactly those four fields, using the same fixed service and impact
+choices. `startedAt` is the earliest confirmed start of impact, never its detection
+time or an estimate; `resolvedAt` is actual confirmed recovery. Both use the exact
+UTC format above, and start cannot follow recovery. The current post's `updatedAt`
+describes that post, so it does not limit history dates. Past incidents show the
+resolution date newest first; equal dates keep input order. Every supplied entry
+remains visible. Keep the complete list locally and include it each time you
+regenerate the bundle: the generator stores no history between runs. Omitting
+the array removes history from the new output. Trim the input yourself when you
+want a shorter history.
+
+Missing history or `[]` keeps the original page unchanged, including its styles.
+History uses fixed public text and makes no next-update promise. Invalid history
+has the same redacted error as invalid current-post input. Correct your local
+input and generate a new bundle; a previously generated bundle stays untouched.
 
 If generation fails, you receive a fixed error without input details. The command
 attempts to remove its own incomplete output. If a filesystem problem prevents
@@ -120,6 +154,6 @@ bilingual status updates plus manual publishing over mobile data. Paging must
 start when investigation finishes or 15 minutes after confirmation, whichever
 comes first; the repeat is 10 minutes after the first page attempt and the
 unattended marker is at 20 minutes. Keep times and results in the private launch
-record. Account recovery, dated public incident history, verified-health wording, the
-publisher, phone adapters and these drills remain open until actually completed.
-A generated local bundle alone qualifies none of them.
+record. Account recovery, verified-health wording, the publisher, phone adapters
+and these drills remain open until actually completed. The local history bundle
+does not qualify public delivery or those launch checks.
