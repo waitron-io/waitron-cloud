@@ -83,25 +83,26 @@ for(const event of ['pull_request','push','schedule','workflow_dispatch'])test(`
  assert.deepEqual(jobs.map(ci=>[ci.jobId,ci.jobKey,ci.attempt,ci.event]),[[901,'changes-1',2,event]]);
  assert.equal(paths.some(path=>path.includes('/pulls/')),event==='pull_request');
 });
-for(const event of ['pull_request','push','schedule','workflow_dispatch'])test(`automatic ${event} overflow marks only the exact next hosted attempt before cancellation`,async t=>{
+for(const event of ['pull_request','push','schedule','workflow_dispatch'])for(const attempt of [1,2])test(`automatic ${event} attempt ${attempt} moves only untouched first attempts`,async t=>{
  const root=mkdtempSync(tmpdir()+'/server-overflow-');t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:1,bootstrap:true});
- const f=evidence(event,2),ci=admitOrdinary(policy,sha,f),actions=[];let cancelled=false,marker='{}';
- leases.setInvocation({nonce:'a'.repeat(32),sourceSha:sha,workflowSha:sha,route:'server',createdAt:Date.now(),runId:789,attempt:2,jobId:901,ordinaryStage:'admitted'});
+ const f=evidence(event,attempt),ci=admitOrdinary(policy,sha,f),actions=[];let cancelled=false,marker='{}';
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:sha,workflowSha:sha,route:'server',createdAt:Date.now(),runId:789,attempt,jobId:901,ordinaryStage:'admitted'});
  const api={get:async path=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
   if(path.endsWith('/pulls/12'))return f.pull;
+  if(path.includes(`/attempts/${attempt}/jobs?`))return {total_count:1,jobs:[f.job]};
   if(path.endsWith('/jobs/901'))return {...f.job,status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null};
   if(path.endsWith('/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   assert.fail('Unexpected API path '+path);
  },patch:async(path,body)=>{
   assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;actions.push('mark');
  },post:async path=>{
-  assert.equal(marker,'{"789":3}');
+  assert.equal(marker,JSON.stringify({789:attempt+1}));
   if(path.endsWith('/cancel')){cancelled=true;actions.push('cancel');}
   else{assert.ok(path.endsWith('/rerun'));actions.push('rerun');}
  }};
  const result=await fallbackOrdinary({api,policy,ci,leases,automatic:true});
- assert.equal(result.retry,true);assert.equal(result.previousAttempt,2);
- assert.deepEqual(actions,['mark','cancel','rerun']);
+ assert.equal(result.retry,attempt===1);assert.equal(result.previousAttempt,attempt===1?1:undefined);
+ assert.deepEqual(actions,attempt===1?['mark','cancel','rerun']:[]);assert.equal(marker,attempt===1?'{"789":2}':'{}');
 });

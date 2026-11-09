@@ -263,7 +263,7 @@ for(const [field,value] of [['id',902],['run_id',790],['run_attempt',2],['head_s
  assert.equal(result.cleanup,'absent');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-for(const status of ['in_progress','completed'])test(`a failed listener keeps ordinary recovery when GitHub is ${status}`,async t=>{
+for(const status of ['in_progress','completed'])test(`a failed listener cleans up without retrying assigned work when GitHub is ${status}`,async t=>{
  const {executeOrdinary}=await import('./ci-canary.mjs');
  const identity={...ci,workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,event:'push'};
  const f=fixture(t,{identity}),get=f.api.get,post=f.api.post,execute=f.transport.execute;
@@ -271,6 +271,7 @@ for(const status of ['in_progress','completed'])test(`a failed listener keeps or
  f.transport.execute=async(...args)=>{await execute(...args);ended=true;return 137;};
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   if(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
   const value=await get(path,options);
   if(path.endsWith('/runs/789'))return {...value,event:'push'};
@@ -279,10 +280,10 @@ for(const status of ['in_progress','completed'])test(`a failed listener keeps or
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));writes.push('marker');marker=body.value;};
  f.api.post=async(path,...args)=>{if(path.endsWith('/cancel')){writes.push('cancel');return;}return post(path,...args);};
  const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic:true});
- assert.deepEqual(writes,status==='completed'?[]:['marker','cancel']);
+ assert.deepEqual(writes,[]);
  assert.equal(result.code,125);assert.equal(result.completion.code,137);
- assert.equal(result.cleanup,'absent');assert.equal(result.pending,status==='completed'?undefined:true);
- assert.equal(f.leases.inspect().ciInvocation?.ordinaryStage,status==='completed'?undefined:'cancel-requested');
+ assert.equal(result.cleanup,'absent');assert.equal(result.pending,undefined);
+ assert.equal(f.leases.inspect().ciInvocation,undefined);
 });
 
 test('stopping final readback still cleans up without cancelling the run',async t=>{

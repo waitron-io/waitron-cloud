@@ -100,11 +100,30 @@ export async function overflowInventory({api,policy,signal}){
  }
  return snapshot;
 }
+function startedWork(job){
+ if(job.name==='server-queue-watchdog'||job.name==='changes'&&job.status==='completed'&&job.conclusion==='success')return false;
+ return job.runner_id>0 || job.status==='in_progress' || job.status==='completed'&&!['skipped','cancelled'].includes(job.conclusion);
+}
+const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
+export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
+ const usable=healthy?state.slots.filter(s=>s.state!=='quarantined'&&!s.orphanRunners?.length):[];
+ const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
+ const value={observedAt:now,slots:usable.length,serverRunning:usable.filter(s=>s.state!=='free'||s.ciInvocation).length,serverWaiting:0,hostedRunning:0,hostedWaiting:0};
+ for(const {jobs} of snapshot.values())for(const job of jobs){
+  if(!job.labels.length)continue;
+  const server=job.labels.includes('self-hosted');
+  if(['queued','pending','waiting','requested'].includes(job.status)&&!admitted.has(job.id))value[server?'serverWaiting':'hostedWaiting']++;
+  if(!server&&job.status==='in_progress')value.hostedRunning++;
+ }
+ await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_CAPACITY',value:JSON.stringify(value),signal});
+ return value;
+}
 // The repository variable survives a full pool and a controller restart.
 export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
+ if(ci.attempt>1)return;
  const base=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
  const run=await api.get(base,{signal});
  const job=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
@@ -114,7 +133,7 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
   const inventory=await jobInventory(api,base+`/attempts/${ci.attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
    inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
-  const busy=inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
+  const busy=inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha || startedWork(job) ||
    job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued' &&
     !(job.status==='completed' && job.conclusion==='skipped')));
   return {busy,jobs:inventory.jobs};
@@ -173,24 +192,23 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
     pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
   }
-  if(obsolete || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
+  if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
    delete values[id];
    await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
    continue;
   }
   if(run.run_attempt===attempt)continue;
   assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
+  const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
+  assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100,'Incomplete overflow job inventory');
+  if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || blocksRecovery(job))){
+   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+  }
   if(run.status==='completed'){
    await api.post(path+'/rerun',undefined,{signal});
    console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
   }
   else {
-   const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
-   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
-   if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha ||
-    job.labels?.includes('self-hosted') && (job.runner_id || job.status==='in_progress' || job.status==='completed' && !['cancelled','skipped'].includes(job.conclusion)))){
-    delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
-   }
    let force=false;
    if(run.status==='queued'){
     force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
@@ -238,7 +256,15 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(!await currentPR(run))return {retry:false,obsolete:true};
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
- if(automatic)await markHostedAttempt({api,policy,ci,signal});
+ if(automatic)for(const marked of [false,true]){
+  const inventory=await jobInventory(api,path+`/attempts/${ci.attempt}/jobs`,signal,1000,'Incomplete cancellation job inventory');
+  if(!inventory.jobs.every(job=>job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha))return {retry:false,pending:true};
+  if(ci.attempt>1 || inventory.jobs.some(ownedCancel?blocksRecovery:startedWork)){
+   if(marked){const values=await hostedAttempts({api,policy,signal});if(values[ci.runId]===ci.attempt+1){delete values[ci.runId];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}}
+   return {retry:false,started:true};
+  }
+  if(!marked)await markHostedAttempt({api,policy,ci,signal});
+ }
  if(ownedCancel && run.status==='queued'){
   const outcome=await cancelCIJob({api,repository:policy.repository,ci,signal,wait,force:true,waitForCompletion:!automatic});
   if(outcome?.pending)return {retry:false,pending:true};
