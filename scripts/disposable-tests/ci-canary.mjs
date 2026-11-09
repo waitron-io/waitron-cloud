@@ -100,6 +100,9 @@ export async function overflowInventory({api,policy,signal}){
  }
  return snapshot;
 }
+function activeSibling(job){
+ return job.name!=='server-queue-watchdog' && job.status!=='completed' && (job.runner_id>0 || job.status==='in_progress');
+}
 // The repository variable survives a full pool and a controller restart.
 export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
@@ -114,7 +117,7 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
   const inventory=await jobInventory(api,base+`/attempts/${ci.attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
    inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
-  const busy=inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
+  const busy=inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha || activeSibling(job) ||
    job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued' &&
     !(job.status==='completed' && job.conclusion==='skipped')));
   return {busy,jobs:inventory.jobs};
@@ -187,7 +190,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
   else {
    const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
    assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
-   if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha ||
+   if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || activeSibling(job) ||
     job.labels?.includes('self-hosted') && (job.runner_id || job.status==='in_progress' || job.status==='completed' && !['cancelled','skipped'].includes(job.conclusion)))){
     delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
    }

@@ -36,6 +36,34 @@ function fixture(){
  }};
  return {run,jobs,api};
 }
+for(const action of ['overflow','recover'])for(const [name,status,runner,blocked] of [
+ ['bundle-smoke','in_progress',7,true],['bundle-smoke','queued',7,true],
+ ['bundle-smoke','in_progress',0,true],['server-queue-watchdog','in_progress',7,false],
+ ['server-queue-watchdog-copy','in_progress',7,true]
+])test(`${action} protects hosted siblings except the exact watchdog: ${name} ${status} runner ${runner}`,async()=>{
+ const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get,posts=[];
+ f.jobs.push({...f.jobs[0],id:999,name,status,runner_id:runner,labels:['ubuntu-latest']});
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.post=async path=>{posts.push(path);};
+ const api=routingVariables(f.api);
+ if(action==='overflow')await controller.overflowOrdinary({api,policy,ci});
+ else{
+  await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
+  await controller.recoverHostedAttempts({api,policy});
+ }
+ assert.deepEqual(posts,blocked?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
+ assert.deepEqual(await controller.hostedAttempts({api,policy}),blocked?{}:{789:2});
+});
+
+test('overflow preserves a hosted assignment arriving after the marker was written',async()=>{
+ const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get;
+ const api=routingVariables(f.api);
+ f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{const result=await target.patch(path,body);if(JSON.parse(body.value)['789'])f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'queued',runner_id:7,labels:['ubuntu-latest']});return result;};return Reflect.get(target,key);}});
+ f.api.post=async()=>assert.fail('The new hosted assignment must survive');
+ await controller.overflowOrdinary({api:observed,policy,ci});
+ assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
+});
 test('automatic pickup admits each routed shard on the current same-repository PR without a chosen head',async()=>{
  const {api}=fixture();assert.equal(typeof controller.findAutomatic,'function');
  const jobs=await controller.findAutomatic({api:routingVariables(api),policy,limit:6});
