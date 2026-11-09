@@ -68,14 +68,14 @@ download() {
   return 1
 }
 # END bounded download
-download Node 60 134217728 https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz "$temporary/node.tar.xz""
+download Node 60 134217728 https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz "$temporary/node.tar.xz"
 printf '%s  %s\n' d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997 "$temporary/node.tar.xz" | sha256sum --check --status || { echo 'Node integrity mismatch' >&2; exit 1; }
 mkdir -p /opt/waitron-tools/pnpm
 tar --extract --xz --file "$temporary/node.tar.xz" --directory /opt/waitron-tools --no-same-owner
 for tool in node npm npx; do
   ln -s /opt/waitron-tools/node-v26.13.0-linux-x64/bin/"$tool" /usr/local/bin/"$tool"
 done
-download pnpm 30 33554432 https://registry.npmjs.org/pnpm/-/pnpm-9.15.0.tgz "$temporary/pnpm.tgz""
+download pnpm 30 33554432 https://registry.npmjs.org/pnpm/-/pnpm-9.15.0.tgz "$temporary/pnpm.tgz"
 python3 - "$temporary/pnpm.tgz" <<'PY'
 import base64,hashlib,sys
 with open(sys.argv[1],'rb') as source:

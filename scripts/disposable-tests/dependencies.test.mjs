@@ -210,3 +210,21 @@ test('corrupt Node, pnpm and runner bytes fail with the tool named before extrac
   assert.ok(source.indexOf(check)<source.indexOf('tar --extract',source.indexOf(check)));
  }
 });
+
+for (const [file,tool,budget,output] of [
+ ['guest-tools.sh','Node','60','node.tar.xz'],
+ ['guest-tools.sh','pnpm','30','pnpm.tgz'],
+ ['runner-tools.sh','Actions-runner','120','runner.tgz'],
+]) test(`the real ${tool} download call passes five shell arguments`,()=>{
+ const source=readFileSync(new URL('../../deploy/disposable-tests/'+file,import.meta.url),'utf8');
+ const call=source.split('\n').find(line=>line.startsWith('download '+tool+' '));
+ assert.ok(call);
+ const result=spawnSync('bash',['-c',`temporary=/tmp/fixture-tools
+download() { printf '%s\\0' "$@"; }
+${call}
+`],{encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stderr);
+ const args=result.stdout.split('\0');args.pop();
+ assert.equal(args.length,5);assert.equal(args[0],tool);assert.equal(args[1],budget);
+ assert.equal(args[4],'/tmp/fixture-tools/'+output);
+});
