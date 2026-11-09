@@ -3140,11 +3140,13 @@ implementation or production evidence.
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
   availability checks for sign-in, remote access and backups. You can run the first
-  single-machine sign-in and remote-access checks with `node scripts/kubernetes-check.mjs`;
-  its opening comment lists the required local images and tools. Kubernetes backup
-  verification with the test backup worker, full service/fault proof and the strict
-  common verifier remain open. These checks use test-service mode; P1's
-  production-mode acceptance remains open. D570's
+  single-machine sign-in, remote-access and captured-backup restore checks with
+  `node scripts/kubernetes-check.mjs`; its opening comment lists the required local
+  images and tools. The one-node test in `scripts/kubernetes-check.test.mjs` passed
+  locally on Linux, including the captured point, digest and byte count, restoration
+  across 15 modules, child removal and natural worker exit. These checks use
+  test-service mode and the test backup worker. Full service/fault proof, the strict
+  common verifier and P1's production-mode acceptance remain open. D570's
   [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
   is paused by the owner on 2026-11-08. Restart it as a small new item when
   production deployment is close: one self-removing machine template, shutdown

@@ -254,14 +254,14 @@
             "name": "verifier",
             "image": "CLOUD_IMAGE",
             "imagePullPolicy": "Never",
-            "command": ["sh", "-ec", "until docker image inspect \"$CLOUD_VERIFIER_IMAGE\" >/dev/null 2>&1; do sleep 1; done; exec node deploy/test-cloud/test-fixtures/integration-verifier.mjs"],
+            "command": ["sh", "-ec", "until [ -f /run/backup-verifier/image-loaded ]; do sleep 1; done; exec node deploy/test-cloud/test-fixtures/integration-verifier.mjs"],
             "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}, {"name": "CLOUD_VERIFIER_IMAGE", "value": "PINNED_WAITRON_IMAGE"}, {"name": "CLOUD_INTEGRATION_POINT_ID", "value": "CAPTURED_POINT_ID"}, {"name": "CLOUD_INTEGRATION_WAITRON_REVISION", "value": "PINNED_WAITRON_REVISION"}, {"name": "DOCKER_HOST", "value": "unix:///docker-socket/docker.sock"}],
             "securityContext": {"readOnlyRootFilesystem": true, "allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}},
             "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack", "readOnly": true}, {"name": "socket", "mountPath": "/docker-socket"}, {"name": "verifier-state", "mountPath": "/run/backup-verifier"}, {"name": "tmp", "mountPath": "/tmp"}],
             "resources": {"limits": {"memory": "128Mi"}}
           }
         ],
-        "hostAliases": [{"ip": "CLOUD_POD_IP", "hostnames": ["waitron.local", "postgres"]}]
+        "hostAliases": [{"ip": "CLOUD_POD_IP", "hostnames": ["waitron.local"]}]
       }
     }
   ]

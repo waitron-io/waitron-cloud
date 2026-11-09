@@ -40,6 +40,7 @@ export function createKubernetesVerifier({template, kube, pod, loadImage}) {
       await kube(['apply', '-f', '-'], JSON.stringify(value));
       await kube(['wait', '--for=condition=Ready', 'pod/verifier', '--timeout=180s']);
       await loadImage(image);
+      await exec(['node', '-e', 'require("node:fs").writeFileSync("/run/backup-verifier/image-loaded","")']);
       return 'kube-verifier';
     },
     identity: async () => parseIntegrationJson(await exec(['cat', '/run/backup-verifier/verifier-controller/identity.json'])),
@@ -138,6 +139,13 @@ try {
   if (created && !stop.signal.aborted) {try {process.stderr.write(await kube(['get', 'pods', '--request-timeout=5s']) + '\n');} catch {}}
   throw error;
 } finally {
+  if (created && !stop.signal.aborted) try {
+    const state = (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
+    const reason = ['Completed', 'Error', 'OOMKilled', 'ContainerCannotRun', 'StartError'].includes(state.terminated?.reason) ? state.terminated.reason : 'OTHER';
+    const exitCode = Number.isInteger(state.terminated?.exitCode) ? state.terminated.exitCode : null;
+    process.stderr.write('Kubernetes verifier termination ' + JSON.stringify({reason, exitCode}) + '\n');
+    process.stderr.write(await kube(['logs', 'pod/verifier', '-c', 'verifier', '--tail=100']) + '\n');
+  } catch {process.stderr.write('Kubernetes verifier diagnostics unavailable\n');}
   for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {
     if (created) {

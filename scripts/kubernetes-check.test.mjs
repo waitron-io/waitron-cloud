@@ -54,6 +54,7 @@ test('one-node Kubernetes services sign in, pair, restore a captured backup and 
 }, () => {
   const run = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs'], {encoding: 'utf8', timeout: 840000});
   assert.equal(run.status, 0, run.stderr);
+  if (run.stderr) process.stderr.write(run.stderr);
   const reply = JSON.parse(run.stdout);
   assert.match(reply.kubernetes.cluster, /^d620-/);
   assert.equal(reply.accountMail.free, 'proved'); assert.equal(reply.accountMail.paid, 'proved');
@@ -187,10 +188,11 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   const point = '12345678-1234-4234-8234-123456789abc', image = 'sha256:' + 'b'.repeat(64), revision = 'c'.repeat(40);
   const statuses = [{name: 'docker', state: {running: {}}}, {name: 'verifier', state: {running: {}}}];
   const identity = {version: 1, owner: 'waitron-cloud-test-backup', image, scope: point};
-  let applied, loaded; const calls = [];
+  let applied, loaded, importing, finishLoad; const calls = [];
+  const entered = new Promise(resolve => {importing = resolve;}), transfer = new Promise(resolve => {finishLoad = resolve;});
   const adapter = api.createKubernetesVerifier({template,
     pod: async role => {assert.ok(['cloud', 'verifier'].includes(role)); return {status: {podIP: '10.244.0.5', containerStatuses: statuses}};},
-    loadImage: async id => {loaded = id; assert.ok(applied);},
+    loadImage: async id => {loaded = id; assert.ok(applied); importing(); await transfer;},
     kube: async (args, input) => {
       calls.push(args);
       if (args[0] === 'apply') applied = JSON.parse(input);
@@ -198,18 +200,21 @@ test('nested verifier adapter binds the captured point and pinned image to its o
         assert.equal(args[2], 'pod/verifier');
         if (args[4] === 'docker') return 'nested-daemon-output';
         if (args.includes('cat')) return JSON.stringify(identity);
-        if (args.includes('node')) statuses[1].state = {terminated: {exitCode: 0}};
+        if (args.includes('process.kill(1,"SIGTERM")')) statuses[1].state = {terminated: {exitCode: 0}};
       }
       return '';
     }});
   await assert.rejects(adapter.start('not-a-point', {image, revision}), /kubernetes.verifier_binding/); assert.deepEqual(calls, []);
-  assert.equal(await adapter.start(point, {image, revision}), 'kube-verifier');
+  const starting = adapter.start(point, {image, revision}); await entered;
+  assert.equal(calls.some(args => args.some(value => value.includes('image-loaded'))), false, 'worker stays gated while image import is unfinished');
+  finishLoad(); assert.equal(await starting, 'kube-verifier');
+  assert.ok(calls.some(args => args.includes('require("node:fs").writeFileSync("/run/backup-verifier/image-loaded","")')), 'successful import must release the worker');
   const worker = applied.spec.containers.find(row => row.name === 'verifier');
   const environment = Object.fromEntries(worker.env.map(row => [row.name, row.value]));
   assert.equal(environment.CLOUD_INTEGRATION_POINT_ID, point); assert.equal(environment.CLOUD_VERIFIER_IMAGE, image);
   assert.equal(environment.CLOUD_INTEGRATION_WAITRON_REVISION, revision); assert.equal(environment.CLOUD_TEST_SERVICE_PLANS, '1');
   assert.equal(loaded, image); assert.equal(applied.spec.restartPolicy, 'Never');
-  assert.deepEqual(applied.spec.hostAliases, [{ip: '10.244.0.5', hostnames: ['waitron.local', 'postgres']}]);
+  assert.deepEqual(applied.spec.hostAliases, [{ip: '10.244.0.5', hostnames: ['waitron.local']}]);
   assert.deepEqual(await adapter.identity(), identity); assert.equal(await adapter.running(), true);
   assert.equal(await adapter.docker(['ps', '-aq']), 'nested-daemon-output');
   await adapter.stop(); assert.equal(await adapter.running(), false); assert.equal(await adapter.exitCode(), '0');
@@ -249,4 +254,14 @@ test('failed verifier image transfer drains its own exporter without printing pr
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   const exporter = rows.find(row => row.exporter).exporter;
   assert.throws(() => process.kill(exporter, 0), {code: 'ESRCH'});
+});
+
+// The worker must identify a failure without echoing its private input or assertion text.
+test('verifier startup reports its stage and error class without private values', () => {
+  const run = spawnSync(process.execPath, ['deploy/test-cloud/test-fixtures/integration-verifier.mjs'], {
+    encoding: 'utf8', env: {...process.env, CLOUD_INTEGRATION_POINT_ID: 'PRIVATE_POINT_CANARY'}, timeout: 10000});
+  assert.equal(run.status, 1); assert.equal(run.stdout, '');
+  const row = run.stderr.split('\n').find(line => line.startsWith('integration.verifier_diagnostic ')); assert.ok(row, run.stderr);
+  assert.deepEqual(JSON.parse(row.slice('integration.verifier_diagnostic '.length)), {stage: 'point', exceptionClass: 'AssertionError', code: 'ERR_ASSERTION'});
+  assert.equal(run.stderr.includes('PRIVATE_POINT_CANARY'), false);
 });
