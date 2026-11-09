@@ -102,3 +102,72 @@ test('resolved posts report past impact and actual UTC resolution time without a
   }
  }
 });
+
+const past={service:'hosted_servers',impact:'all',startedAt:'2028-02-28T23:45:00Z',resolvedAt:'2028-02-29T00:15:00Z'};
+
+test('missing or empty incident history preserves the complete current bundle',()=>{
+ for(const state of ['no_incident','investigating','fix_being_applied','monitoring','resolved']){
+  const input=state==='no_incident'?{state,updatedAt:incident.updatedAt}:{...incident,state};
+  assert.deepEqual(renderStatusPage({...input,history:[]}),renderStatusPage(input));
+ }
+});
+
+test('dated history uses literal bilingual public wording and UTC dates without another update promise',()=>{
+ const pages=renderStatusPage({...incident,state:'resolved',history:[past]});
+ for(const [path,heading,service,impact,started,resolved] of [
+  ['index.html','Past incidents','Cloud-hosted venue servers','All venues were affected.','Started','Resolved at'],
+  ['es/index.html','Incidencias anteriores','Servidores de locales alojados en Cloud','Todos los locales se vieron afectados.','Inicio','Resuelto el'],
+ ] as const){
+  const history=pages[path].slice(pages[path].indexOf('<section'));
+  for(const text of [`<h2>${heading}</h2>`,service,impact,started,resolved,
+   '<time datetime="2028-02-28T23:45:00Z">2028-02-28 23:45:00 UTC</time>',
+   '<time datetime="2028-02-29T00:15:00Z">2028-02-29 00:15:00 UTC</time>'])assert.ok(history.includes(text),text);
+  assert.match(history,/<ol>/);assert.match(history,/<li>/);
+  assert.doesNotMatch(history,/Next update|Próxima actualización|https?:|<script/);
+ }
+});
+
+test('history keeps every supplied incident in newest resolution order without changing the current article',()=>{
+ const older={...past,service:'backups',resolvedAt:'2028-02-29T00:00:00Z'};
+ const newest={...past,service:'email',startedAt:'2028-02-29T00:15:00Z',resolvedAt:'2028-02-29T00:15:00Z'};
+ const history=[older,past,newest];
+ for(const state of ['no_incident','investigating','fix_being_applied','monitoring','resolved']){
+  const input=state==='no_incident'?{state,updatedAt:incident.updatedAt}:{...incident,state};
+  const legacy=renderStatusPage(input),pages=renderStatusPage({...input,history});
+  for(const path of ['index.html','es/index.html'] as const){
+   assert.equal(pages[path].match(/<article>[\s\S]*?<\/article>/)![0],legacy[path].match(/<article>[\s\S]*?<\/article>/)![0]);
+   const entries=[...pages[path].matchAll(/<li>[\s\S]*?<\/li>/g)].map(match=>match[0]);
+   assert.equal(entries.length,3);
+   assert.ok(entries[2]!.includes('datetime="2028-02-29T00:00:00Z"'));
+   assert.ok(entries[0]!.includes('datetime="2028-02-29T00:15:00Z"'));
+   assert.ok(entries[1]!.includes('datetime="2028-02-29T00:15:00Z"'));
+  }
+ }
+ assert.deepEqual(history,[older,past,newest]);
+});
+
+test('history retains unknown impact and valid equal, midnight, leap and year-boundary dates',()=>{
+ for(const [startedAt,resolvedAt] of [
+  ['2028-02-29T00:00:00Z','2028-02-29T00:00:00Z'],
+  ['2026-12-31T23:59:59Z','2027-01-01T00:00:00Z'],
+ ]){
+  const pages=renderStatusPage({...incident,history:[{...past,impact:'unknown',startedAt,resolvedAt}]});
+  assert.ok(pages['index.html'].includes('The impact is not yet known.'));
+  assert.ok(pages['es/index.html'].includes('Aún no se conoce el alcance.'));
+  for(const html of Object.values(pages))assert.ok(html.includes(`datetime="${resolvedAt}"`));
+ }
+});
+
+test('history rejects private text, unknown fields and malformed dates with the existing redacted error',()=>{
+ const privateText='Private venue <script>secret@example.test</script>';
+ const entries=[null,[],{},privateText,{...past,service:privateText},{...past,impact:privateText},
+  ...['service','impact','startedAt','resolvedAt'].map(field=>Object.fromEntries(Object.entries(past).filter(([key])=>key!==field))),
+  ...['venueId','hostname','details','state','updatedAt'].map(field=>({...past,[field]:privateText})),
+  ...['2026-02-29T00:00:00Z','2028-02-30T00:00:00Z','2028-02-29T24:00:00Z','2028-02-29','2028-02-29T00:00:00+01:00',null,42].flatMap(value=>[
+   {...past,startedAt:value},{...past,resolvedAt:value}]),
+  {...past,startedAt:'2028-02-29T00:16:00Z'},
+ ];
+ for(const history of [null,{},privateText,42,...entries.map(entry=>[entry])]){
+  assert.throws(()=>renderStatusPage({...incident,history}),{message:'Invalid public status input'});
+ }
+});
