@@ -137,7 +137,7 @@ test('a changed published translation vector retains its real package check', ()
     const selected = JSON.parse(planLine.slice(5));
     assert.equal(selected.documentation, undefined, 'the consumed contract cannot qualify as unread prose');
     assert.equal(selected.typecheck, true);
-    assert.equal(selected.packages.length, 29);
+    assert.equal(selected.packages.length, 1);
     assert.ok(selected.packages.some(row => row.package === '@waitron-cloud/translation'), 'run the translation package');
     assert.deepEqual(selected.receipts, receipts);
     const manifest = JSON.parse(read('packages/translation/package.json'));

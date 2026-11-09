@@ -83,7 +83,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     if (root) {
       const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage, range.kind)
         : {packages: [], receipts: [], typecheck: false, reason: 'Known root owners'};
-      return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
+      return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])], reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
     }
     if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
