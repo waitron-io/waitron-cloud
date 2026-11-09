@@ -310,30 +310,28 @@ async function historyFixture(count:number){
   return f;
  }catch(error){await f.close();throw error;}
 }
-async function measuredHistoryRead(f:Fixture){
- let queries=0,lockAt=0,commitAt=0;const started=performance.now(),sql:{text:string;values:any[]}[]=[];
+async function countedHistoryRead(f:Fixture){
+ let queries=0;
  const pool={async connect(){
   const client=await f.pool.connect();
   return new Proxy(client,{get(target,key){
    if(key==='query')return async(text:string,values:any[]=[])=>{
-    queries++;sql.push({text,values});const result=await client.query(text,values);
-    if(text==='SELECT id FROM organisations WHERE id=$1 FOR SHARE')lockAt=performance.now();
-    if(text==='COMMIT')commitAt=performance.now();return result;
+    queries++;return client.query(text,values);
    };
    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
   }});
  }} as Pool;
  const result=await machine(f,settings,origin,pool).read(request(f.targets[0]!));
- return {result,queries,elapsedMs:performance.now()-started,clientObservedLockHeldMs:commitAt-lockAt,sql};
+ return {result,queries};
 }
 test('billing history query count stays constant from 12 to 120 charges',async t=>{
  frozenClock(t);const counts=[];
  for(const count of [12,120]){
   const f=await historyFixture(count);
   try{
-   const read=await measuredHistoryRead(f);counts.push(read.queries);
+   const read=await countedHistoryRead(f);counts.push(read.queries);
    assert.deepEqual(read.result.billing,{status:'ready',level:'connected',state:'payment_failing',period:{kind:'paid',level:'connected',from:count===12?'2026-02-01':'2017-02-01',until:'2026-11-01',coversAsOf:false}});
-   t.diagnostic(JSON.stringify({charges:count,queries:read.queries,elapsedMs:read.elapsedMs,clientObservedLockHeldMs:read.clientObservedLockHeldMs}));
+   t.diagnostic(JSON.stringify({charges:count,queries:read.queries}));
   }finally{await f.close();}
  }
  assert.equal(counts[1],counts[0],'longer history must not add database roundtrips');
@@ -365,23 +363,5 @@ test('batched history retains complete facts and excludes sibling scopes and ven
 });
 test('empty billing history retains the unpaid display',async t=>{
  frozenClock(t);const f=await historyFixture(0);
- try{assert.deepEqual((await measuredHistoryRead(f)).result.billing,{status:'ready',level:'connected',state:'active',period:null});}finally{await f.close();}
-});
-if(process.env.BILLING_HISTORY_MEASURE==='1')test('measure synthetic billing histories',async t=>{
- frozenClock(t);
- for(const count of [0,12,120,1200]){
-  const f=await historyFixture(count);
-  try{
-   await measuredHistoryRead(f);
-   for(let sample=0;sample<5;sample++){
-    const {queries,elapsedMs,clientObservedLockHeldMs,sql}=await measuredHistoryRead(f);
-    t.diagnostic(JSON.stringify({charges:count,sample,queries,elapsedMs,clientObservedLockHeldMs}));
-    if(count===1200&&sample===4){
-     const history=sql.find(q=>q.text.includes('FROM billing_charges c'))!;
-     const plan=await f.pool.query('EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) '+history.text,history.values);
-     t.diagnostic('EXPLAIN '+JSON.stringify(plan.rows));
-    }
-   }
-  }finally{await f.close();}
- }
+ try{assert.deepEqual((await countedHistoryRead(f)).result.billing,{status:'ready',level:'connected',state:'active',period:null});}finally{await f.close();}
 });

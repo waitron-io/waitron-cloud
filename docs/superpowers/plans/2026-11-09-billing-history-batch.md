@@ -1,5 +1,7 @@
 # D617: Measure and batch billing history reads
 
+Review correction (watcher, 9 November 15:53; finding 4): step 2’s one-off instrumentation is removed after saving its receipts; step 4 checks composite account/venue scope, recording individual predicates equivalent under database constraints as such.
+
 Keep the authenticated venue’s display unchanged while removing per-charge database roundtrips
 under shared locks. The watcher’s 9 November queue asks: measure synthetic long history, then
 one batched query, keeping every assertion. This page needs watcher approval before building.
