@@ -353,6 +353,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       const captureSnapshot = (paidSnapshot || paidVerification || paidRecovery) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
+        ...(kubernetes ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
         '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
