@@ -3155,8 +3155,12 @@ implementation or production evidence.
   passed locally on Linux, including the captured point, digest and byte count, restoration
   across 15 modules, child removal and natural worker exit. These checks use
   test-service mode and the test backup worker. Full service/fault proof, the strict
-  common verifier and P1's production-mode acceptance remain open. The owner
-  dropped D570's first-machine proposal on 9 November. D618's
+  common verifier and P1's production-mode acceptance remain open. The three-node
+  command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
+  passed locally on ARM64 Mac Docker: both journeys restored their captured backups
+  across 15 modules, with the manifest worker replaced after its host stopped,
+  900 seconds before the second journey, and owned cluster/volume cleanup.
+  The owner dropped D570's first-machine proposal on 9 November. D618's
   [bounded three-machine plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
   separates the local worker-loss rehearsal from an owner-started Amazon run;
   Amazon resources and spending still need the owner's approval.
