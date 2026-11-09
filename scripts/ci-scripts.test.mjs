@@ -4,7 +4,7 @@ import {chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, 
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 import {checkScripts} from './ci-scripts.mjs';
@@ -251,7 +251,8 @@ test('package edits keep their package owners when Kubernetes proof paths accomp
   }
   put('scripts/kubernetes-proof-budget.mjs', 'export const cap = 10;\n');
   const base = commit();
-  const plan = head => createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, loadWorkspace(root), git);
+  const plan = head => selectPlan({base, head},
+    {revision: head, packages: loadWorkspace(root), testFilesByPackage: {}}, git);
   put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const packageOnly = plan(commit());
   assert.deepEqual(packageOnly.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
