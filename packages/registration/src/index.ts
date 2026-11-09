@@ -275,6 +275,7 @@ export class RegistrationStore {
 }
 
 export { transaction } from './transaction.ts';
+export {assertBillingTransaction} from './billing-transaction-guard.ts';
 export { normaliseEmail } from './account-input.ts';
 export { PasskeyError, PasskeyStore } from './passkeys.ts';
 export type { PasskeyAuthenticationOptions, PasskeyCeremonyAdapter, PasskeyRegistrationOptions, PasskeySummary } from './passkeys.ts';

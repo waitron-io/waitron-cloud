@@ -75,6 +75,12 @@ export async function passwordScreeningFromEnv(env: NodeJS.ProcessEnv): Promise<
 }
 
 export interface BillingAccountOptions {accountIds:readonly string[]}
+export function parseTestBillingProviderAccount(value:unknown):{provider:'stripe'|'sumup';accountId:string}{
+ if(typeof value!=='string')throw new Error('billing_methods.invalid_provider_account');
+ const match=/^(stripe-test|sumup-sandbox):([A-Za-z0-9_]+)$/.exec(value);
+ if(!match||match[0]!==value||value.length>256)throw new Error('billing_methods.invalid_provider_account');
+ return {provider:match[1]==='stripe-test'?'stripe':'sumup',accountId:match[2]!};
+}
 export function validateBillingAccountOptions(value:BillingAccountOptions|undefined,mode:import('@waitron-cloud/registration').PlanMode):Readonly<BillingAccountOptions>|undefined{
  if(value===undefined)return undefined;
  if(mode!=='test-venue-levels')throw new Error('billing_account.test_mode_required');

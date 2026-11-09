@@ -1,3 +1,4 @@
+import type {BillingMethodsOptions} from './billing-methods.ts';
 import type {BillingAccountOptions} from './config.ts';
 import type {TunnelProvisionOptions} from './tunnel-provision.ts';
 import type {AddressLookupOptions} from './address-lookup.ts';
@@ -11,17 +12,17 @@ import { getPath } from 'hono/utils/url';
 import type { Pool } from 'pg';
 import type { RelayAdmissionConfig, EmailOutbox, LeaseIssuer, PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { validateConfig, type AccountHttpConfig, type FactorConfig } from './config.ts';
-import { portalErrorResponse, portalResponse, securityHeaders, type PortalAssets } from './portal.ts';
+import { portalErrorResponse, portalResponse, portalSecurityHeaders, securityHeaders, type PortalAssets } from './portal.ts';
 import { createAccountApp } from './app.ts';
 import { clientAddress } from './client-address.ts';
 import { submitPath, submitRequestMs, submitSlots } from './translation.ts';
-function unavailable(request?: Request, portal = false) {
-  if (request && portal && !new URL(request.url).pathname.startsWith('/api/')) return portalErrorResponse(request, 503);
+function unavailable(request?: Request, portal = false, testBillingMethods=false) {
+  if (request && portal && !new URL(request.url).pathname.startsWith('/api/')) return portalErrorResponse(request, 503,testBillingMethods);
   return Response.json({error: 'temporarily_unavailable'}, {status: 503, headers: {
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
   const config = validateConfig(options.config);
   const app = createAccountApp({...options, config});
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
@@ -32,10 +33,10 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     if (portalRequest) {
       const host = new URL(options.config.portalOrigin).host;
       if (url.host !== host || (request.headers.has('host') && request.headers.get('host') !== host))
-        return new Response(null, {status: 403, headers: securityHeaders});
+        return new Response(null, {status: 403, headers: portalSecurityHeaders(!!options.billingMethods)});
     }
-    if (stopping) return unavailable(request, portalRequest);
-    if (portalRequest) return portalResponse(request, options.portalAssets!);
+    if (stopping) return unavailable(request, portalRequest,!!options.billingMethods);
+    if (portalRequest) return portalResponse(request, options.portalAssets!,!!options.billingMethods);
     if (url.pathname === '/api/health/live') return app.fetch(request, bindings);
     // Encoded aliases must use the same admission as the router's decoded submit path.
     if (options.translation && getPath(request) === submitPath) {

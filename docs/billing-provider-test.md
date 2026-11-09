@@ -47,7 +47,8 @@ with `purpose=SETUP_RECURRING_PAYMENT`, a synthetic customer and the
 [documented sandbox Visa](https://developer.sumup.com/online-payments/testing/)
 `4200000000000091`. It selected consent in the widget and completed the provider's
 synthetic authentication frame using its Approve/Submit control. The setup checkout
-became `PAID` at 2026-11-07 12:37:54 UTC. A provisional token seen before authentication
+used **€1**, as recorded by `run-sumup.mjs`'s setup-checkout request, and became
+`PAID` at 2026-11-07 12:37:54 UTC. A provisional token seen before authentication
 had not qualified the setup; the completed run read an active saved instrument for
 the exact synthetic customer.
 
@@ -131,3 +132,28 @@ These simulated elapsed times do not measure production settlement. Stripe's
 for its published timing; slice A's production timing assumption is unqualified by
 these tests. Test-mode availability also does not qualify live-account enablement,
 production fees, supplier/privacy work or real-money billing.
+
+## Local account panel, 7–8 November 2026
+
+The separately scoped payment-method piece ran through a local Cloud server and a
+throwaway PostgreSQL database. The command was
+`node "$HOME/waitron-campaign-g/receipts/d604/payment-methods/sandbox-journey.mjs"`.
+The final sanitized log is `sandbox-journey-final.log` in that directory.
+
+At 23:58:14 UTC the account panel verified and selected a SumUp sandbox card. At
+23:58:27 UTC it verified a Stripe test SEPA mandate after returning from Checkout
+to plain `/account`. The card run checked that renewal anchors stayed null. This
+journey collected no live payment or renewal. Its browser, local server, database
+and test connection fixtures closed successfully.
+
+The card confirmation observed these parent-page origins with zero Content Security
+Policy violations: scripts from `gateway.sumup.com`; connections to `api.sumup.com`,
+`gateway.sumup.com` and `js.sumup.com`; frames at `gateway.sumup.com`, `api.sumup.com`,
+`eu-test.oppwa.com`, `test.oppwa.com` and `test.ppipe.net`; images from
+`static.sumup.com`. These exact hosts qualify this sandbox run only. The policy
+keeps forms on Cloud and adds no wildcard or live-provider qualification.
+
+After the review removed the unmeasured `data:` image allowance, the same command
+ran again. `sandbox-policy-tightened.log` records card selection at 00:11:36 UTC
+and mandate selection at 00:11:49 UTC on 8 November, with zero policy violations
+and successful fixture cleanup.

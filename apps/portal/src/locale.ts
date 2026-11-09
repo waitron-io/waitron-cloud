@@ -8,6 +8,10 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  billingMethodsTitle:'Test payment method',billingMethodsIntro:'Test accounts only. Use a sandbox card or test IBAN. Saving a card makes a €1 sandbox payment. No live payment or renewal is collected.',
+  billingSelectedMethod:'Saved method:',billingMethodCard:'Card',billingMethodDebit:'Direct debit',billingMethodNone:'None',billingAddCard:'Add or switch test card',billingAddDebit:'Add or switch test direct debit',
+  billingMethodPending:'Setup is not confirmed. Check the saved method before starting again. Your previous method stays selected.',billingMethodFailed:'Setup failed. Your previous method is unchanged. You can start again.',billingMethodVerified:'Payment method confirmed.',billingMethodRefresh:'Check saved method',
+  billingMethodUncertain:'We could not confirm the setup. Check the saved method before trying again.',billingMethodChanged:'The payment setup changed. Check the saved method.',
   billingTitle:'Connected trial',billingVenue:'Venue',billingLevel:'Current plan',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
   billingIntro:'Try Connected free for 30 days. No card is needed.',billingStart:'Start free trial',billingLastDay:'Last trial day',billingIneligible:'A free trial is unavailable for this venue.',billingEmpty:'No venues are available.',
   billingChanged:'The trial choice changed. Check the current plan below.',billingUncertain:'We could not confirm the change. Check the current plan before trying again.',billingRefresh:'Check current plan',
@@ -265,6 +269,10 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  billingMethodsTitle:'Método de pago de prueba',billingMethodsIntro:'Solo cuentas de prueba. Usa una tarjeta sandbox o un IBAN de prueba. Guardar una tarjeta hace un pago sandbox de 1 €. No se cobran pagos reales ni renovaciones.',
+  billingSelectedMethod:'Método guardado:',billingMethodCard:'Tarjeta',billingMethodDebit:'Domiciliación',billingMethodNone:'Ninguno',billingAddCard:'Añadir o cambiar tarjeta de prueba',billingAddDebit:'Añadir o cambiar domiciliación de prueba',
+  billingMethodPending:'La configuración no está confirmada. Consulta el método guardado antes de volver a empezar. El anterior sigue seleccionado.',billingMethodFailed:'La configuración ha fallado. El método anterior no cambia. Puedes volver a empezar.',billingMethodVerified:'Método de pago confirmado.',billingMethodRefresh:'Consultar método guardado',
+  billingMethodUncertain:'No hemos podido confirmar la configuración. Consulta el método guardado antes de volver a intentarlo.',billingMethodChanged:'La configuración de pago ha cambiado. Consulta el método guardado.',
   billingTitle:'Prueba de Connected',billingVenue:'Local',billingLevel:'Plan actual',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
   billingIntro:'Prueba Connected gratis durante 30 días. No necesitas tarjeta.',billingStart:'Iniciar prueba gratis',billingLastDay:'Último día de prueba',billingIneligible:'La prueba gratis no está disponible para este local.',billingEmpty:'No hay locales disponibles.',
   billingChanged:'La opción de prueba ha cambiado. Revisa el plan actual.',billingUncertain:'No hemos podido confirmar el cambio. Revisa el plan actual antes de volver a intentarlo.',billingRefresh:'Consultar plan actual',

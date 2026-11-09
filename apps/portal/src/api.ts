@@ -8,9 +8,11 @@ import {validAuthenticationOptions, validPasskeyList, validPasskeySummary, valid
 import {validAccountSessions} from './account-security-types.ts';
 import {validUsageSummary} from './usage-types.ts';
 import {validDiagnosticExport} from './diagnostic-types.ts';
-import {validBillingView} from './billing-types.ts';
+import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown, status: number): boolean {
+  if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
+  if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
   if(path==='/billing/read'||path==='/billing/start-trial')return status===200&&validBillingView(value);
   if(path==='/login')return validPasswordLogin(value,status);
   if(path==='/login/factor')return validPasswordLogin(value,status)&&status===200;
@@ -64,7 +66,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
-    if(path==='/billing/start-trial'&&response.status===409)codes.push('conflict');
+    if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active','password_too_long');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
     if(path.startsWith('/recovery/')){

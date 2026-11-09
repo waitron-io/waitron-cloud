@@ -5,6 +5,10 @@ export const securityHeaders = {
   'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
   'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
 };
+export function portalSecurityHeaders(testBillingMethods=false){
+  if(!testBillingMethods)return securityHeaders;
+  return {...securityHeaders,'Content-Security-Policy':"default-src 'none'; script-src 'self' https://gateway.sumup.com; connect-src 'self' https://api.sumup.com https://gateway.sumup.com https://js.sumup.com; frame-src https://gateway.sumup.com https://api.sumup.com https://eu-test.oppwa.com https://test.oppwa.com https://test.ppipe.net; style-src 'self' 'unsafe-inline'; img-src 'self' https://static.sumup.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"};
+}
 export async function loadPortalAssets(directory: string): Promise<PortalAssets> {
   const assets = new Map<string, {body: Uint8Array; contentType: string}>();
   for (const [name, contentType] of [['index.html', 'text/html'], ['app.js', 'text/javascript'], ['app.css', 'text/css']] as const) {
@@ -44,19 +48,19 @@ function preferredLocale(header: string | null): 'en' | 'es' {
   choices.sort((left, right) => right.quality - left.quality || left.index - right.index);
   return choices[0]?.locale ?? 'en';
 }
-export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 503): Response {
+export function portalErrorResponse(request: Request, status: 400 | 404 | 405 | 503, testBillingMethods=false): Response {
   const locale = preferredLocale(request.headers.get('accept-language'));
   const copy = errors[locale]; const [title, detail] = copy[status];
   const encoded = new TextEncoder().encode(`<!doctype html><html lang="${locale}"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>${title} · Waitron Cloud</title><style>body{font-family:system-ui,sans-serif;line-height:1.5;margin:0}main{box-sizing:border-box;max-width:32rem;margin:10vh auto;padding:1.5rem}h1{line-height:1.2}a{text-underline-offset:.15em}</style><main><h1>${title}</h1><p>${detail}</p><p><a href="/">${copy.return}</a></p></main></html>`);
   return new Response(request.method === 'HEAD' ? null : encoded, {status, headers: {
-    ...securityHeaders, 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': String(encoded.byteLength),
+    ...portalSecurityHeaders(testBillingMethods), 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': String(encoded.byteLength),
     ...(status === 405 ? {Allow: 'GET, HEAD'} : {}),
     ...(status === 503 ? {'Retry-After': '1'} : {}),
   }});
 }
-export function portalResponse(request: Request, assets: PortalAssets): Response {
+export function portalResponse(request: Request, assets: PortalAssets, testBillingMethods=false): Response {
   const url = new URL(request.url);
-  const failure = (status: 400 | 404 | 405) => portalErrorResponse(request, status);
+  const failure = (status: 400 | 404 | 405) => portalErrorResponse(request, status, testBillingMethods);
   if (url.search && !['/signup', '/reset-password'].includes(url.pathname)) return failure(400);
   if (!['GET', 'HEAD'].includes(request.method)) return failure(405);
   const key = documents.has(url.pathname) ? '/index.html' : ['/app.js', '/app.css'].includes(url.pathname) ? url.pathname : '';
@@ -67,6 +71,6 @@ export function portalResponse(request: Request, assets: PortalAssets): Response
     start(controller) { controller.enqueue(asset.body); controller.close(); },
   });
   return new Response(body, {headers: {
-    ...securityHeaders, 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
+    ...portalSecurityHeaders(testBillingMethods), 'Content-Type': asset.contentType, 'Content-Length': String(asset.body.byteLength),
   }});
 }

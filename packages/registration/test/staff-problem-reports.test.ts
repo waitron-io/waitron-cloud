@@ -26,7 +26,7 @@ test('staff migration preserves populated automatic reports and applied digests 
   const before=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,prior=(await pool.query('SELECT * FROM installation_error_reports')).rows[0];
   await Promise.all([migrate(pool),migrate(pool)]);await migrate(pool);
   const after=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,54);
+  assert.deepEqual(after.slice(0,53),before);assert.equal(after[52].name,'053_country_flow_authority.sql');assert.equal(after[53].name,'054_staff_problem_reports.sql');assert.equal(after.length,55);
   assert.deepEqual((await pool.query('SELECT * FROM installation_error_reports')).rows,[{...prior,kind:'automatic',details:null,description:null,description_operation_id:null,description_digest:null}]);
   for(const change of ["code=NULL","occurrences=NULL","details='{}'::jsonb","description='Private text'","kind='staff'","kind='other'"]){
    await assert.rejects(pool.query('UPDATE installation_error_reports SET '+change),(error:unknown)=>(error as {code?:string}).code==='23514');

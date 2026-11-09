@@ -636,5 +636,67 @@ Run the focused API checks with `node scripts/test-postgres.mjs exec pnpm --dir
 packages/account-http exec node --test --test-timeout=60000 test/billing-account.test.ts`.
 These checks cover real PostgreSQL lock waits, expiry, ownership changes, concurrent
 starts and rollback. This piece sets no renewal anchor and makes no charge or
-provider request. Payment methods, paid-plan changes and production billing remain
-separate work.
+provider request. Paid-plan changes and production billing remain separate work.
+
+## Test payment-method routes
+
+To exercise saved cards and direct-debit setup with synthetic accounts, enable the
+chooser settings above and set `CLOUD_BILLING_METHODS_MODE=test`. Supply
+`CLOUD_BILLING_STRIPE_TEST_ACCOUNT`, `CLOUD_BILLING_STRIPE_TEST_KEY`,
+`CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT` and `CLOUD_BILLING_SUMUP_SANDBOX_KEY` through
+your private environment. The default is `off`. These routes require a Stripe test
+key and read both providers' account identities before writing; SumUp must report
+the configured merchant with `extdev: true`. Keep real account data out of this test.
+
+POST `/api/account/billing/method/start` with
+`{"venueId":"11111111-1111-4111-8111-111111111111","kind":"card"}` or
+`kind: "direct_debit"`, using the same origin, session cookie and CSRF header as the
+chooser. Cards return a `checkoutId` for SumUp's widget; direct debit returns a
+`url` restricted to `https://checkout.stripe.com`, which returns to `/account`.
+The SumUp setup is a €1 sandbox checkout, as recorded in the
+[provider test](../../docs/billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge).
+On `/account`, choose **Add or switch test card** or **Add or switch test direct debit**.
+Card details stay in SumUp’s widget; your bank details stay on Stripe’s page.
+After returning from Stripe, choose **Check saved method** to verify the saved setup.
+A pending or failed setup keeps your previous method selected. If a reply is lost,
+check the saved method before starting again.
+
+POST `/api/account/billing/method/verify` with only the venue ID. The server reads
+the saved setup rather than accepting a customer, token or checkout reference from
+your browser. The response is `{"state":"pending"}`, `{"state":"failed"}` or
+`{"state":"verified"}`. The existing method stays selected until verification
+succeeds. Starting again replaces the pending setup; a late response cannot select
+the replaced method. An uncertain provider write is never automatically repeated.
+
+With methods enabled, billing/read adds `paymentMethods` to test venues, for example
+`{"selected":"card","setup":{"kind":"direct_debit","state":"pending"}}`.
+This view contains no private provider references. Read state is derived from the
+saved binding and completed method row; a provider refusal appears in the verify
+reply. A local read reports any unconfirmed setup as pending; it cannot distinguish
+a provider still working from a refused or interrupted setup. Use verify for a
+current provider result. Each provider request rechecks authority, and the final transaction checks it
+again before returning setup details or selecting a method. Both method routes share
+the chooser's limit of 30 requests per account per minute. They leave renewal dates
+and paid periods unchanged.
+
+Run `node scripts/test-postgres.mjs exec node --test --test-timeout=30000
+packages/account-http/test/billing-method-routes.test.ts` for the route checks with
+fake providers and real PostgreSQL. The provider client checks use local HTTP servers:
+`node --test packages/account-http/test/billing-method-client.test.ts
+packages/account-http/test/billing-method-config.test.ts
+packages/account-http/test/billing-methods.test.ts`. These checks do not call either
+provider. Run `node --test apps/portal/test/billing-methods.test.ts
+apps/portal/test/billing-methods-browser.test.ts
+packages/account-http/test/billing-method-csp.test.ts` for the portal and security-policy
+checks. The browser checks use fake providers. See the [provider
+receipt](../../docs/billing-provider-test.md) for the separate sandbox runs. Live
+qualification remains open.
+
+With test methods enabled, every portal document and asset, including error replies,
+uses the same policy with exact sandbox hosts. Script loading is restricted to
+`gateway.sumup.com`; frames can also use `api.sumup.com`, `eu-test.oppwa.com`,
+`test.oppwa.com` and `test.ppipe.net`. Connections can reach `api.sumup.com`,
+`gateway.sumup.com` and `js.sumup.com`; images can use `static.sumup.com`. The sandbox run in the receipt observed these hosts through card confirmation.
+Forms still submit only to Cloud. When test methods are off, these exceptions are
+absent. Changing account, venue or page removes the card widget and discards its
+late replies.
