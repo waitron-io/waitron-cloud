@@ -135,7 +135,9 @@ test('history keeps every supplied incident in newest resolution order without c
   const input=state==='no_incident'?{state,updatedAt:incident.updatedAt}:{...incident,state};
   const legacy=renderStatusPage(input),pages=renderStatusPage({...input,history});
   for(const path of ['index.html','es/index.html'] as const){
-   assert.equal(pages[path].match(/<article>[\s\S]*?<\/article>/)![0],legacy[path].match(/<article>[\s\S]*?<\/article>/)![0]);
+   const withoutHistory=pages[path].replace(/<section class="history">[\s\S]*?<\/section>/,'')
+    .replace(/\n?\.history[^{}]*\{[^{}]*\}/g,'');
+   assert.equal(withoutHistory,legacy[path]);
    const entries=[...pages[path].matchAll(/<li>[\s\S]*?<\/li>/g)].map(match=>match[0]);
    assert.equal(entries.length,3);
    assert.ok(entries[2]!.includes('datetime="2028-02-29T00:00:00Z"'));
