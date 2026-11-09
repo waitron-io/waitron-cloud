@@ -209,6 +209,60 @@
           }
         ]
       }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {"name": "verifier", "labels": {"app": "verifier"}},
+      "spec": {
+        "restartPolicy": "Never",
+        "terminationGracePeriodSeconds": 15,
+        "volumes": [
+          {
+            "name": "config",
+            "hostPath": {"path": "/var/local/d620-config", "type": "Directory"}
+          },
+          {
+            "name": "socket",
+            "emptyDir": {}
+          },
+          {
+            "name": "docker-data",
+            "emptyDir": {}
+          },
+          {
+            "name": "verifier-state",
+            "emptyDir": {}
+          },
+          {
+            "name": "tmp",
+            "emptyDir": {"sizeLimit": "96Mi"}
+          }
+        ],
+        "containers": [
+          {
+            "name": "docker",
+            "image": "docker:29.9.3-dind",
+            "args": ["--host=unix:///docker-socket/docker.sock"],
+            "env": [{"name": "DOCKER_TLS_CERTDIR", "value": ""}, {"name": "DOCKER_HOST", "value": "unix:///docker-socket/docker.sock"}],
+            "securityContext": {"privileged": true},
+            "volumeMounts": [{"name": "socket", "mountPath": "/docker-socket"}, {"name": "docker-data", "mountPath": "/var/lib/docker"}],
+            "startupProbe": {"exec": {"command": ["docker", "info"]}, "periodSeconds": 1, "failureThreshold": 60},
+            "resources": {"limits": {"memory": "2048Mi"}}
+          },
+          {
+            "name": "verifier",
+            "image": "CLOUD_IMAGE",
+            "imagePullPolicy": "Never",
+            "command": ["sh", "-ec", "until [ -f /run/backup-verifier/image-loaded ]; do sleep 1; done; exec node deploy/test-cloud/test-fixtures/integration-verifier.mjs"],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}, {"name": "CLOUD_VERIFIER_IMAGE", "value": "PINNED_WAITRON_IMAGE"}, {"name": "CLOUD_INTEGRATION_POINT_ID", "value": "CAPTURED_POINT_ID"}, {"name": "CLOUD_INTEGRATION_WAITRON_REVISION", "value": "PINNED_WAITRON_REVISION"}, {"name": "DOCKER_HOST", "value": "unix:///docker-socket/docker.sock"}],
+            "securityContext": {"readOnlyRootFilesystem": true, "allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}},
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack", "readOnly": true}, {"name": "socket", "mountPath": "/docker-socket"}, {"name": "verifier-state", "mountPath": "/run/backup-verifier"}, {"name": "tmp", "mountPath": "/tmp"}],
+            "resources": {"limits": {"memory": "128Mi"}}
+          }
+        ],
+        "hostAliases": [{"ip": "CLOUD_POD_IP", "hostnames": ["waitron.local"]}]
+      }
     }
   ]
 }
