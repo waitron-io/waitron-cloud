@@ -569,6 +569,26 @@ refusal retain their separate qualification gates.
 
 ## Native storage admin fallback exhaustion (D506)
 
+The service allocator now chooses Linux 61000–65535 or Mac 32768–49151, outside
+those platforms’ measured automatic port ranges. The ownership control reads the
+running kernel’s range and drives eight distinct upper-edge choices; the old
+allocator fails on 60999 on the Mac. The Linux run below passes all 59 cases,
+including real native storage on the high ports. This addresses automatic
+listeners taking a released service port, including automatic issuer listeners;
+it does not attribute every historical refusal or measure the recurrence rate.
+
+```sh
+node --test --test-concurrency=2 scripts/ci-backup-storage-port-ownership.test.mjs scripts/ci-backup-storage-claim-before-bind.test.mjs scripts/ci-backup-storage-reservation-refusals.test.mjs scripts/ci-storage-admin-handoff.test.mjs scripts/ci-backup-storage-readiness-diagnostics.test.mjs deploy/test-cloud/storage-startup.test.mjs deploy/test-cloud/storage-s3-grpc.test.mjs deploy/test-cloud/storage-admin-ports.test.mjs deploy/test-cloud/storage-admin-exhaustion.test.mjs
+```
+
+A final allocated-port collision prints the existing listening-only snapshot
+captured before cleanup. The occupied-filer controls retain the original failure
+and competing listener, including when the reporter throws. An absent observed
+owner remains inconclusive. All eight claims, the single native restart, readiness
+budgets and existing assertions remain. The admin HTTP control still injects its
+low service port deliberately, so its unsafe derived-port check is retained.
+
+
 The admin test listeners could take another fixture's service port during the
 handoff from reservation socket to native child. Run
 `node --test scripts/ci-storage-admin-handoff.test.mjs` to pause a native child

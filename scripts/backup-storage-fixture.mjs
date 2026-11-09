@@ -101,9 +101,14 @@ export async function startBackupStorage(options = {}) {
       const refused = /Port allocation failed: port (\d+) .*is not available on 127\.0\.0\.1 and cannot be used/.exec(error.message);
       const bound = /listen tcp 127\.0\.0\.1:(\d+): bind: address already in use/.exec(error.message);
       const port = Number((refused ?? bound)?.[1]);
-      if (attempt >= 1 || options.retryPortCollision === false ||
-          !error.message.startsWith("SeaweedFS exited: ") ||
-          !Object.values(error.storageStartup?.ports ?? {}).includes(port)) throw error;
+      const collision = error.message.startsWith("SeaweedFS exited: ") &&
+        Object.values(error.storageStartup?.ports ?? {}).includes(port);
+      if (attempt >= 1 || options.retryPortCollision === false || !collision) {
+        if (collision) {
+          try { console.error("Storage fixture port handoff failed:", error.storageStartup); } catch {}
+        }
+        throw error;
+      }
       // A failed diagnostic sink must not cancel the already-qualified retry.
       try { console.error("Storage fixture port handoff failed; retrying once:", error); } catch {}
     }
@@ -342,8 +347,10 @@ async function startBackupStorageAttempt(options) {
     // that has not bound it yet. Hold all eight reservations through selection.
     for (let candidates = 0; ports.length < 8; candidates++) {
       if (candidates === 256) throw Error("Could not reserve unclaimed storage ports");
-      // Preserve Linux's usual odd-listener/even-outgoing port preference.
-      const port = randomInt(32768, 61000) | 1;
+      // Keep service ports outside each platform's default automatic band so
+      // automatic listeners cannot take them during the native process handoff.
+      const [first, end] = process.platform === "darwin" ? [32768, 49152] : [61000, 65536];
+      const port = randomInt(first, end) | 1;
       const claim = join(portClaimsDirectory, String(port));
       try { await symlink(root, claim); }
       catch (error) {

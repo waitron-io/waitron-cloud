@@ -23,7 +23,8 @@ for (const {exhausted, occupied, http = false} of [
   const controlChildren = [], controlRoots = new Set();
   const spawned = new Promise(resolve => { announceSpawn = resolve; });
   if (http) t.mock.method(crypto, 'randomInt', (min, max, ...rest) =>
-    min === 32768 && max === 61000 ? choose(32768, 42668) : choose(min, max, ...rest));
+    ((min === 32768 && max === 49152) || (min === 61000 && max === 65536))
+      ? choose(32768, 42668) : choose(min, max, ...rest));
   t.mock.method(childProcess, 'spawn', (binary, args, options) => {
     if (args[0] !== 'mini') return spawn(binary, args, options);
     native = spawn('sh', ['-c', 'kill -STOP $$; exec "$@"', 'sh', binary, ...args], options);
