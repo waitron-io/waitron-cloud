@@ -14,7 +14,7 @@ on 84/87-job runs. Every consumer keeps its completeness, trust and admission ch
 later siblings observed as assigned that bar cancellation. Source tests exercise paginated
 admission and refusal; keep actual published pickup as separate operating evidence.
 
-A1440's whole-run overflow now requires observed hosted room for the run’s non-skipped jobs, with no hosted queue and complete repository inventories. Existing next-attempt markers reserve their pending work in that count. This constrains automatic moves; it does not split a run between the two pools or reserve account-wide capacity. Per-job routing and the first-day measurements remain open.
+A1440's whole-run overflow now requires observed hosted room for the run’s visible non-skipped jobs, with no hosted queue and complete repository inventories read once per pickup outside the controller lock. Fresh hosted markers reserve pending work, including retry jobs not yet visible. This constrains automatic moves; it does not split a run between the two pools or reserve account-wide capacity. Per-job routing and the first-day measurements remain open.
 
 A1440's execution monitor now checks guest liveness independently when GitHub reads fail
 with a network error, timeout, interrupted body or HTTP 5xx response. It retains confirmed
