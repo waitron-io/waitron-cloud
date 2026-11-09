@@ -55,7 +55,7 @@ for (const [file, name] of cases) {
         const sourceReads = starts.filter(event => event.argv.includes('show') && /^[a-f0-9]{40}:.*\.[cm]?[jt]sx?$/.test(event.argv.at(-1)));
         assert.equal(sourceReads.length, 0, 'Fixture package discovery must not launch Git once per source file');
         const batches = starts.filter(event => event.argv.includes('cat-file') && event.argv.includes('--batch'));
-        assert.equal(batches.length, file === 'ci-local-stack-receipt.test.mjs' ? 2 : 8, 'Fixture package discovery must read both saved revisions for every checked plan in batches');
+        assert.equal(batches.length, file === 'ci-local-stack-receipt.test.mjs' ? 2 : 14, 'Fixture package discovery must read both saved revisions for every checked plan in batches');
       }
     } finally {rmSync(root, {recursive: true, force: true});}
   });
