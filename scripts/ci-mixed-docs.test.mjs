@@ -162,3 +162,16 @@ test('PR reader refusal keeps only the package owner but retains every receipt s
   assert.match(selected.reason, /Unverified package revisions/);
   assert.equal(selected.typecheck, true);
 }));
+
+test('a PR portal reader refusal cannot borrow its narrowed package scope for receipts', () => fixture(({put, commit, prPlan}) => {
+  put('apps/portal/package.json', JSON.stringify({name: '@waitron-cloud/portal', private: true,
+    scripts: {test: 'node --test test/*.test.ts'}}));
+  put('apps/portal/src/app.ts', "import {globSync} from 'node:fs'; export const discover = () => globSync('**');\n");
+  for (let i = 0; i < 6; i++) put(`apps/portal/test/${i}.test.ts`, 'export {};\n');
+  const base = commit();
+  put('apps/portal/src/app.ts', "import {globSync} from 'node:fs'; export const discover = () => globSync('**');\nexport const changed = true;\n");
+  const selected = prPlan(commit(), base);
+  assert.deepEqual(selected.packages.map(row => row.package), Array(6).fill('@waitron-cloud/portal'));
+  assert.equal(selected.receipts.length, 6);
+  assert.match(selected.reason, /Unverified package revisions/);
+}));
