@@ -162,7 +162,7 @@ for(const code of [6,7,18,28,52,55,56])test(`guest downloads retry network exit 
  const result=toolDownload(t,`${code}:000,0:200`);assert.equal(result.status,0,result.stderr);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'2');assert.equal(result.stderr,'');
 });
-for(const [code,http] of [[22,401],[22,404],[22,408],[22,429],[6,404],[35,'000'],[60,'000'],[63,'000']])test(`guest downloads refuse curl ${code} HTTP ${http} immediately`,t=>{
+for(const [code,http] of [[0,404],[22,401],[22,404],[22,408],[22,429],[6,404],[35,'000'],[60,'000'],[63,'000']])test(`guest downloads refuse curl ${code} HTTP ${http} immediately`,t=>{
  const result=toolDownload(t,`${code}:${http},0:200`);assert.notEqual(result.status,0);
  assert.equal(readFileSync(join(result.root,'count'),'utf8').trim(),'1');
  assert.match(result.stderr,/Node download failed/);assert.match(result.stderr,new RegExp(`curl ${code}`));
@@ -197,11 +197,15 @@ test('an attempt that spends its budget makes no retry',t=>{
 });
 test('corrupt Node, pnpm and runner bytes fail with the tool named before extraction',t=>{
  const root=mkdtempSync(join(tmpdir(),'guest-integrity-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const checksumPath=process.platform==='darwin'?'/opt/homebrew/opt/coreutils/libexec/gnubin:/usr/local/opt/coreutils/libexec/gnubin:'+process.env.PATH:process.env.PATH;
+ writeFileSync(join(root,'known-bytes'),'abc');
+ const good=spawnSync('bash',['-c',`printf '%s  %s\\n' ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad "$ROOT/known-bytes" | sha256sum --check --status`],{encoding:'utf8',timeout:5000,env:{...process.env,PATH:checksumPath,ROOT:root}});
+ assert.equal(good.status,0,good.stderr);
  for(const [script,file,message] of [['guest-tools.sh','node.tar.xz',/Node integrity mismatch/],['guest-tools.sh','pnpm.tgz',/pnpm integrity mismatch/],['runner-tools.sh','runner.tgz',/Actions runner integrity mismatch/]]){
   writeFileSync(join(root,file),'corrupt');
   const source=readFileSync(new URL('../../deploy/disposable-tests/'+script,import.meta.url),'utf8');
   const check=file==='pnpm.tgz' ? source.match(/python3 - "\$temporary\/pnpm.tgz" <<'PY'\n[\s\S]*?\nPY/)[0] : source.split('\n').find(line=>line.startsWith('printf ') && line.includes(file));
-  const result=spawnSync('bash',['-c','set -euo pipefail\ntemporary="$ROOT"\n'+check],{encoding:'utf8',timeout:5000,env:{...process.env,ROOT:root}});
+  const result=spawnSync('bash',['-c','set -euo pipefail\ntemporary="$ROOT"\n'+check],{encoding:'utf8',timeout:5000,env:{...process.env,PATH:checksumPath,ROOT:root}});
   assert.notEqual(result.status,0);assert.match(result.stderr,message);
   assert.ok(source.indexOf(check)<source.indexOf('tar --extract',source.indexOf(check)));
  }

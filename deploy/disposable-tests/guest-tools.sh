@@ -39,18 +39,43 @@ timeout 180s apt-get install -y --no-install-recommends \
   'libxkbcommon0=1.7.0-2' 'libxrandr2=2:1.5.4-1+b3'
 temporary=$(mktemp -d /tmp/disposable-tools.XXXXXXXX)
 trap 'rm -rf -- "$temporary"' EXIT
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-  --connect-timeout 10 --max-time 60 --max-filesize 134217728 \
-  https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz -o "$temporary/node.tar.xz"
-printf '%s  %s\n' d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997 "$temporary/node.tar.xz" | sha256sum --check --status
+# BEGIN bounded download
+download() {
+  local tool=$1 budget=$2 limit=$3 url=$4 output=$5
+  local end=$((SECONDS + budget)) attempt remaining status=0 http=000 reason='budget exhausted'
+  for attempt in 1 2 3; do
+    remaining=$((end - SECONDS))
+    if ((remaining <= 0)); then reason='budget exhausted'; break; fi
+    rm -f -- "$output"
+    status=0
+    http=$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      --connect-timeout 10 --max-time "$remaining" --max-filesize "$limit" \
+      --write-out '%{http_code}' "$url" -o "$output" 2>/dev/null) || status=$?
+    case "$http" in 4??) reason='HTTP request refused'; break;; esac
+    if ((status == 0)); then return 0; fi
+    reason='request failed'
+    case "$status:$http" in
+      22:5??|6:*|7:*|18:*|28:*|52:*|55:*|56:*) ;;
+      *) break;;
+    esac
+    if ((SECONDS >= end)); then reason='budget exhausted'; break; fi
+    if ((attempt < 3)); then
+      printf '%s download attempt %s failed (curl %s HTTP %s); retrying\n' "$tool" "$attempt" "$status" "$http"
+      sleep 1
+    fi
+  done
+  printf '%s download failed: %s (curl %s HTTP %s)\n' "$tool" "$reason" "$status" "$http" >&2
+  return 1
+}
+# END bounded download
+download Node 60 134217728 https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz "$temporary/node.tar.xz""
+printf '%s  %s\n' d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997 "$temporary/node.tar.xz" | sha256sum --check --status || { echo 'Node integrity mismatch' >&2; exit 1; }
 mkdir -p /opt/waitron-tools/pnpm
 tar --extract --xz --file "$temporary/node.tar.xz" --directory /opt/waitron-tools --no-same-owner
 for tool in node npm npx; do
   ln -s /opt/waitron-tools/node-v26.13.0-linux-x64/bin/"$tool" /usr/local/bin/"$tool"
 done
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-  --connect-timeout 10 --max-time 30 --max-filesize 33554432 \
-  https://registry.npmjs.org/pnpm/-/pnpm-9.15.0.tgz -o "$temporary/pnpm.tgz"
+download pnpm 30 33554432 https://registry.npmjs.org/pnpm/-/pnpm-9.15.0.tgz "$temporary/pnpm.tgz""
 python3 - "$temporary/pnpm.tgz" <<'PY'
 import base64,hashlib,sys
 with open(sys.argv[1],'rb') as source:
