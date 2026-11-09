@@ -165,7 +165,7 @@ test("native storage service ports stay outside the kernel automatic range", {ti
     try { await storage?.stop(); }
     finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
   });
-  t.mock.method(crypto, "randomInt", (min, max) => max - 1 - 2 * selections++);
+  t.mock.method(crypto, "randomInt", (min, max) => { const i = selections++; return i % 2 ? min + i - 1 : max - 1 - i; });
   t.mock.method(childProcess, "spawn", (binary, args, options) => {
     if (args[0] === "mini") {
       starts++;

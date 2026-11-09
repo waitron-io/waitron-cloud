@@ -742,8 +742,8 @@ running kernel’s automatic range and checks all eight native ports before a re
 bucket operation. Final allocated-port collisions print the existing listener
 snapshot; the single restart, claims and assertions remain. The Linux focused run
 passed 59 cases, but does not identify every historical owner or measure recurrence.
-Default native admin behaviour, admin-worker functionality and other programs’
-explicit bind races remain separate qualifications. See
+The progress-control timeout, default native admin behaviour, admin-worker
+functionality and other programs’ explicit bind races remain separate qualifications. See
 [the commands and limits](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
 
 ## Repository licence

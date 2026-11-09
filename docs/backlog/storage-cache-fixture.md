@@ -571,7 +571,7 @@ refusal retain their separate qualification gates.
 
 The service allocator now chooses Linux 61000–65535 or Mac 32768–49151, outside
 those platforms’ measured automatic port ranges. The ownership control reads the
-running kernel’s range and drives eight distinct upper-edge choices; the old
+running kernel’s range and drives eight distinct choices at both edges; the old
 allocator fails on 60999 on the Mac. The Linux run below passes all 59 cases,
 including real native storage on the high ports. This addresses automatic
 listeners taking a released service port, including automatic issuer listeners;
@@ -598,7 +598,7 @@ or its 101-port range reproduces an S3 startup refusal. The 101 admin-gRPC owner
 stay below 32768. The fallback cases select
 owners below 22668, leaving room for HTTP's derived gRPC port 10000 higher and
 the next 100 fallback choices. This keeps these controlled listeners outside
-the service allocator's 32768–60999 range. An occupied admin candidate retries
+the service allocator's then-current 32768–60999 range. An occupied admin candidate retries
 within 20 selections. The original admin assertions, all 101
 competing listeners, single-child checks and deadlines remain.
 
