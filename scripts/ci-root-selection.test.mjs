@@ -97,7 +97,7 @@ test('uncertain filesystem inventories never return partial advice', () => fixtu
   assert.throws(() => api.selectRootFiles(1, context));
 }));
 
-test('the workflow keeps its complete literal fallback and passes the full and planner decisions', () => {
+test('the workflow passes the full and planner decisions to root advice', () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const root = workflow.match(/^  root:\n([\s\S]*?)(?=^  [\w-]+:)/m)?.[1] ?? '';
   assert.match(root, /CI_FORCE_FULL: \$\{\{ inputs.full \}\}/);

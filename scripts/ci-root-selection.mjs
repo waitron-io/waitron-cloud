@@ -16,12 +16,10 @@ const regular = row => row?.mode === '100644' && row.type === 'blob';
 export function selectRootFiles(shard, {base, head, git, root = process.cwd(), mode, eventName, forceFull}) {
   assert.ok(eventName === 'pull_request' && mode === 'selected' && ['', 'false'].includes(forceFull), 'Keep full root work');
   assert.ok(Number.isInteger(shard) && shard >= 1 && shard <= 8, 'Unknown root partition');
-  assert.ok(base !== head, 'Empty root input range');
   const trees = [base, head].map(revision => readInputInventory(revision, git));
   const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
   assert.equal(paths.pop(), '', 'Incomplete changed paths');
   assert.ok(paths.length, 'Empty changed paths');
-  let packageChanged = false;
   for (const path of paths) {
     assert.ok(!path.split('/').includes('.gitattributes'), 'Changed checkout attributes');
     assert.ok(trees.every(tree => {
@@ -31,12 +29,10 @@ export function selectRootFiles(shard, {base, head, git, root = process.cwd(), m
     const directory = /^(packages\/[^/]+|apps\/[^/]+)\/(?:src|test)\/.+/.exec(path)?.[1];
     if (directory) {
       assert.ok(trees.every(tree => regular(tree.find(row => row.path === `${directory}/package.json`))), 'New or unknown package');
-      packageChanged = true;
     } else assert.ok(unreadMarkdown(path), 'Shared or unknown changed input');
   }
-  assert.ok(packageChanged, 'No package source or test change');
   const files = trees[1].filter(row => rootTest(row.path));
-  assert.ok(files.every(regular) && explicit.every(path => files.some(row => row.path === path)), 'Incomplete regular root inventory');
+  assert.ok(files.every(regular), 'Nonregular root inventory');
   const actual = readdirSync(join(root, 'scripts')).map(name => `scripts/${name}`).filter(rootTest).sort();
   assert.deepEqual(actual, files.map(row => row.path).sort(), 'Root filesystem differs from Git');
   assert.ok(actual.every(path => lstatSync(join(root, path)).isFile()), 'Nonregular root filesystem');

@@ -26,7 +26,7 @@ The possible decisions are:
 
 | Mode | What must be proved |
 | --- | --- |
-| `reused` | Its own complete, successful PR attempt checked the same tree. The current planner and summary pass; product jobs are skipped. |
+| `reused` | Its own successful PR attempt completed every selected check on the same tree. The current planner and summary pass; product jobs are skipped. Reuse does not rerun an advised PR's omitted root suites. |
 | `selected` | The selection matches the literal main `before..after` range, including every pushed commit. All selected jobs pass. |
 | `full` | The complete current inventory runs because the invocation requires full work or evidence could not justify less. |
 | `unselected` | A native proof has a verified nonempty range with no relevant inputs. Its planner and summary pass and its known proof jobs are skipped. |

@@ -280,7 +280,7 @@ test('configured root and receipt preflights verify the event plan before runnin
     const step = /- name: Verify exact root input work\n\s+run: ([^\n]+)\n\s+env:\n\s+CI_PLAN: ([^\n]+)/.exec(body);
     assert.ok(step, `Missing executed preflight in ${job}`);
     assert.equal(step[2], '${{ needs.changes.outputs.plan }}');
-    assert.ok(step.index < body.indexOf(job === 'root' ? '- run: node --test' : '- run: node scripts/ci-run-receipts.mjs'));
+    assert.ok(step.index < body.indexOf(job === 'root' ? '- name: Run root checks' : '- run: node scripts/ci-run-receipts.mjs'));
     const [runtime, program, ...args] = step[1].split(' '); assert.equal(runtime, 'node');
     const run = () => spawnSync(process.execPath, [fileURLToPath(new URL(`../${program}`, import.meta.url)), ...args], {
       cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan)}});

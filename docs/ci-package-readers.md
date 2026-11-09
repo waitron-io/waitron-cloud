@@ -83,8 +83,10 @@ These are graph selections, not executed package checks or duration savings.
 Real imports, shared fixtures and explicitly declared generated inputs remain
 consumers in the retained default/push policy. PR tests use changed package owners;
 whole-workspace typechecking and nightly tests cover dependents.
-These counts describe package jobs only. Type checking and root checks keep
-their existing rules. Whenever these declarations qualify narrower package
+These counts describe package jobs only. Type checking and root job selection
+keep their existing rules; selected package-only root commands may use
+[the audited advice](ci-root-input-ownership.md#package-only-root-advice-10-november-2026).
+Whenever these declarations qualify narrower package
 work, all six existing receipt suites remain selected. Package precision does
 not prove that an independent receipt can be omitted. Receipt reductions need
 separate evidence, including Cloud-cost consumers of portal or UI build tools.
