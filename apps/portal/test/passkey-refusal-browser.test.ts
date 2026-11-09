@@ -12,11 +12,16 @@ const labels = {
   en: {check: 'Check passkeys', registration: 'Check your passkeys. To add one, enter your password and start a new prompt. Choose another passkey if it is already registered. Password sign-in remains available.', removal: 'Check your passkeys. If this key is still listed, enter your password and remove it again. Password sign-in remains available.'},
   es: {check: 'Comprobar llaves de acceso', registration: 'Comprueba tus llaves de acceso. Para añadir una, introduce tu contraseña e inicia una nueva solicitud. Elige otra llave si ya está registrada. Puedes seguir entrando con tu contraseña.', removal: 'Comprueba tus llaves de acceso. Si esta llave sigue en la lista, introduce tu contraseña y elimínala de nuevo. Puedes seguir entrando con tu contraseña.'},
 };
+const bodyGuidance = {
+  en: {408: 'This passkey request was interrupted.', 413: 'This passkey request’s size wasn’t accepted. Retrying may not help.', 415: 'This passkey request arrived in an unsupported format.'},
+  es: {408: 'Se ha interrumpido esta petición de llave de acceso.', 413: 'No se ha aceptado el tamaño de esta petición de llave de acceso. Puede que reintentarlo no sirva.', 415: 'Esta petición de llave de acceso ha llegado en un formato no admitido.'},
+};
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: refused passkey changes have a read-only check and fresh attempt`, async t => {
     const browser = await chromium.launch({headless: true});
     const flows = ['options', 'verify', 'remove', 'browser-duplicate', 'failed-list', 'navigation', ...(locale === 'en' && theme === 'light' && width === 390 ? ['missing-handler'] as const : [])] as const;
-    try { for (const flow of flows) await t.test(flow, async () => {
+    const cases = flows.flatMap(flow => [{flow, status: 400}, ...(['options', 'verify', 'remove'].includes(flow) ? [408, 413, 415].map(status => ({flow, status})) : [])]);
+    try { for (const {flow, status} of cases) await t.test(`${flow}:${status}`, async () => {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
       let release!: () => void;
@@ -24,6 +29,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       let checking = false, refused = false, refusingAgain = false, reads = 0, added = false, removed = false, optionsCount = 0;
       const writes: {path: string; body: Record<string, unknown>}[] = [];
       const c = translations[locale], text = labels[locale];
+      const expected = status === 400 ? (flow === 'remove' ? text.removal : text.registration) : bodyGuidance[locale][status as 408 | 413 | 415] + (locale === 'en' ? ' Check passkeys before another change.' : ' Comprueba tus llaves de acceso antes de otro cambio.');
       const failureAt = flow === 'failed-list' || flow === 'navigation' || flow === 'missing-handler' ? 'verify' : flow;
       try {
         const virtual = await page.context().newCDPSession(page);
@@ -43,7 +49,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           if (path === '/passkeys') {reads++; if (checking) await checked; if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
-            if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(failureAt === 'options' ? '/options' : failureAt === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
+            if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(failureAt === 'options' ? '/options' : failureAt === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
             if (path.endsWith('/options')) {
               optionsCount++;
               return route.fulfill({json: {ceremonyId: optionsCount === 1 ? id : addedId, options: {challenge: optionsCount === 1 ? 'YWJj' : 'ZGVm', rp: {name: 'Waitron Cloud', id: 'portal.test'}, user: {id: 'b3duZXI', name: 'owner@example.test', displayName: 'Owner'}, pubKeyCredParams: [{type: 'public-key', alg: -7}]}}});
@@ -59,7 +65,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const action = section.getByRole('button', {name: flow === 'remove' ? c.passkeyRemove : c.passkeyAdd, exact: true}).first();
         await section.locator('.passkey-list li').waitFor();
         await password.fill('Old password'); await action.click();
-        await section.getByRole('alert').getByText(flow === 'remove' ? text.removal : text.registration, {exact: true}).waitFor();
+        await section.getByRole('alert').getByText(expected, {exact: true}).waitFor();
         assert.equal(await section.getByText(c.passkeyUnavailable, {exact: true}).count(), 0);
         assert.equal(await section.getByRole('alert').count(), 1);
         assert.equal(await section.getByRole('button', {name: c.retry, exact: true}).count(), 0, 'one list-check action even if the automatic read failed');
@@ -67,7 +73,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const refresh = section.getByRole('button', {name: text.check, exact: true});
         assert.equal(await refresh.isEnabled(), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-        if (process.env.PASSKEY_REFUSAL_RECEIPT_DIR && flow === 'verify') {await mkdir(process.env.PASSKEY_REFUSAL_RECEIPT_DIR, {recursive: true}); await section.screenshot({path: `${process.env.PASSKEY_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
+        if (process.env.PASSKEY_REFUSAL_RECEIPT_DIR && flow === 'verify') {await mkdir(process.env.PASSKEY_REFUSAL_RECEIPT_DIR, {recursive: true}); await section.screenshot({path: `${process.env.PASSKEY_REFUSAL_RECEIPT_DIR}/${status}-${locale}-${theme}-${width}.png`});}
         const before = writes.length, beforeReads = reads; checking = true;
         if (flow === 'navigation') await page.evaluate(() => {
           const w = window as unknown as {passkeyRefusalApp: {refreshPasskeys(): Promise<void>}; passkeyRefreshDone: Promise<void>};
@@ -119,7 +125,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await password.inputValue(), '');
         if (flow === 'options') {
           refusingAgain = true; await password.fill('Fresh password'); await action.click();
-          await section.getByRole('alert').getByText(text.registration, {exact: true}).waitFor();
+          await section.getByRole('alert').getByText(expected, {exact: true}).waitFor();
           const beforeWaitReads = reads, beforeWaitWrites = writes.length;
           assert.equal(await refresh.isDisabled(), true, 'the check button honors the response retry delay');
           await refresh.evaluate(el => (el as HTMLButtonElement).click());

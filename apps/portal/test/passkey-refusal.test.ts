@@ -11,14 +11,14 @@ const response = {id: 'credential', rawId: 'credential', type: 'public-key' as c
   response: {clientDataJSON: 'client', attestationObject: 'attestation'}};
 const browser: PasskeyBrowser = {supported: async () => true, register: async () => response, authenticate: async () => {throw new Error('unexpected sign-in');}};
 const refusal = {ok: false, status: 400, code: 'invalid_input', retryAfterMs: 0} as const;
-function fixture(stage: 'options' | 'verify' | 'remove', failure: ApiResult<unknown> = refusal) {
+function fixture(stage: 'options' | 'verify' | 'remove' | 'signin-options' | 'signin-verify', failure: ApiResult<unknown> = refusal, listed = [key]) {
   const calls: {path: string; body?: Record<string, unknown>}[] = [];
   const c = new PasskeyController(() => {}, async <T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> => {
     calls.push({path, body});
-    if (path === '/passkeys') return {ok: true, value: {passkeys: [key]} as T};
-    if (path.endsWith('/options') && stage !== 'options') return {ok: true, value: options as T};
+    if (path === '/passkeys') return {ok: true, value: {passkeys: listed} as T};
+    if (path.endsWith('/options') && stage !== 'options' && stage !== 'signin-options') return {ok: true, value: options as T};
     return failure as ApiResult<T>;
-  }, browser);
+  }, {...browser, authenticate: async () => ({id: 'credential', rawId: 'credential', type: 'public-key', clientExtensionResults: {}, response: {clientDataJSON: 'client', authenticatorData: 'data', signature: 'signature'}})});
   c.account('owner'); c.passkeys = [key]; c.loaded = true; c.listLoaded = true; c.password = 'Current password';
   return {c, calls};
 }
@@ -111,4 +111,28 @@ test('a JavaScript error named InvalidStateError does not claim a browser duplic
   const c = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => ({ok: true, value: options as T}),
     {...browser, register: async () => {throw Object.assign(new Error('Other failure'), {name: 'InvalidStateError'});}});
   c.account('owner'); await c.enroll('Current password'); assert.equal(c.error, 'passkeyUnavailable');
+});
+
+for (const stage of ['options', 'verify', 'remove', 'signin-options', 'signin-verify'] as const) for (const [status, name] of [[408, 'Interrupted'], [413, 'Size'], [415, 'Format']] as const) {
+  test(`${stage}: ${status} body refusal names its cause and the next action`, async () => {
+    const {c, calls} = fixture(stage, {ok: false, status, code: 'invalid_input', retryAfterMs: 0});
+    if (stage.startsWith('signin')) assert.equal(await c.signIn(), false);
+    else if (stage === 'remove') await c.remove(id, c.password); else await c.enroll(c.password);
+    assert.equal(c.error, `passkeyRequest${name}${stage.startsWith('signin') ? 'SignIn' : ''}`);
+    assert.equal(c.notice, undefined); assert.equal(c.pending, false);
+    assert.equal(calls.filter(call => call.body !== undefined).length, stage === 'verify' || stage === 'signin-verify' ? 2 : 1);
+  });
+}
+for (const status of [400, 408, 413, 415, 431]) test(`list ${status} is a read refusal, with no body-change guidance`, async () => {
+  const c = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => ({ok: false, status, code: 'invalid_input', retryAfterMs: 0}), browser);
+  c.account('owner'); await c.load(); assert.equal(c.error, 'passkeyUnavailable'); assert.equal(c.listLoaded, false);
+});
+for (const [status, code, expected] of [[408, 'unavailable', 'passkeyUnavailable'], [415, 'other', 'passkeyUnavailable'], [431, 'invalid_input', 'passkeyUnavailable'], [413, 'credentials_invalid', 'passkeyPasswordInvalid']] as const) test(`body guidance keeps ${status} ${code} handling`, async () => {
+  const {c} = fixture('options', {ok: false, status, code, retryAfterMs: 0}); await c.enroll(c.password); assert.equal(c.error, expected);
+});
+for (const stage of ['verify', 'remove'] as const) for (const status of [408, 413, 415]) test(`${stage}: ${status} keeps reconciled success`, async () => {
+  const listed = stage === 'remove' ? [] : [key, {...key, id: '22345678-1234-4234-8234-123456789abc'}];
+  const {c} = fixture(stage, {ok: false, status, code: 'invalid_input', retryAfterMs: 0}, listed);
+  if (stage === 'remove') await c.remove(id, c.password); else await c.enroll(c.password);
+  assert.equal(c.error, undefined); assert.equal(c.notice, stage === 'remove' ? 'passkeyRemoved' : 'passkeyAdded');
 });

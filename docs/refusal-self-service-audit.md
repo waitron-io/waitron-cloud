@@ -40,13 +40,15 @@ demonstrated invariant at its source.
 
 Each row gives the current English/Spanish wording, the cause and the action to
 implement or clarify. R1, R4, R8 and R10 are implemented. R11's guidance and owner-check
-documentation are implemented; its repair controls remain open. R2's shared-400, browser-duplicate and generic-failure guidance
-are implemented; the remaining rows and cause-specific R2 request-body feedback stay open. No row authorizes a permission bypass.
+documentation are implemented; its repair controls remain open. R2's shared-400,
+browser-duplicate, generic-failure and 408/413/415 passkey guidance are implemented.
+Malformed JSON (400), other controllers' request-body feedback and the remaining
+rows stay open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
 | --- | --- | --- | --- |
 | R1: authenticator setup and management | Delivered: management `400 invalid_input` asks you to check current settings and start again with your password and fresh codes, in English and Spanish. | The shared code covers malformed input, unavailable setup state and absent factors. The inventory below traces every producer. It cannot identify one precise cause. | Check authenticator settings discards the local setup and inputs, reads status and exposes the existing setup/replacement actions. It sends no change or cancellation. Password and current-factor proof remain required by the refreshed state. Credentials, rate limits and uncertain writes retain their handling; sign-in errors retain their separate feedback. |
-| R2: passkey registration and removal | Delivered: management `400 invalid_input` offers Check passkeys and explains a fresh password/prompt or removal, in English and Spanish. | The shared server code includes malformed input, unusable registration state, duplicate credentials and failed verification. The inventory below traces each producer; the response cannot identify one cause. | The read-only check clears the old password and refreshes your account's list. Start another prompt with a fresh password, or choose another key if already registered. Removal guidance is separate. Password sign-in, credential errors, limits and uncertain-write reconciliation retain their handling. No other account's keys or existence is disclosed. |
+| R2: passkeys | Delivered: management `400 invalid_input` offers Check passkeys and explains a fresh password/prompt or removal, in English and Spanish. For POST `invalid_input` with 408/413/415, cause-specific guidance points to password sign-in or Check passkeys. | The shared 400 code includes malformed input, unusable registration state, duplicate credentials and failed verification. The inventory below traces each producer; the response cannot identify one cause. | The read-only check clears the old password and refreshes your account's list. Start another prompt with a fresh password, or choose another key if already registered. Removal guidance is separate. Password sign-in, credential errors, limits and uncertain-write reconciliation retain their handling. No other account's keys or existence is disclosed. |
 | R3: recovery approval and replacement | English and Spanish refusals distinguish confirmation, source verification/compatibility, reused targets, another recovery, changed bindings, missing approval and invalid input. Check request status reads the existing request. | [Recovery HTTP](../packages/account-http/src/recovery.ts), [API reader](../apps/portal/src/api.ts) and [controller](../apps/portal/src/recovery-controller.ts) carry known 400/409 codes through without changing the server. [Native API/controller checks](../apps/portal/test/recovery-guidance.test.ts) preserve one write, its code and confirmations, and uncertain-write inspection. [Browser checks](../apps/portal/test/recovery-guidance-browser.test.ts) exercise nine refusals, status inspection and a refreshed source selection in both languages, themes and widths. Database authority and locking qualification runs in CI. | Check request status and replacement setup requirements; refresh the snapshot list to check verification, which does not guarantee compatibility. A reused target needs its existing request or fresh replacement setup. Another recovery can be closed only through its original link if no longer needed; no cross-request list/control is added. An approval binding change needs inspection before a new source/request; a replacement conflict first checks for completed replacement and its Cloud connection. An unapproved request may expire without granting recovery. Unknown responses and lost write replies still reconcile before another approval. Source compatibility display, finding a lost request link and fresh-target setup remain follow-ups, not new server capabilities. |
 | R4: recovery outside the local test scope | `403 local_integration_only` now explains that recovery supports test venues only, tells you to open a new recovery link from the replacement server’s setup and choose a test venue on the Cloud page, and says production recovery is unavailable. Both English and Spanish name this restriction in the recovery page’s error message. | [Catalogue](../packages/backups/src/catalogue.ts#L82), [managed streams](../packages/backups/src/managed-streams.ts#L199) and [replacement](../packages/backups/src/replacement.ts#L29) retain their server restrictions. The API client recognises this code only for a recovery HTTP 403; other paths and statuses retain their prior handling. | Implemented with new native API/controller and browser checks. Permission refusals still clear the displayed authority and confirmations; unexpected write results still reconcile without replay. Production recovery remains unfinished. Existing PostgreSQL scope tests run in CI. |
 | R5: Account permission refusals | Venue panels distinguish `403 permission_denied` from request-verification `403 forbidden`. English and Spanish guidance asks you to check your account, organisation and venue, with Account overview and Sign out beside the refusal. | [Common mapping](../packages/account-http/src/app.ts#L53), backup/diagnostic/remote owner lookups, the final diagnostic ownership recheck and translation consent retain their checks while identifying denied permission. Native HTTP checks cover response classification; original and new controller checks protect clearing private data. Two-venue browser checks exercise six panels, navigation without a reload, heading focus and sign-out retry. Real database authority and locking checks run in CI. | Installations, snapshots, diagnostics, usage, remote setup and translation consent have reachable permission denials. Alerts, sessions, passkeys and authenticator settings keep their existing endpoint-specific handling. The shared backup/installation read surfaces on recovery pages inherit this wording; request-specific recovery guidance stays in R3. Pairing retains its account/business guidance. Remote setup distinguishes a missing paid trial plan, missing gateway setup, a venue outside the test-only trial and stopped installation access. Both languages name the operator-only limits, link to Account overview and offer a read-only installation refresh after revocation. Shared callers retain `permission_denied`; only known Account remote 403 causes receive specific codes. Native SQL-boundary, API/controller and browser checks cover this; real database and late-DNS rechecks run in CI. Customer plan/setup/restart controls remain unavailable. Request verification keeps reload guidance; no account or membership change is added. |
@@ -113,9 +115,15 @@ The browser's already-registered (`InvalidStateError`) refusal uses the same
 general registration guidance, without sending a verification request.
 Cancellations keep their existing feedback.
 Existing PostgreSQL store and HTTP tests run in CI.
-Oversized bodies (413), unsupported request formats (415) and interrupted bodies
-(408) still share generic feedback. Their cause-specific messages remain
-follow-ups. The server and its disclosure policy are unchanged.
+For passkey POST requests, `invalid_input` with status 413 names an unaccepted
+size, 415 names an unsupported format and 408 names an interruption. Sign-in
+points you to your password; management offers Check passkeys before another
+change. The list is a read and retains its existing Retry path. A refreshed list
+that confirms the change still reports success. The server and its disclosure
+policy are unchanged (`passkey-controller.ts`, `passkey-screen.ts`). Run
+`pnpm --dir apps/portal exec node --test test/passkey-refusal.test.ts` for the
+status/code boundaries; the two passkey guidance browser files exercise the
+English/Spanish actions with synthetic responses.
 
 Generic passkey failures say “Passkeys are unavailable. You can try again.
 Password sign-in remains available.” / “Las llaves de acceso no están disponibles.
@@ -127,8 +135,10 @@ synthetic HTTP responses to follow both paths, including a second refused
 passkey attempt and an incorrect password before a successful sign-in. The fixture explicitly provides a simulated passkey
 device, while a native check records whether the machine could begin the
 passkey journey without one. These checks do not qualify real credential
-verification or repair a browser or service restriction. Request-body limits, malformed requests
-and interrupted requests still need cause-specific feedback.
+verification or repair a browser or service restriction. Malformed JSON (400)
+and request-body refusals in the other portal controllers remain open:
+authenticator, sessions, alerts, backups, billing, diagnostics, installations,
+pairing, recovery, remote access, consent, usage, signup and password reset.
 
 ## Existing actions to preserve
 
@@ -144,15 +154,14 @@ existing behavioral coverage when an adjacent screen changes.
 | Remote `dns_not_verified`, `hostname_conflict`, revision conflict | Check both DNS records, choose another name, or refresh/review / Comprueba ambos registros, elige otro nombre o actualiza/revisa. | [Remote screen (remote-screen.ts:16)](../apps/portal/src/remote-screen.ts#L16) exposes the records, assigned-name switch and refresh. [Remote handler (remote-access.ts:58)](../packages/account-http/src/remote-access.ts#L58) distinguishes those outcomes. Gateway assignment and certificate installation remain operator tooling, as its trial notice says. |
 | Recovery `410`, missing code/link and unconfirmed result | Start a fresh request on the replacement, reopen its link, or inspect status / Inicia otra solicitud en el servidor de sustitución, abre su enlace o comprueba el estado. | [Recovery screen (recovery-screen.ts:11)](../apps/portal/src/recovery-screen.ts#L11) and [controller](../apps/portal/src/recovery-controller.ts#L40). An expired request cannot be revived by waiting. Existing guidance already says so. |
 | Unknown write result | Inspect/reconcile before retrying / Comprueba el resultado antes de reintentar. | Fiscal, recovery, remote, passkey, authenticator, translation and alert controllers retain explicit uncertain-result handling. Keep their action-specific distinctions; do not replace them with a generic “try again”. |
-| Read failure: sessions, snapshots, usage, diagnostics, venue list | Refresh/retry; diagnostics also says “Retry or refresh the status” / Reintenta o actualiza el estado. | These controls exist. Temporary transport or backend failure can clear. Permission/configuration outcomes need R5/R7 instead; a generic 503 does not establish a transient cause. |
+| Read failure: sessions, snapshots, usage, diagnostics, venue list | Refresh/retry; diagnostics also says “Retry or refresh the status” / Reintenta o actualiza el estado. | These controls exist. Temporary transport or backend failure can clear. Permission/configuration outcomes need R5 instead; a generic 503 does not establish a transient cause. |
 | Portal HTML `400`, `404`, `405`, `503` | Check the address or return to Waitron Cloud / Comprueba el enlace o vuelve a Waitron Cloud. | [Error renderer (portal.ts:48)](../packages/account-http/src/portal.ts#L48) always links to `/`; 503 adds Retry-After. All eight language/status responses were rendered natively. |
 | Verification/reset/password-changed emails | Open the single-use link, ignore an unrequested email, or request a fresh reset / Abre el enlace de un solo uso, ignora el correo no solicitado o solicita otro restablecimiento. | [Mail renderer](../packages/registration/src/account-mail.ts#L20) includes expiry and the password-change reset-request link. Rendering was exercised in both languages; delivery and provider behavior were not exercised. |
 
 ## Delivery boundaries
 
 Cloud owns these follow-ups. R1, R2, R3, R4, R5 and any fiscal change need the full
-authentication/recovery/authority review path. R6/R7 must first respect the owner's
-fiscal approval rule. A wording-only public-page change may use focused review;
+authentication/recovery/authority review path. A wording-only public-page change may use focused review;
 changing bot checks or permissions may not.
 
 R1's inventory and status-refresh path are delivered. Later server-code changes

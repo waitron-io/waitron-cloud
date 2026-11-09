@@ -12,14 +12,19 @@ const guidance = {
   es: 'Las llaves de acceso no están disponibles. Puedes volver a intentarlo. Puedes seguir entrando con tu contraseña.',
 };
 
+const bodyGuidance = {
+  en: {408: 'This passkey request was interrupted.', 413: 'This passkey request’s size wasn’t accepted. Retrying may not help.', 415: 'This passkey request arrived in an unsupported format.'},
+  es: {408: 'Se ha interrumpido esta petición de llave de acceso.', 413: 'No se ha aceptado el tamaño de esta petición de llave de acceso. Puede que reintentarlo no sirva.', 415: 'Esta petición de llave de acceso ha llegado en un formato no admitido.'},
+};
 // Generic failures need an available password alternative and a repeatable passkey attempt.
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: generic passkey failures offer a working password path`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
-      for (const failure of ['browser', 'service'] as const) await t.test(failure, async () => {
+      for (const failure of ['browser', 'service', 408, 413, 415] as const) await t.test(String(failure), async () => {
         const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
         page.setDefaultTimeout(4000);
+        const expected = typeof failure === 'number' ? bodyGuidance[locale][failure] + (locale === 'en' ? ' Try password sign-in instead.' : ' Prueba a entrar con tu contraseña.') : guidance[locale];
         const c = translations[locale], calls: string[] = [], passwords: unknown[] = [];
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
@@ -35,8 +40,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             if (path === '/session' || path === '/session/activity') return signedIn
               ? route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}})
               : route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
-            if (path === '/passkeys/authentication/options') return failure === 'service'
-              ? route.fulfill({status: 503, json: {error: 'unavailable'}})
+            if (path === '/passkeys/authentication/options') return failure === 'service' || typeof failure === 'number'
+              ? route.fulfill({status: typeof failure === 'number' ? failure : 503, json: {error: typeof failure === 'number' ? 'invalid_input' : 'unavailable'}})
               : route.fulfill({json: {ceremonyId: '12345678-1234-4234-8234-123456789abc', options: {challenge: 'YWJj', rpId: 'portal.test', userVerification: 'required'}}});
             if (path === '/login') {
               const body = route.request().postDataJSON(); passwords.push(body);
@@ -74,9 +79,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(supported, true, 'the virtual platform authenticator admits the intended failure journey');
           if (nativeControl) t.diagnostic(`Virtual passkey control: ${JSON.stringify({supported})}`);
           await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
-          const alert = page.getByRole('alert').filter({hasText: c.passkeyUnavailable});
+          const alert = page.getByRole('alert').filter({hasText: expected});
           await alert.waitFor();
-          assert.equal(await alert.getByText(c.passkeyUnavailable, {exact: true}).innerText(), guidance[locale]);
+          assert.equal(await alert.getByText(expected, {exact: true}).innerText(), expected);
+          assert.equal(await page.getByRole('alert').count(), 1);
           assert.equal(calls.filter(path => path === '/passkeys/authentication/options').length, 1);
           assert.equal(calls.some(path => path.endsWith('/verify')), false, 'no credential was submitted after a browser/options failure');
           assert.equal(new URL(page.url()).pathname, '/login');
@@ -89,9 +95,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(calls.filter(path => path === '/passkeys/authentication/options').length, 2);
           assert.equal(calls.some(path => path.endsWith('/verify')), false, 'a second refusal still submits no credential');
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-          if (process.env.PASSKEY_GUIDANCE_RECEIPT_DIR && failure === 'browser') {
+          if (process.env.PASSKEY_GUIDANCE_RECEIPT_DIR && (failure === 'browser' || typeof failure === 'number')) {
             await mkdir(process.env.PASSKEY_GUIDANCE_RECEIPT_DIR, {recursive: true});
-            await page.screenshot({path: `${process.env.PASSKEY_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`, fullPage: true});
+            await page.screenshot({path: `${process.env.PASSKEY_GUIDANCE_RECEIPT_DIR}/${failure}-${locale}-${theme}-${width}.png`, fullPage: true});
           }
           await page.locator('input[name=email]').fill('owner@example.test');
           await page.locator('input[name=password]').fill('Incorrect password');

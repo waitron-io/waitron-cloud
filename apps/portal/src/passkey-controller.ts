@@ -73,13 +73,17 @@ export class PasskeyController {
     return error instanceof DOMException && ['NotAllowedError', 'AbortError'].includes(error.name);
   }
 
-  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false, refusal?: 'passkeyRegistrationRefused' | 'passkeyRemovalRefused') {
+  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false, refusal?: 'passkeyRegistrationRefused' | 'passkeyRemovalRefused' | 'signIn') {
     this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
+    const body = result.code === 'invalid_input' && refusal
+      ? result.status === 408 ? 'passkeyRequestInterrupted' : result.status === 413 ? 'passkeyRequestSize' : result.status === 415 ? 'passkeyRequestFormat' : undefined
+      : undefined;
     this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
       : result.status === 403 ? 'forbidden'
-      : result.status === 400 && result.code === 'invalid_input' && refusal ? refusal
+      : body ? refusal === 'signIn' ? `${body}SignIn` : body
+      : result.status === 400 && result.code === 'invalid_input' && refusal && refusal !== 'signIn' ? refusal
       : 'passkeyUnavailable';
   }
 
@@ -116,7 +120,7 @@ export class PasskeyController {
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const options = await this.#request<AuthenticationOptions>('/passkeys/authentication/options', {});
     if (generation !== this.#generation) return false;
-    if (!options.ok) { this.pending = false; this.#failure(options); this.#changed(); return false; }
+    if (!options.ok) { this.pending = false; this.#failure(options, false, 'signIn'); this.#changed(); return false; }
     let response: AuthenticationResponseJSON;
     try { response = await this.#browser.authenticate(options.value.options); }
     catch (error) {
@@ -132,7 +136,7 @@ export class PasskeyController {
     this.pending = false;
     if (result.ok) { this.#changed(); return 'authenticated'; }
     if (result.status === 0 || result.status >= 500) { this.error = 'passkeySignInUncertain'; this.#changed(); return 'reconcile'; }
-    this.#failure(result); this.#changed(); return false;
+    this.#failure(result, false, 'signIn'); this.#changed(); return false;
   }
 
   async enroll(password: string) {
