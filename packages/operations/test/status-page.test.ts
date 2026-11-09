@@ -120,8 +120,8 @@ test('dated history uses literal bilingual public wording and UTC dates without 
  ] as const){
   const history=pages[path].slice(pages[path].indexOf('<section'));
   for(const text of [`<h2>${heading}</h2>`,service,impact,started,resolved,
-   '<time datetime="2028-02-28T23:45:00Z">2028-02-28 23:45:00 UTC</time>',
-   '<time datetime="2028-02-29T00:15:00Z">2028-02-29 00:15:00 UTC</time>'])assert.ok(history.includes(text),text);
+   `${started}: <time datetime="2028-02-28T23:45:00Z">2028-02-28 23:45:00 UTC</time>`,
+   `${resolved}: <time datetime="2028-02-29T00:15:00Z">2028-02-29 00:15:00 UTC</time>`])assert.ok(history.includes(text),text);
   assert.match(history,/<ol>/);assert.match(history,/<li>/);
   assert.doesNotMatch(history,/Next update|Próxima actualización|https?:|<script/);
  }
@@ -130,7 +130,8 @@ test('dated history uses literal bilingual public wording and UTC dates without 
 test('history keeps every supplied incident in newest resolution order without changing the current article',()=>{
  const older={...past,service:'backups',resolvedAt:'2028-02-29T00:00:00Z'};
  const newest={...past,service:'email',startedAt:'2028-02-29T00:15:00Z',resolvedAt:'2028-02-29T00:15:00Z'};
- const history=[older,past,newest];
+ const earliest={...past,service:'cloud',startedAt:'2026-11-07T12:00:00Z',resolvedAt:'2026-11-07T12:15:00Z'};
+ const history=[older,past,earliest,newest];
  for(const state of ['no_incident','investigating','fix_being_applied','monitoring','resolved']){
   const input=state==='no_incident'?{state,updatedAt:incident.updatedAt}:{...incident,state};
   const legacy=renderStatusPage(input),pages=renderStatusPage({...input,history});
@@ -138,14 +139,17 @@ test('history keeps every supplied incident in newest resolution order without c
    const withoutHistory=pages[path].replace(/<section class="history">[\s\S]*?<\/section>/,'')
     .replace(/\n?\.history[^{}]*\{[^{}]*\}/g,'');
    assert.equal(withoutHistory,legacy[path]);
+   assert.match(pages[path],/<\/article>\s*<section class="history">/);
+   assert.match(pages[path],/<\/ol><\/section>\s*<\/main>/);
    const entries=[...pages[path].matchAll(/<li>[\s\S]*?<\/li>/g)].map(match=>match[0]);
-   assert.equal(entries.length,3);
+   assert.equal(entries.length,4);
+   assert.ok(entries[3]!.includes('datetime="2026-11-07T12:15:00Z"'));
    assert.ok(entries[2]!.includes('datetime="2028-02-29T00:00:00Z"'));
    assert.ok(entries[0]!.includes('datetime="2028-02-29T00:15:00Z"'));
    assert.ok(entries[1]!.includes('datetime="2028-02-29T00:15:00Z"'));
   }
  }
- assert.deepEqual(history,[older,past,newest]);
+ assert.deepEqual(history,[older,past,earliest,newest]);
 });
 
 test('history retains unknown impact and valid equal, midnight, leap and year-boundary dates',()=>{

@@ -100,7 +100,10 @@ time or an estimate; `resolvedAt` is actual confirmed recovery. Both use the exa
 UTC format above, and start cannot follow recovery. The current post's `updatedAt`
 describes that post, so it does not limit history dates. Past incidents show the
 resolution date newest first; equal dates keep input order. Every supplied entry
-remains visible. Trim the input yourself when you want a shorter history.
+remains visible. Keep the complete list locally and include it each time you
+regenerate the bundle: the generator stores no history between runs. Omitting
+the array removes history from the new output. Trim the input yourself when you
+want a shorter history.
 
 Missing history or `[]` keeps the original page unchanged, including its styles.
 History uses fixed public text and makes no next-update promise. Invalid history
