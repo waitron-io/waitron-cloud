@@ -106,6 +106,7 @@ const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').ba
 const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.appendFileSync(log,JSON.stringify(row)+'\\n');
 record({name,args:a});
 if(name==='docker'&&a[0]==='save'&&mode==='load-fails'){record({exporter:process.pid});process.stdout.on('error',()=>{});process.on('SIGTERM',()=>{});setInterval(()=>process.stdout.write(Buffer.alloc(1024)),25);}
+if(name==='docker'&&a[0]==='save'&&mode==='load-exit'){record({exporter:process.pid});process.stdout.write('archive');}
 if(name==='kind'&&a[0]==='version')console.log('kind v0.31.0');
 if(name==='kind'&&a[0]==='create'&&mode==='create-fails')process.exit(17);
 if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSettings:{Networks:{kind:{IPAddress:'172.18.0.2'}}}}]));
@@ -115,14 +116,14 @@ if(name==='kubectl'){
  if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
  if(b[0]==='get'){
   const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=a[1].slice(5);
-  console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:cluster+'-control-plane',containers:[{name:'account',image:cluster+':cloud'}]}}]}));
+  console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:cluster+'-control-plane',containers:[{name:'account',image:cluster+':cloud'}]},status:role==='verifier'&&mode==='signal'?{containerStatuses:[{name:'verifier',state:{terminated:{reason:'Error',exitCode:137}}}]}:undefined}]}));
  }
  if(b[0]==='port-forward'){
   process.on('SIGTERM',()=>{});record({forward:process.pid});
   for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
   setInterval(()=>{},1000);
  }
- if(b[0]==='exec'){if(mode==='load-fails'){const refuse=()=>{if(fs.readFileSync(log,'utf8').includes('\"exporter\":')){process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);}setTimeout(refuse,5);};refuse();}else process.kill(process.ppid,'SIGTERM');}
+ if(b[0]==='exec'){if(mode==='load-exit'){process.stdin.resume();process.stdin.on('end',()=>{process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);});}else if(mode==='load-fails'){const refuse=()=>{if(fs.readFileSync(log,'utf8').includes('\"exporter\":')){process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);}setTimeout(refuse,5);};refuse();}else process.kill(process.ppid,'SIGTERM');}
 }
 `;
   for (const name of ['kind', 'kubectl', 'docker']) await writeFile(join(directory, name), source, {mode: 0o700});
@@ -138,6 +139,10 @@ for (const mode of ['create-fails', 'signal', 'apply-fails']) test('local comman
   assert.equal(code, 1, error);
   if (mode === 'apply-fails') assert.match(error, /kubernetes.command_failed:kubectl:apply/);
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  if (mode === 'signal') {
+    assert.match(error, /Kubernetes verifier termination \{"reason":"Error","exitCode":137\}/);
+    assert.ok(rows.some(row => row.args?.[4] === 'logs'), 'cancelled runs must still collect worker output');
+  }
   if (mode === 'apply-fails') {
     const applied = rows.find(row => row.manifest).manifest;
     assert.equal(applied.items.some(item => item.metadata.name === 'verifier'), false, 'verifier must wait for the actual captured point');
@@ -177,6 +182,7 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   const value = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
   const template = value.items.find(item => item.metadata.name === 'verifier'); assert.ok(template);
   const daemon = template.spec.containers.find(row => row.name === 'docker');
+  assert.equal(template.spec.volumes.find(row => row.name === 'tmp').emptyDir.sizeLimit, '96Mi');
   for (const container of template.spec.containers) {
     const socket = container.volumeMounts.find(row => row.name === 'socket').mountPath;
     const canonical = socket === '/var/run' ? '/run' : socket;
@@ -244,9 +250,9 @@ test('malformed private verifier identity has a fixed error without its contents
   });
 });
 
-test('failed verifier image transfer drains its own exporter without printing private output', {timeout: 10000}, async t => {
+for (const mode of ['load-fails', 'load-exit']) test('failed verifier image transfer drains its own exporter without printing private output: ' + mode, {timeout: 10000}, async t => {
   const {loadVerifierImage} = await import('./kubernetes-check.mjs'); assert.equal(typeof loadVerifierImage, 'function');
-  const fixture = await commandFixture(t, 'load-fails');
+  const fixture = await commandFixture(t, mode);
   await assert.rejects(loadVerifierImage('sha256:' + 'b'.repeat(64),
     ['--context', 'kind-d620-unit', '--namespace', 'default', 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], fixture.env), error => {
       assert.equal(error.message, 'kubernetes.verifier_image_load'); assert.equal(String(error.stack).includes('PRIVATE_IMAGE_LOAD_CANARY'), false); return true;
@@ -257,11 +263,34 @@ test('failed verifier image transfer drains its own exporter without printing pr
 });
 
 // The worker must identify a failure without echoing its private input or assertion text.
-test('verifier startup reports its stage and error class without private values', () => {
-  const run = spawnSync(process.execPath, ['deploy/test-cloud/test-fixtures/integration-verifier.mjs'], {
-    encoding: 'utf8', env: {...process.env, CLOUD_INTEGRATION_POINT_ID: 'PRIVATE_POINT_CANARY'}, timeout: 10000});
+for (const [code, expected] of [
+  [undefined, {stage: 'point', exceptionClass: 'AssertionError', code: 'ERR_ASSERTION'}],
+  ['EAI_AGAIN', {stage: 'runtime', exceptionClass: 'Error', code: 'EAI_AGAIN'}],
+  ['28P01', {stage: 'runtime', exceptionClass: 'Error', code: '28P01'}],
+]) test('verifier startup reports its stage and error class without private values: ' + code, () => {
+  const stub = 'data:text/javascript,' + encodeURIComponent(`export function loadRuntime(){throw Object.assign(Error('PRIVATE_POINT_CANARY'),{code:${JSON.stringify(code)}});}`);
+  const loader = 'data:text/javascript,' + encodeURIComponent(`import {registerHooks} from 'node:module';registerHooks({resolve(s,c,next){return s==='../../local-stack/runtime.mjs'&&c.parentURL?.endsWith('/test-fixtures/integration-verifier.mjs')?{url:${JSON.stringify(stub)},shortCircuit:true}:next(s,c);}});`);
+  const run = spawnSync(process.execPath, [...(code ? ['--import', loader] : []), 'deploy/test-cloud/test-fixtures/integration-verifier.mjs'], {
+    encoding: 'utf8', env: {...process.env, CLOUD_INTEGRATION_POINT_ID: code ? '12345678-1234-4234-8234-123456789abc' : 'PRIVATE_POINT_CANARY'}, timeout: 10000});
   assert.equal(run.status, 1); assert.equal(run.stdout, '');
-  const row = run.stderr.split('\n').find(line => line.startsWith('integration.verifier_diagnostic ')); assert.ok(row, run.stderr);
-  assert.deepEqual(JSON.parse(row.slice('integration.verifier_diagnostic '.length)), {stage: 'point', exceptionClass: 'AssertionError', code: 'ERR_ASSERTION'});
+  const row = run.stderr.split('\n').filter(line => line.startsWith('integration.verifier_diagnostic ')).at(-1); assert.ok(row, run.stderr);
+  assert.deepEqual(JSON.parse(row.slice('integration.verifier_diagnostic '.length)), expected);
   assert.equal(run.stderr.includes('PRIVATE_POINT_CANARY'), false);
+});
+
+// The shell must acknowledge waiting before the parent releases it, then execute the worker.
+test('manifest worker stays behind the actual image-transfer gate', {timeout: 5000}, async t => {
+  const fixture = await commandFixture(t, 'guards'), ready = join(fixture.directory, 'image-loaded');
+  const manifest = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
+  const worker = manifest.items.find(row => row.metadata.name === 'verifier').spec.containers.find(row => row.name === 'verifier');
+  await writeFile(join(fixture.directory, 'sleep'), '#!/bin/sh\nprintf "waiting\\n"\n/bin/sleep 0.05\n', {mode: 0o700});
+  await writeFile(join(fixture.directory, 'node'), '#!/bin/sh\n[ "$1" = deploy/test-cloud/test-fixtures/integration-verifier.mjs ] || exit 19\nprintf "started\\n"\n', {mode: 0o700});
+  const child = spawn(worker.command[0], [worker.command[1], worker.command[2].replace('/run/backup-verifier/image-loaded', '"$VERIFIER_READY"')], {
+    env: {...fixture.env, VERIFIER_READY: ready}, stdio: ['ignore', 'pipe', 'pipe']});
+  const closed = new Promise(resolve => child.once('close', resolve)), timer = setTimeout(() => child.kill('SIGKILL'), 3000);
+  t.after(() => {clearTimeout(timer); child.kill('SIGKILL');}); child.stderr.resume();
+  let output = ''; child.stdout.on('data', part => {output += part;});
+  const first = await Promise.race([new Promise(resolve => child.stdout.once('data', part => resolve(String(part)))), closed.then(() => '')]);
+  assert.equal(first.split('\n')[0], 'waiting'); assert.equal(output.includes('started'), false);
+  await writeFile(ready, ''); assert.equal(await closed, 0); assert.ok(output.endsWith('started\n'));
 });

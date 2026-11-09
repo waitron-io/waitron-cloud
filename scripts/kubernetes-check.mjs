@@ -70,9 +70,9 @@ async function run(binary, args, input, cleanup = false) {
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
 }
-const kube = (args, input) => run('kubectl', ['--context', 'kind-' + cluster, '--namespace', 'default', ...args], input);
-const pod = async role => {
-  const rows = JSON.parse(await kube(['get', 'pods', '-l', 'app=' + role, '-o', 'json'])).items;
+const kube = (args, input, cleanup = false) => run('kubectl', ['--context', 'kind-' + cluster, '--namespace', 'default', ...args], input, cleanup);
+const pod = async (role, cleanup = false) => {
+  const rows = JSON.parse(await kube(['get', 'pods', '-l', 'app=' + role, '-o', 'json'], undefined, cleanup)).items;
   assert.equal(rows.length, 1, 'kubernetes.replica_count');
   assert.equal(rows[0].spec.nodeName, cluster + '-control-plane', 'kubernetes.node_binding');
   return rows[0];
@@ -139,12 +139,12 @@ try {
   if (created && !stop.signal.aborted) {try {process.stderr.write(await kube(['get', 'pods', '--request-timeout=5s']) + '\n');} catch {}}
   throw error;
 } finally {
-  if (created && !stop.signal.aborted) try {
-    const state = (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
+  if (created) try {
+    const state = (await pod('verifier', true)).status.containerStatuses.find(row => row.name === 'verifier').state;
     const reason = ['Completed', 'Error', 'OOMKilled', 'ContainerCannotRun', 'StartError'].includes(state.terminated?.reason) ? state.terminated.reason : 'OTHER';
     const exitCode = Number.isInteger(state.terminated?.exitCode) ? state.terminated.exitCode : null;
     process.stderr.write('Kubernetes verifier termination ' + JSON.stringify({reason, exitCode}) + '\n');
-    process.stderr.write(await kube(['logs', 'pod/verifier', '-c', 'verifier', '--tail=100']) + '\n');
+    process.stderr.write(await kube(['logs', 'pod/verifier', '-c', 'verifier', '--tail=100'], undefined, true) + '\n');
   } catch {process.stderr.write('Kubernetes verifier diagnostics unavailable\n');}
   for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {

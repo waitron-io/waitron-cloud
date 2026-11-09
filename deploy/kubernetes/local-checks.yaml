@@ -236,7 +236,7 @@
           },
           {
             "name": "tmp",
-            "emptyDir": {}
+            "emptyDir": {"sizeLimit": "96Mi"}
           }
         ],
         "containers": [

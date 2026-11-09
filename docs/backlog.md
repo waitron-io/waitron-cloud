@@ -3142,8 +3142,9 @@ implementation or production evidence.
   availability checks for sign-in, remote access and backups. You can run the first
   single-machine sign-in, remote-access and captured-backup restore checks with
   `node scripts/kubernetes-check.mjs`; its opening comment lists the required local
-  images and tools. The one-node test in `scripts/kubernetes-check.test.mjs` passed
-  locally on Linux, including the captured point, digest and byte count, restoration
+  images and tools. Its opt-in command,
+  `TEST_KUBERNETES_CHECK=1 node --test --test-name-pattern=one-node scripts/kubernetes-check.test.mjs`,
+  passed locally on Linux, including the captured point, digest and byte count, restoration
   across 15 modules, child removal and natural worker exit. These checks use
   test-service mode and the test backup worker. Full service/fault proof, the strict
   common verifier and P1's production-mode acceptance remain open. D570's

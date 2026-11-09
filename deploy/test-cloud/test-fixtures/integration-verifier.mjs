@@ -27,7 +27,7 @@ try {
     admitted: async () => (progress('qualification-query'), await pool.query("SELECT current_verification='verified' AS admitted FROM backup_point_qualification WHERE point_id=$1", [pointId])).rows[0]?.admitted === true});
 } catch (error) {
   const exceptionClass = ['Error', 'TypeError', 'AssertionError', 'RangeError', 'SyntaxError'].includes(error.name) ? error.name : 'OTHER';
-  const code = ['ENOENT', 'EACCES', 'EPERM', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ERR_ASSERTION'].includes(error.code) ? error.code : 'OTHER';
+  const code = ['ENOENT', 'EACCES', 'EPERM', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ECONNRESET', 'EHOSTUNREACH', '28P01', '42P01', '42703', '42501', 'ERR_ASSERTION'].includes(error.code) ? error.code : 'OTHER';
   console.error('integration.verifier_diagnostic ' + JSON.stringify({stage, exceptionClass, code}));
   console.error('integration.verifier_worker_failed');
   process.exitCode = 1;
