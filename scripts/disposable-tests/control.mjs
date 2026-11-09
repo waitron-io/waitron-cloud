@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,recoverHostedAttempts,hostedAttempts} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,overflowInventory,recoverHostedAttempts,hostedAttempts} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -73,12 +73,14 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(!free){
   const occupiedRuns=new Set([...excludeRuns,...state.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean),...[...active.values()].map(ci=>ci.runId)]);
   const queued=await read(()=>findAutomatic({api,policy,limit:16,onePerRun:true,exclude,excludeRuns:occupiedRuns,signal}));
+  let snapshot;
+  if(queued.length)try{snapshot=await overflowInventory({api,policy,signal});}catch(error){pendingFailure(error);break;}
   for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values()){
   const outcome=await withKernelLock(config.state,async()=>{
    const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
    if(fresh.slots.some(slot=>(slot.ciInvocation?.runId??slot.lease?.ci?.runId)===ci.runId) || [...active.values()].some(job=>job.runId===ci.runId))return;
-   try{await overflowOrdinary({api,policy,ci,signal});}catch(error){return {error};}
+   try{await overflowOrdinary({api,policy,ci,signal,snapshot});}catch(error){return {error};}
   },{signal});
   if(outcome?.error){pendingFailure(outcome.error,ci.runId);if(Number.isFinite(outcome.error.retryAt))await wait(Math.max(30000,outcome.error.retryAt-Date.now()),undefined,{signal});}
   }

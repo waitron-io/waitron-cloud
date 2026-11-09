@@ -78,8 +78,30 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
+export async function overflowInventory({api,policy,signal}){
+ const marked=await hostedAttempts({api,policy,signal}),runs=new Map(),snapshot=new Map();
+ for(const status of ['queued','in_progress']){
+  const data=await api.get(`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,{signal});
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete hosted run inventory');
+  for(const run of data.workflow_runs)runs.set(run.id,run);
+ }
+ for(const id of Object.keys(marked))if(!runs.has(Number(id)))runs.set(Number(id),await api.get(`/repos/${policy.repository}/actions/runs/${id}`,{signal}));
+ for(const [id,run] of runs){
+  assert.ok(run.id===id && run.repository?.id===policy.repositoryId && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0,'Foreign hosted run inventory');
+  const read=async attempt=>{
+   const {jobs}=await jobInventory(api,`/repos/${policy.repository}/actions/runs/${id}/attempts/${attempt}/jobs`,signal);
+   assert.ok(jobs.every(job=>job.run_id===id && job.run_attempt===attempt && job.head_sha===run.head_sha && Array.isArray(job.labels)),'Foreign hosted job inventory');
+   return jobs;
+  };
+  const jobs=await read(run.run_attempt);
+  const previous=marked[id]===run.run_attempt && run.run_attempt>1 && run.status!=='completed'?await read(run.run_attempt-1):[];
+  snapshot.set(id,{run,jobs,previous});
+ }
+ return snapshot;
+}
 // The repository variable survives a full pool and a controller restart.
-export async function overflowOrdinary({api,policy,ci,signal}){
+export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
@@ -92,13 +114,38 @@ export async function overflowOrdinary({api,policy,ci,signal}){
   const inventory=await jobInventory(api,base+`/attempts/${ci.attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
    inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
-  return inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
+  const busy=inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
    job.labels?.includes('self-hosted') && (job.runner_id || job.status!=='queued' &&
     !(job.status==='completed' && job.conclusion==='skipped')));
+  return {busy,jobs:inventory.jobs};
  };
- if(await started())return;
+ const selected=await started();
+ if(selected.busy)return;
+ const wave=selected.jobs.filter(job=>job.conclusion!=='skipped').length;
+ if(wave>20)return;
+ snapshot??=await overflowInventory({api,policy,signal});
+ const marked=await hostedAttempts({api,policy,signal});
+ if(Object.keys(marked).some(id=>!snapshot.has(Number(id))))return;
+ let occupied=0;
+ for(const [id,{run,jobs,previous}] of snapshot){
+  if(id===ci.runId)continue;
+  if(marked[id]===run.run_attempt+1)occupied+=jobs.filter(job=>job.conclusion!=='skipped').length;
+  if(marked[id]===run.run_attempt && run.run_attempt>1 && run.status!=='completed'){
+   if(!previous.length)return;
+   const appeared=jobs.map(job=>job.name);
+   for(const job of previous)if(job.conclusion!=='skipped'){
+    const index=appeared.indexOf(job.name);if(index<0)occupied++;else appeared.splice(index,1);
+   }
+  }
+  for(const job of jobs){
+   if(!job.labels.length || job.labels.includes('self-hosted'))continue;
+   if(!['completed','in_progress'].includes(job.status))return;
+   if(job.status==='in_progress')occupied++;
+  }
+ }
+ if(occupied+wave>20)return;
  await markHostedAttempt({api,policy,ci,signal});
- if(await started()){
+ if((await started()).busy){
   const values=await hostedAttempts({api,policy,signal});
   if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
   return;
