@@ -1475,6 +1475,11 @@ implementation or production evidence.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate.
 
+  Requalify the browser-reconnect diagnostic before retiring it. Hosted browser
+  qualification still owns removal of the retained apt-only setup. Record D614's
+  first natural proof-only PR hosted selection; the policy-change PR keeps full
+  work. D613's accepted timing sample does not close these qualifications.
+
   **Closed failure sweep (D530).** The sweep is closed; the existing investigations
   retain their limits. This is the historical cause/fix summary, not new qualification.
   Handle a matching recurrence from that run's log under the existing CI-failure rules;
@@ -2216,7 +2221,7 @@ implementation or production evidence.
   The final #992 head and its exact merge qualify their own CI and independent
   general/AWS reuse readbacks; the separate merge Kubernetes run executes 37 checks.
   The full nightly at `9237200a` also qualifies all eight root partitions.
-  D616 replaces D571's aggregate-measurement wait: PRs test only changed packages,
+  D571 is closed, replaced by D616 and D613. D616 makes PRs test only changed packages,
   while whole-workspace typechecking remains and nightly catches type-correct
   dependent behaviour breaks. Healthy elapsed savings are not claimed.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
@@ -3512,13 +3517,14 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Reduce unnecessary CI work (D613)
 
-Requalify the browser-reconnect diagnostic before retiring it. Qualify PR and
-merge job-time savings, including hosted browser preparation, on matched samples
-during healthy GitHub operation. Remove retained apt-only browser setup after
-hosted qualification.
-
-Record D614's first natural proof-only PR hosted selection after the planner
-controls pass; the policy-change PR itself keeps full work.
+The [9 November report](ci-proof-selection.md#remaining-ci-work-measured-on-9-november-2026-d613)
+closes the accepted three-category measurement. Ordinary code PRs still run about
+25 job-minutes of root tests and every receipt suite. First propose root checks
+selected by their actual inputs, retaining the rest in nightly runs. Then model
+registration test times by area over recent merged PRs before proposing a package
+split; agree the boundary with pairing v2 before moving code. Review the retained
+receipt fallback and weekly cost-check policy separately. Sample infrastructure
+and cost-input PRs as they arrive naturally; no measurement-only reruns.
 
 ## Dependency-cache miss job budgets (D507)
 
