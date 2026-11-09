@@ -306,7 +306,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),onePerRun=false,onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -319,7 +319,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
-  if(excludeRuns.has(run.id))continue;
+  if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt)continue;
   let candidate;
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
@@ -369,7 +369,7 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
   leases.clearInvocation(invocation.nonce);return result;
  }catch(error){
   assert.ok(leases.inspect().slots.every(slot=>slot.state==='free'),`Ordinary CI cleanup remains uncertain: ${error.message}`);
-  const retry=await (fallback??fallbackOrdinary)({api,policy,ci,leases,automatic,signal:AbortSignal.timeout(240000)});
+  const retry=automatic?{retry:false}:await (fallback??fallbackOrdinary)({api,policy,ci,leases,automatic,signal:AbortSignal.timeout(240000)});
   if(!retry.pending && retry.code!==75)leases.clearInvocation(invocation.nonce);return {...result,code:125,error:error.message,...retry};
  }
 }

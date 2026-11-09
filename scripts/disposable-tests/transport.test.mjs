@@ -148,3 +148,9 @@ await runProcess(process.execPath,['-e',"process.stderr.write('child-error');pro
     assert.match(output,/SETTLED/);
   } finally {if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');}
 });
+
+test('transport reports stderr to an observer while preserving the child exit code',async()=>{
+ const {runProcess}=await import('./transport.mjs');let stderr='';
+ const result=await runProcess(process.execPath,['-e',"process.stderr.write('admission failed');process.exit(125)"],{onStderr:data=>{stderr+=data;}});
+ assert.equal(stderr,'admission failed');assert.equal(result.code,125);
+});

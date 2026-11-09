@@ -111,7 +111,7 @@ export class CITransport extends SSHTransport {
   }
 }
 
-export async function runProcess(command, argv, {input, inputPath, signal, capture = false, onOutput, terminationGraceMs = 2000} = {}) {
+export async function runProcess(command, argv, {input, inputPath, signal, capture = false, onOutput, onStderr, terminationGraceMs = 2000} = {}) {
   signal?.throwIfAborted();
   assert.ok(Number.isSafeInteger(terminationGraceMs) && terminationGraceMs>=2000 && terminationGraceMs<=600000,'Invalid process termination grace');
   protectOutputStreams();
@@ -172,7 +172,7 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
       } else if (onOutput) onOutput(data);
       else writeOutput(process.stdout, data);
     });
-    child.stderr.on('data', data => { if (acceptOutput(data)) writeOutput(process.stderr, data); });
+    child.stderr.on('data', data => { if (acceptOutput(data)) { onStderr?.(data); writeOutput(process.stderr, data); } });
     child.stdin.on('error', error => { if (error.code !== 'EPIPE') stop(error); });
     if (inputPath) {
       source = createReadStream(inputPath);
