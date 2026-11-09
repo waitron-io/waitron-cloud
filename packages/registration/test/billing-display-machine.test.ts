@@ -4,6 +4,8 @@ import {setImmediate} from 'node:timers/promises';
 import {test,type TestContext} from 'node:test';
 import {Pool,type PoolClient} from 'pg';
 import * as api from '../src/index.ts';
+import * as displayReader from '../src/billing-display-machine.ts';
+import {readFrozenCharge} from '../src/billing-payments.ts';
 import {migrate} from '../src/migrate.ts';
 import {createLeaseIssuer,encodeMachine} from '../src/installation-proof.ts';
 import type {BillingEvent,BillingCommand,BillingPriceVersion} from '../src/billing-types.ts';
@@ -269,4 +271,97 @@ test('billing display reads of different venues share their business lock while 
  }finally{
   await blocker.query('ROLLBACK');blocker.release();await Promise.allSettled([first,second,writer].filter(Boolean));await f.close();
  }
+});
+
+// Composite account/venue scope, array order and constant database calls are preserved.
+async function historyFixture(count:number){
+ const f=await fixture();
+ try{
+  await f.prices.publish(price);
+  for(const target of f.targets)await level(f,target,{connectedFrom:'1900-01-01'});
+  const client=await f.pool.connect();
+  try{
+   await client.query('BEGIN');
+   for(const scope of f.scopes){
+    const args=[scope.organisationId,scope.legalBusinessId,count],eventId=randomUUID(),methodId=randomUUID();
+    await client.query("INSERT INTO billing_events(id,organisation_id,legal_business_id,source,event_key,occurred_at,command,result) VALUES($3::uuid,$1,$2,'internal',($3::uuid)::text,'2026-11-02T11:00:00Z','{}','{}')",[...args.slice(0,2),eventId]);
+    await client.query("INSERT INTO billing_payment_methods(organisation_id,legal_business_id,id,kind,provider,provider_account_id,customer_id,method_id,event_id) VALUES($1,$2,$3::uuid,'card','sumup','synthetic-account','synthetic-customer',($3::uuid)::text,$4)",[...args.slice(0,2),methodId,eventId]);
+    await client.query(`INSERT INTO billing_charges SELECT $1,$2,md5(n::text)::uuid,'renewal',
+     (date '2026-12-01'-n*interval '1 month')::date,(date '2027-01-01'-n*interval '1 month')::date,
+     (date '2026-12-01'-n*interval '1 month')::date,(date '2026-12-03'-n*interval '1 month')::date,
+     1,'2026-09-01','EUR',1000,3000,2100,1100,231,1331,$4 FROM generate_series(1,$3::int+1) n`,[...args,eventId]);
+    const venues=f.targets.filter(t=>t.scope===scope);
+    for(const [v,target] of venues.entries()){
+     await client.query(`INSERT INTO billing_charge_lines SELECT $1,$2,md5(n::text)::uuid,$4,kind,1,cents
+      FROM generate_series(1,$3::int+1) n CROSS JOIN (VALUES ('connected_month',1000),('hosted_days',100)) k(kind,cents)
+      WHERE ($5::int>0 OR (n<=$3-2 OR n=$3) AND (kind='hosted_days' OR n<$3))`,[...args,target.venueId,v]);
+     await client.query(`INSERT INTO billing_hosted_days(organisation_id,legal_business_id,venue_id,on_date,consumed_by_charge_id,event_id)
+      SELECT $1,$2,$4,(date '2026-12-01'-n*interval '1 month'+d*interval '1 day')::date,md5(n::text)::uuid,$5
+      FROM generate_series(1,$3::int) n CROSS JOIN (VALUES(0),(2)) days(d)`,[...args,target.venueId,eventId]);
+    }
+    await client.query(`INSERT INTO billing_payment_attempts(organisation_id,legal_business_id,id,charge_id,method_id,provider,provider_account_id,request_key,state,succeeded_at,event_id)
+     SELECT $1,$2,md5(n::text||'-'||a::text)::uuid,md5(n::text)::uuid,$4,'sumup','synthetic-account',($5::uuid)::text||n::text||a::text,
+     CASE WHEN $6::boolean OR n=1 THEN CASE WHEN a=1 THEN 'failed' ELSE 'pending' END WHEN a=1 THEN 'refunded' ELSE 'succeeded' END,
+     CASE WHEN NOT $6::boolean AND n<>1 THEN '2026-10-01T12:34:56.123Z'::timestamptz END,$5
+     FROM generate_series(1,$3::int-1) n CROSS JOIN (VALUES(1),(2)) attempts(a)`,[...args,methodId,eventId,scope!==f.scopes[0]]);
+   }
+   await client.query('COMMIT');
+  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  return f;
+ }catch(error){await f.close();throw error;}
+}
+async function countedHistoryRead(f:Fixture){
+ let queries=0;
+ const pool={async connect(){
+  const client=await f.pool.connect();
+  return new Proxy(client,{get(target,key){
+   if(key==='query')return async(text:string,values:any[]=[])=>{
+    queries++;return client.query(text,values);
+   };
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});
+ }} as Pool;
+ const result=await machine(f,settings,origin,pool).read(request(f.targets[0]!));
+ return {result,queries};
+}
+test('billing history query count stays constant from 12 to 120 charges',async t=>{
+ frozenClock(t);const counts=[];
+ for(const count of [12,120]){
+  const f=await historyFixture(count);
+  try{
+   const read=await countedHistoryRead(f);counts.push(read.queries);
+   assert.deepEqual(read.result.billing,{status:'ready',level:'connected',state:'payment_failing',period:{kind:'paid',level:'connected',from:count===12?'2026-02-01':'2017-02-01',until:'2026-11-01',coversAsOf:false}});
+   t.diagnostic(JSON.stringify({charges:count,queries:read.queries}));
+  }finally{await f.close();}
+ }
+ assert.equal(counts[1],counts[0],'longer history must not add database roundtrips');
+});
+test('batched history retains complete facts and excludes sibling scopes and venues',async t=>{
+ frozenClock(t);const f=await historyFixture(12),client=await f.pool.connect();
+ try{
+  const target=f.targets[0]!,args=[target.scope.organisationId,target.scope.legalBusinessId,target.venueId];
+  await client.query(`INSERT INTO billing_charge_lines VALUES($1,$2,md5(13::text)::uuid,$3,'hosted_days',1,100)`,args);
+  await client.query(`INSERT INTO billing_charges SELECT organisation_id,legal_business_id,'ffffffff-ffff-ffff-ffff-ffffffffffff','hosted_comeback',
+   renewal_date,NULL,hosted_from,hosted_through,price_revision,price_effective_from,currency,connected_monthly_cents,hosted_monthly_cents,vat_rate_basis_points,100,21,121,event_id
+   FROM billing_charges WHERE organisation_id=$1 AND legal_business_id=$2 AND id=md5(1::text)::uuid`,args.slice(0,2));
+  await client.query(`INSERT INTO billing_charge_lines VALUES($1,$2,'ffffffff-ffff-ffff-ffff-ffffffffffff',$3,'hosted_days',1,100)`,args);
+  await client.query(`INSERT INTO billing_hosted_days(organisation_id,legal_business_id,venue_id,on_date,consumed_by_charge_id,event_id)
+   SELECT organisation_id,legal_business_id,$3,'2026-11-02',id,event_id FROM billing_charges
+   WHERE organisation_id=$1 AND legal_business_id=$2 AND id='ffffffff-ffff-ffff-ffff-ffffffffffff'`,args);
+  const actual=await displayReader.facts(client,target.scope,target.venueId),expected=[];
+  // Independent old reads preserve every frozen field, not just the projected paid period.
+  for(const {id} of (await client.query('SELECT id FROM billing_charges WHERE organisation_id=$1 AND legal_business_id=$2 AND id<>md5(13::text)::uuid ORDER BY renewal_date,id',args.slice(0,2))).rows){
+   const charge=await readFrozenCharge({client,scope:target.scope},id);charge.lines=charge.lines.filter(l=>l.venueId===target.venueId);
+   const attempts=(await client.query('SELECT state,succeeded_at FROM billing_payment_attempts WHERE organisation_id=$1 AND legal_business_id=$2 AND charge_id=$3 ORDER BY id',[...args.slice(0,2),id])).rows.map(r=>({state:r.state,succeededAt:r.succeeded_at?.toISOString()??null}));
+   const hostedDays=(await client.query('SELECT venue_id,on_date::text FROM billing_hosted_days WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 AND consumed_by_charge_id=$4 ORDER BY on_date',[...args,id])).rows.map(r=>({venueId:r.venue_id,on:r.on_date}));
+   expected.push({charge,attempts,hostedDays});
+  }
+  assert.equal(actual.charges.length,13);assert.deepEqual(actual.charges,expected);
+  assert.deepEqual(actual.charges[0],{charge:{...target.scope,id:'c20ad4d7-6fe9-7759-aa27-a0c99bff6710',kind:'renewal',renewalDate:'2025-12-01',connectedUntil:'2026-01-01',window:{from:'2025-12-01',through:'2025-12-03'},price:{revision:1,effectiveFrom:'2026-09-01',currency:'EUR',prices:{connectedMonthlyCents:1000,hostedMonthlyCents:3000},vatRateBasisPoints:2100},lines:[{venueId:target.venueId,kind:'hosted_days',quantity:1,cents:100}],totals:{netCents:1100,vatCents:231,grossCents:1331}},attempts:[],hostedDays:[{venueId:target.venueId,on:'2025-12-01'},{venueId:target.venueId,on:'2025-12-03'}]});
+  assert.deepEqual(actual.charges[1]!.charge.lines,[]);
+ }finally{client.release();await f.close();}
+});
+test('empty billing history retains the unpaid display',async t=>{
+ frozenClock(t);const f=await historyFixture(0);
+ try{assert.deepEqual((await countedHistoryRead(f)).result.billing,{status:'ready',level:'connected',state:'active',period:null});}finally{await f.close();}
 });

@@ -2,7 +2,7 @@ import {addDays} from './billing-calendar.ts';
 import {chargeTotals,renewalLines} from './billing-charges.ts';
 import {billingDate,billingWhole,readBillingPrice} from './billing-config.ts';
 import {readRenewalViews} from './billing-venues.ts';
-import {BillingError,type BillingCommand,type BillingContext,type BillingEvent,type BillingValue,type FrozenCharge,type PaymentView} from './billing-types.ts';
+import {BillingError,type BillingCommand,type BillingContext,type BillingEvent,type BillingValue,type FrozenCharge,type PaymentView,type BillingScope} from './billing-types.ts';
 
 type ReadContext=Pick<BillingContext,'client'|'scope'>;
 type PaymentContext=BillingContext&{source:BillingEvent['source']};
@@ -14,9 +14,12 @@ export async function readFrozenCharge(context:ReadContext,chargeId:string):Prom
   FROM billing_charges WHERE organisation_id=$1 AND legal_business_id=$2 AND id=$3`,[...scope,chargeId])).rows[0];
  if(!row)throw new BillingError('billing_scope_not_found');
  const lines=await client.query('SELECT venue_id,kind,quantity,cents FROM billing_charge_lines WHERE organisation_id=$1 AND legal_business_id=$2 AND charge_id=$3 ORDER BY venue_id,kind',[...scope,chargeId]);
- return {...context.scope,id:row.id,kind:row.kind,renewalDate:row.renewal_date,connectedUntil:row.connected_until,window:{from:row.hosted_from,through:row.hosted_through},
+ return frozenChargeRow(context.scope,row,lines.rows);
+}
+export function frozenChargeRow(scope:BillingScope,row:Record<string,any>,lines:Record<string,any>[]):FrozenCharge{
+ return {...scope,id:row.id,kind:row.kind,renewalDate:row.renewal_date,connectedUntil:row.connected_until,window:{from:row.hosted_from,through:row.hosted_through},
   price:{revision:Number(row.price_revision),effectiveFrom:row.price_effective_from,currency:row.currency,prices:{connectedMonthlyCents:Number(row.connected_monthly_cents),hostedMonthlyCents:Number(row.hosted_monthly_cents)},vatRateBasisPoints:Number(row.vat_rate_basis_points)},
-  lines:lines.rows.map(l=>({venueId:l.venue_id,kind:l.kind,quantity:Number(l.quantity),cents:Number(l.cents)})),
+  lines:lines.map(l=>({venueId:l.venue_id,kind:l.kind,quantity:Number(l.quantity),cents:Number(l.cents)})),
   totals:{netCents:Number(row.net_cents),vatCents:Number(row.vat_cents),grossCents:Number(row.gross_cents)}};
 }
 async function payment(context:ReadContext,attemptId:string):Promise<PaymentView>{

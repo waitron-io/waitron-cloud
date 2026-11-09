@@ -1,6 +1,6 @@
 import type {Pool,PoolClient} from 'pg';
 import {BillingError,type BillingScope,type TrialView} from './billing-types.ts';
-import {readFrozenCharge} from './billing-payments.ts';
+import {frozenChargeRow} from './billing-payments.ts';
 import {readBillingPrice} from './billing-config.ts';
 import {readBillingVenue} from './billing-venues.ts';
 import {billingDisplayDay,projectBillingDisplay,type BillingDisplayV1,type BillingDisplayFacts} from './billing-display.ts';
@@ -31,27 +31,37 @@ function accountOrigin(value:string):boolean{
  }catch{return false;}
 }
 
-async function facts(client:PoolClient,scope:BillingScope,venueId:string):Promise<BillingDisplayFacts>{
+export async function facts(client:PoolClient,scope:BillingScope,venueId:string):Promise<BillingDisplayFacts>{
  const context={client,scope},args=[scope.organisationId,scope.legalBusinessId,venueId];
  const venue=await readBillingVenue(context,venueId);
  const trials=(await client.query(`SELECT level,started_on::text,ends_on::text,extended,state FROM billing_trials
   WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 ORDER BY level`,args)).rows.map(row=>({
    level:row.level,startedOn:row.started_on,endsOn:row.ends_on,extended:row.extended,state:row.state,
   } as TrialView));
- const ids=await client.query(`SELECT c.id FROM billing_charges c WHERE c.organisation_id=$1 AND c.legal_business_id=$2 AND (
-  EXISTS(SELECT 1 FROM billing_charge_lines l WHERE (l.organisation_id,l.legal_business_id,l.charge_id)=(c.organisation_id,c.legal_business_id,c.id) AND l.venue_id=$3 AND l.kind='connected_month') OR
-  EXISTS(SELECT 1 FROM billing_hosted_days d WHERE (d.organisation_id,d.legal_business_id,d.consumed_by_charge_id)=(c.organisation_id,c.legal_business_id,c.id) AND d.venue_id=$3))
+ // Group each child set before joining: retries and sparse days must not multiply lines.
+ const rows=await client.query(`SELECT c.*,c.renewal_date::text,c.connected_until::text,c.hosted_from::text,c.hosted_through::text,c.price_effective_from::text,
+  coalesce(l.lines,'[]'::jsonb) AS lines,coalesce(a.attempts,'[]'::jsonb) AS attempts,coalesce(d.days,'[]'::jsonb) AS days
+  FROM billing_charges c
+  LEFT JOIN (
+   SELECT charge_id,bool_or(kind='connected_month') AS connected,jsonb_agg(to_jsonb(l) ORDER BY venue_id,kind) AS lines
+   FROM billing_charge_lines l WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 GROUP BY charge_id
+  ) l ON l.charge_id=c.id
+  LEFT JOIN (
+   SELECT charge_id,jsonb_agg(jsonb_build_object('state',state,'succeededAt',succeeded_at) ORDER BY id) AS attempts
+   FROM billing_payment_attempts WHERE organisation_id=$1 AND legal_business_id=$2 GROUP BY charge_id
+  ) a ON a.charge_id=c.id
+  LEFT JOIN (
+   SELECT consumed_by_charge_id,jsonb_agg(jsonb_build_object('venueId',venue_id,'on',on_date::text) ORDER BY on_date) AS days
+   FROM billing_hosted_days WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 AND consumed_by_charge_id IS NOT NULL GROUP BY consumed_by_charge_id
+  ) d ON d.consumed_by_charge_id=c.id
+  WHERE c.organisation_id=$1 AND c.legal_business_id=$2 AND (l.connected OR d.consumed_by_charge_id IS NOT NULL)
   ORDER BY c.renewal_date,c.id`,args);
- const charges:BillingDisplayFacts['charges']=[];
- for(const {id} of ids.rows){
-  const charge=await readFrozenCharge(context,id);
-  charge.lines=charge.lines.filter(line=>line.venueId===venueId);
-  const attempts=(await client.query(`SELECT state,succeeded_at FROM billing_payment_attempts
-   WHERE organisation_id=$1 AND legal_business_id=$2 AND charge_id=$3 ORDER BY id`,[scope.organisationId,scope.legalBusinessId,id])).rows.map(row=>({state:row.state,succeededAt:row.succeeded_at?.toISOString()??null}));
-  const hostedDays=(await client.query(`SELECT venue_id,on_date::text FROM billing_hosted_days
-   WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 AND consumed_by_charge_id=$4 ORDER BY on_date`,[...args,id])).rows.map(row=>({venueId:row.venue_id,on:row.on_date}));
-  charges.push({charge,attempts,hostedDays});
- }
+ const charges:BillingDisplayFacts['charges']=rows.rows.map(row=>({
+  charge:frozenChargeRow(scope,row,row.lines),
+  attempts:row.attempts.map((attempt:BillingDisplayFacts['charges'][number]['attempts'][number])=>({
+   state:attempt.state,succeededAt:attempt.succeededAt===null?null:new Date(attempt.succeededAt).toISOString(),
+  })),hostedDays:row.days,
+ }));
  return {venue,trials,charges};
 }
 
