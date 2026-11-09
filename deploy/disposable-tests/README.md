@@ -20,6 +20,15 @@ bash deploy/disposable-tests/bootstrap-host.sh --install deploy/disposable-tests
 
 The installer requires the four named versions and verifies them after installation. It preserves an existing service-start policy, or suppresses package service starts temporarily and removes only the policy file it created. It does not configure VM networking or start a guest. The package file pins the direct host prerequisites. `guest-tools.sh` pins Node, pnpm, Docker, its command-line client, Compose and Git inside each fresh guest, plus the Chromium libraries and fonts listed by [Playwright 1.64.1 for Debian 13](https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/server/registry/nativeDeps.ts#L821-L857). DejaVu supplies the generic system font alongside those regional browser fonts. It records every installed Debian package. The job installs its own browser binary. Transitive package resolution still uses Debian’s signed current indexes; a completely frozen guest package inventory remains open.
 
+Node, pnpm and Actions runner downloads allow up to three attempts, sharing their
+existing 60-, 30- and 120-second budgets, including one-second waits. Temporary network
+errors and HTTP 5xx responses can retry; HTTP 4xx and other curl failures stop immediately.
+Each attempt removes partial bytes first. HTTPS-only redirects, transfer-size limits and
+pinned digests still apply; an integrity failure stops before extraction and is not retried.
+A final failure names the tool and numeric curl/HTTP result without raw response bodies.
+Bash whole-second accounting may differ by less than a second; the existing outer stage
+and session deadlines still apply. Healthy cold guests normally exercise attempt 1 only.
+
 If a version leaves your package mirror, stop and review a replacement pin. `--metadata` refreshes the host's signed package indexes and prints current candidates; it never rewrites the committed pins. Do not substitute candidates silently.
 
 Copy `harden-ssh.sh` and `ssh-policy.conf` beside the host recipe and run the former through the shared connection. It disables password and keyboard-interactive authentication, permits root only with a public key, validates the effective policy and reloads SSH while preserving existing sessions. It refuses an unrelated existing drop-in and removes only its own new file if validation fails. Prove a fresh key login after applying it. Keep Hetzner Robot's rescue system as the supported recovery path; do not enable passwords or add an alternate port to bypass a network problem. Read authentication logs for your controller's source address so internet password attempts do not obscure its evidence.
