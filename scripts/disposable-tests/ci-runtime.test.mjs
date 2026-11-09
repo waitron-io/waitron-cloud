@@ -77,7 +77,7 @@ test('uncertain cleanup preserves the original preparation failure in the report
  f.leases.setInvocation(invocation);f.transport.prepare=async()=>{throw new Error('original preparation refusal');};
  f.api.get=async path=>path.includes('/contents/')?{content:Buffer.from(workflow).toString('base64'),encoding:'base64'}:
  path.includes('/commits/')?{sha:ci.sourceSha,commit:{tree:{sha:ci.sourceTree}}}:
- path.endsWith('/jobs?per_page=100')?{total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,name:'typecheck',status:'queued',labels:['self-hosted','dt-123-789-1-typecheck'],runner_id:null}]}:
+ path.endsWith('/jobs?per_page=30&page=1')?{total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,name:'typecheck',status:'queued',labels:['self-hosted','dt-123-789-1-typecheck'],runner_id:null}]}:
  path.endsWith('/runs/789')?{id:789,run_attempt:1,head_sha:ci.workflowSha,workflow_id:456,path:ci.workflowPath,event:'workflow_dispatch',status:'in_progress',display_title:'disposable-'+invocation.nonce,repository:{id:123},head_repository:{id:123}}:
  {id:123,full_name:'fixture/cloud'};
  await assert.rejects(executeCanary({...f,policy,lane:'I',invocation}),error=>/original preparation refusal/.test(error.message)&&/independent guest absence/.test(error.message));

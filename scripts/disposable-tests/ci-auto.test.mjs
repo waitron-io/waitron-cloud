@@ -198,7 +198,7 @@ test('a PR with mismatched source evidence cannot stop another approved PR from 
 test('one pickup reads shared run evidence once before workers independently recheck admission',async()=>{
  const f=fixture(),get=f.api.get,reads=new Map();f.api.get=async path=>{reads.set(path,(reads.get(path)??0)+1);return get(path);};
  assert.equal((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:6})).length,5);
- assert.equal(reads.get('/repos/fixture/waitron/actions/runs/789/attempts/1/jobs?per_page=100'),1);
+ assert.equal(reads.get('/repos/fixture/waitron/actions/runs/789/attempts/1/jobs?per_page=30&page=1'),1);
  assert.equal(reads.get('/repos/fixture/waitron/actions/permissions/fork-pr-contributor-approval'),1);
 });
 
@@ -1098,4 +1098,52 @@ for(const [label,conclusion,runner,late,wantCancel] of [
  f.api.post=async path=>{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');assert.equal(marker,'{"789":2}');posts++;};
  await controller.overflowOrdinary({api:f.api,policy,ci});
  assert.equal(posts,wantCancel?1:0);assert.equal(marker,wantCancel?'{"789":2}':'{}');
+});
+
+function pagedJobFixture(fault){
+ const f=fixture(),get=f.api.get,target=f.jobs[0],pages=[];
+ f.jobs.splice(0,f.jobs.length,...Array.from({length:83},(_,index)=>({...target,id:1000+index,name:'completed job',status:'completed',runner_id:1,labels:['ubuntu-latest']})),target);
+ f.api.get=async(path,options)=>{
+  if(!path.includes('/jobs?'))return get(path,options);
+  const params=new URL('https://fixture.invalid'+path).searchParams,size=Number(params.get('per_page')),page=Number(params.get('page')??1);
+  if(size>30)throw new Error('HTTP 502 on 100-record job pages');
+  pages.push(page);
+  let jobs=f.jobs.slice((page-1)*size,page*size);
+  if(page===2 && fault==='empty')jobs=[];
+  if(page===2 && fault==='duplicate')jobs=[f.jobs[0],...jobs.slice(1)];
+  return {total_count:f.jobs.length+(page===2 && fault==='changed-count'?1:0),jobs};
+ };
+ return {...f,target,pages};
+}
+
+test('automatic pickup admits a page-three job when 100-record job pages answer 502',async()=>{
+ const f=pagedJobFixture();
+ const admitted=await controller.findAutomatic({api:f.api,policy,limit:1});
+ assert.deepEqual(admitted.map(ci=>[ci.runId,ci.jobId,ci.jobKey]),[[789,901,'test-server-24']]);
+ assert.deepEqual(f.pages,[1,2,3]);
+});
+for(const fault of ['empty','duplicate','changed-count'])test(`a ${fault} later job page refuses ordinary admission`,async()=>{
+ const f=pagedJobFixture(fault);
+ await assert.rejects(controller.findOrdinary({api:f.api,policy,approvedHead:head,runId:789,jobId:901,automatic:true}),/job inventory/);
+});
+
+test('force cancellation reads the assigned sibling on page three before changing the run',async()=>{
+ const f=pagedJobFixture(),get=f.api.get;
+ f.run.status='queued';f.jobs[0]=f.target;
+ f.jobs[f.jobs.length-1]={...f.target,id:2000,status:'in_progress',runner_id:77};
+ f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
+ f.api.post=async()=>assert.fail('An assigned sibling must prevent cancellation');
+ const result=await controller.cancelCIJob({api:f.api,repository:policy.repository,ci:{repositoryId:123,workflowId:456,workflowSha:head,runId:789,attempt:1,jobId:901},force:true});
+ assert.deepEqual(result,{pending:true});assert.deepEqual(f.pages,[1,2,3]);
+});
+
+for(const count of [1000,1001])test(`force cancellation preserves the ${count}-job inventory boundary`,async()=>{
+ const f=pagedJobFixture(),get=f.api.get;let posts=0;
+ f.run.status='queued';
+ f.jobs.splice(0,f.jobs.length,f.target,...Array.from({length:count-1},(_,index)=>({...f.target,id:1000+index,status:'completed',runner_id:0})));
+ f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
+ f.api.post=async path=>{assert.ok(path.endsWith('/force-cancel'));posts++;f.run.status='completed';};
+ const work=controller.cancelCIJob({api:f.api,repository:policy.repository,ci:{repositoryId:123,workflowId:456,workflowSha:head,runId:789,attempt:1,jobId:901},force:true});
+ if(count===1000){await work;assert.equal(posts,1);assert.equal(f.pages.length,34);}
+ else {await assert.rejects(work,/Incomplete cancellation job inventory/);assert.equal(posts,0);}
 });

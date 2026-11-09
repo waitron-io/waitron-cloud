@@ -4,6 +4,20 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {ciIdentity,routingLabel,jobName,ciJobKeyPattern} from './ci-identity.mjs';
 import {configuredSlots} from './leases.mjs';
 
+async function jobInventory(api,path,signal,limit=100,message='Incomplete job inventory'){
+ const jobs=[];let total;
+ for(let page=1;page<=Math.ceil(limit/30);page++){
+  const data=await api.get(path+`?per_page=30&page=${page}`,{signal});
+  total??=data.total_count;
+  assert.ok(Array.isArray(data.jobs) && Number.isSafeInteger(total) && total>=0 && total<=limit && data.total_count===total,message);
+  jobs.push(...data.jobs);
+  assert.ok(jobs.length<=total && new Set(jobs.map(job=>job.id)).size===jobs.length,message);
+  if(jobs.length===total)return {total_count:total,jobs};
+  assert.ok(data.jobs.length>0,message);
+ }
+ assert.fail(message);
+}
+
 function ordinaryKey(name,labels){
  if(name==='image / smoke')return 'image-smoke-1';
  if(name==='typecheck')return Array.isArray(labels) && labels.some(label=>typeof label==='string' && label.endsWith('-typecheck-1'))?'typecheck-1':'typecheck';
@@ -75,7 +89,7 @@ export async function overflowOrdinary({api,policy,ci,signal}){
  const queuedAt=Date.parse(job.started_at??run.run_started_at??run.created_at);
  if(!Number.isFinite(queuedAt) || Date.now()-queuedAt<60000)return;
  const started=async()=>{
-  const inventory=await api.get(base+`/attempts/${ci.attempt}/jobs?per_page=100`,{signal});
+  const inventory=await jobInventory(api,base+`/attempts/${ci.attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count &&
    inventory.jobs.some(job=>job.id===ci.jobId),'Incomplete overflow admission inventory');
   return inventory.jobs.some(job=>job.run_id!==ci.runId || job.run_attempt!==ci.attempt || job.head_sha!==ci.workflowSha ||
@@ -124,7 +138,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
   }
   else {
-   const inventory=await api.get(path+`/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+   const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
    assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete overflow job inventory');
    if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha ||
     job.labels?.includes('self-hosted') && (job.runner_id || job.status==='in_progress' || job.status==='completed' && !['cancelled','skipped'].includes(job.conclusion)))){
@@ -204,7 +218,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
   run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && run.workflow_id===policy.workflowId &&
   run.path===policy.workflowPath && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
  if(run.event==='pull_request')assert.equal(run.pull_requests?.length,1,'Ordinary run needs one PR');
- const inventory=await api.get(`${base}/actions/runs/${runId}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+ const inventory=await jobInventory(api,`${base}/actions/runs/${runId}/attempts/${run.run_attempt}/jobs`,signal);
  assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,
   'Incomplete ordinary CI job inventory');
  const candidates=inventory.jobs.filter(job=>jobId===undefined?job.name==='typecheck':job.id===jobId);
@@ -242,7 +256,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
    const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
    if(pull.state!=='open' || pull.head?.sha!==run.head_sha || pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
   }
-  const inventory=await api.get(`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+  const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   for(const job of inventory.jobs){
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
@@ -295,7 +309,7 @@ export async function qualifyOrdinaryHosted({api,policy,retry,signal,wait=delay}
    [retry.previousAttempt,retry.previousAttempt+1].includes(run.run_attempt),'Hosted retry identity or attempt differs');
   if(run.run_attempt===retry.previousAttempt+1 && run.status==='completed'){
    assert.equal(run.conclusion,'success','Hosted retry failed');
-   const inventory=await api.get(`${base}/actions/runs/${retry.runId}/attempts/${run.run_attempt}/jobs?per_page=100`,{signal});
+   const inventory=await jobInventory(api,`${base}/actions/runs/${retry.runId}/attempts/${run.run_attempt}/jobs`,signal);
    assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100 && inventory.jobs.every(job=>
     job.run_id===retry.runId && job.run_attempt===run.run_attempt && job.head_sha===retry.sourceSha && job.status==='completed'),'Hosted retry inventory is incomplete');
    const named=name=>{const jobs=inventory.jobs.filter(job=>job.name===name);assert.equal(jobs.length,1,`Hosted retry ${name} is missing or duplicated`);return jobs[0];};
@@ -357,12 +371,7 @@ export async function cancelCIJob({api,repository,ci,signal,wait=delay,force=fal
   assert.equal(run.status,'queued','Force cancellation needs a queued run');
   if(job.status!=='completed' || job.conclusion!=='cancelled'){
    assert.ok(job.status==='queued' && !job.runner_id,'Force cancellation needs an unassigned queued job');
-   const jobs=[];let total;
-   for(let page=1;page<=10;page++){
-    const data=await api.get(path+`/attempts/${ci.attempt}/jobs?per_page=100&page=${page}`,{signal});
-    assert.ok(Array.isArray(data.jobs) && Number.isSafeInteger(data.total_count) && data.total_count<=1000,'Invalid cancellation job inventory');
-    total=data.total_count;jobs.push(...data.jobs);if(jobs.length>=total)break;
-   }
+   const {jobs,total_count:total}=await jobInventory(api,path+`/attempts/${ci.attempt}/jobs`,signal,1000,'Incomplete cancellation job inventory');
    assert.equal(jobs.length,total,'Incomplete cancellation job inventory');
    assert.ok(jobs.some(candidate=>candidate.id===ci.jobId),'Cancellation job missing from inventory');
    if(jobs.some(candidate=>candidate.run_id!==ci.runId || candidate.run_attempt!==ci.attempt || candidate.head_sha!==ci.workflowSha ||
@@ -561,7 +570,7 @@ export async function qualifyCanary({api,policy,invocation,signal}){
  assert.ok(run.id===invocation.runId && run.run_attempt===invocation.attempt && run.workflow_id===policy.workflowId &&
   run.head_sha===invocation.workflowSha && run.event==='workflow_dispatch' && run.display_title==='disposable-'+invocation.nonce &&
   run.status==='completed' && run.conclusion==='success','CI run is not qualified');
- const inventory=await api.get(`${base}/actions/runs/${invocation.runId}/attempts/${invocation.attempt}/jobs?per_page=100`,{signal});
+ const inventory=await jobInventory(api,`${base}/actions/runs/${invocation.runId}/attempts/${invocation.attempt}/jobs`,signal);
  assert.ok(inventory.total_count===2 && inventory.jobs.length===2 && new Set(inventory.jobs.map(j=>j.name)).size===2 &&
   inventory.jobs.every(job=>['typecheck','summary'].includes(job.name) && job.run_id===invocation.runId && job.run_attempt===invocation.attempt &&
    job.head_sha===invocation.workflowSha && job.status==='completed' && job.conclusion==='success' && Number.isSafeInteger(job.runner_id) && job.runner_id>0),'CI jobs are incomplete or failed');
@@ -591,7 +600,7 @@ export async function executeCanary({api,policy,leases,transport,lane,invocation
    while(!ci){
     signal?.throwIfAborted();assert.ok(Date.now()-invocation.createdAt<900000,'CI queue deadline exceeded');
     const run=await api.get(`${base}/actions/runs/${invocation.runId}`,{signal});
-    const jobs=await api.get(`${base}/actions/runs/${invocation.runId}/attempts/${invocation.attempt}/jobs?per_page=100`,{signal});
+    const jobs=await jobInventory(api,`${base}/actions/runs/${invocation.runId}/attempts/${invocation.attempt}/jobs`,signal);
     assert.ok(jobs.total_count<=2 && jobs.jobs.length===jobs.total_count,'Unexpected CI job inventory');
     const candidates=jobs.jobs.filter(job=>job.name==='typecheck');assert.ok(candidates.length<=1,'Ambiguous typecheck job');
     if(candidates.length){const blob=await api.get(`${base}/contents/${policy.workflowPath}?ref=${run.head_sha}`,{signal});
