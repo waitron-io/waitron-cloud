@@ -5,7 +5,15 @@ import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
 import {receiptFixtureWorkspace, seedReceiptDependencyInputs} from './ci-dependency-fixture.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {selectPlan} from './ci-plan.mjs';
+// These reader assertions exercise the retained default/push selection policy.
+function createPlan(event, context, packages, git) {
+  const {base, head} = event.pull_request;
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base: base.sha, head: head.sha}, {revision: head.sha, packages, testFilesByPackage}, git);
+}
+
 import {receiptPlan} from './ci-receipts.mjs';
 import {receiptSuites} from './ci-scope.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';

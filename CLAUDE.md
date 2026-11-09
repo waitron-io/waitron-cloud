@@ -133,8 +133,9 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
 - **Run focused tests while you work; CI owns the full package suites** (owner, 2026-10-18). Do not run
   everything locally before a push. The repository is public, so GitHub's standard runners bill
   nothing. Run a whole package only when chasing a failure.
-- **A pull request runs only what its changed files select**: the changed package and one level of
-  packages that use it ([ci-package-selection.md](docs/ci-package-selection.md)). The venue proof
+- **A pull request runs only what its changed files select**: only the changed packages' own tests;
+  the whole workspace, including dependents, is typechecked. Dependent behaviour
+  that remains type-correct waits for nightly ([ci-package-selection.md](docs/ci-package-selection.md)). The venue proof
   selects separately; cost conformance runs manually and nightly, outside PRs
   ([ci-proof-selection.md](docs/ci-proof-selection.md)). AWS and Kubernetes workflows start only
   for their declared paths. A green pull request says nothing about checks that did not run.

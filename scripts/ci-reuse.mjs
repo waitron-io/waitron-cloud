@@ -242,7 +242,7 @@ export function findReuse(context, {api, git, now = () => performance.now()} = {
     readGit('merge-base', '--is-ancestor', source.event.mergeBase, head.sha);
     assert.equal(readGit('merge-base', originalBase.sha, head.sha).trim(), source.event.mergeBase, 'Original merge base differs');
     assertWorkflowProvenance(source, run, readGit);
-    const selection = selectWorkflowPlan(workflowPath, {base: source.event.mergeBase, head: head.sha}, readGit);
+    const selection = selectWorkflowPlan(workflowPath, {kind: 'pr', base: source.event.mergeBase, head: head.sha}, readGit);
     const jobs = collectJobPages(number => call('listAttemptJobs', run.id, run.run_attempt, number));
     assertSourceEvidence(source, selection, jobs, expectedJobContract(workflowPath, selection));
     const reread = call('readRun', run.id), latest = newest();

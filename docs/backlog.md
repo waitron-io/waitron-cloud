@@ -2192,7 +2192,9 @@ implementation or production evidence.
   The final #992 head and its exact merge qualify their own CI and independent
   general/AWS reuse readbacks; the separate merge Kubernetes run executes 37 checks.
   The full nightly at `9237200a` also qualifies all eight root partitions.
-  Aggregate usage savings remain open.
+  D616 replaces D571's aggregate-measurement wait: PRs test only changed packages,
+  while whole-workspace typechecking remains and nightly catches type-correct
+  dependent behaviour breaks. Healthy elapsed savings are not claimed.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
   five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.

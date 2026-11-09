@@ -58,6 +58,16 @@ test('historical workspace reconstruction ignores newer manifests, source depend
   const duplicated=(...args)=>{const value=git(...args);return args[0]==='ls-tree'?value+value.split('\0')[0]+'\0':value;};
   assert.throws(()=>loadWorkspaceAtRevision(head,duplicated),/Duplicate workspace path/);
   git('reset','--hard',head);
+  rmSync(join(root, 'packages/new-owner'), {recursive: true});
+  write('packages/identity/src/index.ts', 'export const changed = true;\n');
+  git('add', '.'); git('commit', '-qsm', 'Identity source change');
+  const identityHead = git('rev-parse', 'HEAD').trim(), identitySnapshot = loadWorkspaceAtRevision(identityHead, git);
+  const prPlan = selectPlan({kind: 'pr', base: head, head: identityHead}, identitySnapshot, git);
+  assert.deepEqual(prPlan.packages, [{package: '@waitron-cloud/identity', shard: 1}]);
+  assert.equal(prPlan.typecheck, true);
+  const {selectWorkflowPlan} = await import('./ci-workflow-plan.mjs');
+  assert.deepEqual(selectWorkflowPlan('.github/workflows/ci.yml', {kind: 'pr', base: head, head: identityHead}, git), prPlan);
+  assert.equal(selectPlan({base: head, head: identityHead}, identitySnapshot, git).packages.length, 7);
   write('.gitattributes','* -text\n');git('add','.gitattributes');git('commit','-qsm','Attributed checkout');
   const attributed=git('rev-parse','HEAD').trim();
   assert.throws(()=>loadWorkspaceAtRevision(attributed,git),/Checkout attributes require full work/);

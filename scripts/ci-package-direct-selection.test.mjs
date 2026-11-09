@@ -6,7 +6,15 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {loadWorkspace, scopeForPaths} from './ci-scope.mjs';
 import {scopeForRevisions} from './ci-package-revisions.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {selectPlan} from './ci-plan.mjs';
+// These reader assertions exercise the retained default/push selection policy.
+function createPlan(event, context, packages, git) {
+  const {base, head} = event.pull_request;
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base: base.sha, head: head.sha}, {revision: head.sha, packages, testFilesByPackage}, git);
+}
+
 
 const direct = {direct: true};
 const members = [
@@ -177,7 +185,7 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('real PR plans distinguish own tests from source changes and keep compiler and receipts', () => fixture(({root, git, write, commit}) => {
+test('default plans distinguish own tests from source changes and keep compiler and receipts', () => fixture(({root, git, write, commit}) => {
   write('packages/catalogue/test/prices.test.mjs', 'export const price = 1;\n');
   const base = commit();
   write('packages/catalogue/test/prices.test.mjs', 'export const price = 2;\n');

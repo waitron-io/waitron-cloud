@@ -74,3 +74,19 @@ test('workspace source reads include undeclared names, root paths and uncertain 
     assert.deepEqual(scopeForPaths(['packages/named/src/a.mjs'],graph).packages,['named','opaque']);
   } finally {rmSync(root,{recursive:true,force:true});}
 });
+
+// Selecting manifest consumers here would restore the PR dependency expansion.
+test('PR scope selects only changed owners for sources, shared fixtures and multiple packages', () => {
+  const graph = [
+    {name: 'stock', directory: 'packages/stock'},
+    {name: 'service', directory: 'packages/service', dependencies: {stock: 'workspace:*'},
+      sources: [{path: 'packages/service/test/read.mjs', source: "import '../../stock/test/shared.mjs';"}]},
+    {name: 'portal', directory: 'apps/portal', dependencies: {service: 'workspace:*'}},
+  ];
+  for (const path of ['packages/stock/src/index.mjs', 'packages/stock/test/shared.mjs', 'packages/stock/README.md']) {
+    assert.deepEqual(scopeForPaths([path], graph, {ownersOnly: true}), {full: false, packages: ['stock']});
+  }
+  assert.deepEqual(scopeForPaths(['packages/stock/src/index.mjs', 'apps/portal/src/app.ts'], graph, {ownersOnly: true}),
+    {full: false, packages: ['portal', 'stock']});
+  assert.equal(scopeForPaths(['scripts/shared.mjs'], graph, {ownersOnly: true}).full, true);
+});

@@ -6,9 +6,12 @@ formatting job. It reads the exact Git blobs, checks UTF-8, rejects NUL characte
 and requires a final newline. A deleted document is accepted if it was regular
 in the earlier revision. Links and executable files do not qualify.
 
-Two documents are inputs to real checks: `docs/waitron-integration-contract.md`
-and the generated `docs/cloud-cost-model.md`. Their changes keep product checks.
-Package Markdown and everything under `docs/receipts/` also keep their owners.
+Consumed documents select their named execution owners: the integration contract
+runs translation, cost-model Markdown and JSON run the cloud-cost receipt, and
+the calculator also runs ui-smoke. The known gateway receipt runs root checks.
+The [ownership table](ci-root-input-ownership.md) gives the exact paths.
+Package Markdown selects its package. Other receipt files and unknown inputs
+retain full work; ordinary prose alone keeps the documentation check.
 
 CI compares both saved revisions. Ordinary prose can accompany package changes
 without widening their selection. Unknown inputs keep full work. Main pushes

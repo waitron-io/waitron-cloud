@@ -530,3 +530,28 @@ test('full root fallback requires every package owner', () => fixture(({git, wri
     assert.throws(() => api.assertRootInputWork({...full, packages}, {base, head, git}), /Root fallback requires every package owner/);
   }
 }));
+
+// A consumed document must select its execution owner rather than every package.
+for (const [path, packages, receipts, rootTests] of [
+  ['docs/waitron-integration-contract.md', ['@waitron-cloud/translation'], [], true],
+  ['docs/cloud-cost-model.md', [], ['test:cloud-cost'], false],
+  ['docs/cost-model/prices.json', [], ['test:cloud-cost'], false],
+  ['docs/cloud-cost-calculator.html', ['@waitron-cloud/ui-smoke'], ['test:cloud-cost'], true],
+  ['docs/receipts/gateway-reconnection-2026-10-13.json', [], [], true],
+]) test(`consumed document selects its named checks: ${path}`, () => fixture(({git, write, commit}) => {
+  for (const name of ['translation', 'ui-smoke']) {
+    write(`packages/${name}/package.json`, {name: `@waitron-cloud/${name}`, scripts: {test: 'node --test test/*.test.mjs'}});
+    write(`packages/${name}/src/index.mjs`, 'export {};\n');
+  }
+  write(path, 'original value\n'); const base = commit();
+  write(path, 'changed value\n'); const head = commit();
+  const members = ['control', 'translation', 'ui-smoke'].map(name => ({name: `@waitron-cloud/${name}`,
+    directory: `packages/${name}`, sources: [], scripts: {test: 'node --test test/*.test.mjs'}}));
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, members, git);
+  assert.deepEqual(selected.packages.flatMap(row => row.packages ?? [row.package]).sort(), packages);
+  for (const receipt of receipts) assert.ok(selected.receipts.includes(receipt));
+  assert.equal(selected.rootTests, rootTests);
+  assert.doesNotThrow(() => api.assertRootInputWork(selected, {base, head, git}));
+  if (packages.length) assert.throws(() => api.assertRootInputWork({...selected,
+    packages: [{package: '@waitron-cloud/control', shard: 1}]}, {base, head, git}), /Missing root package owner/);
+}));

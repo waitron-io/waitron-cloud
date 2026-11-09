@@ -26,9 +26,10 @@ function mixedCodePaths(paths, base, head, git) {
   } catch { return paths; }
 }
 
-export function packageWorkForPaths(paths, workspace, base, head, git, testFilesByPackage) {
+export function packageWorkForPaths(paths, workspace, base, head, git, testFilesByPackage, kind) {
   if (!paths.length) throw Error('Package work requires nonempty paths');
-  let scope = scopeForPaths(paths, workspace, {direct: true});
+  const ownersOnly = kind === 'pr';
+  let scope = scopeForPaths(paths, workspace, {direct: true, ownersOnly});
   let receiptScope = scopeForPaths(paths, workspace), lockSelection;
   let reason, reviewedPackageReaders = false;
   if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
@@ -41,13 +42,13 @@ export function packageWorkForPaths(paths, workspace, base, head, git, testFiles
       const revisions = scopeForRevisions(paths, workspace, base, head, git, {direct: true, receiptScope: true,
         onReviewedReader: () => { candidateReviewedReaders = true; }});
       reviewedPackageReaders = candidateReviewedReaders;
-      scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
+      if (!ownersOnly) scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
       receiptScope.packages = [...new Set([...receiptScope.packages, ...revisions.receiptPackages])].sort();
     } catch (error) {
       // Package evidence cannot invalidate an independent receipt audit.
-      scope.packages = scopeForPaths([], workspace).packages;
-      receiptScope.packages = [...scope.packages];
-      reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
+      if (!ownersOnly) scope.packages = scopeForPaths([], workspace).packages;
+      receiptScope.packages = scopeForPaths([], workspace).packages;
+      reason = `Unverified package revisions: ${error.message}: ${ownersOnly ? 'full receipt scope' : 'full package suite'} (${paths.join(', ')})`;
     }
   }
   reason ??= scope.full ? `Shared or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
@@ -80,7 +81,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     const root = rootInputPlan(paths, base, head, git);
     if (root?.full) return full(root.reason);
     if (root) {
-      const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage)
+      const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage, range.kind)
         : {packages: [], receipts: [], typecheck: false, reason: 'Known root owners'};
       return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
@@ -88,7 +89,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
       return full(`Shared or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
     }
-    return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};
+    return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage, range.kind), reuse: null};
   } catch {
     return full('Cannot determine revision diff: full suite');
   }

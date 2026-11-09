@@ -1,13 +1,17 @@
 # Checks outside workspace packages
 
 A small test outside a package can otherwise select every package and receipt.
-Two tests have known execution owners, kept as a two-row constant in
+Tests and consumed documents have known execution owners, kept in
 `scripts/ci-root-inputs.mjs`:
 
 | Changed input | Required checks |
 | --- | --- |
 | `scripts/ci-root-shards.test.mjs` | All eight root partitions |
 | `deploy/local-stack/operations-health.test.mjs` | The entire `test:local-stack` receipt command |
+| `docs/waitron-integration-contract.md` | translation, typecheck and root checks |
+| `docs/cloud-cost-model.md`, `docs/cost-model/*.json` | `test:cloud-cost` |
+| `docs/cloud-cost-calculator.html` | ui-smoke, typecheck, root checks and `test:cloud-cost` |
+| `docs/receipts/gateway-reconnection-2026-10-13.json` | All eight root partitions |
 
 Both targets must be regular files in both saved revisions. Removing either,
 changing workspace identities or test commands, or changing checkout attributes
@@ -22,7 +26,10 @@ empty work and incomplete job results. Large markers retain full work.
 
 ## Review the actual readers
 
-Root ownership comes from the two-row constant, not generated records. The old
+Root ownership comes from the explicit mapping, not generated records.
+Consumed documents must be regular files wherever present in either saved tree.
+A missing named package or an unknown companion input retains full work.
+Package-associated work keeps the independent receipt audits. The old
 JSON registry, records and writers have been removed. The [documentation guide](ci-documentation-audit.md)
 explains this accepted trade-off. When a reader changes, trace imports, copied
 files, scans and child commands and update its ownership tests in the same PR.

@@ -4,7 +4,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {createPlan} from './ci-plan.mjs';
+import {selectPlan} from './ci-plan.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 
 function fixture(run) {
@@ -28,10 +28,8 @@ function fixture(run) {
       write(`${pkg.directory}/src/index.mjs`, 'export const value = 1;\n');
     }
     git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input}));
-    const plan = (base, head, call = git) => createPlan(
-      {pull_request: {base: {sha: base}, head: {sha: head}}},
-      {sha: head, repository: 'waitron-io/waitron-cloud'}, workspace, call,
-      () => {throw Error('No API expected');});
+    const plan = (base, head, call = git) => selectPlan({base, head},
+      {revision: head, packages: workspace, testFilesByPackage: {}}, call);
     run({root, git, write, commit, plan, workspace});
   } finally {rmSync(root, {recursive: true, force: true});}
 }

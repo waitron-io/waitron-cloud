@@ -69,16 +69,19 @@ test('package Markdown, document data and unknown paths preserve their existing 
     fixture(({put, commit, plan}) => {
       put(path, '{}\n');
       const selected = plan(commit());
-      assert.equal(selected.packages.length, 29, path);
+      assert.equal(selected.packages.length, path.startsWith('packages/identity/') ? 1 : 29, path);
+      assert.equal(selected.receipts.length, 6, path);
     });
   }
 });
 
-test('mixed documents and portal code retain the full fallback', () => fixture(({put, commit, plan}) => {
+test('mixed documents and portal code retain portal tests and complete receipt scope', () => fixture(({put, commit, plan}) => {
   put('docs/backlog.md', '# Updated\n');
   put('apps/portal/src/change.ts', 'export const changed = true;\n');
   const selected = plan(commit());
-  assert.equal(selected.packages.length, 29);
+  assert.equal(selected.packages.length, 6);
+  assert.ok(selected.packages.every(row => row.package === '@waitron-cloud/portal'));
+  assert.equal(selected.receipts.length, 6);
   assert.equal(selected.typecheck, true);
 }));
 

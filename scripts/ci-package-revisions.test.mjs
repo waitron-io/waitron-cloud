@@ -4,7 +4,15 @@ import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, rmSync
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {createPlan} from './ci-plan.mjs';
+import {selectPlan} from './ci-plan.mjs';
+// These reader assertions exercise the retained default/push selection policy.
+function createPlan(event, context, packages, git) {
+  const {base, head} = event.pull_request;
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base: base.sha, head: head.sha}, {revision: head.sha, packages, testFilesByPackage}, git);
+}
+
 import {loadWorkspace, scopeForPaths} from './ci-scope.mjs';
 import {scopeForRevisions} from './ci-package-revisions.mjs';
 import * as packageInputs from './ci-package-revisions.mjs';
@@ -517,19 +525,20 @@ test('unreferenced helpers do not add package consumers', () => fixture(({root, 
     {full: false, packages: ['catalogue']});
 }));
 
-test('the planner command follows immutable helper readers despite dirty source and batches both trees', () => fixture(({root, git, write, commit}) => {
+test('the main push planner command follows immutable helper readers despite dirty source and batches both trees', () => fixture(({root, git, write, commit}) => {
   write('scripts/adapter.mjs', "import '../packages/catalogue/src/index.mjs';\n");
   write('packages/portal/src/index.mjs', "import '../../../scripts/adapter.mjs';\n");
   const base = commit();
+  git('commit', '--allow-empty', '-sm', 'Intermediate push fixture');
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
   write('scripts/adapter.mjs', 'export const value = 3;\n');
   const event = join(root, 'event.json'), output = join(root, 'outputs.txt'), trace = join(root, 'git-trace.log');
-  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  writeFileSync(event, JSON.stringify({before: base, after: head}));
   execFileSync(process.execPath, [new URL('./ci-plan.mjs', import.meta.url).pathname], {
-    cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+    cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', CI_FULL: 'false', CI_CALLED: 'false',
       CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head,
-      GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'fixture', GIT_TRACE: trace},
+      GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'main', GIT_TRACE: trace},
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const result = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));

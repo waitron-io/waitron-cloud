@@ -38,7 +38,7 @@ export function loadWorkspace(root = process.cwd()) {
   }));
   if (!packages.length || new Set(packages.map(pkg=>pkg.name)).size !== packages.length) throw new Error('Invalid workspace members');
   // Tests may import sibling source and fixtures directly rather than through manifests.
-  // Include those file consumers so a scoped PR cannot hide a broken sibling fixture.
+  // Push selection retains those readers; PR tests follow changed owners only.
   for (const pkg of packages) {
     const sources = [], metadata = [];
     const visit = directory => {
@@ -99,7 +99,7 @@ function testReaderIndex(sources, workspace) {
     [...uncertain].some(prefix => prefix === '.' || path.startsWith(prefix));
 }
 
-export function scopeForPaths(paths, workspace, {direct = false} = {}) {
+export function scopeForPaths(paths, workspace, {direct = false, ownersOnly = false} = {}) {
   const all = workspace.map(pkg=>pkg.name).sort();
   const full = () => ({full:true, packages:all});
   if (!paths.length || paths.some(path => !path)) return full();
@@ -112,6 +112,7 @@ export function scopeForPaths(paths, workspace, {direct = false} = {}) {
     if (!changed.has(owner.name)) changed.set(owner.name, []);
     changed.get(owner.name).push(path);
   }
+  if (ownersOnly) return {full: false, packages: [...selected].sort()};
   if (direct) {
     const indexes = new Map();
     const indexFor = pkg => {

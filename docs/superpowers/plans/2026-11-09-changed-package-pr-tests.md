@@ -1,6 +1,6 @@
 # D616: Changed-package PR tests
 
-Owner authority, quoted from Lane G queue, watcher 2026-11-09 08:22: owner “yes, same rule”; “if code in package X changes then run the tests for package X ... and then catch anything else in the nightlies.” Claude's 406-second source review found the changes below. Watcher BUILD approval and the policy choices below remain pending.
+Owner authority, quoted from Lane G queue, watcher 2026-11-09 08:22: owner “yes, same rule”; “if code in package X changes then run the tests for package X ... and then catch anything else in the nightlies.” Claude's 406-second source review found the changes below. Watcher approved this plan and its policy choices in Lane G questions.md, 2026-11-09 09:02: “keep every existing reader and refusal assertion, run against the unchanged push and default policy”; “correct Cloud's CLAUDE.md rule”.
 
 Use existing selectors: PR tests select changed packages, while whole-workspace typechecking covers dependents. Key this on `range.kind === 'pr'`; preserve default push selection, full nightly/manual runs, receipt audits, partitions and summaries. A dependent behaviour break that remains type-correct waits for nightly. No workflow edits or new evidence format.
 
