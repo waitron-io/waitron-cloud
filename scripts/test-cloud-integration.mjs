@@ -55,12 +55,12 @@ function command(args, input = '', phase = args[0], env = {}) {
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', code => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '')));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_legacy_builder' : '')));
       else resolve(output.trim());
     });
     child.stdin.end(input);
