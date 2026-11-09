@@ -116,9 +116,11 @@ export async function runTestCloudClients(options = {}) {
       ['account', 'ca', 'network', 'proxyIp'].every(key => typeof k[key] === 'string' && k[key].length > 0) &&
       Number.isInteger(k.port) && Number.isInteger(k.mailPort) && typeof k.exec === 'function' &&
       typeof k.remote?.worker === 'function', 'integration.kubernetes_binding');
-    assert.ok(!options.paidSnapshot && !options.paidVerification && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
+    assert.ok(!options.paidSnapshot && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
       !options.measureCapacity && !options.measureIntegration && !options.cloudRollback && !options.schemaRollback &&
       !options.fixedProject && !options.pairedExpiry, 'integration.kubernetes_scope');
+    if (options.paidVerification) assert.ok(['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
+      .every(name => typeof k.verifier?.[name] === 'function'), 'integration.kubernetes_binding');
   }
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
   const revision = process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
@@ -188,19 +190,21 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',
     ...(venueCAs.has(id) ? ['--env', 'NODE_EXTRA_CA_CERTS=' + venueCAs.get(id)] : []),
     id, 'node', '/proof/integration-control.mjs'], JSON.stringify({phase, choice}), 'client-' + phase));
+  const verifierDocker = (...args) => kubernetes?.verifier ? kubernetes.verifier.docker(...args) : docker(...args);
   const readVerifierScope = async () => {
     if (!verifierWorker || !verifierStarted) return;
     const path = join(directory, 'verifier-identity.json');
+    if (kubernetes) {verifierScope = verifierIdentityScope(await kubernetes.verifier.identity(), waitronImage); return;}
     await docker(['cp', verifierWorker + ':/run/backup-verifier/verifier-controller/identity.json', path], '', 'verifier-identity');
     const identity = parseIntegrationJson(await readFile(path, 'utf8'));
     verifierScope = verifierIdentityScope(identity, waitronImage);
   };
   const verifierChildren = async () => {
     if (!verifierScope) return [];
-    const children = lines(await docker(['ps', '-aq', '--no-trunc', '--filter', 'label=cloud.backup-verifier.owner=waitron-cloud-test-backup', '--filter', 'label=cloud.backup-verifier.scope=' + verifierScope]));
+    const children = lines(await verifierDocker(['ps', '-aq', '--no-trunc', '--filter', 'label=cloud.backup-verifier.owner=waitron-cloud-test-backup', '--filter', 'label=cloud.backup-verifier.scope=' + verifierScope]));
     for (const id of children) {
       assert.match(id, /^[a-f0-9]{64}$/);
-      const [info] = parseIntegrationJson(await docker(['inspect', id]));
+      const [info] = parseIntegrationJson(await verifierDocker(['inspect', id]));
       checkVerifierChild(info, {id, image: waitronImage, scope: verifierScope});
     }
     return children;
@@ -421,6 +425,8 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           const verify = async () => {
           const verification = {image: waitronImage, revision, nativeTarget};
           await accountPhase('configure-verification', verification);
+          if (kubernetes) {verifierWorker = await kubernetes.verifier.start(captured.pointId, verification); verifierStarted = true;}
+          else {
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
           const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
           const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-verifier-state']);
@@ -436,22 +442,23 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             '--entrypoint', 'node', image, 'deploy/test-cloud/test-fixtures/integration-verifier.mjs'], '', 'verifier-create');
           owned.push(verifierWorker); record('container', verifierWorker);
           verifierStarted = true; await docker(['start', verifierWorker]);
+          }
           let admission;
           for (let attempt = 0; attempt < 90; attempt++) {
             try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...captured, ...verification})); break;}
             catch {
-              assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', verifierWorker]), 'true', 'integration.verifier_worker_exited');
+              assert.equal(kubernetes ? String(await kubernetes.verifier.running()) : await docker(['inspect', '--format', '{{.State.Running}}', verifierWorker]), 'true', 'integration.verifier_worker_exited');
               await delay(500);
             }
           }
           assert.ok(admission, 'integration.verification_not_admitted');
           await readVerifierScope(); assert.equal(admission.controllerScope, verifierScope);
           assert.deepEqual(await verifierChildren(), [], 'integration.verifier_child_remains');
-          assert.equal(await docker(['ps', '-aq', '--no-trunc', '--filter', 'id=' + admission.childId]), '', 'integration.verifier_child_remains');
+          assert.equal(await verifierDocker(['ps', '-aq', '--no-trunc', '--filter', 'id=' + admission.childId]), '', 'integration.verifier_child_remains');
           record('container', admission.childId);
           removed.push(created.find(value => value.kind === 'container' && value.id === admission.childId));
-          await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-stop');
-          assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
+          if (kubernetes) await kubernetes.verifier.stop(); else await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-stop');
+          assert.equal(kubernetes ? await kubernetes.verifier.exitCode() : await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
           publishedSnapshot.verification = 'verified';
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
           };
@@ -729,8 +736,9 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
   } finally {
     await cancellation.run({...cancellation.getStore(), cleanup: true}, async () => {
     try {
+      // Host cleanup owns the native clients; the owned kind node collects its separate verifier daemon.
       const cleanup = () => cleanupTestCloudResources({docker, project, runId, created, removed, owned, started,
-        verifier: {worker: verifierWorker, started: verifierStarted, readScope: readVerifierScope, children: verifierChildren},
+        verifier: {worker: kubernetes ? undefined : verifierWorker, started: verifierStarted, readScope: readVerifierScope, children: verifierChildren},
         built, recoveryBuilt, clientTag, recoveryTag, inventory,
         protectedUnchanged: after => checkProtectedContainers(before, after, protectedContainerIds)});
       if (capacityChronology) {

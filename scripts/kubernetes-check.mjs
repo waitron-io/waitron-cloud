@@ -7,7 +7,53 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {runTestCloudClients} from './test-cloud-integration.mjs';
+import {pathToFileURL} from 'node:url';
+import {pipeline} from 'node:stream/promises';
+import {runTestCloudClients, parseIntegrationJson} from './test-cloud-integration.mjs';
+export async function loadVerifierImage(image, kubeArgs, env, signal) {
+  signal?.throwIfAborted();
+  const exporter = spawn('docker', ['save', image], {env, signal, stdio: ['ignore', 'pipe', 'pipe']});
+  const importer = spawn('kubectl', kubeArgs, {env, signal, stdio: ['pipe', 'pipe', 'pipe']});
+  const children = [exporter, importer], exits = children.map(child => new Promise(resolve => {
+    child.once('error', () => {}); child.once('close', resolve); child.stderr.resume();
+  }));
+  importer.stdout.resume();
+  const timer = setTimeout(() => {for (const child of children) child.kill('SIGKILL');}, 180000);
+  try {
+    await pipeline(exporter.stdout, importer.stdin, {signal});
+    assert.ok((await Promise.all(exits)).every(code => code === 0), 'kubernetes.verifier_image_load');
+  } catch {throw Error('kubernetes.verifier_image_load');}
+  finally {clearTimeout(timer); for (const child of children) child.kill('SIGKILL'); await Promise.all(exits);}
+}
+
+export function createKubernetesVerifier({template, kube, pod, loadImage}) {
+  const status = async () => (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
+  const exec = args => kube(['exec', '-i', 'pod/verifier', '-c', 'verifier', '--', ...args]);
+  return {
+    async start(pointId, {image, revision}) {
+      assert.ok(/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(pointId) &&
+        /^sha256:[a-f0-9]{64}$/.test(image) && /^[a-f0-9]{40}$/.test(revision), 'kubernetes.verifier_binding');
+      const value = structuredClone(template), worker = value.spec.containers.find(row => row.name === 'verifier');
+      value.spec.hostAliases[0].ip = (await pod('cloud')).status.podIP;
+      const environment = {CLOUD_INTEGRATION_POINT_ID: pointId, CLOUD_VERIFIER_IMAGE: image, CLOUD_INTEGRATION_WAITRON_REVISION: revision};
+      for (const row of worker.env) if (Object.hasOwn(environment, row.name)) row.value = environment[row.name];
+      await kube(['apply', '-f', '-'], JSON.stringify(value));
+      await kube(['wait', '--for=condition=Ready', 'pod/verifier', '--timeout=180s']);
+      await loadImage(image);
+      return 'kube-verifier';
+    },
+    identity: async () => parseIntegrationJson(await exec(['cat', '/run/backup-verifier/verifier-controller/identity.json'])),
+    docker: args => kube(['exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', ...args]),
+    running: async () => Boolean((await status()).running),
+    async stop() {
+      await exec(['node', '-e', 'process.kill(1,"SIGTERM")']);
+      await kube(['wait', '--for=jsonpath={.status.containerStatuses[?(@.name=="verifier")].state.terminated}', 'pod/verifier', '--timeout=15s']);
+    },
+    exitCode: async () => String((await status()).terminated?.exitCode),
+  };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 const cluster = 'd620-' + randomUUID(), forwards = [];
 const directory = await mkdtemp(join(tmpdir(), 'cloud-kubernetes-'));
 const env = {...process.env, KUBECONFIG: join(directory, 'kubeconfig')};
@@ -61,6 +107,8 @@ try {
   const address = node.NetworkSettings.Networks.kind.IPAddress;
   assert.match(address, /^(?:\d{1,3}\.){3}\d{1,3}$/);
   const manifest = JSON.parse((await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8')).replaceAll('CLOUD_IMAGE', tag));
+  const verifierTemplate = manifest.items.find(item => item.metadata.name === 'verifier');
+  manifest.items = manifest.items.filter(item => item !== verifierTemplate);
   const proxy = (await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8'))
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
   manifest.items.push({apiVersion: 'v1', kind: 'ConfigMap', metadata: {name: 'proxy'}, data: {'proxy.cfg': proxy}});
@@ -80,9 +128,12 @@ try {
     else await kube(['rollout', 'status', 'deployment/manifest', '--timeout=60s']);
   }};
   process.stderr.write('Running native signup, pairing and remote-access journey against Kubernetes\n');
-  result = await runTestCloudClients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true,
+  const verifier = createKubernetesVerifier({template: verifierTemplate, kube, pod,
+    loadImage: id => loadVerifierImage(id, ['--context', 'kind-' + cluster, '--namespace', 'default', 'exec', '-i',
+      'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, stop.signal)});
+  result = await runTestCloudClients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true, paidVerification: true,
     kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: 'kind', proxyIp: address,
-      port: ports[3443], mailPort: ports[8025], exec, remote}});
+      port: ports[3443], mailPort: ports[8025], exec, remote, verifier}});
 } catch (error) {
   if (created && !stop.signal.aborted) {try {process.stderr.write(await kube(['get', 'pods', '--request-timeout=5s']) + '\n');} catch {}}
   throw error;
@@ -101,3 +152,4 @@ try {
   }
 }
 process.stdout.write(JSON.stringify(result) + '\n');
+}
