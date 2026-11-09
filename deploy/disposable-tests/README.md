@@ -192,6 +192,13 @@ While hosted CI or the final summary runs, the controller releases the slot lock
 
 Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hosted jobs run Ubuntu. The guest account owns its home and runner tree and can use its private Docker daemon and passwordless sudo. Registration requests `/home/runner/work` as its working root to match hosted checkout paths; mixed coverage still needs an actual successful merge before qualification. Provisioning, supervision and completion recording stay privileged; local manual Cloud commands still run as root. Run `node --test scripts/disposable-tests/session.test.mjs scripts/disposable-tests/guest-exec.test.mjs` to check the listener’s launch settings and command completion.
 
+During an assigned job, failed GitHub network reads, request timeouts, interrupted response
+bodies and HTTP 5xx replies retry while a separate inspection confirms that the owned guest
+is running. A failed read skips only its dependent checks; other readable confirmations
+still apply. Confirmed cancellation, a changed attempt or assignment, and a missing guest
+still stop execution. Other API refusals keep the existing one-minute failure limit;
+original preparation, execution and overall turn deadlines remain in force.
+
 The guest recipe also pins `zip`, `unzip` and `jq` for archive fixtures and shell guards. Run each newly routed family’s actual job commands in a guest before enabling its cap so missing operating-system tools fail qualification.
 
 A worker exit of 75 without a job admission record leaves the job eligible after the 30-second polling interval, including when a publication holds the slot locks. The wait counts against starting capacity to limit repeated requests; recorded admissions still prevent replay. Run `node --test scripts/disposable-tests/ci-auto.test.mjs` to check both cases.

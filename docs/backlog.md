@@ -14,6 +14,12 @@ on 84/87-job runs. Every consumer keeps its completeness, trust and admission ch
 later siblings observed as assigned that bar cancellation. Source tests exercise paginated
 admission and refusal; keep actual published pickup as separate operating evidence.
 
+A1440's execution monitor now checks guest liveness independently when GitHub reads fail
+with a network error, timeout, interrupted body or HTTP 5xx response. It retains confirmed
+cancellation/identity stops and existing deadlines. A delayed GitHub cancellation after a
+guest was destroyed does not measure that guest's execution speed; keep the API-monitor
+failure and later cancellation timestamps separate when assessing server performance.
+
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
 ## Keep the private shared UI release current (D579)
