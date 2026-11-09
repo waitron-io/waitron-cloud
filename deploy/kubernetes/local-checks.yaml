@@ -243,10 +243,10 @@
           {
             "name": "docker",
             "image": "docker:29.9.3-dind",
-            "args": ["--host=unix:///var/run/docker.sock"],
-            "env": [{"name": "DOCKER_TLS_CERTDIR", "value": ""}],
+            "args": ["--host=unix:///docker-socket/docker.sock"],
+            "env": [{"name": "DOCKER_TLS_CERTDIR", "value": ""}, {"name": "DOCKER_HOST", "value": "unix:///docker-socket/docker.sock"}],
             "securityContext": {"privileged": true},
-            "volumeMounts": [{"name": "socket", "mountPath": "/var/run"}, {"name": "docker-data", "mountPath": "/var/lib/docker"}],
+            "volumeMounts": [{"name": "socket", "mountPath": "/docker-socket"}, {"name": "docker-data", "mountPath": "/var/lib/docker"}],
             "startupProbe": {"exec": {"command": ["docker", "info"]}, "periodSeconds": 1, "failureThreshold": 60},
             "resources": {"limits": {"memory": "2048Mi"}}
           },
@@ -255,9 +255,9 @@
             "image": "CLOUD_IMAGE",
             "imagePullPolicy": "Never",
             "command": ["sh", "-ec", "until docker image inspect \"$CLOUD_VERIFIER_IMAGE\" >/dev/null 2>&1; do sleep 1; done; exec node deploy/test-cloud/test-fixtures/integration-verifier.mjs"],
-            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}, {"name": "CLOUD_VERIFIER_IMAGE", "value": "PINNED_WAITRON_IMAGE"}, {"name": "CLOUD_INTEGRATION_POINT_ID", "value": "CAPTURED_POINT_ID"}, {"name": "CLOUD_INTEGRATION_WAITRON_REVISION", "value": "PINNED_WAITRON_REVISION"}],
+            "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}, {"name": "CLOUD_VERIFIER_IMAGE", "value": "PINNED_WAITRON_IMAGE"}, {"name": "CLOUD_INTEGRATION_POINT_ID", "value": "CAPTURED_POINT_ID"}, {"name": "CLOUD_INTEGRATION_WAITRON_REVISION", "value": "PINNED_WAITRON_REVISION"}, {"name": "DOCKER_HOST", "value": "unix:///docker-socket/docker.sock"}],
             "securityContext": {"readOnlyRootFilesystem": true, "allowPrivilegeEscalation": false, "capabilities": {"drop": ["ALL"]}},
-            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack", "readOnly": true}, {"name": "socket", "mountPath": "/var/run"}, {"name": "verifier-state", "mountPath": "/run/backup-verifier"}, {"name": "tmp", "mountPath": "/tmp"}],
+            "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack", "readOnly": true}, {"name": "socket", "mountPath": "/docker-socket"}, {"name": "verifier-state", "mountPath": "/run/backup-verifier"}, {"name": "tmp", "mountPath": "/tmp"}],
             "resources": {"limits": {"memory": "128Mi"}}
           }
         ],

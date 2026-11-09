@@ -175,6 +175,15 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   assert.equal(typeof api.createKubernetesVerifier, 'function');
   const value = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
   const template = value.items.find(item => item.metadata.name === 'verifier'); assert.ok(template);
+  const daemon = template.spec.containers.find(row => row.name === 'docker');
+  for (const container of template.spec.containers) {
+    const socket = container.volumeMounts.find(row => row.name === 'socket').mountPath;
+    const canonical = socket === '/var/run' ? '/run' : socket;
+    assert.equal(['/run/local-stack', '/run/backup-verifier'].some(path => path.startsWith(canonical + '/')), false, 'socket mount must not hide private runtime or controller state');
+    const endpoint = 'unix://' + socket + '/docker.sock';
+    assert.equal(container.env.find(row => row.name === 'DOCKER_HOST')?.value, endpoint);
+    assert.deepEqual(daemon.args, ['--host=' + endpoint]);
+  }
   const point = '12345678-1234-4234-8234-123456789abc', image = 'sha256:' + 'b'.repeat(64), revision = 'c'.repeat(40);
   const statuses = [{name: 'docker', state: {running: {}}}, {name: 'verifier', state: {running: {}}}];
   const identity = {version: 1, owner: 'waitron-cloud-test-backup', image, scope: point};
