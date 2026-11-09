@@ -151,6 +151,6 @@ bilingual status updates plus manual publishing over mobile data. Paging must
 start when investigation finishes or 15 minutes after confirmation, whichever
 comes first; the repeat is 10 minutes after the first page attempt and the
 unattended marker is at 20 minutes. Keep times and results in the private launch
-record. Account recovery, dated public incident history, verified-health wording, the
-publisher, phone adapters and these drills remain open until actually completed.
-A generated local bundle alone qualifies none of them.
+record. Account recovery, verified-health wording, the publisher, phone adapters
+and these drills remain open until actually completed. The local history bundle
+does not qualify public delivery or those launch checks.
