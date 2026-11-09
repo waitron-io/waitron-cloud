@@ -1161,3 +1161,31 @@ test('automatic worker failure retires its intent without invoking fallback',asy
  const result=await controller.executeOrdinary({api:f.api,policy,ci,leases,lane:'I',automatic:true,transport:{healthy:async()=>false},fallback:async()=>{calls.push('fallback');return {retry:true};}});
  assert.equal(result.code,125);assert.equal(result.retry,false);assert.deepEqual(calls,[]);assert.equal(pending,undefined);
 });
+
+
+test('automatic capacity publication ignores deleted runs in retained hosted markers',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ let capacity='',markerWrites=0;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"777":2}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:path.endsWith('/runs/777')?Promise.reject(Object.assign(new Error('Not Found'),{status:404})):get(path);
+ f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;else markerWrites++;};
+ const result=await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>({code:0})});
+ assert.equal(result.served,5);assert.equal(JSON.parse(capacity).slots,6);assert.equal(markerWrites,0);
+});
+
+test('the real automatic worker tags bounded stderr and forwards the original bytes',async t=>{
+ const {writeFileSync}=await import('node:fs'),{automaticTick}=await import('./control.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(1);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const node=process.execPath,worker=config.state+'/stderr-worker';
+ writeFileSync(worker,'#!'+node+'\n'+"process.stderr.write('x'.repeat(6000));process.exit(125);\n",{mode:0o700});
+ const error=console.error,write=process.stderr.write,records=[],forwarded=[];
+ t.after(()=>{process.execPath=node;console.error=error;process.stderr.write=write;});
+ console.error=line=>{records.push(JSON.parse(line));};process.stderr.write=data=>{forwarded.push(Buffer.from(data));return true;};process.execPath=worker;
+ let result;
+ try{result=await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true}});}
+ finally{process.execPath=node;console.error=error;process.stderr.write=write;}
+ const diagnostics=records.filter(row=>row.event==='automatic-ci-admission-stderr');
+ assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),'x'.repeat(4096));
+ for(const row of diagnostics){assert.equal(row.runId,789);assert.equal(row.attempt,1);assert.equal(row.jobId,901);assert.ok(Number.isFinite(Date.parse(row.at)));}
+ assert.equal(Buffer.concat(forwarded).toString(),'x'.repeat(6000));
+});

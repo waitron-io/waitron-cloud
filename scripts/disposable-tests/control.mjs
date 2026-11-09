@@ -3,7 +3,7 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp} from './github-app.mjs';
-import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
+import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity} from './ci-canary.mjs';
@@ -45,7 +45,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
   try{
-   snapshot=await overflowInventory({api,policy,signal});
+   snapshot=await overflowInventory({api,policy,signal,includeHosted:false});
    await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal});lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   return snapshot;

@@ -78,8 +78,8 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
-export async function overflowInventory({api,policy,signal}){
- const marked=await hostedAttempts({api,policy,signal}),runs=new Map(),snapshot=new Map();
+export async function overflowInventory({api,policy,signal,includeHosted=true}){
+ const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(),snapshot=new Map();
  for(const status of ['queued','in_progress']){
   const data=await api.get(`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,{signal});
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
