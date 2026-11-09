@@ -97,6 +97,31 @@ export async function overflowOrdinary({api,policy,ci,signal}){
     !(job.status==='completed' && job.conclusion==='skipped')));
  };
  if(await started())return;
+ const selected=await jobInventory(api,base+`/attempts/${ci.attempt}/jobs`,signal);
+ const wave=selected.jobs.filter(job=>job.conclusion!=='skipped').length;
+ if(wave>20)return;
+ const marked=await hostedAttempts({api,policy,signal}),runs=new Map();
+ for(const status of ['queued','in_progress']){
+  const data=await api.get(`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,{signal});
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete hosted run inventory');
+  for(const run of data.workflow_runs)runs.set(run.id,run);
+ }
+ for(const id of Object.keys(marked))if(!runs.has(Number(id)))runs.set(Number(id),await api.get(`/repos/${policy.repository}/actions/runs/${id}`,{signal}));
+ let occupied=0;
+ for(const [id,run] of runs){
+  assert.ok(run.id===id && run.repository?.id===policy.repositoryId && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0,'Foreign hosted run inventory');
+  if(id===ci.runId)continue;
+  const inventory=await jobInventory(api,`/repos/${policy.repository}/actions/runs/${id}/attempts/${run.run_attempt}/jobs`,signal);
+  for(const job of inventory.jobs){
+   assert.ok(job.run_id===id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha && Array.isArray(job.labels),'Foreign hosted job inventory');
+   if(marked[id]===run.run_attempt+1){if(job.conclusion!=='skipped')occupied++;}
+   if(!job.labels.length || job.labels.includes('self-hosted'))continue;
+   if(job.status==='queued')return;
+   if(job.status==='in_progress')occupied++;
+  }
+ }
+ if(occupied+wave>20)return;
  await markHostedAttempt({api,policy,ci,signal});
  if(await started()){
   const values=await hostedAttempts({api,policy,signal});

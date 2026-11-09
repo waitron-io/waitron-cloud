@@ -835,6 +835,37 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  assert.equal(value,['newer-attempt','stale-head','closed','running-sibling'].includes(state)?'{}':'{"789":2}');
 });
 
+for(const [state,running,wave,wantCancel] of [
+ ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,false],
+ ['large wave',0,21,false],['queued hosted',0,5,false],['unknown jobs',0,5,false],
+ ['unknown runs',0,5,false],['wrong attempt',0,5,false],['duplicate runs',0,5,false],
+ ['reserved retry',15,5,false]
+])test(`overflow requires observed hosted room: ${state}`,async()=>{
+ const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ const target=f.jobs[0];f.jobs.splice(0,f.jobs.length,...Array.from({length:wave},(_,i)=>({...target,id:901+i})));
+ const other={...f.run,id:790},hosted=Array.from({length:running},(_,i)=>({...target,id:1000+i,run_id:790,status:'in_progress',runner_id:42,labels:['ubuntu-latest']}));
+ if(state==='queued hosted')hosted.push({...target,id:2000,run_id:790,labels:['ubuntu-latest']});
+ if(state==='wrong attempt')hosted.push({...target,id:2000,run_id:790,run_attempt:2,labels:['ubuntu-latest']});
+ let marker=state==='reserved retry'?'{"790":2}':'{}';const posts=[];
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
+  if(path.endsWith('/actions/jobs/901'))return target;
+  if(path.includes('/actions/runs?')){
+   const runs=path.includes('status=queued')?[]:[f.run,other];
+   if(state==='duplicate runs' && runs.length)runs.push(other);
+   return {total_count:runs.length+(state==='unknown runs'?1:0),workflow_runs:runs};
+  }
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:hosted.length+(state==='unknown jobs'?1:0),jobs:hosted};
+  return get(path,options);
+ };
+ f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
+ let error;try{await controller.overflowOrdinary({api:f.api,policy,ci});}catch(e){error=e;}
+ if(state.startsWith('unknown') || state==='wrong attempt' || state==='duplicate runs')assert.match(error?.message??'',/inventory/i);
+ else assert.equal(error,undefined);
+ assert.deepEqual(posts,wantCancel?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
+ assert.equal(marker,wantCancel?'{"789":2}':state==='reserved retry'?'{"790":2}':'{}');
+});
+
 test('full-pool overflow preserves a run already preparing a guest before runner assignment',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;
@@ -1150,6 +1181,7 @@ for(const count of [1000,1001])test(`force cancellation preserves the ${count}-j
 
 for(const assigned of [true,false])test(`overflow reads the page-three sibling before ${assigned?'preserving':'cancelling'} the run`,async()=>{
  const f=pagedJobFixture(),get=f.api.get,posts=[];
+ for(const job of f.jobs)if(job!==f.target)job.conclusion='skipped';
  f.jobs[82]={...f.target,id:2000,status:assigned?'in_progress':'queued',runner_id:assigned?77:0};
  f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
  f.api.post=async path=>{posts.push(path);f.run.status='completed';};
