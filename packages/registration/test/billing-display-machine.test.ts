@@ -273,7 +273,7 @@ test('billing display reads of different venues share their business lock while 
  }
 });
 
-// Losing a tenant/venue filter, array order or one-roundtrip history must fail these checks.
+// Composite account/venue scope, array order and constant database calls are preserved.
 async function historyFixture(count:number){
  const f=await fixture();
  try{
@@ -342,6 +342,14 @@ test('batched history retains complete facts and excludes sibling scopes and ven
  frozenClock(t);const f=await historyFixture(12),client=await f.pool.connect();
  try{
   const target=f.targets[0]!,args=[target.scope.organisationId,target.scope.legalBusinessId,target.venueId];
+  await client.query(`INSERT INTO billing_charge_lines VALUES($1,$2,md5(13::text)::uuid,$3,'hosted_days',1,100)`,args);
+  await client.query(`INSERT INTO billing_charges SELECT organisation_id,legal_business_id,'ffffffff-ffff-ffff-ffff-ffffffffffff','hosted_comeback',
+   renewal_date,NULL,hosted_from,hosted_through,price_revision,price_effective_from,currency,connected_monthly_cents,hosted_monthly_cents,vat_rate_basis_points,100,21,121,event_id
+   FROM billing_charges WHERE organisation_id=$1 AND legal_business_id=$2 AND id=md5(1::text)::uuid`,args.slice(0,2));
+  await client.query(`INSERT INTO billing_charge_lines VALUES($1,$2,'ffffffff-ffff-ffff-ffff-ffffffffffff',$3,'hosted_days',1,100)`,args);
+  await client.query(`INSERT INTO billing_hosted_days(organisation_id,legal_business_id,venue_id,on_date,consumed_by_charge_id,event_id)
+   SELECT organisation_id,legal_business_id,$3,'2026-11-02',id,event_id FROM billing_charges
+   WHERE organisation_id=$1 AND legal_business_id=$2 AND id='ffffffff-ffff-ffff-ffff-ffffffffffff'`,args);
   const actual=await displayReader.facts(client,target.scope,target.venueId),expected=[];
   // Independent old reads preserve every frozen field, not just the projected paid period.
   for(const {id} of (await client.query('SELECT id FROM billing_charges WHERE organisation_id=$1 AND legal_business_id=$2 AND id<>md5(13::text)::uuid ORDER BY renewal_date,id',args.slice(0,2))).rows){
@@ -350,9 +358,9 @@ test('batched history retains complete facts and excludes sibling scopes and ven
    const hostedDays=(await client.query('SELECT venue_id,on_date::text FROM billing_hosted_days WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3 AND consumed_by_charge_id=$4 ORDER BY on_date',[...args,id])).rows.map(r=>({venueId:r.venue_id,on:r.on_date}));
    expected.push({charge,attempts,hostedDays});
   }
-  assert.equal(actual.charges.length,12);assert.deepEqual(actual.charges,expected);
+  assert.equal(actual.charges.length,13);assert.deepEqual(actual.charges,expected);
   assert.deepEqual(actual.charges[0],{charge:{...target.scope,id:'c20ad4d7-6fe9-7759-aa27-a0c99bff6710',kind:'renewal',renewalDate:'2025-12-01',connectedUntil:'2026-01-01',window:{from:'2025-12-01',through:'2025-12-03'},price:{revision:1,effectiveFrom:'2026-09-01',currency:'EUR',prices:{connectedMonthlyCents:1000,hostedMonthlyCents:3000},vatRateBasisPoints:2100},lines:[{venueId:target.venueId,kind:'hosted_days',quantity:1,cents:100}],totals:{netCents:1100,vatCents:231,grossCents:1331}},attempts:[],hostedDays:[{venueId:target.venueId,on:'2025-12-01'},{venueId:target.venueId,on:'2025-12-03'}]});
-  assert.deepEqual(actual.charges[1].charge.lines,[]);
+  assert.deepEqual(actual.charges[1]!.charge.lines,[]);
  }finally{client.release();await f.close();}
 });
 test('empty billing history retains the unpaid display',async t=>{
