@@ -1,6 +1,6 @@
 # D620: Single-machine Kubernetes service checks
 
-**Blocked at source review.** The owner's 15:17 direction in Lane G `questions.md` puts local sign-in, remote access and backups first; D618 later runs those same checks on three Amazon machines. Scope and spending choices are answered. No runtime evidence is claimed here.
+**Source reading only.** Owner authority, relayed in Lane G `questions.md` on 9 November at 15:17: “write Cloud's service checks for D110 (sign-in, remote access, backups working on Kubernetes) and run them locally on ONE machine.” D618 runs those checks on three Amazon machines later. No build or runtime proof is claimed.
 
 Sources: [D110](2026-10-22-cloud-country-cell.md), [deployment design §12](../specs/2026-10-22-cloud-production-deployment-design.md#12-what-approving-this-design-allows-and-what-is-left-open), [documentation ownership](../../documentation-ownership.md).
 
