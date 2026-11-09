@@ -1,34 +1,17 @@
-# D506 storage handoff port owners
+# D506: identify the storage port holder before choosing a repair
 
-Authority: `/Users/clintongormley/waitron-campaign-g/queue.md` and `questions.md`, watcher **2026-11-09 12:52**: “D506 (the recurring port-collision flake) first ... D506’s fix goes test-first from a failure that prints the port’s holder.”
+Authority: watcher **2026-11-09 12:52**, Lane G `questions.md`: “D506 (the recurring port-collision flake) first ... D506’s fix goes test-first from a failure that prints the port’s holder.” RUNNER section 0 requires Claude’s plan read and watcher approval before building. This proposed smaller first slice follows that read; watcher approval is pending.
 
-Driver reviews and commits this plan, obtains one Claude read, then asks watcher approval before building. No standalone plan PR.
+The [PR1114 failure](https://github.com/waitron-io/waitron-cloud/actions/runs/42601399972/job/129106638540) names master port 35921 without its owner. `scripts/backup-storage-fixture.mjs:403–404,632–646` releases reservations before spawn, then attaches a listening-only snapshot after failure. The retry line at 108 prints that snapshot; a final Node test refusal can omit it. No historical cause is established.
 
-Reading evidence: `scripts/backup-storage-fixture.mjs:346,408,632–646` selects odd ports, releases reservations before spawn, and attaches LISTEN-only ownership without printing it. `/Users/clintongormley/waitron-campaign-g/receipts/d616/build-20261109/head-ci/job-129106638540.log:7555` names master port 35921 without its holder. Automatic outgoing-port overlap is untested; historical owners remain unexplained.
+**Deliverable:** a bounded stderr marker naming observed local socket holders before owned-child cleanup. This diagnostic slice can land with D506 still open; fixing an attributed cause needs its own approved scope. A single snapshot may miss a short-lived holder. Empty output means no owner observed, never that the port was free.
 
-Files to change:
+**Exact changed files:** this plan; `scripts/backup-storage-fixture.mjs`; `scripts/storage-control-diagnostics.mjs`; new `scripts/ci-backup-storage-startup-diagnostics.test.mjs`; `scripts/ci-backup-storage-readiness-diagnostics.test.mjs`; `docs/backlog.md` (D506 paragraph); `docs/backlog/storage-cache-fixture.md` (D506 section). No port allocation, claim, retry, deadline, authority or fixture-root attribution change. No sampler, new reservation scheme, unrelated timeout fix, provider access or shared-machine mutation.
 
-- `scripts/backup-storage-fixture.mjs`: diagnostics, then only the demonstrated allocation repair.
-- `scripts/ci-backup-storage-startup-diagnostics.test.mjs` (new): real-owner diagnostics and cause-specific regression.
-- `scripts/ci-backup-storage-readiness-diagnostics.test.mjs`: deliberately extend exact output checks for the added marker; retain original readiness bytes, counts and error identity.
-- `deploy/test-cloud/storage-startup.test.mjs`: cause-specific native regression if needed; retain every check.
-- `docs/backlog.md`: own D506 paragraph only.
-- `docs/backlog/storage-cache-fixture.md`: own D506 section only.
-- `docs/superpowers/plans/2026-11-09-storage-handoff-port-owners.md`: this plan.
+- [ ] Test first: capture actual stderr around real occupied-listener and connected-socket startup refusals. Require one `storage_startup_failure=` JSON record before cleanup per failed attempt, including an abandoned first attempt. Add missing inspector, no observed owner and throwing-sink cases. Keep the original refusal/error identity, competing sockets and owned cleanup. Excluding the print must fail the new checks.
+- [ ] Export existing `inspectSockets` with an optional timeout, preserving its current five-second default and partial-output handling. The fixture uses its existing two-second/65536-byte bounds. Keep its attached LISTEN-only snapshot unchanged. Use the wider query only for the new filtered marker; reuse Linux bound-inactive fallback when applicable. Print only allocated ports, parent/child PID (null if unavailable), parsed refused port/service, local holder PID/short process name/local port/TCP state and bounded collection status. Exclude remote endpoints, arguments, environment, raw error text and inspector output. A local-port filter must reject a readiness client whose remote port alone matches. No claimant-to-holder inference.
+- [ ] Deliberately extend readiness exact-output checks: strictly parse/count the new records (one without collision, two with collision), then require today’s readiness bytes/reporter messages unchanged after removing those records. Preserve empty stderr for a throwing sink, all counts, error identity and cleanup checks. Add no readiness subtests; the tar-seed consumer pins eight passes. List this changed check in the PR.
+- [ ] Run explicit files: the new test; `scripts/ci-backup-storage-{readiness-diagnostics,spawn-refusal,claim-before-bind,reservation-refusals}.test.mjs`; `scripts/ci-storage-{control-diagnostics,tar-seed,admin-handoff}.test.mjs`; `deploy/test-cloud/storage-{startup,admin-ports,admin-exhaustion,s3-grpc}.test.mjs`. Use the Linux test-box for Linux controls. Each real-owner mode runs once before/after; a passing baseline is no repair claim. Any unlisted file or changed check returns to the watcher.
+- [ ] Update only D506 documentation with commands and limits; retain unresolved historical causes. One Claude execution review, gathered push, exact-head CI, signed landing under the lane lock, exact-merge readback. CI owns full suites.
 
-- [ ] **Diagnostics first, test first.** Add subprocess controls with a real competing listener and a connected TCP owner. Capture actual stderr; require one `storage_startup_failure=` JSON marker per failed native startup before cleanup, including the first attempt when retry succeeds. Watch these fail because output is missing. Add missing-inspector, no-owner and throwing-sink controls; verify original error identity, cleanup and preservation of competing sockets. Include synthetic private values and assert they never print.
-- [ ] Reuse `storageStartup` and its existing two-second, 65536-byte collection bounds. Include listening and connected sockets, allocated ports, PID and process short name. Emit only credential-free fields, never arguments, environment or raw error text. Distinguish collection unavailable from no observed owner. Include fixture root identity only when existing claim/root mapping demonstrably identifies that holder; a claimant alone is insufficient. Preserve all eight claims, odd preference, exactly one retry, cleanup and broken-reporter handling. Make controls pass.
-- [ ] Trace these consumers before changing policy, then run them explicitly:
-
-```sh
-node --test scripts/ci-backup-storage-claim-before-bind.test.mjs scripts/ci-backup-storage-reservation-refusals.test.mjs scripts/ci-storage-admin-handoff.test.mjs
-node --test deploy/test-cloud/storage-startup.test.mjs deploy/test-cloud/storage-admin-ports.test.mjs deploy/test-cloud/storage-admin-exhaustion.test.mjs deploy/test-cloud/storage-s3-grpc.test.mjs
-node --test scripts/ci-backup-storage-readiness-diagnostics.test.mjs
-```
-
-- [ ] On the Linux test-box, use controlled/concurrent native handoffs to capture the holder before cleanup. Inspect the actual automatic outgoing range if implicated. Reproduce the evidenced conflict in a failing regression, then minimally repair this fixture and rerun that reproduction and commands above. Never choose an arbitrary range. Stop with evidence for watcher if diagnostics cannot establish cause or repair requires a new reservation scheme. The readiness diagnostic checks deliberately gain the startup marker while retaining the exact readiness record and all original predicates. Ask before any other changed check or file.
-- [ ] Update D506 documentation with commands, observations and remaining limits. No new protocols, deadlines, permanent self-mutation tests, retry increases, unrelated progress-timeout repair or production/provider changes. CI owns full suites. After build: one Claude run-it review, one gathered push, inspect every exact-head CI job, then signed landing under your own lock and exact-merge verification.
-
-Estimate: 60 production lines, 220 new/40 changed test lines, 40 documentation lines and 60 plan lines: 420 changed lines total; stop for watcher at 630. Three-hour start-to-PR budget; approval waits excluded. No extra deadline.
-
-Finish: unrelated Cloud CI no longer hits the reproduced allocation conflict; remaining real refusals print their current owner without hiding the original failure. Without an established cause, D506 is incomplete.
+Estimate: 55 production, 150 new/25 changed test, 25 documentation and 45 plan lines: 300 changed lines; watcher stop 450. RUNNER’s three-hour start-to-PR budget excludes approval waits. Finish: controlled refusals print their observed holder while preserving failure and cleanup; D506’s root-cause repair remains open.
