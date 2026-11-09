@@ -1,0 +1,27 @@
+# D618: one bounded Amazon run
+
+D620 comes first, with its own size limit. The driver reports its one-machine run passed, 1 test/0 skips, 337.6 seconds. This proposal follows source inspection at `6eb3e4675`; it is not runtime proof or approval. Obtain one Claude source review, then watcher/owner plan approval before building inline. Account access and spending require the separate owner-started run.
+
+Your finish line is three EC2 machines forming one Kubernetes cluster, D620’s unchanged signup/login/pairing, remote-access/refusal and captured-snapshot restore assertions passing before and after stopping one machine, and confirmed deletion afterward. Reuse `runTestCloudClients` and `createKubernetesVerifier`; copy neither checks nor D570 machinery.
+
+Use kubeadm/Kubernetes 1.34.3, not three kind containers. Machine A hosts the control plane, Cloud/database/storage/gateway and external Docker venue clients; B hosts the nested verifier; C hosts the manifest Deployment. After the first complete journey, bind C’s instance ID to its node and running worker, stop C through EC2, confirm stopped, then replace its worker on B. Keep C off for at least 900 seconds and rerun the complete journey. Successful new routes and subsequent downgrade withdrawal require that replacement worker’s actual work. Preserve all existing assertions, timeouts, diagnostics and security restrictions.
+
+The adapter must replace the singleton binding and image loading (`scripts/kubernetes-check.mjs:73–137`), keep loopback port-forwards, import pinned images into each node and verifier daemon, and give A’s venue clients an owned Docker bridge reaching A’s private host ports 3000/8333/51820 (`scripts/test-cloud-integration.mjs:309–364`). Add a separate Amazon target guard; retain kind’s strict guard. Retain TLS names/trust. Cross-node PostgreSQL uses its Service; verifier `waitron.local` resolves to Cloud’s Pod IP. Share the live synthetic configuration directory from A through node-restricted NFS: copying files once cannot carry manifest/certificate updates (`deploy/test-cloud/remote-runtime.mjs:65–69`). NFS compatibility remains unverified. Pin bootstrap inputs and check cross-node DNS/routing before journeys.
+
+The Cloud Pod’s `emptyDir` database/storage stays on A (`deploy/kubernetes/local-checks.yaml:21–33`). Nothing here proves its relocation or durability after A fails. Two fresh journeys do not prove continuity of existing sessions/backups. P1’s each-node loss, 90/300-second recovery, continuing probes, durable commits, stable gateway handover and repository reconciliation remain unproved (`2026-10-22-cloud-country-cell.md:32–45`); do not rewrite those targets.
+
+Recommend an existing practice account outside the Organization, isolating management/production. Existence, access, quota, AMI and capacity are unverified; account creation is unauthorized. Propose `eu-west-1`, three on-demand x86 `m7i.xlarge`, encrypted 80-GiB root disks, one subnet, 60-minute absolute expiry; SSH only from your address and cluster ports only between nodes. Transfer prebuilt images without package credentials.
+
+Before the first run resource, require a USD 10 monthly automatic [Budgets deny-launch action](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-controls.html) covering every launch role, preserving teardown permissions. A small CloudFormation stack installs an independent [Scheduler target](https://docs.aws.amazon.com/scheduler/latest/UserGuide/managing-targets-universal.html) calling `cloudformation:deleteStack` before creating machines. Success/failure traps delete immediately; creation rollback and scheduled deletion cover partial launch, launcher loss and stopped C, including disks/network. Verify deletion completion, not request acceptance. Residual risk: AWS deletion/permission failures and [8–12-hour billing updates](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) can exceed USD 10. Explicit planning assumption: USD 0.25/instance-hour plus USD 1.25 for disks, IPv4, transfer and actions gives approximately USD 2/run before tax; verify prices before launch and check the bill before any second run.
+
+Proposed commands: `node scripts/amazon-run.mjs start --state /private/tmp/d618-run`; emergency/idempotent stop: `node scripts/amazon-run.mjs stop --state /private/tmp/d618-run`.
+
+Exact implementation files and estimated added/removed lines:
+
+- Code 300/30: new `scripts/amazon-{run,check}.mjs`; adapt `scripts/{kubernetes-check,test-cloud-integration}.mjs`.
+- Config 220/0: new `deploy/aws/bounded-run.yaml`, including expiry/IAM.
+- Support 160/0: new `deploy/kubernetes/amazon-bootstrap.sh`, including networking/NFS.
+- Tests 220/0: new `scripts/amazon-run.test.mjs` owns fake lifecycle/failure/expiry checks; extend `scripts/kubernetes-check.test.mjs` for adapter binding/DNS/image loading. D620 owns real service assertions; the authorized run owns provider/fault/deletion evidence. Use observed failing tests before implementation.
+- Docs 100/0: this page, eventual `docs/{aws-infrastructure,backlog}.md` updates.
+
+Approximately 1,030 changed lines cannot credibly fit 500. Smallest proposed cut: separate offline cluster/adapter work from launcher/expiry work, each independently estimated before watcher decision; build neither under the current limit. Exclude production, managed service resources, customer data/mail, AI, new monitoring/DNS, weekly automation, D570 deletions and later D110–D116 platform work. Publish no account IDs or secrets.
