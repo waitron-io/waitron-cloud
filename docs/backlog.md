@@ -3139,8 +3139,12 @@ implementation or production evidence.
   for local building and rehearsal. D110's
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
-  availability checks for sign-in, remote access and backups. Full service/fault proof
-  and the strict common verifier remain unbuilt. D570's
+  availability checks for sign-in, remote access and backups. You can run the first
+  single-machine sign-in and remote-access checks with `node scripts/kubernetes-check.mjs`;
+  its opening comment lists the required local images and tools. Kubernetes backup
+  verification with the test backup worker, full service/fault proof and the strict
+  common verifier remain open. These checks use test-service mode; P1's
+  production-mode acceptance remains open. D570's
   [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
   is paused by the owner on 2026-11-08. Restart it as a small new item when
   production deployment is close: one self-removing machine template, shutdown
