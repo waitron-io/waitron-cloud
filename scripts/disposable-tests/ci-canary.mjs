@@ -436,33 +436,43 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    const execution=new AbortController(),monitor=new AbortController();let ended=false,monitorFailure;
    const work=AbortSignal.any([options.signal,execution.signal]);
    const watching=(async()=>{
-    let healthyAt=Date.now();
+    let healthyAt=Date.now(),refusal;
     while(!ended){
      try{await wait(15000,undefined,{signal:monitor.signal});}catch{if(ended)return;throw new Error('CI monitor stopped');}
      if(ended)return;
      try{
-      try{
-       const current=await api.get(`${base}/runs/${ci.runId}`,{signal:work});
-       assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');
-       const job=await api.get(`${base}/jobs/${ci.jobId}`,{signal:work});
+      let unavailable=false;
+      const read=async path=>{
+       try{return await api.get(path,{signal:work});}
+       catch(error){
+        unavailable=true;
+        const transient=error instanceof TypeError && error.message==='fetch failed' || error.name==='TimeoutError' ||
+         error.code==='GITHUB_RESPONSE_INTERRUPTED' || Number.isInteger(error.status) && error.status>=500 && error.status<=599;
+        if(!transient)refusal??={at:healthyAt,error};
+        return undefined;
+       }
+      };
+      const current=await read(`${base}/runs/${ci.runId}`);
+      if(current!==undefined)assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');
+      const job=await read(`${base}/jobs/${ci.jobId}`);
+      if(job!==undefined){
        assert.ok(!job.runner_id || job.runner_id===registration.runner.id,'CI runner assignment differs');
        assert.ok(job.status!=='completed' || job.conclusion==='success','CI job assignment completed without success');
        if(!job.runner_id){
-        const runner=await api.get(`${base}/runners/${registration.runner.id}`,{signal:work});
-        assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
-        assert.equal(runner.busy,false,'CI runner assignment is busy elsewhere');
+        const runner=await read(`${base}/runners/${registration.runner.id}`);
+        if(runner!==undefined){
+         assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
+         assert.equal(runner.busy,false,'CI runner assignment is busy elsewhere');
+        }
        }
        if(job.status==='queued')assert.ok(Date.now()-lease.createdAt<900000,'CI queue deadline exceeded');
-      }catch(error){
-       const transient=error instanceof TypeError && error.message==='fetch failed' || error.name==='TimeoutError' ||
-        error.code==='GITHUB_RESPONSE_INTERRUPTED' || Number.isInteger(error.status) && error.status>=500 && error.status<=599;
-       if(!transient)throw error;
-       work.throwIfAborted();
       }
+      if(!unavailable)refusal=undefined;
+      if(refusal && Date.now()-refusal.at>=60000)throw refusal.error;
       const observed=await transport.inspect(lease,{signal:work});
       assert.ok(observed.running===true,'CI guest is no longer running');healthyAt=Date.now();
      }catch(error){
-      if(/assignment|attempt|deadline|no longer running/i.test(error.message) || Date.now()-healthyAt>=60000)throw error;
+      if(/assignment|attempt|deadline|no longer running/i.test(error.message) || refusal && Date.now()-refusal.at>=60000 || Date.now()-healthyAt>=60000)throw error;
      }
     }
    })().catch(error=>{monitorFailure=error;execution.abort();});

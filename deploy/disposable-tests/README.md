@@ -194,7 +194,8 @@ Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hoste
 
 During an assigned job, failed GitHub network reads, request timeouts, interrupted response
 bodies and HTTP 5xx replies retry while a separate inspection confirms that the owned guest
-is running. Confirmed cancellation, a changed attempt or assignment, and a missing guest
+is running. A failed read skips only its dependent checks; other readable confirmations
+still apply. Confirmed cancellation, a changed attempt or assignment, and a missing guest
 still stop execution. Other API refusals keep the existing one-minute failure limit;
 original preparation, execution and overall turn deadlines remain in force.
 
