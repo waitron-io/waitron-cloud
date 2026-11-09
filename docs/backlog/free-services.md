@@ -159,11 +159,12 @@ venue does not subscribe to remote access or backups.
   at `0fbcde001`); actual secret exposure is unverified. The Waitron caller item must
   use bounded diagnostics and test secret-bearing exceptions before integration.
 - **SMS codes (candidate).** The [SMS gateway design](../superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md)
-  holds the chosen provider, account-counted monthly figures and initial enforcement
-  exceptions. Approval, sender/privacy/delivery qualification and implementation remain open;
+  holds the owner-approved provider, venue-counted monthly figures and daily cap,
+  and initial monthly enforcement exception (owner, 2026-11-09). Sender/privacy/delivery
+  qualification and implementation remain open;
   booking messages are outside this revision. Push notifications need a separate decision.
-- **Per-user allowances.** Meter each service against the Cloud user account, enforce
-  limits and show usage and remaining allowance. Define the allowance sizes, reset
+- **Per-user allowances.** Meter services against the Cloud user account, except SMS which counts
+  per venue; enforce limits and show usage and remaining allowance. Define the allowance sizes, reset
   periods and behaviour at the limit, including password-reset delivery. Settle how
   venue-generated requests count against an account and prevent multiple installations
   from bypassing its allowance. The relay contract proposes one unit per admitted

@@ -72,14 +72,14 @@ the sign-up themselves. It should require zero work from us"
 
 | Level | Name in this design | Who it belongs to | What it includes |
 | --- | --- | --- | --- |
-| 1 | Registered | the Cloud account | the email gateway, address lookup, automatic upgrades and [SMS codes](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures); free |
+| 1 | Registered | the Cloud account, except SMS per venue | the email gateway, address lookup, automatic upgrades and [SMS codes](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures); free |
 | 2 | Connected | one venue | level 1, plus remote access, automatic translation, the rota solver, off-box backups with the live stream, and the possibility of failing over to the cloud |
 | 3 | Hosted | one venue | level 2, with the venue's server running in Cloud |
 
 - **Level 1's allowances count per Cloud account**, so an owner with many venues has a
   reason to bring them all into Cloud (owner). Levels 2 and 3 are per venue (owner).
   SMS is the exception: its [monthly figures](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures)
-  count per Cloud account at every level, initially without monthly refusal.
+  count per venue at every level, initially without monthly refusal (owner, 2026-11-09).
 - **Failing over to the cloud is part of what level 2 promises.** No one agrees to it in
   advance, because nothing has to happen until it is needed: the live stream is already in
   Cloud (owner).
@@ -114,8 +114,8 @@ enforcement points are reconciled is left to the builder.
 
 - The email gateway and the AI features (translation, the rota solver) each have a
   **monthly allowance, which can differ by level**. SMS follows the
-  [8 November decisions](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
-  account-counted codes, initially unenforced monthly figures, an enforced daily cap,
+  [9 November decisions](2026-11-07-cloud-venue-sms-gateway-design.md#codes-and-monthly-figures):
+  venue-counted codes, initially unenforced monthly figures, an enforced per-venue daily cap,
   EU-only eligible destinations, usage warnings and enforced request/guess controls. Booking messages are outside that revision. The gateway remains unbuilt.
 - **The allowances exist to stop abuse, not to make money.** They are set high enough that
   a normal venue never meets them; SMS’s daily cap can stop ordinary use. The AI
