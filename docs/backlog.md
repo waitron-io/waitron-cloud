@@ -404,8 +404,12 @@ G5 movement, G6 diagnostics/privacy and G7 runtime evidence retain their
 path-scoped gates. G4/G5 are outside the first target. No tunnel or consumer is
 qualified by the plan. Admission stays CLOSED and `.local` independent.
 
-**D101 data protection, approved design and published build planning:** the owner
-approved the complete D101/D88 data-protection engineering design from PR283
+**D101 data protection is parked until the privacy specialist answers** (owner,
+2026-11-09). Slices 1–4 remain landed, and the slice 5 plan is kept. No further
+D101 build starts until that answer. The earlier approvals and delivered work
+below remain the record.
+
+The owner approved the complete D101/D88 data-protection engineering design from PR283
 (`9701cd2359d69f0a3e8960b761754cf492aac745`) on 2026-10-22 around 08:30 **for build
 planning only**. The [Cloud design](superpowers/specs/2026-10-22-cloud-data-protection-design.md)
 and [implementation roadmap](superpowers/plans/2026-10-22-cloud-data-protection.md)
@@ -461,8 +465,9 @@ row changes. O1 is answered. AI stays disabled until separately privacy-reviewed
 eligibility rules, positive/refusal examples and documented limits receive owner
 acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provider/entity/
 access-location evidence, D102 email qualification and runtime proof remain open.
-The published plan records the reviewed roadmap; local build authority for slices
-2–5 leaves every legal, provider, shared-contract and enablement gate in place. This does not approve broader D88 hosting/isolation/shared contracts,
+The published plan records the reviewed roadmap and leaves every legal, provider,
+shared-contract and enablement gate in place. The owner's 9 November pause takes
+precedence over the earlier local build authority. This does not approve broader D88 hosting/isolation/shared contracts,
 spending, deployment, provider resources or contracts. The C39 monitoring design
 remains approved for planning only, subject to the production deployment and
 monitoring designs' corrections. The [alerts plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
