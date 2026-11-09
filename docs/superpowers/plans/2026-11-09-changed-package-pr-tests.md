@@ -1,26 +1,21 @@
 # D616: Changed-package PR tests
 
-Plan authored from source inspection; parent ran the existing scope/workPlan helper, not tests. Authority: Lane G queue D616, owner 2026-11-09. Parent obtains Claude review and watcher approval before implementation.
+Owner authority, quoted from Lane G queue, watcher 2026-11-09 08:22: owner “yes, same rule”; “if code in package X changes then run the tests for package X ... and then catch anything else in the nightlies.” Claude's 406-second source review found the changes below. Watcher BUILD approval and the policy choices below remain pending.
 
-Use existing Node/Git selectors, not a replacement. PR package tests select changed owners only; whole-workspace typechecking already covers dependents. Preserve default dependency scopes for receipts and pushes, nightly/manual full work, proof ownership, strict summaries, partitions and authority checks. Dependent behaviour that remains type-correct may fail only at the next nightly.
+Use existing selectors: PR tests select changed packages, while whole-workspace typechecking covers dependents. Key this on `range.kind === 'pr'`; preserve default push selection, full nightly/manual runs, receipt audits, partitions and summaries. A dependent behaviour break that remains type-correct waits for nightly. No workflow edits or new evidence format.
 
-**Change paths and estimates.** Code, 120–200 lines: `scripts/ci-scope.mjs`, `scripts/ci-plan.mjs`, `scripts/ci-root-inputs.mjs`, `scripts/ci-reuse.mjs`. Tests, 180–260 lines: `scripts/ci-scope.test.mjs`, `scripts/ci-plan.test.mjs`, `scripts/ci-mixed-docs.test.mjs`, `scripts/ci-root-inputs.test.mjs`, `scripts/ci-workspace-snapshot.test.mjs`, `scripts/ci-reuse.test.mjs`. Guides/backlog, 60–100 lines: `docs/ci-package-selection.md`, `docs/ci-package-readers.md`, `docs/ci-documentation-audit.md`, `docs/ci-root-input-ownership.md`, `docs/backlog.md`. Workflow edits: zero; `.github/workflows/ci.yml` already executes exact package filters.
+**Files/size.** Code 50–100 lines: `scripts/ci-{scope,plan,root-inputs,reuse}.mjs`. Tests 220–320 lines: `scripts/ci-{scope,plan,mixed-docs,root-inputs,workspace-snapshot,reuse,package-direct-selection,local-stack-receipt,docs,gateway-scripts}.test.mjs`, plus the existing 34-file `scripts/ci-package-revisions{,-*}.test.mjs` family for fixture routing only. Guides/backlog 60–100 lines: `docs/ci-{package-selection,package-readers,documentation-audit,root-input-ownership}.md`, `docs/backlog.md`. Ask the watcher to authorize the stale `CLAUDE.md` CI paragraph correction; otherwise Claude updates it. No generated files.
 
-1. **TDD: package owners.** Add failing PR source/test/multiple-package cases in `ci-scope.test.mjs` and `ci-plan.test.mjs`; run `node --test scripts/ci-scope.test.mjs scripts/ci-plan.test.mjs`. Add an opt-in owners-only scope, applied only to PR ranges. Keep `scopeForRevisions` reader unions and refusal evidence for independent receipts; a reader refusal must not expand PR package tests. Leave lockfile ownership/audits intact.
-2. **TDD: outside-package inputs.** Add failing cases in `ci-mixed-docs.test.mjs` and `ci-root-inputs.test.mjs`; run `node --test scripts/ci-mixed-docs.test.mjs scripts/ci-root-inputs.test.mjs`. Reuse documentation audit and root ownership: `docs/**` and Markdown never force full package work, alone or mixed. Preserve actual test/receipt owners for consumed inputs. Other inputs retain full fallback only when they can affect tests; workflows, shared configuration, locks, helpers and unresolved readers qualify. Make both files pass without weakening receipt or authority assertions.
-3. **TDD: reconstruction.** Add failing cases in `ci-workspace-snapshot.test.mjs` and `ci-reuse.test.mjs`; run `node --test scripts/ci-workspace-snapshot.test.mjs scripts/ci-reuse.test.mjs`. Mark reconstructed source ranges as PRs in reuse; reconstruct pushes with their existing policy. Preserve immutable snapshots, saved shard inventory, missing-evidence refusals and exact-job summaries. Rerun all six focused files green.
+1. **TDD package policy/reconstruction.** In the named scope/plan/direct-selection/snapshot/reuse tests, first fail PR source/test/multiple-owner cases and source reconstruction; then add owners-only scope and pass PR kind through reuse. Default/no-kind ranges retain current behaviour. Preserve reader/refusal assertions under that retained policy through a narrow fixture-helper switch; watcher must approve moving those existing PR fixtures. Add PR cases proving owners-only tests, full dependent typechecking and unchanged receipt refusals. Set refused receipt scope to all packages directly, never copy narrowed PR scope. Preserve refusal diagnostics and lockfile audits.
+2. **TDD documentation routing, after watcher decision.** Use existing root/document owners and summaries, retaining saved-file and authority checks. Proposed bounded owners:
 
-Current `scopeForPaths(..., {direct: true})`/`workPlan` probe at `d9bad98be`: package rows below. Documentation row describes the existing planner, not the raw helper. Targets are projections:
+| Changed input | Required work |
+| --- | --- |
+| Ordinary root/docs Markdown | Existing documentation check |
+| Integration contract | translation |
+| Cost model and cost-model data | cloud-cost receipt |
+| Cost calculator | cloud-cost receipt and ui-smoke |
+| Known gateway receipt | Existing root checks |
 
-| Change | Before packages/jobs | After |
-| --- | ---: | ---: |
-| identity | 5/23 | 1/1 |
-| account-http | 7/28 | 1/3 |
-| portal | 1/6 | 1/6 |
-| ordinary docs only | 0/0 via planner | 0/0 |
-
-Full allocation is 29 jobs. Re-run scope/workPlan and the complete planner before/after for the PR table; these counts establish selection, not elapsed savings.
-
-Watcher decision: executable/link Markdown, contract/cost Markdown and receipt data have real guards. Prefer bounded owning checks; blanket exemption delays their failures until nightly. Never silently discard those guards. Flag Claude-maintained `CLAUDE.md:136`’s “one level” rule and `:147`’s prose boundary; do not edit it.
-
-Update the named guides; D616 replaces D571’s measurement wait in its existing backlog paragraph only. Finish: one Claude-reviewed, current-head green PR with the measured table, then landing and exact-merge verification.
+Confirm actual execution owners before exempting other receipts/evaluations. Recommend keeping unknown non-Markdown, executable/symlink Markdown and checkout attributes full; interpret `*.md` as root/docs prose, with package README selecting its package. These are explicit exceptions to the literal docs rule, requiring watcher approval. No new zero-work route.
+3. **Verify and finish.** Run explicit changed test files, preserving assertions; CI owns full suites. Re-run existing scope/workPlan and complete-planner before/after probes for identity, account-http, portal, ordinary docs and consumed-doc rows. Current raw direct counts are 5/23, 7/28 and 1/6 packages/jobs; projected owner counts 1/1, 1/3 and 1/6. Counts are not elapsed savings. Update the guides and replace “Aggregate usage savings remain open” in the backlog CI-runtime paragraph with D616's superseding decision. One Claude run-it review, one ready push/PR, green current-head checks, landing and exact-merge verification.
