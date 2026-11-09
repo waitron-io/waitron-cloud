@@ -1,6 +1,6 @@
 # D608: revise the Cloud owner design
 
-**Documentation only; approved for revision.** Revise draft #1090 to the settled sign-in rules. No implementation, provider access or landing.
+**Documentation only; approved for landing.** Revise draft #1090 to the settled sign-in rules and the owner’s 9 November decisions. No implementation or provider access.
 
 ## Direction and scope
 
@@ -9,6 +9,10 @@ Lane G watcher 2026-11-08 11:25: “Revise #1090 to it”, the shared `sign-in-r
 Owner 11:39 settled Registered (level 1, free) 10 texts/account/month, Connected (level 2) 25, Hosted (level 3) includes Connected; stated, initially unenforced. Counting/configurability are watcher 11:11 directions; D610 owns delivery detail. No build authority.
 
 **Approval:** Watcher 8 November 13:13 approves the revision with the corrected 12:08 rule: at least one proof (app, passkey **or SMS**) before connecting a box, remote access or adding a payment method, including existing owners and handover recipients. This replaces the stricter app/passkey wording below. Existing app recovery codes remain; expansion and remembered-device reset effects stay open. “Revise the draft; no further Claude read” supersedes the design-read step. No implementation or landing authority.
+
+## Final owner decisions, 2026-11-09
+
+Watcher 13:06 relays the owner’s five answers and says “record them and land the design”. These replace the open choices below: total loss has no manual/staff recovery or support/operator override; box recovery reaches only the organisation of the paired venue; every owner with app, passkey or SMS gets single-use recovery codes that may replace any of those methods; one pending transfer per organisation expires visibly after 24 hours, either participant can cancel, and recipient acceptance completes it without another owner confirmation; mailbox password reset forgets recognised devices so their next sign-in needs email or SMS again. The earlier 13:13 “no further Claude read” direction is retained. This is design landing, not build or provider authority.
 
 ## Revision after approval
 
@@ -26,4 +30,4 @@ Owner 11:39 settled Registered (level 1, free) 10 texts/account/month, Connected
 
 Only this plan, `docs/superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md` and launch item 5 in `docs/backlog.md`. Estimate 110 changed documentation lines including existing branch edits; zero production/test code. Spec: at most two pages, target 1,000 words. Keep unrelated backlog bytes. Put approval quotations in the PR, with a short dated provenance sentence in the spec.
 
-Check full diff, size, local links/anchors and `git diff --check`; name absent D610 as code text. Run `node --test scripts/ci-docs.test.mjs`, signed commits and immutable `node scripts/ci-docs.mjs` on committed planner base/head/paths. Obtain Claude design read; update draft #1090 and read current-head CI. Finish: owner reviews consistent rules and open choices; nothing built or landed.
+Check full diff, size, local links/anchors and `git diff --check`; name absent D610 as code text. Run `node --test scripts/ci-docs.test.mjs`, signed commits and immutable `node scripts/ci-docs.mjs` on committed planner base/head/paths. Obtain Claude design read; update draft #1090 and read current-head CI. Finish: the approved design records all five decisions; sign-in, handover and recovery remain unbuilt and need a separate build plan.
