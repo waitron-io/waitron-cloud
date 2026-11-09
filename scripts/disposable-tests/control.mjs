@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,overflowInventory,recoverHostedAttempts,hostedAttempts} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,overflowInventory,recoverHostedAttempts,hostedAttempts,publishCapacity} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -43,7 +43,18 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(error.status===401 || error.status===403 && !Number.isFinite(error.retryAt))throw error;
   console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId,error:error.message}));
  };
- let served=0,healthy;
+ let served=0,healthy,lastCapacity=-Infinity;
+ const publish=async()=>{
+  if(Date.now()-lastCapacity<30000)return;
+  lastCapacity=Date.now();
+  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+  let snapshot;
+  try{
+   snapshot=await overflowInventory({api,policy,signal});
+   await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal});lastCapacity=Date.now();
+  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
+  return snapshot;
+ };
  try{do{
  let readFailed=false;
  const read=async work=>{try{return await work();}catch(error){readFailed=true;throw error;}};
@@ -73,8 +84,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(!free){
   const occupiedRuns=new Set([...excludeRuns,...state.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean),...[...active.values()].map(ci=>ci.runId)]);
   const queued=await read(()=>findAutomatic({api,policy,limit:16,onePerRun:true,exclude,excludeRuns:occupiedRuns,signal}));
-  let snapshot;
-  if(queued.length)try{snapshot=await overflowInventory({api,policy,signal});}catch(error){pendingFailure(error);break;}
+  let snapshot=await read(publish);
+  if(queued.length&&!snapshot)try{snapshot=await overflowInventory({api,policy,signal});}catch(error){pendingFailure(error);break;}
   for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values()){
   const outcome=await withKernelLock(config.state,async()=>{
    const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
@@ -92,6 +103,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   try{healthy=await transport.healthy({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});}catch{signal?.throwIfAborted();}
   if(!healthy){
    if(await read(()=>routingMode({api,policy,signal}))!=='hosted')await setRoutingMode({api,policy,mode:'hosted',signal});
+   await read(publish);
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
@@ -132,13 +144,14 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',...refused[i],error:fallbacks[i].reason.message}));
  }}));
  if(active.size)await waitForWorker();
+ await read(publish);
  signal?.throwIfAborted();
  }catch(error){
   signal?.throwIfAborted();
   if(!readFailed)throw error;
   const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
    error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
-   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
+   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete (automatic|hosted) run inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
   const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);

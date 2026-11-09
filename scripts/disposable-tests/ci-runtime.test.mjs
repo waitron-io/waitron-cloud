@@ -213,6 +213,7 @@ for(const failure of ['stale status','read failure','uncertain cleanup'])test(`c
  f.transport.execute=async(...args)=>{await execute(...args);assert.ok(f.leases.inspect().ciInvocation);completed=true;return 0;};
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   if(completed && path.includes('/jobs/')){
    assert.equal(f.leases.inspect().ciInvocation,undefined,'Final API reads must follow retirement of the fallback intent');
    if(failure==='read failure')throw new Error('completion API unavailable');
@@ -271,6 +272,7 @@ for(const status of ['in_progress','completed'])test(`a failed listener keeps or
  f.transport.execute=async(...args)=>{await execute(...args);ended=true;return 137;};
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   if(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:marker};
   const value=await get(path,options);
   if(path.endsWith('/runs/789'))return {...value,event:'push'};
@@ -279,10 +281,10 @@ for(const status of ['in_progress','completed'])test(`a failed listener keeps or
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));writes.push('marker');marker=body.value;};
  f.api.post=async(path,...args)=>{if(path.endsWith('/cancel')){writes.push('cancel');return;}return post(path,...args);};
  const result=await executeOrdinary({...f,ci:identity,policy:{repository:'fixture/cloud'},lane:'I',automatic:true});
- assert.deepEqual(writes,status==='completed'?[]:['marker','cancel']);
+ assert.deepEqual(writes,[]);
  assert.equal(result.code,125);assert.equal(result.completion.code,137);
- assert.equal(result.cleanup,'absent');assert.equal(result.pending,status==='completed'?undefined:true);
- assert.equal(f.leases.inspect().ciInvocation?.ordinaryStage,status==='completed'?undefined:'cancel-requested');
+ assert.equal(result.cleanup,'absent');assert.equal(result.pending,undefined);
+ assert.equal(f.leases.inspect().ciInvocation,undefined);
 });
 
 test('stopping final readback still cleans up without cancelling the run',async t=>{
@@ -291,6 +293,7 @@ test('stopping final readback still cleans up without cancelling the run',async 
  const f=fixture(t,{identity}),get=f.api.get;let stopped=false;
  f.api.get=async(path,options)=>{
   if(path.endsWith('/DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.includes('/attempts/1/jobs?'))return {total_count:1,jobs:[{id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status,runner_id:1,name:'typecheck',labels:['self-hosted']}]};
   const value=await get(path,options);
   if(path.includes('/jobs/') && value.runner_id){setImmediate(()=>{stopped=true;stop.abort();});return {...value,status:'in_progress',conclusion:null};}
   return value;
