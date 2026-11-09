@@ -10,12 +10,13 @@ This trades earlier behavioural coverage for less PR work: a change that breaks
 a dependent package's behaviour while keeping its types valid is caught at the
 next [full nightly](ci-nightly.md). Manual full runs also retain all packages.
 
-Main pushes keep the previous selection policy: changed packages and one level
+When a main push needs fresh tests, package changes keep the previous selection policy: changed packages and one level
 of their consumers, using both saved revisions. A selected consumer does not
 select another level. Changes entirely inside a package's `test/` directory
 retain actual readers of those files, rather than every manifest dependent.
 The default saved-range selector keeps this policy too. Source-plan reconstruction
-uses the original PR policy; merge reuse still checks its tree, source and jobs.
+uses the original PR policy; merge reuse checks its tree, source and jobs and
+skips repeated package work only when that evidence qualifies.
 
 Package selection does not narrow receipt checks. The planner retains the
 original dependency scope from both saved revisions and independent receipt
@@ -24,7 +25,8 @@ while PR tests still select only changed packages. Unknown paths and shared
 configuration retain full work. Lockfile audits keep their existing rules.
 
 Ordinary root/docs Markdown can accompany code without widening package work.
-Consumed documents instead select their [named checks](ci-root-input-ownership.md).
+On PRs, consumed documents instead select their [named checks](ci-root-input-ownership.md);
+default and main-push ranges keep them full.
 Links, executable Markdown and checkout attributes retain full work.
 
 ## What the measurement establishes

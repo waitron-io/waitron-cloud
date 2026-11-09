@@ -151,7 +151,7 @@ test('PR mixed prose already preserves narrow package work and full dependent ty
   assert.equal(selected.documentation, undefined);
 }));
 
-test('PR reader refusal keeps only the package owner but retains every receipt suite', () => fixture(({put, commit, prPlan}) => {
+test('PR backend reader refusal keeps changed package tests and a diagnostic', () => fixture(({put, commit, prPlan}) => {
   put('tools/unknown.mjs', "import {globSync} from 'node:fs'; globSync('../**');\n");
   put('packages/consumer/test/scan.mjs', "import '../../../tools/unknown.mjs';\n");
   const base = commit();

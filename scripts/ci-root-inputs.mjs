@@ -22,6 +22,7 @@ const documentOwners = [
 ];
 const documentOwner = path => documentOwners.find(entry => entry.paths.includes(path)) ??
   (/^docs\/cost-model\/[^/]+\.json$/.test(path) ? documentOwners[1] : undefined);
+export const isConsumedDocumentPath = path => Boolean(documentOwner(path));
 const sha = /^[a-f0-9]{40}$/;
 const manifestPattern = /^(?:apps|packages)\/[^/\\]+\/package\.json$/;
 

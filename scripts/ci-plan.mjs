@@ -10,7 +10,7 @@ import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan, isKubernetesProofPath} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
-import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
+import {assertRootInputWork, rootInputPlan, isConsumedDocumentPath} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
 import {unreadMarkdown} from './ci-input-audit.mjs';
@@ -78,6 +78,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
       const scripts = scriptPlan(paths, base, head, git);
       if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Owned root script: ${paths.join(', ')}`};
     } catch { /* Missing or nonregular script targets keep the full fallback. */ }
+    if (range.kind !== 'pr' && paths.some(isConsumedDocumentPath)) return full('Consumed document inputs: full suite outside pull requests');
     const root = rootInputPlan(paths, base, head, git);
     if (root?.full) return full(root.reason);
     if (root) {

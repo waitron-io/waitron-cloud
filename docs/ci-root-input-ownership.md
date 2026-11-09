@@ -2,18 +2,19 @@
 
 A small test outside a package can otherwise select every package and receipt.
 Tests and consumed documents have known execution owners, kept in
-`scripts/ci-root-inputs.mjs`:
+`scripts/ci-root-inputs.mjs`. Consumed-document routes apply only to pull requests;
+default and main-push ranges keep those documents on full work:
 
 | Changed input | Required checks |
 | --- | --- |
 | `scripts/ci-root-shards.test.mjs` | All eight root partitions |
 | `deploy/local-stack/operations-health.test.mjs` | The entire `test:local-stack` receipt command |
-| `docs/waitron-integration-contract.md` | translation, typecheck and root checks |
+| `docs/waitron-integration-contract.md` | translation, typecheck, root checks and all six receipt suites |
 | `docs/cloud-cost-model.md`, `docs/cost-model/*.json` | `test:cloud-cost` |
-| `docs/cloud-cost-calculator.html` | ui-smoke, typecheck, root checks and `test:cloud-cost` |
+| `docs/cloud-cost-calculator.html` | ui-smoke, typecheck, root checks and all six receipt suites |
 | `docs/receipts/gateway-reconnection-2026-10-13.json` | All eight root partitions |
 
-Both targets must be regular files in both saved revisions. Removing either,
+The two registered test targets must be regular files in both saved revisions. Removing either,
 changing workspace identities or test commands, or changing checkout attributes
 retains full work. Unregistered root inputs and shared configuration do too.
 The capacity-verifier test stays unregistered because another root test copies
