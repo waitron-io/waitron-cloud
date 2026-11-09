@@ -3,10 +3,10 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp} from './github-app.mjs';
-import {LocalLeases,configuredSlots,withAvailableSlot} from './leases.mjs';
+import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary,overflowOrdinary,overflowInventory,recoverHostedAttempts,hostedAttempts,publishCapacity} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -32,16 +32,11 @@ export async function withOrdinaryController({state,hostGeneration,api,policy,ap
 // Each child owns one slot lock and its temporary directory through guest cleanup.
 export async function automaticTick({configuration,config,api,signal,runWorker,transport,recover,wait=delay}){
  const policy=config.ci,slots=configuredSlots(config);
- const active=new Map(),seen=new Set(),refusedRuns=new Set(),cleanups=[];
+ const active=new Map(),seen=new Set();
  const waitForWorker=async()=>{
   const wake=new AbortController();
   try{await Promise.race([...active.keys(),delay(30000,undefined,{signal:signal?AbortSignal.any([signal,wake.signal]):wake.signal})]);}
   finally{wake.abort();}
- };
- const pendingFailure=(error,runId)=>{
-  signal?.throwIfAborted();
-  if(error.status===401 || error.status===403 && !Number.isFinite(error.retryAt))throw error;
-  console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId,error:error.message}));
  };
  let served=0,healthy,lastCapacity=-Infinity;
  const publish=async()=>{
@@ -50,7 +45,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
   try{
-   snapshot=await overflowInventory({api,policy,signal});
+   snapshot=await overflowInventory({api,policy,signal,includeHosted:false});
    await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal});lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   return snapshot;
@@ -60,18 +55,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const read=async work=>{try{return await work();}catch(error){readFailed=true;throw error;}};
  try{
  await recover?.();
- const pending=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
- const ownedRuns=new Set(pending.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean));
- let hosted=await read(()=>hostedAttempts({api,policy,signal}));
- if(Object.keys(hosted).some(id=>!ownedRuns.has(Number(id)))){
-  let retryAt=0;
-  const recovered=await withKernelLock(config.state,()=>recoverHostedAttempts({api,policy,signal,excludeRuns:ownedRuns,onError:(error,runId)=>{
-   pendingFailure(error,runId);if(Number.isFinite(error.retryAt)){retryAt=error.retryAt;return false;}
-  }}),{signal});
-  if(recovered.code!==75)hosted=recovered;
-  if(retryAt)await wait(Math.max(30000,retryAt-Date.now()),undefined,{signal});
- }
- const excludeRuns=new Set(Object.keys(hosted).map(Number));
+ const hosted=await read(()=>hostedAttempts({api,policy,signal}));
  const selectedHead=await read(()=>routingHead({api,policy,signal}));
  if(selectedHead && await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
  assert.equal(selectedHead,'','Automatic CI requires unrestricted same-repository routing');
@@ -82,19 +66,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  if(!free){
-  const occupiedRuns=new Set([...excludeRuns,...state.slots.map(slot=>slot.ciInvocation?.runId??slot.lease?.ci?.runId).filter(Boolean),...[...active.values()].map(ci=>ci.runId)]);
-  const queued=await read(()=>findAutomatic({api,policy,limit:16,onePerRun:true,exclude,excludeRuns:occupiedRuns,signal}));
-  let snapshot=await read(publish);
-  if(queued.length&&!snapshot)try{snapshot=await overflowInventory({api,policy,signal});}catch(error){pendingFailure(error);break;}
-  for(const ci of new Map(queued.map(ci=>[ci.runId,ci])).values()){
-  const outcome=await withKernelLock(config.state,async()=>{
-   const fresh=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-   if(fresh.slots.some(slot=>slot.state==='free' && !slot.ciInvocation))return;
-   if(fresh.slots.some(slot=>(slot.ciInvocation?.runId??slot.lease?.ci?.runId)===ci.runId) || [...active.values()].some(job=>job.runId===ci.runId))return;
-   try{await overflowOrdinary({api,policy,ci,signal,snapshot});}catch(error){return {error};}
-  },{signal});
-  if(outcome?.error){pendingFailure(outcome.error,ci.runId);if(Number.isFinite(outcome.error.retryAt))await wait(Math.max(30000,outcome.error.retryAt-Date.now()),undefined,{signal});}
-  }
+  await read(publish);
   if(active.size){await waitForWorker();continue;}break;
  }
  transport??=new CITransport(config);
@@ -107,12 +79,15 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
- const refused=[];
- const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,excludeRuns,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000),
-  onRefused:job=>{if(!refusedRuns.has(job.runId) && !state.slots.some(slot=>slot.ciInvocation?.runId===job.runId && slot.ciInvocation.ordinaryStage!=='admitted')){refusedRuns.add(job.runId);refused.push(job);}}}));
- // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
- runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
- let cleanup;
+ const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
+ // Each admission keeps a bounded diagnostic alongside the child's original stderr.
+ runWorker??=ci=>{
+  let remaining=4096;
+  return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000,onStderr:data=>{
+   const excerpt=data.subarray(0,remaining);remaining-=excerpt.length;
+   if(excerpt.length)console.error(JSON.stringify({event:'automatic-ci-admission-stderr',at:new Date().toISOString(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,stderr:excerpt.toString()}));
+  }});
+ };
  jobs.forEach(ci=>{
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
@@ -122,10 +97,6 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    return latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
     Object.keys(latest.turns).some(turn=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`));
   };
-  if(refused.length && result.code===75){
-   await cleanup;signal?.throwIfAborted();
-   if(!recorded())result=await runWorker(ci);
-  }
   // Refused work without a job admission stays eligible at the normal polling interval.
   if(result.code===75 && !recorded()){
    try{await wait(30000,undefined,{signal});}
@@ -138,11 +109,6 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    .finally(()=>active.delete(worker));
   active.set(worker,ci);
  });
- cleanup=Promise.allSettled(refused.map(job=>fallbackRefused({config,api,...job,signal})));
- cleanups.push(cleanup.then(fallbacks=>{for(let i=0;i<fallbacks.length;i++)if(fallbacks[i].status==='rejected'){
-  refusedRuns.delete(refused[i].runId);
-  console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',...refused[i],error:fallbacks[i].reason.message}));
- }}));
  if(active.size)await waitForWorker();
  await read(publish);
  signal?.throwIfAborted();
@@ -162,27 +128,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   await wait(retryDelay,undefined,{signal});
  }
  }while(active.size);
- }finally{await Promise.allSettled([...active.keys(),...cleanups]);}
+ }finally{await Promise.allSettled([...active.keys()]);}
  return {code:0,served};
-}
-async function fallbackRefused({config,api,runId,jobId,name,label,signal}){
- const {randomBytes}=await import('node:crypto');
- const policy=config.ci,base=`/repos/${policy.repository}`;
- // Refusal may prevent execution, but cancellation still needs a current owned label.
- const run=await api.get(`${base}/actions/runs/${runId}`,{signal});
- assert.ok(run.id===runId && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0 && run.workflow_id===policy.workflowId && run.path===policy.workflowPath &&
-  ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && (run.event!=='pull_request' || run.pull_requests?.length===1),'Refused run identity differs');
- const job=await api.get(`${base}/actions/jobs/${jobId}`,{signal});
- assert.ok(job.id===jobId && job.name===name && job.run_id===runId && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha && job.status==='queued' && !job.runner_id &&
-  job.labels?.length===2 && job.labels.includes('self-hosted') && job.labels.includes(label),'Refused job identity differs');
- const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:run.run_attempt,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
- return withAvailableSlot(config,async({leases})=>{
-  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:run.run_attempt,jobId,ordinaryStage:'refused'};
-  leases.setInvocation(invocation);
-  const result=await withKernelLock(config.state,()=>fallbackOrdinary({api,policy,ci,leases,automatic:true,signal:AbortSignal.timeout(240000)}));
-  if(!result.pending)leases.clearInvocation(invocation.nonce);
-  console.log(JSON.stringify({event:'automatic-ci-refused-fallback',runId,jobId,...result}));return result;
- },{signal});
 }
 async function automaticJob({config,api,runId,jobId,signal}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
@@ -190,8 +137,7 @@ async function automaticJob({config,api,runId,jobId,signal}){
  const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId,jobId,automatic:true,signal});
  if(!ci)return {code:75,reason:'job-no-longer-queued'};
  return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,()=>
-  executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport(config),signal,automatic:true,
-   fallback:options=>withKernelLock(config.state,()=>fallbackOrdinary(options),{signal:options.signal})})),{signal});
+  executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport(config),signal,automatic:true})),{signal});
 }
 
 export async function main(args){

@@ -108,7 +108,8 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
             assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
             const identity={repositoryId:ci.repositoryId,workflowId:ci.workflowId,workflowSha:pending.workflowSha,
               runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
-            if(pending.ordinaryStage!==undefined){
+            if(slots>1)console.error(JSON.stringify({event:'automatic-ci-recovery-released',runId:pending.runId,stage:pending.ordinaryStage??'unrecorded'}));
+            else if(pending.ordinaryStage!==undefined){
               const outcome=await fallbackOrdinary({api,policy:ci,ci:identity,leases,automatic:slots>1,signal:cleanup});
               if(outcome.pending)return {code:75,reason:'ci-recovery-pending'};
             }

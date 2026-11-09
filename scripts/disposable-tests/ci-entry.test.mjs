@@ -112,30 +112,6 @@ test('CI control reads configured capacity and refuses a mode change with any pe
  assert.equal(slot.inspect().ciInvocation.jobId,901);
 });
 
-// Run cancellation is shared by all its shards and must not be posted concurrently.
-test('recovery serializes run cancellation across independently owned slots',async t=>{
- const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
- const root=mkdtempSync(join(tmpdir(),'ci-shared-cancel-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
- await withKernelLock(state,async()=>{new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,bootstrap:true});
-  for(let slot=0;slot<4;slot++)await withKernelLock(join(state,'slot-'+slot),async()=>({code:0}),{bootstrap:true});
- },{bootstrap:true});
- for(let slot=0;slot<2;slot++)new LocalLeases(join(state,'ledger'),{hostGeneration:'test',slots:4,slot}).setInvocation({nonce:String(slot+1).repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901+slot});
- let finish,ready,posts=0,done=false;const gate=new Promise(r=>finish=r),entered=new Promise(r=>ready=r);
- const api={get:async path=>path.includes('/jobs/')?{id:Number(path.split('/').at(-1)),run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:done?'completed':'queued'}:
- {id:789,run_attempt:1,workflow_id:456,head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:done?'completed':'in_progress'},
- post:async path=>{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');posts++;ready();await gate;done=true;}};
- const config={state,hostGeneration:'test',slots:4,ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},api,transport:{destroy:async()=>assert.fail('No guest remains')}};
- const first=reconcileManual({...config,slot:0});let second;
- try{
-  await entered;second=reconcileManual({...config,slot:1});
-  // A second cancellation must settle busy without waiting for the first API call.
-  const busy=await Promise.race([second,new Promise(r=>setTimeout(()=>r({code:-1}),2000))]);
-  assert.equal(busy.code,75);assert.equal(posts,1);
-  finish();assert.equal((await first).code,0);await second;
-  assert.equal((await reconcileManual({...config,slot:1})).code,0);assert.equal(posts,1);
- }finally{finish();await Promise.allSettled([first,...(second?[second]:[])]);}
-});
-
 // A busy API-recovery lock is deferred work, not evidence of a live guest owner.
 test('pool recovery distinguishes pending CI cleanup from live slot owners',async t=>{
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
@@ -151,4 +127,16 @@ test('pool recovery distinguishes pending CI cleanup from live slot owners',asyn
  try{await held;const result=await reconcileManual(config);assert.equal(result.cleanup,'pending');assert.equal(result.busy,0);assert.equal(result.pending,1);}
  finally{finish();await locked;}
  const complete=await reconcileManual(config);assert.equal(complete.cleanup,'absent');assert.equal(complete.pending,0);
+});
+
+for(const stage of [undefined,'admitted','cancel-requested'])test(`automatic recovery clears ${stage} intent without moving its run`,async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
+ const root=mkdtempSync(join(tmpdir(),'no-move-recovery-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,bootstrap:true});},{bootstrap:true});
+ const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:4,slot:0});
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:'1'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,...(stage?{ordinaryStage:stage}:{})});
+ await withKernelLock(state+'/slot-0',async()=>({code:0}),{bootstrap:true});
+ const writes=[];let cancelled=false;const api={get:async path=>path.includes('/jobs/')?{id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:'1'.repeat(40),status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null}:{id:789,run_attempt:1,workflow_id:456,path:'.github/workflows/ci.yml',event:'push',head_sha:'1'.repeat(40),repository:{id:123},head_repository:{id:123},status:cancelled?'completed':'in_progress'},post:async path=>{writes.push(path);cancelled=true;},patch:async path=>writes.push(path)};
+ await reconcileManual({state,hostGeneration:'test',slots:4,slot:0,api,ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},transport:{destroy:async()=>assert.fail('No guest remains')}});
+ assert.deepEqual(writes,[]);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
 });
