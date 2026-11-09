@@ -163,7 +163,8 @@ Run the full package suite against disposable PostgreSQL and local fake provider
 node scripts/test-postgres.mjs --filter @waitron-cloud/translation test
 ```
 
-CI selects this package through workspace discovery and source consumers. Its ordinary test
+Pull requests select this package for its own file changes or integration-contract changes.
+Typechecking covers the whole workspace; nightly checks catch dependent behavior. Its ordinary test
 command includes the offline scorer tests in `quality/`; these never call a provider.
 
 ## Score the recorded trial

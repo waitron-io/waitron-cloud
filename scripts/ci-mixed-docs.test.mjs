@@ -4,7 +4,7 @@ import {chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, un
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
 
 function fixture(run) {
@@ -35,9 +35,11 @@ function fixture(run) {
     put('docs/backlog.md', '# Backlog\n');
     put('README.md', '# Cloud\n');
     const base = commit();
-    const plan = (head, old = base) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}},
+    const prPlan = (head, old = base) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}},
       {sha: head}, loadWorkspace(root), git);
-    run({root, git, put, commit, base, plan});
+    const plan = (head, old = base) => selectPlan({base: old, head},
+      {revision: head, packages: loadWorkspace(root), testFilesByPackage: {}}, git);
+    run({root, git, put, commit, base, plan, prPlan});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
@@ -138,4 +140,38 @@ test('unknown JSON alone cannot create an empty successful plan', () => fixture(
   put('scripts/unknown.json', '{}\n'); const selected = plan(commit());
   assert.equal(selected.packages.length, 3); assert.equal(selected.typecheck, true);
   assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
+}));
+
+test('PR mixed prose already preserves narrow package work and full dependent typechecking', () => fixture(({put, commit, prPlan}) => {
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  put('docs/backlog.md', '# Updated backlog\n');
+  const selected = prPlan(commit());
+  assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue']);
+  assert.equal(selected.typecheck, true);
+  assert.equal(selected.documentation, undefined);
+}));
+
+test('PR backend reader refusal keeps changed package tests and a diagnostic', () => fixture(({put, commit, prPlan}) => {
+  put('tools/unknown.mjs', "import {globSync} from 'node:fs'; globSync('../**');\n");
+  put('packages/consumer/test/scan.mjs', "import '../../../tools/unknown.mjs';\n");
+  const base = commit();
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const selected = prPlan(commit(), base);
+  assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue']);
+  assert.equal(selected.receipts.length, 6);
+  assert.match(selected.reason, /Unverified package revisions/);
+  assert.equal(selected.typecheck, true);
+}));
+
+test('a PR portal reader refusal cannot borrow its narrowed package scope for receipts', () => fixture(({put, commit, prPlan}) => {
+  put('apps/portal/package.json', JSON.stringify({name: '@waitron-cloud/portal', private: true,
+    scripts: {test: 'node --test test/*.test.ts'}}));
+  put('apps/portal/src/app.ts', "import {globSync} from 'node:fs'; export const discover = () => globSync('**');\n");
+  for (let i = 0; i < 6; i++) put(`apps/portal/test/${i}.test.ts`, 'export {};\n');
+  const base = commit();
+  put('apps/portal/src/app.ts', "import {globSync} from 'node:fs'; export const discover = () => globSync('**');\nexport const changed = true;\n");
+  const selected = prPlan(commit(), base);
+  assert.deepEqual(selected.packages.map(row => row.package), Array(6).fill('@waitron-cloud/portal'));
+  assert.equal(selected.receipts.length, 6);
+  assert.match(selected.reason, /Unverified package revisions/);
 }));

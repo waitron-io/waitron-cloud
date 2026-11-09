@@ -6,7 +6,13 @@ import {join, resolve} from 'node:path';
 import test from 'node:test';
 import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
 import {readGitBlobs, scopeForRevisions} from './ci-package-revisions.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
+function defaultPlan(base, head, packages, git) {
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base, head}, {revision: head, packages, testFilesByPackage}, git);
+}
+
 
 const helper = 'scripts/ci-audit-fixture-dependencies.mjs';
 const installedReader = readFileSync(new URL('./ci-audit-fixture-dependencies.mjs', import.meta.url), 'utf8');
@@ -98,7 +104,7 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
     writeFileSync(portal, readFileSync(portal, 'utf8') + '\n');
     writeFileSync(join(root, 'docs/backlog.md'), '# Portal selection fixture\n');
     const head = save(), workspace = loadWorkspace(root);
-    const plan = sha => createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, git);
+    const plan = sha => defaultPlan(base, sha, workspace, git);
     const selected = plan(head);
     assert.deepEqual(selected.packages.map(row => row.package), Array(6).fill('@waitron-cloud/portal'), selected.reason);
     assert.equal(selected.typecheck, true);

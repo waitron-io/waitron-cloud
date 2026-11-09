@@ -530,3 +530,65 @@ test('full root fallback requires every package owner', () => fixture(({git, wri
     assert.throws(() => api.assertRootInputWork({...full, packages}, {base, head, git}), /Root fallback requires every package owner/);
   }
 }));
+
+// A consumed document must select its execution owner rather than every package.
+for (const [path, packages, receipts, rootTests] of [
+  ['docs/waitron-integration-contract.md', ['@waitron-cloud/translation'], [], true],
+  ['docs/cloud-cost-model.md', [], ['test:cloud-cost'], false],
+  ['docs/cost-model/prices.json', [], ['test:cloud-cost'], false],
+  ['docs/cloud-cost-calculator.html', ['@waitron-cloud/ui-smoke'], ['test:cloud-cost'], true],
+  ['docs/receipts/gateway-reconnection-2026-10-13.json', [], [], true],
+]) test(`consumed document selects its named checks: ${path}`, () => fixture(({git, write, commit}) => {
+  for (const name of ['translation', 'ui-smoke']) {
+    write(`packages/${name}/package.json`, {name: `@waitron-cloud/${name}`, scripts: {test: 'node --test test/*.test.mjs'}});
+    write(`packages/${name}/src/index.mjs`, 'export {};\n');
+  }
+  write(path, 'original value\n'); const base = commit();
+  write(path, 'changed value\n'); const head = commit();
+  const members = ['control', 'translation', 'ui-smoke'].map(name => ({name: `@waitron-cloud/${name}`,
+    directory: `packages/${name}`, sources: [], scripts: {test: 'node --test test/*.test.mjs'}}));
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, members, git);
+  assert.deepEqual(selected.packages.flatMap(row => row.packages ?? [row.package]).sort(), packages);
+  for (const receipt of receipts) assert.ok(selected.receipts.includes(receipt));
+  assert.equal(selected.rootTests, rootTests);
+  assert.doesNotThrow(() => api.assertRootInputWork(selected, {base, head, git}));
+  for (const kind of [undefined, 'push']) {
+    const complete = selectPlan({kind, base, head}, {revision: head, packages: members, testFilesByPackage: {}}, git);
+    assert.equal(complete.packages.length, 3);
+    assert.deepEqual(complete.receipts, receiptSuites);
+    assert.equal(complete.typecheck, true);
+    assert.equal(complete.rootInputs, undefined);
+  }
+  if (packages.length) assert.throws(() => api.assertRootInputWork({...selected,
+    packages: [{package: '@waitron-cloud/control', shard: 1}]}, {base, head, git}), /Missing root package owner/);
+}));
+
+for (const side of ['base', 'head']) for (const kind of ['executable', 'link']) {
+  test(`consumed document ownership refuses ${kind} content in the ${side} revision`, () => fixture(({root, git, write, commit}) => {
+    const path = 'docs/cloud-cost-model.md';
+    write(path, 'regular document\n');
+    const changeMode = () => {
+      if (kind === 'link') {rmSync(join(root, path)); symlinkSync('explanation.md', join(root, path));}
+      else chmodSync(join(root, path), 0o755);
+    };
+    if (side === 'base') changeMode();
+    const base = commit();
+    if (side === 'base' && kind === 'link') rmSync(join(root, path));
+    write(path, 'updated regular document\n');
+    chmodSync(join(root, path), 0o644);
+    if (side === 'head') changeMode();
+    const head = commit();
+    const selected = api.rootInputPlan([path], base, head, git);
+    assert.equal(selected.full, true);
+    assert.match(selected.reason, /Nonregular consumed document/);
+  }));
+}
+
+test('consumed document ownership refuses a missing execution package', () => fixture(({git, write, commit}) => {
+  const path = 'docs/waitron-integration-contract.md';
+  write(path, 'original contract\n'); const base = commit();
+  write(path, 'updated contract\n'); const head = commit();
+  const selected = api.rootInputPlan([path], base, head, git);
+  assert.equal(selected.full, true);
+  assert.match(selected.reason, /Missing consumed document owner: @waitron-cloud\/translation/);
+}));

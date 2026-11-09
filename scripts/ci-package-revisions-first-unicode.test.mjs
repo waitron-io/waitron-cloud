@@ -4,7 +4,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
-import {createPlan} from './ci-plan.mjs';
+import {selectPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 
@@ -25,10 +25,8 @@ function fixture(run) {
       write(`packages/${name}/package.json`, JSON.stringify({name, private: true, scripts: {test: 'node --test'}}));
       write(`packages/${name}/src/index.mjs`, 'export const value = 1;\n');
     }
-    const plan = (base, head, call = git) => createPlan(
-      {pull_request: {base: {sha: base}, head: {sha: head}}},
-      {sha: head, repository: 'waitron-io/waitron-cloud'}, loadWorkspace(root), call,
-      () => {throw Error('No API expected');});
+    const plan = (base, head, call = git) => selectPlan({base, head},
+      {revision: head, packages: loadWorkspace(root), testFilesByPackage: {}}, call);
     run({root, git, write, commit, plan});
   } finally {rmSync(root, {recursive: true, force: true});}
 }

@@ -5,7 +5,13 @@ import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
 import {receiptFixtureWorkspace, copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
+function defaultPlan(base, head, packages, git) {
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base, head}, {revision: head, packages, testFilesByPackage}, git);
+}
+
 import {receiptPlan} from './ci-receipts.mjs';
 import {receiptSuites} from './ci-scope.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
@@ -69,8 +75,11 @@ test('unrelated package changes omit public gateway while retaining packages, ty
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 28);
-    assert.deepEqual([...new Set(plan.packages.map(row => row.package))], ["@waitron-cloud/account-http", "@waitron-cloud/backups", "@waitron-cloud/fiscal-allocation", "@waitron-cloud/operations", "@waitron-cloud/portal", "@waitron-cloud/registration", "@waitron-cloud/remote-access"]);
+    assert.equal(plan.packages.length, 6);
+    assert.ok(plan.packages.every(row => row.package === '@waitron-cloud/registration'));
+    const pushPlan = defaultPlan(base, head, workspace, git);
+    assert.equal(pushPlan.packages.length, 28);
+    assert.deepEqual([...new Set(pushPlan.packages.map(row => row.package))], ["@waitron-cloud/account-http", "@waitron-cloud/backups", "@waitron-cloud/fiscal-allocation", "@waitron-cloud/operations", "@waitron-cloud/portal", "@waitron-cloud/registration", "@waitron-cloud/remote-access"]);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted public gateway receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);

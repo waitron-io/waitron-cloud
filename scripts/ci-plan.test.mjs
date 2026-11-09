@@ -10,7 +10,9 @@ test('PR planner uses exact SHAs and NUL paths, preserving spaces and both renam
   const calls=[];
   const git=(...args)=>{calls.push(args);return args[0]==='merge-base'?base:'apps/portal/test/a b.ts\0packages/identity/old.ts\0';};
   const plan=createPlan({pull_request:{head:{sha:head},base:{sha:base}}},{sha:head,repository,branch:'main'},workspace,git,api);
-  assert.equal(plan.packages.length,29);
+  assert.equal(plan.packages.length,7);
+  assert.deepEqual([...new Set(plan.packages.map(row => row.package))].sort(), ['@waitron-cloud/identity', '@waitron-cloud/portal']);
+  assert.equal(plan.receipts.length,6);
   assert.deepEqual(calls,[['merge-base',base,head],['diff','--name-only','--no-renames','-z',base,head],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',head],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base],['ls-tree','-rz','--full-tree',base]]);
 });
 test('every direct, multi-commit, unknown and failed-evidence push falls back to the full package plan', () => {

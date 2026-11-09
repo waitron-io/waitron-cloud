@@ -5,7 +5,13 @@ import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
 import {copyReceiptFixtureInput} from './ci-dependency-fixture.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
+function defaultPlan(base, head, packages, git) {
+  const testFilesByPackage = Object.fromEntries(packages.map(pkg => [pkg.name,
+    (pkg.sources ?? []).map(source => source.path).filter(path => path.startsWith(`${pkg.directory}/test/`) && path.endsWith('.test.ts'))]));
+  return selectPlan({base, head}, {revision: head, packages, testFilesByPackage}, git);
+}
+
 import {receiptPlan} from './ci-receipts.mjs';
 import {loadWorkspace, receiptSuites} from './ci-scope.mjs';
 
@@ -50,10 +56,12 @@ function fixture(run, alter = () => {}) {
 }
 
 test('backend-only changes omit the unchanged pure milestone receipt and preserve all other work', () => {
-  fixture(({plan}) => {
+  fixture(({plan, git, base, head}) => {
     const result = plan();
     assert.deepEqual(result.receipts, ['test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt','test:cloud-cost']);
-    assert.equal(result.packages.length, 29);
+    assert.equal(result.packages.length, 6);
+    assert.ok(result.packages.every(row => row.package === '@waitron-cloud/registration'));
+    assert.equal(defaultPlan(base, head, workspace, git).packages.length, 29);
     assert.equal(result.typecheck, true);
     assert.match(result.reason, /unchanged audited milestone inputs/i);
   });

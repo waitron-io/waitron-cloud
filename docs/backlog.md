@@ -1669,8 +1669,8 @@ implementation or production evidence.
   overlaps published GitHub incidents and cannot support a savings claim.
   D571 part 2b adds
   [one-level package selection](ci-package-selection.md): a source change selects
-  its package and direct consumers; changes only under its `test/` directory
-  retain file readers rather than every manifest consumer. Both immutable
+  its package and direct consumers on main ranges; D616 selects only changed
+  packages on pull requests. Test-only changes keep file readers on main ranges. Both immutable
   revisions contribute readers, including removed imports and exports. Lockfile
   selection retains its original full dependency walk. The 50-merge replay
   through `be28f5d6` remains 980 package jobs before and after because other
@@ -2192,7 +2192,9 @@ implementation or production evidence.
   The final #992 head and its exact merge qualify their own CI and independent
   general/AWS reuse readbacks; the separate merge Kubernetes run executes 37 checks.
   The full nightly at `9237200a` also qualifies all eight root partitions.
-  Aggregate usage savings remain open.
+  D616 replaces D571's aggregate-measurement wait: PRs test only changed packages,
+  while whole-workspace typechecking remains and nightly catches type-correct
+  dependent behaviour breaks. Healthy elapsed savings are not claimed.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
   five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.

@@ -11,7 +11,8 @@ entry records its Git mode, object type and blob identifier, which identifies
 its complete bytes. When the graph visits a declaration, both saved revisions must match independently.
 In the current graph, an edit to any of the 40 declared readers also fails the required real-graph
 root check until you review the changed reader and renew its identifier. The
-planner keeps full package work while that check is red.
+planner keeps full package work on default/push ranges while that check is red.
+PR tests retain changed owners, and receipt audits keep the complete package scope.
 
 The declarations distinguish directory operations from source inputs. `nonSourceDirectoryReads` identifies
 reviewed directory operations on installed dependencies, runtime data or owned
@@ -80,14 +81,17 @@ synthetic source paths against both identical immutable graphs and selects:
 
 These are graph selections, not executed package checks or duration savings.
 Real imports, shared fixtures and explicitly declared generated inputs remain
-consumers; a smaller result needs evidence for removing an edge.
+consumers in the retained default/push policy. PR tests use changed package owners;
+whole-workspace typechecking and nightly tests cover dependents.
 These counts describe package jobs only. Type checking and root checks keep
 their existing rules. Whenever these declarations qualify narrower package
 work, all six existing receipt suites remain selected. Package precision does
 not prove that an independent receipt can be omitted. Receipt reductions need
 separate evidence, including Cloud-cost consumers of portal or UI build tools.
 If any package reader refuses validation, the planner keeps all package work
-and uses the independent receipt audits. Visiting an approved reader before
+on default/push ranges and uses independent receipt audits over every package.
+PR package tests keep only changed owners, without copying that narrower list
+into receipt scope. Visiting an approved reader before
 that refusal cannot override those audits. The historical local-stack fixture
 supplies an explicit unknown reader so this fallback remains exercised as more
 real readers gain declarations.

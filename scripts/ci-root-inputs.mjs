@@ -14,6 +14,15 @@ const owners = [
   {id: 'local-health-test', paths: ['deploy/local-stack/operations-health.test.mjs'], owners: {rootTests: false, receipts: ['test:local-stack']}},
 ];
 const candidates = new Set(owners.flatMap(entry => entry.paths));
+const documentOwners = [
+  {id: 'translation-contract', paths: ['docs/waitron-integration-contract.md'], owners: {packages: ['@waitron-cloud/translation'], receipts: []}},
+  {id: 'cost-documents', paths: ['docs/cloud-cost-model.md'], owners: {receipts: ['test:cloud-cost']}},
+  {id: 'cost-calculator', paths: ['docs/cloud-cost-calculator.html'], owners: {packages: ['@waitron-cloud/ui-smoke'], receipts: ['test:cloud-cost']}},
+  {id: 'gateway-receipt', paths: ['docs/receipts/gateway-reconnection-2026-10-13.json'], owners: {rootTests: true, receipts: []}},
+];
+const documentOwner = path => documentOwners.find(entry => entry.paths.includes(path)) ??
+  (/^docs\/cost-model\/[^/]+\.json$/.test(path) ? documentOwners[1] : undefined);
+export const isConsumedDocumentPath = path => Boolean(documentOwner(path));
 const sha = /^[a-f0-9]{40}$/;
 const manifestPattern = /^(?:apps|packages)\/[^/\\]+\/package\.json$/;
 
@@ -42,7 +51,7 @@ function packageInventory(revision, entries, git) {
 }
 
 export function rootInputPlan(paths, base, head, git) {
-  if (!paths.some(path => candidates.has(path) || /(?:^|\/)\.gitattributes$/.test(path))) return null;
+  if (!paths.some(path => candidates.has(path) || documentOwner(path) || /(?:^|\/)\.gitattributes$/.test(path))) return null;
   try {
     assert.ok(paths.length > 0 && new Set(paths).size === paths.length && paths.every(path => typeof path === 'string' && !path.includes('\0')), 'Invalid root changed paths');
     assert.ok(sha.test(base) && sha.test(head), 'Invalid root revisions');
@@ -77,6 +86,20 @@ export function rootInputPlan(paths, base, head, git) {
     for (const path of paths) {
       const entry = inputs.get(path);
       if (entry) {selected.set(entry.id, entry); continue;}
+      const document = documentOwner(path);
+      if (document) {
+        assert.ok(trees.some(tree => tree.entries.some(row => row.path === path)) && trees.every(tree => {
+          const row = tree.entries.find(row => row.path === path);
+          return !row || row.mode === '100644' && row.type === 'blob';
+        }), `Nonregular consumed document: ${path}`);
+        selected.set(document.id, document);
+        for (const name of document.owners.packages ?? []) {
+          const directory = [...inventories[1]].find(([, pkg]) => pkg.name === name)?.[0];
+          assert.ok(directory, `Missing consumed document owner: ${name}`);
+          packagePaths.push(`${directory}/package.json`);
+        }
+        continue;
+      }
       if (unreadMarkdown(path) && trees.every(tree => {
         const row = tree.entries.find(e => e.path === path);
         return !row || row.mode === '100644' && row.type === 'blob';
@@ -91,8 +114,8 @@ export function rootInputPlan(paths, base, head, git) {
     // environment limit; full work needs no changed-path ownership marker.
     assert.ok(Buffer.byteLength(JSON.stringify(rootInputs), 'utf8') <= 64 * 1024, 'Root ownership size exceeds the step environment budget');
     return {rootInputs,
-      rootTests: entries.some(entry => entry.owners.rootTests),
-      receipts: [...new Set(entries.flatMap(entry => entry.owners.receipts))].sort(), packagePaths};
+      rootTests: entries.some(entry => entry.owners.rootTests === true),
+      receipts: [...new Set(entries.flatMap(entry => entry.owners.receipts))].sort(), packagePaths: [...new Set(packagePaths)]};
   } catch (error) {
     return {full: true, reason: `Root ownership refused: ${error.message.split('\n')[0]}`.slice(0, 512)};
   }
@@ -129,7 +152,15 @@ export function assertRootInputWork(plan, {base, head, git}) {
   assert.deepEqual(plan.rootInputs, expected.rootInputs, 'Root marker differs from trusted event ownership');
   assert.equal(plan.typecheck, plan.packages.length > 0, 'Root compiler work differs from package work');
   assert.equal(plan.rootTests, expected.rootTests || plan.typecheck, 'Root execution gate differs from required owners');
-  if (expected.packagePaths.length) assert.ok(plan.packages.length > 0, 'Missing root-associated package work');
+  if (expected.packagePaths.length) {
+    assert.ok(plan.packages.length > 0, 'Missing root-associated package work');
+    const inventory = packageManifests(head, readInputInventory(head, git), git);
+    const selected = new Set(plan.packages.flatMap(packageMembers));
+    for (const path of expected.packagePaths) {
+      const owner = [...inventory].find(([directory]) => path.startsWith(directory + '/'))?.[1].name;
+      assert.ok(owner && selected.has(owner), `Missing root package owner: ${owner}`);
+    }
+  }
   else assert.equal(plan.packages.length, 0, 'Unexpected root-associated package work');
   for (const suite of expected.receipts) assert.ok(plan.receipts.includes(suite), `Missing root receipt owner: ${suite}`);
   assert.equal(new Set(plan.receipts).size, plan.receipts.length, 'Duplicate root receipt owner');

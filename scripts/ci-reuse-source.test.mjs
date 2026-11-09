@@ -151,7 +151,7 @@ for (const [key, names] of siblingCases) {
   });
 }
 
-for (const kind of ['docs', 'scoped']) {
+for (const kind of ['docs', 'scoped', 'dependent-source']) {
   test(`a legitimate ${kind} PR source reuses only its reconstructed successes and explicit skips`, () => {
     const directory = mkdtempSync(join(tmpdir(), `cloud-reuse-${kind}-`));
     try {
@@ -163,8 +163,16 @@ for (const kind of ['docs', 'scoped']) {
       variantGit.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: directory, input}));
       variantGit('config', 'user.name', 'CI source test'); variantGit('config', 'user.email', 'ci@example.test');
       variantGit('checkout', '--detach', base);
+      if (kind === 'dependent-source') {
+        mkdirSync(join(directory, 'packages/consumer/src'), {recursive: true});
+        writeFileSync(join(directory, 'packages/consumer/package.json'), JSON.stringify({name: '@waitron-cloud/consumer',
+          scripts: {test: 'node --test test/*.test.ts'}, dependencies: {'@waitron-cloud/operations': 'workspace:*'}}));
+        writeFileSync(join(directory, 'packages/consumer/src/index.ts'), "import '@waitron-cloud/operations';\n");
+        variantGit('add', '.'); variantGit('commit', '-qsm', 'Saved dependent source');
+      }
       const originalBase = variantGit('rev-parse', 'HEAD').trim();
-      const path = kind === 'docs' ? 'docs/guide.md' : 'packages/operations/test/scoped.test.ts';
+      const path = kind === 'docs' ? 'docs/guide.md' : kind === 'dependent-source'
+        ? 'packages/operations/src/index.ts' : 'packages/operations/test/scoped.test.ts';
       mkdirSync(join(directory, path, '..'), {recursive: true});
       writeFileSync(join(directory, path), kind === 'docs' ? '# Operations guide\n' : 'export const scoped = true;\n');
       variantGit('add', '.'); variantGit('commit', '-qsm', 'Scoped source');
@@ -176,7 +184,7 @@ for (const kind of ['docs', 'scoped']) {
         readDocumentation(originalBase, variantGit);
         readDocumentation(originalHead, variantGit);
       }
-      const selection = selectPlan({base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
+      const selection = selectPlan({kind: 'pr', base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
       const required = kind === 'docs' ? ['changes', 'documentation', 'summary']
         : ['changes', 'summary', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'package (@waitron-cloud/operations)', 'receipts'];
       const skipped = kind === 'docs' ? ['scripts', 'typecheck', 'root (${{ matrix.shard }}/8)',
