@@ -150,3 +150,36 @@ for (const exhausted of [false, true]) test(exhausted
   assert.equal((await c.bucket("released-port-owner")).endpoint, c.endpoint);
   assert.equal(children.length, 3, "ownership must not depend on a startup retry");
 });
+
+// Native service handoff ports must be outside the kernel's automatic band.
+test("native storage service ports stay outside the kernel automatic range", {timeout:60000}, async t => {
+  const range = process.platform === "linux"
+    ? (await fs.readFile("/proc/sys/net/ipv4/ip_local_port_range", "utf8")).trim().split(/\s+/).map(Number)
+    : childProcess.execFileSync("sysctl", ["-n", "net.inet.ip.portrange.first", "net.inet.ip.portrange.last"], {encoding:"utf8"}).trim().split(/\s+/).map(Number);
+  assert.equal(range.length, 2);
+  const [first, last] = range;
+  assert.ok(Number.isInteger(first) && Number.isInteger(last) && first > 0 && first <= last && last <= 65535);
+  const spawn = childProcess.spawn;
+  let selections = 0, starts = 0, storage;
+  t.after(async () => {
+    try { await storage?.stop(); }
+    finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  });
+  t.mock.method(crypto, "randomInt", (min, max) => { const i = selections++; return i % 2 ? min + i - 1 : max - 1 - i; });
+  t.mock.method(childProcess, "spawn", (binary, args, options) => {
+    if (args[0] === "mini") {
+      starts++;
+      const ports = args.filter(arg => /^-(s3|master|volume|filer)\.port(?:\.grpc)?=/.test(arg)).map(arg => Number(arg.split("=")[1]));
+      assert.equal(ports.length, 8);
+      assert.equal(new Set(ports).size, 8);
+      for (const port of ports) assert.ok(port < first || port > last,
+        `native service port ${port} overlaps kernel automatic range ${first}-${last}`);
+    }
+    return spawn(binary, args, options);
+  });
+  syncBuiltinESMExports();
+  const {startBackupStorage} = await import("./backup-storage-fixture.mjs");
+  storage = await startBackupStorage({retryPortCollision:false});
+  assert.equal(starts, 1);
+  assert.equal((await storage.bucket("outside-automatic-port-range")).endpoint, storage.endpoint);
+});

@@ -742,15 +742,15 @@ for billing or enforcement. See [the remaining usage qualifications](backlog/usa
 
 ## Native storage admin fallback exhaustion (D506)
 
-**Open.** Admin test listeners and HTTP-derived gRPC choices now stay below the native
-service-port range; paused-child controls reproduce the old S3 refusals.
-Historical port owners, the progress-control timeout, default native admin
-listeners, admin-worker functionality and other programs' bind races remain unqualified.
-D584 narrows the exhaustion starting range so the 101 owners and the parent’s
-additional 100-port check stay below 32768. The original upper edge fails a
-controlled reproduction; the historical CI draw is unknown. Future failures print
-the actual candidate and first attempted port, with every predicate retained.
-See [the controls and unresolved failures](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
+**Open; the automatic-listener conflict has a targeted repair.** Native service
+ports use Linux 61000–65535 or Mac 32768–49151. The ownership regression reads the
+running kernel’s automatic range and checks all eight native ports before a real
+bucket operation. Final allocated-port collisions print the existing listener
+snapshot; the single restart, claims and assertions remain. The Linux focused run
+passed 59 cases, but does not identify every historical owner or measure recurrence.
+The progress-control timeout, default native admin behaviour, admin-worker
+functionality and other programs’ explicit bind races remain separate qualifications. See
+[the commands and limits](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
 
 ## Repository licence
 

@@ -45,11 +45,17 @@ test('failed storage port allocation releases every earlier owned listener', {ti
 });
 
 // A listener can still claim a released port before the separate process binds it.
-test('a child port collision reports the allocation and current socket owners without hiding the failure', {timeout:90000}, async t => {
+for (const brokenReporter of [false, true]) test('a child port collision reports the allocation and current socket owners without hiding the failure' + (brokenReporter ? ' with a throwing reporter' : ''), {timeout:90000}, async t => {
   const childProcess = await import('node:child_process');
   const {syncBuiltinESMExports} = await import('node:module');
   const originalSpawn = childProcess.default.spawn;
   let owner, allocated;
+  const reports = [], report = console.error;
+  t.mock.method(console, 'error', (...args) => {
+    reports.push(args);
+    if (brokenReporter) throw Error('controlled diagnostic reporter refusal');
+    report(...args);
+  });
   const owners = [];
   t.mock.method(childProcess.default, 'spawn', function (binary, args, options) {
     if (args[0] === 'mini') {
@@ -68,6 +74,10 @@ test('a child port collision reports the allocation and current socket owners wi
     assert.equal(error.storageStartup?.ports?.filer, allocated, 'failure must identify the allocated filer port');
     assert.equal(Object.keys(error.storageStartup.ports).length, 8);
     assert.ok(error.storageStartup.socketOwners, 'failure must record socket ownership or an explicit collection failure');
+    assert.equal(reports.length, 1, 'a final native collision must print its observed holder');
+    assert.equal(reports[0][0], 'Storage fixture port handoff failed:');
+    assert.equal(reports[0][1].ports.filer, allocated);
+    assert.deepEqual(reports[0][1].socketOwners, error.storageStartup.socketOwners);
     if (error.storageStartup.socketOwners.source === 'lsof') {
       assert.match(error.storageStartup.socketOwners.output, new RegExp('p' + process.pid + '\\b'));
     }
