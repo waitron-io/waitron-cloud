@@ -200,7 +200,7 @@ test('nested verifier adapter binds the captured point and pinned image to its o
   assert.equal(environment.CLOUD_INTEGRATION_POINT_ID, point); assert.equal(environment.CLOUD_VERIFIER_IMAGE, image);
   assert.equal(environment.CLOUD_INTEGRATION_WAITRON_REVISION, revision); assert.equal(environment.CLOUD_TEST_SERVICE_PLANS, '1');
   assert.equal(loaded, image); assert.equal(applied.spec.restartPolicy, 'Never');
-  assert.deepEqual(applied.spec.hostAliases, [{ip: '10.244.0.5', hostnames: ['waitron.local']}]);
+  assert.deepEqual(applied.spec.hostAliases, [{ip: '10.244.0.5', hostnames: ['waitron.local', 'postgres']}]);
   assert.deepEqual(await adapter.identity(), identity); assert.equal(await adapter.running(), true);
   assert.equal(await adapter.docker(['ps', '-aq']), 'nested-daemon-output');
   await adapter.stop(); assert.equal(await adapter.running(), false); assert.equal(await adapter.exitCode(), '0');

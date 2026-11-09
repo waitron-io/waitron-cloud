@@ -261,7 +261,7 @@
             "resources": {"limits": {"memory": "128Mi"}}
           }
         ],
-        "hostAliases": [{"ip": "CLOUD_POD_IP", "hostnames": ["waitron.local"]}]
+        "hostAliases": [{"ip": "CLOUD_POD_IP", "hostnames": ["waitron.local", "postgres"]}]
       }
     }
   ]
