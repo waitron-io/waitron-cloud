@@ -36,6 +36,10 @@ PACKAGES = [{
     'file': 'ui-core-0.2.1.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58',
     'integrity': 'sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w=='
+}, {
+    'file': 'contract-0.2.9.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508',
+    'integrity': 'sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='
 }]
 
 
@@ -49,9 +53,13 @@ def select(snapshot):
         r'resolution: \{integrity: (sha512-[^,}]+), tarball: ([^}]+)\}',lock)
         if 'npm.pkg.github.com' in url)
     approved = {(package['integrity'],package['url']):package['file'] for package in PACKAGES}
-    if len(pins) != 1 or not pins <= approved.keys():
-        raise ValueError('Captured lockfile needs one approved private release; missing, unknown or mixed pins refused')
-    return approved[next(iter(pins))]
+    if not pins or not pins <= approved.keys():
+        raise ValueError('Captured lockfile needs approved private releases; missing or unknown pins refused')
+    files = [package['file'] for package in PACKAGES if (package['integrity'], package['url']) in pins]
+    names = [name.rsplit('-', 1)[0] for name in files]
+    if names.count('ui-core') != 1 or len(names) != len(set(names)):
+        raise ValueError('Captured lockfile needs one UI release; mixed private versions refused')
+    return files
 
 
 class RefuseRedirect(urllib.request.HTTPRedirectHandler):
@@ -107,7 +115,7 @@ if __name__ == '__main__':
         if len(sys.argv) == 4 and sys.argv[1] == 'verify':
             verify(sys.argv[2], sys.argv[3])
         elif len(sys.argv) == 3 and sys.argv[1] == 'select':
-            print(select(sys.argv[2]))
+            print(json.dumps(select(sys.argv[2])))
         elif len(sys.argv) == 3 and sys.argv[1] == 'fetch':
             fetch(sys.argv[2])
         else:

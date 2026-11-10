@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Wrap already prepared source and package bytes; never inspect candidate code."""
+import importlib.util
 import hashlib
 import io
 import json
@@ -10,11 +11,21 @@ import sys
 import tarfile
 
 
-def create(source, package, output, request):
+spec = importlib.util.spec_from_file_location('private_packages', Path(__file__).with_name('private-packages.py'))
+packages = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(packages)
+PACKAGE_FILES = {package['file'] for package in packages.PACKAGES}
+
+
+def create(source, output, private_packages, request):
     sources = []
     published = False
     try:
-        for name, path, limit in [('source.tar', source, 512*1024*1024), ('ui.tgz', package, 64*1024*1024)]:
+        names = [Path(path).name for path in private_packages]
+        if not names or len(names) != len(set(names)) or not set(names) <= PACKAGE_FILES:
+            raise ValueError('Bundle needs reviewed private filenames without duplicates')
+        for name, path, limit in [('source.tar', source, 512*1024*1024),
+                                  *[(Path(path).name, path, 64*1024*1024) for path in private_packages]]:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             raw = os.fdopen(fd, 'rb')
             sources.append((name, raw))
@@ -53,7 +64,7 @@ def receive(directory):
     if not header.endswith(b'\n') or not header.strip().isdigit():
         raise ValueError('Invalid manual upload length')
     size=int(header)
-    if not 0<size<=577*1024*1024:
+    if not 0<size<=641*1024*1024:
         raise ValueError('Manual upload byte limit exceeded')
     archive_path=Path(directory)/'upload.tar'
     with archive_path.open('xb') as output:
@@ -61,15 +72,17 @@ def receive(directory):
             block=sys.stdin.buffer.read(min(size,1024*1024))
             if not block:raise EOFError('Manual upload disconnected')
             output.write(block);size-=len(block)
-    limits={'request.json':65536,'source.tar':512*1024*1024,'ui.tgz':64*1024*1024}
+    limits={'request.json':65536,'source.tar':512*1024*1024,**{name:64*1024*1024 for name in PACKAGE_FILES}}
+    required={'request.json','source.tar'}
     with tarfile.open(archive_path,'r:') as archive:
         for entry in archive:
-            if entry.name not in limits or not entry.isfile() or not 0<=entry.size<=limits.pop(entry.name):
+            if entry.name not in limits or not entry.isfile() or entry.pax_headers or not 0<=entry.size<=limits.pop(entry.name):
                 raise ValueError('Invalid manual upload member')
             with archive.extractfile(entry) as source,(Path(directory)/entry.name).open('xb') as output:
                 while block:=source.read(1024*1024):output.write(block)
     archive_path.unlink()
-    if limits:raise ValueError('Incomplete manual upload')
+    if required & limits.keys() or not any(name.startswith('ui-core-') and name not in limits for name in PACKAGE_FILES):
+        raise ValueError('Incomplete manual upload')
     request=json.loads((Path(directory)/'request.json').read_bytes())
     if set(request)!={'snapshot','argv'}:
         raise ValueError('Invalid manual request fields')
@@ -83,9 +96,9 @@ if __name__ == '__main__':
     try:
         if len(sys.argv)==3 and sys.argv[1]=='--receive':
             print(json.dumps(receive(sys.argv[2])));sys.exit(0)
-        if len(sys.argv) != 4:
-            raise ValueError('Usage: bundle.py SOURCE PRIVATE_PACKAGE OUTPUT')
-        create(*sys.argv[1:], json.loads(sys.stdin.buffer.read(65537)))
+        if len(sys.argv) < 4:
+            raise ValueError('Usage: bundle.py SOURCE OUTPUT PRIVATE_PACKAGE...')
+        create(sys.argv[1], sys.argv[2], sys.argv[3:], json.loads(sys.stdin.buffer.read(65537)))
     except EOFError as error:
         print(str(error),file=sys.stderr);sys.exit(143)
     except (OSError, ValueError, KeyError, tarfile.TarError) as error:

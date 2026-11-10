@@ -48,7 +48,7 @@ class CISession(unittest.TestCase):
   self.assertTrue((directory/'prepared').exists())
   joined='\n'.join(' '.join(argv) for argv in calls)
   self.assertIn('runner-tools.sh',joined)
-  for forbidden in ['source.tar','ui.tgz','pnpm install','snapshot.py extract']:self.assertNotIn(forbidden,joined)
+  for forbidden in ['source.tar','ui-core-','contract-','pnpm install','snapshot.py extract']:self.assertNotIn(forbidden,joined)
  def test_preparation_waits_through_only_ssh_boot_resets_within_the_original_deadline(self):
   for statuses in [[255,0],[2],[255,255]]:
    with self.subTest(statuses=statuses),tempfile.TemporaryDirectory() as temporary:
@@ -72,13 +72,14 @@ class CISession(unittest.TestCase):
       with self.assertRaisesRegex(expected,message):session.prepare(self.resource)
       self.assertFalse((directory/'prepared').exists());self.assertEqual(len(readiness),1)
  def test_prebuilt_manual_and_ci_check_tools_offline_and_stage_current_execution_files(self):
-  for ci in [True,False]:
-   with self.subTest(ci=ci),tempfile.TemporaryDirectory() as temporary:
+  for ci,packages in [(True,[]),(False,['ui-core-0.1.0.tgz']),(False,['ui-core-0.2.1.tgz','contract-0.2.9.tgz'])]:
+   with self.subTest(ci=ci,packages=packages),tempfile.TemporaryDirectory() as temporary:
     root=Path(temporary);directory=root/self.resource;directory.mkdir();recipe=root/'recipe';recipe.mkdir()
     for name in ['guest-tools.sh','runner-tools.sh','guest-exec.py','snapshot.py']:(recipe/name).write_text('CURRENT-'+name)
     value=request(self.resource)
     if not ci:
-     value.pop('ci');value['argv']=['true'];(directory/'source.tar').write_bytes(b'source');(directory/'ui.tgz').write_bytes(b'private')
+     value.pop('ci');value['argv']=['true'];(directory/'source.tar').write_bytes(b'source');
+     for name in packages:(directory/name).write_bytes(name.encode())
     (directory/'request.json').write_text(json.dumps(value));calls=[]
     def command(argv,deadline,stdin=None,**kwargs):
      if argv[0]=='ssh-keygen':(directory/'key.pub').write_text('ssh-ed25519 fake')
@@ -89,6 +90,9 @@ class CISession(unittest.TestCase):
     self.assertFalse(any(argv[-1]=='bash -s' or argv[-1]=='bash /opt/waitron-disposable/runner-tools.sh' for argv,_ in calls))
     self.assertIn(b'CURRENT-guest-exec.py',[data for _,data in calls])
     self.assertEqual(b'CURRENT-snapshot.py' in [data for _,data in calls],not ci)
+    if not ci:
+     for name in packages:self.assertIn((b'cat > /work/private/'+name.encode()).decode(),[argv[-1] for argv,_ in calls])
+     self.assertIn('pnpm store add '+' '.join('/work/private/'+name for name in packages)+' && pnpm install --frozen-lockfile','\n'.join(argv[-1] for argv,_ in calls))
     self.assertTrue((directory/'prepared').is_file())
 
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):

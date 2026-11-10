@@ -20,12 +20,13 @@ import host
 import operations
 from host import resource_id
 
-MAX_BUNDLE = 577 * 1024 * 1024
+MAX_BUNDLE = 641 * 1024 * 1024
 LIMITS = {'request.json': 65536, 'source.tar': 512 * 1024 * 1024}
-PACKAGE_SHA512 = {base64.b64decode(value) for value in [
-    'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
-    'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
-]}
+PACKAGE_SHA512 = {name: base64.b64decode(value) for name, value in {
+    'ui-core-0.1.0.tgz': 'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
+    'ui-core-0.2.1.tgz': 'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
+    'contract-0.2.9.tgz': 'L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g==',
+}.items()}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'
 RECIPE = Path(__file__).resolve().parent
@@ -107,7 +108,7 @@ def receive(root, resource, stream):
         seen = set()
         with tarfile.open(bundle, 'r:') as archive:
             for entry in archive:
-                if (entry.name not in {*LIMITS, 'ui.tgz'} or entry.name in seen or not entry.isfile() or
+                if (entry.name not in {*LIMITS, *PACKAGE_SHA512} or entry.name in seen or not entry.isfile() or
                         entry.pax_headers or entry.size < 0 or entry.size > LIMITS.get(entry.name, 64*1024*1024)):
                     raise ValueError('Unknown, duplicate or unsafe transfer member')
                 seen.add(entry.name)
@@ -132,9 +133,9 @@ def receive(root, resource, stream):
         with (target/'source.tar').open('rb') as source:
             if hashlib.file_digest(source, 'sha256').hexdigest() != request['snapshot']:
                 raise ValueError('Snapshot digest mismatch')
-        if 'ui.tgz' in seen:
-            with (target/'ui.tgz').open('rb') as source:
-                if hashlib.file_digest(source, 'sha512').digest() not in PACKAGE_SHA512:
+        for name in seen & PACKAGE_SHA512.keys():
+            with (target/name).open('rb') as source:
+                if hashlib.file_digest(source, 'sha512').digest() != PACKAGE_SHA512[name]:
                     raise ValueError('Private package integrity mismatch')
         bundle.unlink()
         return request
@@ -240,7 +241,8 @@ def prepare(resource):
     directory = turn_directory(resource)
     request = request_identity(json.loads((directory/'request.json').read_text()), resource)
     deadline = request['deadline']
-    if 'ci' not in request and not (directory/'ui.tgz').is_file():
+    private_packages = [name for name in PACKAGE_SHA512 if (directory/name).is_file()]
+    if 'ci' not in request and not any(name.startswith('ui-core-') for name in private_packages):
         raise ValueError('Reviewed private dependency bytes are required')
     command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
     public = ' '.join((directory/'key.pub').read_text().split()[:2])
@@ -267,13 +269,13 @@ def prepare(resource):
     for source_path, target in [(RECIPE/'snapshot.py', '/opt/waitron-disposable/snapshot.py'),
                                 (RECIPE/'guest-exec.py', '/opt/waitron-disposable/guest-exec.py'),
                                 (directory/'source.tar', '/work/source.tar'),
-                                (directory/'ui.tgz', '/work/private/ui.tgz')]:
+                                *[(directory/name, '/work/private/'+name) for name in private_packages]]:
         with source_path.open('rb') as source:
             command([*ssh, 'cat > '+shlex.quote(target)], deadline, stdin=source)
     command([*ssh, 'python3 /opt/waitron-disposable/snapshot.py extract /work/source.tar '+
              shlex.quote(request['snapshot'])+' /work/source'], deadline)
     command([*ssh, 'cd /work/source && export CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true; '
-             'pnpm store add /work/private/ui.tgz && pnpm install --frozen-lockfile'],
+             'pnpm store add '+' '.join('/work/private/'+name for name in private_packages)+' && pnpm install --frozen-lockfile'],
             min(deadline, int(time.time()*1000)+180000))
     (directory/'prepared').touch(exist_ok=False)
 

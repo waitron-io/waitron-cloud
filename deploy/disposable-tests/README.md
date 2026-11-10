@@ -67,13 +67,17 @@ bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST \
   < deploy/disposable-tests/host-runtime.test.py
 ```
 
-Prepare the reviewed private UI package on the Mac before copying source. The adapter downloads only its reviewed releases, verifies their full SHA512 digests and refuses candidate-selected authenticated URLs:
+Prepare the reviewed private UI and signing packages on the Mac before copying source. The adapter downloads only its reviewed releases, verifies their full SHA512 digests and refuses candidate-selected authenticated URLs:
 
 ```sh
 python3 scripts/disposable-tests/private-packages.py fetch /tmp/cloud-private-packages
 ```
 
-The package token stays in the Mac process. The helper selects one approved URL and integrity from `pnpm-lock.yaml` inside the captured source archive, then sends that release using the existing `ui.tgz` bundle member. A missing, unknown or mixed private pin refuses preparation; captured files never supply an authenticated URL. The host accepts only the reviewed release digests and verifies the full bytes, including for historical checkouts. GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence.
+The package token stays in the Mac process. The helper reads `pnpm-lock.yaml` inside the captured source archive and returns reviewed filenames: one UI release and, when present, `contract-0.2.9.tgz`. Each archive keeps that filename in both the manual upload and host transfer. UI-only historical captures still work. Missing UI, unknown pins and multiple versions of one package refuse preparation; captured files never supply an authenticated URL. The host checks each filename against its own full SHA512 digest, so swapped or corrupt bytes refuse transfer. Each package remains bounded to 64 MiB; the complete bundle is bounded to 641 MiB.
+
+GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof stages both packages and exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence. Automatic CI retains its request-only transfer and existing job token.
+
+Before adopting the signing package, publish the matched controller and host recipe through the [existing installer](#run-the-controller-from-the-ci-server), with lane I's operator. Then run guest-tools, local-runtime and cancellation proofs against that release. Portable tests do not qualify an installed release. Never patch a frozen recipe in place.
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 
@@ -82,7 +86,8 @@ To run the complete private command-path proof, first prepare the snapshot and r
 ```sh
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-private-packages/ui-core-0.2.1.tgz /tmp/cloud-proof-ledger
+  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
+  /tmp/cloud-private-packages/contract-0.2.9.tgz
 ```
 
 This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, the private package integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
@@ -116,7 +121,8 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 ```sh
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-private-packages/ui-core-0.2.1.tgz /tmp/cloud-cancel-ledger
+  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
+  /tmp/cloud-private-packages/contract-0.2.9.tgz
 ```
 
 Use a new absent private ledger path for each opt-in proof. Explicit bootstrap refuses a directory left by an earlier proof so it cannot forget an old lease.

@@ -86,6 +86,21 @@ published private version `0.2.1` from merged source
 The package keeps Elastic License 2.0 and `LICENSE-GRANTS.md`. Cloud keeps its
 existing package access and authenticated install and image build paths.
 
+## Prepare private signing packages for disposable tests
+
+The signing package is published from Waitron as `@waitron-io/contract`. Cloud's
+disposable-test adapter recognizes reviewed `0.2.9` bytes alongside the UI package;
+this support change does not yet add the application dependency. UI-only captured
+checkouts continue to select their own approved release.
+
+For a future contract release, update its reviewed URL and full SHA512 integrity in
+`scripts/disposable-tests/private-packages.py` and its filename-to-digest entry in
+`deploy/disposable-tests/session.py`. Keep approved historical releases. Publish a
+matched controller and host recipe through the existing installer before adopting
+the new application pin. Follow the [private package and proof instructions](../deploy/disposable-tests/README.md).
+The installed guest-tools, local-runtime and cancellation proofs still have to run
+on the published support before Cloud adopts `0.2.9`.
+
 ## Install locally
 
 Use pnpm 9.15.0 and authenticate GitHub CLI with package-read permission:
