@@ -20,8 +20,8 @@ import host as host_recipe
 
 
 def isolation_targets(peers):
-    if not peers:
-        raise ValueError('Supply independent expected peer addresses with --peers')
+    if len(set(peers)) < 2:
+        raise ValueError('Supply both other servers’ expected addresses with --peers')
     return host_recipe.protected_addresses() | {str(ipaddress.ip_address(peer)) for peer in peers}
 
 

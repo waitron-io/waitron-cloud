@@ -88,6 +88,7 @@ export async function withDrained({configuration:c,api,transport,signal=AbortSig
   try{return await acquire(0);}
   catch(error){if(error!==pending)throw error;}
   // GitHub may report a just-finished job as running; release admission while it catches up.
+  console.error('Waiting for recorded CI jobs to finish before publication');
   await wait(30000,undefined,{signal});
  }
 }
@@ -103,9 +104,16 @@ for index,line in enumerate(lines):
  if not line.lstrip().startswith('exec '):continue
  args=shlex.split(line)
  assert args[-1]=='$@' and args.count(old_script)==1 and args.count(p['oldConfiguration'])==1
- args[args.index(old_script)]=p.get('controller',p['oldController'])+'/deploy/disposable-tests/mac-controller.py'
- args[args.index(p['oldConfiguration'])]=p.get('configurationPath',p['oldConfiguration'])
- lines[index]=shlex.join(args[:-1])+' "$@"\n';changed+=1
+ replacements={old_script:p.get('controller',p['oldController'])+'/deploy/disposable-tests/mac-controller.py',
+               p['oldConfiguration']:p.get('configurationPath',p['oldConfiguration'])}
+ lexer=shlex.shlex(line,posix=True);lexer.whitespace_split=True;lexer.commenters='';pieces=[]
+ while True:
+  start=lexer.instream.tell();value=lexer.get_token();raw=line[start:lexer.instream.tell()]
+  if value in replacements:
+   raw=raw[:len(raw)-len(raw.lstrip())]+shlex.quote(replacements[value])+raw[len(raw.rstrip()):]
+  pieces.append(raw)
+  if value is None:break
+ lines[index]=''.join(pieces);changed+=1
 assert changed==1
 body=''.join(lines)
 if p.get('validate'):sys.exit(0)

@@ -142,7 +142,8 @@ class Guards(unittest.TestCase):
    self.assertIn('isolation_targets',proof)
    targets=proof['isolation_targets'](['8.8.4.4','9.9.9.9'])
    self.assertTrue({'1.1.1.1','8.8.4.4','9.9.9.9'}<=targets)
-   with self.assertRaisesRegex(ValueError,'peer'):proof['isolation_targets']([])
+   for peers in [[],['8.8.4.4']]:
+    with self.assertRaisesRegex(ValueError,'peer'):proof['isolation_targets'](peers)
 
  def test_image_preparation_creates_only_the_reserved_nonlogin_slot_accounts(self):
   image=self.root/'base-image';image.touch();accounts={};created=[]

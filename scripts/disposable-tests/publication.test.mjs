@@ -41,6 +41,8 @@ async function fixture(t){
 test('publication refuses unfinished recorded jobs and uncertain guest absence before changing callers',async t=>{
  const f=await fixture(t),{withDrained}=await import('./publish.mjs');let called=false;
  const work=async()=>{called=true;return {code:0};};
+ for(const changed of [{id:790},{run_attempt:0}])
+  await assert.rejects(withDrained({configuration:f.old,api:{get:async(path,options)=>path.endsWith('/runs/789')?{id:789,run_attempt:1,status:'completed',...changed}:f.api.get(path,options)},transport:f.transport},work),/identity/i);
  for(const changed of [{id:902},{run_id:790},{run_attempt:2}])
   await assert.rejects(withDrained({configuration:f.old,api:{get:async(path,options)=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,status:'completed',...changed}:f.api.get(path,options)},transport:f.transport},work),/identity/i);
  await assert.rejects(withDrained({configuration:f.old,api:{get:async(path,options)=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:f.api.get(path,options)},transport:f.transport},work),/Hosted movements/);
@@ -50,11 +52,12 @@ test('publication refuses unfinished recorded jobs and uncertain guest absence b
 
 test('drain waits for final GitHub status without holding the old admission locks',async t=>{
  const f=await fixture(t),{withDrained}=await import('./publish.mjs');let jobs=0,waits=0;
+ const messages=[];t.mock.method(console,'error',message=>messages.push(message));
  const api={get:async(path,options)=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,status:++jobs===1?'in_progress':'completed'}:f.api.get(path,options)};
  const result=await withDrained({configuration:f.old,api,transport:f.transport,wait:async()=>{
   waits++;assert.equal((await withKernelLock(f.old.state+'/slot-0',async()=>({code:0}))).code,0);
  }},async()=>({code:0}));
- assert.equal(result.code,0);assert.equal(jobs,2);assert.equal(waits,1);
+ assert.equal(result.code,0);assert.equal(jobs,2);assert.equal(waits,1);assert.equal(messages.length,1);
 });
 
 test('drain groups completed run history and checks only the latest guest generation',async t=>{
@@ -84,9 +87,14 @@ test('publication rewrites manual command arguments once even when the new path 
  const original=f.p.oldController;f.p.oldController=f.root;
  for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original,f.root));
  f.p.newController=f.root+'/release';
+ writeFileSync(f.p.wrapper,readFileSync(f.p.wrapper,'utf8').replace('#!/bin/sh\n','#!/bin/sh\nlane=$1; checkout=$2; shift 2\n').replace(' \"$@\"',' \"$lane\" \"$checkout\" -- \"$@\"'));
  await publish(f.p,{api:f.api,transport:f.transport,candidateTransport:{healthySlots:async()=>[0,1]},execute:f.execute});
  const args=JSON.parse(execFileSync(f.p.python,['-I','-c','import shlex,sys,json;print(json.dumps(shlex.split(open(sys.argv[1]).read().splitlines()[-1])))',f.p.wrapper],{encoding:'utf8'}));
- assert.deepEqual(args,['exec',f.p.python,'-I','-B',f.p.newController+'/deploy/disposable-tests/mac-controller.py',process.execPath,f.p.newController+'/config.json','$@']);
+ assert.deepEqual(args,['exec',f.p.python,'-I','-B',f.p.newController+'/deploy/disposable-tests/mac-controller.py',process.execPath,f.p.newController+'/config.json','$lane','$checkout','--','$@']);
+ const probe=f.root+'/argument-probe';writeFileSync(probe,'#!/usr/bin/env python3\nimport json,sys;print(json.dumps(sys.argv[1:]))\n',{mode:0o700});
+ writeFileSync(f.p.wrapper,readFileSync(f.p.wrapper,'utf8').replace(f.p.python,probe));
+ const received=JSON.parse(execFileSync('sh',[f.p.wrapper,'I','/fixture/checkout with spaces','exit','3'],{encoding:'utf8'}));
+ assert.deepEqual(received,['-I','-B',f.p.newController+'/deploy/disposable-tests/mac-controller.py',process.execPath,f.p.newController+'/config.json','I','/fixture/checkout with spaces','--','exit','3']);
 });
 
 test('host preparation sends the reviewed pinned recipe to both destinations and reports either failure',async t=>{
