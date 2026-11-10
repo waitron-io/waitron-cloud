@@ -28,6 +28,12 @@ hosted-only Bluetooth exception.
 
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
+A1472 bounds pickup and capacity run-list rereads at three fresh requests for count/list
+mismatches. Persistent mismatches retain the existing refusal; job pagination and routing
+policy are unchanged. The local consumer tests exercise recovery and exhaustion. Actual
+published assignment and any change in incomplete-inventory events remain separate evidence;
+no queue saving is established by those tests.
+
 ## Keep the private shared UI release current (D579)
 
 The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)

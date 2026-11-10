@@ -37,6 +37,38 @@ function fixture(){
  }};
  return {run,jobs,api};
 }
+for(const consumer of ['findAutomatic','overflowInventory'])for(const persistent of [false,true])test(`${consumer} ${persistent?'bounds repeated mismatches':'rereads a mismatched run inventory'}`,async()=>{
+ const f=fixture(),get=f.api.get,signal=new AbortController().signal;let reads=0;
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?') && path.includes('status=queued')){
+   assert.equal(options.signal,signal);reads++;
+   if(persistent || reads===1)return {total_count:1,workflow_runs:[]};
+   return {total_count:1,workflow_runs:[f.run]};
+  }
+  return get(path,options);
+ };
+ const result=controller[consumer]({api:f.api,policy,limit:6,signal});
+ if(persistent)await assert.rejects(result,{message:consumer==='findAutomatic'?'Incomplete automatic run inventory':'Incomplete hosted run inventory'});
+ else if(consumer==='findAutomatic')assert.deepEqual((await result).map(ci=>ci.jobId),[901,902,903,904,905]);
+ else assert.deepEqual([...(await result)].map(([id,{jobs}])=>[id,jobs.map(job=>job.id)]),[[789,[901,902,903,904,905]]]);
+ assert.equal(reads,persistent?3:2);
+});
+for(const consumer of ['findAutomatic','overflowInventory'])for(const fault of ['http','shape','oversized','negative','duplicate'])test(`${consumer} does not reread ${fault} run inventories`,async()=>{
+ const f=fixture(),get=f.api.get;let reads=0;
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?') && path.includes('status=queued')){
+   reads++;
+   if(fault==='http')throw Object.assign(new Error('Unavailable'),{status:503});
+   if(fault==='shape')return {total_count:1,workflow_runs:null};
+   if(fault==='duplicate')return {total_count:2,workflow_runs:[f.run,f.run]};
+   return {total_count:fault==='oversized'?101:-1,workflow_runs:[]};
+  }
+  return get(path,options);
+ };
+ if(fault==='duplicate' && consumer==='findAutomatic')assert.deepEqual((await controller.findAutomatic({api:f.api,policy,limit:6})).map(ci=>ci.jobId),[901,902,903,904,905]);
+ else await assert.rejects(controller[consumer]({api:f.api,policy,limit:6}));
+ assert.equal(reads,1);
+});
 for(const healthy of [true,false])test(`capacity publication counts usable occupancy and distinct queues with healthy=${healthy}`,async()=>{
  const f=fixture(),get=f.api.get;let published='';
  f.jobs.push(...Array.from({length:6},(_,i)=>({...f.jobs[0],id:1000+i,labels:['ubuntu-latest'],status:i<2?'in_progress':i===5?'pending':'queued'})));
@@ -116,22 +148,22 @@ test('an incomplete run inventory does not hold free capacity behind a still-run
  const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
  await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
  const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release;
- const held=new Promise(resolve=>release=resolve),ids=[];
+ const held=new Promise(resolve=>release=resolve),ids=[],waits=[];
  const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/runs?') && path.includes('status=queued')){
-   if(++scans===2)return {total_count:1,workflow_runs:[]};
+  if(path.includes('/workflows/456/runs?') && path.includes('status=queued')){
+   if(++scans>=2 && scans<=4)return {total_count:1,workflow_runs:[]};
   }
-  if(path.includes('/jobs?'))return {total_count:scans<3?2:3,jobs:scans<3?[first,second]:[first,second,third]};
+  if(path.includes('/jobs?'))return {total_count:scans<5?2:3,jobs:scans<5?[first,second]:[first,second,third]};
   return get(path);
  };
  let failure;
  try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
-  api:routingVariables(f.api),transport:{healthy:async()=>true},wait:async()=>{},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903)release();return {code:0};}});}
+  api:routingVariables(f.api),transport:{healthy:async()=>true},wait:async ms=>{waits.push(ms);},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903)release();return {code:0};}});}
  catch(error){failure=error;}
- assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);
+ assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);assert.ok(waits.includes(30000));
 });
 for(const change of ['fork','retry','assigned','hosted','unsupported','stale'])test(`automatic pickup leaves ${change} jobs alone`,async()=>{
  const f=fixture();
@@ -621,12 +653,14 @@ for(const fault of ['inventory','run-http','marker-http','head-http','network','
  }
  const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release,heldActive=true,thirdWhileHeld=false,injected=false;
  const held=new Promise(resolve=>release=()=>{heldActive=false;resolve();}),ids=[];
- const timeout=setTimeout(release,2000);t.after(()=>clearTimeout(timeout));
+ const timeout=setTimeout(release,2000);t.after(()=>clearTimeout(timeout));let inventoryFailures=0;const waits=[];
  f.api.get=async path=>{
-  if(!injected && ids.includes(902) && ((fault==='marker-http' && path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('marker') && !fault.startsWith('head') && (fault==='rate-pr'?path.endsWith('/pulls/12'):path.includes('/runs?'))))){
+  if(fault==='inventory' && ids.includes(902) && inventoryFailures<3 && path.includes('/workflows/456/runs?') && path.includes('status=queued')){
+   injected=true;inventoryFailures++;return {total_count:1,workflow_runs:[]};
+  }
+  if(fault!=='inventory' && !injected && ids.includes(902) && ((fault==='marker-http' && path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('marker') && !fault.startsWith('head') && (fault==='rate-pr'?path.endsWith('/pulls/12'):path.includes('/runs?'))))){
    injected=true;
    if(interrupted)return interrupted.get(path);
-   if(fault==='inventory')return {total_count:1,workflow_runs:[]};
    if(fault.endsWith('http'))throw Object.assign(new Error('Unavailable'),{status:503});
    if(fault==='network')throw new TypeError('fetch failed');
    if(fault==='timeout')throw new DOMException('Timed out','TimeoutError');
@@ -640,9 +674,10 @@ for(const fault of ['inventory','run-http','marker-http','head-http','network','
  };
  let failure;
  try{await automaticTick({configuration:'/fixture/config.json',config:{version:2,mode:'manual-slots',state:root,hostGeneration:'test',slots:2,ci:policy},
-  api:f.api,transport:{healthy:async()=>true},wait:async ms=>{if(fault.startsWith('rate-'))assert.ok(ms>=(fault==='rate-reset'?88000:74000) && ms<=(fault==='rate-reset'?90000:75000),'Respect the server retry time');else assert.equal(ms,30000);},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903){thirdWhileHeld=heldActive;release();}return {code:0};}});}
+  api:f.api,transport:{healthy:async()=>true},wait:async ms=>{waits.push(ms);if(fault.startsWith('rate-'))assert.ok(ms>=(fault==='rate-reset'?88000:74000) && ms<=(fault==='rate-reset'?90000:75000),'Respect the server retry time');else assert.equal(ms,30000);},runWorker:async ci=>{ids.push(ci.jobId);if(ci.jobId===901)await held;else if(ci.jobId===903){thirdWhileHeld=heldActive;release();}return {code:0};}});}
  catch(error){failure=error;}
  assert.equal(failure,undefined);assert.deepEqual(ids,[901,902,903]);assert.equal(thirdWhileHeld,true,'The third job starts before the first finishes');
+ if(fault==='inventory')assert.ok(waits.includes(30000));
 });
 
 test('automatic cancellation yields its persisted intent while GitHub is still cancelling',async()=>{
