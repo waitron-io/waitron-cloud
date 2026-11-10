@@ -925,11 +925,12 @@ for(const [state,running,wave,wantCancel] of [
  ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,true],
  ['large wave',0,21,true],['queued hosted',0,5,true],['unknown jobs',0,5,false],
  ['unknown runs',0,5,false],['wrong attempt',0,5,false],['duplicate runs',0,5,false],
- ['reserved retry',15,5,true],['balanced queue',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
+ ['reserved retry',15,5,true],['balanced queue',0,5,false],['unrecognized status',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
 ])test(`overflow requires observed hosted room: ${state}`,async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  const target=f.jobs[0];f.jobs.splice(0,f.jobs.length,...Array.from({length:wave},(_,i)=>({...target,id:901+i})));
  const other={...f.run,id:790},hosted=Array.from({length:running},(_,i)=>({...target,id:1000+i,run_id:790,status:'in_progress',runner_id:42,labels:['ubuntu-latest']}));
+ if(state==='unrecognized status')hosted.push({...target,id:2000,run_id:790,status:'unrecognized',labels:['ubuntu-latest']});
  if(state==='balanced queue')hosted.push(...Array.from({length:17},(_,i)=>({...target,id:2000+i,run_id:790,labels:['ubuntu-latest']})));
  if(state==='queued hosted')hosted.push({...target,id:2000,run_id:790,labels:['ubuntu-latest']});
  if(['waiting','pending','requested'].includes(state))hosted.push({...target,id:2000,run_id:790,status:state,labels:['ubuntu-latest']});

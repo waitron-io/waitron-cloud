@@ -186,6 +186,7 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
   }
   for(const job of jobs){
    if(!job.labels.length)continue;
+   if(!['completed','in_progress'].includes(job.status) && !waiting(job))return;
    if(job.labels.includes('self-hosted')){
     if(!pending && waiting(job) && !capacity.jobs?.has(job.id))serverWaiting++;
    }else{
