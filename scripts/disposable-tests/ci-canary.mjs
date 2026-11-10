@@ -4,6 +4,14 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {ciIdentity,routingLabel,jobName,ciJobKeyPattern} from './ci-identity.mjs';
 import {configuredSlots} from './leases.mjs';
 
+async function runInventory(api,path,signal){
+ for(let attempt=1;attempt<=3;attempt++){
+  const data=await api.get(path,{signal});
+  if(attempt===3 || !Number.isSafeInteger(data.total_count) || data.total_count<0 || data.total_count>100 ||
+   !Array.isArray(data.workflow_runs) || data.workflow_runs.length===data.total_count)return data;
+ }
+}
+
 async function jobInventory(api,path,signal,limit=100,message='Incomplete job inventory'){
  const jobs=[];let total;
  for(let page=1;page<=Math.ceil(limit/30);page++){
@@ -81,7 +89,7 @@ async function markHostedAttempt({api,policy,ci,signal}){
 export async function overflowInventory({api,policy,signal,includeHosted=true}){
  const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(),snapshot=new Map();
  for(const status of ['queued','in_progress']){
-  const data=await api.get(`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,{signal});
+  const data=await runInventory(api,`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,signal);
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
    data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete hosted run inventory');
   for(const run of data.workflow_runs)runs.set(run.id,run);
@@ -312,7 +320,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
  const base=`/repos/${policy.repository}`,found=[];
  const upstream=api,reads=new Map();
  api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
- const inventories=await Promise.all(['queued','in_progress'].map(status=>api.get(`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,{signal})));
+ const inventories=await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
  const runs=new Map();
  for(const inventory of inventories){
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');

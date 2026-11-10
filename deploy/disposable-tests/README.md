@@ -298,6 +298,12 @@ The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute p
 Automatic pickup does not read main's workflow history or use `ci.workflowHistory` or `ci.candidateWorkflowDigest` to decide trust. Existing configurations containing those fields still parse; new automatic-pickup configurations need neither. The manual canary and selected-head commands retain their configured `workflowDigest` check. Execution still enters through the fixed host command and runs inside a disposable guest; App credentials stay on the Mac. Run `node --test scripts/disposable-tests/ci-auto.test.mjs scripts/disposable-tests/ci-server-first.test.mjs scripts/disposable-tests/ci-runtime.test.mjs` for the automatic admission and executor checks.
 
 
+Pickup and capacity run-list reads make up to three fresh requests when a valid count of
+0–100 disagrees with the returned list length. Overflow uses the same capacity reader.
+A persistent mismatch retains each caller's existing refusal and polling behavior; HTTP errors,
+malformed answers and oversized counts are not reread. These local controls run through
+`node --test scripts/disposable-tests/ci-auto.test.mjs`; they do not measure live retry frequency.
+
 Attempt-job reads use 30-record pages; run and runner lists keep 100-record pages. Ordinary
 job inventories retain their 100-job ceiling. Explicit manual cancellation tools retain their 1,000-job ceiling.
 Changed counts, duplicate IDs and incomplete pages refuse the read before admission or cancellation.
