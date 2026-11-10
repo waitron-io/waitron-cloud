@@ -13,12 +13,19 @@ Delete the 12 October identity **first**, if it still exists. In IAM → Users �
 `waitron-lane-d-rehearsal`, remove inline policies and its permissions boundary,
 then delete the user. In IAM → Policies, delete `waitron-lane-d-rehearsal` and
 `lane-d-boundary` only after **Entities attached = 0**; otherwise retain the shared
-policy and inspect its users. Do not delete buckets, keys or roles belonging to other
+policy and inspect its users. Check the policy’s **Permissions boundary** usage too;
+a boundary used by a retained role must stay. After revocation, use a local editor
+to remove only the retired `waitron-rehearsal` profile from
+`~/.config/waitron-cloud/aws/credentials` and its matching config stanza; preserve
+other profiles. Check locally that both retired stanzas are gone, without printing
+credentials. Do not delete buckets, keys or roles belonging to other
 rehearsals. Check: the user search returns no match and neither policy has an
 attachment to that user. Expiry on 3 November did not delete anything.
 
 Keep your root MFA enabled. In IAM, use an existing non-root IAM user with MFA,
 or create a console-only user `d618-owner-login` with MFA and no access keys.
+As administrator, set its console password privately without requiring a first-login
+reset, then register its MFA device under Security credentials.
 Give this identity only `sts:AssumeRole` on the launcher role below, plus AWS's
 `SignInLocalDevelopmentAccess` managed policy for browser-based CLI login.
 Use your administrator session for setup, not this restricted identity.
@@ -69,12 +76,9 @@ the inline policy `d618`. Do not attach administrator or EC2-full-access policie
 | `d618-budget` | `budget-trust.json` | `budget-policy.json` | Budgets attaches/removes only the deny-launch policy |
 
 For `d618-launcher`, set maximum session duration to **3 hours**. In the non-root
-owner identity's Permissions → Add inline policy, use the JSON below, replacing
-the account placeholder locally. Check that it has no other permissions if newly created.
-
-```json
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sts:AssumeRole","Resource":"arn:aws:iam::ACCOUNT_ID:role/d618-launcher"}]}
-```
+owner identity's Permissions → Add inline policy, paste the rendered
+`owner-policy.json`. Check that a newly created user has only this inline policy and
+`SignInLocalDevelopmentAccess`.
 
 On the x86 test box use AWS CLI **2.32.0 or later**. Configure browser login and the
 role profile (these settings contain no secret). CLI-managed session caches stay
@@ -95,8 +99,8 @@ done
 ```
 
 Check: caller account matches your desk note, ARN contains `assumed-role/d618-launcher/`,
-and the four trusts match the files. Use the IAM user login route above: assuming
-the launcher from another role is limited to one hour, shorter than this experiment.
+and the four trusts match the files. The profile requests three hours to match
+the role setting; keep the source browser-login session available for CLI refreshes.
 Do not start with a root identity or the old rehearsal profile.
 
 ## 3. Make the USD 10 budget deny new launches
@@ -105,7 +109,8 @@ As administrator, IAM → Policies → Create policy → JSON: paste `deny-launc
 name it **d618-deny-launch**. Leave it unattached; Budgets attaches it at the threshold.
 Billing → Budgets → Create budget → Customize → Cost budget: name **D618**, monthly,
 fixed **USD 10**, all account costs, including tax, without service/tag filters.
-At actual spend **100%**, add an automatic action: execution role **d618-budget**,
+At actual spend **100%**, add your own email as the alert recipient, then add an
+automatic action: execution role **d618-budget**,
 action **Apply IAM policy**, policy **d618-deny-launch**, target role
 **d618-launcher**, automatically execute **Yes**. Review and create. Keep the action
 ID from its detail page privately. An existing D618 budget must be edited to these
@@ -155,6 +160,20 @@ aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
 aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
   --action-names cloudformation:DeleteStack --resource-arns "$SIM_STACK" \
   --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string
+aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
+  --action-names iam:PassRole --resource-arns "$STACK_ROLE" \
+  --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string
+aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
+  --action-names iam:PassRole --resource-arns "$SCHEDULER_ROLE" \
+  --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=scheduler.amazonaws.com,ContextKeyType=string
+aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
+  --action-names ec2:TerminateInstances \
+  --resource-arns "arn:aws:ec2:eu-west-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+  --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=d618-simulation,ContextKeyType=string
+aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
+  --action-names ec2:TerminateInstances \
+  --resource-arns "arn:aws:ec2:eu-west-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+  --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string
 aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-west-1
 ```
 
@@ -162,11 +181,10 @@ Require, in order: create allowed; passing the stack role allowed; direct EC2 la
 and role creation implicitly denied; with the budget denial, create explicitly denied
 but describe/delete allowed; scheduler deletion allowed; the expected key pair found.
 If a result has `MissingContextValues`, fix the invocation rather than reading it as
-permission granted. Repeat pass-role simulation with the scheduler role as source,
-stack role as resource and CloudFormation as service; and with the stack role as source,
-scheduler role as resource and `scheduler.amazonaws.com` as service. Both must allow.
-Check stack-role `ec2:TerminateInstances` on a synthetic instance ARN with
-`ec2:ResourceTag/cloud.campaign=D618`: allowed. Without that tag: denied.
+permission granted. The final four simulations must show both role passes allowed,
+termination with the protected stack-name tag allowed, and termination with another
+stack’s tag denied. CloudFormation sets `aws:` tags; [EC2 reserves that prefix](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html),
+so the role cannot forge them with `CreateTags`.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
 for quota, AMI, spend, config and launch. Confirm in the **account console** that the
@@ -179,22 +197,26 @@ Every policy is derived from `scripts/amazon-run.mjs` and
 `deploy/kubernetes/bounded-amazon/stack.yaml`; the following is the action map.
 Resource IDs do not exist until creation, so their ARN suffixes use `*`. EC2 describe
 calls, Cost Explorer and the quota read use `Resource: "*"`; no action uses `ec2:*`.
-Network modifications/deletion use CloudFormation's stack-name tag; instance stop
-and termination use the template's explicit `cloud.campaign=D618` tag. Creation and
+Network modifications/deletion and instance termination use CloudFormation’s protected
+stack-name tag; stopping C uses the template’s explicit `cloud.campaign=D618` tag. Creation and
 tagging cannot rely on a tag that does not exist yet. The role is for this isolated
 practice account only; it is not a production deployment role.
 
 | Policy section | Call or template resource requiring it |
 | --- | --- |
+| Owner AssumeRole | The browser-login identity assumes `d618-launcher`; the separate AWS sign-in policy permits CLI login |
 | Launcher create/tag, describe/delete, pass-role | `startAmazon.create`, waiters and error/`stop` teardown; the launcher passes only the stack role |
 | Launcher stop/describe EC2 | `stopWorker`, `waitStopped`, `checkStopped`; image/key/usage checks in the run checklist |
 | Launcher budget, IAM, quota, cost reads | Steps 2–4 above and the run checklist; `GetCallerIdentity` needs no IAM grant |
 | Stack network create/tag/configure/delete | `Vpc`, `Subnet` (DNS/public IP attributes), `Internet`, `Attachment`, `Routes`, `Route`, `Association`, `Firewall`, `Mesh`; ingress/egress rule handling and rollback |
-| Stack EC2 reads | CloudFormation create/read/delete checks for those resources and A/B/C; includes network ACL, network interface, volume and instance-attribute reads |
+| Stack EC2/SSM reads | Declared CloudFormation create/read/delete checks for those resources and A/B/C, including launch-template, VPC-encryption and VPN-gateway discovery and Systems Manager association reads; no Systems Manager write is granted |
 | Stack RunInstances/CreateTags/TerminateInstances | A/B/C, pinned AMI and key, m7i.xlarge, automatic root volumes/network interfaces; deletion removes root disks |
 | Stack scheduler lifecycle/pass-role | `Expiry`, created before A/B/C; scheduler uses default group and CloudFormation-generated `d618-*` name |
 | Scheduler delete/pass-role | `Expiry.Target` names the stack and explicitly supplies `StackRole` |
 | Budget attach/detach | Apply/revert only `d618-deny-launch` on `d618-launcher`; no budget permission to stop/delete machines or change the other roles |
+
+The read permissions include the [resource handlers’ declared discovery calls](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/resource-type-schemas.html);
+which optional calls the live handlers use remains unverified.
 
 Sources checked 10 November 2026: AWS's [service-role guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/least-privilege-cloudformation/service-roles-for-cloudformation.html),
 [EC2 action/resource reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html),

@@ -18,7 +18,13 @@
         "ec2:DescribeInstanceCreditSpecifications",
         "ec2:DescribeNetworkInterfaces",
         "ec2:DescribeVolumes",
-        "ec2:DescribeKeyPairs"
+        "ec2:DescribeKeyPairs",
+        "ec2:DescribeLaunchTemplates",
+        "ec2:DescribeVpcEncryptionControls",
+        "ec2:DescribeVpnGateways",
+        "ec2:DescribeImages",
+        "ssm:ListAssociations",
+        "ssm:DescribeAssociation"
       ],
       "Resource": "*",
       "Condition": {
@@ -144,8 +150,8 @@
       "Action": "ec2:TerminateInstances",
       "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
       "Condition": {
-        "StringEquals": {
-          "ec2:ResourceTag/cloud.campaign": "D618"
+        "StringLike": {
+          "ec2:ResourceTag/aws:cloudformation:stack-name": "d618-*"
         }
       }
     },
