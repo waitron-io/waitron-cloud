@@ -12,31 +12,50 @@ if test "${ID:-}" != debian || test "${VERSION_ID:-}" != 13 || test "$(id -u)" !
    ! [[ "$virtualisation" =~ ^(kvm|qemu)$ ]]; then
   echo 'A fresh disposable Debian 13 x86 KVM guest is required' >&2; exit 1
 fi
+# BEGIN offline check
+packages=(
+  'docker.io=26.1.5+dfsg1-9+deb13u1' 'docker-cli=26.1.5+dfsg1-9+deb13u1' 'docker-compose=2.26.1-4' 'git=1:2.47.3-0+deb13u1'
+  'zip=3.0-15+deb13u1' 'unzip=6.0-29+deb13u1' 'jq=1.7.1-6+deb13u4'
+  'fonts-dejavu-core=2.37-8'
+  'xvfb=2:21.1.16-1.3+deb13u4' 'fonts-noto-color-emoji=2.051-0+deb13u1'
+  'fonts-unifont=1:15.1.01-1' 'libfontconfig1=2.15.0-2.3'
+  'libfreetype6=2.13.3+dfsg-1+deb13u1' 'xfonts-scalable=1:1.0.3-1.3'
+  'fonts-liberation=1:2.1.5-3' 'fonts-ipafont-gothic=00303-23'
+  'fonts-wqy-zenhei=0.9.45-8' 'fonts-tlwg-loma-otf=1:0.7.3-1'
+  'fonts-freefont-ttf=20211204+svn4273-2' 'libasound2t64=1.2.14-1+deb13u1'
+  'libatk-bridge2.0-0t64=2.56.2-1+deb13u2' 'libatk1.0-0t64=2.56.2-1+deb13u2'
+  'libatspi2.0-0t64=2.56.2-1+deb13u2' 'libcairo2=1.18.4-1+b1'
+  'libcups2t64=2.4.10-3+deb13u2' 'libdbus-1-3=1.16.2-2'
+  'libdrm2=2.4.124-2' 'libgbm1=25.0.7-2+deb13u1'
+  'libglib2.0-0t64=2.84.4-3~deb13u5' 'libnspr4=2:4.36-1'
+  'libnss3=2:3.110-1+deb13u5' 'libpango-1.0-0=1.56.3-1'
+  'libx11-6=2:1.8.12-1' 'libxcb1=1.17.0-2+b1'
+  'libxcomposite1=1:0.4.6-1' 'libxdamage1=1:1.1.6-1+b2'
+  'libxext6=2:1.3.4-1+b3' 'libxfixes3=1:6.0.0-2+b4'
+  'libxkbcommon0=1.7.0-2' 'libxrandr2=2:1.5.4-1+b3'
+)
+check_tools() {
+  local pin
+  for pin in "${packages[@]}"; do
+    test "$(dpkg-query -W -f='${Version}' "${pin%%=*}")" = "${pin#*=}"
+  done
+  test "$(node --version)" = v26.13.0
+  test "$(pnpm --version)" = 9.15.0
+  test "$(docker compose version --short)" = 2.26.1-4
+}
+# END offline check
+if test "${1:-}" = --check; then
+  systemctl start docker
+  check_tools
+  docker info --format '{{.ServerVersion}}'
+  exit
+fi
 export DEBIAN_FRONTEND=noninteractive
 # A missing version refuses preparation. It must never silently change the tool set.
 timeout 120s apt-get update -qq
 # DejaVu supplies system-ui before the regional Chromium fonts can become its fallback.
 # Include Chromium libraries and fonts before candidate browser tests start.
-timeout 180s apt-get install -y --no-install-recommends \
-  'docker.io=26.1.5+dfsg1-9+deb13u1' 'docker-cli=26.1.5+dfsg1-9+deb13u1' 'docker-compose=2.26.1-4' 'git=1:2.47.3-0+deb13u1' \
-  'zip=3.0-15+deb13u1' 'unzip=6.0-29+deb13u1' 'jq=1.7.1-6+deb13u4' \
-  'fonts-dejavu-core=2.37-8' \
-  'xvfb=2:21.1.16-1.3+deb13u4' 'fonts-noto-color-emoji=2.051-0+deb13u1' \
-  'fonts-unifont=1:15.1.01-1' 'libfontconfig1=2.15.0-2.3' \
-  'libfreetype6=2.13.3+dfsg-1+deb13u1' 'xfonts-scalable=1:1.0.3-1.3' \
-  'fonts-liberation=1:2.1.5-3' 'fonts-ipafont-gothic=00303-23' \
-  'fonts-wqy-zenhei=0.9.45-8' 'fonts-tlwg-loma-otf=1:0.7.3-1' \
-  'fonts-freefont-ttf=20211204+svn4273-2' 'libasound2t64=1.2.14-1+deb13u1' \
-  'libatk-bridge2.0-0t64=2.56.2-1+deb13u2' 'libatk1.0-0t64=2.56.2-1+deb13u2' \
-  'libatspi2.0-0t64=2.56.2-1+deb13u2' 'libcairo2=1.18.4-1+b1' \
-  'libcups2t64=2.4.10-3+deb13u2' 'libdbus-1-3=1.16.2-2' \
-  'libdrm2=2.4.124-2' 'libgbm1=25.0.7-2+deb13u1' \
-  'libglib2.0-0t64=2.84.4-3~deb13u5' 'libnspr4=2:4.36-1' \
-  'libnss3=2:3.110-1+deb13u5' 'libpango-1.0-0=1.56.3-1' \
-  'libx11-6=2:1.8.12-1' 'libxcb1=1.17.0-2+b1' \
-  'libxcomposite1=1:0.4.6-1' 'libxdamage1=1:1.1.6-1+b2' \
-  'libxext6=2:1.3.4-1+b3' 'libxfixes3=1:6.0.0-2+b4' \
-  'libxkbcommon0=1.7.0-2' 'libxrandr2=2:1.5.4-1+b3'
+timeout 180s apt-get install -y --no-install-recommends "${packages[@]}"
 temporary=$(mktemp -d /tmp/disposable-tools.XXXXXXXX)
 trap 'rm -rf -- "$temporary"' EXIT
 # BEGIN bounded download

@@ -182,6 +182,46 @@ When replacing a legacy manual release with the kernel-lock controller, follow t
 4. Switch the shared helper to the new immutable controller/configuration. Confirm that no old helper process remains. Keep the retired state gated permanently; never point the replacement at it.
 5. Only then load the rendered launchd agent with explicit HOME and no log file. Qualify its real SSH identity, interrupted-turn cleanup and a fresh successor. For a newly enrolled host, coordinate its reboot with the watcher. Measured capacity and GitHub activation retain their later gates.
 
+## Build the shared tool disk
+
+To avoid installing the same pinned tools on every guest, build a reusable disk from the
+reviewed, frozen host recipe after `host.py prepare-image`:
+
+```sh
+python3 -B /opt/REVIEWED_RECIPE/image.py build "dt-tools-0-$(date +%s)"
+```
+
+Choose a free slot in the resource ID. The existing slot and capacity checks refuse an occupied
+slot with status 75; the build never stops another guest. It installs both trusted tool scripts
+in a fresh verified Debian guest, checks their exact versions without downloads, removes the
+builder's machine identity, keys, caches and daemon state, then shuts it down and publishes a
+flattened disk. Unexpected task or runner-registration files refuse publication. Builder cleanup
+is checked independently after success or failure.
+
+Manual and CI guests share this disk, including its unregistered runner tools and account.
+The key includes the Debian digest and the exact bytes of both installers and `image.py`.
+Run the build command again after changing any of those files. Ordinary admission never builds:
+a missing or stale disk uses the existing Debian install path. A matching disk with an unsafe
+owner, writable permissions, links, a bad checksum or an external backing file refuses admission.
+Published disks and checksums are root-owned 0444 files in 0755 directories under
+`/var/lib/waitron-disposable/images`; this command does not delete older images.
+
+Admission hashes only its selected backing disk before taking the host allocation lock, then
+rechecks that same artifact inside the lock before making a private writable overlay.
+Prebuilt guests start their own Docker daemon and run the current installers with `--check`:
+each direct package pin, Node, pnpm, Compose and runner version and the saved runner-binary
+checksum must match offline. A mismatch fails preparation rather than reinstalling tools.
+Both paths still stage the current execution program, and manual turns stage the current
+snapshot program. Download retries, registration and execution checks keep their existing owners.
+
+Run the portable image and dispatch cases with
+`node --test scripts/disposable-tests/{dependencies,session,host}.test.mjs scripts/ci-plan.test.mjs`.
+The opt-in host and guest proofs remain separate. A hosted image-smoke pass does not qualify
+this disk: before using a new recipe for ordinary CI, run image smoke inside a prebuilt guest,
+check fresh successor identities and cleanup, and record an ordinary job using that disk.
+For startup comparisons, report disk hashing separately and define cold as a fresh guest and
+overlay. Shared host page-cache state is uncontrolled; never clear shared caches for a benchmark.
+
 ## Run the first CI canary
 
 Use the separate `disposable-ci-canary.yml` workflow as a shared qualification probe. Its default route is GitHub-hosted. Server routing still needs the reviewed controller and matching host recipe to be published together; checking out these files does not activate runners.

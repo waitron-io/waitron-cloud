@@ -305,15 +305,31 @@ def plan(request):
             'userData': '#cloud-config\n' + json.dumps(cloud) + '\n'}
 
 
+def select_image(fresh=False):
+    import image
+    chosen = None if fresh else image.select(ROOT, IMAGE_SHA512)
+    if chosen is None:
+        image_verified()
+        chosen = {'path': IMAGE, 'mode': 'install',
+                  'entries': [(IMAGE, 0o444, image.metadata(IMAGE, 0o444))]}
+    return chosen
+
+
 def create(request):
+    return _create(request)
+
+
+def _create(request, *, fresh=False):
     initial = plan(request)
     resource = initial['resourceId']
+    import image
+    chosen = select_image(fresh)
     with locked():
         active = active_path(resource)
         if active.exists() or (ROOT / 'history' / (resource + '.json')).exists():
             raise BlockingIOError('A slot is occupied or this resource ID is already retired')
         admitted = capacity(resource)
-        image_verified()
+        image.recheck(chosen, run)
         guest_account(slot_id(resource))
         if not observation(resource)['absent']:
             raise ValueError('Resource already exists without a matching active record')
@@ -327,7 +343,7 @@ def create(request):
         (turn / 'user-data').write_text(initial['userData'])
         (turn / 'meta-data').write_text(json.dumps({'instance-id': resource, 'local-hostname': 'disposable'}))
         run('cloud-localds', str(turn / 'seed.img'), str(turn / 'user-data'), str(turn / 'meta-data'))
-        run('qemu-img', 'create', '-f', 'qcow2', '-F', 'qcow2', '-b', str(IMAGE), str(turn / 'disk.qcow2'), '64G')
+        run('qemu-img', 'create', '-f', 'qcow2', '-F', 'qcow2', '-b', str(chosen['path']), str(turn / 'disk.qcow2'), '64G')
         for child in turn.iterdir():
             os.chmod(child, 0o600)
             os.chown(child, initial['uid'], -1)
@@ -341,7 +357,7 @@ def create(request):
         for setting in current['service']:
             command.extend(['--property', setting])
         run(*command, *current['qemu'])
-        return observation(resource)
+        return {**observation(resource), 'preparation': chosen['mode']}
 
 
 def destroy(resource):

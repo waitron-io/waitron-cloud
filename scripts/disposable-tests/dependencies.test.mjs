@@ -1,11 +1,49 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, readFileSync, writeFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 const script = new URL('./private-packages.py', import.meta.url).pathname;
+
+test('prebuilt tool checks verify every direct pin offline and reject a changed package or executable', t => {
+ const root=mkdtempSync(join(tmpdir(),'guest-tool-check-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ for(const [name,body] of Object.entries({
+  'dpkg-query': 'printf "%s" "${2#*=}"',
+  node: 'echo v26.13.0', pnpm: 'echo 9.15.0',
+  docker: 'if [[ "$1" = compose ]]; then echo 2.26.1-4; else echo 26.1.5; fi',
+  systemctl: 'echo "$*" >> "$ROOT/services"',
+  'systemd-detect-virt': 'echo kvm', id: 'echo 0', uname: 'echo x86_64',
+  'apt-get': 'echo forbidden-network-install >&2; exit 97',
+  curl: 'echo forbidden-download >&2; exit 97',
+  sha256sum: 'test "${BAD:-}" != digest',
+  runuser: 'test "$1 $2 $3" = "-u runner --"; echo runner > "$ROOT/checked-user"; shift 3; exec "$@"',
+ }))writeFileSync(join(root,name),'#!/bin/bash\n'+body+'\n',{mode:0o755});
+ for(const file of ['guest-tools.sh','runner-tools.sh']){
+  const source=readFileSync(new URL('../../deploy/disposable-tests/'+file,import.meta.url),'utf8');
+  const block=source.match(/# BEGIN offline check\n([\s\S]*?)# END offline check/);
+  assert.ok(block, file+' must expose its network-free pin checks');
+  const pins=[...source.matchAll(/'([a-z][a-z0-9+.-]*=[^'\s]+)'/g)].map(m=>m[1]);
+  assert.ok(pins.length>0);
+  writeFileSync(join(root,'dpkg-query'),'#!/bin/bash\nfor pin in '+pins.map(p=>"'"+p+"'").join(' ')+'; do if [[ "$3" = "${pin%%=*}" ]]; then if [[ "${BAD:-}" = package ]]; then echo wrong; else printf "%s" "${pin#*=}"; fi; exit; fi; done\nexit 1\n',{mode:0o755});
+  writeFileSync(join(root,'os-release'),'ID=debian\nVERSION_ID=13\n');
+  writeFileSync(join(root,'instance-id'),'dt-check-0-1\n');
+  let body=source.replaceAll('/etc/os-release',join(root,'os-release')).replaceAll('/var/lib/cloud/data/instance-id',join(root,'instance-id'));
+  const run=bad=>spawnSync('bash',['-c',body,'tool-check','--check'],{encoding:'utf8',timeout:5000,env:{...process.env,PATH:root+':'+process.env.PATH,ROOT:root,BAD:bad}});
+  if(file==='runner-tools.sh'){
+   // Paths are fixed in the guest; the portable harness redirects only its executable/receipt reads.
+   body=body.replaceAll('/opt/actions-runner/bin/Runner.Listener',join(root,'Runner.Listener')).replaceAll('/opt/waitron-tools/runner-version.txt',join(root,'runner-version.txt'));
+   writeFileSync(join(root,'Runner.Listener'),'#!/bin/bash\necho 2.338.2\n',{mode:0o755});writeFileSync(join(root,'runner-version.txt'),'2.338.2\n');
+  }
+  let result=run('');assert.equal(result.status,0,result.stderr);
+  result=run('package');assert.notEqual(result.status,0,file+' accepted a changed package');
+  if(file==='guest-tools.sh'){
+   writeFileSync(join(root,'node'),'#!/bin/bash\necho v26.0.0\n',{mode:0o755});
+   result=run('');assert.notEqual(result.status,0,'a wrong Node version passed');writeFileSync(join(root,'node'),'#!/bin/bash\necho v26.13.0\n',{mode:0o755});
+  }else{assert.ok(existsSync(join(root,'checked-user')),'runner version must use the runner account');assert.equal(readFileSync(join(root,'checked-user'),'utf8'),'runner\n');result=run('digest');assert.notEqual(result.status,0,'a changed runner passed');}
+ }
+});
 
 // An integrity bypass would allow changed package bytes into the guest store.
 test('private package bytes must match the complete pinned SHA512 before consumption', t => {
