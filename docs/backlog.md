@@ -36,7 +36,7 @@ no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
 
-A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification.
+A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; publication and natural recovery remain to be read.
 
 The [approved three-slice plan](superpowers/plans/2026-11-10-a1473-ci-self-recovery.md)
 covers obsolete-PR cancellation, terminal-marker retirement and shared per-pass reads.

@@ -83,6 +83,14 @@ test('uncertain cleanup preserves the original preparation failure in the report
  await assert.rejects(executeCanary({...f,policy,lane:'I',invocation}),error=>/original preparation refusal/.test(error.message)&&/independent guest absence/.test(error.message));
 });
 
+test('a refusal-record write failure still removes the cleaned guest runner',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t);
+ f.transport.execute=async()=>{throw new Error('CI runner assignment is busy elsewhere');};
+ f.leases.recordBusyRunnerFailure=()=>{throw new Error('refusal record write failed');};
+ await assert.rejects(runCI({...f,lane:'I',ci,repository:'fixture/cloud'}),/refusal record write failed/);
+ assert.equal(f.events.includes('deregister'),true);
+ assert.equal(f.leases.inspect().orphanRunners.length,0);
+});
 test('JIT registration binds the workflow label and the hosted checkout root',async t=>{
  const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),post=f.api.post;let workFolder;
  f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-typecheck']);workFolder=body.work_folder;return post(path,body,options);};
@@ -112,16 +120,48 @@ test('ordinary job admission requires its concrete persisted Mac intent before a
  f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,0);
 });
-test('a busy runner with an unassigned intended job aborts the active guest promptly',async t=>{
- const {runCI}=await import('./ci-canary.mjs');const f=fixture(t);let stopped=false,registered=false,destroyed=false;
+test('a busy runner survives a queued job read until its own assignment becomes visible',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha};
+ const f=fixture(t,{identity}),get=f.api.get,inspect=f.transport.inspect;
+ f.leases.setInvocation({nonce:'d'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ let executing=false,round=0,finish,aborted=false;
+ f.api.get=async(path,options)=>{
+  if(executing && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
+  const value=await get(path,options);
+  return executing && path.includes('/jobs/')?{...value,status:round===1?'queued':'in_progress',conclusion:null,runner_id:round===1?0:1001}:value;
+ };
+ f.transport.execute=async(_lease,{signal})=>{
+  executing=true;
+  try{await new Promise((resolve,reject)=>{finish=resolve;signal.addEventListener('abort',()=>{aborted=true;reject(new Error('execution aborted'));},{once:true});});return 0;}
+  finally{executing=false;}
+ };
+ f.transport.inspect=async(lease,options)=>{
+  if(executing){if(round>=2)finish();return {resourceId:lease.resourceId,running:true};}
+  return inspect(lease,options);
+ };
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),
+  wait:async ms=>{if(ms===15000)round++;await new Promise(resolve=>setTimeout(resolve,1));}});
+ assert.equal(result.code,0,result.error);assert.equal(aborted,false);assert.ok(round>=2);
+ assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().slots[0].state,'free');
+});
+test('a persistently busy runner with an unassigned intended job aborts after the tolerance',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha};
+ const f=fixture(t,{identity});let stopped=false,registered=false,destroyed=false;
+ f.leases.setInvocation({nonce:'e'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ const originalNow=Date.now;let elapsed=0,inspections=0;
+ Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  const destroy=f.transport.destroy;f.transport.destroy=async(...args)=>{destroyed=true;return destroy(...args);};
- f.transport.inspect=async lease=>({resourceId:lease.resourceId,running:!destroyed,absent:destroyed});
+ f.transport.inspect=async lease=>{if(!destroyed)inspections++;return {resourceId:lease.resourceId,running:!destroyed,absent:destroyed};};
  const post=f.api.post;f.api.post=async(...args)=>{const value=await post(...args);registered=true;return value;};
  f.transport.execute=async(lease,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{stopped=true;reject(new Error('runner busy elsewhere'));},{once:true}));
  const get=f.api.get;f.api.get=async(path,options)=>path.endsWith('/runners/1001')?{id:1001,name:'dt-123-789-1-901',busy:true}:
  path.includes('/jobs/')&&registered?{id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:'queued',runner_id:null}:get(path,options);
- const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',signal:AbortSignal.timeout(300),wait:async()=>{await new Promise(r=>setTimeout(r,1));}});
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),wait:async ms=>{if(ms===15000)elapsed+=15000;await new Promise(r=>setTimeout(r,1));}});
  assert.equal(stopped,true);assert.equal(result.code,125);assert.match(result.error,/busy|assignment/i);
+ assert.ok(elapsed>=75000 && elapsed<=90000);assert.ok(inspections>=4);assert.equal(result.cleanup,'absent');
+ assert.ok(Number.isSafeInteger(f.leases.inspect().turns['I:ci-789-1-901'].busyRunnerRefusedAt));
 });
 
 // Exact literal API names, including unsharded UI, must qualify before JIT minting.
@@ -303,7 +343,7 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false}={}) {
+async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false}={}) {
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
  const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
@@ -312,12 +352,14 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
  const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[];
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
-  if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
+  if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
+  if(executing && busyFirst && path.includes('/jobs/') && rounds>1){const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
+  if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=busyFirst && rounds===1?undefined:typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.includes('/jobs/'))jobReads++;
   const value=await get(path,options);
   const cancelled=typeof jobCancelled==='function'?jobCancelled(rounds):jobCancelled;
   return executing && path.endsWith('/runs/789') && runCancelled && rounds>=2?{...value,status:'completed',conclusion:'cancelled'}:
-   executing && path.includes('/jobs/')?{...value,status:cancelled?'completed':'in_progress',conclusion:cancelled?'cancelled':null}:value;
+   executing && path.includes('/jobs/')?{...value,status:busyFirst?'queued':cancelled?'completed':'in_progress',runner_id:busyFirst?0:value.runner_id,conclusion:cancelled?'cancelled':null}:value;
  };
  f.transport.execute=async(_lease,{signal})=>{
   executing=true;
@@ -393,6 +435,22 @@ for(const status of [403,429])test(`rate-limited HTTP ${status} keeps a healthy 
  assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);
  assert.equal(result.jobReads,0);assert.equal(records.length,1);
  assert.equal(records[0].status,status);assert.equal(records[0].retryAt,retryAt);assert.equal(records[0].operation,'run');
+});
+test('a rate limit after an inconsistent busy reply retains an independently healthy guest',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:6,
+  failure:Object.assign(new Error('Rate limited'),{status:429,retryAt:Date.now()+3600000})});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,6);
+});
+test('temporary API failures between busy replies cannot restart their refusal allowance',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:8,
+  failure:round=>round%2===0?Object.assign(new Error('temporarily unavailable'),{status:502}):undefined});
+ assert.equal(result.code,125);assert.match(result.error,/busy elsewhere/);
+ assert.ok(result.rounds>=5 && result.rounds<=6);assert.equal(result.cleanup,'absent');
+});
+test('a permanent API refusal after a busy reply retains its bounded refusal',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:8,
+  failure:Object.assign(new Error('GitHub read refused (401)'),{status:401})});
+ assert.equal(result.code,125);assert.match(result.error,/401/);assert.ok(result.rounds<=6);
 });
 test('GitHub monitor reads resume once the rate-limit reset passes',async t=>{
  const reset=Date.now()+100000;

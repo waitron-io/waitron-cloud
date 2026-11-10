@@ -426,6 +426,60 @@ async function refusalPool(t){
  return {version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy};
 }
 
+test('pickup retries only its recorded busy-runner failure once, while other turns stay retired',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ f.jobs.splice(2);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const identities=await controller.findAutomatic({api:f.api,policy,limit:2});
+ const failed=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0,now:()=>Date.now()-60000});
+ for(const identity of identities){
+  const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
+  failed.release(lease,{resourceId:lease.resourceId,absent:true});
+  if(identity.jobId!==901)failed.forgetRunner(failed.inspect().orphanRunners.find(r=>r.ci.jobId===identity.jobId));
+  if(identity.jobId===901)failed.recordBusyRunnerFailure({code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'});
+ }
+ const admitted=[];
+ const options={configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:ci=>withAvailableSlot(config,async({leases})=>{
+  const reserved=leases.reserveLocal(ciRequest('I',ci));assert.equal(reserved.code,0);
+  admitted.push(ci.jobId);leases.release(reserved.lease,{resourceId:reserved.lease.resourceId,absent:true});
+  leases.forgetRunner(leases.inspect().orphanRunners[0]);return {code:0};
+ })};
+ assert.equal((await automaticTick(options)).served,0,'pickup must wait for the previous runner cleanup');
+ failed.forgetRunner(failed.inspect().orphanRunners.find(r=>r.ci.jobId===901));
+ await automaticTick(options);await automaticTick(options);
+ assert.deepEqual(admitted,[901]);
+ const state=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
+ assert.equal(Object.keys(state.turns).length,2);assert.equal(state.turns['I:ci-789-1-901'].busyRunnerRetried,true);
+ assert.equal(state.turns['I:ci-789-1-902'].busyRunnerRetried,undefined);
+});
+
+test('pickup does not reselect a retry while its first worker awaits admission',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(2);
+ const identity=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ const failed=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0,now:()=>Date.now()-60000});
+ const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
+ failed.release(lease,{resourceId:lease.resourceId,absent:true});failed.forgetRunner(failed.inspect().orphanRunners[0]);
+ failed.recordBusyRunnerFailure({code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'});
+ let release,passes=0,retryWorkers=0;
+ const awaitingAdmission=new Promise(resolve=>{release=resolve;});
+ f.api.get=async path=>{
+  if(path.includes('/actions/runs?status=queued') && ++passes===2)release();
+  return path.endsWith('DISPOSABLE_TESTS_MODE')?{value:'server'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ };
+ const result=await automaticTick({configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{
+  if(ci.jobId!==901)return {code:0};
+  retryWorkers++;await awaitingAdmission;
+  return withAvailableSlot(config,async({leases})=>{
+   const reserved=leases.reserveLocal(ciRequest('I',ci));if(reserved.code!==0)return reserved;
+   leases.release(reserved.lease,{resourceId:reserved.lease.resourceId,absent:true});
+   leases.forgetRunner(leases.inspect().orphanRunners[0]);return {code:0};
+  });
+ }});
+ assert.equal(retryWorkers,1);assert.equal(result.served,2);
+});
+
 test('automatic pickup refills a completed slot before a slow sibling finishes',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

@@ -9,6 +9,9 @@ import {withKernelLock} from './kernel-lock.mjs';
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export const busyRunnerRetryReady=(turn,state,jobId,now=Date.now())=>turn.busyRunnerRefusedAt!==undefined &&
+  !turn.busyRunnerRetried && now-turn.busyRunnerRefusedAt>=60000 &&
+  ![state,...state.slots].some(s=>s.orphanRunners?.some(r=>r.ci.jobId===jobId));
 function requestIdentity(request) {
   assert.ok(request && typeof request.lane === 'string' && /^[A-K]$/.test(request.lane) &&
     typeof request.turn === 'string' && word.test(request.turn) &&
@@ -89,6 +92,8 @@ export class LocalLeases {
     assert.ok(Object.entries(state.turns).every(([key,turn])=>/^[A-K]:[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(key) &&
       turn && typeof turn==='object' && !Array.isArray(turn) && typeof turn.fingerprint==='string' && /^[a-f0-9]{64}$/.test(turn.fingerprint) &&
       Number.isSafeInteger(turn.slot) && turn.slot>=0 && turn.slot<this.capacity &&
+      (turn.busyRunnerRefusedAt===undefined || Number.isSafeInteger(turn.busyRunnerRefusedAt) && turn.busyRunnerRefusedAt>=0) &&
+      (turn.busyRunnerRetried===undefined || turn.busyRunnerRetried===true && turn.busyRunnerRefusedAt!==undefined) &&
       Number.isSafeInteger(turn.generation) && turn.generation>=1 && turn.generation<=state.slots[turn.slot].generation),
       'Invalid retained turn history');
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
@@ -155,20 +160,33 @@ export class LocalLeases {
         assert.equal(prior.fingerprint, fingerprint, 'Turn reused with different request');
         const slot = state.slots[prior.slot];
         if ((this.slot===undefined || this.slot===prior.slot) && slot.generation === prior.generation && ['reserved', 'running'].includes(slot.state)) return {code: 0, created: false, lease: slot.lease};
-        return {code: 75, reason: 'turn-finished-or-quarantined'};
+        if(!identity.ci || !busyRunnerRetryReady(prior,state,identity.ci.jobId,now))
+          return {code: 75, reason: 'turn-finished-or-quarantined'};
       }
       if(identity.ci && (this.scope(state).orphanRunners?.length??0)>=32) return {code:75,reason:'orphan-runners-full'};
       const slot = state.slots.find(s => s.state === 'free' && (this.slot===undefined || s.id===this.slot));
       if (!slot) return {code: 75, reason: 'capacity-busy'};
-      // Retaining completed turn IDs prevents a delayed request recreating work.
-      assert.ok(Object.keys(state.turns).length < 10000, 'Local turn history full; archive only after reconciliation');
+      assert.ok(prior || Object.keys(state.turns).length < 10000, 'Local turn history full; archive only after reconciliation');
       assert.ok(slot.generation < Number.MAX_SAFE_INTEGER, 'Slot generation exhausted');
       slot.generation++;
       slot.state = 'reserved';
       slot.lease = {...identity, slot: slot.id, hostGeneration: this.hostGeneration, generation: slot.generation,
         resourceId: `dt-${this.hostGeneration}-${slot.id}-${slot.generation}`, createdAt: now, deadline: now + durationMs};
-      state.turns[key] = {fingerprint, slot: slot.id, generation: slot.generation};
+      state.turns[key] = {...prior,fingerprint, slot: slot.id, generation: slot.generation,...(prior?{busyRunnerRetried:true}:{})};
       return {code: 0, created: true, lease: slot.lease};
+    });
+  }
+  recordBusyRunnerFailure(result) {
+    const lease=result?.lease;
+    if(result?.code!==125 || result.cleanup!=='absent' || !/^CI runner assignment is busy elsewhere(?:\n|$)/.test(result.error??'') ||
+      lease?.ci?.workflowPath!=='.github/workflows/ci.yml')return false;
+    let identity;try{identity=requestIdentity(lease);}catch{return false;}
+    return this.transaction((state,now)=>{
+      const turn=state.turns[`${lease.lane}:${lease.turn}`];
+      if(!turn || turn.fingerprint!==digest(identity) || turn.slot!==lease.slot || turn.generation!==lease.generation ||
+        lease.hostGeneration!==this.hostGeneration || lease.resourceId!==`dt-${this.hostGeneration}-${turn.slot}-${turn.generation}` ||
+        state.slots.some(slot=>slot.lease?.resourceId===lease.resourceId) || turn.busyRunnerRefusedAt!==undefined)return false;
+      turn.busyRunnerRefusedAt=now;return true;
     });
   }
   owns(slot, lease) {
