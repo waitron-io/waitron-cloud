@@ -7,7 +7,25 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   }
   return 'en';
 }
-const en = {
+const bodyRefusalActions = {
+  account:'retry', factorSignIn:'login', factor:'factorRefresh', sessionRevoke:'sessionRevoke', logout:'signout',
+  alerts:'alertsSave', snapshots:'retry', diagnostic:'diagnosticDownload', installations:'refreshStatus',
+  recovery:'recoveryCheckRequest', remote:'refreshStatus', translationConsent:'translationConsentRefresh', usage:'usageRefresh',
+} as const;
+type BodyRefusalCopyKey = `${keyof typeof bodyRefusalActions}Request${'Interrupted'|'Size'|'Format'}`;
+function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string> {
+  const messages = {} as Record<BodyRefusalCopyKey,string>;
+  for (const context of Object.keys(bodyRefusalActions) as (keyof typeof bodyRefusalActions)[]) {
+    for (const cause of ['Interrupted','Size','Format'] as const) {
+      messages[`${context}Request${cause}`] = `${copy[`requestBody${cause}`]} ${copy[bodyRefusalActions[context]]}.`;
+    }
+  }
+  return messages;
+}
+const enBase = {
+  requestBodyInterrupted:'This request was interrupted.',
+  requestBodySize:'This request’s size wasn’t accepted; retrying may not help.',
+  requestBodyFormat:'This request arrived in an unsupported format.',
   billingMethodsTitle:'Test payment method',billingMethodsIntro:'Test accounts only. Use a sandbox card or test IBAN. Saving a card makes a €1 sandbox payment. No live payment or renewal is collected.',
   billingSelectedMethod:'Saved method:',billingMethodCard:'Card',billingMethodDebit:'Direct debit',billingMethodNone:'None',billingAddCard:'Add or switch test card',billingAddDebit:'Add or switch test direct debit',
   billingMethodPending:'Setup is not confirmed. Check the saved method before starting again. Your previous method stays selected.',billingMethodFailed:'Setup failed. Your previous method is unchanged. You can start again.',billingMethodVerified:'Payment method confirmed.',billingMethodRefresh:'Check saved method',
@@ -273,8 +291,12 @@ const en = {
   sessionRevokeUncertain:'We could not confirm the revocation. Review the refreshed session list before trying again.',
   passkeyLastUsed:'Last used', passkeyNeverUsed:'Never used',
 };
+const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
-const es: Copy = {
+const esBase: typeof enBase = {
+  requestBodyInterrupted:'Esta solicitud se interrumpió.',
+  requestBodySize:'No se ha aceptado el tamaño de esta solicitud; puede que reintentarlo no sirva.',
+  requestBodyFormat:'Esta solicitud llegó en un formato no admitido.',
   billingMethodsTitle:'Método de pago de prueba',billingMethodsIntro:'Solo cuentas de prueba. Usa una tarjeta sandbox o un IBAN de prueba. Guardar una tarjeta hace un pago sandbox de 1 €. No se cobran pagos reales ni renovaciones.',
   billingSelectedMethod:'Método guardado:',billingMethodCard:'Tarjeta',billingMethodDebit:'Domiciliación',billingMethodNone:'Ninguno',billingAddCard:'Añadir o cambiar tarjeta de prueba',billingAddDebit:'Añadir o cambiar domiciliación de prueba',
   billingMethodPending:'La configuración no está confirmada. Consulta el método guardado antes de volver a empezar. El anterior sigue seleccionado.',billingMethodFailed:'La configuración ha fallado. El método anterior no cambia. Puedes volver a empezar.',billingMethodVerified:'Método de pago confirmado.',billingMethodRefresh:'Consultar método guardado',
@@ -540,4 +562,5 @@ const es: Copy = {
   sessionRevokeUncertain:'No hemos podido confirmar la revocación. Revisa la lista actualizada antes de volver a intentarlo.',
   passkeyLastUsed:'Último uso', passkeyNeverUsed:'Nunca se ha usado',
 };
+const es = {...esBase,...bodyRefusalCopy(esBase)};
 export const translations: Record<Locale, Copy> = {en, es};
