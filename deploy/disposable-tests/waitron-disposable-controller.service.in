@@ -1,0 +1,14 @@
+[Unit]
+Description=Waitron disposable CI controller
+After=network-online.target waitron-disposable-startup.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+UMask=0077
+WorkingDirectory=/
+ExecStart=/usr/bin/python3 -I -B @RELEASE@/deploy/disposable-tests/mac-controller.py @NODE@ @CONFIGURATION@ --once
+Restart=on-failure
+RestartSec=30s
+KillMode=mixed
+TimeoutStopSec=600s

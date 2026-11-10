@@ -173,3 +173,68 @@ for(const fail of [false,true])test(`publication uses fresh state and preserves 
  assert.equal(config.host,fail?'old.invalid':'new.invalid');
  assert.ok(Object.keys(JSON.parse(readFileSync(f.old.state+'/ledger/state.json','utf8')).turns).includes('I:ci-789-1-901'));
 });
+
+
+test('server staging stays private and disabled until fresh-state activation',async t=>{
+ const f=await fixture(t),installer=new URL('../../deploy/disposable-tests/install-controller.py',import.meta.url).pathname;
+ const program=`import importlib.util,json,os,sys,uuid,subprocess
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+root=Path(sys.argv[2]);m.OPT=root/'opt';m.OPT.mkdir();m.ROOT=root/'controller';m.HOME=root/'home';m.HOME.mkdir();m.OWNER=os.getuid();m.UNITS=root/'units';m.UNITS.mkdir()
+calls=[]
+def command(argv,timeout=300):
+ calls.append(argv)
+ if '--bootstrap' in argv:subprocess.run(argv,check=True,stdout=subprocess.DEVNULL)
+ if argv[0]=='ssh-keygen':
+  key=Path(argv[argv.index('-f')+1]);key.write_text('private host identity');key.chmod(0o600);key.with_suffix('.pub').write_text('ssh-ed25519 fixture')
+ return ''
+m.command=command;m.NODE=sys.argv[3]
+config=json.loads(sys.argv[4]);config['state']=str(m.ROOT/'states'/'first');config['ci'].update(appEnv=str(m.ROOT/'app.env'),appKey=str(m.ROOT/'app.key'))
+plan={'release':str(m.OPT/'waitron-disposable-controller-first'),'configuration':config,'knownHosts':'fixture.invalid ssh-ed25519 fixture\\n'}
+keydata=('private-'+uuid.uuid4().hex).encode();receipt=m.install(plan,b'private-app-identity',keydata)
+release=Path(receipt['release']);assert (release/'scripts/disposable-tests/manual.mjs').is_file()
+assert (m.ROOT/'app.key').read_bytes()==keydata
+assert (m.ROOT/'app.key').stat().st_mode&0o777==0o600
+assert not any(keydata in p.read_bytes() for p in release.rglob('*') if p.is_file())
+assert not Path(config['state']).exists()
+assert not any(argv[0]=='systemctl' for argv in calls)
+assert not any(keydata.decode() in arg for argv in calls for arg in argv)
+before=(release/'scripts/disposable-tests/manual.mjs').stat().st_mtime_ns;m.install(plan,b'private-app-identity',keydata);assert (release/'scripts/disposable-tests/manual.mjs').stat().st_mtime_ns==before
+(m.ROOT/'app.key').chmod(0o644)
+try:m.install(plan,b'private-app-identity',keydata);raise AssertionError('publicly readable credential accepted')
+except ValueError:pass
+(m.ROOT/'app.key').chmod(0o600)
+m.activate(receipt)
+ledger=json.loads((Path(config['state'])/'ledger/state.json').read_text());assert ledger['hostGeneration']=='new' and ledger['turns']=={}
+boot=next(i for i,a in enumerate(calls) if '--bootstrap' in a);start=next(i for i,a in enumerate(calls) if a[:2]==['systemctl','start']);assert boot<start
+try:m.activate(receipt);raise AssertionError('existing ledger reopened')
+except ValueError:pass
+print('private frozen staging; no active ledger or pickup until activation')`;
+ const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root,process.execPath,JSON.stringify(f.p.configuration)],{encoding:'utf8',timeout:10000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/no active ledger or pickup/);
+});
+
+test('controller runtime verifies pinned packages and the Node archive before installation',async t=>{
+ const f=await fixture(t),installer=new URL('../../deploy/disposable-tests/install-controller.py',import.meta.url).pathname;
+ const program=`import importlib.util,json,os,sys,hashlib
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+root=Path(sys.argv[2]);m.NODE=str(root/'runtime/bin/node');m.NODE_ARCHIVE_SHA=hashlib.sha256(b'node archive fixture').hexdigest();bad=False;calls=[]
+def command(argv,timeout=300):
+ calls.append(argv)
+ if argv[0]=='dpkg-query':return {'git':'1:2.47.3-0+deb13u1','python3':'3.13.5-1'}[argv[-1]]
+ if argv[0]=='curl':Path(argv[-1]).write_bytes(b'bad' if bad else b'node archive fixture')
+ if argv[0]=='tar':
+  directory=Path(argv[argv.index('--directory')+1])/'node-v26.13.0-linux-x64/bin';directory.mkdir(parents=True);(directory/'node').write_text('verified fixture')
+ if argv[0]==m.NODE:return 'v26.13.0\\n'
+ return ''
+m.command=command;bad=True
+try:m.prepare_runtime();raise AssertionError('corrupt Node installed')
+except ValueError:pass
+assert not Path(m.NODE).exists();assert not any(a[0]=='tar' for a in calls)
+bad=False;m.prepare_runtime();assert Path(m.NODE).read_text()=='verified fixture'
+assert any('git=1:2.47.3-0+deb13u1' in a and 'python3=3.13.5-1' in a for a in calls)
+print('pinned runtime verified')`;
+ const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root],{encoding:'utf8',timeout:10000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/pinned runtime verified/);
+});

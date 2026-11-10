@@ -127,21 +127,21 @@ export class CITransport extends SSHTransport {
   }
 }
 
-export async function runProcess(command, argv, {input, inputPath, signal, capture = false, onOutput, onStderr, terminationGraceMs = 2000} = {}) {
+export async function runProcess(command, argv, {input, inputPath, inheritStdin = false, keepStdinOpen = false, signal, capture = false, onOutput, onStderr, terminationGraceMs = 2000} = {}) {
   signal?.throwIfAborted();
   assert.ok(Number.isSafeInteger(terminationGraceMs) && terminationGraceMs>=2000 && terminationGraceMs<=600000,'Invalid process termination grace');
   protectOutputStreams();
   return new Promise((resolve, reject) => {
     const directory = mkdtempSync(join(tmpdir(), 'disposable-command-'));
     let child;
-    try { child = spawn(command, argv, {cwd: directory, detached: true, stdio: ['pipe', 'pipe', 'pipe']}); }
+    try { child = spawn(command, argv, {cwd: directory, detached: true, stdio: [inheritStdin?'inherit':'pipe', 'pipe', 'pipe']}); }
     catch (error) { rmSync(directory, {recursive: true, force: true}); reject(error); return; }
     let failure, timer, stdout = '', bytes = 0, outputBytes = 0, source;
     const kill = sig => {
       if (child.pid) try { process.kill(-child.pid, sig); } catch (error) { if (error.code !== 'ESRCH') failure ??= error; }
     };
     const closePipes = () => {
-      child.stdin.destroy();
+      child.stdin?.destroy();
       child.stdout.destroy();
       child.stderr.destroy();
     };
@@ -189,12 +189,13 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
       else writeOutput(process.stdout, data);
     });
     child.stderr.on('data', data => { if (acceptOutput(data)) { onStderr?.(data); writeOutput(process.stderr, data); } });
-    child.stdin.on('error', error => { if (error.code !== 'EPIPE') stop(error); });
-    if (inputPath) {
+    child.stdin?.on('error', error => { if (error.code !== 'EPIPE') stop(error); });
+    if (!inheritStdin && inputPath) {
+      if(input!==undefined)child.stdin.write(input);
       source = createReadStream(inputPath);
       source.on('error', stop);
-      source.pipe(child.stdin);
-    } else child.stdin.end(input);
+      source.pipe(child.stdin,{end:!keepStdinOpen});
+    } else if(!inheritStdin) child.stdin.end(input);
     child.on('close', (code, termination) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
