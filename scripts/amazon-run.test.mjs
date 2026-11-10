@@ -79,9 +79,51 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
   assert.match(result.stderr, /Unknown bootstrap phase/);
 });
 
-const config = {region: 'eu-west-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
+const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+test('an explicit region is required before account access', async () => {
+  for (const region of [undefined, '', 'REGION']) {
+    await assert.rejects(api.startAmazon({...config, region}, {
+      aws: () => assert.fail('no account access without an explicit region'),
+      run: () => assert.fail('no build without an explicit region'),
+    }), /Set an explicit AWS region/);
+  }
+});
+
+test('CLI start and stop require a region; stop uses the selected Stockholm region', async t => {
+  const {mkdtemp, writeFile, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os'); const {join} = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'd618-region-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const log = join(directory, 'calls'), configPath = join(directory, 'config.json');
+  await writeFile(join(directory, 'aws'), `#!${process.execPath}
+const fs = require('node:fs'), args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+console.log(JSON.stringify(args.includes('describe-stacks') ? {Stacks: [{Tags: [{Key: 'cloud.campaign', Value: 'D618'}]}]} : {}));
+`, {mode: 0o700});
+  const invoke = mode => spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
+    {encoding: 'utf8', env: {...process.env, D618_CONFIG: configPath, PATH: directory + ':' + process.env.PATH}, timeout: 10000});
+  for (const region of [undefined, '', 'REGION']) {
+    await writeFile(configPath, JSON.stringify({...config, region}));
+    for (const mode of ['start', 'stop']) {
+      const result = invoke(mode);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Set an explicit AWS region/);
+    }
+  }
+  await assert.rejects(readFile(log), {code: 'ENOENT'});
+  await writeFile(configPath, JSON.stringify(config));
+  const result = invoke('stop');
+  assert.equal(result.status, 0, result.stderr);
+  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(calls.map(args => args.slice(0, 5)), [
+    ['--region', 'eu-north-1', '--no-cli-pager', 'cloudformation', 'describe-stacks'],
+    ['--region', 'eu-north-1', '--no-cli-pager', 'cloudformation', 'delete-stack'],
+    ['--region', 'eu-north-1', '--no-cli-pager', 'cloudformation', 'wait'],
+  ]);
+});
+
 test('wrong account or root identity cannot build or create resources', async () => {
   assert.equal(typeof api.startAmazon, 'function');
   for (const identity of [{Account: '000000000000', Arn: 'arn:aws:iam::000000000000:user/test'}, {Account: config.account, Arn: 'arn:aws:iam::123456789012:root'}]) {

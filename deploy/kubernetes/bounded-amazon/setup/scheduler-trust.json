@@ -6,7 +6,7 @@
     "Action": "sts:AssumeRole",
     "Condition": {
       "StringEquals": {"aws:SourceAccount": "ACCOUNT_ID"},
-      "ArnEquals": {"aws:SourceArn": "arn:aws:scheduler:eu-west-1:ACCOUNT_ID:schedule-group/default"}
+      "ArnEquals": {"aws:SourceArn": "arn:aws:scheduler:REGION:ACCOUNT_ID:schedule-group/default"}
     }
   }]
 }

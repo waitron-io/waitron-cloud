@@ -5,9 +5,10 @@ Tonight's route uses one access key on **`d618-owner-login`**, only to assume
 has no automatic expiry: delete it after the run, including if the run fails.
 The lane has no permission to access Amazon or spend.
 
-**Check the project's region in part 3 before creating the key or starting the
-run.** New-experience projects have a fixed region; tonight's key does not
-unlock Ireland. D618's policies and launcher require **`eu-west-1`**.
+**Use Stockholm (`eu-north-1`) for tonight's run**, as you chose on 10 November.
+New-experience projects have a fixed region. Keep that region for the policies,
+image, key pair and CLI profile; you do not need to activate advanced features.
+The launcher requires an explicit region and has no default.
 
 ## Which login, for which step
 
@@ -15,7 +16,7 @@ unlock Ireland. D618's policies and launcher require **`eu-west-1`**.
 | --- | --- |
 | 1. Remove the old login | Your existing **project owner/setup console**; local editor for old profiles |
 | 2. Prepare the IAM user | **Project owner/setup console** |
-| 3. Find or create the SSH key; find the image | **Project owner/setup console**, EC2 in **Ireland (`eu-west-1`)** |
+| 3. Find or create the SSH key; find the image | **Project owner/setup console**, EC2 in **Stockholm (`eu-north-1`)** |
 | 4. Prepare the files | **x86 test box's terminal**, in your clean Waitron Cloud checkout |
 | 5. Create four roles | **Project owner/setup console**; terminal to display the files |
 | 6. Set the budget | **Project owner/setup console** |
@@ -74,16 +75,13 @@ keep your existing project owner session for setup and later key deletion.
 1. Open **AWS Settings → Project → Overview → Additional Info**.
 2. Read **Region**. AWS documents this lookup in
    [project regions](https://docs.aws.amazon.com/accounts/latest/reference/project-regions.html).
-3. If the project is fixed to **Stockholm (`eu-north-1`)**, stop here. AWS requires
-   advanced features to select other regions; changing a URL or creating an
-   access key does not remove that restriction. A separate decision is needed
-   before Ireland can be used. Do not silently change D618's scoped policies.
-4. For an account that can use Ireland, open
-   [EC2 in Ireland](https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1).
-5. Confirm the address bar contains **`eu-west-1`** and does not return to
-   **`eu-north-1`**. The AMI, key pair and run profile must use the same region.
+3. For tonight's run, require **Stockholm (`eu-north-1`)**. If the project shows
+   another region, stop and check it before rendering policies.
+4. Open [EC2 in Stockholm](https://eu-north-1.console.aws.amazon.com/ec2/home?region=eu-north-1).
+5. Confirm the address bar contains **`eu-north-1`**. The AMI, key pair, policy
+   resources and run profile must all use this region.
 
-**Window: EC2 in Ireland.** Do not launch an instance.
+**Window: EC2 in Stockholm.** Do not launch an instance.
 
 1. Open **EC2 → Network & Security → Key pairs**.
 2. Look for a key pair whose private key you already hold.
@@ -131,7 +129,7 @@ and copy it over your existing SSH connection to the x86 test box. Replace
 2. Use the full absolute path to this file for the run configuration's **`sshKey`**.
    Keep it private and out of the checkout.
 
-**Window: practice-account setup console, still in Ireland.**
+**Window: practice-account setup console, still in Stockholm.**
 
 1. Open **EC2 → Images → AMI Catalog → Community AMIs**.
 2. Search for **`debian-13-amd64-`**.
@@ -145,8 +143,8 @@ If you use **EC2 → Images → AMIs** instead, select **Public images**, filter
 
 Debian's [official Debian 13 cloud-image page](https://wiki.debian.org/Cloud/AmazonEC2Image/Trixie)
 states: “The AMIs are owned by AWS account ID `136693071363`”. That is Debian's
-public publisher ID, not your account ID. On 10 November 2026 its Ireland amd64
-image is **`ami-0fb60e81bd0441e98`**; **`ami-0d2679679834750c7`** is Stockholm.
+public publisher ID, not your account ID. On 10 November 2026 its Stockholm amd64
+image is **`ami-0d2679679834750c7`**. Use key pair **`d618`** in that same region.
 Check the current table and CLI lookup before using an image. The name uses `amd64`; EC2 calls that
 architecture `x86_64`. Part 8 includes the equivalent CLI lookup after login is ready.
 
@@ -179,7 +177,11 @@ Keep this terminal open through part 8. Replace each `YOUR_…` value privately.
    export KEY_NAME=YOUR_EXISTING_EC2_KEY_NAME
    ```
 
-5. Make a private directory for the rendered files:
+5. Select tonight's region explicitly, then make a private directory for the rendered files:
+
+   ```sh
+   export REGION=eu-north-1
+   ```
 
    ```sh
    export D618_SETUP_DIR="$(mktemp -d "$HOME/.d618-setup.XXXXXX")"
@@ -194,7 +196,7 @@ Keep this terminal open through part 8. Replace each `YOUR_…` value privately.
    source = Path('deploy/kubernetes/bounded-amazon/setup')
    for path in source.glob('*.json'):
        text = path.read_text()
-       for key in ('ACCOUNT_ID', 'OWNER_PRINCIPAL_ARN', 'IMAGE_ID', 'KEY_NAME'):
+       for key in ('ACCOUNT_ID', 'OWNER_PRINCIPAL_ARN', 'IMAGE_ID', 'KEY_NAME', 'REGION'):
            text = text.replace(key, os.environ[key])
        value = json.loads(text)
        target = Path(os.environ['D618_SETUP_DIR']) / path.name
@@ -204,16 +206,17 @@ Keep this terminal open through part 8. Replace each `YOUR_…` value privately.
    PYTHON
    ```
 
-7. Inspect those files locally: your four values must be correct, with no `YOUR_…`, `ACCOUNT_ID`, `OWNER_PRINCIPAL_ARN`, `IMAGE_ID` or `KEY_NAME` placeholders left.
+7. Inspect those files locally: your five values must be correct, with no `YOUR_…`, `ACCOUNT_ID`, `OWNER_PRINCIPAL_ARN`, `IMAGE_ID`, `KEY_NAME` or `REGION` placeholders left. All regional ARNs and `aws:RequestedRegion` conditions must say `eu-north-1`.
 
 Do not paste account details, credentials or command output into Git, a pull request
 or chat. These files contain permission settings; do not copy access keys into them.
 
-## 5. Create the four roles
+## 5. Create or update the four roles
 
 **Window: project owner/setup console.** Use the x86 terminal only to display each file for copying.
 
-For **each row** in this table, repeat the numbered steps below:
+If the roles already exist, use **Update existing roles** below. Otherwise, for
+**each row** in this table, repeat the numbered steps below:
 
 | Role name | Trust file | Permissions file |
 | --- | --- | --- |
@@ -244,7 +247,36 @@ For **each row** in this table, repeat the numbered steps below:
 10. Name the inline policy **`d618`**.
 11. Create the inline policy.
 
-After all four roles exist:
+### Update existing roles for Stockholm
+
+Render part 4 again with **`REGION=eu-north-1`**, Stockholm's image and key pair
+**`d618`**. Keep the same account and exact owner IAM user ARN. Replace these
+existing inline policies rather than adding another policy alongside Ireland's:
+
+| Console role | Existing inline policy | Replace its entire JSON with |
+| --- | --- | --- |
+| `d618-launcher` | `d618` | `launcher-policy.json` |
+| `d618-stack` | `d618` | `stack-policy.json` |
+| `d618-scheduler` | `d618` | `scheduler-policy.json` |
+
+1. Display the rendered file, for example `cat "$D618_SETUP_DIR/launcher-policy.json"`.
+2. Open **IAM → Roles → the row's role → Permissions → expand `d618` → Edit policy → JSON**.
+3. Select all the existing JSON and paste the rendered file's complete contents.
+4. Choose **Next**, then **Save changes** (or **Review policy → Save changes**).
+5. Repeat for the other two rows. Check each saved regional ARN and region condition
+   says **`eu-north-1`**, with the correct account, image and key.
+6. Display `cat "$D618_SETUP_DIR/scheduler-trust.json"`.
+7. Open **IAM → Roles → `d618-scheduler` → Trust relationships → Edit trust policy**.
+8. Replace all JSON with that rendered file and choose **Update policy**. Require
+   **`arn:aws:scheduler:eu-north-1:YOUR_PRACTICE_ACCOUNT_ID:schedule-group/default`**
+   for `aws:SourceArn`, with your actual account ID in place of the placeholder.
+
+The other trust documents, owner policy, budget role and deny-launch policy have
+no region and need no replacement. Do not change their principals or permissions.
+AWS documents [editing inline policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_manage-edit-console.html)
+and [updating role trust](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_update-role-trust-policy.html).
+
+After creating or updating all four roles:
 
 1. Open **IAM → Roles → `d618-launcher` → Edit** beside **Maximum session duration**.
 2. Set its maximum session duration to **3 hours**.
@@ -329,7 +361,7 @@ key deletion at the end, not an automatically expiring key.
    aws configure --profile d618-owner
    ```
 
-2. At its prompts enter the key ID, secret, region **`eu-west-1`**, output **`json`**.
+2. At its prompts enter the key ID, secret, region **`eu-north-1`**, output **`json`**.
 3. Protect the credentials file:
 
    ```sh
@@ -344,7 +376,7 @@ key deletion at the end, not an automatically expiring key.
    source_profile = d618-owner
    role_arn = arn:aws:iam::YOUR_PRACTICE_ACCOUNT_ID:role/d618-launcher
    role_session_name = d618-owner-run
-   region = eu-west-1
+   region = eu-north-1
    duration_seconds = 10800
    ```
 
@@ -381,16 +413,16 @@ Policy simulation reads the settings; it does not prove live enforcement.
    done
    ```
 
-2. Check that the selected key pair exists in Ireland:
+2. Check that the selected key pair exists in Stockholm:
 
    ```sh
-   aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-west-1
+   aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-north-1
    ```
 
-3. List the official Debian 13 amd64 images in Ireland, newest first:
+3. List the official Debian 13 amd64 images in Stockholm, newest first:
 
    ```sh
-   aws ec2 describe-images --region eu-west-1 --owners 136693071363 \
+   aws ec2 describe-images --region eu-north-1 --owners 136693071363 \
      --filters 'Name=name,Values=debian-13-amd64-*' \
        'Name=architecture,Values=x86_64' 'Name=state,Values=available' \
        'Name=root-device-name,Values=/dev/xvda' \
@@ -432,7 +464,7 @@ below are synthetic simulation inputs.
    export CALLER_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-launcher"
    export STACK_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-stack"
    export SCHEDULER_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-scheduler"
-   export SIM_STACK="arn:aws:cloudformation:eu-west-1:$ACCOUNT_ID:stack/d618-simulation/example"
+   export SIM_STACK="arn:aws:cloudformation:eu-north-1:$ACCOUNT_ID:stack/d618-simulation/example"
    ```
 
 2. Check the launcher can create its tagged stack with the stack role. Expect **allowed**:
@@ -499,7 +531,7 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
      --action-names ec2:TerminateInstances \
-     --resource-arns "arn:aws:ec2:eu-west-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+     --resource-arns "arn:aws:ec2:eu-north-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
      --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=d618-simulation,ContextKeyType=string
    ```
 
@@ -508,7 +540,7 @@ below are synthetic simulation inputs.
     ```sh
     aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
       --action-names ec2:TerminateInstances \
-      --resource-arns "arn:aws:ec2:eu-west-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+      --resource-arns "arn:aws:ec2:eu-north-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
       --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string
     ```
 
@@ -518,7 +550,7 @@ prefix](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html), so
 `CreateTags` cannot forge them.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
-for quota, spend, config and launch. Resolve the region gate before any launch;
+for quota, spend, config and launch. Keep Stockholm in the config and profile;
 the launcher deliberately lacks `organizations:DescribeOrganization`.
 This page's checks are offline/source guidance until you execute them; no live
 permission enforcement or experiment is proved here.
@@ -556,6 +588,27 @@ aws iam list-access-keys --user-name d618-owner-login \
 Require **`[]`** from the last command. Without that existing administrator
 profile, use the console steps. Key deletion prevents future source-key use;
 already-issued launcher sessions can remain valid until expiry.
+
+## Stockholm availability and cost
+
+Public sources checked on 10 November 2026 support tonight's **`eu-north-1`**
+choice. They establish regional availability, not your account's quota or current
+capacity; run part 8 and the quota/spend checks before launching.
+
+| Template or setup dependency | Public evidence |
+| --- | --- |
+| Three `m7i.xlarge` instances | AWS's [regional instance list](https://docs.aws.amazon.com/ec2/latest/instancetypes/ec2-instance-regions.html) says “available in Europe (Stockholm)” and lists M7i; its [Stockholm price file](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-north-1/index.csv) has the Linux/shared `m7i.xlarge` row. |
+| gp3 root disks, VPC, subnet, internet gateway, routes, firewall, public addresses | AWS's [EC2 endpoints](https://docs.aws.amazon.com/general/latest/gr/ec2-service.html) list “ec2.eu-north-1.amazonaws.com”; [EBS](https://docs.aws.amazon.com/general/latest/gr/ebs-service.html) and [VPC](https://docs.aws.amazon.com/general/latest/gr/vpc-service.html) resource actions use that API. The same Stockholm price file lists gp3. |
+| Stack creation and deletion | AWS's [CloudFormation endpoints](https://docs.aws.amazon.com/general/latest/gr/cfn.html) list “cloudformation.eu-north-1.amazonaws.com”. |
+| Independent deletion schedule | AWS's [Scheduler endpoints](https://docs.aws.amazon.com/general/latest/gr/eventbridgescheduler.html) list “scheduler.eu-north-1.amazonaws.com”. |
+| IAM roles, user and role assumption | AWS lists Stockholm in its [IAM endpoints](https://docs.aws.amazon.com/general/latest/gr/iam-service.html) with “iam.amazonaws.com” and [STS endpoints](https://docs.aws.amazon.com/general/latest/gr/sts.html) with “sts.eu-north-1.amazonaws.com”. |
+| USD 10 budget and spend read | AWS's [billing endpoints](https://docs.aws.amazon.com/general/latest/gr/billing.html) list the separate “budgets.amazonaws.com” and “ce.us-east-1.amazonaws.com” endpoints; these account-wide checks do not move the machines. |
+
+The [90-minute estimate and late-deletion cost](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
+now use Stockholm prices: **USD 1.11 before tax / USD 1.35 with 21% VAT**, rounded
+up, for three machines, their disks and addresses, plus one charged GB out.
+Keep the USD 10 budget backstop and confirm deletion: neither the estimate nor the
+budget stops an existing machine if teardown fails.
 
 ## Policy reference
 

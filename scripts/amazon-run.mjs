@@ -46,7 +46,7 @@ async function main() {
   const [mode, stack] = process.argv.slice(2);
   assert.ok(['start', 'stop'].includes(mode), 'Use start or stop');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
-  assert.equal(config.region, 'eu-west-1', 'D618 uses eu-west-1');
+  assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const aws = (service, args, cleanup = false) => command('aws', ['--region', config.region, '--no-cli-pager', service, ...args, '--output', 'json'], undefined, cleanup ? undefined : stop.signal, 300000);
   const stop = new AbortController(), shutdown = () => stop.abort();
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
@@ -69,9 +69,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now}) {
+  assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
-  assert.equal(config.region, 'eu-west-1');
   assert.match(config.image, /^ami-[a-f0-9]{17}$/);
   assert.match(config.operatorCidr, /^(?:\d{1,3}\.){3}\d{1,3}\/32$/);
   assert.equal(await run('uname', ['-m']), 'x86_64', 'Use the x86 test-box builder');
