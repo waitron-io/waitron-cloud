@@ -398,7 +398,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused,runs:observed}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,untouched=false,onRefused,runs:observed}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -423,6 +423,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   }
   const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
+  if(untouched && inventory.jobs.some(startedWork))continue;
   for(const job of inventory.jobs){
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name,job.labels);

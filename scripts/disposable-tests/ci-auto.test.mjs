@@ -1486,3 +1486,13 @@ for(const fork of [true,false])test(`shared pickup rejects ${fork?'fork code eve
  assert.deepEqual(admissions,[]);
  if(!fork){assert.equal(permissionReads,1);assert.ok(refusals.some(row=>row.event==='automatic-ci-refused' && /External contributor approval/.test(row.error)));}
 });
+
+for(const [state,count] of [['completed',47],['in_progress',5]])test(`overflow selection skips an older PR with ${count} ${state} jobs`,async()=>{
+ const f=fixture(),get=f.api.get;
+ f.jobs.push(...Array.from({length:count},(_,i)=>({...f.jobs[0],id:2000+i,name:'useful-'+i,status:state,conclusion:state==='completed'?'success':null,runner_id:42,labels:['ubuntu-latest']})));
+ const run={...f.run,id:790,created_at:new Date(Date.now()-90000).toISOString(),pull_requests:[{number:13}],referenced_workflows:f.run.referenced_workflows.map(value=>({...value,ref:'refs/pull/13/merge'}))};
+ const jobs=f.jobs.slice(0,5).map((job,i)=>({...job,id:1001+i,run_id:790,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
+ const api={get:async(path,options)=>path.endsWith('/actions/runs/790')?run:path.includes('/runs/790/attempts/')?{total_count:jobs.length,jobs}:path.endsWith('/pulls/13')?{number:13,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}:path.endsWith('/actions/jobs/1001')?jobs[0]:get(path,options)};
+ const found=await controller.findAutomatic({api,policy,limit:1,onePerRun:true,untouched:true,runs:new Map([[789,f.run],[790,run]])});
+ assert.deepEqual(found.map(ci=>ci.jobId),[1001]);
+});
