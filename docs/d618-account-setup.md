@@ -416,13 +416,13 @@ Policy simulation reads the settings; it does not prove live enforcement.
 2. Check that the selected key pair exists in Stockholm:
 
    ```sh
-   aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-north-1
+   aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region "$REGION"
    ```
 
 3. List the official Debian 13 amd64 images in Stockholm, newest first:
 
    ```sh
-   aws ec2 describe-images --region eu-north-1 --owners 136693071363 \
+   aws ec2 describe-images --region "$REGION" --owners 136693071363 \
      --filters 'Name=name,Values=debian-13-amd64-*' \
        'Name=architecture,Values=x86_64' 'Name=state,Values=available' \
        'Name=root-device-name,Values=/dev/xvda' \
@@ -464,7 +464,7 @@ below are synthetic simulation inputs.
    export CALLER_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-launcher"
    export STACK_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-stack"
    export SCHEDULER_ROLE="arn:aws:iam::$ACCOUNT_ID:role/d618-scheduler"
-   export SIM_STACK="arn:aws:cloudformation:eu-north-1:$ACCOUNT_ID:stack/d618-simulation/example"
+   export SIM_STACK="arn:aws:cloudformation:$REGION:$ACCOUNT_ID:stack/d618-simulation/example"
    ```
 
 2. Check the launcher can create its tagged stack with the stack role. Expect **allowed**:
@@ -531,7 +531,7 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
      --action-names ec2:TerminateInstances \
-     --resource-arns "arn:aws:ec2:eu-north-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+     --resource-arns "arn:aws:ec2:$REGION:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
      --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=d618-simulation,ContextKeyType=string
    ```
 
@@ -540,7 +540,7 @@ below are synthetic simulation inputs.
     ```sh
     aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
       --action-names ec2:TerminateInstances \
-      --resource-arns "arn:aws:ec2:eu-north-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
+      --resource-arns "arn:aws:ec2:$REGION:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
       --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string
     ```
 
