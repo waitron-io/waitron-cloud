@@ -21,7 +21,8 @@ The launcher requires an explicit region and has no default.
 | 5. Create four roles | **Project owner/setup console**; terminal to display the files |
 | 6. Set the budget | **Project owner/setup console** |
 | 7. Configure tonight's access key | **Project owner/setup console**, then **x86 terminal** |
-| 8. Check permissions, run, remove the key | **x86 terminal**, using **`d618`**; setup console for key deletion |
+| 8. Check permissions | **x86 terminal**, using **`d618`** |
+| 9. Save the run configuration, then follow the run checklist | **x86 terminal**; setup console for the last-step key deletion |
 
 The new account uses a project owner identity, not a root console login. Do not
 create an IAM console password, invite a teammate, or activate advanced features
@@ -165,7 +166,7 @@ architecture `x86_64`. Part 8 includes the equivalent CLI lookup after login is 
 ## 4. Prepare the policy files
 
 **Window: x86 test box's terminal, inside your clean Waitron Cloud checkout.**
-Keep this terminal open through part 8. Replace each `YOUR_…` value privately.
+Keep this terminal open through part 9 and launch. Replace each `YOUR_…` value privately.
 
 1. Set the practice account ID from your private note:
 
@@ -597,6 +598,7 @@ lookup. `/32` allows SSH from just that address, so run it on the x86 box that
 will make the connections. Check the resulting address before continuing.
 
 ```sh
+(
 umask 077
 cat > "$D618_SETUP_DIR/run-config.json" <<JSON
 {
@@ -611,6 +613,7 @@ cat > "$D618_SETUP_DIR/run-config.json" <<JSON
   "waitronCheckout": "YOUR_ABSOLUTE_PATH_TO_WAITRON_CHECKOUT"
 }
 JSON
+)
 chmod 600 "$D618_SETUP_DIR/run-config.json"
 export D618_CONFIG="$D618_SETUP_DIR/run-config.json"
 ```
@@ -627,7 +630,7 @@ and profile; the launcher deliberately lacks `organizations:DescribeOrganization
 This page's checks are offline/source guidance until you execute them; no live
 permission enforcement or experiment is proved here.
 
-### Last step: delete tonight's access key
+## Last step: delete tonight's access key
 
 Do this after success **or failure**. First use the launcher to inspect/delete
 any remaining D618 stack, as the run checklist directs.
