@@ -36,7 +36,7 @@ extend that source; they do not change Waitron's local identity or fiscal flows.
 Cloud's registration `src/password-recovery.ts` and its tests have no Waitron
 identity-package counterpart. Maintain and test that Cloud-owned flow here.
 
-Last reviewed Waitron revision: `b9440c685e440d37d5bc65a7feade840ceacf1c9`.
+Last reviewed Waitron revision: `0b7f37048f4bc5dff92b0b527d33c7767fbf49eb`.
 
 When changing authentication in either repository, compare the corresponding source
 and behavioural tests above, record applicable fixes in both backlogs, and port the
@@ -59,7 +59,7 @@ The report also checks each mapped path at its linked source revision and at the
 target revision. If a file is renamed or deleted, update its mapped path and link
 after reviewing that change; do not advance the reviewed revision blindly.
 Keep the original copy revision; update the reviewed revision only after you have
-classified every reported change. The [2026-10-12 review](../../docs/identity-upstream-review.md)
+classified every reported change. The [dated source reviews](../../docs/identity-upstream-review.md)
 records applicable ports, already adapted properties and changes outside Cloud's
 security scope. Passkey registration now offers and accepts EdDSA, ES256 and RS256
 explicitly, so a runtime upgrade cannot add an algorithm without review.
