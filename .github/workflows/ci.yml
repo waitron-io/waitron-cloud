@@ -174,7 +174,22 @@ jobs:
         run: node scripts/ci-root-inputs.mjs --check
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
-      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/8 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs scripts/billing-display-guard-probes.test.mjs scripts/venue-service-guard-probes.test.mjs
+      - name: Run root checks
+        env:
+          CI_FORCE_FULL: ${{ inputs.full }}
+          CI_MODE: ${{ needs.changes.outputs.mode }}
+        run: |
+          if retained=$(node scripts/ci-root-selection.mjs '${{ matrix.shard }}'); then
+            if [ -n "$retained" ]; then
+              root_files=()
+              while IFS= read -r path; do root_files+=("$path"); done <<< "$retained"
+              node --test --test-reporter=tap --test-concurrency=2 "${root_files[@]}"
+            else
+              echo 'Root partition has no retained files.'
+            fi
+          else
+            node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/8 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs scripts/billing-display-guard-probes.test.mjs scripts/venue-service-guard-probes.test.mjs
+          fi
       # Keep optional saving last so final runner cleanup collects its child processes.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'

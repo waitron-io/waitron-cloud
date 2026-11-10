@@ -6,7 +6,17 @@ Ordinary code changes still occupy many machines. Start with root-test selection
 the registration and portal examples below each ran about 25 job-minutes of root
 tests. Package selection alone does not remove those jobs. The owner asked for
 root checks to follow their actual inputs first, then a measured proposal for
-splitting registration by area. These changes are proposed, not implemented.
+splitting registration by area. At that measurement, those cuts were proposed.
+
+**10 November update:** the first cut omits nine audited synthetic root suites
+inside selected package-only PR commands, with the original full command as
+fallback. The live-reader suite stays. See [root advice](ci-root-input-ownership.md#package-only-root-advice-10-november-2026).
+The unchanged nine-file local profile attributed 22.194 of 619.851 sampled
+seconds to Git initialisation/configuration and 13.240 to other non-child work;
+fixture setup was a much smaller opportunity than omitting the complete suites.
+That shared-Mac profile does not measure hosted job-minute savings. The historical
+table below remains unchanged; the new cut needs a healthy natural eligible PR.
+Receipt selection and the registration-area model remain open.
 
 | Current example | Largest work | Does this change need it? | Next cut to assess |
 | --- | --- | --- | --- |
