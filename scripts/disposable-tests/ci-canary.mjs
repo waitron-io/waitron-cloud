@@ -145,7 +145,7 @@ export async function publishCapacity({api,policy,state,snapshot,healthy,signal,
  return value;
 }
 // The repository variable survives a full pool and a controller restart.
-export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
+export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
@@ -166,29 +166,35 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  };
  const selected=await started();
  if(selected.busy)return;
- const wave=selected.jobs.filter(job=>job.conclusion!=='skipped').length;
- if(wave>20)return;
  snapshot??=await overflowInventory({api,policy,signal});
  const marked=await hostedAttempts({api,policy,signal});
  if(Object.keys(marked).some(id=>!snapshot.has(Number(id))))return;
- let occupied=0;
+ const capacity=local();
+ if(!capacity.busy || !capacity.slots || capacity.owned.has(ci.runId))return;
+ if(!snapshot.has(ci.runId))snapshot=new Map([...snapshot,[ci.runId,{run,jobs:selected.jobs}]]);
+ let serverWaiting=0,hostedWaiting=0,hostedRunning=0;
+ const waiting=job=>['queued','pending','waiting','requested'].includes(job.status);
  for(const [id,{run,jobs,previous}] of snapshot){
-  if(id===ci.runId)continue;
-  if(marked[id]===run.run_attempt+1)occupied+=jobs.filter(job=>job.conclusion!=='skipped').length;
+  const pending=marked[id]===run.run_attempt+1;
+  if(pending)hostedWaiting+=jobs.filter(job=>job.conclusion!=='skipped').length;
   if(marked[id]===run.run_attempt && run.run_attempt>1 && run.status!=='completed'){
    if(!previous.length)return;
    const appeared=jobs.map(job=>job.name);
    for(const job of previous)if(job.conclusion!=='skipped'){
-    const index=appeared.indexOf(job.name);if(index<0)occupied++;else appeared.splice(index,1);
+    const index=appeared.indexOf(job.name);if(index<0)hostedWaiting++;else appeared.splice(index,1);
    }
   }
   for(const job of jobs){
-   if(!job.labels.length || job.labels.includes('self-hosted'))continue;
-   if(!['completed','in_progress'].includes(job.status))return;
-   if(job.status==='in_progress')occupied++;
+   if(!job.labels.length)continue;
+   if(job.labels.includes('self-hosted')){
+    if(!pending && waiting(job) && !capacity.jobs?.has(job.id))serverWaiting++;
+   }else{
+    if(job.status==='in_progress')hostedRunning++;
+    if(!pending && waiting(job))hostedWaiting++;
+   }
   }
  }
- if(occupied+wave>20)return;
+ if(hostedRunning>=20 || serverWaiting/capacity.slots<=hostedWaiting/20)return;
  await markHostedAttempt({api,policy,ci,signal});
  if((await started()).busy){
   const values=await hostedAttempts({api,policy,signal});

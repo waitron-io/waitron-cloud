@@ -37,7 +37,7 @@ function fixture(){
   if(path==='/repos/fixture/waitron')return {id:123,full_name:policy.repository};
   throw new Error('Unexpected '+path);
  }};
- return {run,jobs,api};
+ return {run,jobs,api,local:()=>({slots:6,busy:6,owned:new Set()})};
 }
 for(const consumer of ['findAutomatic','overflowInventory'])for(const persistent of [false,true])test(`${consumer} ${persistent?'bounds repeated mismatches':'rereads a mismatched run inventory'}`,async()=>{
  const f=fixture(),get=f.api.get,signal=new AbortController().signal;let reads=0;
@@ -93,7 +93,7 @@ for(const action of ['overflow','recover'])for(const [name,status,runner,blocked
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{posts.push(path);};
  const api=routingVariables(f.api);
- if(action==='overflow')await controller.overflowOrdinary({api,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api,policy,ci});
  else{
   await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
   await controller.recoverHostedAttempts({api,policy});
@@ -120,7 +120,7 @@ for(const action of ['overflow','fallback','recovery'])test(`automatic ${action}
  const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);f.api.post=async path=>posts.push(path);
  const api=routingVariables(f.api);
- if(action==='overflow')await controller.overflowOrdinary({api,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api,policy,ci});
  else if(action==='fallback')await controller.fallbackOrdinary({api,policy,ci,automatic:true});
  else {await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":3}'});await controller.recoverHostedAttempts({api,policy});}
  assert.deepEqual(posts,[]);assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
@@ -132,7 +132,7 @@ for(const action of ['overflow','fallback'])test(`${action} preserves a hosted a
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{const result=await target.patch(path,body);if(JSON.parse(body.value)['789'])f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'queued',runner_id:7,labels:['ubuntu-latest']});return result;};return Reflect.get(target,key);}});
  f.api.post=async()=>assert.fail('The new hosted assignment must survive');
- if(action==='overflow')await controller.overflowOrdinary({api:observed,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api:observed,policy,ci});
  else await controller.fallbackOrdinary({api:observed,policy,ci,automatic:true,leases:{inspect:()=>({ciInvocation:{ordinaryStage:'admitted',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}}});
  assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
 });
@@ -922,14 +922,15 @@ for(const change of ['successor','head','local'])test(`recovery refreshes ${chan
 });
 
 for(const [state,running,wave,wantCancel] of [
- ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,false],
- ['large wave',0,21,false],['queued hosted',0,5,false],['unknown jobs',0,5,false],
+ ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,true],
+ ['large wave',0,21,true],['queued hosted',0,5,true],['unknown jobs',0,5,false],
  ['unknown runs',0,5,false],['wrong attempt',0,5,false],['duplicate runs',0,5,false],
- ['reserved retry',15,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,false])
+ ['reserved retry',15,5,true],['balanced queue',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
 ])test(`overflow requires observed hosted room: ${state}`,async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  const target=f.jobs[0];f.jobs.splice(0,f.jobs.length,...Array.from({length:wave},(_,i)=>({...target,id:901+i})));
  const other={...f.run,id:790},hosted=Array.from({length:running},(_,i)=>({...target,id:1000+i,run_id:790,status:'in_progress',runner_id:42,labels:['ubuntu-latest']}));
+ if(state==='balanced queue')hosted.push(...Array.from({length:17},(_,i)=>({...target,id:2000+i,run_id:790,labels:['ubuntu-latest']})));
  if(state==='queued hosted')hosted.push({...target,id:2000,run_id:790,labels:['ubuntu-latest']});
  if(['waiting','pending','requested'].includes(state))hosted.push({...target,id:2000,run_id:790,status:state,labels:['ubuntu-latest']});
  if(state==='wrong attempt')hosted.push({...target,id:2000,run_id:790,run_attempt:2,labels:['ubuntu-latest']});
@@ -946,11 +947,11 @@ for(const [state,running,wave,wantCancel] of [
   return get(path,options);
  };
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- let error;try{await controller.overflowOrdinary({api:f.api,policy,ci});}catch(e){error=e;}
+ let error;try{await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});}catch(e){error=e;}
  if(state.startsWith('unknown') || state==='wrong attempt' || state==='duplicate runs')assert.match(error?.message??'',/inventory/i);
  else assert.equal(error,undefined);
  assert.deepEqual(posts,wantCancel?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
- assert.equal(marker,wantCancel?'{"789":2}':state==='reserved retry'?'{"790":2}':'{}');
+ assert.deepEqual(JSON.parse(marker),wantCancel?{...(state==='reserved retry'?{790:2}:{}),789:2}:state==='reserved retry'?{790:2}:{});
 });
 
 for(const names of ['distinct','repeated'])test(`overflow reserves a marked retry while its hosted job list is still growing: ${names}`,async()=>{
@@ -967,7 +968,7 @@ for(const names of ['distinct','repeated'])test(`overflow reserves a marked retr
   return get(path,options);
  };
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.deepEqual(posts,[]);assert.equal(marker,'{"790":2}');
 });
 
@@ -985,8 +986,8 @@ for(const state of ['missing marked run','missing skipped run','stale marker','s
   return get(path,options);
  };
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>posts.push(path);
- if(state.startsWith('foreign'))await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}),/inventory/);
- else await controller.overflowOrdinary({api:f.api,policy,ci});
+ if(state.startsWith('foreign'))await assert.rejects(controller.overflowOrdinary({local:f.local,api:f.api,policy,ci}),/inventory/);
+ else await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.deepEqual(posts,['stale marker','skipped reservation','missing skipped run','retry visible'].includes(state)?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
 });
 
@@ -1017,7 +1018,7 @@ for(const failure of ['write','readback','assigned','advanced'])test(`overflow d
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  if(failure==='assigned')f.jobs[0].runner_id=42;
  if(failure==='advanced')f.run.run_attempt=2;
- await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}));assert.equal(posts,0);
+ await assert.rejects(controller.overflowOrdinary({local:f.local,api:f.api,policy,ci}));assert.equal(posts,0);
 });
 
 for(const state of ['running','completed','assigned','young','late-assignment','waiting','cancelled'])test(`overflow preserves a ${state} server run`,async()=>{
@@ -1030,7 +1031,7 @@ for(const state of ['running','completed','assigned','young','late-assignment','
  if(state==='cancelled'){f.jobs[1].status='completed';f.jobs[1].conclusion='cancelled';}
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{writes++;marker=body.value;if(state==='late-assignment')start();};f.api.post=async()=>{posts++;};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.equal(posts,0);assert.equal(marker,'{}');if(state!=='late-assignment')assert.equal(writes,0);
 });
 
@@ -1062,14 +1063,14 @@ for(const clock of ['attempt','job'])test(`overflow gives a newly queued ${clock
  else f.jobs[0].started_at=new Date().toISOString();
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
 });
 
 test('overflow leaves a workflow without hosted-attempt routing on the server',async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let marker='{}';const posts=[];
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.includes('/contents/')?{encoding:'base64',content:Buffer.from('legacy workflow').toString('base64')}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
 });
 
 test('a rate-limit callback stops recovery reads until its caller can release the lock and wait',async()=>{
@@ -1187,7 +1188,7 @@ for(const [label,conclusion,runner,late,wantCancel] of [
  f.api.get=async path=>path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;if(late)skipped.runner_id=42;};
  f.api.post=async path=>{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');assert.equal(marker,'{"789":2}');posts++;};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.equal(posts,wantCancel?1:0);assert.equal(marker,wantCancel?'{"789":2}':'{}');
 });
 
@@ -1246,7 +1247,7 @@ for(const assigned of [true,false])test(`overflow reads the page-three sibling b
  f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
  f.api.post=async path=>{posts.push(path);f.run.status='completed';};
  const api=routingVariables(f.api),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
- await controller.overflowOrdinary({api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api,policy,ci});
  assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
  assert.deepEqual(await controller.hostedAttempts({api,policy}),assigned?{}:{789:2});
 });
