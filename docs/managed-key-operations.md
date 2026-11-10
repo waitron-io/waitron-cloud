@@ -95,11 +95,14 @@ the old snapshot. It then proves that a wrong backup master key stops before res
 and does not record a false archive-verification failure. It also runs the CLI with
 correct and wrong keys and checks that its JSON contains no key material.
 
-For the complete local recovery path through a real Waitron archive and cold restore,
-run `node scripts/test-local-backups.mjs` as described in
-[Local encrypted backup proof](local-backups.md). That proof loses the original server,
-rotates the venue key, and restores the retained snapshot on a replacement. Neither
-drill provisions a live key service or proves a paid vault provider.
+For real archive verification and separately authorised cold restore, use the
+[joint and paired proofs](test-cloud.md#backup-verifier-boundary).
+The [legacy local runner](local-backups.md#run-the-proof) records older recovery and
+key-rotation results, but ordinary fiscal restore now refuses without allocation
+authority before its container verification. The key drill and historical archive
+proofs do not qualify current-Waitron compatibility, release, publication, deployment
+or a module's `needs_authority` outcome. Neither provisions a live key service or
+proves a paid vault provider.
 
 After restoring an older Cloud database, restore its retained key set into an isolated
 environment and run `pnpm keys:check` before starting workers. If the check reports an
