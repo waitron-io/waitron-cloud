@@ -31,7 +31,9 @@ function fixture(){
   if(path.includes('/jobs?'))return {total_count:jobs.length,jobs};
   if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from(workflow).toString('base64')};
   if(path.endsWith('/commits/'+head))return {sha:head,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.endsWith('/pulls/12'))return {number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.includes('/pulls?state=open'))return [{number:12,head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];
+ if(path.endsWith('/commits/'+head+'/pulls'))return [{number:12}];
+ if(path.endsWith('/pulls/12'))return {number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}};
   if(path==='/repos/fixture/waitron')return {id:123,full_name:policy.repository};
   throw new Error('Unexpected '+path);
  }};
@@ -146,16 +148,16 @@ test('an incomplete run inventory does not hold free capacity behind a still-run
  const {automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-inventory-'),root=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
  await withKernelLock(root,async()=>{new LocalLeases(root+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});},{bootstrap:true});
- const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release;
+ const f=fixture(),get=f.api.get,first=f.jobs[0],second=f.jobs[1],third=f.jobs[2];let scans=0,release,inventoryFailures=0;
  const held=new Promise(resolve=>release=resolve),ids=[],waits=[];
  const timeout=setTimeout(release,500);t.after(()=>clearTimeout(timeout));
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
   if(path.includes('/workflows/456/runs?') && path.includes('status=queued')){
-   if(++scans>=2 && scans<=4)return {total_count:1,workflow_runs:[]};
+   scans++;if(ids.includes(902) && inventoryFailures++<3)return {total_count:1,workflow_runs:[]};
   }
-  if(path.includes('/jobs?'))return {total_count:scans<5?2:3,jobs:scans<5?[first,second]:[first,second,third]};
+  if(path.includes('/jobs?'))return {total_count:inventoryFailures<3?2:3,jobs:inventoryFailures<3?[first,second]:[first,second,third]};
   return get(path);
  };
  let failure;
@@ -1199,11 +1201,11 @@ test('automatic worker failure retires its intent without invoking fallback',asy
 
 test('automatic capacity publication ignores deleted runs in retained hosted markers',async t=>{
  const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
- let capacity='',markerWrites=0;
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"777":2}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:path.endsWith('/runs/777')?Promise.reject(Object.assign(new Error('Not Found'),{status:404})):get(path);
- f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;else markerWrites++;};
+ let capacity='',markerWrites=0,marker=JSON.stringify({777:2});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:path.endsWith('/runs/777')?Promise.reject(Object.assign(new Error('Not Found'),{status:404})):get(path);
+ f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;else {markerWrites++;marker=body.value;}};
  const result=await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>({code:0})});
- assert.equal(result.served,5);assert.equal(JSON.parse(capacity).slots,6);assert.equal(markerWrites,0);
+ assert.equal(result.served,5);assert.equal(JSON.parse(capacity).slots,6);assert.equal(markerWrites,1);assert.equal(marker,'{}');
 });
 
 test('the real automatic worker tags bounded stderr and forwards the original bytes',async t=>{
@@ -1222,4 +1224,56 @@ test('the real automatic worker tags bounded stderr and forwards the original by
  assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),'x'.repeat(4096));
  for(const row of diagnostics){assert.equal(row.runId,789);assert.equal(row.attempt,1);assert.equal(row.jobId,901);assert.ok(Number.isFinite(Date.parse(row.at)));}
  assert.equal(Buffer.concat(forwarded).toString(),'x'.repeat(6000));
+});
+
+for(const state of ['replaced','closed','merged-empty-links','assigned','current-fail-fast','unknown-link','foreign','main','schedule','advanced-during-read','incomplete-jobs'])test(`dead-run reconciliation handles ${state}`,async()=>{
+ const f=fixture(),get=f.api.get,posts=[];let refreshes=0;
+ const obsolete=!['current-fail-fast','unknown-link','foreign','main','schedule'].includes(state);
+ if(state==='merged-empty-links'||state==='unknown-link')f.run.pull_requests=[];
+ if(state==='foreign')f.run.head_repository={id:999};
+ if(state==='main')f.run.event='push';
+ if(state==='schedule')f.run.event='schedule';
+ if(state==='assigned'){f.jobs[0].runner_id=42;f.jobs[0].status='in_progress';}
+ if(state==='current-fail-fast'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
+ f.api.get=async(path,options)=>{
+  if(path.includes('/pulls?state=open')&&['merged-empty-links','unknown-link'].includes(state))return [];
+  if(path.endsWith('/pulls/12'))return {number:12,state:['closed','merged-empty-links'].includes(state)?'closed':'open',head:{sha:obsolete?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/commits/'+head+'/pulls')&&state==='unknown-link')return [];
+  if(path.endsWith('/runs/789')&&state==='advanced-during-read')return {...f.run,run_attempt:++refreshes+1};
+  if(path.includes('/jobs?')&&state==='incomplete-jobs')return {total_count:6,jobs:f.jobs};
+  return get(path,options);
+ };
+ f.api.post=async path=>posts.push(path);
+ const errors=[];
+ assert.equal(typeof controller.reconcileDeadRuns,'function');
+ await controller.reconcileDeadRuns({api:f.api,policy,onError:error=>errors.push(error.message)});
+ assert.deepEqual(posts,obsolete&&!['advanced-during-read','incomplete-jobs'].includes(state)?['/repos/fixture/waitron/actions/runs/789/'+(state==='assigned'?'cancel':'force-cancel')]:[]);
+ if(state==='incomplete-jobs')assert.match(errors.join(),/inventory/);
+});
+for(const state of ['completed','missing','active','pending-move','closed-before-retry'])test(`dead-run reconciliation retires only finished hosted markers: ${state}`,async()=>{
+ const f=fixture(),get=f.api.get;let value=JSON.stringify({789:['pending-move','closed-before-retry'].includes(state)?2:1});const posts=[];
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
+  if(path.includes('/runs?'))return {total_count:0,workflow_runs:[]};
+  if(path.endsWith('/pulls/12')&&state==='closed-before-retry')return {number:12,state:'closed',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/runs/789')){
+   if(state==='missing')throw Object.assign(new Error('Gone'),{status:404});
+   return {...f.run,status:['completed','closed-before-retry'].includes(state)?'completed':'in_progress',conclusion:state==='completed'?'success':null};
+  }
+  return get(path,options);
+ };
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));value=body.value;};
+ f.api.post=async path=>posts.push(path);
+ assert.equal(typeof controller.reconcileDeadRuns,'function');
+ await controller.reconcileDeadRuns({api:f.api,policy});
+ assert.deepEqual(JSON.parse(value),['completed','missing','closed-before-retry'].includes(state)?{}:{789:state==='pending-move'?2:1});assert.deepEqual(posts,[]);
+});
+test('a full pool still cancels an obsolete run before returning',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[];
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'full-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ f.api.get=async(path,options)=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/pulls/12')?{number:12,state:'closed',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}:get(path,options);
+ f.api.post=async path=>posts.push(path);
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
 });

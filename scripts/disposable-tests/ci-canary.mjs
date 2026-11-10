@@ -180,6 +180,60 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }
+export async function reconcileDeadRuns({api,policy,signal,onError}){
+ const base=`/repos/${policy.repository}`,runs=new Map(),marked=await hostedAttempts({api,policy,signal});
+ const identity=run=>run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+  run.workflow_id===policy.workflowId && run.path===policy.workflowPath && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0;
+ for(const status of ['queued','in_progress']){
+  const data=await runInventory(api,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal);
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete dead-run inventory');
+  for(const run of data.workflow_runs)if(identity(run) && run.event==='pull_request')runs.set(run.id,run);
+ }
+ let pulls=[];
+ if(runs.size){
+  pulls=await api.get(`${base}/pulls?state=open&per_page=100`,{signal});
+  assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');
+ }
+ const pullFor=async run=>{
+  let links=run.pull_requests;
+  if(!links?.length){
+   links=pulls.filter(pull=>pull.head?.sha===run.head_sha && pull.head.repo?.id===policy.repositoryId);
+   if(!links.length)links=await api.get(`${base}/commits/${run.head_sha}/pulls`,{signal});
+  }
+  if(!Array.isArray(links) || links.length!==1 || !Number.isSafeInteger(links[0].number))return;
+  const pull=await api.get(`${base}/pulls/${links[0].number}`,{signal});
+  if(pull.number!==links[0].number || pull.head?.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId ||
+   !['open','closed'].includes(pull.state))return;
+  return pull;
+ };
+ const dead=(pull,run)=>pull && (pull.state==='closed' || pull.head.sha!==run.head_sha);
+ for(const [id,observed] of runs)try{
+  const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
+  if(!identity(run) || run.id!==id || run.event!=='pull_request' || run.head_sha!==observed.head_sha ||
+   run.run_attempt!==observed.run_attempt || !['queued','in_progress'].includes(run.status))continue;
+  if(!dead(await pullFor(run),run))continue;
+  const {jobs}=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
+  assert.ok(jobs.every(job=>job.run_id===id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Foreign dead-run job inventory');
+  const latest=await api.get(path,{signal});
+  if(!identity(latest) || latest.id!==id || latest.event!=='pull_request' || latest.head_sha!==run.head_sha ||
+   latest.run_attempt!==run.run_attempt || !['queued','in_progress'].includes(latest.status))continue;
+  const action=jobs.every(job=>job.status==='completed' || !job.runner_id)?'force-cancel':'cancel';
+  await api.post(path+'/'+action,undefined,{signal});
+  console.log(JSON.stringify({event:'automatic-ci-dead-run',at:new Date().toISOString(),runId:id,attempt:run.run_attempt,action}));
+ }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,id)===false)break;}
+ for(const [id,attempt] of Object.entries(marked))try{
+  let run;
+  try{run=await api.get(`${base}/actions/runs/${id}`,{signal});}catch(error){if(error.status!==404)throw error;}
+  if(run && (!identity(run) || run.id!==Number(id) || run.status!=='completed'))continue;
+  if(run && run.run_attempt<attempt && !(run.event==='pull_request' && dead(await pullFor(run),run)))continue;
+  const current=await hostedAttempts({api,policy,signal});
+  if(current[id]!==attempt)continue;
+  delete current[id];
+  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(current),signal});
+  console.log(JSON.stringify({event:'automatic-ci-marker-retired',at:new Date().toISOString(),runId:Number(id),attempt}));
+ }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
+}
 export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set(),onError}){
  const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
  for(const [id,attempt] of Object.entries(values)){

@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -59,12 +59,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const selectedHead=await read(()=>routingHead({api,policy,signal}));
  if(selectedHead && await read(()=>routingMode({api,policy,signal}))!=='server')return {code:0,served};
  assert.equal(selectedHead,'','Automatic CI requires unrestricted same-repository routing');
+
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
  for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)recorded.add(Number(match[1]));}
  const exclude=new Set([...seen,...recorded]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
+ await read(()=>reconcileDeadRuns({api,policy,signal,onError:(error,runId)=>{
+  console.error(JSON.stringify({event:'automatic-ci-dead-run-pending',runId,error:error.message}));
+  if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;
+ }}));
  if(!free){
   await read(publish);
   if(active.size){await waitForWorker();continue;}break;
@@ -117,7 +122,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(!readFailed)throw error;
   const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
    error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
-   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete automatic run inventory/.test(error.message);
+   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete (?:automatic run|dead-run|open PR) inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
   const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);
