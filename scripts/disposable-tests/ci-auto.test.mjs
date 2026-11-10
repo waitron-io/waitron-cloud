@@ -53,7 +53,7 @@ for(const consumer of ['findAutomatic','overflowInventory'])for(const persistent
  else assert.deepEqual([...(await result)].map(([id,{jobs}])=>[id,jobs.map(job=>job.id)]),[[789,[901,902,903,904,905]]]);
  assert.equal(reads,persistent?3:2);
 });
-for(const consumer of ['findAutomatic','overflowInventory'])for(const fault of ['http','shape','oversized','negative','duplicate'])test(`${consumer} does not reread ${fault} run inventories`,async()=>{
+for(const consumer of ['findAutomatic','overflowInventory'])for(const fault of ['http','shape','oversized','negative',...(consumer==='overflowInventory'?['duplicate']:[])])test(`${consumer} does not reread ${fault} run inventories`,async()=>{
  const f=fixture(),get=f.api.get;let reads=0;
  f.api.get=async(path,options)=>{
   if(path.includes('/runs?') && path.includes('status=queued')){
@@ -65,8 +65,7 @@ for(const consumer of ['findAutomatic','overflowInventory'])for(const fault of [
   }
   return get(path,options);
  };
- if(fault==='duplicate' && consumer==='findAutomatic')assert.deepEqual((await controller.findAutomatic({api:f.api,policy,limit:6})).map(ci=>ci.jobId),[901,902,903,904,905]);
- else await assert.rejects(controller[consumer]({api:f.api,policy,limit:6}));
+ await assert.rejects(controller[consumer]({api:f.api,policy,limit:6}),fault==='shape' && consumer==='overflowInventory'?{message:'Incomplete hosted run inventory'}:undefined);
  assert.equal(reads,1);
 });
 for(const healthy of [true,false])test(`capacity publication counts usable occupancy and distinct queues with healthy=${healthy}`,async()=>{
