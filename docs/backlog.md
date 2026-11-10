@@ -24,6 +24,13 @@ those transfers' existing budgets, with HTTP 4xx and integrity failures refusing
 The controlled dependency tests exercise retries and refusals; a healthy cold guest usually
 uses only its first attempt. Frozen host recipes still change only through explicit publication.
 
+A1463's [prebuilt guest disk plan](superpowers/plans/2026-11-09-a1463-prebuilt-guest.md)
+is awaiting review and watcher approval before implementation. Four fresh guests observed on
+10 November spent 56–59 seconds in installers out of 73–76 seconds from admission to worker
+startup, including SSH overhead. No saving or reusable disk is proved yet. The proposed disk
+keeps the existing install path when missing or stale; cold comparison, guest image smoke and
+an ordinary CI assignment remain required.
+
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
 ## Keep the private shared UI release current (D579)
