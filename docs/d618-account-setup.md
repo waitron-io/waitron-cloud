@@ -1,8 +1,14 @@
 # Prepare the practice account for one D618 run
 
-Work through these eight parts in order. Use the standalone practice account in
-your private desk note. Setup creates four roles and a USD 10 budget backstop;
+First check which kind of account you have in part 2. The eight parts below
+use a classic standalone practice account, as described in your private desk note. Setup creates four roles and a USD 10 budget backstop;
 the experiment comes afterwards. The lane has no permission to access Amazon or spend.
+
+**If IAM offers API keys but no console sign-in, stop before part 2.** The
+new AWS experience uses project identities instead of IAM console users. The
+classic login instructions below do not work there. Do not create access keys,
+invite an administrator teammate, or activate advanced features to work around
+this. See [the account check](#2-check-the-account-and-create-the-console-login).
 
 ## Which login, for which step
 
@@ -48,19 +54,69 @@ Do not create root access keys or run the experiment as root.
 You do not need `waitron-billing-read` or `lane-d-boundary` for D618. If you already
 deleted them, do not recreate them. Leave other rehearsals' buckets, keys and roles alone.
 
-## 2. Create the new console login
+## 2. Check the account and create the console login
+
+**Window: your current practice-account console.** First identify the login.
+
+1. Open the account menu at the top right and read the identity type.
+2. If you entered through **AWS Settings** (`settings.aws.com`) and a **project**,
+   use the project-account explanation below and stop the classic setup.
+3. Continue with the classic route only if this is the standalone account and
+   your setup session is its **Root user** with MFA. A banner in IAM linking to
+   the new experience does not by itself establish the account type.
+
+### If this is a project account
+
+AWS's [IAM user guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)
+says “you cannot create IAM users with console access” in its new experience.
+Its [account comparison](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html)
+explains that a Builder ID owns a project account, which has no root login.
+The root instructions in this page therefore do not apply to that account.
+
+Inviting a teammate does not create the restricted D618 login. AWS's
+[team guide](https://docs.aws.amazon.com/accounts/latest/reference/invite-team-members.html)
+says “you cannot control which AWS services they have access to”; teammates
+receive project administrator access.
+
+Restricted human roles are available after
+[activating advanced features](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html),
+using the existing identity and Account access manager. Activation cannot be
+reversed, removes project spend limits and creates a delegated administrator
+account. Do not activate it as a login repair. Ask for a separate decision on
+that account change before continuing D618; no tested project-login procedure
+is supplied here yet. Keep any roles already prepared, but do not launch.
+
+### If this is the classic standalone account
 
 **Window: practice account's root console.** Keep root MFA enabled.
 
+If you have not created the IAM user:
+
 1. Open **IAM → Users → Create user**.
 2. Enter **`d618-owner-login`** as the user name.
-3. Enable **AWS Management Console access** for this IAM user.
-4. Set its password privately, without requiring a first-login password reset.
-5. Finish creating the user without granting administrator permissions.
-6. Open **`d618-owner-login` → Security credentials → Assign MFA device**.
-7. Register your MFA device.
-8. Copy this user's **ARN** from its summary into your private notes. You need it in part 4.
+3. Enable **Provide user access to the AWS Management Console**.
+4. Choose **I want to create an IAM user** if the wizard asks.
+5. Set its password privately, without requiring a first-login password reset.
+6. Finish creating the user without granting administrator permissions.
 
+If `d618-owner-login` already exists without console access:
+
+1. Open **IAM → Users → `d618-owner-login` → Security credentials**.
+2. In **Console sign-in**, choose **Enable console access**.
+3. Select **Reset password**, then **Custom password**, and set the password privately.
+4. Leave **Require password change at the next sign-in** cleared.
+5. Choose **Reset password** to save it.
+
+For either route:
+
+1. Open **Security credentials → Multi-factor authentication (MFA) → Assign MFA device**.
+2. Register your MFA device.
+3. Copy this user's **ARN** from its summary into your private notes for part 4.
+
+If **Console sign-in** is absent, stop; do not substitute an access key or a
+`create-login-profile` command. **Permissions (0)** is expected until part 5.
+AWS documents the existing-user controls in
+[managing user passwords](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_passwords_admin-change-user.html).
 Create no access key. Part 5 gives this user its two permissions.
 
 ## 3. Find the existing key pair and Debian image
@@ -233,6 +289,11 @@ It blocks later `CreateStack` calls, not an accepted stack. The independent
 90-minute deletion schedule and manual deletion remain essential.
 
 ## 7. Sign the CLI in as the new user
+
+**Classic standalone account only.** Continue only after part 2 produced an IAM
+console login with MFA. An API-only IAM user or a project teammate is not a
+replacement. The project-account route still needs the separate account decision
+in part 2; do not run these commands against it.
 
 **Windows: x86 terminal and a separate browser session signed in as `d618-owner-login`.**
 Keep the root setup console separate. Check the browser's selected identity before authorising CLI login.
