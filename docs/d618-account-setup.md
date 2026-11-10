@@ -75,6 +75,9 @@ the inline policy `d618`. Do not attach administrator or EC2-full-access policie
 | `d618-scheduler` | `scheduler-trust.json` | `scheduler-policy.json` | The expiry schedule deletes the stack |
 | `d618-budget` | `budget-trust.json` | `budget-policy.json` | Budgets attaches/removes only the deny-launch policy |
 
+You launch through a separate role so the budget restricts that role while your
+owner sign-in can still assume it to inspect and delete.
+
 For `d618-launcher`, set maximum session duration to **3 hours**. In the non-root
 owner identity's Permissions → Add inline policy, paste the rendered
 `owner-policy.json`. Check that a newly created user has only this inline policy and
