@@ -1071,6 +1071,7 @@ spending authority:
 
 1. Confirm the isolated practice account and launcher identity with
    `aws sts get-caller-identity --profile d618`; require `assumed-role/d618-launcher/`.
+   Confirm the account's [Paid Plan](d618-account-setup.md#check-the-account-plan-before-launching); the Free plan refuses these machines.
    Use Stockholm (`eu-north-1`) as chosen for tonight. If you already created the roles,
    follow the setup page's **Update existing roles for Stockholm** before proceeding.
 2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name D618`

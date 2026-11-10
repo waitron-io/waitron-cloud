@@ -41,7 +41,9 @@ git pull --ff-only
 git log -1 --oneline
 ```
 
-Check that the latest commit is **`9307c90ce` or later**. Keep this terminal in
+Compare the latest commit with `main` on GitHub and confirm
+`deploy/kubernetes/bounded-amazon/setup/launcher-policy.json` includes
+`cloudformation:DescribeStackEvents` before rendering it. Keep this terminal in
 that folder: every relative file path below starts from this checkout.
 
 ### Check the account plan before launching
@@ -322,7 +324,21 @@ Finish by reopening **IAM → Roles → each role → Permissions → expand `d6
 
 If the launcher lacks the events action, re-render part 4 from the current
 checkout and replace its existing `d618` inline policy using steps 1–4 above.
-This lets you inspect why a stack failed without broadening access to other stacks.
+This grants access to D618 stack events. A failed wait can report only the stack
+status; the launcher does not fetch the failing resource's reason and deletes
+the failed stack during cleanup. In your **setup console → CloudFormation →
+Stacks → filter Deleted → select the stack → Events**, read the failed
+resource's reason. Copy its full **Stack ID**, not just the stack name, to use
+the launcher's new permission from your x86 terminal:
+
+```sh
+export D618_STACK_ID=YOUR_FULL_DELETED_STACK_ARN
+aws cloudformation describe-stack-events --stack-name "$D618_STACK_ID" --region "$REGION" --profile d618
+```
+
+AWS requires the unique ID for [deleted stacks' events](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-events.html).
+Keep this output private; remove account IDs and other private values before
+sharing an error message.
 
 After creating or updating all four roles:
 
@@ -677,7 +693,8 @@ and compare again. An older Debian image's ARN does not authorise a newer one.
 The launcher has no IAM-policy read permission; you make this comparison.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
-for quota and spend checks, then launch with `node scripts/amazon-run.mjs start`
+for quota and spend checks. Confirm the [Paid Plan check](#check-the-account-plan-before-launching),
+then launch with `node scripts/amazon-run.mjs start`
 in this same terminal so `D618_CONFIG` remains set. Keep Stockholm in the config
 and profile; the launcher deliberately lacks `organizations:DescribeOrganization`.
 This page's checks are offline/source guidance until you execute them; no live

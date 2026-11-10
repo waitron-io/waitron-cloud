@@ -139,6 +139,7 @@ test('CLI start and stop require a region; stop uses the selected Stockholm regi
   await writeFile(join(directory, 'aws'), `#!${process.execPath}
 const fs = require('node:fs'), args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+console.error('synthetic-success-diagnostic');
 console.log(JSON.stringify(args.includes('describe-stacks') ? {Stacks: [{Tags: [{Key: 'cloud.campaign', Value: 'D618'}]}]} : {}));
 `, {mode: 0o700});
   const invoke = mode => spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
@@ -155,6 +156,7 @@ console.log(JSON.stringify(args.includes('describe-stacks') ? {Stacks: [{Tags: [
   await writeFile(configPath, JSON.stringify(config));
   const result = invoke('stop');
   assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /synthetic-success-diagnostic/);
   const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(calls.map(args => args.slice(0, 5)), [
     ['--region', 'eu-north-1', '--no-cli-pager', 'cloudformation', 'describe-stacks'],
