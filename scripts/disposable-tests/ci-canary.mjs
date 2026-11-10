@@ -1,3 +1,4 @@
+import {withRequestCounts} from './github-app.mjs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -583,7 +584,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    const execution=new AbortController(),monitor=new AbortController();let ended=false,monitorFailure;
    const work=AbortSignal.any([options.signal,execution.signal]);
    const watching=(async()=>{
-    let healthyAt=Date.now(),refusal,retryAt=0,reported=false,reportedLimit=false;
+    let healthyAt=Date.now(),lastRunRead=-Infinity,refusal,retryAt=0,reported=false,reportedLimit=false;
     while(!ended){
      try{await wait(15000,undefined,{signal:monitor.signal});}catch{if(ended)return;throw new Error('CI monitor stopped');}
      if(ended)return;
@@ -604,8 +605,10 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
         return undefined;
        }
       };
-      const current=await read(`${base}/runs/${ci.runId}`,'run');
-      if(current!==undefined)assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');
+      if(Date.now()-lastRunRead>=60000){
+       const current=await read(`${base}/runs/${ci.runId}`,'run');
+       if(current!==undefined){lastRunRead=Date.now();assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');}
+      }
       const job=await read(`${base}/jobs/${ci.jobId}`,'job');
       if(job!==undefined){
        assert.ok(!job.runner_id || job.runner_id===registration.runner.id,'CI runner assignment differs');
@@ -849,6 +852,6 @@ export function validateCIConfig(config){
 const cli=process.argv[1];
 if(cli && cli!=='-'){
  const {realpathSync}=await import('node:fs'),{pathToFileURL}=await import('node:url');
- if(import.meta.url===pathToFileURL(realpathSync(cli)).href){try{const result=await main(process.argv.slice(2));console.log(JSON.stringify(result));process.exitCode=result.code;}
+ if(import.meta.url===pathToFileURL(realpathSync(cli)).href){try{const result=await withRequestCounts(()=>main(process.argv.slice(2)));console.log(JSON.stringify(result));process.exitCode=result.code;}
  catch(error){console.error(error.message);process.exitCode=125;}}
 }

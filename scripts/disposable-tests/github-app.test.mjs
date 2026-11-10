@@ -6,7 +6,8 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 test('App authentication uses a short JWT and keeps the installation token off request URLs',async t=>{
- const {GithubApp}=await import('./github-app.mjs');
+ t.mock.timers.enable({apis:['Date'],now:120000});
+ const {GithubApp,withRequestCounts}=await import('./github-app.mjs');
  const directory=mkdtempSync(join(tmpdir(),'ci-app-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
  const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
  writeFileSync(join(directory,'key.pem'),privateKey.export({type:'pkcs1',format:'pem'}),{mode:0o600});
@@ -21,7 +22,11 @@ test('App authentication uses a short JWT and keeps the installation token off r
  }else{assert.equal(req.headers.authorization,'Bearer synthetic-installation-token');res.end('{"id":789}');}
  });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const app=new GithubApp({appEnv:join(directory,'app.env'),appKey:join(directory,'key.pem'),apiBase:`http://127.0.0.1:${server.address().port}`});
- assert.deepEqual(await app.get('/fixture'),{id:789});assert.deepEqual(await app.get('/fixture'),{id:789});
+ const rows=[];t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
+ assert.equal(typeof withRequestCounts,'function');
+ await withRequestCounts(()=>app.token());assert.equal(rows[0].requests,1);assert.equal(rows[0].latestResponse.kind,'token');
+ await withRequestCounts(async()=>{assert.deepEqual(await app.get('/fixture'),{id:789});assert.deepEqual(await app.get('/fixture'),{id:789});});
+ assert.equal(rows.length,2);assert.equal(rows[1].requests,2);assert.equal(rows[1].final,true);assert.equal(rows[1].latestResponse.kind,'api');
  assert.deepEqual(seen,['/app/installations/456/access_tokens','/fixture','/fixture']);
 });
 test('job-log reads are bounded plain text without exposing token-bearing redirects',async t=>{
@@ -42,4 +47,49 @@ test('the App can read exact immutable Git comparisons without admitting parent 
  assert.deepEqual(await app.get(path),{status:'ahead'});
  for(const bad of ['/repos/fixture/../private','/repos/fixture/waitron/compare/main...other',path+'/../private',path+'?extra=true'])await assert.rejects(app.get(bad),/API path/);
  await assert.rejects(app.post(path,{}),/API path/);assert.deepEqual(seen,[path]);
+});
+
+test('request counts share clients, retain quota snapshots and omit external log downloads',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:120000});
+ const {GithubApp,withRequestCounts}=await import('./github-app.mjs');
+ const rows=[];t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
+ const server=createServer((req,res)=>{res.setHeader('x-ratelimit-resource','core');res.setHeader('x-ratelimit-remaining','17');res.setHeader('x-ratelimit-reset','2000000000');
+  if(req.url==='/refused'){res.writeHead(403);res.end('private refusal');}
+  else if(req.url==='/invalid')res.end('invalid JSON');
+  else res.end('{}');
+ });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const first=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`}),second=new GithubApp({apiBase:first.apiBase});
+ first.token=second.token=async()=>'private-token';
+ assert.equal(typeof withRequestCounts,'function');
+ await withRequestCounts(async()=>{
+  await first.get('/ok');await assert.rejects(second.get('/invalid'),SyntaxError);
+  await assert.rejects(second.get('/refused'),{status:403});
+ });
+ assert.equal(rows[0].requests,3);assert.deepEqual(rows[0].latestResponse,{at:rows[0].latestResponse.at,kind:'api',status:403,resource:'core',remaining:'17',reset:'2000000000'});
+ const fetch=globalThis.fetch;t.after(()=>{globalThis.fetch=fetch;});let calls=0;
+ globalThis.fetch=async()=>{calls++;if(calls===1)throw new TypeError('private fetch failure');
+  if(calls===2)return new Response(null,{status:302,headers:{location:'https://logs.actions.githubusercontent.com/private-download'}});
+  return new Response('log');};
+ await withRequestCounts(async()=>{await assert.rejects(first.get('/broken'),TypeError);assert.equal(await second.jobLog('/log'),'log');});
+ assert.equal(calls,3);assert.equal(rows[1].requests,2);assert.equal(rows[1].failedFetches,1);
+ assert.deepEqual(rows[1].latestResponse,{at:rows[1].latestResponse.at,kind:'api',status:302,resource:null,remaining:null,reset:null});
+ assert.doesNotMatch(JSON.stringify(rows),/private|Bearer|fixture|127\.0\.0/);
+ globalThis.fetch=fetch;const length=rows.length;await first.request('/outside',{authorization:'private'});assert.equal(rows.length,length);
+});
+
+test('count logging owns one timer, UTC request buckets and a final flush even on failure',async t=>{
+ const {GithubApp,withRequestCounts}=await import('./github-app.mjs');const rows=[];
+ t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));t.mock.timers.enable({apis:['Date','setInterval'],now:120000});
+ const app=new GithubApp({});app.token=async()=>'private';
+ t.mock.method(globalThis,'fetch',async()=>new Response('{}'));
+ assert.equal(typeof withRequestCounts,'function');
+ await withRequestCounts(async()=>{
+  await app.get('/one');t.mock.timers.tick(60000);await app.get('/two');t.mock.timers.tick(60000);
+ });
+ assert.deepEqual(rows.map(row=>[row.minute,row.requests,row.final]),[[120000,1,false],[180000,1,false],[240000,0,true]]);
+ assert.ok(rows.every(row=>row.pid===process.pid && row.startedAt===120000 && row.to>=row.from));
+ const length=rows.length;t.mock.timers.tick(60000);assert.equal(rows.length,length,'Timer must stop with its scope');
+ await assert.rejects(withRequestCounts(async()=>{await app.get('/failure');throw new Error('work failed');}),/work failed/);
+ assert.equal(rows.at(-1).final,true);assert.equal(rows.at(-1).requests,1);
+ const end=rows.length;t.mock.timers.tick(60000);assert.equal(rows.length,end);
 });

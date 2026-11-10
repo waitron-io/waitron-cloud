@@ -42,8 +42,9 @@ The [approved three-slice plan](superpowers/plans/2026-11-10-a1473-ci-self-recov
 covers obsolete-PR cancellation, terminal-marker retirement and shared per-pass reads.
 Controlled cases cover cancellation, full-pool invocation, scoped pickup above the
 repository bound and conservative capacity age; natural published outcomes remain
-to be read. Real request counters and the approved monitor-cadence cut come next,
-then one busy hour of counts before forward overflow, the five-minute untaken-job
+to be read. The request-count CLI events and minute run-state cadence now have controlled
+HTTP, lifecycle, cancellation and diagnostic-excerpt checks. Publication and one
+busy hour of complete original process counts remain before forward overflow, the five-minute untaken-job
 rule and reverse movement. Keep routing policy
 and capacity publication unchanged until their separate owner decision.
 

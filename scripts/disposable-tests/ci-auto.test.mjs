@@ -1208,12 +1208,13 @@ test('automatic capacity publication ignores deleted runs in retained hosted mar
  assert.equal(result.served,5);assert.equal(JSON.parse(capacity).slots,6);assert.equal(markerWrites,1);assert.equal(marker,'{}');
 });
 
-test('the real automatic worker tags bounded stderr and forwards the original bytes',async t=>{
+for(const [label,output] of [['bounded','x'.repeat(6000)],['partial line','guest partial '+JSON.stringify({event:'github-request-counts',requests:2})+'\nreal error\n'],['short lines','x\n'.repeat(3000)]])test('the real automatic worker tags bounded stderr and forwards the original bytes: '+label,async t=>{
  const {writeFileSync}=await import('node:fs'),{automaticTick}=await import('./control.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(1);
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const node=process.execPath,worker=config.state+'/stderr-worker';
- writeFileSync(worker,'#!'+node+'\n'+"process.stderr.write('x'.repeat(6000));process.exit(125);\n",{mode:0o700});
+ const count=JSON.stringify({event:'github-request-counts',requests:1})+'\n';
+ writeFileSync(worker,'#!'+node+'\n'+'process.stderr.write('+JSON.stringify(count)+');process.stderr.write('+JSON.stringify(output)+');process.exit(125);\n',{mode:0o700});
  const error=console.error,write=process.stderr.write,records=[],forwarded=[];
  t.after(()=>{process.execPath=node;console.error=error;process.stderr.write=write;});
  console.error=line=>{records.push(JSON.parse(line));};process.stderr.write=data=>{forwarded.push(Buffer.from(data));return true;};process.execPath=worker;
@@ -1221,9 +1222,10 @@ test('the real automatic worker tags bounded stderr and forwards the original by
  try{result=await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true}});}
  finally{process.execPath=node;console.error=error;process.stderr.write=write;}
  const diagnostics=records.filter(row=>row.event==='automatic-ci-admission-stderr');
- assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),'x'.repeat(4096));
+ assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),output.startsWith('guest')?'guest partial real error\n':output.slice(0,4096));
+ assert.ok(diagnostics.length<=forwarded.length+1,'A chunk of short lines must not create one tagged record per line');
  for(const row of diagnostics){assert.equal(row.runId,789);assert.equal(row.attempt,1);assert.equal(row.jobId,901);assert.ok(Number.isFinite(Date.parse(row.at)));}
- assert.equal(Buffer.concat(forwarded).toString(),'x'.repeat(6000));
+ assert.equal(Buffer.concat(forwarded).toString(),'{"event":"github-request-counts","requests":1}\n'+output);
 });
 
 for(const state of ['replaced','closed','closed-with-current-other','merged-empty-links','assigned','current-fail-fast','unknown-link','foreign','main','schedule','advanced-during-read','incomplete-jobs'])test(`dead-run reconciliation handles ${state}`,async()=>{

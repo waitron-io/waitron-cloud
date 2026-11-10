@@ -9,16 +9,44 @@ async function boundedBody(response,limit){
  catch(error){await response.body?.cancel().catch(()=>{});throw error;}
  return Buffer.concat(buffers);
 }
+let requestCounts;
+export async function withRequestCounts(work){
+ assert.equal(requestCounts,undefined,'Request count scope already active');
+ const startedAt=Date.now(),buckets=new Map(),scope={buckets,latestResponse:null};requestCounts=scope;
+ let minute=Math.floor(startedAt/60000)*60000;
+ const flush=final=>{
+  const now=Date.now(),current=Math.floor(now/60000)*60000;
+  while(minute<current || final && minute===current){
+   console.error(JSON.stringify({event:'github-request-counts',pid:process.pid,startedAt,minute,
+    from:Math.max(startedAt,minute),to:Math.min(now,minute+60000),requests:buckets.get(minute)?.requests??0,
+    failedFetches:buckets.get(minute)?.failedFetches??0,latestResponse:scope.latestResponse,final:final && minute===current}));
+   buckets.delete(minute);minute+=60000;
+  }
+ };
+ const timer=setInterval(()=>flush(false),60000);timer.unref();
+ try{return await work();}finally{clearInterval(timer);flush(true);requestCounts=undefined;}
+}
+async function githubFetch(url,options,kind='api'){
+ const scope=requestCounts;
+ const bucket=()=>{const minute=Math.floor(Date.now()/60000)*60000;
+  if(!scope.buckets.has(minute))scope.buckets.set(minute,{requests:0,failedFetches:0});return scope.buckets.get(minute);};
+ if(scope)bucket().requests++;
+ let response;
+ try{response=await fetch(url,options);}catch(error){if(scope)bucket().failedFetches++;throw error;}
+ if(scope)scope.latestResponse={at:Date.now(),kind,status:response.status,resource:response.headers.get('x-ratelimit-resource'),
+  remaining:response.headers.get('x-ratelimit-remaining'),reset:response.headers.get('x-ratelimit-reset')};
+ return response;
+}
 export class GithubApp {
  constructor({appEnv,appKey,apiBase='https://api.github.com'}){Object.assign(this,{appEnv,appKey,apiBase});
   assert.ok(apiBase==='https://api.github.com' || /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(apiBase),'Untrusted GitHub API origin');}
  async request(path,{method='GET',body,authorization,signal}={}){
   const comparison=method==='GET' && /^\/repos\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1&page=2)?$/.test(path);
   assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && (!path.includes('..') || comparison),'Invalid GitHub API path');
-  const response=await fetch(this.apiBase+path,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
+  const response=await githubFetch(this.apiBase+path,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
    headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'waitron-disposable-ci',
     authorization:'Bearer '+authorization,...(body===undefined?{}:{'content-type':'application/json'})},
-   ...(body===undefined?{}:{body:JSON.stringify(body)})});
+   ...(body===undefined?{}:{body:JSON.stringify(body)})},path.startsWith('/app/installations/')?'token':'api');
   if(!response.ok){
    await response.body?.cancel();const error=new Error(`GitHub ${method} refused (${response.status})`);error.status=response.status;
    const after=response.headers.get('retry-after'),remaining=response.headers.get('x-ratelimit-remaining'),reset=response.headers.get('x-ratelimit-reset');
@@ -54,8 +82,9 @@ export class GithubApp {
  async jobLog(path,{signal}={}){
   assert.match(path,/^\/[a-zA-Z0-9_./-]+$/);
   const budget=signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000);
-  let response=await fetch(this.apiBase+path,{redirect:'manual',signal:budget,
-   headers:{authorization:'Bearer '+await this.token(),'user-agent':'waitron-disposable-ci'}});
+  const authorization='Bearer '+await this.token();
+  let response=await githubFetch(this.apiBase+path,{redirect:'manual',signal:budget,
+   headers:{authorization,'user-agent':'waitron-disposable-ci'}});
   if(response.status===302){const target=new URL(response.headers.get('location'));
    await response.body?.cancel();assert.ok(target.protocol==='https:' &&
     (target.hostname.endsWith('.blob.core.windows.net') || target.hostname.endsWith('.actions.githubusercontent.com')),'Untrusted job log redirect');

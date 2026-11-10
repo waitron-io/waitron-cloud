@@ -244,6 +244,32 @@ While hosted CI or the final summary runs, the controller releases the slot lock
 
 Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hosted jobs run Ubuntu. The guest account owns its home and runner tree and can use its private Docker daemon and passwordless sudo. Registration requests `/home/runner/work` as its working root to match hosted checkout paths; mixed coverage still needs an actual successful merge before qualification. Provisioning, supervision and completion recording stay privileged; local manual Cloud commands still run as root. Run `node --test scripts/disposable-tests/session.test.mjs scripts/disposable-tests/guest-exec.test.mjs` to check the listener’s launch settings and command completion.
 
+During an assigned job, a successful run-state read is followed by a minute without
+another run-state read; failed reads remain due at each 15-second tick. Job and
+guest checks stay at 15 seconds. A guest whose run is cancelled stops at its next
+job check once the job reports cancellation. Completion still compares the exact
+`run_attempt`, so a successful listener cannot report success for a newer attempt.
+Run `node --test scripts/disposable-tests/ci-runtime.test.mjs` for cadence,
+cancellation and completion controls.
+
+To measure API traffic, read `github-request-counts` JSON events from the original
+controller and worker stderr. Each CLI process emits UTC minute buckets, including
+zero-request intervals, and a final partial bucket when its scoped work finishes
+cleanup on success, error or handled cancellation. Unhandled signals can omit it. Sum `requests`
+from all processes; tokens, admission, recovery, cleanup and the initial job-log API
+read count, while the external log download does not. Requests belong to the minute
+when they start; `failedFetches` belongs to the minute when fetch rejects. These are
+local fetch attempts, not the whole App's consumption. `latestResponse` keeps one
+local observation timestamp, status and raw resource/remaining/reset snapshot; `kind`
+distinguishes token replies from ordinary API replies, and missing headers are null.
+The snapshot is the latest reply when the line is emitted; it can be older or newer
+than the request bucket. Attribute quota samples by their own `at` timestamp. Count events stay out of each
+worker's 4 KiB tagged error excerpt; original stderr still carries them. Check
+`pid`, `startedAt`, `from`, `to` and `final` when joining processes. Treat unreadable
+or interleaved lines and missing final records as measurement gaps. Run
+`node --test scripts/disposable-tests/github-app.test.mjs` for counting and scope
+cleanup controls. A real busy hour remains required before enabling moves.
+
 During an assigned job, failed GitHub network reads, request timeouts, interrupted response
 bodies and HTTP 5xx replies retry while a separate inspection confirms that the owned guest
 is running. A failed read skips only its dependent checks; other readable confirmations
