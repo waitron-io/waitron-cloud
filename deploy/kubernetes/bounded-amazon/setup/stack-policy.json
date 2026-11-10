@@ -1,0 +1,174 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadTemplateResources",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVpcs",
+        "ec2:DescribeVpcAttribute",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeRouteTables",
+        "ec2:DescribeNetworkAcls",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceAttribute",
+        "ec2:DescribeInstanceCreditSpecifications",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeKeyPairs"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "eu-west-1"
+        }
+      }
+    },
+    {
+      "Sid": "CreateNetworkResources",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpc",
+        "ec2:CreateSubnet",
+        "ec2:CreateInternetGateway",
+        "ec2:CreateRouteTable",
+        "ec2:CreateSecurityGroup"
+      ],
+      "Resource": [
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationTagsCreatedResources",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": [
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*"
+      ]
+    },
+    {
+      "Sid": "ConfigureAndRemoveStackNetwork",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:ModifyVpcAttribute",
+        "ec2:ModifySubnetAttribute",
+        "ec2:AttachInternetGateway",
+        "ec2:DetachInternetGateway",
+        "ec2:CreateRoute",
+        "ec2:DeleteRoute",
+        "ec2:AssociateRouteTable",
+        "ec2:DisassociateRouteTable",
+        "ec2:ReplaceRouteTableAssociation",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:DeleteVpc",
+        "ec2:DeleteSubnet",
+        "ec2:DeleteInternetGateway",
+        "ec2:DeleteRouteTable",
+        "ec2:DeleteSecurityGroup"
+      ],
+      "Resource": [
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+      ],
+      "Condition": {
+        "StringLike": {
+          "ec2:ResourceTag/aws:cloudformation:stack-name": "d618-*"
+        }
+      }
+    },
+    {
+      "Sid": "LaunchOnlyPinnedImageAndKey",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:eu-west-1::image/IMAGE_ID",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:key-pair/KEY_NAME"
+      ]
+    },
+    {
+      "Sid": "LaunchInStackNetwork",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+      ],
+      "Condition": {
+        "StringLike": {
+          "ec2:ResourceTag/aws:cloudformation:stack-name": "d618-*"
+        }
+      }
+    },
+    {
+      "Sid": "LaunchFixedMachineType",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:InstanceType": "m7i.xlarge",
+          "aws:RequestTag/cloud.campaign": "D618"
+        }
+      }
+    },
+    {
+      "Sid": "LaunchCreatesDiskAndInterface",
+      "Effect": "Allow",
+      "Action": "ec2:RunInstances",
+      "Resource": [
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:volume/*",
+        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:network-interface/*"
+      ]
+    },
+    {
+      "Sid": "TerminateStackInstances",
+      "Effect": "Allow",
+      "Action": "ec2:TerminateInstances",
+      "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:ResourceTag/cloud.campaign": "D618"
+        }
+      }
+    },
+    {
+      "Sid": "ExpiryScheduleLifecycle",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:CreateSchedule",
+        "scheduler:GetSchedule",
+        "scheduler:DeleteSchedule"
+      ],
+      "Resource": "arn:aws:scheduler:eu-west-1:ACCOUNT_ID:schedule/default/d618-*"
+    },
+    {
+      "Sid": "PassOnlyExpiryRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::ACCOUNT_ID:role/d618-scheduler",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "scheduler.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

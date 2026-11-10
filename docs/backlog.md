@@ -3188,7 +3188,9 @@ implementation or production evidence.
   supplies `node scripts/amazon-run.mjs start` for the owner-started Amazon run.
   Its launcher/template checks run with `node --test scripts/amazon-run.test.mjs`;
   actual Amazon bootstrap, host loss and independent deletion remain unrun.
-  The owner checks the practice account, budget and roles before starting it.
+  The [practice-account setup](d618-account-setup.md) supplies the role and budget
+  policy files and owner-run checks. The owner completes those checks before starting it;
+  live permission enforcement remains unqualified.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1
   service/fault proof and measured build/steady/fault/verifier/healing peaks remain

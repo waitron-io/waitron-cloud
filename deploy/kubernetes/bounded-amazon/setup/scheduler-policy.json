@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ExpiryDeletesItsStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:DeleteStack",
+      "Resource": "arn:aws:cloudformation:eu-west-1:ACCOUNT_ID:stack/d618-*/*",
+      "Condition": {"ArnEquals": {"cloudformation:RoleArn": "arn:aws:iam::ACCOUNT_ID:role/d618-stack"}}
+    },
+    {
+      "Sid": "ExpiryPassesOnlyStackRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::ACCOUNT_ID:role/d618-stack",
+      "Condition": {"StringEquals": {"iam:PassedToService": "cloudformation.amazonaws.com"}}
+    }
+  ]
+}
