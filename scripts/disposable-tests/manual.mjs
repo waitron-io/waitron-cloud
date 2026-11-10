@@ -214,7 +214,7 @@ export async function main(args) {
       if(remote){
         const seen=await runProcess('python3',['-I','-B',new URL('../../deploy/disposable-tests/ci-status.py',import.meta.url).pathname,'--remote',remoteHost,remoteConfiguration],{capture:true,signal:admission});
         const capacity=seen.code===0?JSON.parse(seen.stdout).slots?.free:undefined;
-        if(!Number.isInteger(capacity)||capacity<1)return {code:75,reason:capacity===0?'recorded-slot-busy-or-quarantined':'host-unavailable'};
+        if(capacity===0)return {code:75,reason:'recorded-slot-busy-or-quarantined'};
       }
       admitted=true;
       console.log(remote?`Disposable tests: remote controller ${remoteHost}`:`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);

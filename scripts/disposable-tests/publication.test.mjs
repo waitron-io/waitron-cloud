@@ -278,7 +278,7 @@ for(const fail of [false,'activation','callers'])test(`server cutover retires Ma
   if(command==='launchctl'&&argv[0]==='bootout'){assert.equal(probed,true);stopped=true;}
   if(command==='bash'){
    const text=argv.at(-1);
-   if(options.input&&Buffer.isBuffer(options.input))return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+   if(options.input&&Buffer.isBuffer(options.input)){assert.equal(JSON.parse(options.input.subarray(0,options.input.indexOf(10))).release,f.p.serverRelease);return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};}
    if(text.includes('/probe-controller.py')){assert.equal((await withKernelLock(f.old.state+'/slot-0',async()=>({code:0}))).code,0,'Probe held OLD admission');probed=true;}
    if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail==='activation'?1:0,stdout:'{}'};}
    return {code:0,stdout:'{}'};
@@ -336,7 +336,7 @@ for(const field of ['state','hostGeneration'])test(`server updates refuse reusin
  assert.equal(existsSync(f.old.state+'/manual.lock'),false);
 });
 
-for(const reply of ['', '{"code":1}'])test(`an interrupted server update preserves callers and reports its closed rollback: ${reply}`,async t=>{
+for(const reply of ['', '{"code":1}', '{'])test(`an interrupted server update preserves callers and reports its closed rollback: ${reply}`,async t=>{
  const f=await fixture(t),{publishServer}=await import('./publish.mjs');
  writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
  Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\n',oldServer:{release:'/opt/waitron-disposable-controller-old',configuration:'/opt/waitron-disposable-controller-old/config.json'}});

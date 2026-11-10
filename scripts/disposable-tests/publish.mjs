@@ -302,8 +302,14 @@ export async function publishServer(p,{execute=runProcess,api,transport,signal=A
  copyRelease(p);const localConfiguration=join(p.newController,'config.json');writeFileSync(localConfiguration,JSON.stringify(old)+'\n',{mode:0o400});
  const activate=()=>rootCommand(p,`${controllerNode} ${receipt.release}/scripts/disposable-tests/publish.mjs server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
  const commitCallers=async target=>{assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');await renderTo({host:p.controllerHost,configuration:target.configuration},localConfiguration);freezeRelease(p.newController);};
- if(p.oldServer){const result=await activate();assert.ok(result.stdout?.trim(),'Server rollback stopped; callers remain closed');const value=JSON.parse(result.stdout);const target=result.code===0?receipt:value.rollback;assert.ok(target,'Server rollback stopped; callers remain closed');await commitCallers(target);if(result.code!==0)throw new Error('Publication failed; fresh-state server rollback is restored');return {published:true,receipt};}
-  const probed=await rootCommand(p,'python3 -I -B '+receipt.release+'/deploy/disposable-tests/probe-controller.py',JSON.stringify({...receipt,recipe:p.configuration.recipe,peers:p.peerAddresses.filter(host=>host!==p.controllerHost)}),{execute,signal,capture:false});assert.equal(probed.code,0,'Server qualification failed before Mac stop');
+ if(p.oldServer){
+  const result=await activate();let value;
+  try{value=JSON.parse(result.stdout);}catch(cause){throw new Error('Server rollback stopped; callers remain closed',{cause});}
+  const target=result.code===0?receipt:value?.rollback;assert.ok(target,'Server rollback stopped; callers remain closed');await commitCallers(target);
+  if(result.code!==0)throw new Error('Publication failed; fresh-state server rollback is restored');return {published:true,receipt};
+ }
+
+ const probed=await rootCommand(p,'python3 -I -B '+receipt.release+'/deploy/disposable-tests/probe-controller.py',JSON.stringify({...receipt,recipe:p.configuration.recipe,peers:p.peerAddresses.filter(host=>host!==p.controllerHost)}),{execute,signal,capture:false});assert.equal(probed.code,0,'Server qualification failed before Mac stop');
  return withDrained({configuration:old,api:api??new GithubApp(old.ci),transport:transport??new SSHTransport(old),signal},async()=>{
   assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');
   mkdirSync(join(old.state,'manual.lock'),{mode:0o700});

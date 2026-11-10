@@ -130,7 +130,6 @@ def prepare_runtime():
             if hashlib.sha256(archive.read_bytes()).hexdigest()!=NODE_ARCHIVE_SHA:
                 raise ValueError('Controller Node archive integrity mismatch')
             command(['tar','--extract','--xz','--file',str(archive),'--directory',directory,'--no-same-owner'])
-            node.parent.parent.parent.mkdir(mode=0o755,parents=True,exist_ok=True)
             os.rename(Path(directory)/'node-v26.13.0-linux-x64',node.parent.parent)
     if command([NODE,'--version']).strip()!='v26.13.0':
         raise ValueError('Controller Node version differs')

@@ -285,7 +285,8 @@ For a later release, add `oldServer` with the installed receipt's `release`,
 fresh state. A refused activation restores the previous code under a fresh release,
 state and generation. Keep the installed receipt for the next publication.
 
-The manual helper still verifies your local checkout. A full remote pool refuses before capture. Upload reception holds no slot;
+The manual helper still verifies your local checkout. A confirmed full remote pool refuses before capture; unknown status leaves admission
+to NEW. Upload reception holds no slot;
 admission starts after reception and rechecks capacity. Its counted upload lets a
 command finish while stdin stays open; observed EOF or a signal cancels the turn
 and retains independent guest cleanup. A sleeping Mac leaves the guest's existing
