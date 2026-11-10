@@ -173,7 +173,7 @@ test('wrong account or root identity cannot build or create resources', async ()
   }
 });
 test('launcher refuses a standard vCPU quota below twelve before building or creating a stack', async () => {
-  for (const value of [8, 12]) {
+  for (const value of [8, 11, 12]) {
     await assert.rejects(api.startAmazon(config, {
       aws: async (service, args) => {
         if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
@@ -182,7 +182,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
         return JSON.stringify({Quota: {Value: value}});
       },
       run: async () => {throw Error('builder reached');},
-    }), value < 12 ? /D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is 8/ : /builder reached/);
+    }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
 for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/]]) test('Amazon distribution and journeys: ' + scenario, async () => {

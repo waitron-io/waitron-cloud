@@ -324,6 +324,7 @@ Finish by reopening **IAM → Roles → each role → Permissions → expand `d6
 
 If the launcher lacks the events action, re-render part 4 from the current
 checkout and replace its existing `d618` inline policy using steps 1–4 above.
+
 ### Inspect a failed stack
 
 The grant lets you read D618 stack events. A failed wait can report only the stack
@@ -341,6 +342,8 @@ aws cloudformation describe-stack-events --stack-name "$D618_STACK_ID" --region 
 AWS requires the unique ID for [deleted stacks' events](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-events.html).
 Keep this output private; remove account IDs and other private values before
 sharing an error message.
+
+### Finish the roles
 
 After creating or updating all four roles:
 

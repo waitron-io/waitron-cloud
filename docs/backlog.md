@@ -3194,6 +3194,7 @@ implementation or production evidence.
   manual key deletion. The owner chose Stockholm (`eu-north-1`): render the
   region explicitly, update the existing roles, compare the saved image policy
   with the run config and check the account's Paid Plan before running there. The
+  launcher refuses a standard vCPU quota below 12 before building the images.
   launcher has no region default; the actual run remains open. The owner
   completes the checks before starting it;
   live permission enforcement remains unqualified.
