@@ -477,7 +477,7 @@ test('main root preflight derives the literal push range and refuses a forced na
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
   const event = join(root, '.git', 'root-push.json');
   const env = {...process.env, GITHUB_EVENT_PATH: event, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main',
-    GITHUB_SHA: head, CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan), CI_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}'};
+    GITHUB_SHA: head, CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan), CI_FULL: 'false', CI_FORCE_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}'};
   const run = value => {
     writeFileSync(event, JSON.stringify(value));
     return spawnSync(process.execPath, [fileURLToPath(new URL('./ci-root-inputs.mjs', import.meta.url)), '--check'],
