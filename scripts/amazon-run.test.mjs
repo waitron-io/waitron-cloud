@@ -91,6 +91,36 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
 const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+test('failed AWS commands show the provider error without dumping response data', async t => {
+  const {mkdtemp, writeFile, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os'); const {join} = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'd618-error-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const configPath = join(directory, 'config.json');
+  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(join(directory, 'aws'), `#!${process.execPath}
+console.log('synthetic-private-response');
+console.error('An error occurred (AccessDenied) when calling the DescribeStacks operation: no identity-based policy allows the action');
+process.exit(255);
+`, {mode: 0o700});
+  for (const mode of ['start', 'stop']) {
+    const result = spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
+      {encoding: 'utf8', env: {...process.env, D618_CONFIG: configPath, PATH: directory + ':' + process.env.PATH}, timeout: 10000});
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /AccessDenied.*no identity-based policy allows the action/);
+    assert.match(result.stderr, /amazon.command_failed:aws:Error:255/);
+    assert.doesNotMatch(result.stdout + result.stderr, /synthetic-private-response/);
+  }
+});
+
+test('launcher policy lets the owner read stack failures within the D618 stack scope', async () => {
+  const policy = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/setup/launcher-policy.json', import.meta.url), 'utf8'));
+  const grants = policy.Statement.filter(row => row.Effect === 'Allow' && [row.Action].flat().includes('cloudformation:DescribeStackEvents'));
+  assert.equal(grants.length, 1);
+  assert.equal(grants[0].Resource, 'arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/d618-*/*');
+  assert.equal(grants[0].Condition, undefined, 'failure diagnosis remains available after a budget denial');
+});
+
 test('an explicit region is required before account access', async () => {
   for (const region of [undefined, '', 'REGION']) {
     await assert.rejects(api.startAmazon({...config, region}, {
@@ -109,6 +139,7 @@ test('CLI start and stop require a region; stop uses the selected Stockholm regi
   await writeFile(join(directory, 'aws'), `#!${process.execPath}
 const fs = require('node:fs'), args = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+console.error('synthetic-success-diagnostic');
 console.log(JSON.stringify(args.includes('describe-stacks') ? {Stacks: [{Tags: [{Key: 'cloud.campaign', Value: 'D618'}]}]} : {}));
 `, {mode: 0o700});
   const invoke = mode => spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
@@ -125,6 +156,7 @@ console.log(JSON.stringify(args.includes('describe-stacks') ? {Stacks: [{Tags: [
   await writeFile(configPath, JSON.stringify(config));
   const result = invoke('stop');
   assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /synthetic-success-diagnostic/);
   const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(calls.map(args => args.slice(0, 5)), [
     ['--region', 'eu-north-1', '--no-cli-pager', 'cloudformation', 'describe-stacks'],
@@ -140,6 +172,19 @@ test('wrong account or root identity cannot build or create resources', async ()
       aws: async (service, args) => {assert.equal(service, 'sts'); assert.equal(args[0], 'get-caller-identity'); return JSON.stringify(identity);}}), /amazon.identity/);
   }
 });
+test('launcher refuses a standard vCPU quota below twelve before building or creating a stack', async () => {
+  for (const value of [8, 11, 12]) {
+    await assert.rejects(api.startAmazon(config, {
+      aws: async (service, args) => {
+        if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
+        assert.equal(service, 'service-quotas');
+        assert.deepEqual(args, ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A']);
+        return JSON.stringify({Quota: {Value: value}});
+      },
+      run: async () => {throw Error('builder reached');},
+    }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
+  }
+});
 for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
@@ -152,6 +197,7 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (args[0] === 'delete-stack') deleting = true;
       if (args[0] === 'wait' && args[1] === 'stack-delete-complete' && scenario === 'late deletion' && !deleting) throw Object.assign(Error('timeout'), {code: 'ETIMEDOUT'});
       if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
+      if (service === 'service-quotas') return JSON.stringify({Quota: {Value: 12}});
       if (args[0] === 'describe-stacks') return JSON.stringify({Stacks: [{Outputs: Object.entries(output).map(([OutputKey, OutputValue]) => ({OutputKey, OutputValue}))}]});
       if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: output.C, State: {Name: 'stopped'}}]}]});
       assert.ok(['create-stack', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);

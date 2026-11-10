@@ -1071,6 +1071,7 @@ spending authority:
 
 1. Confirm the isolated practice account and launcher identity with
    `aws sts get-caller-identity --profile d618`; require `assumed-role/d618-launcher/`.
+   Confirm the account's [Paid Plan](d618-account-setup.md#check-the-account-plan-before-launching); the Free plan refuses these machines.
    Use Stockholm (`eu-north-1`) as chosen for tonight. If you already created the roles,
    follow the setup page's **Update existing roles for Stockholm** before proceeding.
 2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name D618`
@@ -1083,11 +1084,15 @@ spending authority:
    Use the setup page’s three `iam:PassRole` checks: launcher to CloudFormation, stack to Scheduler, and Scheduler to CloudFormation.
 4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region "$REGION"`
    with `aws ec2 describe-instances --region "$REGION" --filters Name=instance-state-name,Values=pending,running`.
+   This is the **Running On-Demand Standard instances** quota: three `m7i.xlarge`
+   machines need **12 vCPUs**. A limit of 8 cannot run D618; request **16** in Stockholm
+   and wait for the granted value before retrying. The launcher refuses a quota below 12 before building.
    Existing usage must leave 12 standard vCPUs free. Check your AMI with
    `aws ec2 describe-images --image-ids "$IMAGE_ID" --region "$REGION"`; require official Debian 13, amd64 and root device `/dev/xvda`.
 5. Read month-to-date spend with `aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD --granularity MONTHLY --metrics UnblendedCost`
    (end is exclusive), then re-read the plan’s linked Stockholm prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
+   If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
