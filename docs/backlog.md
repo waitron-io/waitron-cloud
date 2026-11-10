@@ -3179,11 +3179,11 @@ implementation or production evidence.
   Its launcher/template checks run with `node --test scripts/amazon-run.test.mjs`;
   actual Amazon bootstrap, host loss and independent deletion remain unrun.
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
-  policy files, eight numbered setup parts, the login for each part, official
-  Debian image and existing-key lookups, and owner-run checks for a classic
-  standalone account. A new-experience project cannot use that IAM console login;
-  restricted project access needs a separate account decision before setup continues.
-  The owner completes the applicable checks before starting it;
+  policy files, numbered steps, SSH-key creation and owner-run checks. The owner's
+  one-run access-key route keeps the existing restricted launcher and requires
+  manual key deletion. A new-experience project's fixed region can still block
+  Ireland; that account/region decision and the actual run remain open. The owner
+  completes the checks before starting it;
   live permission enforcement remains unqualified.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1

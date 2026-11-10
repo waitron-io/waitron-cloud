@@ -1,40 +1,36 @@
 # Prepare the practice account for one D618 run
 
-Before part 1, read the account check in part 2. The eight parts below use a
-classic standalone practice account, as described in your private desk note.
-Setup creates four roles and a USD 10 budget backstop;
-the experiment comes afterwards. The lane has no permission to access Amazon or spend.
+Tonight's route uses one access key on **`d618-owner-login`**, only to assume
+**`d618-launcher`**. You chose this one-run exception on 10 November. The key
+has no automatic expiry: delete it after the run, including if the run fails.
+The lane has no permission to access Amazon or spend.
 
-**If IAM offers API keys but no console sign-in, stop before part 2.** The
-new AWS experience uses project identities instead of IAM console users. The
-classic login instructions below do not work there. Do not create access keys,
-invite an administrator teammate, or activate advanced features to work around
-this. See [the account check](#2-check-the-account-and-create-the-console-login).
+**Check the project's region in part 3 before creating the key or starting the
+run.** New-experience projects have a fixed region; tonight's key does not
+unlock Ireland. D618's policies and launcher require **`eu-west-1`**.
 
 ## Which login, for which step
 
-This table applies to the classic standalone account.
-
 | Part | Window and login |
 | --- | --- |
-| 1. Remove the old login | Practice account's **root console**, with MFA; your local editor for the old profiles |
-| 2. Create the new login | **Root console** |
-| 3. Find or create the key pair; find the image | **Root console**, EC2 in **Ireland (`eu-west-1`)** |
+| 1. Remove the old login | Your existing **project owner/setup console**; local editor for old profiles |
+| 2. Prepare the IAM user | **Project owner/setup console** |
+| 3. Find or create the SSH key; find the image | **Project owner/setup console**, EC2 in **Ireland (`eu-west-1`)** |
 | 4. Prepare the files | **x86 test box's terminal**, in your clean Waitron Cloud checkout |
-| 5. Create four roles | **Root console**; terminal only to display the prepared files |
-| 6. Set the budget | **Root console** |
-| 7. Sign the CLI in | **x86 terminal** and a separate **`d618-owner-login` browser session** |
-| 8. Check permissions | **x86 terminal**, using the **`d618` profile** |
+| 5. Create four roles | **Project owner/setup console**; terminal to display the files |
+| 6. Set the budget | **Project owner/setup console** |
+| 7. Configure tonight's access key | **Project owner/setup console**, then **x86 terminal** |
+| 8. Check permissions, run, remove the key | **x86 terminal**, using **`d618`**; setup console for key deletion |
 
-Root is the account's original email login (see your private note), not an IAM
-user. Keep that console separate from the new user's browser session. Use root
-only for this one-time setup; [AWS recommends an administrative identity for
-everyday work](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html).
-Do not create root access keys or run the experiment as root.
+The new account uses a project owner identity, not a root console login. Do not
+create an IAM console password, invite a teammate, or activate advanced features
+for tonight's credential setup. AWS's [account comparison](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html)
+explains project ownership; its [IAM guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)
+says “you cannot create IAM users with console access” in the new experience.
 
 ## 1. Remove the old login
 
-**Window: practice account's root console.** Skip anything already removed.
+**Window: project owner/setup console.** Skip anything already removed.
 
 1. Open **IAM → Users → `waitron-lane-d-rehearsal` → Security credentials**.
 2. Deactivate each old access key.
@@ -57,75 +53,37 @@ Do not create root access keys or run the experiment as root.
 You do not need `waitron-billing-read` or `lane-d-boundary` for D618. If you already
 deleted them, do not recreate them. Leave other rehearsals' buckets, keys and roles alone.
 
-## 2. Check the account and create the console login
+## 2. Prepare the IAM user for tonight's route
 
-**Window: your current practice-account console.** First identify the login.
+**Window: your existing project owner/setup console.**
 
-1. Open the account menu at the top right and read the identity type.
-2. If you entered through **AWS Settings** (`settings.aws.com`) and a **project**,
-   use the project-account explanation below and stop the classic setup.
-3. Continue with the classic route only if this is the standalone account and
-   your setup session is its **Root user** with MFA. A banner in IAM linking to
-   the new experience does not by itself establish the account type.
+1. Open **IAM → Users → `d618-owner-login`**.
+2. If it does not exist, choose **Create user**, enter **`d618-owner-login`**,
+   and finish without adding administrator permissions or console access.
+3. Copy its **ARN** from the summary into your private notes for part 4.
+4. Leave access-key creation until part 7, after the region and roles are checked.
 
-### If this is a project account
-
-AWS's [IAM user guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)
-says “you cannot create IAM users with console access” in its new experience.
-Its [account comparison](https://docs.aws.amazon.com/accounts/latest/reference/sign-up-for-aws.html)
-explains that a Builder ID owns a project account, which has no root login.
-The root instructions in this page therefore do not apply to that account.
-
-Inviting a teammate does not create the restricted D618 login. AWS's
-[team guide](https://docs.aws.amazon.com/accounts/latest/reference/invite-team-members.html)
-says “you cannot control which AWS services they have access to”; teammates
-receive project administrator access.
-
-Restricted human roles are available after
-[activating advanced features](https://docs.aws.amazon.com/accounts/latest/reference/activate-advanced-features.html),
-using the existing identity and Account access manager. Activation cannot be
-reversed, removes project spend limits and creates a delegated administrator
-account. Do not activate it as a login repair. Ask for a separate decision on
-that account change before continuing D618; no tested project-login procedure
-is supplied here yet. Keep any roles already prepared, but do not launch.
-
-### If this is the classic standalone account
-
-**Window: practice account's root console.** Keep root MFA enabled.
-
-If you have not created the IAM user:
-
-1. Open **IAM → Users → Create user**.
-2. Enter **`d618-owner-login`** as the user name.
-3. Enable **Provide user access to the AWS Management Console**.
-4. Choose **I want to create an IAM user** if the wizard asks.
-5. Set its password privately, without requiring a first-login password reset.
-6. Finish creating the user without granting administrator permissions.
-
-If `d618-owner-login` already exists without console access:
-
-1. Open **IAM → Users → `d618-owner-login` → Security credentials**.
-2. In **Console sign-in**, choose **Enable console access**.
-3. Select **Reset password**, then **Custom password**, and set the password privately.
-4. Leave **Require password change at the next sign-in** cleared.
-5. Choose **Reset password** to save it.
-
-For either route:
-
-1. Open **Security credentials → Multi-factor authentication (MFA) → Assign MFA device**.
-2. Register your MFA device.
-3. Copy this user's **ARN** from its summary into your private notes for part 4.
-
-If **Console sign-in** is absent, stop; do not substitute an access key or a
-`create-login-profile` command. **Permissions (0)** is expected until part 5.
-AWS documents the existing-user controls in
-[managing user passwords](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_passwords_admin-change-user.html).
-Create no access key. Part 5 gives this user its two permissions.
+This is an API-only user. Missing **Console sign-in** and IAM MFA controls are not
+steps to work around. Part 5 grants only permission to assume the launcher;
+keep your existing project owner session for setup and later key deletion.
 
 ## 3. Find or create the key pair, then find the Debian image
 
-**Window: your practice-account setup console, region set to Ireland
-(`eu-west-1`).** Do not launch an instance.
+**Window: your project owner/setup console.** First check the region.
+
+1. Open **AWS Settings → Project → Overview → Additional Info**.
+2. Read **Region**. AWS documents this lookup in
+   [project regions](https://docs.aws.amazon.com/accounts/latest/reference/project-regions.html).
+3. If the project is fixed to **Stockholm (`eu-north-1`)**, stop here. AWS requires
+   advanced features to select other regions; changing a URL or creating an
+   access key does not remove that restriction. A separate decision is needed
+   before Ireland can be used. Do not silently change D618's scoped policies.
+4. For an account that can use Ireland, open
+   [EC2 in Ireland](https://eu-west-1.console.aws.amazon.com/ec2/home?region=eu-west-1).
+5. Confirm the address bar contains **`eu-west-1`** and does not return to
+   **`eu-north-1`**. The AMI, key pair and run profile must use the same region.
+
+**Window: EC2 in Ireland.** Do not launch an instance.
 
 1. Open **EC2 → Network & Security → Key pairs**.
 2. Look for a key pair whose private key you already hold.
@@ -187,7 +145,9 @@ If you use **EC2 → Images → AMIs** instead, select **Public images**, filter
 
 Debian's [official Debian 13 cloud-image page](https://wiki.debian.org/Cloud/AmazonEC2Image/Trixie)
 states: “The AMIs are owned by AWS account ID `136693071363`”. That is Debian's
-public publisher ID, not your account ID. The name uses `amd64`; EC2 calls that
+public publisher ID, not your account ID. On 10 November 2026 its Ireland amd64
+image is **`ami-0fb60e81bd0441e98`**; **`ami-0d2679679834750c7`** is Stockholm.
+Check the current table and CLI lookup before using an image. The name uses `amd64`; EC2 calls that
 architecture `x86_64`. Part 8 includes the equivalent CLI lookup after login is ready.
 
 ## 4. Prepare the policy files
@@ -213,7 +173,7 @@ Keep this terminal open through part 8. Replace each `YOUR_…` value privately.
    export IMAGE_ID=YOUR_DEBIAN_13_AMI_ID
    ```
 
-4. Set the key pair name copied in part 3:
+4. Set the key pair name copied or created in part 3:
 
    ```sh
    export KEY_NAME=YOUR_EXISTING_EC2_KEY_NAME
@@ -251,7 +211,7 @@ or chat. These files contain permission settings; do not copy access keys into t
 
 ## 5. Create the four roles
 
-**Window: root console.** Use the x86 terminal only to display each file for copying.
+**Window: project owner/setup console.** Use the x86 terminal only to display each file for copying.
 
 For **each row** in this table, repeat the numbered steps below:
 
@@ -297,16 +257,20 @@ After all four roles exist:
 4. Open **IAM → Users → `d618-owner-login` → Permissions → Add permissions → Create inline policy → JSON**.
 5. Paste the owner policy JSON.
 6. Name and create that inline policy as **`d618`**.
-7. Open **Add permissions → Attach policies directly** for that user.
-8. Attach AWS's **`SignInLocalDevelopmentAccess`** managed policy.
-9. Check the user has only that managed policy and the `d618` inline policy.
+7. Check the user has the `d618` inline policy and no administrator policy.
+
+`SignInLocalDevelopmentAccess` is for browser CLI login; tonight's API-key route
+does not need it. The owner policy and launcher trust already allow the exact
+IAM user to assume `d618-launcher`; no policy template needs to change.
+The trust has no IAM MFA condition: your project-owner MFA does not protect
+an API call signed with this user's key.
 
 The launcher is separate so the budget can block its new launches while your owner
 sign-in can still assume it to inspect and delete. Do not add administrator or EC2-full-access policies.
 
 ## 6. Set the USD 10 budget backstop
 
-**Window: root console.** Edit an existing **D618** budget rather than making a duplicate.
+**Window: project owner/setup console.** Edit an existing **D618** budget rather than making a duplicate.
 
 1. Display the deny policy in the x86 terminal:
 
@@ -338,74 +302,71 @@ Billing updates are delayed: this is a backstop, **not a hard USD 10 ceiling**.
 It blocks later `CreateStack` calls, not an accepted stack. The independent
 90-minute deletion schedule and manual deletion remain essential.
 
-## 7. Sign the CLI in as the new user
+## 7. Configure tonight's access key
 
-**Classic standalone account only.** Continue only after part 2 produced an IAM
-console login with MFA. An API-only IAM user or a project teammate is not a
-replacement. The project-account route still needs the separate account decision
-in part 2; do not run these commands against it.
+**Window: project owner/setup console.** Check part 3's region gate first.
 
-**Windows: x86 terminal and a separate browser session signed in as `d618-owner-login`.**
-Keep the root setup console separate. Check the browser's selected identity before authorising CLI login.
+1. Open **IAM → Users → `d618-owner-login` → Security credentials**.
+2. Under **Access keys**, choose **Create access key**.
+3. Choose **Command Line Interface (CLI)** and read the alternative-credentials
+   recommendation. Acknowledge it if the wizard asks, then choose **Next**.
+   If the wizard only offers **Other**, use that after reading the recommendation.
+4. Add **`D618 tonight`** as the optional description.
+5. Choose **Create access key**.
+6. Keep the access key ID and secret private; leave this page open while configuring
+   the box. Save no copy in the checkout, a command, shell history or chat.
 
-1. Check the CLI version; it must be **2.32.0 or later**:
+AWS's [CLI guide](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html)
+says “choose Command Line Interface (CLI)” and recommends federation for regular
+software development or real data. This is your one-run exception, with manual
+key deletion at the end, not an automatically expiring key.
 
-   ```sh
-   aws --version
-   ```
+**Window: x86 test box's terminal.**
 
-2. Start browser login from the terminal:
-
-   ```sh
-   aws login --remote --profile d618-owner --region eu-west-1
-   ```
-
-3. Complete the displayed browser instructions as **`d618-owner-login`**, not root.
-4. Set the role used by the run:
+1. Enter the source credentials interactively:
 
    ```sh
-   aws configure set role_arn "arn:aws:iam::$ACCOUNT_ID:role/d618-launcher" --profile d618
+   aws configure --profile d618-owner
    ```
 
-5. Set the source login:
+2. At its prompts enter the key ID, secret, region **`eu-west-1`**, output **`json`**.
+3. Protect the credentials file:
 
    ```sh
-   aws configure set source_profile d618-owner --profile d618
+   chmod 600 ~/.aws/credentials
    ```
 
-6. Set the session name:
+4. In **`~/.aws/config`**, add or update only this stanza. Replace
+   **`YOUR_PRACTICE_ACCOUNT_ID`** privately; preserve every other profile:
+
+   ```ini
+   [profile d618]
+   source_profile = d618-owner
+   role_arn = arn:aws:iam::YOUR_PRACTICE_ACCOUNT_ID:role/d618-launcher
+   role_session_name = d618-owner-run
+   region = eu-west-1
+   duration_seconds = 10800
+   ```
+
+5. Check the run identity:
 
    ```sh
-   aws configure set role_session_name d618-owner-run --profile d618
+   aws sts get-caller-identity --profile d618
    ```
 
-7. Set the requested duration to three hours:
-
-   ```sh
-   aws configure set duration_seconds 10800 --profile d618
-   ```
-
-8. Set the region:
-
-   ```sh
-   aws configure set region eu-west-1 --profile d618
-   ```
-
-9. Select that profile for the remaining commands:
+6. Require your practice account ID and an ARN containing
+   **`assumed-role/d618-launcher/`**. If it shows the IAM user or another role, stop.
+7. Select the launcher for the remaining checks and the run:
 
    ```sh
    export AWS_PROFILE=d618
    ```
 
-10. Check who the CLI is using:
-
-    ```sh
-    aws sts get-caller-identity
-    ```
-
-Continue only if the account matches your private note and the ARN contains
-**`assumed-role/d618-launcher/`**. Keep the source browser-login session available
-for refreshes. CLI-managed caches stay private; do not export credentials or write access keys to files.
+The user ARN in **`OWNER_PRINCIPAL_ARN`** remains the `d618-owner-login` IAM
+**user's** ARN, not root, a project identity or an assumed-role session.
+The direct IAM source can request three hours because part 5 sets that maximum
+on the launcher; see [STS session durations](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html).
+Never launch with `--profile d618-owner`.
 
 ## 8. Check the setup before launching
 
@@ -557,10 +518,44 @@ prefix](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html), so
 `CreateTags` cannot forge them.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
-for quota, spend, config and launch. Confirm in the **account console** that this is
-a standalone account; the launcher deliberately lacks `organizations:DescribeOrganization`.
+for quota, spend, config and launch. Resolve the region gate before any launch;
+the launcher deliberately lacks `organizations:DescribeOrganization`.
 This page's checks are offline/source guidance until you execute them; no live
 permission enforcement or experiment is proved here.
+
+### Last step: delete tonight's access key
+
+Do this after success **or failure**. First use the launcher to inspect/delete
+any remaining D618 stack, as the run checklist directs.
+
+**Window: your existing project owner/setup console.** The API user and launcher
+cannot delete this key: neither policy grants **`iam:DeleteAccessKey`**.
+AWS documents the required separate permissions in
+[managing your own keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/access-key-self-managed.html).
+
+1. Open **IAM → Users → `d618-owner-login` → Security credentials → Access keys**.
+2. Select the one key created for tonight.
+3. Choose **Actions → Deactivate** and confirm.
+4. Choose **Actions → Delete** and confirm the requested key ID.
+5. Refresh and require **Access keys (0)** / **No access keys**.
+6. In the x86 box's private **`~/.aws/credentials`**, remove only the
+   **`[d618-owner]`** stanza. Preserve every other profile.
+7. Delete any downloaded access-key CSV and clear the clipboard containing it.
+
+If you already have an authorised setup-administrator CLI profile, the equivalent
+commands are below. Replace the placeholders privately. Do not create root keys
+or try these using `d618-owner` or `d618`:
+
+```sh
+aws iam delete-access-key --user-name d618-owner-login \
+  --access-key-id YOUR_TONIGHT_KEY_ID --profile YOUR_SETUP_ADMIN_PROFILE
+aws iam list-access-keys --user-name d618-owner-login \
+  --profile YOUR_SETUP_ADMIN_PROFILE --query AccessKeyMetadata --output json
+```
+
+Require **`[]`** from the last command. Without that existing administrator
+profile, use the console steps. Key deletion prevents future source-key use;
+already-issued launcher sessions can remain valid until expiry.
 
 ## Policy reference
 
@@ -575,7 +570,7 @@ practice account only; it is not a production deployment role.
 
 | Policy section | Call or template resource requiring it |
 | --- | --- |
-| Owner AssumeRole | The browser-login identity assumes `d618-launcher`; the separate AWS sign-in policy permits CLI login |
+| Owner AssumeRole | The IAM user's one-run access key authenticates only the call to assume `d618-launcher` |
 | Launcher create/tag, describe/delete, pass-role | `startAmazon.create`, waiters and error/`stop` teardown; the launcher passes only the stack role |
 | Launcher stop/describe EC2 | `stopWorker`, `waitStopped`, `checkStopped`; image/key/usage checks in the run checklist |
 | Launcher budget, IAM, quota, cost reads | Parts 5–8 above and the run checklist; `GetCallerIdentity` needs no IAM grant |
@@ -594,7 +589,7 @@ Sources checked 10 November 2026: AWS's [service-role guidance](https://docs.aws
 [Scheduler reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_scheduler.html),
 [budget action setup](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-action-configure.html),
 [budget role policies](https://docs.aws.amazon.com/cost-management/latest/userguide/billing-example-policies.html#billing-permissions-ref-attach-role),
-and [CLI browser login](https://docs.aws.amazon.com/signin/latest/userguide/command-line-sign-in.html).
+and [CLI access-key configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html).
 Live role assumption, CloudFormation tagging, rollback and independent deletion
 remain checks for your practice-account run. If creation fails, keep the stack roles
 until every stack resource has been deleted; inspect CloudFormation events as the
