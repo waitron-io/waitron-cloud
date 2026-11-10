@@ -77,6 +77,7 @@ def install(plan):
         match=re.search(r'ExecStart=/usr/bin/python3 -B (/opt/waitron-disposable-[a-zA-Z0-9_-]+)/startup.py',old)
         if not match or old!=(recipe/'waitron-disposable-startup.service.in').read_text().replace('@RECIPE@',match[1]):
             raise ValueError('Existing startup service belongs to another installation')
+    command(['bash',str(recipe/'bootstrap-host.sh'),'--metadata'])
     command(['bash',str(recipe/'bootstrap-host.sh'),'--install',str(recipe/'host-packages.txt')])
     command(['bash',str(recipe/'harden-ssh.sh')])
     command(['python3','-B',str(recipe/'host.py'),'prepare-image'])
