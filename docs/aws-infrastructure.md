@@ -1063,18 +1063,20 @@ Each of the three SSH copies has a 300-second limit: a 4-GiB bundle needs at lea
 115 Mbit/s sustained upload, plus headroom, per copy. The archive size is measured
 when you build it; no actual Cloud/Waitron bundle has been transferred by this lane.
 
-Before starting, check these yourself; the lane has no account or spending authority:
+First follow [the one-time practice-account setup](d618-account-setup.md) to create
+the CLI identity, external roles and USD 10 deny-launch budget. Then check these
+yourself; the lane has no account or spending authority:
 
 1. Confirm the practice account and non-root identity with `aws sts get-caller-identity`
-   and its organisation with `aws organizations describe-organization`.
+   and confirm in the account console that it is the standalone practice account.
 2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT" --budget-name D618`
    and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT" --budget-name D618 --action-id "$ACTION"`.
-   Inspect its IAM policy and simulate it with `aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" --action-names ec2:RunInstances ec2:TerminateInstances cloudformation:DeleteStack`.
+   Use the setup page’s simulations to check launcher denial and permitted deletion separately from the stack role’s EC2 termination.
    Check that the action covers the launching role and preserves teardown; billing delay prevents a hard USD 10 cap.
 3. Read both external roles with `aws iam get-role --role-name "$ROLE"`. The stack role trusts
    CloudFormation and can manage the template’s EC2/network/schedule resources; the scheduler
    role trusts `scheduler.amazonaws.com`, can delete `d618-*` stacks and pass the stack role.
-   Check `iam:PassRole` using `aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" --action-names iam:PassRole --resource-arns "$STACK_ROLE" "$SCHEDULER_ROLE"`.
+   Use the setup page’s three `iam:PassRole` checks: launcher to CloudFormation, stack to Scheduler, and Scheduler to CloudFormation.
 4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region eu-west-1`
    with `aws ec2 describe-instances --region eu-west-1 --filters Name=instance-state-name,Values=pending,running`.
    Existing usage must leave 12 standard vCPUs free. Check your AMI with
