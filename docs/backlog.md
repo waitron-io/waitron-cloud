@@ -3170,8 +3170,10 @@ implementation or production evidence.
   900 seconds before the second journey, and owned cluster/volume cleanup.
   The owner dropped D570's first-machine proposal on 9 November. D618's
   [bounded three-machine plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
-  separates the local worker-loss rehearsal from an owner-started Amazon run;
-  Amazon resources and spending still need the owner's approval.
+  supplies `node scripts/amazon-run.mjs start` for the owner-started Amazon run.
+  Its launcher/template checks run with `node --test scripts/amazon-run.test.mjs`;
+  actual Amazon bootstrap, host loss and independent deletion remain unrun.
+  The owner checks the practice account, budget and roles before starting it.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1
   service/fault proof and measured build/steady/fault/verifier/healing peaks remain

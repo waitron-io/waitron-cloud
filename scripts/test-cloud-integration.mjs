@@ -109,10 +109,21 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
+export function assertAmazonBinding(target) {
+  assert.ok(target?.type === 'amazon' && /^d618-[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(target.cluster) &&
+    target.context === target.cluster && ['before', 'after'].includes(target.phase) && target.address === '10.77.0.1' &&
+    Array.isArray(target.instances) && target.instances.length === 3 && new Set(target.instances).size === 3 &&
+    target.instances.every(id => /^i-[a-f0-9]{17}$/.test(id)) &&
+    JSON.stringify(target.nodes) === JSON.stringify(['-control-plane', '-worker', '-worker2'].map(suffix => target.cluster + suffix)),
+    'kubernetes.amazon_binding');
+}
+
 export async function runTestCloudClients(options = {}) {
   if (options.kubernetes) {
     const k = options.kubernetes;
-    assert.ok(/^d620-[a-f0-9-]+$/.test(k.cluster) && k.namespace === 'default' && k.account === 'kube-account' && k.network === 'kind' &&
+    if (k.amazon) assertAmazonBinding(k.amazon);
+    const ownedTarget = k.amazon ? k.cluster === k.amazon.cluster && k.network === k.amazon.cluster : /^d620-[a-f0-9-]+$/.test(k.cluster) && k.network === 'kind';
+    assert.ok(ownedTarget && k.namespace === 'default' && k.account === 'kube-account' &&
       ['account', 'ca', 'network', 'proxyIp'].every(key => typeof k[key] === 'string' && k[key].length > 0) &&
       Number.isInteger(k.port) && Number.isInteger(k.mailPort) && typeof k.exec === 'function' &&
       typeof k.remote?.worker === 'function', 'integration.kubernetes_binding');

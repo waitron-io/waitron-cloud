@@ -1,0 +1,76 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "D618: three disposable Debian machines; external roles and budget are owner prerequisites",
+  "Parameters": {
+    "Image": {"Type": "AWS::EC2::Image::Id"},
+    "Key": {"Type": "AWS::EC2::KeyPair::KeyName"},
+    "OperatorCidr": {"Type": "String", "AllowedPattern": "[0-9.]+/32"},
+    "ExpiryTime": {"Type": "String"},
+    "StackRole": {"Type": "String"},
+    "SchedulerRole": {"Type": "String"}
+  },
+  "Resources": {
+    "Expiry": {
+      "Type": "AWS::Scheduler::Schedule",
+      "Properties": {
+        "ScheduleExpression": {"Fn::Sub": "at(${ExpiryTime})"},
+        "ScheduleExpressionTimezone": "UTC",
+        "FlexibleTimeWindow": {"Mode": "OFF"},
+        "Target": {
+          "Arn": "arn:aws:scheduler:::aws-sdk:cloudformation:deleteStack",
+          "RoleArn": {"Ref": "SchedulerRole"},
+          "Input": {"Fn::Sub": "{\"StackName\":\"${AWS::StackId}\",\"RoleARN\":\"${StackRole}\"}"},
+          "RetryPolicy": {"MaximumRetryAttempts": 10, "MaximumEventAgeInSeconds": 900}
+        }
+      }
+    },
+    "Vpc": {"Type": "AWS::EC2::VPC", "Properties": {"CidrBlock": "10.78.0.0/24", "EnableDnsSupport": true, "EnableDnsHostnames": true}},
+    "Subnet": {"Type": "AWS::EC2::Subnet", "Properties": {"VpcId": {"Ref": "Vpc"}, "CidrBlock": "10.78.0.0/24", "MapPublicIpOnLaunch": true}},
+    "Internet": {"Type": "AWS::EC2::InternetGateway"},
+    "Attachment": {"Type": "AWS::EC2::VPCGatewayAttachment", "Properties": {"VpcId": {"Ref": "Vpc"}, "InternetGatewayId": {"Ref": "Internet"}}},
+    "Routes": {"Type": "AWS::EC2::RouteTable", "Properties": {"VpcId": {"Ref": "Vpc"}}},
+    "Route": {"Type": "AWS::EC2::Route", "DependsOn": "Attachment", "Properties": {"RouteTableId": {"Ref": "Routes"}, "DestinationCidrBlock": "0.0.0.0/0", "GatewayId": {"Ref": "Internet"}}},
+    "Association": {"Type": "AWS::EC2::SubnetRouteTableAssociation", "Properties": {"SubnetId": {"Ref": "Subnet"}, "RouteTableId": {"Ref": "Routes"}}},
+    "Firewall": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {"GroupDescription": "Operator SSH and encrypted in-cell mesh only", "VpcId": {"Ref": "Vpc"},
+        "SecurityGroupIngress": [{"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "CidrIp": {"Ref": "OperatorCidr"}}]}
+    },
+    "Mesh": {"Type": "AWS::EC2::SecurityGroupIngress", "Properties": {"GroupId": {"Ref": "Firewall"}, "IpProtocol": "udp", "FromPort": 51821, "ToPort": 51821, "SourceSecurityGroupId": {"Ref": "Firewall"}}},
+    "A": {
+      "Type": "AWS::EC2::Instance", "DependsOn": ["Expiry", "Route", "Association", "Mesh"],
+      "Properties": {
+        "ImageId": {"Ref": "Image"}, "KeyName": {"Ref": "Key"}, "InstanceType": "m7i.xlarge",
+        "SubnetId": {"Ref": "Subnet"}, "SecurityGroupIds": [{"Ref": "Firewall"}],
+        "MetadataOptions": {"HttpTokens": "required"},
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": 60, "VolumeType": "gp3", "Encrypted": true, "DeleteOnTermination": true}}],
+        "Tags": [{"Key": "cloud.campaign", "Value": "D618"}]
+      }
+    },
+    "B": {
+      "Type": "AWS::EC2::Instance", "DependsOn": ["Expiry", "Route", "Association", "Mesh"],
+      "Properties": {
+        "ImageId": {"Ref": "Image"}, "KeyName": {"Ref": "Key"}, "InstanceType": "m7i.xlarge",
+        "SubnetId": {"Ref": "Subnet"}, "SecurityGroupIds": [{"Ref": "Firewall"}],
+        "MetadataOptions": {"HttpTokens": "required"},
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": 60, "VolumeType": "gp3", "Encrypted": true, "DeleteOnTermination": true}}],
+        "Tags": [{"Key": "cloud.campaign", "Value": "D618"}]
+      }
+    },
+    "C": {
+      "Type": "AWS::EC2::Instance", "DependsOn": ["Expiry", "Route", "Association", "Mesh"],
+      "Properties": {
+        "ImageId": {"Ref": "Image"}, "KeyName": {"Ref": "Key"}, "InstanceType": "m7i.xlarge",
+        "SubnetId": {"Ref": "Subnet"}, "SecurityGroupIds": [{"Ref": "Firewall"}],
+        "MetadataOptions": {"HttpTokens": "required"},
+        "BlockDeviceMappings": [{"DeviceName": "/dev/xvda", "Ebs": {"VolumeSize": 60, "VolumeType": "gp3", "Encrypted": true, "DeleteOnTermination": true}}],
+        "Tags": [{"Key": "cloud.campaign", "Value": "D618"}]
+      }
+    }
+  },
+  "Outputs": {
+    "A": {"Value": {"Ref": "A"}}, "B": {"Value": {"Ref": "B"}}, "C": {"Value": {"Ref": "C"}},
+    "AddressA": {"Value": {"Fn::GetAtt": ["A", "PublicIp"]}}, "AddressB": {"Value": {"Fn::GetAtt": ["B", "PublicIp"]}}, "AddressC": {"Value": {"Fn::GetAtt": ["C", "PublicIp"]}},
+    "PrivateA": {"Value": {"Fn::GetAtt": ["A", "PrivateIp"]}}, "PrivateB": {"Value": {"Fn::GetAtt": ["B", "PrivateIp"]}}, "PrivateC": {"Value": {"Fn::GetAtt": ["C", "PrivateIp"]}}
+  }
+}
