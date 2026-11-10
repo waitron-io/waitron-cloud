@@ -40,13 +40,13 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  };
  let served=0,healthy,lastCapacity=-Infinity;
  const publish=async pass=>{
-  if(Date.now()-lastCapacity<60000)return;
+  if(!pass || Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
   try{
    snapshot=await overflowInventory({api:pass?.api??api,policy,signal,includeHosted:false,runs:pass?.runs});
-   await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal});lastCapacity=Date.now();
+   await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal,now:pass.observedAt});lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   return snapshot;
  };
@@ -66,8 +66,13 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const exclude=new Set([...seen,...recorded]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
- const pass=await read(()=>readAutomaticPass({api,policy,signal}));
- await read(()=>reconcileDeadRuns({api,policy,signal,pass,hosted,onError:(error,runId)=>{
+ let pass;
+ try{pass=await read(()=>readAutomaticPass({api,policy,signal}));}
+ catch(error){
+  if(error.code!=='CI_REPOSITORY_RUN_LIMIT')throw error;
+  readFailed=false;console.error(JSON.stringify({event:'automatic-ci-wide-inventory-pending',error:error.message}));
+ }
+ if(pass)await read(()=>reconcileDeadRuns({api,policy,signal,pass,hosted,onError:(error,runId)=>{
   console.error(JSON.stringify({event:'automatic-ci-dead-run-pending',runId,error:error.message}));
   if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;
  }}));
@@ -85,7 +90,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
- const jobs=await read(()=>findAutomatic({api:pass.api,policy,runs:pass.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
+ const jobs=await read(()=>findAutomatic({api:pass?.api??api,policy,runs:pass?.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
  runWorker??=ci=>{
   let remaining=4096;
@@ -123,7 +128,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(!readFailed)throw error;
   const transient=error.status===403 && Number.isFinite(error.retryAt) || error.status===408 || error.status===429 || error.status>=500 && error.status<=599 ||
    error.code==='GITHUB_RESPONSE_INTERRUPTED' || error instanceof TypeError && error.message==='fetch failed' || error instanceof SyntaxError ||
-   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete (?:automatic run|dead-run|open PR) inventory/.test(error.message);
+   ['TimeoutError','AbortError'].includes(error.name) || /Incomplete (?:automatic run|open PR) inventory/.test(error.message);
   if(!transient)throw error;
   console.error(JSON.stringify({event:'automatic-ci-inventory-pending',error:error.message}));
   const retryDelay=Math.max(30000,Number.isFinite(error.retryAt)?error.retryAt-Date.now():0);

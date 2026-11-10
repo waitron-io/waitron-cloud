@@ -1233,14 +1233,15 @@ for(const state of ['replaced','closed','closed-with-current-other','merged-empt
  if(state==='foreign')f.run.head_repository={id:999};
  if(state==='main')f.run.event='push';
  if(state==='schedule')f.run.event='schedule';
+ if(['main','schedule'].includes(state))f.run.pull_requests=[];
  if(state==='assigned'){f.jobs[0].runner_id=42;f.jobs[0].status='in_progress';}
  if(state==='current-fail-fast'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  f.api.get=async(path,options)=>{
   if(path.includes('/pulls?state=open')&&state==='closed-with-current-other')return [{number:13,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];
   if(path.includes('/pulls?state=open')&&['merged-empty-links','unknown-link'].includes(state))return [];
-  if(path.endsWith('/pulls/12'))return {number:12,state:['closed','closed-with-current-other','merged-empty-links'].includes(state)?'closed':'open',head:{sha:obsolete?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/pulls/12'))return {number:12,state:['closed','closed-with-current-other','merged-empty-links','main','schedule'].includes(state)?'closed':'open',head:{sha:obsolete?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+head+'/pulls')&&state==='unknown-link')return [];
-  if(path.endsWith('/runs/789')&&state==='advanced-during-read')return {...f.run,run_attempt:++refreshes+1};
+  if(path.endsWith('/runs/789')&&state==='advanced-during-read')return {...f.run,run_attempt:++refreshes===1?1:2};
   if(path.includes('/jobs?')&&state==='incomplete-jobs')return {total_count:6,jobs:f.jobs};
   return get(path,options);
  };
@@ -1259,7 +1260,7 @@ for(const state of ['completed','missing','active','pending-move','closed-before
   if(path.endsWith('/pulls/12')&&state==='closed-before-retry')return {number:12,state:'closed',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/runs/789')){
    if(state==='missing')throw Object.assign(new Error('Gone'),{status:404});
-   return {...f.run,status:['completed','closed-before-retry'].includes(state)?'completed':'in_progress',conclusion:state==='completed'?'success':null};
+   return {...f.run,status:['completed','closed-before-retry','pending-move'].includes(state)?'completed':'in_progress',conclusion:state==='completed'?'success':state==='pending-move'?'cancelled':null};
   }
   return get(path,options);
  };
@@ -1290,4 +1291,25 @@ test('one automatic pass shares run, PR and job observations across its readers'
  assert.equal(reads.filter(path=>path.includes('/pulls?state=open')).length,1);
  assert.equal(reads.filter(path=>path.includes('/jobs?')).length,1);
  assert.equal(reads.filter(path=>path.endsWith('/runs/789')||path.endsWith('/pulls/12')).length,0);
+});
+
+test('a large unrelated workflow queue does not stop ordinary pickup',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,ids=[];
+ f.api.get=async(path,options)=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
+  if(path.includes('/actions/runs?')&&path.includes('status=in_progress'))return {total_count:101,workflow_runs:[f.run,...Array.from({length:99},(_,i)=>({...f.run,id:1000+i,workflow_id:999}))]};
+  return get(path,options);
+ };
+ f.api.post=async()=>assert.fail('No cancellation is justified by a partial inventory');
+ const result=await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{ids.push(ci.jobId);return {code:0};}});
+ assert.equal(result.code,0);assert.deepEqual(ids,[901,902,903,904,905]);
+});
+test('shared capacity keeps the observation time from before worker waits',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ const now=Date.now,start=now();let clock=start,capacity='{}';Date.now=()=>clock;t.after(()=>{Date.now=now;});
+ f.api.get=async(path,options)=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:get(path,options);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));capacity=body.value;};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>{clock=start+30000;return {code:0};}});
+ assert.equal(JSON.parse(capacity).observedAt,start);
 });

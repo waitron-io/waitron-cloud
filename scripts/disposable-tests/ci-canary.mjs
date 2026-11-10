@@ -87,9 +87,10 @@ async function markHostedAttempt({api,policy,ci,signal}){
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
 export async function readAutomaticPass({api,policy,signal}){
- const base=`/repos/${policy.repository}`,runs=new Map(),reads=new Map();
+ const base=`/repos/${policy.repository}`,observedAt=Date.now(),runs=new Map(),reads=new Map();
  for(const status of ['queued','in_progress']){
   const data=await runInventory(api,`${base}/actions/runs?status=${status}&per_page=100`,signal);
+  if(Number.isSafeInteger(data.total_count) && data.total_count>100)throw Object.assign(new Error('Repository run inventory exceeds its 100-run limit'),{code:'CI_REPOSITORY_RUN_LIMIT'});
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
    data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete automatic run inventory');
   for(const run of data.workflow_runs)runs.set(run.id,run);
@@ -98,7 +99,7 @@ export async function readAutomaticPass({api,policy,signal}){
  assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');
  for(const run of runs.values())reads.set(`${base}/actions/runs/${run.id}`,Promise.resolve(run));
  for(const pull of pulls)reads.set(`${base}/pulls/${pull.number}`,Promise.resolve(pull));
- return {runs,pulls,api:{get:(path,options)=>{
+ return {observedAt,runs,pulls,api:{get:(path,options)=>{
   if(!reads.has(path))reads.set(path,api.get(path,options));return reads.get(path);
  }}};
 }

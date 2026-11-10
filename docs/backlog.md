@@ -36,13 +36,15 @@ no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
 
-A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Obsolete-run cancellation, terminal markers and automatic overflow remain in the approved follow-on slices; published live outcomes still need qualification.
+A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification.
 
 The [approved three-slice plan](superpowers/plans/2026-11-10-a1473-ci-self-recovery.md)
-adds obsolete-PR cancellation and terminal routing-marker retirement first. Controlled
-API cases cover both cancellation choices and full-pool invocation; publication and
-natural live outcomes remain to be read. Forward overflow on each pass, then the
-five-minute untaken-job rule and reverse movement remain open. Keep routing policy
+covers obsolete-PR cancellation, terminal-marker retirement and shared per-pass reads.
+Controlled cases cover cancellation, full-pool invocation, scoped pickup above the
+repository bound and conservative capacity age; natural published outcomes remain
+to be read. Real request counters and the approved monitor-cadence cut come next,
+then one busy hour of counts before forward overflow, the five-minute untaken-job
+rule and reverse movement. Keep routing policy
 and capacity publication unchanged until their separate owner decision.
 
 
