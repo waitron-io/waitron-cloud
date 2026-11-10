@@ -589,7 +589,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
      try{await wait(15000,undefined,{signal:monitor.signal});}catch{if(ended)return;throw new Error('CI monitor stopped');}
      if(ended)return;
      try{
-      let unavailable=false;
+      let unavailable=false,confirmedBusy=false;
       const read=async (path,operation)=>{
        if(Date.now()<retryAt){unavailable=true;return undefined;}
        try{return await api.get(path,{signal:work});}
@@ -601,8 +601,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
         if(limited)retryAt=Math.max(retryAt,error.retryAt);
         const transient=limited || error instanceof TypeError && error.message==='fetch failed' || error.name==='TimeoutError' ||
          error.code==='GITHUB_RESPONSE_INTERRUPTED' || Number.isInteger(error.status) && error.status>=500 && error.status<=599;
-        if(transient && refusal?.busyRunner)refusal=undefined;
-        if(!transient)refusal??={at:healthyAt,error};
+        if(!transient && (!refusal || refusal.busyRunner))refusal={at:healthyAt,error};
         return undefined;
        }
       };
@@ -619,7 +618,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
         if(runner!==undefined){
          assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
          if(runner.busy){
-          unavailable=true;
+          unavailable=true;confirmedBusy=true;
           refusal??={at:Date.now(),error:new Error('CI runner assignment is busy elsewhere'),busyRunner:true};
          }
         }
@@ -627,7 +626,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
        if(job.status==='queued')assert.ok(Date.now()-lease.createdAt<900000,'CI queue deadline exceeded');
       }
       if(!unavailable)refusal=undefined;
-      if(refusal && Date.now()-refusal.at>=60000)throw refusal.error;
+      if(refusal && (!refusal.busyRunner || confirmedBusy) && Date.now()-refusal.at>=60000)throw refusal.error;
       const observed=await transport.inspect(lease,{signal:work});
       assert.ok(observed.running===true,'CI guest is no longer running');healthyAt=Date.now();
      }catch(error){

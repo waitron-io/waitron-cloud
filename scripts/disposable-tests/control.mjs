@@ -67,7 +67,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   const id=Number(match[1]);
   if(busyRunnerRetryReady(history,state,id) && !recorded.has(id))seen.delete(id);else recorded.add(id);
  }
- const exclude=new Set([...seen,...recorded]);
+ const exclude=new Set([...seen,...recorded,...[...active.values()].map(ci=>ci.jobId)]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  let pass;

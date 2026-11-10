@@ -353,13 +353,13 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
   if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
-  if(executing && busyFirst && path.includes('/jobs/') && rounds>1)throw failure;
+  if(executing && busyFirst && path.includes('/jobs/') && rounds>1){const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=busyFirst && rounds===1?undefined:typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.includes('/jobs/'))jobReads++;
   const value=await get(path,options);
   const cancelled=typeof jobCancelled==='function'?jobCancelled(rounds):jobCancelled;
   return executing && path.endsWith('/runs/789') && runCancelled && rounds>=2?{...value,status:'completed',conclusion:'cancelled'}:
-   executing && path.includes('/jobs/')?{...value,status:busyFirst && rounds===1?'queued':cancelled?'completed':'in_progress',runner_id:busyFirst && rounds===1?0:value.runner_id,conclusion:cancelled?'cancelled':null}:value;
+   executing && path.includes('/jobs/')?{...value,status:busyFirst?'queued':cancelled?'completed':'in_progress',runner_id:busyFirst?0:value.runner_id,conclusion:cancelled?'cancelled':null}:value;
  };
  f.transport.execute=async(_lease,{signal})=>{
   executing=true;
@@ -440,6 +440,17 @@ test('a rate limit after an inconsistent busy reply retains an independently hea
  const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:6,
   failure:Object.assign(new Error('Rate limited'),{status:429,retryAt:Date.now()+3600000})});
  assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,6);
+});
+test('temporary API failures between busy replies cannot restart their refusal allowance',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:8,
+  failure:round=>round%2===0?Object.assign(new Error('temporarily unavailable'),{status:502}):undefined});
+ assert.equal(result.code,125);assert.match(result.error,/busy elsewhere/);
+ assert.ok(result.rounds>=5 && result.rounds<=6);assert.equal(result.cleanup,'absent');
+});
+test('a permanent API refusal after a busy reply retains its bounded refusal',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:8,
+  failure:Object.assign(new Error('GitHub read refused (401)'),{status:401})});
+ assert.equal(result.code,125);assert.match(result.error,/401/);assert.ok(result.rounds<=6);
 });
 test('GitHub monitor reads resume once the rate-limit reset passes',async t=>{
  const reset=Date.now()+100000;
