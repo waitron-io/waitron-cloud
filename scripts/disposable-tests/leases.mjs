@@ -9,8 +9,9 @@ import {withKernelLock} from './kernel-lock.mjs';
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export const busyRunnerRetryReady=(turn,now=Date.now())=>turn.busyRunnerRefusedAt!==undefined &&
-  !turn.busyRunnerRetried && now-turn.busyRunnerRefusedAt>=60000;
+export const busyRunnerRetryReady=(turn,state,jobId,now=Date.now())=>turn.busyRunnerRefusedAt!==undefined &&
+  !turn.busyRunnerRetried && now-turn.busyRunnerRefusedAt>=60000 &&
+  ![state,...state.slots].some(s=>s.orphanRunners?.some(r=>r.ci.jobId===jobId));
 function requestIdentity(request) {
   assert.ok(request && typeof request.lane === 'string' && /^[A-K]$/.test(request.lane) &&
     typeof request.turn === 'string' && word.test(request.turn) &&
@@ -159,9 +160,7 @@ export class LocalLeases {
         assert.equal(prior.fingerprint, fingerprint, 'Turn reused with different request');
         const slot = state.slots[prior.slot];
         if ((this.slot===undefined || this.slot===prior.slot) && slot.generation === prior.generation && ['reserved', 'running'].includes(slot.state)) return {code: 0, created: false, lease: slot.lease};
-        if(!identity.ci || !busyRunnerRetryReady(prior,now) ||
-          state.slots.some(s=>s.lease?.ci?.jobId===identity.ci.jobId) ||
-          [state,...state.slots].some(s=>s.orphanRunners?.some(r=>r.runnerName===runnerName(identity.ci))))
+        if(!identity.ci || !busyRunnerRetryReady(prior,state,identity.ci.jobId,now))
           return {code: 75, reason: 'turn-finished-or-quarantined'};
       }
       if(identity.ci && (this.scope(state).orphanRunners?.length??0)>=32) return {code:75,reason:'orphan-runners-full'};

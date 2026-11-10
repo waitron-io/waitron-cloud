@@ -601,6 +601,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
         if(limited)retryAt=Math.max(retryAt,error.retryAt);
         const transient=limited || error instanceof TypeError && error.message==='fetch failed' || error.name==='TimeoutError' ||
          error.code==='GITHUB_RESPONSE_INTERRUPTED' || Number.isInteger(error.status) && error.status>=500 && error.status<=599;
+        if(transient && refusal?.busyRunner)refusal=undefined;
         if(!transient)refusal??={at:healthyAt,error};
         return undefined;
        }
@@ -619,7 +620,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
          assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
          if(runner.busy){
           unavailable=true;
-          refusal??={at:Date.now(),error:new Error('CI runner assignment is busy elsewhere')};
+          refusal??={at:Date.now(),error:new Error('CI runner assignment is busy elsewhere'),busyRunner:true};
          }
         }
        }
@@ -661,10 +662,12 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
  if(completion)result={...result,completion};
- leases.recordBusyRunnerFailure(result);
- if(result.cleanup==='absent'){
-  try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}
-  catch{return {...result,code:125,runnerCleanup:'pending'};}
+ try{leases.recordBusyRunnerFailure(result);}
+ finally{
+  if(result.cleanup==='absent'){
+   try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}
+   catch{result={...result,code:125,runnerCleanup:'pending'};}
+  }
  }
  return result;
 }

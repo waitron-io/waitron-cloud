@@ -83,6 +83,14 @@ test('uncertain cleanup preserves the original preparation failure in the report
  await assert.rejects(executeCanary({...f,policy,lane:'I',invocation}),error=>/original preparation refusal/.test(error.message)&&/independent guest absence/.test(error.message));
 });
 
+test('a refusal-record write failure still removes the cleaned guest runner',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t);
+ f.transport.execute=async()=>{throw new Error('CI runner assignment is busy elsewhere');};
+ f.leases.recordBusyRunnerFailure=()=>{throw new Error('refusal record write failed');};
+ await assert.rejects(runCI({...f,lane:'I',ci,repository:'fixture/cloud'}),/refusal record write failed/);
+ assert.equal(f.events.includes('deregister'),true);
+ assert.equal(f.leases.inspect().orphanRunners.length,0);
+});
 test('JIT registration binds the workflow label and the hosted checkout root',async t=>{
  const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),post=f.api.post;let workFolder;
  f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-typecheck']);workFolder=body.work_folder;return post(path,body,options);};
@@ -152,7 +160,7 @@ test('a persistently busy runner with an unassigned intended job aborts after th
  path.includes('/jobs/')&&registered?{id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:'queued',runner_id:null}:get(path,options);
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),wait:async ms=>{if(ms===15000)elapsed+=15000;await new Promise(r=>setTimeout(r,1));}});
  assert.equal(stopped,true);assert.equal(result.code,125);assert.match(result.error,/busy|assignment/i);
- assert.ok(elapsed>=75000);assert.ok(inspections>=4);assert.equal(result.cleanup,'absent');
+ assert.ok(elapsed>=75000 && elapsed<=90000);assert.ok(inspections>=4);assert.equal(result.cleanup,'absent');
  assert.ok(Number.isSafeInteger(f.leases.inspect().turns['I:ci-789-1-901'].busyRunnerRefusedAt));
 });
 
@@ -335,7 +343,7 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false}={}) {
+async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false}={}) {
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
  const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
@@ -344,12 +352,14 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
  const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[];
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
-  if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
+  if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
+  if(executing && busyFirst && path.includes('/jobs/') && rounds>1)throw failure;
+  if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=busyFirst && rounds===1?undefined:typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.includes('/jobs/'))jobReads++;
   const value=await get(path,options);
   const cancelled=typeof jobCancelled==='function'?jobCancelled(rounds):jobCancelled;
   return executing && path.endsWith('/runs/789') && runCancelled && rounds>=2?{...value,status:'completed',conclusion:'cancelled'}:
-   executing && path.includes('/jobs/')?{...value,status:cancelled?'completed':'in_progress',conclusion:cancelled?'cancelled':null}:value;
+   executing && path.includes('/jobs/')?{...value,status:busyFirst && rounds===1?'queued':cancelled?'completed':'in_progress',runner_id:busyFirst && rounds===1?0:value.runner_id,conclusion:cancelled?'cancelled':null}:value;
  };
  f.transport.execute=async(_lease,{signal})=>{
   executing=true;
@@ -425,6 +435,11 @@ for(const status of [403,429])test(`rate-limited HTTP ${status} keeps a healthy 
  assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);
  assert.equal(result.jobReads,0);assert.equal(records.length,1);
  assert.equal(records[0].status,status);assert.equal(records[0].retryAt,retryAt);assert.equal(records[0].operation,'run');
+});
+test('a rate limit after an inconsistent busy reply retains an independently healthy guest',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,stepMs:15000,healthyRounds:6,
+  failure:Object.assign(new Error('Rate limited'),{status:429,retryAt:Date.now()+3600000})});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,6);
 });
 test('GitHub monitor reads resume once the rate-limit reset passes',async t=>{
  const reset=Date.now()+100000;

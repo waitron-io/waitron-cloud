@@ -436,7 +436,7 @@ test('pickup retries only its recorded busy-runner failure once, while other tur
  for(const identity of identities){
   const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
   failed.release(lease,{resourceId:lease.resourceId,absent:true});
-  failed.forgetRunner(failed.inspect().orphanRunners[0]);
+  if(identity.jobId!==901)failed.forgetRunner(failed.inspect().orphanRunners.find(r=>r.ci.jobId===identity.jobId));
   if(identity.jobId===901)failed.recordBusyRunnerFailure({code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'});
  }
  const admitted=[];
@@ -445,6 +445,8 @@ test('pickup retries only its recorded busy-runner failure once, while other tur
   admitted.push(ci.jobId);leases.release(reserved.lease,{resourceId:reserved.lease.resourceId,absent:true});
   leases.forgetRunner(leases.inspect().orphanRunners[0]);return {code:0};
  })};
+ assert.equal((await automaticTick(options)).served,0,'pickup must wait for the previous runner cleanup');
+ failed.forgetRunner(failed.inspect().orphanRunners.find(r=>r.ci.jobId===901));
  await automaticTick(options);await automaticTick(options);
  assert.deepEqual(admitted,[901]);
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
