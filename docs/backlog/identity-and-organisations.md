@@ -358,7 +358,7 @@ The original database-backed assertions and production guards are unchanged.
 Deleting the declared-length guard breaks its early-refusal test;
 the separate streamed-body bound remains covered.
 Review the inherited password cost for deployment. The [identity source review](../identity-upstream-review.md)
-classifies every mapped Waitron source and test change through `b9440c685e44`.
+classifies every mapped Waitron source and test change through `0b7f37048f4b` (10 November 2026); later changes are not reviewed.
 Cloud already covers generic refusals, asynchronous password checks and hashed sessions;
 registration now pins the offered and accepted passkey algorithms, with real-library
 regression tests. Run `node scripts/identity-upstream.mjs ../waitron` for later changes.
