@@ -3189,7 +3189,8 @@ implementation or production evidence.
   Its launcher/template checks run with `node --test scripts/amazon-run.test.mjs`;
   actual Amazon bootstrap, host loss and independent deletion remain unrun.
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
-  policy files, the login for each setup step and owner-run checks.
+  policy files, eight numbered setup parts, the login for each part, official
+  Debian image and existing-key lookups, and owner-run checks.
   The owner completes those checks before starting it;
   live permission enforcement remains unqualified.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
