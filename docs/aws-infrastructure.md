@@ -1052,8 +1052,8 @@ remain mocked. Native tests and template validation do not prove this Amazon run
 Run from a clean Cloud checkout on your x86 test box, with Node 26, Docker Buildx,
 WireGuard tools, AWS CLI and your package-read token in `NODE_AUTH_TOKEN`.
 Keep credentials and a mode-600 JSON file outside the repository. Set `D618_CONFIG`
-to that file. Its keys are `region` (`eu-west-1`), `account` (your practice account),
-`image` (an official Debian 13 amd64 AMI), `key` (your EC2 key-pair name), `sshKey`
+to that file. Its keys are `region` (explicitly `eu-north-1` for tonight; no default), `account` (your practice account),
+`image` (Stockholm's Debian 13 amd64 `ami-0d2679679834750c7`, rechecked before launch), `key` (`d618` in Stockholm), `sshKey`
 (the private key path on the test box), `operatorCidr` (that box’s public IPv4 `/32`),
 `stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
 (a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
@@ -1065,33 +1065,35 @@ when you build it; no actual Cloud/Waitron bundle has been transferred by this l
 
 First follow [the one-time practice-account setup](d618-account-setup.md) to create
 the CLI identity, external roles and USD 10 deny-launch budget. Then check these
-yourself; the lane has no account or spending authority:
+yourself in the same terminal, keeping part 4's explicit `REGION=eu-north-1`
+selection and matching `region` in the run config; the lane has no account or
+spending authority:
 
 1. Confirm the isolated practice account and launcher identity with
    `aws sts get-caller-identity --profile d618`; require `assumed-role/d618-launcher/`.
-   Check the setup page’s project-region gate before proceeding: tonight’s source
-   key does not enable Ireland on a Stockholm-only project.
-2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT" --budget-name D618`
-   and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT" --budget-name D618 --action-id "$ACTION"`.
+   Use Stockholm (`eu-north-1`) as chosen for tonight. If you already created the roles,
+   follow the setup page's **Update existing roles for Stockholm** before proceeding.
+2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name D618`
+   and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT_ID" --budget-name D618 --action-id "$ACTION"`.
    Use the setup page’s simulations to check launcher denial and permitted deletion separately from the stack role’s EC2 termination.
    Check that the action covers the launching role and preserves teardown; billing delay prevents a hard USD 10 cap.
 3. Read both external roles with `aws iam get-role --role-name "$ROLE"`. The stack role trusts
    CloudFormation and can manage the template’s EC2/network/schedule resources; the scheduler
    role trusts `scheduler.amazonaws.com`, can delete `d618-*` stacks and pass the stack role.
    Use the setup page’s three `iam:PassRole` checks: launcher to CloudFormation, stack to Scheduler, and Scheduler to CloudFormation.
-4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region eu-west-1`
-   with `aws ec2 describe-instances --region eu-west-1 --filters Name=instance-state-name,Values=pending,running`.
+4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region "$REGION"`
+   with `aws ec2 describe-instances --region "$REGION" --filters Name=instance-state-name,Values=pending,running`.
    Existing usage must leave 12 standard vCPUs free. Check your AMI with
-   `aws ec2 describe-images --image-ids "$IMAGE" --region eu-west-1`; require official Debian 13, amd64 and root device `/dev/xvda`.
+   `aws ec2 describe-images --image-ids "$IMAGE_ID" --region "$REGION"`; require official Debian 13, amd64 and root device `/dev/xvda`.
 5. Read month-to-date spend with `aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD --granularity MONTHLY --metrics UnblendedCost`
-   (end is exclusive), then re-read the plan’s linked Ireland prices.
+   (end is exclusive), then re-read the plan’s linked Stockholm prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
    to confirm that cleanup, while keeping the run failed. To stop early,
    use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.
-7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region eu-west-1`
+7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION"`
    reports that the named stack no longer exists (or `DELETE_COMPLETE` when you use its retained stack ID), and inspect the bill before another run.
 8. After success or failure, use the setup page’s [last-step key deletion](d618-account-setup.md#last-step-delete-tonights-access-key).
    The source IAM key does not expire automatically; remove it with the project owner’s setup console.

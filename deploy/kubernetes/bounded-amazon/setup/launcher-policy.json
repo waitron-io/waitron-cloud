@@ -5,7 +5,7 @@
       "Sid": "CreateTaggedStackWithItsRole",
       "Effect": "Allow",
       "Action": "cloudformation:CreateStack",
-      "Resource": "arn:aws:cloudformation:eu-west-1:ACCOUNT_ID:stack/d618-*/*",
+      "Resource": "arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/d618-*/*",
       "Condition": {
         "ArnEquals": {
           "cloudformation:RoleArn": "arn:aws:iam::ACCOUNT_ID:role/d618-stack"
@@ -19,7 +19,7 @@
       "Sid": "TagStackAtCreation",
       "Effect": "Allow",
       "Action": "cloudformation:TagResource",
-      "Resource": "arn:aws:cloudformation:eu-west-1:ACCOUNT_ID:stack/d618-*/*",
+      "Resource": "arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/d618-*/*",
       "Condition": {
         "StringEquals": {
           "aws:RequestTag/cloud.campaign": "D618"
@@ -33,7 +33,7 @@
         "cloudformation:DescribeStacks",
         "cloudformation:DeleteStack"
       ],
-      "Resource": "arn:aws:cloudformation:eu-west-1:ACCOUNT_ID:stack/d618-*/*"
+      "Resource": "arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/d618-*/*"
     },
     {
       "Sid": "PassOnlyStackRoleToCloudFormation",
@@ -50,7 +50,7 @@
       "Sid": "StopExperimentWorker",
       "Effect": "Allow",
       "Action": "ec2:StopInstances",
-      "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
+      "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
       "Condition": {
         "StringEquals": {
           "ec2:ResourceTag/cloud.campaign": "D618"
@@ -68,7 +68,7 @@
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "aws:RequestedRegion": "eu-west-1"
+          "aws:RequestedRegion": "REGION"
         }
       }
     },

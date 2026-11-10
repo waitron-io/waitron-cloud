@@ -29,7 +29,7 @@
       "Resource": "*",
       "Condition": {
         "StringEquals": {
-          "aws:RequestedRegion": "eu-west-1"
+          "aws:RequestedRegion": "REGION"
         }
       }
     },
@@ -44,11 +44,11 @@
         "ec2:CreateSecurityGroup"
       ],
       "Resource": [
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+        "arn:aws:ec2:REGION:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:security-group/*"
       ]
     },
     {
@@ -56,12 +56,12 @@
       "Effect": "Allow",
       "Action": "ec2:CreateTags",
       "Resource": [
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*"
+        "arn:aws:ec2:REGION:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:security-group/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*"
       ]
     },
     {
@@ -88,11 +88,11 @@
         "ec2:DeleteSecurityGroup"
       ],
       "Resource": [
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:vpc/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:internet-gateway/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:route-table/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+        "arn:aws:ec2:REGION:ACCOUNT_ID:vpc/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:internet-gateway/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:route-table/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:security-group/*"
       ],
       "Condition": {
         "StringLike": {
@@ -105,8 +105,8 @@
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
       "Resource": [
-        "arn:aws:ec2:eu-west-1::image/IMAGE_ID",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:key-pair/KEY_NAME"
+        "arn:aws:ec2:REGION::image/IMAGE_ID",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:key-pair/KEY_NAME"
       ]
     },
     {
@@ -114,8 +114,8 @@
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
       "Resource": [
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:subnet/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:security-group/*"
+        "arn:aws:ec2:REGION:ACCOUNT_ID:subnet/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:security-group/*"
       ],
       "Condition": {
         "StringLike": {
@@ -127,7 +127,7 @@
       "Sid": "LaunchFixedMachineType",
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
-      "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
+      "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
       "Condition": {
         "StringEquals": {
           "ec2:InstanceType": "m7i.xlarge",
@@ -140,15 +140,15 @@
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
       "Resource": [
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:volume/*",
-        "arn:aws:ec2:eu-west-1:ACCOUNT_ID:network-interface/*"
+        "arn:aws:ec2:REGION:ACCOUNT_ID:volume/*",
+        "arn:aws:ec2:REGION:ACCOUNT_ID:network-interface/*"
       ]
     },
     {
       "Sid": "TerminateStackInstances",
       "Effect": "Allow",
       "Action": "ec2:TerminateInstances",
-      "Resource": "arn:aws:ec2:eu-west-1:ACCOUNT_ID:instance/*",
+      "Resource": "arn:aws:ec2:REGION:ACCOUNT_ID:instance/*",
       "Condition": {
         "StringLike": {
           "ec2:ResourceTag/aws:cloudformation:stack-name": "d618-*"
@@ -163,7 +163,7 @@
         "scheduler:GetSchedule",
         "scheduler:DeleteSchedule"
       ],
-      "Resource": "arn:aws:scheduler:eu-west-1:ACCOUNT_ID:schedule/default/d618-*"
+      "Resource": "arn:aws:scheduler:REGION:ACCOUNT_ID:schedule/default/d618-*"
     },
     {
       "Sid": "PassOnlyExpiryRole",

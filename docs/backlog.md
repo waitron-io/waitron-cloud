@@ -3189,8 +3189,9 @@ implementation or production evidence.
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
   policy files, numbered steps, SSH-key creation and owner-run checks. The owner's
   one-run access-key route keeps the existing restricted launcher and requires
-  manual key deletion. A new-experience project's fixed region can still block
-  Ireland; that account/region decision and the actual run remain open. The owner
+  manual key deletion. The owner chose Stockholm (`eu-north-1`): render the
+  region explicitly and update the existing roles before running there. The
+  launcher has no region default; the actual run remains open. The owner
   completes the checks before starting it;
   live permission enforcement remains unqualified.
   Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
