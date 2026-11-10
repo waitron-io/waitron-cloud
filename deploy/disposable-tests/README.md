@@ -253,15 +253,17 @@ Run `node --test scripts/disposable-tests/ci-runtime.test.mjs` for cadence,
 cancellation and completion controls.
 
 To measure API traffic, read `github-request-counts` JSON events from the original
-controller and worker stderr. Each CLI process emits UTC minute buckets and a final
-partial bucket after cleanup, including zero-request intervals. Sum `requests`
+controller and worker stderr. Each CLI process emits UTC minute buckets, including
+zero-request intervals, and a final partial bucket when its scoped work finishes
+cleanup on success, error or handled cancellation. Unhandled signals can omit it. Sum `requests`
 from all processes; tokens, admission, recovery, cleanup and the initial job-log API
 read count, while the external log download does not. Requests belong to the minute
 when they start; `failedFetches` belongs to the minute when fetch rejects. These are
 local fetch attempts, not the whole App's consumption. `latestResponse` keeps one
 returned timestamp, status and raw resource/remaining/reset snapshot; `kind`
 distinguishes token replies from ordinary API replies, and missing headers are null.
-A retained snapshot can be older than its bucket. Count events stay out of each
+The snapshot is the latest reply when the line is emitted; it can be older or newer
+than the request bucket. Attribute quota samples by their own `at` timestamp. Count events stay out of each
 worker's 4 KiB tagged error excerpt; original stderr still carries them. Check
 `pid`, `startedAt`, `from`, `to` and `final` when joining processes. Treat unreadable
 or interleaved lines and missing final records as measurement gaps. Run

@@ -23,8 +23,9 @@ test('App authentication uses a short JWT and keeps the installation token off r
  const app=new GithubApp({appEnv:join(directory,'app.env'),appKey:join(directory,'key.pem'),apiBase:`http://127.0.0.1:${server.address().port}`});
  const rows=[];t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
  assert.equal(typeof withRequestCounts,'function');
+ await withRequestCounts(()=>app.token());assert.equal(rows[0].requests,1);assert.equal(rows[0].latestResponse.kind,'token');
  await withRequestCounts(async()=>{assert.deepEqual(await app.get('/fixture'),{id:789});assert.deepEqual(await app.get('/fixture'),{id:789});});
- assert.equal(rows.length,1);assert.equal(rows[0].requests,3);assert.equal(rows[0].final,true);assert.equal(rows[0].latestResponse.kind,'api');
+ assert.equal(rows.length,2);assert.equal(rows[1].requests,2);assert.equal(rows[1].final,true);assert.equal(rows[1].latestResponse.kind,'api');
  assert.deepEqual(seen,['/app/installations/456/access_tokens','/fixture','/fixture']);
 });
 test('job-log reads are bounded plain text without exposing token-bearing redirects',async t=>{

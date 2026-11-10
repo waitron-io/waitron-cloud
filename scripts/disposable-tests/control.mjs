@@ -94,16 +94,20 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
  runWorker??=ci=>{
   let remaining=4096,pending=Buffer.alloc(0);
-  const tag=data=>{if(data.toString().startsWith('{"event":"github-request-counts",'))return;
-   const excerpt=data.subarray(0,remaining);remaining-=excerpt.length;
+  const marker=Buffer.from('{"event":"github-request-counts",');
+  const withoutCount=data=>{const start=data.indexOf(marker);return start===-1?data:data.subarray(0,start);};
+  const tag=data=>{const excerpt=data.subarray(0,remaining);remaining-=excerpt.length;
    if(excerpt.length)console.error(JSON.stringify({event:'automatic-ci-admission-stderr',at:new Date().toISOString(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,stderr:excerpt.toString()}));
   };
   return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000,onStderr:data=>{
    if(!remaining)return;
-   pending=Buffer.concat([pending,data]);let end;
-   while((end=pending.indexOf(10))!==-1){tag(pending.subarray(0,end+1));pending=pending.subarray(end+1);}
-   if(pending.length>=4096){tag(pending);pending=Buffer.alloc(0);}
-  }}).finally(()=>tag(pending));
+   pending=Buffer.concat([pending,data]);let end;const excerpts=[];
+   while((end=pending.indexOf(10))!==-1){excerpts.push(withoutCount(pending.subarray(0,end+1)));pending=pending.subarray(end+1);}
+   if(pending.length>=4096){const start=pending.indexOf(marker),cut=start===-1?pending.length-marker.length+1:start;
+    excerpts.push(pending.subarray(0,cut));pending=pending.subarray(cut);
+   }
+   tag(Buffer.concat(excerpts));
+  }}).finally(()=>tag(withoutCount(pending)));
  };
  jobs.forEach(ci=>{
   seen.add(ci.jobId);served++;
