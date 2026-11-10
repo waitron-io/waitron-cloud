@@ -7,7 +7,7 @@ import {LocalLeases} from './leases.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport} from './transport.mjs';
 
-const [host, recipe, source, privatePackage, ledger] = process.argv.slice(2);
+const [host, recipe, source, ledger, ...privatePackages] = process.argv.slice(2);
 test('SSH cancellation stops owned remote work before the Mac ledger grants reuse', {timeout: 900000}, async () => {
   const leases = new LocalLeases(ledger, {hostGeneration: 'cancel-'+Date.now(), slots: 1, bootstrap:true});
   const cancellation = new AbortController();
@@ -24,7 +24,7 @@ test('SSH cancellation stops owned remote work before the Mac ledger grants reus
       }});
     }
   }
-  const transport = new ObservedTransport({host, recipe, source, privatePackage});
+  const transport = new ObservedTransport({host, recipe, source, privatePackages});
   const result = await runLocal({leases, transport, signal: cancellation.signal, durationMs: 900000,
     request: {lane: 'I', turn: 'cancel-real-ssh', snapshot: createHash('sha256').update(readFileSync(source)).digest('hex'),
       argv: ['node', '-e', "console.log('SSH-COMMAND-READY');setInterval(()=>{},1000)"]}});

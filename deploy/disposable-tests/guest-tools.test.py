@@ -81,11 +81,11 @@ class GuestTools(unittest.TestCase):
                 self.assertEqual(inventory.returncode,0,inventory.stderr.decode())
                 self.assertIn(b'docker-cli=26.1.5+dfsg1-9+deb13u1',inventory.stdout)
                 self.assertEqual(guest('mkdir -p /work/source /work/private /opt/waitron-disposable').returncode,0)
-                for path,target in [(SOURCE,'/work/source.tar'),(PRIVATE/'ui-core-0.2.1.tgz','/work/private/ui.tgz'),(RECIPE/'snapshot.py','/opt/waitron-disposable/snapshot.py'),(RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
+                for path,target in [(SOURCE,'/work/source.tar'),(PRIVATE/'ui-core-0.2.1.tgz','/work/private/ui.tgz'),(PRIVATE/'contract-0.2.9.tgz','/work/private/contract-0.2.9.tgz'),(RECIPE/'snapshot.py','/opt/waitron-disposable/snapshot.py'),(RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
                     self.assertEqual(guest('cat > '+shlex.quote(target),path.read_bytes(),timeout=90).returncode,0)
                 extracted=guest('python3 /opt/waitron-disposable/snapshot.py extract /work/source.tar '+shlex.quote(DIGEST)+' /work/source',timeout=30)
                 self.assertEqual(extracted.returncode,0,extracted.stderr.decode())
-                installed=guest("cd /work/source && export CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true; pnpm store add /work/private/ui.tgz && pnpm install --frozen-lockfile",timeout=180)
+                installed=guest("cd /work/source && export CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true; pnpm store add /work/private/ui.tgz /work/private/contract-0.2.9.tgz && pnpm install --frozen-lockfile",timeout=180)
                 self.assertEqual(installed.returncode,0,installed.stderr.decode())
                 clean=guest("test ! -e /work/source/.git && test ! -e /root/.npmrc && test -z \"${NODE_AUTH_TOKEN:-}${GH_TOKEN:-}${GITHUB_TOKEN:-}\"")
                 self.assertEqual(clean.returncode,0,clean.stderr.decode())

@@ -7,6 +7,7 @@ publication, fresh-state rollback, systemd status and Mac-only manual capture.
 Controlled tests cover installation, cutover, rollback, upload completion/EOF and
 status. Both replacement hosts passed corrected native guest isolation and idle
 reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
+Before adopting shared signing, publish the two-package disposable-test support through A1479 and qualify guest-tools, local-runtime and cancellation against that matched release.
 Live CI still runs on OLD from the Mac. The watcher requires complete history/host
 preflight and a short queue before the twelve-slot handoff. Six concurrent mixed
 CI jobs per new host, installed on-server restart and Mac-sleep behavior remain

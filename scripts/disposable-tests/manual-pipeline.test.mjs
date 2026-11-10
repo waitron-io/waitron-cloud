@@ -25,8 +25,11 @@ if any(a.endswith('/snapshot.py') for a in args):
  if mode=='snapshot-failure':sys.exit(9)
  data=b'opaque source fixture';Path(args[-1]).write_bytes(data);print(json.dumps({'sha256':hashlib.sha256(data).hexdigest()}))
 elif any(a.endswith('/private-packages.py') for a in args):
- if args[-2]=='select':print(os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz'));sys.exit(0)
- p=Path(args[-1]);p.mkdir();(p/os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz')).write_bytes(b'private fixture')
+ files=os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz').split(',')
+ if args[-2]=='select':print(json.dumps(files));sys.exit(0)
+ p=Path(args[args.index('fetch')+1]);p.mkdir()
+ files=args[args.index('fetch')+2:] or ['ui-core-0.2.1.tgz']
+ for name in files:(p/name).write_bytes(b'private fixture')
  if mode=='packaging':(root/'packaging.pid').write_text(str(os.getpid()));(root/'packaging-ready').touch();time.sleep(60)
  print('{}')
 else:os.execv(${JSON.stringify(python)},[${JSON.stringify(python)},*args])
@@ -41,7 +44,10 @@ if mode=='health':
   import signal
   signal.signal(signal.SIGTERM,signal.SIG_IGN);(root/'health.pid').write_text(str(os.getpid()));time.sleep(60)
  print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy' and os.environ.get('FIXTURE_DOWN_HOST','') not in sys.argv}))
-elif mode=='transfer':sys.stdin.buffer.read();(root/rid).touch();print('{}')
+elif mode=='transfer':
+ import io,tarfile
+ with tarfile.open(fileobj=io.BytesIO(sys.stdin.buffer.read()),mode='r:') as archive:(root/'members.json').write_text(json.dumps(archive.getnames()))
+ (root/rid).touch();print('{}')
 elif mode=='prepare':
  if os.environ['FIXTURE_MODE']=='work':(root/'work.pid').write_text(str(os.getpid()));print('WORK-READY',flush=True);time.sleep(60)
  if os.environ['FIXTURE_MODE']=='concurrency':
@@ -547,16 +553,17 @@ for(const withCI of [false,true])test('the manual CLI bootstraps several slots a
 });
 
 // The package selector owns version choice; the CLI must consume its literal filename.
-test('manual preparation sends the approved package selected for a historical checkout',t=>{
- const f=fixture(t);f.env.PRIVATE_SELECTED='ui-core-0.1.0.tgz';
+for(const files of [['ui-core-0.1.0.tgz'],['ui-core-0.2.1.tgz','contract-0.2.9.tgz']])test(`manual preparation sends selected archives: ${files}`,t=>{
+ const f=fixture(t);f.env.PRIVATE_SELECTED=files.join(',');
  const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
+ assert.deepEqual(JSON.parse(readFileSync(join(f.root,'members.json'),'utf8')),['request.json','source.tar',...files.map(name=>name.startsWith('ui-core-')?'ui.tgz':name)]);
 });
 
 for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='normal'?'finishes while stdin stays open':'cancels and cleans up when stdin closes'}`,{timeout:25000},async t=>{
- const f=fixture(t,mode),source=join(f.root,'upload-source'),pkg=join(f.root,'upload-package'),bundle=join(f.root,'upload.tar');
- writeFileSync(source,'captured source');writeFileSync(pkg,'reviewed package');
+ const f=fixture(t,mode),source=join(f.root,'upload-source'),pkg=join(f.root,'ui-core-0.2.1.tgz'),contract=join(f.root,'contract-0.2.9.tgz'),bundle=join(f.root,'upload.tar');
+ writeFileSync(source,'captured source');writeFileSync(pkg,'reviewed package');writeFileSync(contract,'reviewed contract');
  const {createHash}=await import('node:crypto'),snapshot=createHash('sha256').update(readFileSync(source)).digest('hex');
- execFileSync('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,source,pkg,bundle],{input:JSON.stringify({snapshot,argv:['false']})});
+ execFileSync('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,source,bundle,pkg,contract],{input:JSON.stringify({snapshot,argv:['false']})});
  const bytes=readFileSync(bundle),child=spawn(process.execPath,[script,f.config,'--bundle','I'],{env:f.env});
  child.stdin.on('error',()=>{});let stdout='',stderr='',ready;const started=new Promise(resolve=>ready=resolve);
  child.stdout.on('data',data=>{stdout+=data;if(stdout.includes('WORK-READY'))ready();});child.stderr.on('data',data=>stderr+=data);
@@ -595,7 +602,7 @@ if '--bundle' in sys.argv[-1]:os.execv(${JSON.stringify(process.execPath)},[${JS
  assertNoTemporaries(f);
 });
 
-for(const [name,input,want] of [['oversized','605028353\n',125],['truncated','100\nshort',143]])test(`a ${name} manual upload creates no lease and removes partial input`,t=>{
+for(const [name,input,want] of [['oversized','672137217\n',125],['truncated','100\nshort',143]])test(`a ${name} manual upload creates no lease and removes partial input`,t=>{
  const f=fixture(t),before=readFileSync(join(f.root,'state/ledger/state.json'),'utf8');
  const result=spawnSync(process.execPath,[script,f.config,'--bundle','I'],{env:f.env,input,encoding:'utf8',timeout:10000});
  assert.equal(result.status,want,result.stdout+result.stderr);assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);assertNoTemporaries(f);

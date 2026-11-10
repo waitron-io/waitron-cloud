@@ -125,6 +125,38 @@ assert not target.exists()
   assert.equal(result.stdout,'');
 });
 
+test('a UI-only fetch does not depend on an unselected contract download',t=>{
+ const root=mkdtempSync(join(tmpdir(),'disposable-selected-download-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const result=spawnSync('python3',['-I','-B','-c',`import base64,hashlib,importlib.util,io,pathlib,sys,urllib.error
+s=importlib.util.spec_from_file_location('packages',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+m.subprocess.check_output=lambda *a,**k:'SYNTHETIC-NEVER-COPY'
+body=b'reviewed UI fixture';ui='ui-core-0.2.1.tgz'
+m.PACKAGES=[{**p,'integrity':'sha512-'+base64.b64encode(hashlib.sha512(body).digest()).decode()} for p in m.PACKAGES]
+seen=[]
+class Network:
+ def open(self,request,**kwargs):
+  seen.append(request.full_url)
+  if '/contract/' in request.full_url:raise urllib.error.HTTPError(request.full_url,403,'Forbidden',{},None)
+  return io.BytesIO(body)
+m.urllib.request.build_opener=lambda *a:Network()
+target=pathlib.Path(sys.argv[2])/'ui'
+m.fetch(target,[ui])
+assert sorted(p.name for p in target.iterdir())==['manifest.json',ui]
+assert len(seen)==1 and '/ui-core/0.2.1/' in seen[0]
+seen.clear();target=pathlib.Path(sys.argv[2])/'both'
+try:m.fetch(target,[ui,'contract-0.2.9.tgz'])
+except urllib.error.HTTPError:pass
+else:raise AssertionError('selected contract failure ignored')
+assert not target.exists() and len(seen)==2
+seen.clear();target=pathlib.Path(sys.argv[2])/'unknown'
+try:m.fetch(target,['unreviewed.tgz'])
+except ValueError:pass
+else:raise AssertionError('unreviewed filename accepted')
+assert not target.exists() and seen==[]
+`,script,root],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
+});
+
 // An updated workspace must still install in a guest without workstation credentials.
 test('the guest package preparation covers every private tarball in the workspace lockfile', () => {
   const result = spawnSync('python3', ['-B', '-c', `import importlib.util,json,sys
@@ -143,18 +175,19 @@ print(json.dumps(m.PACKAGES))
   }
 });
 
-// The single package sent to a guest must match the immutable captured checkout.
+// Package bytes sent to a guest must match the immutable captured checkout.
 test('package selection reads the captured lockfile and refuses unknown or mixed private releases',t=>{
  const root=mkdtempSync(join(tmpdir(),'disposable-private-selection-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const current=readFileSync(new URL('../../pnpm-lock.yaml',import.meta.url),'utf8');
  const legacy=current.replaceAll('ui-core@0.2.1','ui-core@0.1.0').replaceAll('/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58','/ui-core/0.1.0/d2467965338838c9162336c791083d10d56522c9').replaceAll('SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==','MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==');
- for(const [id,lock,want] of [['current',current,'ui-core-0.2.1.tgz'],['legacy',legacy,'ui-core-0.1.0.tgz'],['unknown',current.replaceAll('/ui-core/0.2.1/','/ui-core/9.9.9/'),null],['mixed',legacy+'\n'+current,null],['missing','lockfileVersion: 9.0\n',null]]){
+ const contract='\n  resolution: {integrity: sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508}\n';
+ for(const [id,lock,want] of [['both',current+contract,['ui-core-0.2.1.tgz','contract-0.2.9.tgz']],['contract-only',contract,null],['unknown-contract',current+contract.replace('/contract/0.2.9/','/contract/9.9.9/'),null],['current',current,['ui-core-0.2.1.tgz']],['legacy',legacy,['ui-core-0.1.0.tgz']],['unknown',current.replaceAll('/ui-core/0.2.1/','/ui-core/9.9.9/'),null],['mixed',legacy+'\n'+current,null],['missing','lockfileVersion: 9.0\n',null]]){
   const snapshot=join(root,id+'.tar');const make=spawnSync('python3',['-I','-B','-c',`import io,sys,tarfile
 with tarfile.open(sys.argv[1],'w',format=tarfile.USTAR_FORMAT) as archive:
  data=sys.stdin.buffer.read();member=tarfile.TarInfo('pnpm-lock.yaml');member.size=len(data);archive.addfile(member,io.BytesIO(data))`,snapshot],{input:lock,encoding:'utf8'});
   assert.equal(make.status,0,make.stderr);
   const result=spawnSync('python3',['-I','-B',script,'select',snapshot],{encoding:'utf8',timeout:5000});
-  if(want){assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.trim(),want);}
+  if(want){assert.equal(result.status,0,result.stderr);assert.deepEqual(JSON.parse(result.stdout),want);}
   else{assert.notEqual(result.status,0);assert.match(result.stderr,/lock|approved|private|release/i);assert.equal(result.stdout,'');}
  }
 });

@@ -23,14 +23,14 @@ const sshWrapper = new URL('../../deploy/disposable-tests/ssh.sh', import.meta.u
 const bundleScript = new URL('./bundle.py', import.meta.url).pathname;
 
 export class SSHTransport {
-  constructor({host, recipe, source, privatePackage, slotHosts, slots=1, slot}) {
+  constructor({host, recipe, source, privatePackages, slotHosts, slots=1, slot}) {
     assert.ok(typeof host === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(host), 'Invalid trusted host');
     assert.ok(typeof recipe === 'string' && /^\/opt\/waitron-disposable-[a-zA-Z0-9_-]+$/.test(recipe), 'Invalid trusted recipe path');
     if(slotHosts!==undefined)assert.ok(Array.isArray(slotHosts) && slotHosts.length>1 && slotHosts.length<=16 &&
       slotHosts.every(value=>typeof value==='string' && /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(value)), 'Invalid trusted slot hosts');
     this.slotHosts=slotHosts===undefined?undefined:Object.freeze([...slotHosts]);
     Object.assign(this,{slots,slot});
-    Object.assign(this, {host, recipe, source, privatePackage});
+    Object.assign(this, {host, recipe, source, privatePackages});
   }
   async remote(mode, lease, options = {}) {
     assert.ok(['health', 'transfer', 'transfer-ci', 'prepare', 'execute-v2', 'execute-ci', 'result', 'destroy', 'inspect'].includes(mode), 'Invalid transport operation');
@@ -60,7 +60,7 @@ export class SSHTransport {
     try {
       const bundle = join(directory, 'bundle.tar');
       const {resourceId, snapshot, argv, deadline} = lease;
-      const result = await runProcess('python3', ['-I', '-B', bundleScript, this.source, this.privatePackage, bundle],
+      const result = await runProcess('python3', ['-I', '-B', bundleScript, this.source, bundle, ...this.privatePackages],
         {input: JSON.stringify({resourceId, snapshot, argv, deadline}), signal, capture: true});
       assert.equal(result.code, 0, 'Failed to construct the exact turn bundle');
       const sent = await this.remote('transfer', lease, {signal, inputPath: bundle, capture: true});

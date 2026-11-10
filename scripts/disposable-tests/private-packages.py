@@ -36,6 +36,10 @@ PACKAGES = [{
     'file': 'ui-core-0.2.1.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58',
     'integrity': 'sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w=='
+}, {
+    'file': 'contract-0.2.9.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508',
+    'integrity': 'sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='
 }]
 
 
@@ -49,9 +53,13 @@ def select(snapshot):
         r'resolution: \{integrity: (sha512-[^,}]+), tarball: ([^}]+)\}',lock)
         if 'npm.pkg.github.com' in url)
     approved = {(package['integrity'],package['url']):package['file'] for package in PACKAGES}
-    if len(pins) != 1 or not pins <= approved.keys():
-        raise ValueError('Captured lockfile needs one approved private release; missing, unknown or mixed pins refused')
-    return approved[next(iter(pins))]
+    if not pins or not pins <= approved.keys():
+        raise ValueError('Captured lockfile needs approved private releases; missing or unknown pins refused')
+    files = [package['file'] for package in PACKAGES if (package['integrity'], package['url']) in pins]
+    names = [name.rsplit('-', 1)[0] for name in files]
+    if names.count('ui-core') != 1 or len(names) != len(set(names)):
+        raise ValueError('Captured lockfile needs one UI release; mixed private versions refused')
+    return files
 
 
 class RefuseRedirect(urllib.request.HTTPRedirectHandler):
@@ -64,7 +72,10 @@ class RefuseRedirect(urllib.request.HTTPRedirectHandler):
         return urllib.request.Request(newurl)
 
 
-def fetch(destination):
+def fetch(destination, filenames=None):
+    selected = PACKAGES if filenames is None else [package for package in PACKAGES if package['file'] in filenames]
+    if filenames is not None and (not filenames or len(filenames) != len(set(filenames)) or {package['file'] for package in selected} != set(filenames)):
+        raise ValueError('Usage: fetch requires reviewed private package filenames')
     target = Path(destination)
     target.mkdir(mode=0o700)
     try:
@@ -73,7 +84,7 @@ def fetch(destination):
         if not token or any(c in token for c in '\r\n'):
             raise ValueError('Package authentication unavailable')
         opener = urllib.request.build_opener(RefuseRedirect())
-        for package in PACKAGES:
+        for package in selected:
             # Fail closed if a future pin accidentally changes the credential origin.
             if not re.fullmatch(r'https://npm\.pkg\.github\.com/download/@waitron-io/[A-Za-z0-9_.-]+/[0-9]+\.[0-9]+\.[0-9]+/[a-f0-9]{40}', package['url']):
                 raise ValueError('Unapproved authenticated package origin')
@@ -95,8 +106,8 @@ def fetch(destination):
                 output.flush()
                 os.fsync(output.fileno())
             verify(path, package['integrity'])
-        (target / 'manifest.json').write_text(json.dumps(PACKAGES) + '\n')
-        print(json.dumps({'packages': len(PACKAGES), 'directory': str(target), 'credentialsCopied': False}))
+        (target / 'manifest.json').write_text(json.dumps(selected) + '\n')
+        print(json.dumps({'packages': len(selected), 'directory': str(target), 'credentialsCopied': False}))
     except BaseException:
         shutil.rmtree(target)
         raise
@@ -107,11 +118,11 @@ if __name__ == '__main__':
         if len(sys.argv) == 4 and sys.argv[1] == 'verify':
             verify(sys.argv[2], sys.argv[3])
         elif len(sys.argv) == 3 and sys.argv[1] == 'select':
-            print(select(sys.argv[2]))
-        elif len(sys.argv) == 3 and sys.argv[1] == 'fetch':
-            fetch(sys.argv[2])
+            print(json.dumps(select(sys.argv[2])))
+        elif len(sys.argv) >= 3 and sys.argv[1] == 'fetch':
+            fetch(sys.argv[2], sys.argv[3:] or None)
         else:
-            raise ValueError('Usage: private-packages.py fetch NEW_DIRECTORY | verify FILE INTEGRITY | select SOURCE_TAR')
+            raise ValueError('Usage: private-packages.py fetch NEW_DIRECTORY [REVIEWED_FILENAME...] | verify FILE INTEGRITY | select SOURCE_TAR')
     except (ValueError, OSError, tarfile.TarError, subprocess.SubprocessError, urllib.error.URLError) as error:
         print('Package download failed' if isinstance(error, urllib.error.URLError) else str(error), file=sys.stderr)
         sys.exit(1)

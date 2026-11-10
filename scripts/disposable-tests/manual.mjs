@@ -221,23 +221,25 @@ export async function main(args) {
       const temporary = incoming??mkdtempSync(join(tmpdir(), 'disposable-manual-'));
       try {
         const source = join(temporary, 'source.tar');
-        let snapshot,privatePackage;
+        let snapshot,privatePackages;
         if(bundled){
-          snapshot=upload.snapshot;privatePackage=join(temporary,'ui.tgz');
+          snapshot=upload.snapshot;privatePackages=readdirSync(temporary).filter(name=>name==='ui.tgz' || /^contract-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/.test(name)).map(name=>join(temporary,name));
         }else{
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
         snapshot = JSON.parse(copied.stdout).sha256;
         const selected=await runProcess('python3',['-I','-B',new URL('./private-packages.py',import.meta.url).pathname,'select',source],{signal:cancellation.signal,capture:true});
-        assert.equal(selected.code,0,'Captured source needs one reviewed private release');
-        const privateFile=selected.stdout.trim();assert.match(privateFile,/^ui-core-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
-        const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
+        assert.equal(selected.code,0,'Captured source needs reviewed private releases');
+        const privateFiles=JSON.parse(selected.stdout);
+        assert.ok(Array.isArray(privateFiles) && privateFiles.length>0,'Missing selected private filenames');
+        for(const file of privateFiles)assert.match(file,/^(?:ui-core|contract)-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
+        const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private'), ...privateFiles], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
-        privatePackage=join(temporary,'private',privateFile);
+        privatePackages=privateFiles.map(file=>join(temporary,'private',file));
         }
         if(remote){
           const bundle=join(temporary,'upload.tar');
-          const packaged=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,source,privatePackage,bundle],{input:JSON.stringify({snapshot,argv}),capture:true,signal:cancellation.signal});
+          const packaged=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,source,bundle,...privatePackages],{input:JSON.stringify({snapshot,argv}),capture:true,signal:cancellation.signal});
           assert.equal(packaged.code,0,'Manual bundle preparation failed');
           const release=remoteConfiguration.slice(0,-'/config.json'.length);
           const command=`python3 -I -B ${release}/deploy/disposable-tests/mac-controller.py /opt/waitron-controller-node-v26.13.0/bin/node ${remoteConfiguration} --bundle ${lane}`;
@@ -245,7 +247,7 @@ export async function main(args) {
           return {code:result.code};
         }
         transport.source = source;
-        transport.privatePackage = privatePackage;
+        transport.privatePackages = privatePackages;
         console.log(`Source ${snapshot}; command starts in a fresh VM, maximum 55 minutes.`);
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
