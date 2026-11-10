@@ -248,14 +248,19 @@ export async function reconcileDeadRuns({api,policy,signal,onError,pass,hosted})
  }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
 }
 export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set(),onError}){
- const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
+ let values=await hostedAttempts({api,policy,signal});const base=`/repos/${policy.repository}`;
+ const retire=async(id,attempt)=>{
+  const latest=await hostedAttempts({api,policy,signal});
+  if(latest[id]!==attempt)return;
+  delete latest[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(latest),signal});values=latest;
+ };
  for(const [id,attempt] of Object.entries(values)){
   if(excludeRuns.has(Number(id)))continue;
   try{
   const path=`${base}/actions/runs/${id}`;let run;
   try{run=await api.get(path,{signal});}catch(error){
    if(error.status!==404)throw error;
-   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+   await retire(id,attempt);continue;
   }
   assert.ok(run.id===Number(id) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
    run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
@@ -268,27 +273,32 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
     pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
   }
   if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
-   delete values[id];
-   await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+   await retire(id,attempt);
    continue;
   }
   if(run.run_attempt===attempt)continue;
   assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
   const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100,'Incomplete overflow job inventory');
-  if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || blocksRecovery(job))){
-   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+  assert.ok(inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Foreign overflow job inventory');
+  const latest=await api.get(path,{signal});
+  assert.ok(latest.id===run.id && latest.head_sha===run.head_sha && latest.repository?.id===policy.repositoryId &&
+   latest.head_repository?.id===policy.repositoryId && latest.workflow_id===policy.workflowId && latest.path===policy.workflowPath,'Hosted overflow identity changed');
+  if(latest.run_attempt!==run.run_attempt)continue;
+  run=latest;
+  if(run.event==='pull_request'){
+   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+   if(pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
+    pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
   }
+  if(excludeRuns.has(Number(id)))continue;
   if(run.status==='completed'){
+   if(run.conclusion!=='cancelled')continue;
    await api.post(path+'/rerun',undefined,{signal});
    console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
   }
   else {
-   let force=false;
-   if(run.status==='queued'){
-    force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
-     (job.status==='completed' || job.status==='queued' && !job.runner_id));
-   }
+   const force=inventory.jobs.every(job=>job.status==='completed' || !job.runner_id);
    await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
   }
   }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}

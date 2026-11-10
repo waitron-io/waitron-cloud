@@ -82,12 +82,12 @@ for(const healthy of [true,false])test(`capacity publication counts usable occup
  await controller.publishCapacity({api:f.api,policy,state,snapshot,healthy,now:123000});
  assert.deepEqual(JSON.parse(published),{observedAt:123000,slots:healthy?4:0,serverRunning:healthy?3:0,serverWaiting:2,hostedRunning:2,hostedWaiting:4});
 });
-for(const action of ['overflow','recover'])for(const [name,status,runner,blocked,conclusion] of [
- ['bundle-smoke','in_progress',7,true],['bundle-smoke','queued',7,true],
- ['bundle-smoke','in_progress',0,true],['server-queue-watchdog','in_progress',7,false],
- ['server-queue-watchdog-copy','in_progress',7,true],['changes','completed',7,false,'success'],
- ['changes','completed',7,true,'failure'],['bundle-smoke','completed',7,true,'success']
-])test(`${action} protects hosted siblings except the exact watchdog: ${name} ${status} runner ${runner}`,async()=>{
+for(const action of ['overflow','recover'])for(const [name,status,runner,blocked,conclusion,recovery] of [
+ ['bundle-smoke','in_progress',7,true,undefined,'cancel'],['bundle-smoke','queued',7,true,undefined,'cancel'],
+ ['bundle-smoke','in_progress',0,true,undefined,'force-cancel'],['server-queue-watchdog','in_progress',7,false,undefined,'cancel'],
+ ['server-queue-watchdog-copy','in_progress',7,true,undefined,'cancel'],['changes','completed',7,false,'success','force-cancel'],
+ ['changes','completed',7,true,'failure','force-cancel'],['bundle-smoke','completed',7,true,'success','force-cancel']
+])test(`${action==='overflow'?'overflow protects useful work':'recovery retains its owned intent'}: ${name} ${status} runner ${runner}`,async()=>{
  const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get,posts=[];
  f.jobs.push({...f.jobs[0],id:999,name,status,conclusion,runner_id:runner,labels:['ubuntu-latest']});
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
@@ -98,8 +98,8 @@ for(const action of ['overflow','recover'])for(const [name,status,runner,blocked
   await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
   await controller.recoverHostedAttempts({api,policy});
  }
- assert.deepEqual(posts,blocked?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
- assert.deepEqual(await controller.hostedAttempts({api,policy}),blocked?{}:{789:2});
+ assert.deepEqual(posts,action==='recover'?['/repos/fixture/waitron/actions/runs/789/'+recovery]:blocked?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
+ assert.deepEqual(await controller.hostedAttempts({api,policy}),action==='recover'||!blocked?{789:2}:{});
 });
 for(const conclusion of ['success','failure'])for(const name of ['bundle-smoke','ci','ci-copy'])for(const action of ['completed recovery','failed-guest fallback','owned cancellation'])test(`${action} checks completed ${name} with ${conclusion}`,async()=>{
  const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get,posts=[];
@@ -107,7 +107,7 @@ for(const conclusion of ['success','failure'])for(const name of ['bundle-smoke',
  f.jobs.push({...f.jobs[0],id:999,name,status:'completed',conclusion,runner_id:7,labels:['ubuntu-latest']});
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{posts.push(path);if(path.endsWith('/cancel')){f.run.status='completed';f.run.conclusion='cancelled';}};
- const api=routingVariables(f.api),allowed=name==='ci'&&action!=='failed-guest fallback';
+ const api=routingVariables(f.api),allowed=action==='completed recovery'||name==='ci'&&action!=='failed-guest fallback';
  if(action==='completed recovery'){
   await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
   await controller.recoverHostedAttempts({api,policy});
@@ -864,7 +864,7 @@ test('pickup does not hide malformed local state as a temporary API read',async 
  await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),SyntaxError);
 });
 
-for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
+for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','completed-runner','terminal-failure','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
  const f=fixture(),get=f.api.get,actions=[];let value='{"789":2}';
  if(['cancel-ack-lost','rerun-ack-lost'].includes(state)){f.run.status='completed';f.run.conclusion='cancelled';}
  if(state==='active-hosted')f.run.run_attempt=2;
@@ -875,6 +875,8 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state==='foreign-event')f.run.event='workflow_run';
  if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  if(state==='running-sibling'){f.jobs[1].status='in_progress';f.jobs[1].runner_id=42;}
+ if(state==='completed-runner'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';f.jobs[0].runner_id=42;}
+ if(state==='terminal-failure'){f.run.status='completed';f.run.conclusion='failure';}
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
   if(path.endsWith('/pulls/12') && ['stale-head','closed'].includes(state))return {number:12,state:state==='closed'?'closed':'open',head:{sha:state==='stale-head'?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
@@ -887,9 +889,31 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state.startsWith('foreign-') || state==='incomplete-jobs'){await assert.rejects(recover());assert.deepEqual(actions,[]);return;}
  if(state==='rerun-ack-lost'){await assert.rejects(recover(),/Reply lost/);await recover();}
  else await recover();
- const expected=state==='cancel-not-sent'?['cancel']:state==='force-queued'?['force-cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
+ const expected=['cancel-not-sent','force-queued','completed-runner'].includes(state)?['force-cancel']:state==='running-sibling'?['cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
  assert.deepEqual(actions,expected);
- assert.equal(value,['newer-attempt','stale-head','closed','running-sibling'].includes(state)?'{}':'{"789":2}');
+ assert.equal(value,['newer-attempt','stale-head','closed'].includes(state)?'{}':'{"789":2}');
+});
+
+test('recovery retirement preserves another movement marker written after its first read',async()=>{
+ const f=fixture(),get=f.api.get;f.run.run_attempt=2;f.run.status='completed';let reads=0,written;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:written?JSON.stringify(written):++reads===1?'{"789":2}':'{"789":2,"790":2}'}:get(path);
+ f.api.patch=async(_path,body)=>{written=JSON.parse(body.value);};
+ await controller.recoverHostedAttempts({api:f.api,policy});
+ assert.deepEqual(written,{'790':2});
+});
+
+for(const change of ['successor','head','local'])test(`recovery refreshes ${change} after its job inventory before cancelling`,async()=>{
+ const f=fixture(),get=f.api.get,excluded=new Set(),actions=[];let runs=0,pulls=0;
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{"789":2}'};
+  if(path.endsWith('/runs/789'))return {...f.run,run_attempt:++runs>1&&change==='successor'?2:1};
+  if(path.endsWith('/pulls/12')){const pull=await get(path);return ++pulls>1&&change==='head'?{...pull,head:{...pull.head,sha:'9'.repeat(40)}}:pull;}
+  if(path.includes('/jobs?')&&change==='local')excluded.add(789);
+  return get(path);
+ };
+ f.api.post=async path=>actions.push(path);f.api.patch=async()=>assert.fail('Keep unresolved movement intent');
+ await controller.recoverHostedAttempts({api:f.api,policy,excludeRuns:excluded});
+ assert.deepEqual(actions,[]);
 });
 
 for(const [state,running,wave,wantCancel] of [
@@ -1222,15 +1246,15 @@ for(const assigned of [true,false])test(`overflow reads the page-three sibling b
  assert.deepEqual(await controller.hostedAttempts({api,policy}),assigned?{}:{789:2});
 });
 
-for(const assigned of [true,false])test(`hosted-attempt recovery reads the page-three sibling before ${assigned?'retiring':'cancelling'} the run`,async()=>{
+for(const assigned of [true,false])test(`hosted-attempt recovery reads the page-three sibling before ${assigned?'resending cancellation for':'forcing cancellation for'} the run`,async()=>{
  const f=pagedJobFixture(),posts=[];f.run.status='queued';
  for(const job of f.jobs)if(job!==f.target){job.conclusion='skipped';job.runner_id=0;}
  f.jobs[82]={...f.target,id:2000,status:assigned?'in_progress':'queued',runner_id:assigned?77:0};
  f.api.post=async path=>{posts.push(path);};
  const api=routingVariables(f.api);
  await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
- assert.deepEqual(await controller.recoverHostedAttempts({api,policy}),assigned?{}:{789:2});
- assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.deepEqual(await controller.recoverHostedAttempts({api,policy}),{789:2});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/'+(assigned?'cancel':'force-cancel')]);
  assert.deepEqual(f.pages,[1,2,3]);
 });
 
