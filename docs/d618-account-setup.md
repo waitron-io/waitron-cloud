@@ -16,7 +16,7 @@ this. See [the account check](#2-check-the-account-and-create-the-console-login)
 | --- | --- |
 | 1. Remove the old login | Practice account's **root console**, with MFA; your local editor for the old profiles |
 | 2. Create the new login | **Root console** |
-| 3. Find the key pair and image | **Root console**, EC2 in **Ireland (`eu-west-1`)** |
+| 3. Find or create the key pair; find the image | **Root console**, EC2 in **Ireland (`eu-west-1`)** |
 | 4. Prepare the files | **x86 test box's terminal**, in your clean Waitron Cloud checkout |
 | 5. Create four roles | **Root console**; terminal only to display the prepared files |
 | 6. Set the budget | **Root console** |
@@ -119,21 +119,68 @@ AWS documents the existing-user controls in
 [managing user passwords](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_passwords_admin-change-user.html).
 Create no access key. Part 5 gives this user its two permissions.
 
-## 3. Find the existing key pair and Debian image
+## 3. Find or create the key pair, then find the Debian image
 
-**Window: root console, region set to Ireland (`eu-west-1`).** These are lookups;
-do not launch an instance or create another key pair.
+**Window: your practice-account setup console, region set to Ireland
+(`eu-west-1`).** Do not launch an instance.
 
 1. Open **EC2 → Network & Security → Key pairs**.
-2. Find the key pair from the desk's earlier `create-key-pair` step.
-3. Copy its **Key pair name** into your private notes. This is `KEY_NAME`, not the `.pem` filename.
-4. Open **EC2 → Images → AMIs**.
-5. Change **Owned by me** to **Public images**.
-6. Filter **Owner** to **`136693071363`**.
-7. Search the image name for **`debian-13-amd64-`**.
-8. Select the newest available matching image.
-9. Check its details: owner **`136693071363`**, architecture **`x86_64`**, root device **`/dev/xvda`**.
-10. Copy its **AMI ID** into your private notes as `IMAGE_ID`.
+2. Look for a key pair whose private key you already hold.
+3. If one exists, copy its **Key pair name** into your private notes as `KEY_NAME`.
+
+If there is no usable key pair:
+
+1. Choose **Create key pair**.
+2. Enter **`d618`** for **Name**.
+3. Choose **ED25519** for **Key pair type**.
+4. Choose **.pem** for **Private key file format**.
+5. Choose **Create key pair** and save the downloaded `d618.pem` privately.
+6. Note **`d618`** as `KEY_NAME`; the key name is not the `.pem` filename.
+
+AWS's [key-pair guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html)
+says “For Key pair type, choose either RSA or ED25519” for Linux instances.
+D618 passes the key name to EC2 and the private-key path to OpenSSH's `ssh` and
+`scp` (`scripts/amazon-run.mjs:116–118`); it has no RSA-only key parser.
+Debian 13 is Linux. This is documented compatibility, not a live AMI connection test.
+
+**Window: your Mac's terminal.** If you downloaded the key on the Mac, protect it
+and copy it over your existing SSH connection to the x86 test box. Replace
+`YOUR_TEST_BOX_SSH_LOGIN` with that connection's `user@host`; create no new login.
+
+1. Protect the downloaded file:
+
+   ```sh
+   chmod 600 ~/Downloads/d618.pem
+   ```
+
+2. Copy it to a private file on the box without replacing an existing key:
+
+   ```sh
+   ssh YOUR_TEST_BOX_SSH_LOGIN 'umask 077; mkdir -p ~/.ssh; set -C; cat > ~/.ssh/d618.pem' < ~/Downloads/d618.pem
+   ```
+
+**Window: x86 test box's terminal.**
+
+1. Set its permissions:
+
+   ```sh
+   chmod 600 ~/.ssh/d618.pem
+   ```
+
+2. Use the full absolute path to this file for the run configuration's **`sshKey`**.
+   Keep it private and out of the checkout.
+
+**Window: practice-account setup console, still in Ireland.**
+
+1. Open **EC2 → Images → AMI Catalog → Community AMIs**.
+2. Search for **`debian-13-amd64-`**.
+3. Check the publisher's **Owner ID** is **`136693071363`**.
+4. Select the newest available matching image from that publisher.
+5. Check its details: architecture **`x86_64`**, root device **`/dev/xvda`**.
+6. Copy its **AMI ID** into your private notes as `IMAGE_ID`.
+
+If you use **EC2 → Images → AMIs** instead, select **Public images**, filter
+**Owner** to **`136693071363`**, and search for the same name.
 
 Debian's [official Debian 13 cloud-image page](https://wiki.debian.org/Cloud/AmazonEC2Image/Trixie)
 states: “The AMIs are owned by AWS account ID `136693071363`”. That is Debian's
