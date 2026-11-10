@@ -34,7 +34,7 @@ async function command(binary, args, input, signal, timeout = 180000) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = execFile(binary, args, {signal, timeout, maxBuffer: 32 * 1024 * 1024}, (error, stdout, stderr) => {
-      if (binary !== 'aws' && stderr) process.stderr.write(stderr);
+      if ((error || binary !== 'aws') && stderr) process.stderr.write(stderr);
       if (error) reject(Object.assign(Error('amazon.command_failed:' + binary + ':' + error.name + ':' + (error.killed ? 'ETIMEDOUT' : error.code)), {code: error.killed ? 'ETIMEDOUT' : error.code}));
       else resolve(stdout.trim());
     });

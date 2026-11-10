@@ -91,6 +91,36 @@ test('bootstrap refuses an unsupported phase before touching the host', () => {
 const config = {region: 'eu-north-1', account: '123456789012', image: 'ami-00000000000000001', key: 'synthetic-d618',
   operatorCidr: '203.0.113.8/32', sshKey: '/synthetic/key', stackRole: 'arn:aws:iam::123456789012:role/d618-stack',
   schedulerRole: 'arn:aws:iam::123456789012:role/d618-expiry', waitronCheckout: '/synthetic/waitron'};
+test('failed AWS commands show the provider error without dumping response data', async t => {
+  const {mkdtemp, writeFile, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os'); const {join} = await import('node:path');
+  const directory = await mkdtemp(join(tmpdir(), 'd618-error-'));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const configPath = join(directory, 'config.json');
+  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(join(directory, 'aws'), `#!${process.execPath}
+console.log('synthetic-private-response');
+console.error('An error occurred (AccessDenied) when calling the DescribeStacks operation: no identity-based policy allows the action');
+process.exit(255);
+`, {mode: 0o700});
+  for (const mode of ['start', 'stop']) {
+    const result = spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode, 'd618-12345678-1234-4234-8234-123456789abc'],
+      {encoding: 'utf8', env: {...process.env, D618_CONFIG: configPath, PATH: directory + ':' + process.env.PATH}, timeout: 10000});
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /AccessDenied.*no identity-based policy allows the action/);
+    assert.match(result.stderr, /amazon.command_failed:aws:Error:255/);
+    assert.doesNotMatch(result.stdout + result.stderr, /synthetic-private-response/);
+  }
+});
+
+test('launcher policy lets the owner read stack failures within the D618 stack scope', async () => {
+  const policy = JSON.parse(await readFile(new URL('../deploy/kubernetes/bounded-amazon/setup/launcher-policy.json', import.meta.url), 'utf8'));
+  const grants = policy.Statement.filter(row => row.Effect === 'Allow' && [row.Action].flat().includes('cloudformation:DescribeStackEvents'));
+  assert.equal(grants.length, 1);
+  assert.equal(grants[0].Resource, 'arn:aws:cloudformation:REGION:ACCOUNT_ID:stack/d618-*/*');
+  assert.equal(grants[0].Condition, undefined, 'failure diagnosis remains available after a budget denial');
+});
+
 test('an explicit region is required before account access', async () => {
   for (const region of [undefined, '', 'REGION']) {
     await assert.rejects(api.startAmazon({...config, region}, {

@@ -44,6 +44,25 @@ git log -1 --oneline
 Check that the latest commit is **`9307c90ce` or later**. Keep this terminal in
 that folder: every relative file path below starts from this checkout.
 
+### Check the account plan before launching
+
+D618's `m7i.xlarge` machines require a **Paid Plan**. The owner's 10 November
+Free-plan attempt was refused with “The specified instance type is not eligible
+for Free Tier.” Check this before building the image bundle:
+
+1. In your **project owner/setup console**, open **AWS Settings → Billing**.
+2. Check the account plan. A Free Tier days/credits display or an **Upgrade**
+   option means you must stop here; require **Paid Plan** before launching.
+3. If it is Free, upgrading is **your choice**, not a step the lane can take.
+   AWS documents **Billing → Upgrade → Get started → add payment method →
+   Upgrade account** in [upgrading your account](https://docs.aws.amazon.com/accounts/latest/reference/upgrade-account.html).
+   The upgrade is irreversible, affects every project in the account and can
+   incur charges beyond credits; it does not activate advanced features.
+
+AWS's [billing guide](https://docs.aws.amazon.com/accounts/latest/reference/view-billing-information.html)
+describes the Free and Paid displays. Keep the USD 10 budget and all remaining
+run checks even if you choose to upgrade.
+
 ## 1. Remove the old login
 
 **Window: project owner/setup console.** Skip anything already removed.
@@ -291,6 +310,20 @@ no region and need no replacement. Do not change their principals or permissions
 AWS documents [editing inline policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_manage-edit-console.html)
 and [updating role trust](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_update-role-trust-policy.html).
 
+Finish by reopening **IAM → Roles → each role → Permissions → expand `d618`
+→ JSON**. Inspect the **saved policy**, not just your local rendered file:
+
+| Role | Require in the saved policy |
+| --- | --- |
+| `d618-launcher` | Regional ARNs and region conditions use `eu-north-1`; `ReadAndDeleteEvenAfterBudgetAction` includes `cloudformation:DescribeStackEvents`, scoped to `stack/d618-*/*`. |
+| `d618-stack` | Regional ARNs and region conditions use `eu-north-1`; `LaunchOnlyPinnedImageAndKey` names the exact image and key you chose in part 3. Repeat the image comparison in part 9 against the final run config. |
+| `d618-scheduler` | The delete-stack ARN uses `eu-north-1` and your account; its saved trust names that region's default schedule group. |
+| `d618-budget` | Its role and policy ARNs use your account and only `d618-launcher` / `d618-deny-launch`; this policy has no region or image. |
+
+If the launcher lacks the events action, re-render part 4 from the current
+checkout and replace its existing `d618` inline policy using steps 1–4 above.
+This lets you inspect why a stack failed without broadening access to other stacks.
+
 After creating or updating all four roles:
 
 1. Open **IAM → Roles → `d618-launcher` → Edit** beside **Maximum session duration**.
@@ -514,12 +547,12 @@ a request with no region.
      --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
-5. Add the budget denial in simulation. Expect create **explicitDeny**, describe/delete **allowed**:
+5. Add the budget denial in simulation. Expect create **explicitDeny**, describe/events/delete **allowed**:
 
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
      --policy-input-list "$(cat "$D618_SETUP_DIR/deny-launch.json")" \
-     --action-names cloudformation:CreateStack cloudformation:DeleteStack cloudformation:DescribeStacks \
+     --action-names cloudformation:CreateStack cloudformation:DeleteStack cloudformation:DescribeStacks cloudformation:DescribeStackEvents \
      --resource-arns "$SIM_STACK" \
      --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string \
      ContextKeyName=aws:RequestTag/cloud.campaign,ContextKeyValues=D618,ContextKeyType=string \
@@ -622,6 +655,26 @@ Keep `account` quoted: it is a string, including any leading zeros. The image
 and key must match the values used to render part 4's policies. Inspect your
 private file, confirm the public IPv4 address, and leave no `YOUR_…` placeholders.
 Keep its account and paths out of Git, logs and chat.
+
+Before launching, print the image ARN the saved run config will request:
+
+```sh
+python3 - <<'PY'
+import json, os
+with open(os.environ['D618_CONFIG']) as source:
+    config = json.load(source)
+print('Run region:', config['region'])
+print('Required image ARN: arn:aws:ec2:' + config['region'] + '::image/' + config['image'])
+PY
+```
+
+In your **setup console → IAM → Roles → `d618-stack` → Permissions → expand
+`d618` → JSON**, compare `LaunchOnlyPinnedImageAndKey` with that exact printed
+image ARN. Require `eu-north-1` in each saved regional policy from part 5, and
+the same key as the config. **Do not launch on any mismatch.** Update the live
+policy from a new part-4 render with the config's image and key, then reopen it
+and compare again. An older Debian image's ARN does not authorise a newer one.
+The launcher has no IAM-policy read permission; you make this comparison.
 
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
 for quota and spend checks, then launch with `node scripts/amazon-run.mjs start`
