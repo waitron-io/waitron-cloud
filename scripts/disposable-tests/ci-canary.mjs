@@ -404,7 +404,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
-  if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt)continue;
+  if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt || hosted[run.id]===run.run_attempt+1)continue;
   let candidate;
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||

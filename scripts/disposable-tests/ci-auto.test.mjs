@@ -189,6 +189,11 @@ test('automatic pickup never starts beyond the free-slot count',async()=>{
  assert.deepEqual(await controller.findAutomatic({api:{get:async()=>assert.fail('Full pool must not poll GitHub')},policy,limit:0}),[]);
 });
 
+test('automatic pickup leaves a predecessor marked for its hosted retry unclaimed',async()=>{
+ const f=fixture();
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6,hosted:{789:2}}),[]);
+});
+
 test('automatic pickup serves older waiting PR runs before newer runs fill the pool',async()=>{
  const f=fixture(),get=f.api.get;
  f.run.created_at='2026-11-07T23:00:00Z';
