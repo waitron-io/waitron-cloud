@@ -59,11 +59,11 @@ All archive members are checked before extraction. A changed digest, escaping pa
 
 The host adapter pins Debian's `20261103-2651` generic-cloud image by SHA512, gives each guest a fresh 64 GiB overlay and runs QEMU as a dedicated nonlogin user. It exposes only loopback management, rejects guest traffic to host/private addresses and disables external IPv6. Its only firewall hook is an OUTPUT chain limited to that guest user. The guest keeps its own internal networks. An explicit VGA device with the display disabled supplies the graphics interface required by the image's bootloader. Guest serial output uses a 16 KiB memory ring rather than an unbounded host file.
 
-The explicit runtime proof starts two fresh guests, checks real exit status 3 and public internet access, refuses host/metadata addresses, destroys each guest and verifies that the successor has none of its predecessor's files. It is an opt-in dedicated-host test, never part of ordinary CI:
+Supply the other two machines’ addresses independently of the recipe’s peer file. The explicit runtime proof starts two fresh guests, checks real exit status 3 and public internet access, refuses host/metadata addresses, destroys each guest and verifies that the successor has none of its predecessor's files. It is an opt-in dedicated-host test, never part of ordinary CI:
 
 ```sh
 bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST \
-  python3 - /opt/waitron-disposable-bootstrap-20261106/host.py \
+  python3 - /opt/waitron-disposable-bootstrap-20261106/host.py --peers PEER_ONE_IP,PEER_TWO_IP \
   < deploy/disposable-tests/host-runtime.test.py
 ```
 
@@ -153,7 +153,7 @@ python3 -I -B /PATH/TO/CONTROLLER/deploy/disposable-tests/mac-controller.py \
 
 Bootstrap creates the state directory with mode 0700, its lock file with mode 0600 and a fresh ledger. An existing state path returns 125, including after an interrupted bootstrap; choose another new path instead of deleting state. Ordinary and recovery calls refuse missing state, a missing lock or a missing/damaged ledger. They never initialize an empty slot. Do not remove `mac-controller.lock`: its persistent presence is normal. Any legacy `manual.lock`, `recovery.lock` or `ledger/lock` causes 125 before cleanup, and remains untouched.
 
-Use the same entry point with the helper's ordinary `LANE CHECKOUT -- COMMAND` arguments. A held lock or occupied slot returns 75 before packaging or host contact. The initial lock-helper, Git and first-health work share a 7.5-second abort budget plus the existing two-second forced-stop grace, inside ten seconds. A genuine Git or packaging failure remains 125; the admission clock does not reclassify later command failures. The one-slot profile keeps temporary files under owned `STATE/tmp`; a pool uses `STATE/slot-N/tmp`. Recovery sweeps a slot’s interrupted private files only while it owns that slot. The pool removes interrupted ledger temporary files only under the shared ledger lock, after their writer is gone. The original one-slot path also sweeps owned uncommitted ledger files. An undeletable private child produces a warning and is retried later; housekeeping cannot block guest recovery or replace a verified command result. Unsafe containers still refuse work. Global temporary files remain untouched.
+Use the same entry point with the helper's ordinary `LANE CHECKOUT -- COMMAND` arguments. A held lock or occupied slot returns 75 before packaging. The initial lock-helper, Git and first-health work share a 7.5-second abort budget plus the existing two-second forced-stop grace, inside ten seconds. A genuine Git or packaging failure remains 125; the admission clock does not reclassify later command failures. The one-slot profile keeps temporary files under owned `STATE/tmp`; a pool uses `STATE/slot-N/tmp`. Recovery sweeps a slot’s interrupted private files only while it owns that slot. The pool removes interrupted ledger temporary files only under the shared ledger lock, after their writer is gone. The original one-slot path also sweeps owned uncommitted ledger files. An undeletable private child produces a warning and is retried later; housekeeping cannot block guest recovery or replace a verified command result. Unsafe containers still refuse work. Global temporary files remain untouched.
 
 The recovery agent uses the Standard launch policy. On the Mac, a six-process ledger-write probe under Background produced lock timeouts, while the same workload under Standard completed. The failure was intermittent: later Background timing probes also passed. Six independent real jobs passed under the installed Standard policy; this does not establish that every Background run fails. Keep the ledger lock and file/directory syncs intact. Run qualification through the installed launch policy with independent controller processes.
 
@@ -181,6 +181,74 @@ When replacing a legacy manual release with the kernel-lock controller, follow t
 3. Write the immutable configuration with a different private state path and a new `hostGeneration`, then run `--bootstrap`. Use the same recipe in the host service and Mac configuration.
 4. Switch the shared helper to the new immutable controller/configuration. Confirm that no old helper process remains. Keep the retired state gated permanently; never point the replacement at it.
 5. Only then load the rendered launchd agent with explicit HOME and no log file. Qualify its real SSH identity, interrupted-turn cleanup and a fresh successor. For a newly enrolled host, coordinate its reboot with the watcher. Measured capacity and GitHub activation retain their later gates.
+
+## Use two CI hosts from one controller
+
+When one machine is full, you can add a second dedicated host without changing a
+job's identity. Keep one controller and one ledger. The immutable `slotHosts` list
+assigns each slot to its host for transfer, execution, result reads and cleanup.
+For the twelve-slot profile, assign slots 0–5 to the first host and 6–11 to the
+second. Keep the existing guest sizes and host reserves; qualify six simultaneous
+jobs on each machine before treating twelve slots as operating capacity.
+
+Copy the existing configuration into a private publication manifest. Replace its
+`host`, `recipe`, `state` and `hostGeneration`, set `slots` to 12, and add:
+
+```json
+{
+  "slotHosts": [
+    "new-ci.example.test", "new-ci.example.test", "new-ci.example.test",
+    "new-ci.example.test", "new-ci.example.test", "new-ci.example.test",
+    "bench-ci.example.test", "bench-ci.example.test", "bench-ci.example.test",
+    "bench-ci.example.test", "bench-ci.example.test", "bench-ci.example.test"
+  ]
+}
+```
+
+The manifest's `configuration` holds that complete replacement configuration.
+Keep its existing App credential paths and repository value. Add `source` and
+`sha` for the landed checkout, absolute `node` and `python` paths,
+`oldController`, `oldConfiguration`, an absent `newController` directory,
+`launchAgent`, `launchLabel`, `wrapper`, and `statusAdapter` for the installed
+read-only status script. Set `peerAddresses` to the explicit IPv4 addresses of
+both new hosts and the retired CI host. These addresses join each guest's existing
+own-host/private-address refusal; external IPv6 remains refused.
+
+After landing, install and qualify the hosts while the old controller still serves:
+
+```sh
+node scripts/disposable-tests/publish.mjs hosts /PRIVATE/publication.json
+```
+
+This sends the committed recipe and pinned packages over the shared verified SSH
+connection. The installer refuses an active allocation, verifies an existing
+recipe byte for byte, installs the key-only SSH policy and startup service, and
+builds the pinned tool image. Preserve the requested benchmark results and verify
+its service is stopped before you put that machine into CI. The installer does
+not remove benchmark data. Run the guest isolation proof on each machine: it now
+checks that machine's own addresses and the independent peer addresses supplied
+with `--peers`, without a fixed server address in the test.
+
+Then publish the replacement pool:
+
+```sh
+node scripts/disposable-tests/publish.mjs /PRIVATE/publication.json
+```
+
+Publication takes every old slot lock and the controller lock, requires recorded
+jobs to be terminal, verifies guest absence and refuses pending hosted moves.
+It bootstraps fresh state and a new generation, permanently gates the retired
+state, and switches the launch agent and manual helper. A failed launch first drains the replacement pool, then creates
+fresh rollback state for the previous controller; it never reopens retired state. Uncertain replacement absence keeps admission closed.
+Keep the old host exclusively available for rollback until both host and
+on-server-controller qualification finish.
+
+Admission skips slots on an unavailable host. A stalled host probe has its own deadline, so it does not discard the healthy host’s slots. Occupied leases still count when
+the host's health check refuses room for another guest. The status reader keeps
+the existing pool fields and adds `hosts` and each job's `host` for a mapped pool;
+an unreadable host leaves its job facts unknown while the other host still answers.
+This stage still runs the controller and manual package preparation on the Mac.
+Moving the controller to a server remains the next slice.
 
 ## Build the shared tool disk
 
@@ -312,7 +380,7 @@ Recovery reads the recorded job before cancelling its run. A completed job leave
 
 For a selected multi-slot Waitron measurement, the trusted caller uses `withAvailableSlot` around each `runCI` call. Persist the concrete CI intent on the supplied scoped lease manager, and keep its slot lock through guest cleanup and runner removal. The original `control run` and shared canary entry remain one-slot rehearsals; `control status` and mode changes inspect the entire configured pool. The installed pool also supports automatic pickup, described below.
 
-Each host slot has its own nonlogin UID `62000+slot`, loopback port `22000+slot`, egress rules and active record. Slot zero keeps `active.json`; the other slots use `active-N.json`. Each guest has 16 GiB of memory inside an 18 GiB host cap. The operating pool uses six slots: six caps plus the unchanged 16 GiB host reserve need 124 GiB, below this host’s measured 124.92 GiB. Admission also reserves four complete physical CPU cores, including their siblings, and 20% of disk after guest maximum growth. The ten-slot ceiling remains an additional refusal even on a larger host; available memory can lower it. Run `python3 -B deploy/disposable-tests/capacity.test.py` and `node --test scripts/disposable-tests/host.test.mjs` for the budget and QEMU plan.
+Each host slot has its own nonlogin UID `62000+slot`, loopback port `22000+slot`, egress rules and active record. Slot zero keeps `active.json`; the other slots use `active-N.json`. Each guest has 16 GiB of memory inside an 18 GiB host cap. The single-host operating profile uses six slots: six caps plus the unchanged 16 GiB host reserve need 124 GiB, below this host’s measured 124.92 GiB. Admission also reserves four complete physical CPU cores, including their siblings, and 20% of disk after guest maximum growth. The ten-slot ceiling remains an additional refusal even on a larger host; available memory can lower it. Run `python3 -B deploy/disposable-tests/capacity.test.py` and `node --test scripts/disposable-tests/host.test.mjs` for the budget and QEMU plan.
 
 The ten-slot trial’s 10.5 GiB guests did not cover dashboard coverage memory: [a real dashboard shard](https://github.com/clintongormley/waitron/actions/runs/42425687655/job/128565949100) exhausted guest memory and the guest kernel killed Node. Keep the 16 GiB profile until a smaller guest completes the full workload, including coverage. Fewer simultaneous guests alone cannot enlarge an individual guest. Read each guest service’s `memory.peak` and `memory.events` on the host, plus guest `AnonPages`, `Shmem`, `MemAvailable`, memory pressure and OOM counters. Record host available memory and load too; guest-only monitoring misses a host kill of QEMU.
 
@@ -370,7 +438,7 @@ When GitHub shows waiting jobs, first check whether the server is preparing a gu
 python3 -I -B ~/waitron-campaign-shared/disposable-ci-status.py
 ```
 
-It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
+It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection per configured host. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
 
 Times are Unix milliseconds; durations are seconds. `admissionAgeSeconds` starts when the slot was reserved. `start` and `runtimeSeconds` come from a single worker log filename in that guest, which does not establish when GitHub acknowledged the job. Manual commands instead report `executionRequested`, the command-file timestamp. Missing or ambiguous evidence stays `unknown`. `lastAdmission` is the newest lease time in the current ledger or the last 1 MiB of output containing a job result code and lease creation time. Errors keep unknown times, show the error file's last-write time separately, mask IP addresses and stop at 200 characters. Log paths come from the installed agent; the repository agent template omits them, so an installation using that template unchanged reports unknown history and errors.
 

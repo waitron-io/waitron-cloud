@@ -53,13 +53,37 @@ class StatusTests(unittest.TestCase):
         self.assertIn('--host', args[-1])
         return subprocess.CompletedProcess(args, 0, json.dumps(self.remote), '')
 
-    def collect(self):
+    def collect(self, hosts=1):
         before = {str(p): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.home.rglob('*') if p.is_file()}
         with patch.object(status.subprocess, 'run', self.invoke), patch.object(status.time, 'time', return_value=1000):
             result = status.collect(self.home)
         self.assertEqual(before, {str(p): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.home.rglob('*') if p.is_file()})
-        self.assertEqual(sum(a[0] == 'ssh' for a in self.calls), 1)
+        self.assertEqual(sum(a[0] == 'ssh' for a in self.calls), hosts)
         return result
+
+    def test_two_hosts_keep_each_jobs_evidence_separate_when_one_is_unreachable(self):
+        config=json.loads(self.config.read_text());config.update(host='new.invalid',slotHosts=['new.invalid','new.invalid','bench.invalid'])
+        self.config.write_text(json.dumps(config))
+        for slot in [0,2]:
+            self.slots[slot].update(state='running',lease=dict(resourceId=f'dt-test-{slot}-1',generation=1,createdAt=800000,deadline=1100000,ci=dict(jobId=42+slot)))
+        self.write_ledger();original=self.invoke
+        for failed in [False,True]:
+            self.calls=[]
+            def invoke(args,**kw):
+                if args[0]=='launchctl':return original(args,**kw)
+                self.calls.append(args)
+                if 'root@bench.invalid' in args:
+                    return subprocess.CompletedProcess(args,1,'','unreachable') if failed else subprocess.CompletedProcess(args,0,json.dumps({'dt-test-2-1':dict(state='prepared',workerStart=950000)}),'')
+                self.assertIn('root@new.invalid',args)
+                return subprocess.CompletedProcess(args,0,json.dumps({'dt-test-0-1':dict(state='prepared',workerStart=900000),'dt-test-2-1':dict(state='foreign',workerStart=1)}),'')
+            self.invoke=invoke
+            r=self.collect(hosts=2)
+            self.assertEqual(r['jobs'][0]['start'],900000)
+            self.assertEqual(r['jobs'][1]['start'],'unknown' if failed else 950000)
+            self.assertEqual(r['jobs'][1]['host'],'bench.invalid')
+            self.assertEqual(r['hosts']['new.invalid']['slots'],[0,1])
+            self.assertEqual(r['hosts']['bench.invalid']['reachable'],not failed)
+            self.assertEqual(r['slots'],dict(total=3,busy=2,free=1))
 
     def test_busy_counts_preparation_execution_and_pending_intent_separately(self):
         self.slots[0].update(state='running', lease=dict(resourceId='dt-test-0-1', generation=1, createdAt=900000, deadline=1100000, ci=dict(jobId=42, jobKey='test-ui-1')))

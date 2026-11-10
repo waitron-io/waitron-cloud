@@ -23,21 +23,37 @@ const sshWrapper = new URL('../../deploy/disposable-tests/ssh.sh', import.meta.u
 const bundleScript = new URL('./bundle.py', import.meta.url).pathname;
 
 export class SSHTransport {
-  constructor({host, recipe, source, privatePackage}) {
+  constructor({host, recipe, source, privatePackage, slotHosts, slots=1, slot}) {
     assert.ok(typeof host === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(host), 'Invalid trusted host');
     assert.ok(typeof recipe === 'string' && /^\/opt\/waitron-disposable-[a-zA-Z0-9_-]+$/.test(recipe), 'Invalid trusted recipe path');
+    if(slotHosts!==undefined)assert.ok(Array.isArray(slotHosts) && slotHosts.length>1 && slotHosts.length<=16 &&
+      slotHosts.every(value=>typeof value==='string' && /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(value)), 'Invalid trusted slot hosts');
+    this.slotHosts=slotHosts===undefined?undefined:Object.freeze([...slotHosts]);
+    Object.assign(this,{slots,slot});
     Object.assign(this, {host, recipe, source, privatePackage});
   }
   async remote(mode, lease, options = {}) {
     assert.ok(['health', 'transfer', 'transfer-ci', 'prepare', 'execute-v2', 'execute-ci', 'result', 'destroy', 'inspect'].includes(mode), 'Invalid transport operation');
     const resource = lease?.resourceId;
     if (mode !== 'health') assert.ok(/^dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-(?:[0-9]|1[0-5])-[1-9][0-9]{0,14}$/.test(resource), 'Invalid transport resource');
-    return runProcess('bash', [sshWrapper, this.host,
+    const slot=mode==='health'?(lease?.slot??0):Number(resource.split('-').at(-2));
+    const host=this.slotHosts===undefined?this.host:this.slotHosts[slot];
+    assert.ok(host && Number.isSafeInteger(slot) && slot>=0 && slot<=15,'Unmapped transport slot');
+    return runProcess('bash', [sshWrapper, host,
       `python3 -B ${this.recipe}/session.py ${mode}${resource ? ' '+resource : ''}`], options);
   }
-  async healthy({signal}) {
-    const result = await this.remote('health', null, {signal, capture: true});
+  async healthy({signal,slot=this.slot}) {
+    const result = await this.remote('health', {slot}, {signal, capture: true});
     return result.code === 0 && JSON.parse(result.stdout).healthy === true;
+  }
+  async healthySlots({signal,timeoutMs=7500}) {
+    const hosts=this.slotHosts??Array(this.slots).fill(this.host);
+    const checks=new Map(await Promise.all([...new Set(hosts)].map(async host=>{
+      const deadline=AbortSignal.timeout(timeoutMs),probe=signal?AbortSignal.any([signal,deadline]):deadline;
+      try{return [host,await this.healthy({signal:probe,slot:hosts.indexOf(host)})];}
+      catch{signal?.throwIfAborted();return [host,false];}
+    })));
+    return hosts.flatMap((host,slot)=>checks.get(host)?[slot]:[]);
   }
   async transfer(lease, {signal}) {
     const directory = mkdtempSync(join(tmpdir(), 'disposable-transfer-'));

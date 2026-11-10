@@ -132,7 +132,7 @@ function startedWork(job){
 }
 const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
 export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
- const usable=healthy?state.slots.filter(s=>s.state!=='quarantined'&&!s.orphanRunners?.length):[];
+ const usable=healthy?state.slots.filter(s=>(!Array.isArray(healthy)||healthy.includes(s.id))&&s.state!=='quarantined'&&!s.orphanRunners?.length):[];
  const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
  const value={observedAt:now,slots:usable.length,serverRunning:usable.filter(s=>s.state!=='free'||s.ciInvocation).length,serverWaiting:0,hostedRunning:0,hostedWaiting:0};
  for(const {jobs} of snapshot.values())for(const job of jobs){
@@ -839,7 +839,7 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 export function validateCIConfig(config){
- assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+ assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
  configuredSlots(config);
  const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey',...(ci.candidateWorkflowDigest===undefined?[]:['candidateWorkflowDigest']),'repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&

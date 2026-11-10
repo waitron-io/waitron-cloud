@@ -121,6 +121,29 @@ class Guards(unittest.TestCase):
   args=session.guest_ssh(self.control/'dt-parallel-5-1')
   self.assertEqual(args[args.index('-p')+1],'22005');self.assertEqual(args[-1],'root@127.0.0.1')
 
+ def test_guest_policy_refuses_own_and_peer_ci_addresses_from_the_frozen_recipe(self):
+  peers=self.root/'peer-addresses.json';peers.write_text(json.dumps(['8.8.4.4','9.9.9.9']))
+  interfaces=[{'addr_info':[{'family':'inet','local':'1.1.1.1'},{'family':'inet6','local':'2001:db8::1'}]}]
+  with patch.object(host,'PEER_ADDRESSES',peers,create=True),patch.object(host,'run',return_value=subprocess.CompletedProcess([],0,stdout=json.dumps(interfaces),stderr='')):
+   self.assertTrue(callable(getattr(host,'protected_addresses',None)))
+   self.assertEqual(host.protected_addresses(),{'1.1.1.1','2001:db8::1','8.8.4.4','9.9.9.9'})
+   rules=host.network_policy('dt-peers-6-1')
+   self.assertIn('meta skuid 62006 ip daddr',rules)
+   for address in ['1.1.1.1','8.8.4.4','9.9.9.9']:self.assertIn(address,rules)
+   peers.write_text(json.dumps(['8.8.4.4; accept']))
+   with self.assertRaises(ValueError):host.network_policy('dt-peers-6-1')
+
+
+ def test_runtime_probe_keeps_independent_peer_targets_when_the_recipe_omits_them(self):
+  import runpy
+  with patch.object(sys,'argv',['host-runtime.test.py',str(Path(host.__file__))]),patch.object(unittest,'main'):
+   proof=runpy.run_path(str(Path(__file__).with_name('host-runtime.test.py')))
+  with patch.object(host,'protected_addresses',lambda:{'1.1.1.1'}):
+   self.assertIn('isolation_targets',proof)
+   targets=proof['isolation_targets'](['8.8.4.4','9.9.9.9'])
+   self.assertTrue({'1.1.1.1','8.8.4.4','9.9.9.9'}<=targets)
+   for peers in [[],['8.8.4.4']]:
+    with self.assertRaisesRegex(ValueError,'peer'):proof['isolation_targets'](peers)
 
  def test_image_preparation_creates_only_the_reserved_nonlogin_slot_accounts(self):
   image=self.root/'base-image';image.touch();accounts={};created=[]

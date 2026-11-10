@@ -4,6 +4,13 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+test('CI operations forward the selected slot to their shared transport',async()=>{
+ const {CITransport}=await import('./transport.mjs');
+ const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'}),lease={slot:11,resourceId:'dt-pool-11-1'},modes=[];
+ transport.remote=async(mode,received)=>{assert.equal(received,lease);modes.push(mode);return {code:0,stdout:JSON.stringify({resourceId:'dt-pool-11-1',code:3})};};
+ await transport.transfer(lease,{});assert.equal(await transport.execute(lease,{jitconfig:'synthetic'}),3);
+ assert.deepEqual(modes,['transfer-ci','execute-ci','result']);
+});
 for(const resource of ['dt-fixture-0-1','dt-fixture-5-1'])test('CI transport sends public identity and transient JIT over separate stdin channels',t=>{
  const root=mkdtempSync(join(tmpdir(),'ci-transport-'));t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'bin'));
  writeFileSync(join(root,'bin/ssh'),`#!/usr/bin/env python3
