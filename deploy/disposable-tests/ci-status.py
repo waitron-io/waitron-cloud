@@ -82,28 +82,53 @@ def host_status(request):
         return dict(pool.map(observe, sorted(resources)))
 
 
-def collect(home=None):
+def empty_status(now=None):
+    now=int(time.time()*1000) if now is None else now
+    return dict(observedAt=now, slots=dict(total=UNKNOWN, busy=UNKNOWN, free=UNKNOWN), jobs=[], lastAdmission=UNKNOWN,
+                  host=UNKNOWN, controller=dict(registered=UNKNOWN, state=UNKNOWN, pid=UNKNOWN, lastExit=UNKNOWN, version=UNKNOWN, recipe=UNKNOWN), errors=UNKNOWN, errorsWrittenAt=UNKNOWN)
+
+
+def reader_source():
+    return globals().get("__reader_source__") or Path(__file__).read_text()
+
+
+def collect(home=None,configuration=None):
     home = Path.home() if home is None else Path(home)
     deadline = time.monotonic() + 4.5
     now = int(time.time()*1000)
-    result = dict(observedAt=now, slots=dict(total=UNKNOWN, busy=UNKNOWN, free=UNKNOWN), jobs=[], lastAdmission=UNKNOWN,
-                  host=UNKNOWN, controller=dict(registered=UNKNOWN, state=UNKNOWN, pid=UNKNOWN, lastExit=UNKNOWN, version=UNKNOWN, recipe=UNKNOWN), errors=UNKNOWN, errorsWrittenAt=UNKNOWN)
+    result=empty_status(now)
     try:
-        agent = plistlib.loads((home/'Library/LaunchAgents/com.waitron.disposable-recovery.plist').read_bytes())
-        configuration = Path(agent['ProgramArguments'][5])
-        config = json.loads(configuration.read_text())
+        systemd=configuration is not None
+        if systemd:
+            configuration=Path(configuration)
+            config=json.loads(configuration.read_text())
+            agent=dict(StandardOutPath=str(Path(config['state'])/'recovery.stdout.log'),StandardErrorPath=str(Path(config['state'])/'recovery.stderr.log'))
+        else:
+            agent = plistlib.loads((home/'Library/LaunchAgents/com.waitron.disposable-recovery.plist').read_bytes())
+            configuration = Path(agent['ProgramArguments'][5])
+            config = json.loads(configuration.read_text())
         result['controller'].update(version=str(configuration.parent), recipe=config['recipe'])
         total = config['slots']
         assert type(total) is int and 1 <= total <= 16
         result['slots']['total'] = total
     except (OSError, ValueError, KeyError, IndexError, TypeError, AssertionError, ExpatError):
         return result
-    observed = command(['launchctl', 'print', f'gui/{os.getuid()}/com.waitron.disposable-recovery'], deadline)
-    if observed is not None:
-        pid = re.search(r'^\s*pid = ([0-9]+)$', observed, re.M)
-        code = re.search(r'^\s*last exit code = (-?[0-9]+)$', observed, re.M)
-        result['controller'].update(registered=True, state='running' if pid else 'idle', pid=int(pid[1]) if pid else UNKNOWN,
-                                    lastExit=int(code[1]) if code else UNKNOWN)
+    if systemd:
+        observed=command(['systemctl','show','--property=LoadState,ActiveState,MainPID,ExecMainStatus,ExecStart','waitron-disposable-controller.service'],deadline)
+        if observed is not None:
+            fields=dict(line.split('=',1) for line in observed.splitlines() if '=' in line)
+            if str(configuration) not in fields.get('ExecStart',''):return result
+            try:
+                pid=int(fields['MainPID']);code=int(fields['ExecMainStatus'])
+                result['controller'].update(registered=fields.get('LoadState')=='loaded',state='running' if pid else 'idle',pid=pid or UNKNOWN,lastExit=code)
+            except (KeyError,ValueError):pass
+    else:
+        observed = command(['launchctl', 'print', f'gui/{os.getuid()}/com.waitron.disposable-recovery'], deadline)
+        if observed is not None:
+            pid = re.search(r'^\s*pid = ([0-9]+)$', observed, re.M)
+            code = re.search(r'^\s*last exit code = (-?[0-9]+)$', observed, re.M)
+            result['controller'].update(registered=True, state='running' if pid else 'idle', pid=int(pid[1]) if pid else UNKNOWN,
+                                        lastExit=int(code[1]) if code else UNKNOWN)
     admitted = []
     try:
         ledger = json.loads((Path(config['state'])/'ledger/state.json').read_text())
@@ -167,7 +192,7 @@ def collect(home=None):
     def read_host(target):
         payload=dict(recipe=config['recipe'],resources=[resource for resource,host in expected.items() if host==target],budget=max(0,deadline-time.monotonic()-0.2))
         remote='python3 -B - --host '+shlex.quote(base64.b64encode(json.dumps(payload).encode()).decode())
-        raw=command(['ssh',*[word for option in options for word in ['-o',option]],'root@'+target,remote],deadline,input=Path(__file__).read_text())
+        raw=command(['ssh',*[word for option in options for word in ['-o',option]],'root@'+target,remote],deadline,input=reader_source())
         try:
             values=json.loads(raw)
             assert isinstance(values,dict) and all(isinstance(value,dict) for value in values.values())
@@ -192,9 +217,25 @@ def collect(home=None):
     return result
 
 
+def remote(host,configuration):
+    if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.:-]*',host) or not re.fullmatch(r'/opt/waitron-disposable-controller-[a-zA-Z0-9_-]+/config\.json',configuration):
+        raise ValueError('Invalid installed remote controller')
+    source=reader_source();program='__reader_source__='+repr(source)+'\n'+source
+    raw=command(['bash',str(Path(__file__).with_name('ssh.sh')),host,'python3 -I -B - --systemd '+shlex.quote(configuration)],time.monotonic()+4.5,input=program)
+    try:
+        result=json.loads(raw)
+        if not isinstance(result,dict) or not isinstance(result.get('slots'),dict) or not isinstance(result.get('controller'),dict) or not isinstance(result.get('jobs'),list):raise ValueError('Invalid remote status')
+        return result
+    except (ValueError,TypeError):return empty_status()
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == '--host':
         answer = host_status(json.loads(base64.b64decode(sys.argv[2])))
+    elif len(sys.argv)==3 and sys.argv[1]=='--systemd':
+        answer=collect(configuration=sys.argv[2])
+    elif len(sys.argv)==4 and sys.argv[1]=='--remote':
+        answer=remote(sys.argv[2],sys.argv[3])
     else:
         answer = collect()
     print(json.dumps(answer, separators=(',', ':')))

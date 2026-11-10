@@ -585,3 +585,9 @@ test('remote manual capture leaves the retired Mac ledger untouched and runs on 
  const ledger=JSON.parse(readFileSync(join(remote.state,'ledger/state.json'),'utf8'));assert.equal(Object.keys(ledger.turns).length,1);assert.equal(ledger.slots[0].state,'free');
  assertNoTemporaries(f);
 });
+
+for(const [name,input,want] of [['oversized','605028353\n',125],['truncated','100\nshort',143]])test(`a ${name} manual upload creates no lease and removes partial input`,t=>{
+ const f=fixture(t),before=readFileSync(join(f.root,'state/ledger/state.json'),'utf8');
+ const result=spawnSync(process.execPath,[script,f.config,'--bundle','I'],{env:f.env,input,encoding:'utf8',timeout:10000});
+ assert.equal(result.status,want,result.stdout+result.stderr);assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);assertNoTemporaries(f);
+});

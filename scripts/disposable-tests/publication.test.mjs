@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -209,6 +209,9 @@ ledger=json.loads((Path(config['state'])/'ledger/state.json').read_text());asser
 boot=next(i for i,a in enumerate(calls) if '--bootstrap' in a);start=next(i for i,a in enumerate(calls) if a[:2]==['systemctl','start']);assert boot<start
 try:m.activate(receipt);raise AssertionError('existing ledger reopened')
 except ValueError:pass
+second=json.loads(json.dumps(plan));second['release']=str(m.OPT/'waitron-disposable-controller-second');second['configuration']['state']=str(m.ROOT/'states'/'second');second['configuration']['hostGeneration']='second'
+next_receipt=m.install(second,b'private-app-identity',keydata);m.activate(next_receipt)
+assert next_receipt['configuration'] in (m.UNITS/'waitron-disposable-controller.service').read_text()
 print('private frozen staging; no active ledger or pickup until activation')`;
  const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root,process.execPath,JSON.stringify(f.p.configuration)],{encoding:'utf8',timeout:10000});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/no active ledger or pickup/);
@@ -237,4 +240,80 @@ assert any('git=1:2.47.3-0+deb13u1' in a and 'python3=3.13.5-1' in a for a in ca
 print('pinned runtime verified')`;
  const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root],{encoding:'utf8',timeout:10000});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/pinned runtime verified/);
+});
+
+test('server preparation sends private App bytes only over stdin with the pinned source',async t=>{
+ const f=await fixture(t),{stageServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n'});
+ let sent=0;
+ const execute=async(command,argv,options)=>{
+  sent++;assert.equal(command,'bash');assert.equal(argv[1],'new.invalid');assert.ok(!argv.join(' ').includes('private signing material'));
+  const newline=options.input.indexOf(10),header=JSON.parse(options.input.subarray(0,newline)),body=options.input.subarray(newline+1);
+  const archive=body.subarray(0,header.archiveBytes),files=execFileSync('tar',['-tf','-'],{input:archive,encoding:'utf8'});
+  assert.match(files,/deploy\/disposable-tests\/install-controller.py/);
+  assert.equal(body.subarray(header.archiveBytes,header.archiveBytes+header.envBytes).toString(),'private identity');
+  assert.equal(body.subarray(header.archiveBytes+header.envBytes).toString(),'private signing material');
+  assert.equal(header.configuration.ci.appKey,'/var/lib/waitron-disposable-controller/app.key');assert.equal(header.configuration.state,f.p.serverState);
+  return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+ };
+ const receipt=await stageServer(f.p,{execute});assert.equal(receipt.release,f.p.serverRelease);assert.equal(sent,1);
+ chmodSync(f.p.configuration.ci.appKey,0o644);await assert.rejects(stageServer(f.p,{execute}),/private/i);assert.equal(sent,1);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),false);
+});
+
+for(const fail of [false,true])test(`server cutover retires Mac state and rolls back to fresh state on activation failure: ${fail}`,async t=>{
+ const f=await fixture(t),{publishServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n',peerAddresses:['8.8.8.8','9.9.9.9','1.1.1.1']});
+ const calls=[];let stopped=false;
+ const execute=async(command,argv,options)=>{
+  calls.push([command,...argv]);
+  if(command==='launchctl'&&argv[0]==='bootout')stopped=true;
+  if(command==='bash'){
+   const text=argv.at(-1);
+   if(text.includes('module.prepare_runtime'))return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+   if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail?1:0,stdout:'{}'};}
+   return {code:0,stdout:'{}'};
+  }
+  return f.execute(command,argv,options);
+ };
+ const operation=publishServer(f.p,{api:f.api,transport:f.transport,execute});
+ if(fail)await assert.rejects(operation,/rollback/i);else assert.equal((await operation).published,true);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),true);
+ if(fail){
+  const text=readFileSync(f.p.launchAgent,'utf8');assert.match(text,/rollback-config/);
+  const config=JSON.parse(readFileSync(f.p.newController+'/rollback-config.json','utf8'));assert.notEqual(config.state,f.old.state);assert.notEqual(config.hostGeneration,'old');
+  assert.deepEqual(JSON.parse(readFileSync(config.state+'/ledger/state.json','utf8')).turns,{});
+ }else{
+  assert.match(readFileSync(f.p.wrapper,'utf8'),/remote new.invalid/);assert.equal(statSync(f.p.newController).mode&0o222,0);
+  assert.equal(existsSync(f.p.configuration.state),false);
+  assert.ok(calls.some(([command,hostWrapper,host])=>command==='bash'&&host==='bench.invalid'));
+ }
+});
+
+test('server activation CLI reads its request from stdin and refuses an invalid receipt',t=>{
+ const result=spawnSync(process.execPath,[new URL('./publish.mjs',import.meta.url).pathname,'server-activate'],{input:'{"receipt":{}}',encoding:'utf8',timeout:5000});
+ assert.equal(result.status,1);assert.match(result.stderr,/Invalid server activation receipt/);assert.equal(result.stdout,'');
+});
+
+for(const fail of [false,true])test(`an on-server release retires its old ledger and uses fresh rollback state: ${fail}`,async t=>{
+ const f=await fixture(t),{activateServer}=await import('./publish.mjs'),{cpSync}=await import('node:fs');
+ const oldRelease=f.root+'/old-server',newRelease=f.root+'/new-server';
+ for(const release of [oldRelease,newRelease])for(const area of ['scripts/disposable-tests','deploy/disposable-tests'])cpSync(f.p.source+area,release+'/'+area,{recursive:true});
+ const oldServer={release:oldRelease,configuration:oldRelease+'/config.json',node:process.execPath};writeFileSync(oldServer.configuration,JSON.stringify(f.old));
+ const receipt={release:newRelease,configuration:newRelease+'/config.json',node:process.execPath};writeFileSync(receipt.configuration,JSON.stringify(f.p.configuration));
+ let failed=false;const stopped=[];
+ const execute=async(command,argv,options={})=>{
+  if(command==='systemctl'){stopped.push(argv.join(' '));return {code:0};}
+  assert.equal(command,'/usr/bin/python3');const target=JSON.parse(options.input);
+  if(fail&&!failed){failed=true;return {code:1};}
+  return runProcess(f.p.python,['-I','-B',target.release+'/deploy/disposable-tests/mac-controller.py',process.execPath,target.configuration,'--bootstrap'],{capture:true});
+ };
+ const result=await activateServer({receipt,oldServer},{api:f.api,transport:f.transport,execute});
+ assert.equal(existsSync(f.old.state+'/manual.lock'),true);assert.deepEqual(stopped,['stop waitron-disposable-controller.timer','stop waitron-disposable-controller.service']);
+ const target=fail?result.rollback:receipt;assert.equal(result.code,fail?1:0);
+ const c=JSON.parse(readFileSync(target.configuration));assert.notEqual(c.state,f.old.state);assert.notEqual(c.hostGeneration,f.old.hostGeneration);
+ assert.deepEqual(JSON.parse(readFileSync(c.state+'/ledger/state.json','utf8')).turns,{});
+ if(fail){assert.notEqual(target.release,oldRelease);assert.equal(statSync(target.release).mode&0o222,0);assert.equal(statSync(target.release+'/scripts/disposable-tests/manual.mjs').mode&0o222,0);}
 });

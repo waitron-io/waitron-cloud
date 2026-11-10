@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import shlex
 import subprocess
 import tempfile
 
@@ -81,12 +82,33 @@ def activate(receipt):
         raise ValueError('Activation requires fresh controller state')
     state.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
     command(['/usr/bin/python3','-I','-B',str(Path(receipt['release'])/'deploy/disposable-tests/mac-controller.py'),receipt['node'],str(configuration),'--bootstrap'])
+    previous=None
+    service=UNITS/'waitron-disposable-controller.service'
+    if os.path.lexists(service):
+        info=service.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=OWNER or info.st_mode&0o022:
+            raise ValueError('Unsafe installed controller service')
+        lines=[line.removeprefix('ExecStart=') for line in service.read_text().splitlines() if line.startswith('ExecStart=')]
+        if len(lines)!=1:raise ValueError('Unknown controller service')
+        args=shlex.split(lines[0]);old_release=Path(args[3]).parents[2] if len(args)==7 else Path('/')
+        if old_release.parent!=OPT or args[:3]!=['/usr/bin/python3','-I','-B'] or args[6]!='--once' or args[5]!=str(old_release/'config.json'):
+            raise ValueError('Controller service belongs to another installation')
+        previous=(old_release,args[4],args[5])
     for suffix in ('service','timer'):
-        template=Path(receipt['release'])/'deploy/disposable-tests'/('waitron-disposable-controller.'+suffix+'.in')
-        body=template.read_text().replace('@RELEASE@',receipt['release']).replace('@NODE@',receipt['node']).replace('@CONFIGURATION@',str(configuration))
-        unit=UNITS/('waitron-disposable-controller.'+suffix)
-        write(unit,body.encode(),0o644)
-        command(['systemd-analyze','verify',str(unit)])
+        filename='waitron-disposable-controller.'+suffix
+        def rendered(release,node,path):
+            return (Path(release)/'deploy/disposable-tests'/(filename+'.in')).read_text().replace('@RELEASE@',str(release)).replace('@NODE@',node).replace('@CONFIGURATION@',path).replace('@STATE@',json.loads(Path(path).read_text())['state'])
+        body=rendered(receipt['release'],receipt['node'],str(configuration));unit=UNITS/filename
+        if os.path.lexists(unit):
+            info=unit.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid!=OWNER or info.st_mode&0o022 or not previous or unit.read_text()!=rendered(*previous):
+                raise ValueError('Unknown installed controller unit')
+        fd,name=tempfile.mkstemp(prefix='.waitron-controller-',suffix='.'+suffix,dir=UNITS)
+        candidate=Path(name)
+        try:
+            with os.fdopen(fd,'w') as output:output.write(body);output.flush();os.fsync(output.fileno())
+            candidate.chmod(0o644);command(['systemd-analyze','verify',str(candidate)]);os.replace(candidate,unit)
+        finally:candidate.unlink(missing_ok=True)
     command(['systemctl','daemon-reload'])
     command(['systemctl','enable','--now','waitron-disposable-controller.timer'])
     command(['systemctl','start','waitron-disposable-controller.service'])

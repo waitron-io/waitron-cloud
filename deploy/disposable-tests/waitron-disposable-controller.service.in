@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=exec
 UMask=0077
 WorkingDirectory=/
+Environment=HOME=/root
+StandardOutput=append:@STATE@/recovery.stdout.log
+StandardError=append:@STATE@/recovery.stderr.log
 ExecStart=/usr/bin/python3 -I -B @RELEASE@/deploy/disposable-tests/mac-controller.py @NODE@ @CONFIGURATION@ --once
 Restart=on-failure
 RestartSec=30s
