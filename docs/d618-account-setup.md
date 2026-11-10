@@ -29,6 +29,20 @@ for tonight's credential setup. AWS's [account comparison](https://docs.aws.amaz
 explains project ownership; its [IAM guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html)
 says “you cannot create IAM users with console access” in the new experience.
 
+## Before part 1: get the current files
+
+In the x86 test box's terminal, open your existing **Waitron Cloud checkout on
+`main`**. Replace the example path with that checkout's path, then run:
+
+```sh
+cd /absolute/path/to/waitron-cloud
+git pull --ff-only
+git log -1 --oneline
+```
+
+Check that the latest commit is **`9307c90ce` or later**. Keep this terminal in
+that folder: every relative file path below starts from this checkout.
+
 ## 1. Remove the old login
 
 **Window: project owner/setup console.** Skip anything already removed.
