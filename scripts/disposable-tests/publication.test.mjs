@@ -32,7 +32,7 @@ async function fixture(t){
  const xml=value=>value.replaceAll('&','&amp;').replaceAll('<','&lt;');
  writeFileSync(p.launchAgent,'<?xml version="1.0"?><plist version="1.0"><dict><key>ProgramArguments</key><array>'+args.map(arg=>'<string>'+xml(arg)+'</string>').join('')+'</array><key>ProcessType</key><string>Standard</string></dict></plist>',{mode:0o600});
  writeFileSync(p.wrapper,'#!/bin/sh\nexec '+args.slice(0,6).join(' ')+' "$@"\n',{mode:0o700});
- const api={get:async path=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};assert.equal(path,'/repos/fixture/waitron/actions/jobs/901');return {id:901,run_id:789,run_attempt:1,status:'completed'};}};
+ const api={get:async path=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{}'};if(path.endsWith('/runs/789'))return {id:789,run_attempt:1,status:'in_progress'};assert.equal(path,'/repos/fixture/waitron/actions/jobs/901');return {id:901,run_id:789,run_attempt:1,status:'completed'};}};
  const transport={inspect:async received=>{assert.equal(received.resourceId,lease.resourceId);return {resourceId:lease.resourceId,absent:true};}};
  const execute=async(command,argv,options)=>command==='launchctl'?{code:0,stdout:argv[0]==='print'?readFileSync(p.launchAgent,'utf8'):''}:runProcess(command,argv,options);
  return {root,old,p,api,transport,execute};
@@ -41,10 +41,52 @@ async function fixture(t){
 test('publication refuses unfinished recorded jobs and uncertain guest absence before changing callers',async t=>{
  const f=await fixture(t),{withDrained}=await import('./publish.mjs');let called=false;
  const work=async()=>{called=true;return {code:0};};
- await assert.rejects(withDrained({configuration:f.old,api:{get:async()=>({id:901,run_id:789,run_attempt:1,status:'queued'})},transport:f.transport},work),/terminal/i);
- await assert.rejects(withDrained({configuration:f.old,api:{get:async()=>({id:901,run_id:789,run_attempt:2,status:'completed'})},transport:f.transport},work),/identity|terminal/i);
+ for(const changed of [{id:902},{run_id:790},{run_attempt:2}])
+  await assert.rejects(withDrained({configuration:f.old,api:{get:async(path,options)=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,status:'completed',...changed}:f.api.get(path,options)},transport:f.transport},work),/identity/i);
+ await assert.rejects(withDrained({configuration:f.old,api:{get:async(path,options)=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:f.api.get(path,options)},transport:f.transport},work),/Hosted movements/);
  await assert.rejects(withDrained({configuration:f.old,api:f.api,transport:{inspect:async()=>({resourceId:'dt-old-0-1',absent:false})}},work),/absence|absent/i);
  assert.equal(called,false);assert.equal(existsSync(f.old.state+'/manual.lock'),false);assert.equal(existsSync(f.p.newController),false);
+});
+
+test('drain waits for final GitHub status without holding the old admission locks',async t=>{
+ const f=await fixture(t),{withDrained}=await import('./publish.mjs');let jobs=0,waits=0;
+ const api={get:async(path,options)=>path.includes('/jobs/')?{id:901,run_id:789,run_attempt:1,status:++jobs===1?'in_progress':'completed'}:f.api.get(path,options)};
+ const result=await withDrained({configuration:f.old,api,transport:f.transport,wait:async()=>{
+  waits++;assert.equal((await withKernelLock(f.old.state+'/slot-0',async()=>({code:0}))).code,0);
+ }},async()=>({code:0}));
+ assert.equal(result.code,0);assert.equal(jobs,2);assert.equal(waits,1);
+});
+
+test('drain groups completed run history and checks only the latest guest generation',async t=>{
+ const f=await fixture(t),{withDrained}=await import('./publish.mjs');
+ const leases=new LocalLeases(f.old.state+'/ledger',{hostGeneration:'old',slots:2,slot:0});
+ for(let i=0;i<10;i++){
+  const lease=leases.reserveLocal({lane:'I',turn:'ci-789-1-'+(902+i),snapshot:'a'.repeat(64),argv:['true']}).lease;
+  leases.release(lease,{resourceId:lease.resourceId,absent:true});
+ }
+ const paths=[],resources=[];
+ const api={get:async path=>{paths.push(path);return path.endsWith('/runs/789')?{id:789,run_attempt:1,status:'completed'}:{value:'{}'};}};
+ await withDrained({configuration:f.old,api,transport:{inspect:async({resourceId})=>{resources.push(resourceId);return {resourceId,absent:true};}}},async()=>({code:0}));
+ assert.deepEqual(paths,['/repos/fixture/waitron/actions/runs/789','/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS']);
+ assert.deepEqual(resources,['dt-old-0-11']);
+});
+
+test('a failed status-reader installation leaves the old service admitting work',async t=>{
+ const f=await fixture(t),{publish}=await import('./publish.mjs');let bootouts=0;
+ f.p.statusAdapter=f.root+'/missing/ci-status.py';
+ const execute=async(command,argv,options)=>{if(command==='launchctl'&&argv[0]==='bootout')bootouts++;return f.execute(command,argv,options);};
+ await assert.rejects(publish(f.p,{api:f.api,transport:f.transport,candidateTransport:{healthySlots:async()=>[0,1]},execute}),/Publication command failed/);
+ assert.equal(bootouts,0);assert.equal(existsSync(f.old.state+'/manual.lock'),false);
+});
+
+test('publication rewrites manual command arguments once even when the new path contains the old root',async t=>{
+ const f=await fixture(t),{publish}=await import('./publish.mjs');
+ const original=f.p.oldController;f.p.oldController=f.root;
+ for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original,f.root));
+ f.p.newController=f.root+'/release';
+ await publish(f.p,{api:f.api,transport:f.transport,candidateTransport:{healthySlots:async()=>[0,1]},execute:f.execute});
+ const args=JSON.parse(execFileSync(f.p.python,['-I','-c','import shlex,sys,json;print(json.dumps(shlex.split(open(sys.argv[1]).read().splitlines()[-1])))',f.p.wrapper],{encoding:'utf8'}));
+ assert.deepEqual(args,['exec',f.p.python,'-I','-B',f.p.newController+'/deploy/disposable-tests/mac-controller.py',process.execPath,f.p.newController+'/config.json','$@']);
 });
 
 test('host preparation sends the reviewed pinned recipe to both destinations and reports either failure',async t=>{

@@ -134,6 +134,16 @@ class Guards(unittest.TestCase):
    with self.assertRaises(ValueError):host.network_policy('dt-peers-6-1')
 
 
+ def test_runtime_probe_keeps_independent_peer_targets_when_the_recipe_omits_them(self):
+  import runpy
+  with patch.object(sys,'argv',['host-runtime.test.py',str(Path(host.__file__))]),patch.object(unittest,'main'):
+   proof=runpy.run_path(str(Path(__file__).with_name('host-runtime.test.py')))
+  with patch.object(host,'protected_addresses',lambda:{'1.1.1.1'}):
+   self.assertIn('isolation_targets',proof)
+   targets=proof['isolation_targets'](['8.8.4.4','9.9.9.9'])
+   self.assertTrue({'1.1.1.1','8.8.4.4','9.9.9.9'}<=targets)
+   with self.assertRaisesRegex(ValueError,'peer'):proof['isolation_targets']([])
+
  def test_image_preparation_creates_only_the_reserved_nonlogin_slot_accounts(self):
   image=self.root/'base-image';image.touch();accounts={};created=[]
   def lookup(uid):

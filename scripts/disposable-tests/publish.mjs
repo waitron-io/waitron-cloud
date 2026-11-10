@@ -34,10 +34,34 @@ with tempfile.TemporaryDirectory(prefix='waitron-host-install-') as temporary:
  return {prepared:hosts.length};
 }
 
-export async function withDrained({configuration:c,api,transport,signal=AbortSignal.timeout(3600000)},work){
+export async function withDrained({configuration:c,api,transport,signal=AbortSignal.timeout(3600000),wait=delay},work){
  const slots=configuredSlots(c),paths=[...Array.from({length:slots},(_,slot)=>join(c.state,'slot-'+slot)),c.state];
  const inspect=()=>new LocalLeases(join(c.state,'ledger'),{hostGeneration:c.hostGeneration,slots}).inspect();
  const free=slot=>slot.state==='free'&&!slot.ciInvocation&&!slot.orphanRunners?.length;
+ const pending=Symbol('pending terminal status'),completedRuns=new Map(),completedJobs=new Set();
+ async function terminalHistory(ledger){
+  const runs=new Map();
+  for(const key of Object.keys(ledger.turns)){
+   const identity=/^[A-K]:ci-([0-9]+)-([0-9]+)(?:-([0-9]+))?$/.exec(key);
+   if(identity){const [,run,attempt,job]=identity;if(!runs.has(run))runs.set(run,[]);runs.get(run).push({attempt:Number(attempt),job});}
+  }
+  for(const [run,records] of runs){
+   assert.ok(api&&c.ci,'Recorded CI history needs its original App');
+   const latest=Math.max(...records.map(record=>record.attempt));
+   if((completedRuns.get(run)??0)>=latest)continue;
+   const prefix=`/repos/${c.ci.repository}/actions/`,seen=await api.get(prefix+'runs/'+run,{signal});
+   assert.ok(seen.id===Number(run)&&seen.run_attempt>=latest,'Recorded CI run identity differs');
+   if(seen.status==='completed'){completedRuns.set(run,seen.run_attempt);continue;}
+   for(const {attempt,job} of records){
+    if(completedJobs.has(run+':'+attempt+':'+job))continue;
+    if(!job)throw pending;
+    const value=await api.get(prefix+'jobs/'+job,{signal});
+    assert.ok(value.id===Number(job)&&value.run_id===Number(run)&&value.run_attempt===attempt,'Recorded CI job identity differs');
+    if(value.status!=='completed')throw pending;
+    completedJobs.add(run+':'+attempt+':'+job);
+   }
+  }
+ }
  async function acquire(index){
   for(;;){
    signal.throwIfAborted();
@@ -46,19 +70,10 @@ export async function withDrained({configuration:c,api,transport,signal=AbortSig
     if(index<slots&&!free(ledger.slots[index]))return {code:75};
     if(index+1<paths.length)return acquire(index+1);
     if(ledger.ciInvocation||ledger.orphanRunners?.length||!ledger.slots.every(free))return {code:75};
-    const resources=new Set();
-    for(const [key,turn] of Object.entries(ledger.turns)){
-     resources.add(`dt-${c.hostGeneration}-${turn.slot}-${turn.generation}`);
-     const identity=/^[A-K]:ci-([0-9]+)-([0-9]+)(?:-([0-9]+))?$/.exec(key);
-     if(!identity)continue;
-     assert.ok(api&&c.ci,'Recorded CI history needs its original App');
-     const [,run,attempt,job]=identity;
-     const path=`/repos/${c.ci.repository}/actions/`+(job?`jobs/${job}`:`runs/${run}`);
-     const seen=await api.get(path,{signal});
-     assert.ok(seen.id===Number(job??run)&&(!job||seen.run_id===Number(run))&&
-      (job?seen.run_attempt===Number(attempt):seen.run_attempt>=Number(attempt))&&seen.status==='completed','Recorded CI job identity or terminal state differs');
-    }
-    for(const resourceId of resources){
+    await terminalHistory(ledger);
+    // Advancing a slot already required absence of its predecessor; check its last generation.
+    for(const slot of ledger.slots.filter(slot=>slot.generation>0)){
+     const resourceId=`dt-${c.hostGeneration}-${slot.id}-${slot.generation}`;
      const seen=await transport.inspect({resourceId},{signal});
      assert.ok(seen.resourceId===resourceId&&seen.absent===true,'Recorded guest absence is uncertain');
     }
@@ -66,18 +81,33 @@ export async function withDrained({configuration:c,api,transport,signal=AbortSig
     return work(ledger);
    },{signal});
    if(result.code!==75)return result;
-   await delay(1000,undefined,{signal});
+   await wait(1000,undefined,{signal});
   }
  }
- return acquire(0);
+ for(;;){
+  try{return await acquire(0);}
+  catch(error){if(error!==pending)throw error;}
+  // GitHub may report a just-finished job as running; release admission while it catches up.
+  await wait(30000,undefined,{signal});
+ }
 }
 
-const render=String.raw`import base64,json,os,plistlib,sys,tempfile
+const render=String.raw`import base64,json,os,plistlib,shlex,sys,tempfile
 from pathlib import Path
 p=json.load(sys.stdin);agent=plistlib.loads(base64.b64decode(p['agent']))
 assert agent['ProgramArguments'][5]==p['oldConfiguration']
 assert agent['ProgramArguments'][3]==p['oldController']+'/deploy/disposable-tests/mac-controller.py'
-assert p['oldController']+'/deploy/disposable-tests/mac-controller.py' in p['body']
+old_script=p['oldController']+'/deploy/disposable-tests/mac-controller.py'
+lines=p['body'].splitlines(keepends=True);changed=0
+for index,line in enumerate(lines):
+ if not line.lstrip().startswith('exec '):continue
+ args=shlex.split(line)
+ assert args[-1]=='$@' and args.count(old_script)==1 and args.count(p['oldConfiguration'])==1
+ args[args.index(old_script)]=p.get('controller',p['oldController'])+'/deploy/disposable-tests/mac-controller.py'
+ args[args.index(p['oldConfiguration'])]=p.get('configurationPath',p['oldConfiguration'])
+ lines[index]=shlex.join(args[:-1])+' "$@"\n';changed+=1
+assert changed==1
+body=''.join(lines)
 if p.get('validate'):sys.exit(0)
 agent['ProgramArguments'][3]=p['controller']+'/deploy/disposable-tests/mac-controller.py'
 agent['ProgramArguments'][5]=p['configurationPath'];agent['ProcessType']='Standard'
@@ -85,8 +115,6 @@ for key,name in [('StandardOutPath','recovery.stdout.log'),('StandardErrorPath',
  path=Path(p['state'])/name
  if not path.exists():path.touch(mode=0o600)
  agent[key]=str(path)
-body=p['body'].replace(p['oldConfiguration'],p['configurationPath']).replace(p['oldController'],p['controller'])
-assert p['oldConfiguration'] not in body
 for name,data,mode in [(p['launchAgent'],plistlib.dumps(agent,sort_keys=False),0o600),(p['wrapper'],body.encode(),0o700)]:
  path=Path(name);fd,temporary=tempfile.mkstemp(prefix='.'+path.name,dir=path.parent)
  try:
@@ -94,6 +122,8 @@ for name,data,mode in [(p['launchAgent'],plistlib.dumps(agent,sort_keys=False),0
   os.chmod(temporary,mode);os.replace(temporary,path)
  finally:
   if os.path.exists(temporary):os.unlink(temporary)
+assert Path(p['wrapper']).read_text()==body
+assert plistlib.loads(Path(p['launchAgent']).read_bytes())['ProgramArguments']==agent['ProgramArguments']
 `;
 
 export async function publish(p,{api,transport,candidateTransport,execute=runProcess,signal=AbortSignal.timeout(3600000)}={}){
@@ -132,6 +162,14 @@ export async function publish(p,{api,transport,candidateTransport,execute=runPro
    const printed=await checked('launchctl',['print',p.launchLabel]);
    assert.ok(printed.stdout.includes(path),'Launch agent readback differs');
   };
+  if(p.statusAdapter){
+   await checked(p.python,['-I','-B','-c',String.raw`import os,sys,tempfile
+from pathlib import Path
+target=Path(sys.argv[1]);fd,temporary=tempfile.mkstemp(prefix='.'+target.name,dir=target.parent)
+with os.fdopen(fd,'wb') as output:output.write(Path(sys.argv[2]).read_bytes());output.flush();os.fsync(output.fileno())
+os.chmod(temporary,0o500);os.replace(temporary,target)
+`,p.statusAdapter,join(p.newController,'deploy/disposable-tests/ci-status.py')]);
+  }
   mkdirSync(join(old.state,'manual.lock'),{mode:0o700});
   try{
    await checked('launchctl',['bootout',p.launchLabel]);
@@ -150,15 +188,7 @@ export async function publish(p,{api,transport,candidateTransport,execute=runPro
     if(!existsSync(join(c.state,'manual.lock')))mkdirSync(join(c.state,'manual.lock'),{mode:0o700});
     throw new Error('Publication rollback stopped; admission remains closed',{cause:rollbackError});
    }
-   throw new Error('Publication failed; fresh-state rollback is running',{cause:error});
-  }
-  if(p.statusAdapter){
-   await checked(p.python,['-I','-B','-c',String.raw`import os,sys,tempfile
-from pathlib import Path
-target=Path(sys.argv[1]);fd,temporary=tempfile.mkstemp(prefix='.'+target.name,dir=target.parent)
-with os.fdopen(fd,'wb') as output:output.write(Path(sys.argv[2]).read_bytes());output.flush();os.fsync(output.fileno())
-os.chmod(temporary,0o500);os.replace(temporary,target)
-`,p.statusAdapter,join(p.newController,'deploy/disposable-tests/ci-status.py')]);
+   throw new Error('Publication failed; fresh-state rollback is restored',{cause:error});
   }
   const freeze=directory=>{for(const entry of readdirSync(directory,{withFileTypes:true}))if(entry.isDirectory())freeze(join(directory,entry.name));chmodSync(directory,0o500);};
   freeze(p.newController);

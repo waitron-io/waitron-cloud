@@ -33,6 +33,15 @@ print('{"healthy":true}')
   assert.deepEqual(calls.filter(argv=>argv.at(-1).includes('destroy')).map(argv=>argv.at(-1).split(' ').at(-1)),['dt-pool-5-1','dt-pool-6-1','dt-pool-11-1']);
 });
 
+test('a stalled peer leaves healthy slots usable while caller cancellation still stops the pool check',async t=>{
+ const {SSHTransport}=await import('./transport.mjs');
+ const transport=new SSHTransport({host:'new.invalid',recipe:'/opt/waitron-disposable-fixture',slotHosts:['new.invalid','bench.invalid']});
+ transport.healthy=async({slot,signal})=>{if(slot===0)return true;await delay(60000,undefined,{signal});return true;};
+ const signal=AbortSignal.timeout(500);
+ assert.deepEqual(await transport.healthySlots({signal,timeoutMs:30}),[0]);
+ await assert.rejects(transport.healthySlots({signal:AbortSignal.abort(),timeoutMs:30}),/abort/i);
+});
+
 test('an unavailable SSH cleanup channel refuses after one request instead of reconnecting in a burst', async t => {
   const {spawnSync} = await import('node:child_process');
   const directory=mkdtempSync(join(tmpdir(),'disposable-ssh-unavailable-'));

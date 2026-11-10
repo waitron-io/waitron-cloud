@@ -82,7 +82,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }}));
  if(config.slotHosts!==undefined){
   transport??=new CITransport(config);
-  healthy=await transport.healthySlots({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});
+  healthy=await transport.healthySlots({signal});
   // Host health checks room for another guest; occupied leases still consume capacity.
   healthy=[...new Set([...healthy,...state.slots.filter(slot=>slot.state!=='free'&&slot.state!=='quarantined'&&!slot.orphanRunners?.length).map(slot=>slot.id)])];
   free=Math.max(0,state.slots.filter(slot=>healthy.includes(slot.id)&&slot.state==='free'&&!slot.ciInvocation).length-starting);
@@ -165,12 +165,12 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }finally{await Promise.allSettled([...active.keys()]);}
  return {code:0,served};
 }
-async function automaticJob({config,api,runId,jobId,signal}){
+export async function automaticJob({config,api,runId,jobId,signal}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
  const policy=config.ci,run=await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal});
  const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId,jobId,automatic:true,signal});
  if(!ci)return {code:75,reason:'job-no-longer-queued'};
- const healthySlots=config.slotHosts===undefined?undefined:await new CITransport(config).healthySlots({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});
+ const healthySlots=config.slotHosts===undefined?undefined:await new CITransport(config).healthySlots({signal});
  return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,()=>
   executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true})),{signal,healthySlots});
 }

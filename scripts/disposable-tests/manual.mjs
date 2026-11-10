@@ -163,7 +163,7 @@ export async function main(args) {
   let admitted=false;
   const withController=async work=>!bootstrap && slots>1
     ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal,
-      ...(config.slotHosts===undefined?{}:{healthySlots:await new SSHTransport(config).healthySlots({signal:admission})})})
+      ...(config.slotHosts===undefined?{}:{healthySlots:await new SSHTransport(config).healthySlots({signal:cancellation.signal,timeoutMs:2500})})})
     :withKernelLock(config.state,()=>{refuseLegacy(config.state);return withTemporaryState(config.state,()=>work());},{bootstrap,deadline,signal:cancellation.signal});
   let lastRecovery=-Infinity;
   const recover=async()=>{

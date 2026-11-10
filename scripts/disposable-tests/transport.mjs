@@ -46,10 +46,11 @@ export class SSHTransport {
     const result = await this.remote('health', {slot}, {signal, capture: true});
     return result.code === 0 && JSON.parse(result.stdout).healthy === true;
   }
-  async healthySlots({signal}) {
+  async healthySlots({signal,timeoutMs=7500}) {
     const hosts=this.slotHosts??Array(this.slots).fill(this.host);
     const checks=new Map(await Promise.all([...new Set(hosts)].map(async host=>{
-      try{return [host,await this.healthy({signal,slot:hosts.indexOf(host)})];}
+      const deadline=AbortSignal.timeout(timeoutMs),probe=signal?AbortSignal.any([signal,deadline]):deadline;
+      try{return [host,await this.healthy({signal:probe,slot:hosts.indexOf(host)})];}
       catch{signal?.throwIfAborted();return [host,false];}
     })));
     return hosts.flatMap((host,slot)=>checks.get(host)?[slot]:[]);

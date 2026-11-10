@@ -59,11 +59,11 @@ All archive members are checked before extraction. A changed digest, escaping pa
 
 The host adapter pins Debian's `20261103-2651` generic-cloud image by SHA512, gives each guest a fresh 64 GiB overlay and runs QEMU as a dedicated nonlogin user. It exposes only loopback management, rejects guest traffic to host/private addresses and disables external IPv6. Its only firewall hook is an OUTPUT chain limited to that guest user. The guest keeps its own internal networks. An explicit VGA device with the display disabled supplies the graphics interface required by the image's bootloader. Guest serial output uses a 16 KiB memory ring rather than an unbounded host file.
 
-The explicit runtime proof starts two fresh guests, checks real exit status 3 and public internet access, refuses host/metadata addresses, destroys each guest and verifies that the successor has none of its predecessor's files. It is an opt-in dedicated-host test, never part of ordinary CI:
+Supply the other two machines’ addresses independently of the recipe’s peer file. The explicit runtime proof starts two fresh guests, checks real exit status 3 and public internet access, refuses host/metadata addresses, destroys each guest and verifies that the successor has none of its predecessor's files. It is an opt-in dedicated-host test, never part of ordinary CI:
 
 ```sh
 bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST \
-  python3 - /opt/waitron-disposable-bootstrap-20261106/host.py \
+  python3 - /opt/waitron-disposable-bootstrap-20261106/host.py --peers PEER_ONE_IP,PEER_TWO_IP \
   < deploy/disposable-tests/host-runtime.test.py
 ```
 
@@ -226,8 +226,8 @@ recipe byte for byte, installs the key-only SSH policy and startup service, and
 builds the pinned tool image. Preserve the requested benchmark results and verify
 its service is stopped before you put that machine into CI. The installer does
 not remove benchmark data. Run the guest isolation proof on each machine: it now
-checks that machine's own addresses and every configured peer, without a fixed
-server address in the test.
+checks that machine's own addresses and the independent peer addresses supplied
+with `--peers`, without a fixed server address in the test.
 
 Then publish the replacement pool:
 
@@ -243,7 +243,7 @@ fresh rollback state for the previous controller; it never reopens retired state
 Keep the old host exclusively available for rollback until both host and
 on-server-controller qualification finish.
 
-Admission skips slots on an unavailable host. Occupied leases still count when
+Admission skips slots on an unavailable host. A stalled host probe has its own deadline, so it does not discard the healthy host’s slots. Occupied leases still count when
 the host's health check refuses room for another guest. The status reader keeps
 the existing pool fields and adds `hosts` and each job's `host` for a mapped pool;
 an unreadable host leaves its job facts unknown while the other host still answers.
@@ -438,7 +438,7 @@ When GitHub shows waiting jobs, first check whether the server is preparing a gu
 python3 -I -B ~/waitron-campaign-shared/disposable-ci-status.py
 ```
 
-It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
+It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection per configured host. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
 
 Times are Unix milliseconds; durations are seconds. `admissionAgeSeconds` starts when the slot was reserved. `start` and `runtimeSeconds` come from a single worker log filename in that guest, which does not establish when GitHub acknowledged the job. Manual commands instead report `executionRequested`, the command-file timestamp. Missing or ambiguous evidence stays `unknown`. `lastAdmission` is the newest lease time in the current ledger or the last 1 MiB of output containing a job result code and lease creation time. Errors keep unknown times, show the error file's last-write time separately, mask IP addresses and stop at 200 characters. Log paths come from the installed agent; the repository agent template omits them, so an installation using that template unchanged reports unknown history and errors.
 

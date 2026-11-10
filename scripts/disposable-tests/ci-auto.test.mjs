@@ -442,6 +442,25 @@ test('pickup leaves queued work alone when only the unhealthy server has free sl
  assert.equal(capacity.slots,3);assert.equal(capacity.serverRunning,3);
 });
 
+for(const available of [[],[3]])test(`automatic job rechecks healthy slots and reaches the selected server: ${available}`,async t=>{
+ const {automaticJob}=await import('./control.mjs'),{CITransport}=await import('./transport.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ config.host='new.invalid';config.recipe='/opt/waitron-disposable-fixture';
+ config.slotHosts=['new.invalid','new.invalid','new.invalid','bench.invalid','bench.invalid','bench.invalid'];
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);
+ const replacement={healthySlots:async()=>available,healthy:async function(){return this.slot===3;},
+  transfer:async()=>{throw new Error('fixture transfer failed');},destroy:async()=>{},inspect:async({resourceId})=>({resourceId,absent:true})};
+ for(const [name,method] of Object.entries(replacement)){
+  const descriptor=Object.getOwnPropertyDescriptor(CITransport.prototype,name);
+  t.after(()=>descriptor?Object.defineProperty(CITransport.prototype,name,descriptor):delete CITransport.prototype[name]);
+  CITransport.prototype[name]=method;
+ }
+ const result=await automaticJob({config,api:f.api,runId:789,jobId:901});
+ if(available.length){assert.equal(result.code,125);assert.match(result.error,/fixture transfer failed/);assert.equal(result.lease.slot,3);assert.equal(result.cleanup,'absent');}
+ else assert.equal(result.code,75);
+ assert.ok(f.jobs.every(job=>job.status==='queued'));
+});
+
 test('a full working pool keeps its occupied capacity when another guest cannot fit',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

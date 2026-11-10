@@ -1,5 +1,6 @@
 """Explicit opt-in lifecycle proof on the dedicated test host, never a CI import."""
 import json
+import ipaddress
 import base64
 import pwd
 import os
@@ -16,6 +17,12 @@ import unittest
 MANAGER = sys.argv.pop(1)
 sys.path.insert(0,str(Path(MANAGER).resolve().parent))
 import host as host_recipe
+
+
+def isolation_targets(peers):
+    if not peers:
+        raise ValueError('Supply independent expected peer addresses with --peers')
+    return host_recipe.protected_addresses() | {str(ipaddress.ip_address(peer)) for peer in peers}
 
 
 def qmp_request(resource, command, arguments=None):
@@ -52,6 +59,7 @@ class GuestLifecycle(unittest.TestCase):
 
     def test_isolated_boot_exit_and_fresh_successor(self):
         # A missing VM adapter, shared disk, reachable host or uncertain cleanup fails this proof.
+        targets = isolation_targets(EXPECTED_PEERS)
         prepared = self.manager('prepare-image')
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
         account = pwd.getpwnam('dt-slot-0')
@@ -115,7 +123,7 @@ class GuestLifecycle(unittest.TestCase):
                         clean = self.command(*ssh, 'test ! -e /root/predecessor')
                         self.assertEqual(clean.returncode, 0, clean.stderr)
                     blocked=[('10.0.2.2',22),('169.254.169.254',80),('127.0.0.1',22000)]
-                    blocked.extend((address,22) for address in sorted(host_recipe.protected_addresses()))
+                    blocked.extend((address,22) for address in sorted(targets))
                     probe = "import socket\nfor host,port in "+repr(blocked)+""":
  try:
   connection=socket.create_connection((host,port),2)
@@ -194,7 +202,14 @@ def network_path_probe():
         capture.close()
 
 
-if sys.argv[1:] == ['--network-path']:
-    network_path_probe()
-else:
-    unittest.main(verbosity=2)
+if __name__ == '__main__':
+    if sys.argv[1:] == ['--network-path']:
+        network_path_probe()
+    else:
+        if '--peers' in sys.argv:
+            index = sys.argv.index('--peers')
+            EXPECTED_PEERS = sys.argv.pop(index + 1).split(',')
+            sys.argv.pop(index)
+        else:
+            EXPECTED_PEERS = []
+        unittest.main(verbosity=2)

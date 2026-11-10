@@ -37,7 +37,7 @@ from pathlib import Path
 root=Path(os.environ['FIXTURE_ROOT']);parts=sys.argv[-1].split();mode=parts[-1] if parts[-1]=='health' else parts[-2];rid=parts[-1]
 with (root/'calls').open('a') as f:f.write(mode+'\\n')
 if mode=='health':
- if os.environ['FIXTURE_MODE']=='unreachable':
+ if os.environ['FIXTURE_MODE']=='unreachable' or (os.environ['FIXTURE_MODE']=='stalled-first' and os.environ.get('FIXTURE_DOWN_HOST','') in sys.argv):
   import signal
   signal.signal(signal.SIGTERM,signal.SIG_IGN);(root/'health.pid').write_text(str(os.getpid()));time.sleep(60)
  print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy' and os.environ.get('FIXTURE_DOWN_HOST','') not in sys.argv}))
@@ -118,7 +118,7 @@ test('an occupied recorded lease refuses before packaging or host contact',t=>{
 test('an unhealthy host refuses before snapshot and private package preparation',t=>{
  const f=fixture(t,'unhealthy');const r=run(f);assert.equal(r.status,75,r.stdout+r.stderr);assert.equal(existsSync(join(f.root,'packaged')),false);assertNoTemporaries(f);
 });
-for(const mode of ['normal','unhealthy'])test(`two-host manual admission returns the command result or busy without packaging: ${mode}`,async t=>{
+for(const mode of ['normal','unhealthy','stalled-first'])test(`two-host manual admission returns the command result or busy without packaging: ${mode}`,async t=>{
  const f=fixture(t,mode),config=JSON.parse(readFileSync(f.config,'utf8'));
  config.mode='manual-slots';config.slots=2;config.host='new.invalid';config.slotHosts=['new.invalid','bench.invalid'];
  writeFileSync(f.config,JSON.stringify(config));
@@ -128,8 +128,8 @@ for(const mode of ['normal','unhealthy'])test(`two-host manual admission returns
  for(const slot of [0,1])await withKernelLock(join(f.root,'state/slot-'+slot),async()=>({code:0}),{bootstrap:true});
  f.env.FIXTURE_DOWN_HOST='root@new.invalid';
  const result=run(f);
- assert.equal(result.status,mode==='normal'?3:75,result.stdout+result.stderr);
- assert.equal(existsSync(join(f.root,'packaged')),mode==='normal');
+ assert.equal(result.status,mode==='unhealthy'?75:3,result.stdout+result.stderr);
+ assert.equal(existsSync(join(f.root,'packaged')),mode!=='unhealthy');
  assert.ok(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots.every(slot=>slot.state==='free'));
  assertNoTemporaries(f);
 });
