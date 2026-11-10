@@ -1,3 +1,4 @@
+import {withRequestCounts} from './github-app.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync} from 'node:fs';
 import {join, resolve, isAbsolute} from 'node:path';
@@ -231,6 +232,6 @@ export async function main(args) {
 }
 
 if (process.argv[1] && process.argv[1]!=='-' && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href) {
-  try { process.exitCode=await main(process.argv.slice(2)); }
+  try { process.exitCode=await withRequestCounts(()=>main(process.argv.slice(2))); }
   catch(error) { console.error(error.message);process.exitCode=125; }
 }

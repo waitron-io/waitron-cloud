@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
-import {GithubApp} from './github-app.mjs';
+import {GithubApp,withRequestCounts} from './github-app.mjs';
 import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
@@ -93,11 +93,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const jobs=await read(()=>findAutomatic({api:pass?.api??api,policy,runs:pass?.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
  runWorker??=ci=>{
-  let remaining=4096;
-  return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000,onStderr:data=>{
+  let remaining=4096,pending=Buffer.alloc(0);
+  const tag=data=>{if(data.toString().startsWith('{"event":"github-request-counts",'))return;
    const excerpt=data.subarray(0,remaining);remaining-=excerpt.length;
    if(excerpt.length)console.error(JSON.stringify({event:'automatic-ci-admission-stderr',at:new Date().toISOString(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,stderr:excerpt.toString()}));
-  }});
+  };
+  return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000,onStderr:data=>{
+   if(!remaining)return;
+   pending=Buffer.concat([pending,data]);let end;
+   while((end=pending.indexOf(10))!==-1){tag(pending.subarray(0,end+1));pending=pending.subarray(end+1);}
+   if(pending.length>=4096){tag(pending);pending=Buffer.alloc(0);}
+  }}).finally(()=>tag(pending));
  };
  jobs.forEach(ci=>{
   seen.add(ci.jobId);served++;
@@ -195,6 +201,6 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
- try{const result=await main(process.argv.slice(2));console.log(JSON.stringify(result));process.exitCode=result.code;}
+ try{const result=await withRequestCounts(()=>main(process.argv.slice(2)));console.log(JSON.stringify(result));process.exitCode=result.code;}
  catch(error){console.error(error.message);process.exitCode=125;}
 }

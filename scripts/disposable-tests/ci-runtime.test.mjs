@@ -303,19 +303,21 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs}={}) {
+async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false}={}) {
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
  const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
  if(turnMs){const reserve=f.leases.reserveLocal.bind(f.leases);f.leases.reserveLocal=(request,options)=>reserve(request,{...options,durationMs:turnMs});}
  f.leases.setInvocation({nonce:'c'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
- const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;
+ const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[];
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
-  if(executing && path.endsWith('/runs/789')){const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
+  if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.includes('/jobs/'))jobReads++;
   const value=await get(path,options);
-  return executing && path.includes('/jobs/')?{...value,status:jobCancelled?'completed':'in_progress',conclusion:jobCancelled?'cancelled':null}:value;
+  const cancelled=typeof jobCancelled==='function'?jobCancelled(rounds):jobCancelled;
+  return executing && path.endsWith('/runs/789') && runCancelled && rounds>=2?{...value,status:'completed',conclusion:'cancelled'}:
+   executing && path.includes('/jobs/')?{...value,status:cancelled?'completed':'in_progress',conclusion:cancelled?'cancelled':null}:value;
  };
  f.transport.execute=async(_lease,{signal})=>{
   executing=true;
@@ -327,7 +329,7 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
   return inspect(lease,options);
  };
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(callerMs),wait:async(ms)=>{if(ms===15000){elapsed+=stepMs;rounds++;}await new Promise(resolve=>setTimeout(resolve,1));}});
- return {...result,aborted,liveInspections,rounds,jobReads,events:f.events};
+ return {...result,aborted,liveInspections,rounds,jobReads,runReads,events:f.events};
 }
 
 for(const [label,failure] of [
@@ -408,4 +410,20 @@ test('repeated temporary read failures record one diagnostic',async t=>{
  const records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
  const result=await monitorReadFailure(t,{healthyRounds:5,failure:new TypeError('fetch failed')});
  assert.equal(result.code,0,result.error);assert.equal(records.length,1);
+});
+
+test('successful run reads wait a minute while each job and guest check stays at 15 seconds',async t=>{
+ const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6});
+ assert.equal(result.code,0,result.error);assert.deepEqual(result.runReads,[1,5]);
+ assert.equal(result.jobReads,6);assert.equal(result.liveInspections,6);assert.equal(result.cleanup,'absent');
+});
+test('a failed run read stays due on the next tick before the minute cadence resumes',async t=>{
+ const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6,failure:round=>round===1?Object.assign(new Error('unavailable'),{status:502}):undefined});
+ assert.equal(result.code,0,result.error);assert.deepEqual(result.runReads,[1,2,6]);assert.equal(result.jobReads,6);
+});
+for(const [label,cancelAt,runCancelled] of [['job',2,false],['run between reads',3,true]])test(`a cancelled ${label} stops at the next readable job check without another run read`,async t=>{
+ const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6,runCancelled,jobCancelled:round=>round>=cancelAt});
+ assert.equal(result.code,125);assert.equal(result.aborted,true);assert.deepEqual(result.runReads,[1]);
+ assert.equal(result.jobReads,cancelAt);assert.equal(result.rounds,cancelAt);
+ assert.match(result.error,/assignment completed without success/);assert.equal(result.cleanup,'absent');
 });

@@ -140,3 +140,13 @@ for(const stage of [undefined,'admitted','cancel-requested'])test(`automatic rec
  await reconcileManual({state,hostGeneration:'test',slots:4,slot:0,api,ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml'},transport:{destroy:async()=>assert.fail('No guest remains')}});
  assert.deepEqual(writes,[]);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
 });
+
+test('all three CLI guards activate request logging and flush on refusal',t=>{
+ for(const entry of ['manual','control','ci-canary']){
+  const result=spawnSync(process.execPath,[new URL('./'+entry+'.mjs',import.meta.url).pathname],{encoding:'utf8',timeout:10000});
+  assert.equal(result.status,125,result.stderr);
+  const rows=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
+  assert.equal(rows.length,1,entry+': '+result.stderr);assert.equal(rows[0].event,'github-request-counts');
+  assert.equal(rows[0].final,true);assert.equal(rows[0].requests,0);
+ }
+});

@@ -1213,7 +1213,8 @@ test('the real automatic worker tags bounded stderr and forwards the original by
  const config=await refusalPool(t),f=fixture(),get=f.api.get;f.jobs.splice(1);
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
  const node=process.execPath,worker=config.state+'/stderr-worker';
- writeFileSync(worker,'#!'+node+'\n'+"process.stderr.write('x'.repeat(6000));process.exit(125);\n",{mode:0o700});
+ const count=JSON.stringify({event:'github-request-counts',requests:1})+'\n';
+ writeFileSync(worker,'#!'+node+'\n'+'process.stderr.write('+JSON.stringify(count)+');'+"process.stderr.write('x'.repeat(6000));process.exit(125);\n",{mode:0o700});
  const error=console.error,write=process.stderr.write,records=[],forwarded=[];
  t.after(()=>{process.execPath=node;console.error=error;process.stderr.write=write;});
  console.error=line=>{records.push(JSON.parse(line));};process.stderr.write=data=>{forwarded.push(Buffer.from(data));return true;};process.execPath=worker;
@@ -1223,7 +1224,7 @@ test('the real automatic worker tags bounded stderr and forwards the original by
  const diagnostics=records.filter(row=>row.event==='automatic-ci-admission-stderr');
  assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),'x'.repeat(4096));
  for(const row of diagnostics){assert.equal(row.runId,789);assert.equal(row.attempt,1);assert.equal(row.jobId,901);assert.ok(Number.isFinite(Date.parse(row.at)));}
- assert.equal(Buffer.concat(forwarded).toString(),'x'.repeat(6000));
+ assert.equal(Buffer.concat(forwarded).toString(),'{"event":"github-request-counts","requests":1}\n'+'x'.repeat(6000));
 });
 
 for(const state of ['replaced','closed','closed-with-current-other','merged-empty-links','assigned','current-fail-fast','unknown-link','foreign','main','schedule','advanced-during-read','incomplete-jobs'])test(`dead-run reconciliation handles ${state}`,async()=>{
