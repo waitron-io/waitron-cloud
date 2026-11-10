@@ -206,23 +206,13 @@ known billing to exercise the export contract; it does not qualify real billing.
 
 ## Cloud backup box identity (D451)
 
-Generated recovery accepts only its own captured archive, drains and closes the
-source writer, authenticates with the stored node recovery key, and uses Waitron's
-prepared runner and real restore hooks. Wrong keys, changed bindings, expired
-permissions and replaced destinations refuse. Clock observations are synthetic;
-the actual observer and admission checks still validate them, with the release's
-generated timestamp and no external clock request. This does not qualify production
-time sources.
-
-**Still open under D79:** the genuine full-backup readback pairs both real servers,
-then ordinary native restore refuses `restore.hook_failed` for `fiscal-verifactu`
-with `sif.allocation_invalid`, before the container verifier runs. Preserve that
-refusal: restoring without allocation authority must not activate a fiscal server.
-The approved [non-activating verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-and its [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
-own this remaining qualification. The [compatibility plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
-records the bounded fixture and route amendments. No fiscal implementation,
-immutable row, historical result or deployment authority changes here.
+Current-Waitron runtime compatibility, production time sources, published-image
+qualification and deployment remain unqualified. The [existing joint and paired proofs](test-cloud.md#backup-verifier-boundary)
+record historical local verification and separately authorised recovery; they do not
+exercise a module's `needs_authority` outcome. The [legacy local runner](local-backups.md#run-the-proof)
+still reaches ordinary fiscal restore's deliberate refusal without allocation authority.
+That refusal is not missing D79 verification work. Keep snapshots unavailable and
+deployment enforcement off until the remaining integration and release gates pass.
 
 ## Retrospective review qualification (D535)
 

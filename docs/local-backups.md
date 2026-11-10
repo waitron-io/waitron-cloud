@@ -1,9 +1,9 @@
 # Prove managed backups locally
 
-Use this runner to pair two disposable Waitron servers, stream their live SQLite
-databases, retain encrypted snapshots and restore both sources through Waitron's own
-recovery code.
-It creates no AWS resources and requires no live customer credentials.
+This guide records the legacy two-server runner and its historical results.
+For non-activating archive verification and separately authorised recovery, use the
+[existing joint and paired proofs](test-cloud.md#backup-verifier-boundary).
+The legacy runner creates no AWS resources and requires no live customer credentials.
 
 ## Exercise test free and paid plans
 
@@ -72,6 +72,15 @@ WAITRON_CHECKOUT=/absolute/path/to/waitron \
   BACKUP_RECEIPT=/tmp/cloud-backup-receipt.json \
   node scripts/test-postgres.mjs exec node scripts/test-local-backups.mjs
 ```
+
+With the pinned fiscal runtime, `scripts/test-local-backups.mjs:515–530` calls
+ordinary restore hooks before the bound container verifier. Without allocation
+authority, that restore deliberately refuses `restore.hook_failed` for
+`fiscal-verifactu` with `sif.allocation_invalid`. Preserve that refusal: verification
+does not authorise fiscal activation. This command is not the current joint proof.
+The two-venue wrapper below calls this same runner
+(`scripts/cloud-two-venue-milestone-receipt.mjs:48`) and inherits its limitation.
+Its older successful measurements below are historical, not current qualification.
 
 To run the complete two-venue milestone, build the local gateway image first, then
 run all three phases through one command. The command writes the final receipt only
@@ -368,8 +377,8 @@ contract described below.
 
 ## Still required before production
 
-The complete local runner now proves backup continuity across a real local gateway
-replacement and restores a fresh snapshot published by the replacement. It exercises
+The historical local run recorded backup continuity across a real local gateway
+replacement and restoration of a fresh snapshot published by the replacement. It exercised
 Waitron's stream supervisor, signed pointer, sealed recovery kit and cold database
 restore. It does not activate the target or prove that a planned source stopped at a
 final write. Production replacement still needs final-write and quiescence evidence,

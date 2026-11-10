@@ -537,10 +537,10 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
 Those checks require every owner's passed result, refuse a wrong recovery key and
 changed archive bytes, then verify the untouched original again. No activation is
 attempted. These local candidates remain unpublished and unqualified for release.
-The joint scenario now covers the v2 client, owner approval and target delivery.
-The same run now also restores its delivered archive through the separately
-authorised fixture below. Remaining refusal controls still prevent complete
-certification. Earlier independent controls are not relabelled as part of this run.
+The historical joint proof in Cloud #307 (`121d162ed`) covers the v2 client,
+owner approval, target delivery, separately authorised restore and the same-run
+refusal controls described below. Earlier independent controls are not part of
+that run. This record does not qualify current Waitron main or a published image.
 
 You can qualify the separately authorised recovery fixture against the same image:
 
@@ -622,8 +622,10 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node scripts/backup-verifier-proof.mjs /tmp/cloud-backup-verifier-proof.json
 ```
 
-With the authorised disposable fixture, this command saves the complete local
-receipt and exits with status 0. The receipt retains the primary fiscal refusal
+The [guide at #307](https://github.com/waitron-io/waitron-cloud/blob/121d162ed2c0fbf0be6e9575178686c8b4da5f02/docs/test-cloud.md)
+reports that the authorised disposable fixture saved the complete local receipt
+and exited with status 0. That historical record is not a fresh run against your
+selected image or current Waitron main. The receipt retains the primary fiscal refusal
 alongside the separate successful recovery. A missing phase, failed scenario or
 absent authority still refuses certification.
 `scripts/verify-backup-verifier-proof.mjs` requires one run's genuine capture, signed publication, complete bound
@@ -750,7 +752,7 @@ replacement and that no recovery operation was created. Recovery still records
 Keep deployment plan enforcement off until the remaining PR7 checks pass.
 
 
-This extension passes on the isolated Linux test box without skips in 125.2
+The recorded historical Linux test-box run passed without skips in 125.2
 seconds. Its 30 resource samples include the exact verifier child, with at least
 3,627 MiB available memory and 12.38 GiB free disk. The 36 evidence checks and nine
 cleanup-ownership checks pass locally; removing any of their 34 guards fails its
@@ -790,7 +792,7 @@ checks, rollback and the pinned Alpine release remain open. The complete
 integration reader continues to reject this partial result, and deployment plan
 enforcement stays off.
 
-The recovery-boundary test passes on the isolated Linux box without skips in
+The recorded historical Linux recovery-boundary run passed without skips in
 146.5 seconds. Its 35 resource samples stay above 3,462 MiB available memory and
 15.22 GiB free disk, with no out-of-memory kill among the sampled containers.
 All 18 native recovery-evidence checks pass; removing each of their 17 guards
@@ -828,13 +830,20 @@ source. No server starts, no Cloud credentials are restored and Cloud receives n
 restored report or replacement request. The original source restarts with its
 saved identity after the recovery operation closes.
 
-The complete Linux journey passes without skips in 168.6 seconds. Its 39 resource
-samples stay above 3,330 MiB available memory and 12.40 GiB free disk, without a
+The recorded historical Linux journey passed without skips in 168.6 seconds. Its 39
+resource samples stay above 3,330 MiB available memory and 12.40 GiB free disk, without a
 sampled out-of-memory kill. Sixteen native evidence checks pass and catch all 15
 deliberate evidence-guard omissions in an installed disposable checkout. These
 measurements do not qualify the full settled or active-verifier capacity budget.
 Keep deployment plan enforcement off until the remaining integration and release
 checks pass.
+
+These paired journeys landed in #914 (`2208befc4`); #1088 (`3f2ca18fa`)
+added reading the selected image's exact target. Kubernetes verification is also
+available through #1125 (`223250abc`) in `scripts/kubernetes-check.mjs:201`.
+The commands and historical measurements above do not qualify current-Waitron
+compatibility, release, publication or deployment. They do not exercise a module's
+`needs_authority` outcome. No new archive run was made for this documentation correction.
 
 To capture a continuous stream from that same paired paid source, run:
 
