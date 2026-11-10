@@ -34,6 +34,8 @@ policy are unchanged. The local consumer tests exercise recovery and exhaustion.
 published assignment and any change in incomplete-inventory events remain separate evidence;
 no queue saving is established by those tests.
 
+A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Obsolete-run cancellation, terminal markers and automatic overflow remain in the approved follow-on slices; published live outcomes still need qualification.
+
 ## Keep the private shared UI release current (D579)
 
 The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
