@@ -11,7 +11,7 @@ import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
-import {runTestCloudClients, parseIntegrationJson} from './test-cloud-integration.mjs';
+import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
   const exporter = spawn('docker', ['save', image], {env, signal, stdio: ['ignore', 'pipe', 'pipe']});
@@ -81,16 +81,19 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest}) {
 }
 
 export async function runKubernetesCheck(target = 'kind') {
-assert.ok(['kind', 'kind-worker-loss'].includes(target), 'kubernetes.target');
+const amazon = typeof target === 'object' ? target : undefined;
+if (amazon) assertAmazonBinding(amazon);
+else assert.ok(['kind', 'kind-worker-loss'].includes(target), 'kubernetes.target');
 const workerLoss = target === 'kind-worker-loss';
-const cluster = 'd620-' + randomUUID(), forwards = [];
+const cluster = amazon?.cluster ?? 'd620-' + randomUUID(), forwards = [];
+const context = amazon?.context ?? 'kind-' + cluster;
 const directory = await mkdtemp(join(tmpdir(), 'cloud-kubernetes-'));
-const env = {...process.env, KUBECONFIG: join(directory, 'kubeconfig')};
+const env = {...process.env, KUBECONFIG: amazon ? '/etc/kubernetes/admin.conf' : join(directory, 'kubeconfig')};
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
 let sharedVolume;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
-  cluster + (workerLoss && ['manifest', 'verifier'].includes(role) ? role === 'manifest' ? '-worker2' : '-worker' : '-control-plane')]));
+  cluster + ((workerLoss || amazon) && ['manifest', 'verifier'].includes(role) ? role === 'manifest' && amazon?.phase !== 'after' ? '-worker2' : '-worker' : '-control-plane')]));
 const stop = new AbortController(), shutdown = () => stop.abort();
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 async function run(binary, args, input, cleanup = false) {
@@ -101,7 +104,7 @@ async function run(binary, args, input, cleanup = false) {
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
 }
-const kube = (args, input, cleanup = false) => run('kubectl', ['--context', 'kind-' + cluster, '--namespace', 'default', ...args], input, cleanup);
+const kube = (args, input, cleanup = false) => run('kubectl', ['--context', context, '--namespace', 'default', ...args], input, cleanup);
 const pod = async (role, cleanup = false, optional = false) => {
   const rows = JSON.parse(await kube(['get', 'pods', '-l', 'app=' + role, '-o', 'json'], undefined, cleanup)).items;
   if (optional && rows.length === 0) return;
@@ -113,7 +116,7 @@ const exec = async (role, args, input) => kube(['exec', '-i', (await pod(role ==
   '-c', role, '--', ...args], input);
 async function forward(role, ports) {
   const name = (await pod(role)).metadata.name;
-  const child = spawn('kubectl', ['--context', 'kind-' + cluster, '--namespace', 'default', 'port-forward', '--address', '127.0.0.1', 'pod/' + name,
+  const child = spawn('kubectl', ['--context', context, '--namespace', 'default', 'port-forward', '--address', '127.0.0.1', 'pod/' + name,
     ...ports.map(port => ':' + port)], {env, stdio: ['ignore', 'pipe', 'pipe']});
   const closed = new Promise(resolve => child.once('close', resolve)); forwards.push({child, closed});
   return new Promise((resolve, reject) => {
@@ -129,9 +132,10 @@ async function forward(role, ports) {
 try {
   assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
   assert.match(process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE ?? '', /^sha256:[a-f0-9]{64}$/);
-  assert.match(await run('kind', ['version']), /v0\.31\.0/);
+  if (!amazon) assert.match(await run('kind', ['version']), /v0\.31\.0/);
   assert.equal(JSON.parse(await run('kubectl', ['version', '--client', '-o', 'json'])).clientVersion.gitVersion, 'v1.34.3');
-  await run('docker', ['tag', image, tag]); tagged = true;
+  await run('docker', ['tag', image, tag]); tagged = !amazon;
+  if (!amazon) {
   created = true;
   process.stderr.write('Creating owned local Kubernetes cluster\n');
   let shared;
@@ -152,12 +156,12 @@ try {
     }
   }
   await run('kind', ['load', 'docker-image', '--name', cluster, tag]);
-  const node = JSON.parse(await run('docker', ['inspect', cluster + '-control-plane']))[0];
-  const address = node.NetworkSettings.Networks.kind.IPAddress;
+  }
+  const address = amazon?.address ?? JSON.parse(await run('docker', ['inspect', cluster + '-control-plane']))[0].NetworkSettings.Networks.kind.IPAddress;
   assert.match(address, /^(?:\d{1,3}\.){3}\d{1,3}$/);
   const manifest = JSON.parse((await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8')).replaceAll('CLOUD_IMAGE', tag));
   const verifierTemplate = manifest.items.find(item => item.metadata.name === 'verifier');
-  if (workerLoss) for (const item of manifest.items.filter(row => ['Pod', 'Deployment'].includes(row.kind))) {
+  if (workerLoss || amazon) for (const item of manifest.items.filter(row => ['Pod', 'Deployment'].includes(row.kind))) {
     const spec = item.kind === 'Pod' ? item.spec : item.spec.template.spec;
     if (item.kind === 'Pod') spec.nodeSelector = {'kubernetes.io/hostname': roleNodes[item.metadata.name]};
     else spec.affinity = {nodeAffinity: {
@@ -187,13 +191,13 @@ try {
   }};
   process.stderr.write('Running native signup, pairing and remote-access journey against Kubernetes\n');
   const verifier = createKubernetesVerifier({template: verifierTemplate, kube, pod,
-    loadImage: id => loadVerifierImage(id, ['--context', 'kind-' + cluster, '--namespace', 'default', 'exec', '-i',
+    loadImage: id => loadVerifierImage(id, ['--context', context, '--namespace', 'default', 'exec', '-i',
       'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, stop.signal)});
   const journeys = [];
   let loss, stoppedAt, offBeforeSecondMs;
   for (let journey = 0; journey < (workerLoss ? 2 : 1); journey++) {
   result = await runTestCloudClients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true, paidVerification: true,
-    kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: 'kind', proxyIp: address,
+    kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: amazon ? cluster : 'kind', proxyIp: address, ...(amazon ? {amazon} : {}),
       port: ports[3443], mailPort: ports[8025], exec, remote, verifier}});
   journeys.push(result);
   if (workerLoss && journey === 0) {
@@ -214,7 +218,7 @@ try {
   if (created && !stop.signal.aborted) {try {process.stderr.write(await kube(['get', 'pods', '--request-timeout=5s']) + '\n');} catch {}}
   throw error;
 } finally {
-  if (created) await verifierDiagnostics(kube, pod);
+  if (created || amazon) await verifierDiagnostics(kube, pod);
   for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {
     if (created) {
@@ -237,7 +241,7 @@ return result;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const target = process.argv.length === 2 ? 'kind' : process.argv.length === 3 && process.argv[2] === '--worker-loss' ? 'kind-worker-loss' : undefined;
+  const target = process.argv.length === 4 && process.argv[2] === '--amazon' ? JSON.parse(await readFile(process.argv[3], 'utf8')) : process.argv.length === 2 ? 'kind' : process.argv.length === 3 && process.argv[2] === '--worker-loss' ? 'kind-worker-loss' : undefined;
   assert.ok(target, 'kubernetes.target');
   process.stdout.write(JSON.stringify(await runKubernetesCheck(target)) + '\n');
 }

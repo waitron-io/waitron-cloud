@@ -1040,3 +1040,49 @@ read source, schemas, workflow wiring and their own scratch data. This review
 adds no exemption for Cloud prose. Identity and gateway scripts, workspace
 installation inputs and historical receipt certificates keep their existing
 review boundaries. The separately frozen AWS installation remains inventoried.
+
+## One owner-started Amazon experiment
+
+To test host loss on real machines, use `scripts/amazon-run.mjs`, with the
+[bounded plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md). This uses
+CloudFormation because its deletion schedule can exist before the machines and run
+without your laptop. The external roles survive deletion. The OpenTofu checks above
+remain mocked. Native tests and template validation do not prove this Amazon run.
+
+Run from a clean Cloud checkout on your x86 test box, with Node 26, Docker Buildx,
+WireGuard tools, AWS CLI and your package-read token in `NODE_AUTH_TOKEN`.
+Keep credentials and a mode-600 JSON file outside the repository. Set `D618_CONFIG`
+to that file. Its keys are `region` (`eu-west-1`), `account` (your practice account),
+`image` (an official Debian 13 amd64 AMI), `key` (your EC2 key-pair name), `sshKey`
+(the private key path on the test box), `operatorCidr` (that box’s public IPv4 `/32`),
+`stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
+(a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
+No package token or AWS credential is copied to the three machines.
+
+Before starting, check these yourself; the lane has no account or spending authority:
+
+1. Confirm the practice account and non-root identity with `aws sts get-caller-identity`
+   and its organisation with `aws organizations describe-organization`.
+2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT" --budget-name D618`
+   and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT" --budget-name D618 --action-id "$ACTION"`.
+   Inspect its IAM policy and simulate it with `aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" --action-names ec2:RunInstances ec2:TerminateInstances cloudformation:DeleteStack`.
+   Check that the action covers the launching role and preserves teardown; billing delay prevents a hard USD 10 cap.
+3. Read both external roles with `aws iam get-role --role-name "$ROLE"`. The stack role trusts
+   CloudFormation and can manage the template’s EC2/network/schedule resources; the scheduler
+   role trusts `scheduler.amazonaws.com`, can delete `d618-*` stacks and pass the stack role.
+   Check `iam:PassRole` using `aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" --action-names iam:PassRole --resource-arns "$STACK_ROLE" "$SCHEDULER_ROLE"`.
+4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region eu-west-1`
+   with `aws ec2 describe-instances --region eu-west-1 --filters Name=instance-state-name,Values=pending,running`.
+   Existing usage must leave 12 standard vCPUs free. Check your AMI with
+   `aws ec2 describe-images --image-ids "$IMAGE" --region eu-west-1`; require official Debian 13, amd64 and root device `/dev/xvda`.
+5. Read month-to-date spend with `aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD --granularity MONTHLY --metrics UnblendedCost`
+   (end is exclusive), then re-read the plan’s linked Ireland prices.
+6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
+   It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
+   at 90 minutes. If deletion is late it requests deletion and reports failure. To stop early,
+   use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.
+7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region eu-west-1`
+   reports that the named stack no longer exists (or `DELETE_COMPLETE` when you use its retained stack ID), and inspect the bill before another run.
+
+D110 closes only after that run passes. D621 owns the remaining speed targets,
+database-host loss and production-mode checks. No production service is deployed.
