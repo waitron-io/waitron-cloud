@@ -442,6 +442,21 @@ test('pickup leaves queued work alone when only the unhealthy server has free sl
  assert.equal(capacity.slots,3);assert.equal(capacity.serverRunning,3);
 });
 
+test('a full working pool keeps its occupied capacity when another guest cannot fit',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ config.slotHosts=['new.invalid','new.invalid','new.invalid','bench.invalid','bench.invalid','bench.invalid'];
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot})
+  .reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ let mode='server';const api=routingVariables(f.api);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_MODE')?{value:mode}:get(path);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));mode=body.value;};
+ const result=await automaticTick({configuration:'/fixture/config',config,api,transport:{healthySlots:async()=>[]},runWorker:async()=>assert.fail('The pool is full')});
+ assert.deepEqual(result,{code:0,served:0});assert.equal(mode,'server');
+ const capacity=JSON.parse((await api.get('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY')).value);
+ assert.equal(capacity.slots,6);assert.equal(capacity.serverRunning,6);
+});
+
 test('pickup retries only its recorded busy-runner failure once, while other turns stay retired',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

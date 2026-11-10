@@ -176,6 +176,10 @@ def collect(home=None):
             return target,None
     with ThreadPoolExecutor(max_workers=len(set(slot_hosts))) as pool:
         observed=dict(pool.map(read_host,dict.fromkeys(slot_hosts)))
+    if 'slotHosts' in config:
+        result['hosts']={host:dict(slots=[slot for slot,target in enumerate(slot_hosts) if target==host],reachable=values is not None) for host,values in observed.items()}
+        for job in result['jobs']:
+            job['host']=slot_hosts[job['slot']]
     if any(values is not None for values in observed.values()):
         result['host']={resource:value for values in observed.values() if values is not None for resource,value in values.items()}
         for job in result['jobs']:

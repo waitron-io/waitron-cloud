@@ -83,6 +83,8 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(config.slotHosts!==undefined){
   transport??=new CITransport(config);
   healthy=await transport.healthySlots({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});
+  // Host health checks room for another guest; occupied leases still consume capacity.
+  healthy=[...new Set([...healthy,...state.slots.filter(slot=>slot.state!=='free'&&slot.state!=='quarantined'&&!slot.orphanRunners?.length).map(slot=>slot.id)])];
   free=Math.max(0,state.slots.filter(slot=>healthy.includes(slot.id)&&slot.state==='free'&&!slot.ciInvocation).length-starting);
   if(!healthy.length){
    if(await read(()=>routingMode({api,policy,signal}))!=='hosted')await setRoutingMode({api,policy,mode:'hosted',signal});

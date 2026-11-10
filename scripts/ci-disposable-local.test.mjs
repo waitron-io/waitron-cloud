@@ -25,3 +25,4 @@ import './disposable-tests/ci-ordinary.test.mjs';
 import './disposable-tests/ci-auto.test.mjs';
 import './disposable-tests/ci-server-first.test.mjs';
 import './disposable-tests/ci-status.test.mjs';
+import './disposable-tests/publication.test.mjs';

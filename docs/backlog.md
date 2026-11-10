@@ -2,6 +2,14 @@
 
 ## Disposable test slots and repository runners (D592)
 
+A1479 adds a mapped two-host pool, pinned host installer, both-host status and a
+drained publisher with fresh-state rollback. Controlled transport, admission,
+isolation-policy and publication checks cover the local paths. Live installation,
+each-host isolation/reboot and six mixed CI jobs per host still need qualification.
+The controller and manual package preparation stay on the Mac in this first slice;
+the on-server controller is the remaining A1479 slice. Package selection and the
+manual snapshot/bundle format are unchanged.
+
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
 Pickup now retains active workers across temporary routing and inventory reads with a 30-second retry. Measured routing decisions stay on their queues; automatic recovery cleans guests and runners without cancelling or retrying the run. Guest readiness tolerates SSH restarts during cloud-init within its original boot budget. The matching stability controller and host recipe ran [six simultaneous GitHub jobs successfully](https://github.com/waitron-io/waitron-cloud/actions/runs/42490199973), with all six guests and runner registrations cleaned up. The later widened admission release retains those fixes; the watcher restored server mode on 8 November at 17:50, and ordinary assignment resumed. Sustained operation remains to be measured.

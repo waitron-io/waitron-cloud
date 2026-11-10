@@ -182,6 +182,74 @@ When replacing a legacy manual release with the kernel-lock controller, follow t
 4. Switch the shared helper to the new immutable controller/configuration. Confirm that no old helper process remains. Keep the retired state gated permanently; never point the replacement at it.
 5. Only then load the rendered launchd agent with explicit HOME and no log file. Qualify its real SSH identity, interrupted-turn cleanup and a fresh successor. For a newly enrolled host, coordinate its reboot with the watcher. Measured capacity and GitHub activation retain their later gates.
 
+## Use two CI hosts from one controller
+
+When one machine is full, you can add a second dedicated host without changing a
+job's identity. Keep one controller and one ledger. The immutable `slotHosts` list
+assigns each slot to its host for transfer, execution, result reads and cleanup.
+For the twelve-slot profile, assign slots 0–5 to the first host and 6–11 to the
+second. Keep the existing guest sizes and host reserves; qualify six simultaneous
+jobs on each machine before treating twelve slots as operating capacity.
+
+Copy the existing configuration into a private publication manifest. Replace its
+`host`, `recipe`, `state` and `hostGeneration`, set `slots` to 12, and add:
+
+```json
+{
+  "slotHosts": [
+    "new-ci.example.test", "new-ci.example.test", "new-ci.example.test",
+    "new-ci.example.test", "new-ci.example.test", "new-ci.example.test",
+    "bench-ci.example.test", "bench-ci.example.test", "bench-ci.example.test",
+    "bench-ci.example.test", "bench-ci.example.test", "bench-ci.example.test"
+  ]
+}
+```
+
+The manifest's `configuration` holds that complete replacement configuration.
+Keep its existing App credential paths and repository value. Add `source` and
+`sha` for the landed checkout, absolute `node` and `python` paths,
+`oldController`, `oldConfiguration`, an absent `newController` directory,
+`launchAgent`, `launchLabel`, `wrapper`, and `statusAdapter` for the installed
+read-only status script. Set `peerAddresses` to the explicit IPv4 addresses of
+both new hosts and the retired CI host. These addresses join each guest's existing
+own-host/private-address refusal; external IPv6 remains refused.
+
+After landing, install and qualify the hosts while the old controller still serves:
+
+```sh
+node scripts/disposable-tests/publish.mjs hosts /PRIVATE/publication.json
+```
+
+This sends the committed recipe and pinned packages over the shared verified SSH
+connection. The installer refuses an active allocation, verifies an existing
+recipe byte for byte, installs the key-only SSH policy and startup service, and
+builds the pinned tool image. Preserve the requested benchmark results and verify
+its service is stopped before you put that machine into CI. The installer does
+not remove benchmark data. Run the guest isolation proof on each machine: it now
+checks that machine's own addresses and every configured peer, without a fixed
+server address in the test.
+
+Then publish the replacement pool:
+
+```sh
+node scripts/disposable-tests/publish.mjs /PRIVATE/publication.json
+```
+
+Publication takes every old slot lock and the controller lock, requires recorded
+jobs to be terminal, verifies guest absence and refuses pending hosted moves.
+It bootstraps fresh state and a new generation, permanently gates the retired
+state, and switches the launch agent and manual helper. A failed launch creates
+fresh rollback state for the previous controller; it never reopens retired state.
+Keep the old host exclusively available for rollback until both host and
+on-server-controller qualification finish.
+
+Admission skips slots on an unavailable host. Occupied leases still count when
+the host's health check refuses room for another guest. The status reader keeps
+the existing pool fields and adds `hosts` and each job's `host` for a mapped pool;
+an unreadable host leaves its job facts unknown while the other host still answers.
+This stage still runs the controller and manual package preparation on the Mac.
+Moving the controller to a server remains the next slice.
+
 ## Build the shared tool disk
 
 To avoid installing the same pinned tools on every guest, build a reusable disk from the

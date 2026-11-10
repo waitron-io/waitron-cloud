@@ -80,6 +80,9 @@ class StatusTests(unittest.TestCase):
             r=self.collect(hosts=2)
             self.assertEqual(r['jobs'][0]['start'],900000)
             self.assertEqual(r['jobs'][1]['start'],'unknown' if failed else 950000)
+            self.assertEqual(r['jobs'][1]['host'],'bench.invalid')
+            self.assertEqual(r['hosts']['new.invalid']['slots'],[0,1])
+            self.assertEqual(r['hosts']['bench.invalid']['reachable'],not failed)
             self.assertEqual(r['slots'],dict(total=3,busy=2,free=1))
 
     def test_busy_counts_preparation_execution_and_pending_intent_separately(self):
