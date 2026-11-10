@@ -228,8 +228,10 @@ builds the pinned tool image. For changed recipes, use a fresh `/opt/waitron-dis
 path. Preserve the requested benchmark results and verify
 its service is stopped before you put that machine into CI. The installer does
 not remove benchmark data. Run the guest isolation proof on each machine: it now
-checks that machine's non-loopback IPv4/IPv6 addresses and the independent peers supplied
-with `--peers`, without a fixed server address in the test.
+checks that machine's non-loopback IPv4 addresses and the independent peers supplied
+with `--peers`, without a fixed server address in the test. IPv6 is disabled in the guest;
+IPv6 refusal is not firewall evidence. The localhost:22000 check addresses the guest itself;
+10.0.2.2:22000 checks the host's forwarded management port.
 
 Then publish the replacement pool:
 
