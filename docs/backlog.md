@@ -2,15 +2,16 @@
 
 ## Disposable test slots and repository runners (D592)
 
-A1479 adds a mapped two-host pool, pinned host installer, both-host status and a
-drained publisher with fresh-state rollback. Controlled transport, admission,
-isolation-policy and publication checks cover the local paths. Both replacement
-hosts have the pinned recipe and tool image installed
-([installation receipt](https://github.com/waitron-io/waitron-cloud/pull/1144#issuecomment-6776692683)). Each-host isolation/reboot
-and six mixed CI jobs per host still need qualification.
-The controller and manual package preparation stay on the Mac in this first slice;
-the on-server controller is the remaining A1479 slice. Package selection and the
-manual snapshot/bundle format are unchanged.
+A1479 includes the mapped two-host pool and pinned installer, plus server-controller
+publication, fresh-state rollback, systemd status and Mac-only manual capture.
+Controlled tests cover installation, cutover, rollback, upload completion/EOF and
+status. Both replacement hosts passed corrected native guest isolation and idle
+reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
+Live CI still runs on OLD from the Mac. The watcher requires complete history/host
+preflight and a short queue before the twelve-slot handoff. Six concurrent mixed
+CI jobs per new host, installed on-server restart and Mac-sleep behavior remain
+unqualified. Keep OLD available for rollback until those proofs finish; it then
+stays running for periodic benchmarks and practice.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 

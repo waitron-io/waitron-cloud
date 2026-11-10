@@ -251,8 +251,46 @@ Admission skips slots on an unavailable host. A stalled host probe has its own d
 the host's health check refuses room for another guest. The status reader keeps
 the existing pool fields and adds `hosts` and each job's `host` for a mapped pool;
 an unreadable host leaves its job facts unknown while the other host still answers.
-This stage still runs the controller and manual package preparation on the Mac.
-Moving the controller to a server remains the next slice.
+This pool-only publication keeps the controller and manual package preparation on the Mac.
+Use the server publication below to move the controller.
+
+## Run the controller from the CI server
+
+Your Mac needs to stay awake while it controls CI. Move the sole controller and
+ledger to NEW so ordinary CI continues without it. Keep manual checkout capture
+and private-package authentication on the Mac; the helper uploads their prepared
+bytes and NEW owns the guest allocation.
+
+Use the same private publication manifest and add `controllerHost`, an absent
+`serverRelease` such as `/opt/waitron-disposable-controller-REVIEWED_SHA`, and a fresh
+`serverState` under `/var/lib/waitron-disposable-controller/states/`. Choose a new
+`configuration.hostGeneration`. Keep the already qualified host recipe and mapping.
+Then publish from the landed source:
+
+```sh
+node scripts/disposable-tests/publish.mjs server /PRIVATE/publication.json
+```
+
+The installer verifies the pinned Git, Python and Node runtime. It sends App bytes
+through verified SSH stdin into private root-owned files outside releases, generates
+NEW's own SSH key and pins the mapped hosts. After the old pool drains, a read-only
+App request, both-host SSH checks and a fresh guest proof run before Mac recovery
+stops. NEW starts with a fresh ledger through a systemd service and timer; the Mac
+agent is disabled and its old state remains closed. A refused activation drains NEW
+before creating fresh Mac rollback state.
+
+For a later release, add `oldServer` with the installed receipt's `release`,
+`configuration` and `node`. The same command drains that server's ledger and installs
+fresh state. A refused activation restores the previous code under a fresh release,
+state and generation. Keep the installed receipt for the next publication.
+
+The manual helper still verifies your local checkout. Its counted upload lets a
+command finish while stdin stays open; observed EOF or a signal cancels the turn
+and retains independent guest cleanup. A sleeping Mac leaves the guest's existing
+55-minute command bound in force. The status adapter streams the canonical reader
+over the shared SSH connection. An unreachable controller reports unknown capacity.
+Qualify real CI, restart and Mac-sleep behavior on the installed service before
+retiring the previous CI host's startup service.
 
 ## Build the shared tool disk
 

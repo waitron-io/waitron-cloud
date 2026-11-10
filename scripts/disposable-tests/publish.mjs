@@ -160,13 +160,22 @@ for key,name in [('StandardOutPath','recovery.stdout.log'),('StandardErrorPath',
  path=Path(p['state'])/name
  if not path.exists():path.touch(mode=0o600)
  agent[key]=str(path)
-for name,data,mode in [(p['launchAgent'],plistlib.dumps(agent,sort_keys=False),0o600),(p['wrapper'],body.encode(),0o700)]:
+files=[(p['launchAgent'],plistlib.dumps(agent,sort_keys=False),0o600),(p['wrapper'],body.encode(),0o700)]
+status_data=None
+if p.get('statusAdapter'):
+ if p.get('remoteController'):
+  target=p['remoteController'];command=[p['python'],'-I','-B',p['controller']+'/deploy/disposable-tests/ci-status.py','--remote',target['host'],target['configuration']]
+  status_data=('import os\nos.execv('+repr(p['python'])+','+repr(command)+')\n').encode()
+ elif p.get('statusRestore') is not None:status_data=base64.b64decode(p['statusRestore'])
+ if status_data is not None:files.append((p['statusAdapter'],status_data,0o500))
+for name,data,mode in files:
  path=Path(name);fd,temporary=tempfile.mkstemp(prefix='.'+path.name,dir=path.parent)
  try:
   with os.fdopen(fd,'wb') as output:output.write(data);output.flush();os.fsync(output.fileno())
   os.chmod(temporary,mode);os.replace(temporary,path)
  finally:
   if os.path.exists(temporary):os.unlink(temporary)
+if status_data is not None:assert Path(p['statusAdapter']).read_bytes()==status_data
 assert Path(p['wrapper']).read_text()==body
 assert plistlib.loads(Path(p['launchAgent']).read_bytes())['ProgramArguments']==agent['ProgramArguments']
 `;
@@ -294,9 +303,9 @@ export async function stopServer(receipt,{execute=runProcess,api,transport,signa
 export async function publishServer(p,{execute=runProcess,api,transport,signal=AbortSignal.timeout(3600000)}={}){
  const old=JSON.parse(readFileSync(p.oldConfiguration)),receipt=await stageServer(p,{execute,signal});
  assert.ok(p.configuration.hostGeneration!==old.hostGeneration,'Handoff requires a fresh host generation');
- const agent=readFileSync(p.launchAgent),body=readFileSync(p.wrapper,'utf8');
+ const agent=readFileSync(p.launchAgent),body=readFileSync(p.wrapper,'utf8'),statusRestore=p.statusAdapter&&existsSync(p.statusAdapter)?readFileSync(p.statusAdapter).toString('base64'):undefined;
  const checked=async(command,argv,options={})=>{const r=await execute(command,argv,{signal,capture:true,...options});assert.equal(r.code,0,'Server publication command failed');return r;};
- const renderTo=async(remoteController,configurationPath,controller=p.newController)=>checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,controller,configurationPath,state:old.state,remoteController})});
+ const renderTo=async(remoteController,configurationPath,controller=p.newController)=>checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,controller,configurationPath,state:old.state,remoteController,statusRestore})});
  await checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,validate:true})});
  const authorize=String.raw`import json,os,stat,sys
 from pathlib import Path

@@ -262,32 +262,38 @@ test('server preparation sends private App bytes only over stdin with the pinned
  assert.equal(existsSync(f.old.state+'/manual.lock'),false);
 });
 
-for(const fail of [false,true])test(`server cutover retires Mac state and rolls back to fresh state on activation failure: ${fail}`,async t=>{
+for(const fail of [false,'activation','callers'])test(`server cutover retires Mac state and rolls back to fresh state on activation failure: ${fail}`,async t=>{
  const f=await fixture(t),{publishServer}=await import('./publish.mjs');
  writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
  Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n',peerAddresses:['8.8.8.8','9.9.9.9','1.1.1.1']});
- const calls=[];let stopped=false;
+ f.p.statusAdapter=f.root+'/status.py';writeFileSync(f.p.statusAdapter,'print("old Mac status")\n',{mode:0o500});
+ const calls=[];let stopped=false,callerFailed=false;
  const execute=async(command,argv,options)=>{
   calls.push([command,...argv]);
   if(command==='launchctl'&&argv[0]==='bootout')stopped=true;
   if(command==='bash'){
    const text=argv.at(-1);
    if(text.includes('module.prepare_runtime'))return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
-   if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail?1:0,stdout:'{}'};}
+   if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail==='activation'?1:0,stdout:'{}'};}
    return {code:0,stdout:'{}'};
   }
-  return f.execute(command,argv,options);
+  const result=await f.execute(command,argv,options);
+  if(fail==='callers'&&!callerFailed&&options.input&&JSON.parse(options.input).remoteController){callerFailed=true;return {code:1};}
+  return result;
  };
  const operation=publishServer(f.p,{api:f.api,transport:f.transport,execute});
  if(fail)await assert.rejects(operation,/rollback/i);else assert.equal((await operation).published,true);
  assert.equal(existsSync(f.old.state+'/manual.lock'),true);
  if(fail){
-  const text=readFileSync(f.p.launchAgent,'utf8');assert.match(text,/rollback-config/);
+  const text=readFileSync(f.p.launchAgent,'utf8');assert.match(text,/rollback-config/);assert.equal(readFileSync(f.p.statusAdapter,'utf8'),'print("old Mac status")\n');
   const config=JSON.parse(readFileSync(f.p.newController+'/rollback-config.json','utf8'));assert.notEqual(config.state,f.old.state);assert.notEqual(config.hostGeneration,'old');
   assert.deepEqual(JSON.parse(readFileSync(config.state+'/ledger/state.json','utf8')).turns,{});
  }else{
   assert.match(readFileSync(f.p.wrapper,'utf8'),/remote new.invalid/);assert.equal(statSync(f.p.newController).mode&0o222,0);
   assert.equal(existsSync(f.p.configuration.state),false);
+  mkdirSync(f.root+'/bin');const expected={observedAt:1000,slots:{total:2,busy:1,free:1},jobs:[{slot:1,state:'running'}],lastAdmission:900,host:{},controller:{registered:true,state:'running',pid:321,lastExit:0,version:'/opt/waitron-disposable-controller-new',recipe:'/opt/waitron-disposable-old'},errors:[],errorsWrittenAt:1000};
+  writeFileSync(f.root+'/bin/ssh','#!'+f.p.python+'\nimport sys\nsys.stdin.read()\nprint('+JSON.stringify(JSON.stringify(expected))+')\n',{mode:0o700});
+  const actual=JSON.parse(execFileSync(f.p.python,[f.p.statusAdapter],{env:{...process.env,PATH:f.root+'/bin:'+process.env.PATH,XDG_CACHE_HOME:f.root+'/cache'},encoding:'utf8',timeout:5000}));assert.deepEqual(actual,expected);
   assert.ok(calls.some(([command,hostWrapper,host])=>command==='bash'&&host==='bench.invalid'));
  }
 });
