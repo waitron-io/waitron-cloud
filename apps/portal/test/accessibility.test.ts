@@ -21,6 +21,18 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
         assert.deepEqual(violations,[],route);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),route);
         assert.equal(await page.locator('html').getAttribute('lang'),locale);
+        if(route==='/login') {
+          for(const width of [390,1280]) {
+            await page.setViewportSize({width,height:812});
+            await page.getByRole('button',{name:translations[locale].login,exact:true}).hover();
+            const hoverViolations=await page.evaluate(async()=>
+              (await window.axe.run(document,{runOnly:['color-contrast']})).violations
+                .map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
+            assert.deepEqual(hoverViolations,[],`hover ${locale} ${colorScheme} ${width}`);
+            await page.screenshot({path:new URL(`../dist/hover-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+          }
+          await page.setViewportSize({width:375,height:812});
+        }
         if(route.startsWith('/signup#')) await page.screenshot({path:new URL(`../dist/preview-${locale}-${colorScheme}.png`,import.meta.url).pathname,fullPage:true});
         if(route==='/account'){
           await page.screenshot({path:new URL(`../dist/diagnostics-${locale}-${colorScheme}-phone.png`,import.meta.url).pathname,fullPage:true});
