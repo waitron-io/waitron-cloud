@@ -224,10 +224,11 @@ This sends the committed recipe and pinned packages over the shared verified SSH
 connection. The installer refuses an active allocation, verifies an existing
 recipe byte for byte, refreshes package metadata before installing the recorded pins,
 installs the key-only SSH policy and startup service, and
-builds the pinned tool image. Preserve the requested benchmark results and verify
+builds the pinned tool image. For changed recipes, use a fresh `/opt/waitron-disposable-…`
+path. Preserve the requested benchmark results and verify
 its service is stopped before you put that machine into CI. The installer does
 not remove benchmark data. Run the guest isolation proof on each machine: it now
-checks that machine's own addresses and the independent peer addresses supplied
+checks that machine's non-loopback IPv4/IPv6 addresses and the independent peers supplied
 with `--peers`, without a fixed server address in the test.
 
 Then publish the replacement pool:

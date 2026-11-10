@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {LocalLeases} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {ciRequest} from './ci-identity.mjs';
@@ -39,10 +39,15 @@ async function fixture(t){
 }
 
 test('a publisher CLI invoked through a path alias reports its missing manifest',async t=>{
- const f=await fixture(t),{spawnSync}=await import('node:child_process');
+ const f=await fixture(t);
  const alias=f.root+'/publish.mjs';symlinkSync(new URL('./publish.mjs',import.meta.url).pathname,alias);
  const result=spawnSync(process.execPath,[alias,f.root+'/missing.json'],{encoding:'utf8',timeout:5000});
  assert.equal(result.status,1);assert.match(result.stderr,/ENOENT/);assert.equal(result.stdout,'');
+});
+
+test('publisher functions remain importable from a stdin module program',()=>{
+ const {status,stdout,stderr}=spawnSync(process.execPath,['--input-type=module','-'],{input:'await import('+JSON.stringify(new URL('./publish.mjs',import.meta.url).href)+');console.log("loaded");',encoding:'utf8',timeout:5000});
+ assert.equal(status,0,stderr);assert.equal(stdout,'loaded\n');
 });
 
 test('publication refuses unfinished recorded jobs and uncertain guest absence before changing callers',async t=>{

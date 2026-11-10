@@ -5,7 +5,8 @@
 A1479 adds a mapped two-host pool, pinned host installer, both-host status and a
 drained publisher with fresh-state rollback. Controlled transport, admission,
 isolation-policy and publication checks cover the local paths. Both replacement
-hosts have the pinned recipe and tool image installed. Each-host isolation/reboot
+hosts have the pinned recipe and tool image installed
+([installation receipt](https://github.com/waitron-io/waitron-cloud/pull/1144#issuecomment-6776692683)). Each-host isolation/reboot
 and six mixed CI jobs per host still need qualification.
 The controller and manual package preparation stay on the Mac in this first slice;
 the on-server controller is the remaining A1479 slice. Package selection and the

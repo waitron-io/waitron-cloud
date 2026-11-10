@@ -122,15 +122,15 @@ class GuestLifecycle(unittest.TestCase):
                     else:
                         clean = self.command(*ssh, 'test ! -e /root/predecessor')
                         self.assertEqual(clean.returncode, 0, clean.stderr)
-                    blocked=[('10.0.2.2',22),('169.254.169.254',80),('127.0.0.1',22000)]
+                    blocked=[('10.0.2.2',22),('10.0.2.2',22000),('169.254.169.254',80),('127.0.0.1',22000)]
                     blocked.extend((address,22) for address in sorted(targets))
                     probe = "import socket\nfor host,port in "+repr(blocked)+""":
  try:
   connection=socket.create_connection((host,port),2)
  except OSError:
-  print('DENIED',host,flush=True)
+  print('DENIED',host,port,flush=True)
  else:
-  connection.close();raise RuntimeError('Guest reached management: '+host)
+  connection.close();raise RuntimeError('Guest reached management: '+host+':'+str(port))
 """
                     isolated = self.command(*ssh, 'python3 -c ' + shlex.quote(probe))
                     print(isolated.stdout, isolated.stderr, flush=True)

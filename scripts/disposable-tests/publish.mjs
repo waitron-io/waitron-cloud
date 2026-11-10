@@ -205,7 +205,7 @@ os.chmod(temporary,0o500);os.replace(temporary,target)
  });
 }
 
-if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
+if(process.argv[1]&&existsSync(process.argv[1])&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
  try{
   const hosts=process.argv[2]==='hosts',p=JSON.parse(readFileSync(process.argv[hosts?3:2],'utf8'));
   console.log(JSON.stringify(await (hosts?prepareHosts:publish)(p)));
