@@ -3144,9 +3144,8 @@ implementation or production evidence.
   the failure, but CI did not record window timestamps, so its exact cause remains
   unproved. Production guards and timing policies are unchanged.
 
-- **Shared UI.** The portal uses the released shared account controls. Qualify removal of Cloud's
-  duplicate hover override after this package update, and read the first
-  post-split weekly mutation results; see [scope and remaining work](backlog/shared-ui.md).
+- **Shared UI.** Read the first post-split weekly mutation results;
+  see [scope and remaining work](backlog/shared-ui.md).
 - **Identity and organisations.** Local signup, recovery, passkeys, authenticator
   controls, account sessions, pairing approval and encrypted transactional mail are
   implemented. Production ingress, email and key qualification, password screening

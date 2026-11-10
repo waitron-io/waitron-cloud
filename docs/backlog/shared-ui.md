@@ -14,12 +14,4 @@ manifest and lockfile; a Chromium fixture checks the installed controls and them
 and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
 authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
 after the split in Waitron; the extraction verifies the wiring and coverage, not the
-new full mutation scores. The released Waitron source sets primary-button hover opacity to 1
-(`packages/ui-core/src/components/wt-button.ts:81-84` at the source commit above).
-Cloud still has its matching override in `apps/portal/src/styles.css:13`. English/Spanish light/dark
-accessibility checks pass 4/4 with
-`node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/accessibility.test.ts`.
-A 2026-10-12 Chromium hover probe confirms axe checks the rendered primary button:
-the portal has no contrast violation in either theme, while restoring the shared
-0.85 hover opacity reproduces 3.61:1 in both light-theme languages. The remaining cleanup is to remove Cloud’s duplicate override and qualify the
-released hover colors in the portal.
+new full mutation scores.
