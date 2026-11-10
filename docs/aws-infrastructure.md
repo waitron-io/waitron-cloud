@@ -1067,8 +1067,10 @@ First follow [the one-time practice-account setup](d618-account-setup.md) to cre
 the CLI identity, external roles and USD 10 deny-launch budget. Then check these
 yourself; the lane has no account or spending authority:
 
-1. Confirm the practice account and non-root identity with `aws sts get-caller-identity`
-   and confirm in the account console that it is the standalone practice account.
+1. Confirm the isolated practice account and launcher identity with
+   `aws sts get-caller-identity --profile d618`; require `assumed-role/d618-launcher/`.
+   Check the setup page’s project-region gate before proceeding: tonight’s source
+   key does not enable Ireland on a Stockholm-only project.
 2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT" --budget-name D618`
    and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT" --budget-name D618 --action-id "$ACTION"`.
    Use the setup page’s simulations to check launcher denial and permitted deletion separately from the stack role’s EC2 termination.
@@ -1091,6 +1093,8 @@ yourself; the lane has no account or spending authority:
    use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.
 7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region eu-west-1`
    reports that the named stack no longer exists (or `DELETE_COMPLETE` when you use its retained stack ID), and inspect the bill before another run.
+8. After success or failure, use the setup page’s [last-step key deletion](d618-account-setup.md#last-step-delete-tonights-access-key).
+   The source IAM key does not expire automatically; remove it with the project owner’s setup console.
 
 D110 closes only after that run passes. D621 owns the remaining speed targets,
 database-host loss and production-mode checks. No production service is deployed.
