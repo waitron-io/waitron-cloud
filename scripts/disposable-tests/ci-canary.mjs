@@ -517,7 +517,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    const execution=new AbortController(),monitor=new AbortController();let ended=false,monitorFailure;
    const work=AbortSignal.any([options.signal,execution.signal]);
    const watching=(async()=>{
-    let healthyAt=Date.now(),refusal,retryAt=0,reported=false;
+    let healthyAt=Date.now(),refusal,retryAt=0,reported=false,reportedLimit=false;
     while(!ended){
      try{await wait(15000,undefined,{signal:monitor.signal});}catch{if(ended)return;throw new Error('CI monitor stopped');}
      if(ended)return;
@@ -528,9 +528,9 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
        try{return await api.get(path,{signal:work});}
        catch(error){
         unavailable=true;
-        if(!reported){reported=true;console.error(JSON.stringify({event:'automatic-ci-monitor-read-refused',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,
-         operation,errorClass:error.name,status:error.status??null,retryAt:Number.isFinite(error.retryAt)?error.retryAt:null}));}
         const limited=[403,429].includes(error.status) && Number.isFinite(error.retryAt);
+        if(!reported || limited && !reportedLimit){reported=true;reportedLimit||=limited;console.error(JSON.stringify({event:'automatic-ci-monitor-read-refused',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,
+         operation,errorClass:error.name,status:error.status??null,retryAt:Number.isFinite(error.retryAt)?error.retryAt:null}));}
         if(limited)retryAt=Math.max(retryAt,error.retryAt);
         const transient=limited || error instanceof TypeError && error.message==='fetch failed' || error.name==='TimeoutError' ||
          error.code==='GITHUB_RESPONSE_INTERRUPTED' || Number.isInteger(error.status) && error.status>=500 && error.status<=599;

@@ -397,3 +397,15 @@ test('GitHub monitor reads resume once the rate-limit reset passes',async t=>{
  const result=await monitorReadFailure(t,{failure:round=>round===1?Object.assign(new Error('Rate limited'),{status:403,retryAt:reset}):undefined});
  assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);assert.equal(result.jobReads,2);
 });
+test('a rate limit after a network failure retains its own bounded diagnostic',async t=>{
+ const records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const retryAt=Date.now()+3600000;
+ const result=await monitorReadFailure(t,{healthyRounds:5,failure:round=>round===1?new TypeError('fetch failed'):Object.assign(new Error('Rate limited'),{status:403,retryAt})});
+ assert.equal(result.code,0,result.error);assert.equal(records.length,2);
+ assert.equal(records[0].errorClass,'TypeError');assert.equal(records[1].status,403);assert.equal(records[1].retryAt,retryAt);assert.equal(records[1].operation,'run');
+});
+test('repeated temporary read failures record one diagnostic',async t=>{
+ const records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const result=await monitorReadFailure(t,{healthyRounds:5,failure:new TypeError('fetch failed')});
+ assert.equal(result.code,0,result.error);assert.equal(records.length,1);
+});
