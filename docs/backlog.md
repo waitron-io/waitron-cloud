@@ -19,10 +19,12 @@ cancellation/identity stops and existing deadlines. A delayed GitHub cancellatio
 guest was destroyed does not measure that guest's execution speed; keep the API-monitor
 failure and later cancellation timestamps separate when assessing server performance.
 
-Guest-preparation Node, pnpm and runner downloads now share up to three attempts inside
-those transfers' existing budgets, with HTTP 4xx and integrity failures refusing immediately.
-The controlled dependency tests exercise retries and refusals; a healthy cold guest usually
-uses only its first attempt. Frozen host recipes still change only through explicit publication.
+Matching prebuilt tool disks skip guest-preparation downloads and check the pinned tools offline.
+Missing or stale recipes retain the verified-Debian install path, whose Node, pnpm and runner
+downloads share up to three attempts inside their existing budgets; HTTP 4xx and integrity
+failures refuse immediately. The controlled dependency tests exercise both paths. Frozen host
+recipes still change only through explicit publication; complete image smoke keeps its existing
+hosted-only Bluetooth exception.
 
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
