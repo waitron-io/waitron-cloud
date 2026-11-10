@@ -1073,8 +1073,8 @@ spending authority:
    `aws sts get-caller-identity --profile d618`; require `assumed-role/d618-launcher/`.
    Use Stockholm (`eu-north-1`) as chosen for tonight. If you already created the roles,
    follow the setup page's **Update existing roles for Stockholm** before proceeding.
-2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT" --budget-name D618`
-   and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT" --budget-name D618 --action-id "$ACTION"`.
+2. Read the USD 10 budget with `aws budgets describe-budget --account-id "$ACCOUNT_ID" --budget-name D618`
+   and its automatic deny-launch action with `aws budgets describe-budget-action --account-id "$ACCOUNT_ID" --budget-name D618 --action-id "$ACTION"`.
    Use the setup page’s simulations to check launcher denial and permitted deletion separately from the stack role’s EC2 termination.
    Check that the action covers the launching role and preserves teardown; billing delay prevents a hard USD 10 cap.
 3. Read both external roles with `aws iam get-role --role-name "$ROLE"`. The stack role trusts
@@ -1084,7 +1084,7 @@ spending authority:
 4. Compare `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region "$REGION"`
    with `aws ec2 describe-instances --region "$REGION" --filters Name=instance-state-name,Values=pending,running`.
    Existing usage must leave 12 standard vCPUs free. Check your AMI with
-   `aws ec2 describe-images --image-ids "$IMAGE" --region "$REGION"`; require official Debian 13, amd64 and root device `/dev/xvda`.
+   `aws ec2 describe-images --image-ids "$IMAGE_ID" --region "$REGION"`; require official Debian 13, amd64 and root device `/dev/xvda`.
 5. Read month-to-date spend with `aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD --granularity MONTHLY --metrics UnblendedCost`
    (end is exclusive), then re-read the plan’s linked Stockholm prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
