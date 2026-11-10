@@ -45,6 +45,7 @@ async function command(binary, args, input, signal, timeout = 180000) {
 async function main() {
   const [mode, stack] = process.argv.slice(2);
   assert.ok(['start', 'stop'].includes(mode), 'Use start or stop');
+  assert.ok(process.env.D618_CONFIG, 'Set D618_CONFIG to your private run configuration JSON file.');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const aws = (service, args, cleanup = false) => command('aws', ['--region', config.region, '--no-cli-pager', service, ...args, '--output', 'json'], undefined, cleanup ? undefined : stop.signal, 300000);

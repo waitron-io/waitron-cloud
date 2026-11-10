@@ -577,9 +577,53 @@ CloudFormation sets the protected `aws:` tags; [EC2 reserves that
 prefix](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html), so
 `CreateTags` cannot forge them.
 
+## 9. Save your private run configuration
+
+The launcher needs a JSON file naming the machines' settings and your local paths.
+Keep it in part 4's private directory, outside the checkout: an untracked config
+inside the checkout makes the launcher refuse to start.
+
+**Window: the same x86 test box terminal you used for part 4.** Keep its
+`REGION`, `ACCOUNT_ID`, `IMAGE_ID`, `KEY_NAME` and `D618_SETUP_DIR` exports.
+
+Replace both `YOUR_…` paths below before running the block. Use full absolute
+paths, without `~`: JSON does not expand it. `sshKey` is part 3's private key
+on this box. `waitronCheckout` is your **Waitron** checkout, not Cloud. It must
+contain the commit pinned in Cloud's `deploy/backup-verifier/target.json`
+(`runtime.revision`); fetch Waitron first if that commit is missing.
+
+The `curl` command reads this box's public IPv4 address from Amazon's address
+lookup. `/32` allows SSH from just that address, so run it on the x86 box that
+will make the connections. Check the resulting address before continuing.
+
+```sh
+umask 077
+cat > "$D618_SETUP_DIR/run-config.json" <<JSON
+{
+  "region": "$REGION",
+  "account": "$ACCOUNT_ID",
+  "image": "$IMAGE_ID",
+  "key": "$KEY_NAME",
+  "sshKey": "YOUR_ABSOLUTE_PATH_TO_D618_PRIVATE_KEY",
+  "operatorCidr": "$(curl -s https://checkip.amazonaws.com)/32",
+  "stackRole": "arn:aws:iam::$ACCOUNT_ID:role/d618-stack",
+  "schedulerRole": "arn:aws:iam::$ACCOUNT_ID:role/d618-scheduler",
+  "waitronCheckout": "YOUR_ABSOLUTE_PATH_TO_WAITRON_CHECKOUT"
+}
+JSON
+chmod 600 "$D618_SETUP_DIR/run-config.json"
+export D618_CONFIG="$D618_SETUP_DIR/run-config.json"
+```
+
+Keep `account` quoted: it is a string, including any leading zeros. The image
+and key must match the values used to render part 4's policies. Inspect your
+private file, confirm the public IPv4 address, and leave no `YOUR_…` placeholders.
+Keep its account and paths out of Git, logs and chat.
+
 Return to [the run checklist](aws-infrastructure.md#one-owner-started-amazon-experiment)
-for quota, spend, config and launch. Keep Stockholm in the config and profile;
-the launcher deliberately lacks `organizations:DescribeOrganization`.
+for quota and spend checks, then launch with `node scripts/amazon-run.mjs start`
+in this same terminal so `D618_CONFIG` remains set. Keep Stockholm in the config
+and profile; the launcher deliberately lacks `organizations:DescribeOrganization`.
 This page's checks are offline/source guidance until you execute them; no live
 permission enforcement or experiment is proved here.
 
