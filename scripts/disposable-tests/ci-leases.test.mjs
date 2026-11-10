@@ -9,8 +9,8 @@ import {LocalLeases} from './leases.mjs';
 const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',
   workflowSha:'1'.repeat(40),workflowDigest:'2'.repeat(64),event:'workflow_dispatch',
   sourceSha:'3'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
-const canonical=()=>({lane:'I',turn:'ci-789-1-901',snapshot:createHash('sha256').update(JSON.stringify(ci)).digest('hex'),
-  argv:['/opt/actions-runner/bin/Runner.Listener','run'],ci:{...ci}});
+const canonical=(identity=ci)=>({lane:'I',turn:'ci-789-1-901',snapshot:createHash('sha256').update(JSON.stringify(identity)).digest('hex'),
+  argv:['/opt/actions-runner/bin/Runner.Listener','run'],ci:{...identity}});
 function setup(t){const root=mkdtempSync(join(tmpdir(),'ci-leases-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  return new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:1,bootstrap:true});}
 
@@ -36,6 +36,41 @@ test('verified VM absence frees manual capacity while retaining orphan runner cl
  assert.equal(leases.release(lease,{resourceId:lease.resourceId,absent:true}),true);
  assert.deepEqual(leases.inspect().orphanRunners,[{ci,runnerName:'dt-123-789-1-901',runnerId:null}]);
  assert.equal(leases.reserveLocal({lane:'H',turn:'manual-2',snapshot:'b'.repeat(64),argv:['true']}).code,0);
+});
+
+test('a cleaned busy-runner failure permits one durable retry after the tolerance',t=>{
+ const leases=setup(t);let now=Date.now();leases.now=()=>now;
+ const request=canonical({...ci,workflowPath:'.github/workflows/ci.yml'});
+ const lease=leases.reserveLocal(request).lease;
+ leases.release(lease,{resourceId:lease.resourceId,absent:true});
+ const failure={code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'};
+ assert.equal(leases.recordBusyRunnerFailure(failure),true);
+ assert.equal(leases.reserveLocal(request).code,75);
+ now+=60000;
+ assert.equal(leases.reserveLocal(request).code,75,'the old runner must be removed first');
+ leases.forgetRunner(leases.inspect().orphanRunners[0]);
+ const retry=leases.reserveLocal(request);
+ assert.equal(retry.code,0);assert.equal(retry.created,true);assert.equal(retry.lease.generation,2);
+ const turn=leases.inspect().turns['I:ci-789-1-901'];
+ assert.equal(turn.busyRunnerRetried,true);assert.equal(turn.busyRunnerRefusedAt,now-60000);
+ assert.equal(leases.release(lease,{resourceId:lease.resourceId,absent:true}),false);
+ leases.release(retry.lease,{resourceId:retry.lease.resourceId,absent:true});
+ leases.forgetRunner(leases.inspect().orphanRunners[0]);
+ leases.recordBusyRunnerFailure({...failure,lease:retry.lease});now+=60000;
+ assert.equal(leases.reserveLocal(request).code,75,'a second failure must not gain a third guest');
+ assert.equal(leases.inspect().turns['I:ci-789-1-901'].busyRunnerRetried,true);
+});
+
+for(const change of [
+ value=>{value.error='CI runner assignment differs';},
+ value=>{value.cleanup='quarantined';},
+ value=>{value.lease={...value.lease,generation:999};}
+])test('another failure or an unproved lease cannot authorise a finished turn retry',t=>{
+ const leases=setup(t),request=canonical({...ci,workflowPath:'.github/workflows/ci.yml'}),lease=leases.reserveLocal(request).lease;
+ leases.release(lease,{resourceId:lease.resourceId,absent:true});
+ const failure={code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'};change(failure);
+ assert.equal(leases.recordBusyRunnerFailure(failure),false);
+ assert.equal(leases.reserveLocal(request).code,75);
 });
 
 test('malformed orphan metadata refuses ledger use without discarding its contents',t=>{

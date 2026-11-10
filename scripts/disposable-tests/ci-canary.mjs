@@ -617,7 +617,10 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
         const runner=await read(`${base}/runners/${registration.runner.id}`,'runner');
         if(runner!==undefined){
          assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
-         assert.equal(runner.busy,false,'CI runner assignment is busy elsewhere');
+         if(runner.busy){
+          unavailable=true;
+          refusal??={at:Date.now(),error:new Error('CI runner assignment is busy elsewhere')};
+         }
         }
        }
        if(job.status==='queued')assert.ok(Date.now()-lease.createdAt<900000,'CI queue deadline exceeded');
@@ -658,6 +661,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
  if(completion)result={...result,completion};
+ leases.recordBusyRunnerFailure(result);
  if(result.cleanup==='absent'){
   try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}
   catch{return {...result,code:125,runnerCleanup:'pending'};}

@@ -3,7 +3,7 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp,withRequestCounts} from './github-app.mjs';
-import {LocalLeases,configuredSlots} from './leases.mjs';
+import {LocalLeases,configuredSlots,busyRunnerRetryReady} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
@@ -62,8 +62,12 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
 
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
  const recorded=new Set(state.slots.map(slot=>slot.ciInvocation?.jobId).filter(Boolean));
- for(const turn of Object.keys(state.turns)){const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(match)recorded.add(Number(match[1]));}
- const exclude=new Set([...seen,...recorded]);
+ for(const [turn,history] of Object.entries(state.turns)){
+  const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(!match)continue;
+  const id=Number(match[1]);
+  if(busyRunnerRetryReady(history) && !recorded.has(id))seen.delete(id);else recorded.add(id);
+ }
+ const exclude=new Set([...seen,...recorded,...[...active.values()].map(ci=>ci.jobId)]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  let pass;

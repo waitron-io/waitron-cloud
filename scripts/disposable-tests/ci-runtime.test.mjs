@@ -112,16 +112,48 @@ test('ordinary job admission requires its concrete persisted Mac intent before a
  f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,0);
 });
-test('a busy runner with an unassigned intended job aborts the active guest promptly',async t=>{
- const {runCI}=await import('./ci-canary.mjs');const f=fixture(t);let stopped=false,registered=false,destroyed=false;
+test('a busy runner survives a queued job read until its own assignment becomes visible',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha};
+ const f=fixture(t,{identity}),get=f.api.get,inspect=f.transport.inspect;
+ f.leases.setInvocation({nonce:'d'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ let executing=false,round=0,finish,aborted=false;
+ f.api.get=async(path,options)=>{
+  if(executing && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
+  const value=await get(path,options);
+  return executing && path.includes('/jobs/')?{...value,status:round===1?'queued':'in_progress',conclusion:null,runner_id:round===1?0:1001}:value;
+ };
+ f.transport.execute=async(_lease,{signal})=>{
+  executing=true;
+  try{await new Promise((resolve,reject)=>{finish=resolve;signal.addEventListener('abort',()=>{aborted=true;reject(new Error('execution aborted'));},{once:true});});return 0;}
+  finally{executing=false;}
+ };
+ f.transport.inspect=async(lease,options)=>{
+  if(executing){if(round>=2)finish();return {resourceId:lease.resourceId,running:true};}
+  return inspect(lease,options);
+ };
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),
+  wait:async ms=>{if(ms===15000)round++;await new Promise(resolve=>setTimeout(resolve,1));}});
+ assert.equal(result.code,0,result.error);assert.equal(aborted,false);assert.ok(round>=2);
+ assert.equal(result.cleanup,'absent');assert.equal(f.leases.inspect().slots[0].state,'free');
+});
+test('a persistently busy runner with an unassigned intended job aborts after the tolerance',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha};
+ const f=fixture(t,{identity});let stopped=false,registered=false,destroyed=false;
+ f.leases.setInvocation({nonce:'e'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
+ const originalNow=Date.now;let elapsed=0,inspections=0;
+ Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  const destroy=f.transport.destroy;f.transport.destroy=async(...args)=>{destroyed=true;return destroy(...args);};
- f.transport.inspect=async lease=>({resourceId:lease.resourceId,running:!destroyed,absent:destroyed});
+ f.transport.inspect=async lease=>{if(!destroyed)inspections++;return {resourceId:lease.resourceId,running:!destroyed,absent:destroyed};};
  const post=f.api.post;f.api.post=async(...args)=>{const value=await post(...args);registered=true;return value;};
  f.transport.execute=async(lease,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{stopped=true;reject(new Error('runner busy elsewhere'));},{once:true}));
  const get=f.api.get;f.api.get=async(path,options)=>path.endsWith('/runners/1001')?{id:1001,name:'dt-123-789-1-901',busy:true}:
  path.includes('/jobs/')&&registered?{id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:'queued',runner_id:null}:get(path,options);
- const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',signal:AbortSignal.timeout(300),wait:async()=>{await new Promise(r=>setTimeout(r,1));}});
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(2000),wait:async ms=>{if(ms===15000)elapsed+=15000;await new Promise(r=>setTimeout(r,1));}});
  assert.equal(stopped,true);assert.equal(result.code,125);assert.match(result.error,/busy|assignment/i);
+ assert.ok(elapsed>=75000);assert.ok(inspections>=4);assert.equal(result.cleanup,'absent');
+ assert.ok(Number.isSafeInteger(f.leases.inspect().turns['I:ci-789-1-901'].busyRunnerRefusedAt));
 });
 
 // Exact literal API names, including unsharded UI, must qualify before JIT minting.
