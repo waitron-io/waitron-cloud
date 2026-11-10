@@ -49,19 +49,7 @@ export async function stageServer(p,{execute=runProcess,signal=AbortSignal.timeo
  const appEnv=privateBytes(c.ci.appEnv),appKey=privateBytes(c.ci.appKey);
  const configuration={...c,state:p.serverState,ci:{...c.ci,appEnv:'/var/lib/waitron-disposable-controller/app.env',appKey:'/var/lib/waitron-disposable-controller/app.key'}};
  const header={archiveBytes:archive.length,envBytes:appEnv.length,keyBytes:appKey.length,release:p.serverRelease,configuration,knownHosts};
- const stager=String.raw`import importlib.util,json,sys,tarfile,tempfile
-from pathlib import Path
-p=json.loads(sys.stdin.buffer.readline(65537))
-assert 0<p['archiveBytes']<=16*1024*1024 and 0<p['envBytes']<=65536 and 0<p['keyBytes']<=65536
-with tempfile.TemporaryDirectory(prefix='waitron-controller-stage-') as temporary:
- archive=Path(temporary)/'source.tar';archive.write_bytes(sys.stdin.buffer.read(p['archiveBytes']))
- with tarfile.open(archive,'r:') as source:source.extractall(temporary,filter='data')
- env=sys.stdin.buffer.read(p['envBytes']);key=sys.stdin.buffer.read(p['keyBytes'])
- assert len(env)==p['envBytes'] and len(key)==p['keyBytes']
- spec=importlib.util.spec_from_file_location('installer',Path(temporary)/'deploy/disposable-tests/install-controller.py')
- module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
- module.prepare_runtime();print(json.dumps(module.install(p,env,key)))
-`;
+ const stager=readFileSync(new URL('../../deploy/disposable-tests/stage-controller.py',import.meta.url),'utf8');
  const quote=value=>"'"+value.replaceAll("'","'\"'\"'")+"'";
  const result=await execute('bash',[new URL('../../deploy/disposable-tests/ssh.sh',import.meta.url).pathname,p.controllerHost,'python3 -I -B -c '+quote(stager)],{signal,capture:true,input:Buffer.concat([Buffer.from(JSON.stringify(header)+'\n'),archive,appEnv,appKey])});
  assert.equal(result.code,0,'Server controller staging failed');
@@ -281,7 +269,7 @@ export async function activateServer({receipt,oldServer},{execute=runProcess,api
  assert.ok(candidate.state!==old.state&&candidate.hostGeneration!==old.hostGeneration,'Server update requires fresh state and generation');
  return withDrained({configuration:old,api:api??new GithubApp(old.ci),transport:transport??new SSHTransport(old),signal},async()=>{
   mkdirSync(join(old.state,'manual.lock'),{mode:0o700});
-  for(const unit of ['timer','service'])assert.equal((await execute('systemctl',['stop','waitron-disposable-controller.'+unit],{signal})).code,0,'Server stop failed');
+  for(const unit of ['timer','service'])assert.equal((await execute('systemctl',[...(unit==='timer'?['disable','--now']:['stop']),'waitron-disposable-controller.'+unit],{signal})).code,0,'Server stop failed');
   try{await invoke(receipt);return {code:0,receipt};}
   catch(error){
    await stopServer(receipt,{execute,api,transport,signal});
@@ -297,7 +285,7 @@ export async function stopServer(receipt,{execute=runProcess,api,transport,signa
  const c=JSON.parse(readFileSync(receipt.configuration));if(!existsSync(c.state))return {code:0};
  return withDrained({configuration:c,api:api??new GithubApp(c.ci),transport:transport??new SSHTransport(c),signal},async()=>{
   if(!existsSync(join(c.state,'manual.lock')))mkdirSync(join(c.state,'manual.lock'),{mode:0o700});
-  for(const unit of ['timer','service'])assert.equal((await execute('systemctl',['stop','waitron-disposable-controller.'+unit],{signal})).code,0,'Server stop failed');return {code:0};
+  for(const unit of ['timer','service'])assert.equal((await execute('systemctl',[...(unit==='timer'?['disable','--now']:['stop']),'waitron-disposable-controller.'+unit],{signal})).code,0,'Server stop failed');return {code:0};
  });
 }
 export async function publishServer(p,{execute=runProcess,api,transport,signal=AbortSignal.timeout(3600000)}={}){
@@ -305,32 +293,19 @@ export async function publishServer(p,{execute=runProcess,api,transport,signal=A
  assert.ok(p.configuration.hostGeneration!==old.hostGeneration,'Handoff requires a fresh host generation');
  const agent=readFileSync(p.launchAgent),body=readFileSync(p.wrapper,'utf8'),statusRestore=p.statusAdapter&&existsSync(p.statusAdapter)?readFileSync(p.statusAdapter).toString('base64'):undefined;
  const checked=async(command,argv,options={})=>{const r=await execute(command,argv,{signal,capture:true,...options});assert.equal(r.code,0,'Server publication command failed');return r;};
- const renderTo=async(remoteController,configurationPath,controller=p.newController)=>checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,controller,configurationPath,state:old.state,remoteController,statusRestore})});
+ const renderTo=async(remoteController,configurationPath,controller=p.newController)=>checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,controller,configurationPath,state:JSON.parse(readFileSync(configurationPath)).state,remoteController,statusRestore})});
  await checked(p.python,['-I','-B','-c',render],{input:JSON.stringify({...p,agent:agent.toString('base64'),body,validate:true})});
- const authorize=String.raw`import json,os,stat,sys
-from pathlib import Path
-p=json.load(sys.stdin);key=p['key'];assert len(key.splitlines())==1 and key.startswith('ssh-ed25519 ')
-path=Path('/root/.ssh/authorized_keys');info=path.lstat();assert stat.S_ISREG(info.st_mode) and info.st_uid==0 and not info.st_mode&0o022
-body=path.read_text();line='from="'+p['host']+'",restrict '+key
-if not any(key.split()[1] in value.split() for value in body.splitlines()):
- with path.open('a') as output:output.write(('' if not body or body.endswith('\n') else '\n')+line+'\n');output.flush();os.fsync(output.fileno())
-`;
+ const authorize=readFileSync(new URL('../../deploy/disposable-tests/authorize-controller.py',import.meta.url),'utf8');
  for(const host of new Set(p.configuration.slotHosts??[p.configuration.host])){
   const result=await execute('bash',[wrapperPath,host,'python3 -I -B -c '+shellQuote(authorize)],{input:JSON.stringify({host:p.controllerHost,key:receipt.publicKey}),signal,capture:true});assert.equal(result.code,0,'Server SSH authorization failed');
  }
  copyRelease(p);const localConfiguration=join(p.newController,'config.json');writeFileSync(localConfiguration,JSON.stringify(old)+'\n',{mode:0o400});
  const activate=()=>rootCommand(p,`${controllerNode} ${receipt.release}/scripts/disposable-tests/publish.mjs server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
  const commitCallers=async target=>{assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');await renderTo({host:p.controllerHost,configuration:target.configuration},localConfiguration);freezeRelease(p.newController);};
- if(p.oldServer){const result=await activate(),value=JSON.parse(result.stdout);const target=result.code===0?receipt:value.rollback;assert.ok(target,'Server rollback stopped; callers remain closed');await commitCallers(target);if(result.code!==0)throw new Error('Publication failed; fresh-state server rollback is restored');return {published:true,receipt};}
+ if(p.oldServer){const result=await activate();assert.ok(result.stdout?.trim(),'Server rollback stopped; callers remain closed');const value=JSON.parse(result.stdout);const target=result.code===0?receipt:value.rollback;assert.ok(target,'Server rollback stopped; callers remain closed');await commitCallers(target);if(result.code!==0)throw new Error('Publication failed; fresh-state server rollback is restored');return {published:true,receipt};}
+  const probed=await rootCommand(p,'python3 -I -B '+receipt.release+'/deploy/disposable-tests/probe-controller.py',JSON.stringify({...receipt,recipe:p.configuration.recipe,peers:p.peerAddresses.filter(host=>host!==p.controllerHost)}),{execute,signal,capture:false});assert.equal(probed.code,0,'Server qualification failed before Mac stop');
  return withDrained({configuration:old,api:api??new GithubApp(old.ci),transport:transport??new SSHTransport(old),signal},async()=>{
   assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');
-  const probe=String.raw`import json,subprocess,sys
-p=json.load(sys.stdin)
-code="import fs from 'node:fs';import {pathToFileURL} from 'node:url';const file=process.argv[1],c=JSON.parse(fs.readFileSync(file)),root=file.slice(0,file.lastIndexOf('/'));const {GithubApp}=await import(pathToFileURL(root+'/scripts/disposable-tests/github-app.mjs'));const repo=await new GithubApp(c.ci).get('/repos/'+c.ci.repository);if(repo.id!==c.ci.repositoryId)throw Error('App repository differs');const {SSHTransport}=await import(pathToFileURL(root+'/scripts/disposable-tests/transport.mjs'));if((await new SSHTransport(c).healthySlots({signal:AbortSignal.timeout(15000)})).length!==c.slots)throw Error('Server SSH capacity unavailable');console.log('Read-only App and both-host SSH verified')"
-subprocess.run([p['node'],'--input-type=module','-e',code,p['configuration']],check=True,timeout=40)
-subprocess.run(['python3','-B',p['recipe']+'/host-runtime.test.py',p['recipe']+'/host.py','--peers',','.join(p['peers'])],check=True,timeout=900)
-`;
-  const probed=await rootCommand(p,'python3 -I -B -c '+shellQuote(probe),JSON.stringify({...receipt,recipe:p.configuration.recipe,peers:p.peerAddresses.filter(host=>host!==p.controllerHost)}),{execute,signal,capture:false});assert.equal(probed.code,0,'Server qualification failed before Mac stop');
   mkdirSync(join(old.state,'manual.lock'),{mode:0o700});
   try{
    await checked('launchctl',['bootout',p.launchLabel]);await checked('launchctl',['disable',p.launchLabel]);

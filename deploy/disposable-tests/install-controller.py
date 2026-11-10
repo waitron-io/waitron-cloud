@@ -123,7 +123,8 @@ def prepare_runtime():
             raise ValueError('Controller package pin differs: '+name)
     node=Path(NODE)
     if not node.exists():
-        with tempfile.TemporaryDirectory(prefix='waitron-controller-node-') as directory:
+        node.parent.parent.parent.mkdir(mode=0o755,parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='waitron-controller-node-',dir=node.parent.parent.parent) as directory:
             archive=Path(directory)/'node.tar.xz'
             command(['curl','--fail','--silent','--show-error','--location','--proto','=https','--proto-redir','=https','--retry','2','--retry-delay','1','--connect-timeout','10','--max-time','60','--max-filesize','134217728','https://nodejs.org/dist/v26.13.0/node-v26.13.0-linux-x64.tar.xz','-o',str(archive)],timeout=190)
             if hashlib.sha256(archive.read_bytes()).hexdigest()!=NODE_ARCHIVE_SHA:

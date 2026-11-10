@@ -68,6 +68,7 @@ def receive(directory):
                 raise ValueError('Invalid manual upload member')
             with archive.extractfile(entry) as source,(Path(directory)/entry.name).open('xb') as output:
                 while block:=source.read(1024*1024):output.write(block)
+    archive_path.unlink()
     if limits:raise ValueError('Incomplete manual upload')
     request=json.loads((Path(directory)/'request.json').read_bytes())
     if set(request)!={'snapshot','argv'}:

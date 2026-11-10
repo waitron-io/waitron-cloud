@@ -92,9 +92,9 @@ def reader_source():
     return globals().get("__reader_source__") or Path(__file__).read_text()
 
 
-def collect(home=None,configuration=None):
+def collect(home=None,configuration=None,budget=4.5):
     home = Path.home() if home is None else Path(home)
-    deadline = time.monotonic() + 4.5
+    deadline = time.monotonic() + budget
     now = int(time.time()*1000)
     result=empty_status(now)
     try:
@@ -233,7 +233,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == '--host':
         answer = host_status(json.loads(base64.b64decode(sys.argv[2])))
     elif len(sys.argv)==3 and sys.argv[1]=='--systemd':
-        answer=collect(configuration=sys.argv[2])
+        answer=collect(configuration=sys.argv[2],budget=3.5)
     elif len(sys.argv)==4 and sys.argv[1]=='--remote':
         answer=remote(sys.argv[2],sys.argv[3])
     else:

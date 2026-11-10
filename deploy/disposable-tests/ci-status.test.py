@@ -65,11 +65,11 @@ class StatusTests(unittest.TestCase):
         self.plist.unlink()
         (self.state/'recovery.stdout.log').write_text(json.dumps(dict(code=0,lease=dict(createdAt=800000)))+'\n')
         (self.state/'recovery.stderr.log').write_text('server refusal\n')
-        original=self.invoke
+        original=self.invoke;active_config=self.config
         def invoke(args,**kw):
             if args[0]=='systemctl':
                 self.calls.append(args)
-                return subprocess.CompletedProcess(args,0,'LoadState=loaded\nActiveState=active\nMainPID=321\nExecMainStatus=0\nExecStart='+str(self.config)+'\n','')
+                return subprocess.CompletedProcess(args,0,'LoadState=loaded\nActiveState=active\nMainPID=321\nExecMainStatus=0\nExecStart='+str(active_config)+'\n','')
             return original(args,**kw)
         self.invoke=invoke
         result=self.collect(configuration=self.config)
@@ -77,6 +77,10 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(result['slots'],dict(total=3,busy=0,free=3))
         self.assertEqual(result['lastAdmission'],800000)
         self.assertEqual(result['errors'][0]['message'],'server refusal')
+        active_config=Path('/opt/another-controller/config.json')
+        with patch.object(status.subprocess,'run',invoke):
+            result=status.collect(self.home,configuration=self.config)
+        self.assertEqual(result['slots']['free'],'unknown')
 
     def test_streamed_reader_needs_no_server_side_source_file(self):
         real_run=subprocess.run
@@ -88,6 +92,19 @@ class StatusTests(unittest.TestCase):
             result=status.remote('fixture.invalid','/opt/waitron-disposable-controller-fixture/config.json')
         self.assertEqual(result['controller']['pid'],321)
         self.assertEqual(result['slots'],dict(total=3,busy=0,free=3))
+
+    def test_slow_nested_host_keeps_controller_and_healthy_host_evidence(self):
+        real_run=subprocess.run
+        def invoke(args,**kw):
+            prelude="import subprocess,time\ndef fake(args,**kw):\n if args[0]=='systemctl':return subprocess.CompletedProcess(args,0,'LoadState=loaded\\nMainPID=321\\nExecMainStatus=0\\nExecStart="+str(self.config)+"\\n','')\n if args[-2].endswith('fixture.invalid'):return subprocess.CompletedProcess(args,0,'{}','')\n time.sleep(kw['timeout']);raise subprocess.TimeoutExpired(args,kw['timeout'])\nsubprocess.run=fake\n"
+            time.sleep(.3)
+            return real_run([sys.executable,'-I','-B','-','--systemd',str(self.config)],input=prelude+kw['input'],text=True,capture_output=True,timeout=kw['timeout']-.3)
+        config=json.loads(self.config.read_text());config['slotHosts']=['fixture.invalid','down.invalid','fixture.invalid'];self.config.write_text(json.dumps(config))
+        with patch.object(status.subprocess,'run',invoke):
+            result=status.remote('fixture.invalid','/opt/waitron-disposable-controller-fixture/config.json')
+        self.assertEqual(result['controller']['pid'],321)
+        self.assertTrue(result['hosts']['fixture.invalid']['reachable'])
+        self.assertFalse(result['hosts']['down.invalid']['reachable'])
 
     def test_unreachable_remote_controller_never_reports_local_free_slots(self):
         def unavailable(args,**kw):

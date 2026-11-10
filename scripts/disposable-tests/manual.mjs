@@ -162,9 +162,7 @@ export async function main(args) {
   const cancellation=new AbortController();
   const cancel=()=>cancellation.abort();
   for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.on(signal,cancel);
-  const deadline=Date.now()+7500;
-  const budget=AbortSignal.timeout(7500);
-  const admission=AbortSignal.any([cancellation.signal,budget]);
+  let deadline,budget,admission,incoming,upload;
   let admitted=false;
   const withController=async work=>remote?work():!bootstrap && slots>1
     ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal,
@@ -178,6 +176,16 @@ export async function main(args) {
       transport:new SSHTransport(config),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
   };
   try {
+    if(bundled){
+      incoming=mkdtempSync(join(tmpdir(),'disposable-upload-'));
+      const received=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,'--receive',incoming],{inheritStdin:true,capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(3300000)])});
+      if(received.code===143){cancel();cancellation.signal.throwIfAborted();}
+      assert.equal(received.code,0,'Manual upload refused');
+      upload=JSON.parse(received.stdout);argv=upload.argv;
+      assert.ok(Array.isArray(argv)&&argv.length>0&&argv[0]&&argv.every(v=>typeof v==='string'&&!v.includes('\0')),'A literal command argument list is required');
+      process.stdin.once('end',cancel);process.stdin.resume();
+    }
+    deadline=Date.now()+7500;budget=AbortSignal.timeout(7500);admission=AbortSignal.any([cancellation.signal,budget]);
     const result=reconciling
       ? await recover()
       : await withController(async selected=>{
@@ -203,20 +211,19 @@ export async function main(args) {
       try { healthy=await transport.healthy({signal:admission}); } catch { healthy=false; }
       if (!healthy) return {code:cancellation.signal.aborted?143:75,reason:'host-unavailable'};
       }
+      if(remote){
+        const seen=await runProcess('python3',['-I','-B',new URL('../../deploy/disposable-tests/ci-status.py',import.meta.url).pathname,'--remote',remoteHost,remoteConfiguration],{capture:true,signal:admission});
+        const capacity=seen.code===0?JSON.parse(seen.stdout).slots?.free:undefined;
+        if(!Number.isInteger(capacity)||capacity<1)return {code:75,reason:capacity===0?'recorded-slot-busy-or-quarantined':'host-unavailable'};
+      }
       admitted=true;
       console.log(remote?`Disposable tests: remote controller ${remoteHost}`:`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
-      const temporary = mkdtempSync(join(tmpdir(), 'disposable-manual-'));
+      const temporary = incoming??mkdtempSync(join(tmpdir(), 'disposable-manual-'));
       try {
         const source = join(temporary, 'source.tar');
         let snapshot,privatePackage;
         if(bundled){
-          const received=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,'--receive',temporary],{inheritStdin:true,capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(3300000)])});
-          if(received.code===143)return {code:143,reason:'cancelled-before-admission'};
-          assert.equal(received.code,0,'Manual upload refused');
-          ({snapshot,argv}=JSON.parse(received.stdout));
-          assert.ok(Array.isArray(argv)&&argv.length>0&&argv[0]&&argv.every(v=>typeof v==='string'&&!v.includes('\0')),'A literal command argument list is required');
-          privatePackage=join(temporary,'ui.tgz');
-          process.stdin.once('end',cancel);process.stdin.resume();
+          snapshot=upload.snapshot;privatePackage=join(temporary,'ui.tgz');
         }else{
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
@@ -255,10 +262,11 @@ export async function main(args) {
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:
-      budget.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
+      budget?.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
     if(refusal){console.log(JSON.stringify(refusal));return refusal.code;}
     throw error;
   } finally {
+    if(incoming)rmSync(incoming,{recursive:true,force:true});
     process.stdin.off('end',cancel);
     if(bundled)process.stdin.pause();
     for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.off(signal,cancel);

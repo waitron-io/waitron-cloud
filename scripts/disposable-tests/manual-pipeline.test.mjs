@@ -552,7 +552,7 @@ test('manual preparation sends the approved package selected for a historical ch
  const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
 });
 
-for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='normal'?'finishes while stdin stays open':'cancels and cleans up when stdin closes'}`,{timeout:15000},async t=>{
+for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='normal'?'finishes while stdin stays open':'cancels and cleans up when stdin closes'}`,{timeout:25000},async t=>{
  const f=fixture(t,mode),source=join(f.root,'upload-source'),pkg=join(f.root,'upload-package'),bundle=join(f.root,'upload.tar');
  writeFileSync(source,'captured source');writeFileSync(pkg,'reviewed package');
  const {createHash}=await import('node:crypto'),snapshot=createHash('sha256').update(readFileSync(source)).digest('hex');
@@ -562,7 +562,14 @@ for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='norma
  child.stdout.on('data',data=>{stdout+=data;if(stdout.includes('WORK-READY'))ready();});child.stderr.on('data',data=>stderr+=data);
  const finished=once(child,'close');
  t.after(async()=>{if(child.exitCode===null){child.kill('SIGTERM');await finished;}});
- child.stdin.write(Buffer.concat([Buffer.from(bytes.length+'\n'),bytes]));
+ child.stdin.write(Buffer.from(bytes.length+'\n'));
+ if(mode==='normal'){
+  const pending=()=>readdirSync(f.root,{recursive:true}).find(name=>name.endsWith('/upload.tar')&&name!=='upload.tar');
+  while(!pending()){if(child.exitCode!==null)assert.fail(stdout+stderr);await delay(20);}
+  const {withKernelLock}=await import('./kernel-lock.mjs');assert.equal((await withKernelLock(join(f.root,'state'),async()=>({code:0}))).code,0,'Upload held admission');
+  await delay(8000);
+ }
+ child.stdin.write(bytes);
  if(mode==='work'){
   await Promise.race([started,finished.then(()=>assert.fail('Worker did not start: '+stdout+stderr))]);child.stdin.end();
  }
@@ -570,19 +577,21 @@ for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='norma
  assert.match(stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
 });
 
-test('remote manual capture leaves the retired Mac ledger untouched and runs on the server ledger',async t=>{
+for(const free of [0,1])test(`remote manual capture checks capacity before capture and leaves the retired Mac ledger untouched: ${free}`,async t=>{
  const f=fixture(t),remote=JSON.parse(readFileSync(f.config,'utf8'));remote.state=join(f.root,'remote-state');
  mkdirSync(remote.state,{mode:0o700});writeFileSync(join(remote.state,'mac-controller.lock'),'',{mode:0o600});
  new LocalLeases(join(remote.state,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
  const remoteConfig=join(f.root,'remote.json');writeFileSync(remoteConfig,JSON.stringify(remote));
  mkdirSync(join(f.root,'state/manual.lock'));const before=readFileSync(join(f.root,'state/ledger/state.json'),'utf8');
  const ssh=join(f.root,'bin/ssh'),body=readFileSync(ssh,'utf8');
- writeFileSync(ssh,body.replace("root=Path(os.environ['FIXTURE_ROOT']);parts=",`if '--bundle' in sys.argv[-1]:os.execv(${JSON.stringify(process.execPath)},[${JSON.stringify(process.execPath)},${JSON.stringify(script)},${JSON.stringify(remoteConfig)},'--bundle','I'])\nroot=Path(os.environ['FIXTURE_ROOT']);parts=`));
+ writeFileSync(ssh,body.replace("root=Path(os.environ['FIXTURE_ROOT']);parts=",`if '--systemd' in sys.argv[-1]:
+ sys.stdin.read();print(${JSON.stringify(JSON.stringify({slots:{total:1,busy:1-free,free},controller:{registered:true},jobs:[]}))});sys.exit(0)
+if '--bundle' in sys.argv[-1]:os.execv(${JSON.stringify(process.execPath)},[${JSON.stringify(process.execPath)},${JSON.stringify(script)},${JSON.stringify(remoteConfig)},'--bundle','I'])\nroot=Path(os.environ['FIXTURE_ROOT']);parts=`));
  const result=spawnSync('python3',['-I','-B',new URL('../../deploy/disposable-tests/mac-controller.py',import.meta.url).pathname,process.execPath,f.config,'remote','fixture.invalid','/opt/waitron-disposable-controller-fixture/config.json','I','repo','--','false'],{cwd:f.root,env:f.env,encoding:'utf8',timeout:10000});
- assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/"cleanup":"absent"/);
+ assert.equal(result.status,free?3:75,result.stdout+result.stderr);if(free)assert.match(result.stdout,/"cleanup":"absent"/);
  assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);assert.equal(existsSync(join(f.root,'state/manual.lock')),true);
- assert.equal(existsSync(join(f.root,'packaged')),true);
- const ledger=JSON.parse(readFileSync(join(remote.state,'ledger/state.json'),'utf8'));assert.equal(Object.keys(ledger.turns).length,1);assert.equal(ledger.slots[0].state,'free');
+ assert.equal(existsSync(join(f.root,'packaged')),Boolean(free));
+ const ledger=JSON.parse(readFileSync(join(remote.state,'ledger/state.json'),'utf8'));assert.equal(Object.keys(ledger.turns).length,free);assert.equal(ledger.slots[0].state,'free');
  assertNoTemporaries(f);
 });
 

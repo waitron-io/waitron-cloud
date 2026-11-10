@@ -97,7 +97,7 @@ test('a failed status-reader installation leaves the old service admitting work'
 test('publication rewrites manual command arguments once even when the new path contains the old root',async t=>{
  const f=await fixture(t),{publish}=await import('./publish.mjs');
  const original=f.p.oldController;f.p.oldController=f.root;
- for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original,f.root));
+ for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original+'/deploy/disposable-tests/mac-controller.py',f.root+'/deploy/disposable-tests/mac-controller.py'));
  f.p.newController=f.root+'/release';
  writeFileSync(f.p.wrapper,readFileSync(f.p.wrapper,'utf8').replace('#!/bin/sh\n','#!/bin/sh\nlane=$1; checkout=$2; shift 2\n').replace(' \"$@\"',' \"$lane\" \"$checkout\" -- \"$@\"'));
  await publish(f.p,{api:f.api,transport:f.transport,candidateTransport:{healthySlots:async()=>[0,1]},execute:f.execute});
@@ -235,6 +235,11 @@ m.command=command;bad=True
 try:m.prepare_runtime();raise AssertionError('corrupt Node installed')
 except ValueError:pass
 assert not Path(m.NODE).exists();assert not any(a[0]=='tar' for a in calls)
+original_rename=os.rename
+def same_filesystem(source,destination):
+ assert Path(source).parent.parent==Path(destination).parent,'Node staging crossed filesystems'
+ return original_rename(source,destination)
+os.rename=same_filesystem
 bad=False;m.prepare_runtime();assert Path(m.NODE).read_text()=='verified fixture'
 assert any('git=1:2.47.3-0+deb13u1' in a and 'python3=3.13.5-1' in a for a in calls)
 print('pinned runtime verified')`;
@@ -267,13 +272,14 @@ for(const fail of [false,'activation','callers'])test(`server cutover retires Ma
  writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
  Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n',peerAddresses:['8.8.8.8','9.9.9.9','1.1.1.1']});
  f.p.statusAdapter=f.root+'/status.py';writeFileSync(f.p.statusAdapter,'print("old Mac status")\n',{mode:0o500});
- const calls=[];let stopped=false,callerFailed=false;
+ const calls=[];let stopped=false,callerFailed=false,probed=false;
  const execute=async(command,argv,options)=>{
   calls.push([command,...argv]);
-  if(command==='launchctl'&&argv[0]==='bootout')stopped=true;
+  if(command==='launchctl'&&argv[0]==='bootout'){assert.equal(probed,true);stopped=true;}
   if(command==='bash'){
    const text=argv.at(-1);
-   if(text.includes('module.prepare_runtime'))return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+   if(options.input&&Buffer.isBuffer(options.input))return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+   if(text.includes('/probe-controller.py')){assert.equal((await withKernelLock(f.old.state+'/slot-0',async()=>({code:0}))).code,0,'Probe held OLD admission');probed=true;}
    if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail==='activation'?1:0,stdout:'{}'};}
    return {code:0,stdout:'{}'};
   }
@@ -286,7 +292,7 @@ for(const fail of [false,'activation','callers'])test(`server cutover retires Ma
  assert.equal(existsSync(f.old.state+'/manual.lock'),true);
  if(fail){
   const text=readFileSync(f.p.launchAgent,'utf8');assert.match(text,/rollback-config/);assert.equal(readFileSync(f.p.statusAdapter,'utf8'),'print("old Mac status")\n');
-  const config=JSON.parse(readFileSync(f.p.newController+'/rollback-config.json','utf8'));assert.notEqual(config.state,f.old.state);assert.notEqual(config.hostGeneration,'old');
+  const config=JSON.parse(readFileSync(f.p.newController+'/rollback-config.json','utf8'));assert.notEqual(config.state,f.old.state);assert.notEqual(config.hostGeneration,'old');assert.ok(text.includes(config.state+'/recovery.stdout.log'));
   assert.deepEqual(JSON.parse(readFileSync(config.state+'/ledger/state.json','utf8')).turns,{});
  }else{
   assert.match(readFileSync(f.p.wrapper,'utf8'),/remote new.invalid/);assert.equal(statSync(f.p.newController).mode&0o222,0);
@@ -317,9 +323,27 @@ for(const fail of [false,true])test(`an on-server release retires its old ledger
   return runProcess(f.p.python,['-I','-B',target.release+'/deploy/disposable-tests/mac-controller.py',process.execPath,target.configuration,'--bootstrap'],{capture:true});
  };
  const result=await activateServer({receipt,oldServer},{api:f.api,transport:f.transport,execute});
- assert.equal(existsSync(f.old.state+'/manual.lock'),true);assert.deepEqual(stopped,['stop waitron-disposable-controller.timer','stop waitron-disposable-controller.service']);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),true);assert.deepEqual(stopped,['disable --now waitron-disposable-controller.timer','stop waitron-disposable-controller.service']);
  const target=fail?result.rollback:receipt;assert.equal(result.code,fail?1:0);
  const c=JSON.parse(readFileSync(target.configuration));assert.notEqual(c.state,f.old.state);assert.notEqual(c.hostGeneration,f.old.hostGeneration);
  assert.deepEqual(JSON.parse(readFileSync(c.state+'/ledger/state.json','utf8')).turns,{});
  if(fail){assert.notEqual(target.release,oldRelease);assert.equal(statSync(target.release).mode&0o222,0);assert.equal(statSync(target.release+'/scripts/disposable-tests/manual.mjs').mode&0o222,0);}
+});
+
+for(const field of ['state','hostGeneration'])test(`server updates refuse reusing the retired ${field} before stopping anything`,async t=>{
+ const f=await fixture(t),{activateServer}=await import('./publish.mjs'),candidate={...f.p.configuration,[field]:f.old[field]},path=f.root+'/candidate.json';writeFileSync(path,JSON.stringify(candidate));
+ await assert.rejects(activateServer({receipt:{release:f.p.source,configuration:path,node:process.execPath},oldServer:{release:f.p.source,configuration:f.p.oldConfiguration}},{api:f.api,transport:f.transport,execute:async()=>assert.fail('Must refuse before stopping the server')}),/fresh state and generation/);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),false);
+});
+
+for(const reply of ['', '{"code":1}'])test(`an interrupted server update preserves callers and reports its closed rollback: ${reply}`,async t=>{
+ const f=await fixture(t),{publishServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\n',oldServer:{release:'/opt/waitron-disposable-controller-old',configuration:'/opt/waitron-disposable-controller-old/config.json'}});
+ const before=readFileSync(f.p.wrapper);
+ const execute=async(command,argv,options)=>{
+  if(command==='bash')return argv.at(-1).includes('server-activate')?{code:1,stdout:reply}:{code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',publicKey:'ssh-ed25519 fixture'})};
+  return f.execute(command,argv,options);
+ };
+ await assert.rejects(publishServer(f.p,{execute}),/Server rollback stopped; callers remain closed/);assert.deepEqual(readFileSync(f.p.wrapper),before);
 });
