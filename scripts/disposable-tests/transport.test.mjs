@@ -193,7 +193,7 @@ test('transport reports stderr to an observer while preserving the child exit co
 });
 
 
-test('transfer forwards both approved archives under their reviewed filenames',async t=>{
+test('transfer forwards the stable UI archive and the reviewed signing archive',async t=>{
  const {SSHTransport}=await import('./transport.mjs');
  const {createHash}=await import('node:crypto');
  const {spawnSync}=await import('node:child_process');
@@ -208,5 +208,5 @@ test('transfer forwards both approved archives under their reviewed filenames',a
   assert.equal(result.status,0,result.stderr);members=JSON.parse(result.stdout);return {code:0};
  };
  await transport.transfer({resourceId:'dt-forward-0-1',snapshot:createHash('sha256').update('source').digest('hex'),argv:['false'],deadline:Date.now()+60000},{});
- assert.equal(members['ui-core-0.2.1.tgz'],'ui-core-0.2.1.tgz');assert.equal(members['contract-0.2.9.tgz'],'contract-0.2.9.tgz');
+ assert.equal(members['ui.tgz'],'ui-core-0.2.1.tgz');assert.equal(members['contract-0.2.9.tgz'],'contract-0.2.9.tgz');
 });

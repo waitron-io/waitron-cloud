@@ -87,17 +87,17 @@ class Transfer(unittest.TestCase):
         package = b'reviewed private package fixture'
         contract = b'reviewed contract fixture'
         original = getattr(session, 'PACKAGE_SHA512', None)
-        session.PACKAGE_SHA512 = {'ui-core-0.2.1.tgz': hashlib.sha512(package).digest(),
-                                  'contract-0.2.9.tgz': hashlib.sha512(contract).digest()}
+        session.PACKAGE_SHA512 = {'ui.tgz': {hashlib.sha512(package).digest()},
+                                  'contract-0.2.9.tgz': {hashlib.sha512(contract).digest()}}
         self.addCleanup(setattr, session, 'PACKAGE_SHA512', original)
         result = session.receive(self.root, self.resource, self.archive(extras={
-            'ui-core-0.2.1.tgz': package, 'contract-0.2.9.tgz': contract}))
+            'ui.tgz': package, 'contract-0.2.9.tgz': contract}))
         self.assertEqual(result, self.request)
-        self.assertEqual((self.root/self.resource/'ui-core-0.2.1.tgz').read_bytes(), package)
+        self.assertEqual((self.root/self.resource/'ui.tgz').read_bytes(), package)
         self.assertEqual((self.root/self.resource/'contract-0.2.9.tgz').read_bytes(), contract)
-        for extras in [{'ui-core-0.2.1.tgz': b'altered'},
+        for extras in [{'ui.tgz': b'altered'},
                        {'contract-0.2.9.tgz': b'altered'},
-                       {'ui-core-0.2.1.tgz': contract, 'contract-0.2.9.tgz': package}]:
+                       {'ui.tgz': contract, 'contract-0.2.9.tgz': package}]:
             resource2 = 'dt-transfer-0-2'
             with self.assertRaisesRegex(ValueError, 'integrity'):
                 session.receive(self.root, resource2, self.archive(request={**self.request, 'resourceId': resource2}, extras=extras))
@@ -127,17 +127,18 @@ class Transfer(unittest.TestCase):
         packages=importlib.util.module_from_spec(packages_spec);packages_spec.loader.exec_module(packages)
         original=session.hashlib.file_digest
         for index,package in enumerate(packages.PACKAGES,10):
+            name='ui.tgz' if package['file'].startswith('ui-core-') else package['file']
             expected=base64.b64decode(package['integrity'][7:]);resource=f'dt-transfer-0-{index}'
             def digest(source,algorithm):
-                if Path(source.name).name==package['file']:
+                if Path(source.name).name==name:
                     class CheckedBytes:
                         def digest(self):return expected
                     return CheckedBytes()
                 return original(source,algorithm)
             with patch.object(session.hashlib,'file_digest',digest):
-                try:result=session.receive(self.root,resource,self.archive(request={**self.request,'resourceId':resource},extras={package['file']:b'synthetic crypto-provider input'}))
+                try:result=session.receive(self.root,resource,self.archive(request={**self.request,'resourceId':resource},extras={name:b'synthetic crypto-provider input'}))
                 except ValueError as error:self.fail('A reviewed package was refused: '+str(error))
             self.assertEqual(result['resourceId'],resource)
-            self.assertTrue((self.root/resource/package['file']).is_file())
+            self.assertTrue((self.root/resource/name).is_file())
 
 unittest.main(verbosity=2)

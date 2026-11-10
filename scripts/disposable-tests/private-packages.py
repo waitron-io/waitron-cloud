@@ -72,7 +72,10 @@ class RefuseRedirect(urllib.request.HTTPRedirectHandler):
         return urllib.request.Request(newurl)
 
 
-def fetch(destination):
+def fetch(destination, filenames=None):
+    selected = PACKAGES if filenames is None else [package for package in PACKAGES if package['file'] in filenames]
+    if filenames is not None and (not filenames or len(filenames) != len(set(filenames)) or {package['file'] for package in selected} != set(filenames)):
+        raise ValueError('Usage: fetch requires reviewed private package filenames')
     target = Path(destination)
     target.mkdir(mode=0o700)
     try:
@@ -81,7 +84,7 @@ def fetch(destination):
         if not token or any(c in token for c in '\r\n'):
             raise ValueError('Package authentication unavailable')
         opener = urllib.request.build_opener(RefuseRedirect())
-        for package in PACKAGES:
+        for package in selected:
             # Fail closed if a future pin accidentally changes the credential origin.
             if not re.fullmatch(r'https://npm\.pkg\.github\.com/download/@waitron-io/[A-Za-z0-9_.-]+/[0-9]+\.[0-9]+\.[0-9]+/[a-f0-9]{40}', package['url']):
                 raise ValueError('Unapproved authenticated package origin')
@@ -103,8 +106,8 @@ def fetch(destination):
                 output.flush()
                 os.fsync(output.fileno())
             verify(path, package['integrity'])
-        (target / 'manifest.json').write_text(json.dumps(PACKAGES) + '\n')
-        print(json.dumps({'packages': len(PACKAGES), 'directory': str(target), 'credentialsCopied': False}))
+        (target / 'manifest.json').write_text(json.dumps(selected) + '\n')
+        print(json.dumps({'packages': len(selected), 'directory': str(target), 'credentialsCopied': False}))
     except BaseException:
         shutil.rmtree(target)
         raise
@@ -116,10 +119,10 @@ if __name__ == '__main__':
             verify(sys.argv[2], sys.argv[3])
         elif len(sys.argv) == 3 and sys.argv[1] == 'select':
             print(json.dumps(select(sys.argv[2])))
-        elif len(sys.argv) == 3 and sys.argv[1] == 'fetch':
-            fetch(sys.argv[2])
+        elif len(sys.argv) >= 3 and sys.argv[1] == 'fetch':
+            fetch(sys.argv[2], sys.argv[3:] or None)
         else:
-            raise ValueError('Usage: private-packages.py fetch NEW_DIRECTORY | verify FILE INTEGRITY | select SOURCE_TAR')
+            raise ValueError('Usage: private-packages.py fetch NEW_DIRECTORY [REVIEWED_FILENAME...] | verify FILE INTEGRITY | select SOURCE_TAR')
     except (ValueError, OSError, tarfile.TarError, subprocess.SubprocessError, urllib.error.URLError) as error:
         print('Package download failed' if isinstance(error, urllib.error.URLError) else str(error), file=sys.stderr)
         sys.exit(1)

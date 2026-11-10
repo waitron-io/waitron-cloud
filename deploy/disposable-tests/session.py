@@ -22,10 +22,12 @@ from host import resource_id
 
 MAX_BUNDLE = 641 * 1024 * 1024
 LIMITS = {'request.json': 65536, 'source.tar': 512 * 1024 * 1024}
-PACKAGE_SHA512 = {name: base64.b64decode(value) for name, value in {
-    'ui-core-0.1.0.tgz': 'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
-    'ui-core-0.2.1.tgz': 'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
-    'contract-0.2.9.tgz': 'L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g==',
+PACKAGE_SHA512 = {name: {base64.b64decode(value) for value in values} for name, values in {
+    'ui.tgz': [
+        'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
+        'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
+    ],
+    'contract-0.2.9.tgz': ['L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g=='],
 }.items()}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'
@@ -135,7 +137,7 @@ def receive(root, resource, stream):
                 raise ValueError('Snapshot digest mismatch')
         for name in seen & PACKAGE_SHA512.keys():
             with (target/name).open('rb') as source:
-                if hashlib.file_digest(source, 'sha512').digest() != PACKAGE_SHA512[name]:
+                if hashlib.file_digest(source, 'sha512').digest() not in PACKAGE_SHA512[name]:
                     raise ValueError('Private package integrity mismatch')
         bundle.unlink()
         return request
@@ -242,7 +244,7 @@ def prepare(resource):
     request = request_identity(json.loads((directory/'request.json').read_text()), resource)
     deadline = request['deadline']
     private_packages = [name for name in PACKAGE_SHA512 if (directory/name).is_file()]
-    if 'ci' not in request and not any(name.startswith('ui-core-') for name in private_packages):
+    if 'ci' not in request and 'ui.tgz' not in private_packages:
         raise ValueError('Reviewed private dependency bytes are required')
     command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
     public = ' '.join((directory/'key.pub').read_text().split()[:2])

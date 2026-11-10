@@ -223,7 +223,7 @@ export async function main(args) {
         const source = join(temporary, 'source.tar');
         let snapshot,privatePackages;
         if(bundled){
-          snapshot=upload.snapshot;privatePackages=readdirSync(temporary).filter(name=>/^(?:ui-core|contract)-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/.test(name)).map(name=>join(temporary,name));
+          snapshot=upload.snapshot;privatePackages=readdirSync(temporary).filter(name=>name==='ui.tgz' || /^contract-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/.test(name)).map(name=>join(temporary,name));
         }else{
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
@@ -233,7 +233,7 @@ export async function main(args) {
         const privateFiles=JSON.parse(selected.stdout);
         assert.ok(Array.isArray(privateFiles) && privateFiles.length>0,'Missing selected private filenames');
         for(const file of privateFiles)assert.match(file,/^(?:ui-core|contract)-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
-        const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
+        const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private'), ...privateFiles], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
         privatePackages=privateFiles.map(file=>join(temporary,'private',file));
         }

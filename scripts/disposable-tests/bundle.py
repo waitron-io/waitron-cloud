@@ -21,11 +21,12 @@ def create(source, output, private_packages, request):
     sources = []
     published = False
     try:
-        names = [Path(path).name for path in private_packages]
-        if not names or len(names) != len(set(names)) or not set(names) <= PACKAGE_FILES:
+        files = [('ui.tgz' if Path(path).name.startswith('ui-core-') else Path(path).name, path) for path in private_packages]
+        names = [name for name, _ in files]
+        if not names or len(names) != len(set(names)) or not {Path(path).name for path in private_packages} <= PACKAGE_FILES | {'ui.tgz'}:
             raise ValueError('Bundle needs reviewed private filenames without duplicates')
         for name, path, limit in [('source.tar', source, 512*1024*1024),
-                                  *[(Path(path).name, path, 64*1024*1024) for path in private_packages]]:
+                                  *[(name, path, 64*1024*1024) for name, path in files]]:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             raw = os.fdopen(fd, 'rb')
             sources.append((name, raw))
@@ -72,7 +73,7 @@ def receive(directory):
             block=sys.stdin.buffer.read(min(size,1024*1024))
             if not block:raise EOFError('Manual upload disconnected')
             output.write(block);size-=len(block)
-    limits={'request.json':65536,'source.tar':512*1024*1024,**{name:64*1024*1024 for name in PACKAGE_FILES}}
+    limits={'request.json':65536,'source.tar':512*1024*1024,'ui.tgz':64*1024*1024,**{name:64*1024*1024 for name in PACKAGE_FILES if name.startswith('contract-')}}
     required={'request.json','source.tar'}
     with tarfile.open(archive_path,'r:') as archive:
         for entry in archive:
@@ -81,7 +82,7 @@ def receive(directory):
             with archive.extractfile(entry) as source,(Path(directory)/entry.name).open('xb') as output:
                 while block:=source.read(1024*1024):output.write(block)
     archive_path.unlink()
-    if required & limits.keys() or not any(name.startswith('ui-core-') and name not in limits for name in PACKAGE_FILES):
+    if (required | {'ui.tgz'}) & limits.keys():
         raise ValueError('Incomplete manual upload')
     request=json.loads((Path(directory)/'request.json').read_bytes())
     if set(request)!={'snapshot','argv'}:

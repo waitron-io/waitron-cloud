@@ -9,10 +9,12 @@
 - Before editing, repeat the saved declaration/vector comparison against the installed pin: all 24 Cloud actions, both five-code error unions and `LeaseIssuer` must match. Pin `0.2.9` in `R/package.json`/`pnpm-lock.yaml`; add it to `.github/dependabot.yml`’s existing daily allow list. No new credentials or lag mechanism.
 - Retain Cloud keys, trust, permissions, routes, limits and refusals. Exclude sign-in, SMS, UI, migrations, fiscal/location work, provider resources/spend and republishing.
 
+**Watcher 10 November 23:28 cleared the reviews’ simpler compatibility correction:** keep the existing `ui.tgz` wire name, add the contract archive, and fetch only selected approved archives. Old/new UI-only senders and receivers remain compatible. One fixes read, with the original review wave retained.
+
 **PR1: support only; leave main’s UI-only lockfile unchanged.** A1479’s pending PR changes `manual.mjs`, `D/mac-controller.py` and `S/publish.mjs`; do not touch its branch or publish separately. Trace every `select`, `privatePackage`, `ui.tgz` and digest consumer before edits, including proofs/guides.
 - `S/private-packages.py`: keep approved UI releases; add the saved contract URL/full SHA512. `select` returns a list of reviewed filenames: require UI, allow contract, refuse unknown pins and multiple versions of one package. UI-only captures remain supported. Candidate URLs never authorize downloads.
-- `S/{manual,transport}.mjs` carry that filename/path list; `S/bundle.py` takes source, output and the approved archives, naming members by approved filename. Preserve its bounded regular-file/no-link checks and cleanup.
-- `D/session.py`: use a reviewed filename→digest map and seed supplied archives into the guest store before frozen installation. Preserve UI-only captures and CI’s package-free transfer. Keep transfer-member validation, cleanup and 64 MiB per package; aggregate bound becomes 641 MiB. No lease/deadline change.
+- `S/{manual,transport}.mjs` carry that filename/path list; `S/bundle.py` takes source, output and the approved archives, retaining `ui.tgz` for UI and using the reviewed contract filename. Preserve its bounded regular-file/no-link checks and cleanup.
+- `D/session.py`: keep the approved UI digest set under `ui.tgz`, with contract digests bound to their own filenames; seed supplied archives into the guest store before frozen installation. Preserve UI-only captures and CI’s package-free transfer. Keep transfer-member validation, cleanup and 64 MiB per package; aggregate bound becomes 641 MiB. No lease/deadline change.
 - `S/{local-runtime,cancellation-runtime}.proof.mjs` accept the same approved archive list; `D/guest-tools.test.py` stages both pins.
 
 **Tests and checks, with failing tests before implementation.** Extend existing archive/command/network fakes; keep assertions visible and failures owned once.

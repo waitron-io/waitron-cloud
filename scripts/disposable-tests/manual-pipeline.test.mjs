@@ -27,7 +27,8 @@ if any(a.endswith('/snapshot.py') for a in args):
 elif any(a.endswith('/private-packages.py') for a in args):
  files=os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz').split(',')
  if args[-2]=='select':print(json.dumps(files));sys.exit(0)
- p=Path(args[-1]);p.mkdir()
+ p=Path(args[args.index('fetch')+1]);p.mkdir()
+ files=args[args.index('fetch')+2:] or ['ui-core-0.2.1.tgz']
  for name in files:(p/name).write_bytes(b'private fixture')
  if mode=='packaging':(root/'packaging.pid').write_text(str(os.getpid()));(root/'packaging-ready').touch();time.sleep(60)
  print('{}')
@@ -555,7 +556,7 @@ for(const withCI of [false,true])test('the manual CLI bootstraps several slots a
 for(const files of [['ui-core-0.1.0.tgz'],['ui-core-0.2.1.tgz','contract-0.2.9.tgz']])test(`manual preparation sends selected archives: ${files}`,t=>{
  const f=fixture(t);f.env.PRIVATE_SELECTED=files.join(',');
  const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
- assert.deepEqual(JSON.parse(readFileSync(join(f.root,'members.json'),'utf8')),['request.json','source.tar',...files]);
+ assert.deepEqual(JSON.parse(readFileSync(join(f.root,'members.json'),'utf8')),['request.json','source.tar',...files.map(name=>name.startsWith('ui-core-')?'ui.tgz':name)]);
 });
 
 for(const mode of ['normal','work'])test(`a framed manual upload ${mode==='normal'?'finishes while stdin stays open':'cancels and cleans up when stdin closes'}`,{timeout:25000},async t=>{

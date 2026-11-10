@@ -125,6 +125,38 @@ assert not target.exists()
   assert.equal(result.stdout,'');
 });
 
+test('a UI-only fetch does not depend on an unselected contract download',t=>{
+ const root=mkdtempSync(join(tmpdir(),'disposable-selected-download-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const result=spawnSync('python3',['-I','-B','-c',`import base64,hashlib,importlib.util,io,pathlib,sys,urllib.error
+s=importlib.util.spec_from_file_location('packages',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+m.subprocess.check_output=lambda *a,**k:'SYNTHETIC-NEVER-COPY'
+body=b'reviewed UI fixture';ui='ui-core-0.2.1.tgz'
+m.PACKAGES=[{**p,'integrity':'sha512-'+base64.b64encode(hashlib.sha512(body).digest()).decode()} for p in m.PACKAGES]
+seen=[]
+class Network:
+ def open(self,request,**kwargs):
+  seen.append(request.full_url)
+  if '/contract/' in request.full_url:raise urllib.error.HTTPError(request.full_url,403,'Forbidden',{},None)
+  return io.BytesIO(body)
+m.urllib.request.build_opener=lambda *a:Network()
+target=pathlib.Path(sys.argv[2])/'ui'
+m.fetch(target,[ui])
+assert sorted(p.name for p in target.iterdir())==['manifest.json',ui]
+assert len(seen)==1 and '/ui-core/0.2.1/' in seen[0]
+seen.clear();target=pathlib.Path(sys.argv[2])/'both'
+try:m.fetch(target,[ui,'contract-0.2.9.tgz'])
+except urllib.error.HTTPError:pass
+else:raise AssertionError('selected contract failure ignored')
+assert not target.exists() and len(seen)==2
+seen.clear();target=pathlib.Path(sys.argv[2])/'unknown'
+try:m.fetch(target,['unreviewed.tgz'])
+except ValueError:pass
+else:raise AssertionError('unreviewed filename accepted')
+assert not target.exists() and seen==[]
+`,script,root],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
+});
+
 // An updated workspace must still install in a guest without workstation credentials.
 test('the guest package preparation covers every private tarball in the workspace lockfile', () => {
   const result = spawnSync('python3', ['-B', '-c', `import importlib.util,json,sys

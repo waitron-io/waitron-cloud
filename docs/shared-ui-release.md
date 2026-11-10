@@ -30,11 +30,12 @@ Before merging:
 3. Update the smoke test's version and source expectations while retaining
    its assertions and browser checks.
 4. Update the reviewed tarball URL and integrity in
-   `scripts/disposable-tests/private-packages.py` and the host’s accepted SHA512
+   `scripts/disposable-tests/private-packages.py` and the host’s accepted UI SHA512
    digests in `deploy/disposable-tests/session.py`. Keep older approved tarballs
    needed by historical checkouts. The helper selects the package from the
-   captured lockfile, so it needs no version-specific filename change. Update
-   the guest proof’s input filename. The disposable package checks must cover
+   captured lockfile, so its controller code needs no version-specific edit. Update the
+   host’s UI digest set and the guest proof’s input filename. The UI archive
+   keeps the existing `ui.tgz` name in transfers. The disposable package checks must cover
    the current lockfile and run each approved digest through host transfer.
 5. Review the changed dependencies and their actual test owners using the
    [root ownership](ci-root-input-ownership.md) and
@@ -99,7 +100,9 @@ For a future contract release, update its reviewed URL and full SHA512 integrity
 matched controller and host recipe through the existing installer before adopting
 the new application pin. Follow the [private package and proof instructions](../deploy/disposable-tests/README.md).
 The installed guest-tools, local-runtime and cancellation proofs still have to run
-on the published support before Cloud adopts `0.2.9`.
+on the published support before Cloud adopts `0.2.9`. Use the PR2 capture
+whose lockfile imports the contract to prove installation; a PR1 capture proves
+only that the archive can be seeded into the guest store.
 
 ## Install locally
 
