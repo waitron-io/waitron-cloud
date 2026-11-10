@@ -293,7 +293,9 @@ and [updating role trust](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_ro
 After creating or updating all four roles:
 
 1. Open **IAM → Roles → `d618-launcher` → Edit** beside **Maximum session duration**.
-2. Set its maximum session duration to **3 hours**.
+2. Set its maximum session duration to **3 hours**, then save the change.
+   Return to the role’s **Summary** panel and check **Maximum session duration**
+   shows **3 hours** before continuing.
 3. Display the owner policy in the terminal:
 
    ```sh
@@ -470,7 +472,9 @@ execution role **`d618-budget`**, policy **`d618-deny-launch`**, and only target
 ### Check each permission separately
 
 **Window: the same x86 terminal, `AWS_PROFILE=d618`.** The stack and instance IDs
-below are synthetic simulation inputs.
+below are synthetic simulation inputs. Each simulation supplies `aws:RequestedRegion`
+so the project’s region guard evaluates your chosen region instead of refusing
+a request with no region.
 
 1. Set the simulation names:
 
@@ -487,7 +491,8 @@ below are synthetic simulation inputs.
    aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
      --action-names cloudformation:CreateStack --resource-arns "$SIM_STACK" \
      --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string \
-     ContextKeyName=aws:RequestTag/cloud.campaign,ContextKeyValues=D618,ContextKeyType=string
+     ContextKeyName=aws:RequestTag/cloud.campaign,ContextKeyValues=D618,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 3. Check the launcher can pass that role to CloudFormation. Expect **allowed**:
@@ -495,14 +500,17 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
      --action-names iam:PassRole --resource-arns "$STACK_ROLE" \
-     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string
+     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
-4. Check direct instance launch and role creation. Expect **implicitDeny** for both:
+4. Check direct instance launch and role creation. Expect **implicitDeny** for both.
+   The project’s region guard does not apply to the global `iam:CreateRole` action:
 
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
-     --action-names ec2:RunInstances iam:CreateRole --resource-arns '*'
+     --action-names ec2:RunInstances iam:CreateRole --resource-arns '*' \
+     --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 5. Add the budget denial in simulation. Expect create **explicitDeny**, describe/delete **allowed**:
@@ -513,7 +521,8 @@ below are synthetic simulation inputs.
      --action-names cloudformation:CreateStack cloudformation:DeleteStack cloudformation:DescribeStacks \
      --resource-arns "$SIM_STACK" \
      --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string \
-     ContextKeyName=aws:RequestTag/cloud.campaign,ContextKeyValues=D618,ContextKeyType=string
+     ContextKeyName=aws:RequestTag/cloud.campaign,ContextKeyValues=D618,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 6. Check the scheduler can delete the stack. Expect **allowed**:
@@ -521,7 +530,8 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
      --action-names cloudformation:DeleteStack --resource-arns "$SIM_STACK" \
-     --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string
+     --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 7. Check the scheduler can pass the stack role to CloudFormation. Expect **allowed**:
@@ -529,7 +539,8 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
      --action-names iam:PassRole --resource-arns "$STACK_ROLE" \
-     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string
+     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 8. Check the stack can pass the scheduler role to Scheduler. Expect **allowed**:
@@ -537,7 +548,8 @@ below are synthetic simulation inputs.
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
      --action-names iam:PassRole --resource-arns "$SCHEDULER_ROLE" \
-     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=scheduler.amazonaws.com,ContextKeyType=string
+     --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=scheduler.amazonaws.com,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 9. Check deletion with D618's protected stack-name tag. Expect **allowed**:
@@ -546,7 +558,8 @@ below are synthetic simulation inputs.
    aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
      --action-names ec2:TerminateInstances \
      --resource-arns "arn:aws:ec2:$REGION:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
-     --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=d618-simulation,ContextKeyType=string
+     --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=d618-simulation,ContextKeyType=string \
+     ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
 10. Repeat with another stack's tag. Expect **implicitDeny**:
@@ -555,7 +568,8 @@ below are synthetic simulation inputs.
     aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
       --action-names ec2:TerminateInstances \
       --resource-arns "arn:aws:ec2:$REGION:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
-      --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string
+      --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string \
+      ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
     ```
 
 If any result has **MissingContextValues**, fix that invocation before proceeding.
