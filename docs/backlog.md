@@ -3555,6 +3555,9 @@ closes the accepted three-category measurement. Ordinary code PRs still run abou
 25 job-minutes of root tests and every receipt suite in that sample. The first
 root cut omits nine audited synthetic suites on selected package-only PRs, keeps
 the live-reader suite and full-command fallback, and retains all tests nightly.
+The main-push CLI fixtures set their own full-run flags, independently of the
+outer nightly invocation (`scripts/ci-reuse-source.test.mjs`,
+`scripts/ci-root-inputs.test.mjs`).
 Measure its hosted job-minute saving on a healthy natural eligible PR. Then model
 registration test times by area over recent merged PRs before proposing a package
 split; agree the boundary with pairing v2 before moving code. Review the retained

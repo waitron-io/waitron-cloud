@@ -349,7 +349,7 @@ else process.stdout.write((process.argv.includes('--include') ? 'HTTP/2 200 OK\\
     GITHUB_REPOSITORY: repository, GITHUB_REPOSITORY_ID: '123', GITHUB_EVENT_NAME: 'push',
     GITHUB_REF: 'refs/heads/main', GITHUB_REF_NAME: 'main', GITHUB_SHA: merge, GITHUB_RUN_ID: '90', GITHUB_RUN_ATTEMPT: '1',
     CI_WORKFLOW_ID: '17', GITHUB_WORKFLOW_REF: `${repository}/${workflow}@refs/heads/main`,
-    CI_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}'}};
+    CI_FULL: 'false', CI_FORCE_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}'}};
 }
 
 test('executed main planner and summary use bounded source reads and fail after a newer source turns red', () => {
