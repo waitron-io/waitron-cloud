@@ -37,7 +37,14 @@ test('host installation freezes the reviewed recipe and refuses active or change
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('installer',sys.argv[1]);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 root=Path(sys.argv[2]);module.OPT=root/'opt';module.OPT.mkdir();module.STATE=root/'state';module.STATE.mkdir();module.UNIT=root/'startup.service';module.OWNER=os.getuid()
-calls=[];module.command=lambda argv,timeout=600:calls.append(argv)
+calls=[];metadata=False
+def command(argv,timeout=600):
+ global metadata
+ calls.append(argv)
+ if '--metadata' in argv:metadata=True
+ if '--install' in argv:
+  assert metadata,'Pinned install ran without package metadata';metadata=False
+module.command=command
 recipe=module.OPT/'waitron-disposable-fixture'
 plan=module.installation(str(recipe),['8.8.4.4','9.9.9.9']);module.install(plan)
 assert (recipe/'host.py').read_bytes()==(module.SOURCE/'host.py').read_bytes()

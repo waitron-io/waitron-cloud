@@ -138,10 +138,10 @@ class Guards(unittest.TestCase):
   import runpy
   with patch.object(sys,'argv',['host-runtime.test.py',str(Path(host.__file__))]),patch.object(unittest,'main'):
    proof=runpy.run_path(str(Path(__file__).with_name('host-runtime.test.py')))
-  with patch.object(host,'protected_addresses',lambda:{'1.1.1.1'}):
+  with patch.object(host,'protected_addresses',lambda:{'1.1.1.1','2001:db8::1','127.0.0.1','::1'}):
    self.assertIn('isolation_targets',proof)
    targets=proof['isolation_targets'](['8.8.4.4','9.9.9.9'])
-   self.assertTrue({'1.1.1.1','8.8.4.4','9.9.9.9'}<=targets)
+   self.assertEqual(targets,{'1.1.1.1','2001:db8::1','8.8.4.4','9.9.9.9'})
    for peers in [[],['8.8.4.4']]:
     with self.assertRaisesRegex(ValueError,'peer'):proof['isolation_targets'](peers)
 

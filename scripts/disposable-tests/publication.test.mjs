@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -37,6 +37,13 @@ async function fixture(t){
  const execute=async(command,argv,options)=>command==='launchctl'?{code:0,stdout:argv[0]==='print'?readFileSync(p.launchAgent,'utf8'):''}:runProcess(command,argv,options);
  return {root,old,p,api,transport,execute};
 }
+
+test('a publisher CLI invoked through a path alias reports its missing manifest',async t=>{
+ const f=await fixture(t),{spawnSync}=await import('node:child_process');
+ const alias=f.root+'/publish.mjs';symlinkSync(new URL('./publish.mjs',import.meta.url).pathname,alias);
+ const result=spawnSync(process.execPath,[alias,f.root+'/missing.json'],{encoding:'utf8',timeout:5000});
+ assert.equal(result.status,1);assert.match(result.stderr,/ENOENT/);assert.equal(result.stdout,'');
+});
 
 test('publication refuses unfinished recorded jobs and uncertain guest absence before changing callers',async t=>{
  const f=await fixture(t),{withDrained}=await import('./publish.mjs');let called=false;

@@ -222,7 +222,8 @@ node scripts/disposable-tests/publish.mjs hosts /PRIVATE/publication.json
 
 This sends the committed recipe and pinned packages over the shared verified SSH
 connection. The installer refuses an active allocation, verifies an existing
-recipe byte for byte, installs the key-only SSH policy and startup service, and
+recipe byte for byte, refreshes package metadata before installing the recorded pins,
+installs the key-only SSH policy and startup service, and
 builds the pinned tool image. Preserve the requested benchmark results and verify
 its service is stopped before you put that machine into CI. The installer does
 not remove benchmark data. Run the guest isolation proof on each machine: it now

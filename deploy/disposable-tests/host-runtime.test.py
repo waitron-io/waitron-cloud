@@ -22,7 +22,7 @@ import host as host_recipe
 def isolation_targets(peers):
     if len(set(peers)) < 2:
         raise ValueError('Supply both other servers’ expected addresses with --peers')
-    return host_recipe.protected_addresses() | {str(ipaddress.ip_address(peer)) for peer in peers}
+    return {address for address in host_recipe.protected_addresses() if not ipaddress.ip_address(address).is_loopback} | {str(ipaddress.ip_address(peer)) for peer in peers}
 
 
 def qmp_request(resource, command, arguments=None):

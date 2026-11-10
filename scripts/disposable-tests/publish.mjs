@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,mkdirSync,existsSync,readdirSync,chmodSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,existsSync,readdirSync,chmodSync,realpathSync} from 'node:fs';
 import {join,dirname} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -204,7 +205,7 @@ os.chmod(temporary,0o500);os.replace(temporary,target)
  });
 }
 
-if(process.argv[1]&&new URL(import.meta.url).pathname===process.argv[1]){
+if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
  try{
   const hosts=process.argv[2]==='hosts',p=JSON.parse(readFileSync(process.argv[hosts?3:2],'utf8'));
   console.log(JSON.stringify(await (hosts?prepareHosts:publish)(p)));
