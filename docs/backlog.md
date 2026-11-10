@@ -4165,8 +4165,7 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   message cannot diagnose browser restrictions, configuration or transport faults.
   These failure checks explicitly provide a simulated passkey device; a paired
   native check records whether the machine can begin without it.
-  Request-body refusals in other portal controllers and malformed JSON (400)
-  still need cause-specific feedback.
+  Malformed JSON (400), billing and pairing request-body refusals remain open.
   An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
   refused with an accepted session and no page or relay error. Its historical
   cause remains unknown and belongs to the shared CI-failure investigation;

@@ -42,7 +42,7 @@ Each row gives the current English/Spanish wording, the cause and the action to
 implement or clarify. R1, R4, R8 and R10 are implemented. R11's guidance and owner-check
 documentation are implemented; its repair controls remain open. R2's shared-400,
 browser-duplicate, generic-failure and 408/413/415 passkey guidance are implemented.
-Malformed JSON (400), other controllers' request-body feedback and the remaining
+Malformed JSON (400), billing/pairing request-body feedback and the remaining
 rows stay open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
@@ -135,10 +135,25 @@ synthetic HTTP responses to follow both paths, including a second refused
 passkey attempt and an incorrect password before a successful sign-in. The fixture explicitly provides a simulated passkey
 device, while a native check records whether the machine could begin the
 passkey journey without one. These checks do not qualify real credential
-verification or repair a browser or service restriction. Malformed JSON (400)
-and request-body refusals in the other portal controllers remain open:
-authenticator, sessions, alerts, backups, billing, diagnostics, installations,
-pairing, recovery, remote access, consent, usage, signup and password reset.
+verification or repair a browser or service restriction.
+
+## Request-body refusals in visible portal actions
+
+An interrupted request (408), unaccepted size (413) or unsupported format (415)
+now gets a shared English or Spanish cause followed by the screen's existing action.
+The [classifier](../apps/portal/src/body-refusal.ts#L3) requires `invalid_input`;
+[message composition](../apps/portal/src/locale.ts#L10) owns the three causes.
+Account signup/reset, password and factor sign-in, sign-out, session revocation,
+authenticator changes, alerts, backups, diagnostics, installation revocation,
+recovery, remote access, consent and usage use these messages for their JSON requests.
+Size guidance says another attempt may not help. It does not blame your fields.
+
+The focused controller and session tests exercise the refused actions, retained
+state and completed pending state. The three existing refusal/acknowledgement/focus
+browser files cover localized account submissions, authenticator refresh and sign-out
+focus using synthetic HTTP replies. These checks do not qualify a real server fault.
+GET reads and background session activity retain their handling. Malformed JSON
+(400), billing and pairing remain outside this change.
 
 ## Existing actions to preserve
 

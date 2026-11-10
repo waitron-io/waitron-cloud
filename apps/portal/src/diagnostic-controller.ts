@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import {validDiagnosticExport,type DiagnosticExport} from './diagnostic-types.ts';
@@ -31,6 +32,7 @@ export class DiagnosticController{
  }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'diagnosticUnavailable';
+  const cause=bodyRefusal(result);
+  this.error=cause?`diagnosticRequest${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'diagnosticUnavailable';
  }
 }

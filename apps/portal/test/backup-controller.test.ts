@@ -60,3 +60,13 @@ test('a stale continuous source falls back to the default verified snapshot on r
  const c=new BackupController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:true,value:{...page,continuousRecovery:fresh?continuous:null} as T}));
  c.account('owner');await c.open(venue);assert.equal(c.selectedSource,'continuous');fresh=false;await c.load();assert.equal(c.selectedSource,'snapshot');assert.equal(c.selected,venue);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const next of [false,true])test(`backup ${next?'pagination':'list'} body refusal ${status} retains the page`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new BackupController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ });
+ c.account('owner');c.venueId=venue;c.page=page as NonNullable<typeof c.page>;await c.load(next);
+ assert.equal(c.error,`snapshotsRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.page,page);
+ assert.deepEqual(calls,[{path:'/backups/list',body:{venueId:venue,...(next?{cursor:'next'}:{})}}]);
+});

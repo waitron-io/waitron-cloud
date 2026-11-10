@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest, type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {AccountSessionSummary} from './account-security-types.ts';
@@ -87,7 +88,8 @@ export class AccountSecurityController {
   }
 
   #failure(result: Extract<ApiResult<unknown>, {ok: false}>, write: boolean) {
-    this.error = result.status === 429 ? 'limited'
+    const cause = write && bodyRefusal(result);
+    this.error = cause ? `sessionRevokeRequest${cause}` : result.status === 429 ? 'limited'
       : result.status === 403 ? 'forbidden'
       : write ? 'sessionRevokeUncertain' : 'unavailable';
   }

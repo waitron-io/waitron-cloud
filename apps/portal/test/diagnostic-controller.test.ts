@@ -44,3 +44,13 @@ test('rate limit prevents repeated downloads until Retry-After passes',async()=>
  controller.account('owner');await controller.download(installation);assert.equal(controller.error,'limited');assert.ok(controller.waiting>0);
  await controller.download(installation);assert.equal(calls,1);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`diagnostic body refusal ${status} saves no file`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[],saved:unknown[]=[];
+ const c=new DiagnosticController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ },value=>saved.push(value));
+ c.account('owner');await c.download(installation);
+ assert.equal(c.error,`diagnosticRequest${cause}`);assert.equal(c.errorInstallationId,installation);assert.equal(c.pending,false);assert.deepEqual(saved,[]);
+ assert.deepEqual(calls,[{path:'/diagnostics/read',body:{installationId:installation}}]);
+});

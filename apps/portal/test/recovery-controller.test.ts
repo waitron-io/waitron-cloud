@@ -123,3 +123,15 @@ for(const code of ['12 345678','123456789','1234567','abcdefgh',''])test(`recove
  let calls=0;const c=new RecoveryController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:pending as T};});
  c.open(id);c.account('owner');c.code=code;await c.inspect();assert.equal(calls,0);assert.equal(c.error,'pairCodeError');assert.equal(c.view,undefined);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['inspect','approve','close','replace'] as const)test(`recovery ${action} body refusal ${status} does not reconcile or grant`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ });
+ c.account('owner');c.open(id);c.code='12345678';
+ c.view=(action==='replace'?{...approved,operation:{...approved.operation,status:'restored'},replacement}:action==='close'?approved:pending) as NonNullable<typeof c.view>;
+ c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
+ assert.equal(c.error,`recoveryRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.uncertain,false);
+ assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/recovery/${action}`);assert.equal(calls[0]?.body?.requestId,id);
+});

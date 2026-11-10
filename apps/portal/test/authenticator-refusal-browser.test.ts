@@ -14,7 +14,7 @@ const token='A'.repeat(43),expiresAt='2030-01-01T00:00:00.000Z';
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])
  test(`${locale} ${theme} ${width}: authenticator refusals give a usable next step`,async t=>{
   const browser=await chromium.launch({headless:true});
-  try{for(const reason of ['setup_unavailable','factor_not_active','password_too_long'] as const)await t.test(reason,async()=>{
+  try{for(const reason of ['setup_unavailable','factor_not_active','password_too_long','408','413','415'] as const)await t.test(reason,async()=>{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(4000);
    const c=translations[locale],writes:string[]=[];let statusReads=0;
    try{
@@ -26,7 +26,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      if(endpoint.startsWith('/authenticator/')){
       writes.push(endpoint);
       if(endpoint==='/authenticator/begin'&&reason==='setup_unavailable')return route.fulfill({json:{pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt}});
-      return route.fulfill({status:400,json:{error:reason}});
+      return route.fulfill({status:reason==='408'?408:reason==='413'?413:reason==='415'?415:400,json:{error:['408','413','415'].includes(reason)?'invalid_input':reason}});
      }
      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
     });
@@ -38,7 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     }else if(reason==='factor_not_active'){
      await page.locator('input[name=factorProof]').fill('123456');await page.getByRole('button',{name:c.factorRemove,exact:true}).click();
     }else await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
-    const message=reason==='setup_unavailable'?(locale==='en'?'This setup is no longer available. Start setup again with your password and fresh codes.':'Esta configuración ya no está disponible. Empieza de nuevo con tu contraseña y códigos nuevos.')
+    const message=reason==='408'?c.factorRequestInterrupted:reason==='413'?c.factorRequestSize:reason==='415'?c.factorRequestFormat:reason==='setup_unavailable'?(locale==='en'?'This setup is no longer available. Start setup again with your password and fresh codes.':'Esta configuración ya no está disponible. Empieza de nuevo con tu contraseña y códigos nuevos.')
      :reason==='factor_not_active'?(locale==='en'?'Your authenticator is no longer active. Check your settings before starting again.':'Tu autenticador ya no está activo. Comprueba la configuración antes de empezar de nuevo.')
      :(locale==='en'?'This password is too long. Enter your current account password.':'Esta contraseña es demasiado larga. Introduce la contraseña actual de tu cuenta.');
     await page.locator('.authenticator > p[role=alert]').getByText(message,{exact:true}).waitFor();
@@ -46,7 +46,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(reason==='setup_unavailable'){assert.equal(await page.locator('input[name=factorConfirmation]').count(),0);await page.getByRole('button',{name:c.factorEnable,exact:true}).waitFor();}
     if(process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR){await mkdir(process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR,{recursive:true});await page.locator('.authenticator').scrollIntoViewIfNeeded();await page.screenshot({path:`${process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}-${reason}.png`});}
-    if(reason==='factor_not_active'){
+    if(reason==='factor_not_active'||['408','413','415'].includes(reason)){
      await page.getByRole('button',{name:c.factorRefresh,exact:true}).click();await page.getByRole('button',{name:c.factorEnable,exact:true}).waitFor();
      assert.equal(await page.locator('input[name=factorProof]').count(),0);assert.equal(statusReads,2);
     }

@@ -1,8 +1,10 @@
+import {bodyRefusal} from './body-refusal.ts';
 import { accountRequest, type ApiResult } from './api.ts';
 type Session = {accountId: string; expiresAt: string; billingTrialAvailable?: true};
 export type SessionState = {kind: 'checking' | 'unavailable'} | {kind: 'anonymous'; expired?: true} | ({kind: 'authenticated'} & Session);
 export class PortalSession {
   state: SessionState = {kind: 'checking'};
+  logoutCause: ReturnType<typeof bodyRefusal>;
   // Retry delays use elapsed time; the session expiry remains a server timestamp.
   #retryUntil = 0;
   get retryAt() { const remaining = this.#retryUntil - performance.now(); return remaining > 0 ? Date.now() + remaining : 0; }
@@ -56,13 +58,14 @@ export class PortalSession {
     if (generation === this.#generation) this.#accept(result, sequence);
   }
   async logout(): Promise<boolean> {
+    this.logoutCause = undefined;
     if (this.#disposed || this.waiting) return false;
     await this.check();
     if (this.state.kind === 'unavailable') return false;
     // Fence all earlier passive/activity results before the cookie-changing request.
     this.#generation++; this.#pending = undefined;
     const result = await accountRequest<void>('/logout', {});
-    if (!result.ok) { this.#retryUntil = performance.now() + result.retryAfterMs; return false; }
+    if (!result.ok) { this.logoutCause = bodyRefusal(result); this.#retryUntil = performance.now() + result.retryAfterMs; return false; }
     this.#generation++; this.#pending = undefined;
     this.#set({kind: 'anonymous'});
     return true;

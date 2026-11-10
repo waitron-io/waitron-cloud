@@ -72,3 +72,13 @@ test('a backward clock change during a request cannot revive the expired retry d
  now=61000;elapsed=61000;const loading=c.load();now=30000;finish({ok:false,status:503,code:'unavailable',retryAfterMs:0});await loading;
  assert.equal(c.waiting,0);assert.equal(c.retryAt,0);assert.equal(calls,2);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['agree','withdraw'] as const)test(`consent ${action} body refusal ${status} retains the previous choice`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new TranslationConsentController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ });
+ c.account('owner');c.consents=listed(false).value.consents;await c[action](venueId);
+ assert.equal(c.error,`translationConsentRequest${cause}`);assert.equal(c.errorVenueId,venueId);assert.equal(c.pending,false);assert.equal(c.consented(venueId),false);
+ assert.deepEqual(calls,[{path:'/translation-consent',body:{venueId,choice:action,...(action==='agree'?{consentVersion:'providers-2026-10-14'}:{})}}]);
+});

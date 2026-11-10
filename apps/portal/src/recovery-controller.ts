@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {RecoveryView} from './recovery-types.ts';
@@ -45,7 +46,8 @@ export class RecoveryController {
      409:{approval_required:'recoveryApprovalRequired',conflict:action==='replace'?'recoveryReplacementConflict':'recoveryConflict',target_not_fresh:'recoveryFreshTarget',recovery_active:'recoveryActive'},
     };
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-    this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
+    const cause=bodyRefusal(result);
+    this.error=cause?`recoveryRequest${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
     if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
    }
    else this.error='unavailable';

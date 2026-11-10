@@ -17,14 +17,15 @@ const installations=Array.from({length:8},(_,i)=>{
  return {installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
   services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))};
 });
-for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const handler of ['normal','delayed','missing'] as const){
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const handler of ['normal','delayed','missing','408','413','415'] as const){
  if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390))continue;
  test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} handler`}: ${handler==='missing'?'logout-handler observation times out before failure UI checks':'a failed sign-out is brought into view and focused'}`,async t=>{
   const browser=await chromium.launch({headless:true});let release!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;});let handlerEntered=false;const entered=()=>{handlerEntered=true;};
   try{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
-   const c=translations[locale];let signedIn=true,attempts=0;
+   const c=translations[locale],status=handler==='408'?408:handler==='413'?413:handler==='415'?415:503;
+   const message=status===408?c.logoutRequestInterrupted:status===413?c.logoutRequestSize:status===415?c.logoutRequestFormat:c.logoutFailed;let signedIn=true,attempts=0;
    await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
    await page.route('**/api/account/**',async route=>{
     const endpoint=new URL(route.request().url()).pathname.replace('/api/account','');
@@ -34,7 +35,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(endpoint==='/installations')return route.fulfill({json:{installations}});
     if(endpoint==='/alerts')return route.fulfill({json:{enabled:false,locale}});
     if(endpoint==='/logout'){
-     attempts++;if(attempts===1){if(handler==='delayed')await delay(100);if(handler!=='missing')entered();await held;return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});}
+     attempts++;if(attempts===1){if(handler==='delayed')await delay(100);if(handler!=='missing')entered();await held;return route.fulfill({status,json:{error:status===503?'temporarily_unavailable':'invalid_input'}});}
      signedIn=false;return route.fulfill({status:204});
     }
     return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
@@ -53,8 +54,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    }
    const response=page.waitForResponse('**/api/account/logout');await signOut.click();await waitForHandler();
    assert.equal(await signOut.isDisabled(),true,'sign-out remains disabled while pending');assert.equal(attempts,1);
-   release();assert.equal((await response).status(),503);
-   const summary=page.locator('wt-form-error-summary');await summary.getByText(c.logoutFailed,{exact:true}).waitFor();
+   release();assert.equal((await response).status(),status);
+   const summary=page.locator('wt-form-error-summary');await summary.getByText(message,{exact:true}).waitFor();
    const box=await summary.boundingBox();assert.ok(box);assert.equal(box.y>=0&&box.y+box.height<=900,true,'the failure summary is visible without manual scrolling');
    assert.equal(await page.evaluate(()=>document.activeElement===document.querySelector('wt-form-error-summary')),true);
    assert.equal(await signOut.isEnabled(),true);assert.equal(attempts,1);
@@ -62,7 +63,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    if(process.env.SIGNOUT_FOCUS_RECEIPT_DIR){await mkdir(process.env.SIGNOUT_FOCUS_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.SIGNOUT_FOCUS_RECEIPT_DIR}/${locale}-${theme}-${width}${handler==='normal'?'':`-${handler}`}.png`});}
    await signOut.click();await page.getByText(c.signedOut,{exact:true}).waitFor();assert.equal(attempts,2);
-   assert.equal(await summary.getByText(c.logoutFailed,{exact:true}).count(),0);
+   assert.equal(await summary.getByText(message,{exact:true}).count(),0);
   }finally{release();await browser.close();}
  });
 }

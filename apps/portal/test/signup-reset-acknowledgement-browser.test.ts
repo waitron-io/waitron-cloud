@@ -28,7 +28,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
         page.setDefaultTimeout(4000);
         const completion = flow.endpoint.endsWith('/complete'), calls: {path: string; body: unknown; headers: Record<string, string>}[] = [], errors: string[] = [];
-        let valid = false;
+        let valid = false; let refusalStatus: number | undefined;
         let responseError: string | undefined;
         page.on('pageerror', error => errors.push(error.message));
         try {
@@ -37,7 +37,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
             if (endpoint === '/session') return route.fulfill({status: 401, json: {error: 'unauthenticated'}});
             calls.push({path: endpoint, body: request.postDataJSON(), headers: request.headers()});
-            return route.fulfill({status: valid || responseError ? flow.status : flow.status === 200 ? 202 : 200,
+            return route.fulfill({status: refusalStatus ?? (valid || responseError ? flow.status : flow.status === 200 ? 202 : 200),
               json: responseError ? {error: responseError} : flow.value});
           });
           await page.goto(`https://portal.test${flow.path}${completion ? '#token=' + token : ''}`);
@@ -70,10 +70,19 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             assert.equal(await submit.isEnabled(), true);
             if (completion) assert.equal(await page.locator('input[name=password]').inputValue(), password);
           }
-          responseError = undefined; valid = true;
+          for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const){
+            refusalStatus=status;responseError='invalid_input';const before:number=calls.length;
+            await submit.click();await page.getByText(c[`accountRequest${cause}`],{exact:true}).waitFor();
+            assert.equal(calls.length,before+1);assert.equal(await submit.isEnabled(),true);
+            assert.equal(await page.getByText(c.signupReady,{exact:true}).count(),0);assert.equal(await page.getByText(c.resetReady,{exact:true}).count(),0);
+            assert.equal(await page.getByRole('heading',{name:c.checkEmail,exact:true}).count(),0);
+            assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+            if(output)await page.screenshot({path:`${output}/${locale}-${theme}-${width}-${flow.endpoint.replaceAll('/', '-')}-${status}.png`,fullPage:true});
+          }
+          refusalStatus=undefined;responseError = undefined; valid = true;
           await submit.click();
           await page.getByText(completion ? flow.endpoint === '/signup/complete' ? c.signupReady : c.resetReady : c.emailSent, {exact: true}).waitFor();
-          assert.equal(calls.length, 6, 'only the deliberate retries send another request');
+          assert.equal(calls.length, 9, 'only the deliberate retries send another request');
           const body = completion ? flow.endpoint === '/signup/complete'
             ? {token, password, legalBusinessName: 'Café SL', organisationName: 'Café SL', countryCode: 'ES'}
             : {token, password, locale} : {email: 'owner@example.test', locale};

@@ -96,3 +96,13 @@ test('a failed reconciliation marks a stale session list for retry', async () =>
   assert.equal(controller.loaded, false);
   assert.deepEqual(controller.sessions, []);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`session revoke body refusal ${status} survives reconciliation`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new AccountSecurityController(()=>{},()=>assert.fail('session stays signed in'),async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return body?{ok:false,status,code:'invalid_input',retryAfterMs:0}:{ok:true,value:{sessions:[other]} as T};
+ });
+ c.account('owner');c.sessions=[other];await c.revoke(other.id);
+ assert.equal(c.error,`sessionRevokeRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.notice,undefined);
+ assert.deepEqual(calls,[{path:'/sessions/revoke',body:{id:other.id}},{path:'/sessions',body:undefined}]);
+});

@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy,Locale} from './locale.ts';
 export interface AlertPreferences {enabled:boolean;locale:Locale;}
@@ -28,8 +29,9 @@ export class AlertController {
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write:boolean){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403)this.#clear();
-  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'alertsUncertain':'unavailable';
+  const cause=write&&bodyRefusal(result);
+  this.error=cause?`alertsRequest${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'alertsUncertain':'unavailable';
   // An unconfirmed write may have changed the server, even if the draft is later reverted.
-  if(this.error==='alertsUncertain')this.#confirmed=undefined;
+  if(write&&![401,403,429].includes(result.status))this.#confirmed=undefined;
  }
 }

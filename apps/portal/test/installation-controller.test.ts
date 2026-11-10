@@ -69,3 +69,13 @@ for(const change of ['permission','organisation','fallback','removed','revoked',
  assert.equal(c.confirming,change==='unchanged'?id:undefined);
  await c.revoke();assert.deepEqual(writes,change==='unchanged'?[{installationId:id}]:[]);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`installation revoke body refusal ${status} retains confirmation`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new InstallationController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ });
+ c.account('owner');c.installations=[view];c.choose(id);await c.revoke();
+ assert.equal(c.error,`installationsRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.confirming,id);assert.equal(c.installations[0]?.revokedAt,null);
+ assert.deepEqual(calls,[{path:'/installations/revoke',body:{installationId:id}}]);
+});
