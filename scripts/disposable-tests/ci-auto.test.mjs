@@ -426,6 +426,22 @@ async function refusalPool(t){
  return {version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy};
 }
 
+test('pickup leaves queued work alone when only the unhealthy server has free slots',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get;
+ config.slotHosts=['new.invalid','new.invalid','new.invalid','bench.invalid','bench.invalid','bench.invalid'];
+ for(const slot of [3,4,5])new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot})
+  .reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const served=[];
+ const result=await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthy:async()=>true,healthySlots:async()=>[3,4,5]},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.equal(result.served,0);assert.deepEqual(served,[]);
+ assert.ok(f.jobs.every(job=>job.status==='queued'));
+ const capacity=JSON.parse((await routingVariables(f.api).get('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY')).value);
+ assert.equal(capacity.slots,3);assert.equal(capacity.serverRunning,3);
+});
+
 test('pickup retries only its recorded busy-runner failure once, while other turns stay retired',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;

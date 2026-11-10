@@ -31,9 +31,11 @@ function requestIdentity(request) {
 export function configuredSlots(config) {
   assert.equal(config.version,2,'Invalid controller configuration version');
   if(config.mode==='manual-one-slot'){
-    assert.equal(config.slots,undefined,'Single-slot configuration cannot change capacity');return 1;
+    assert.ok(config.slots===undefined && config.slotHosts===undefined,'Single-slot configuration cannot change capacity');return 1;
   }
   assert.ok(config.mode==='manual-slots' && Number.isSafeInteger(config.slots) && config.slots>1 && config.slots<=16,'Invalid concurrent controller capacity');
+  if(config.slotHosts!==undefined)assert.ok(Array.isArray(config.slotHosts) && config.slotHosts.length===config.slots &&
+    config.slotHosts.every(host=>typeof host==='string' && /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(host)),'Invalid slot host mapping');
   return config.slots;
 }
 
@@ -271,10 +273,12 @@ export function refuseLegacy(state) {
 }
 
 // The slot lock lives through cleanup; the shared ledger lock covers only updates.
-export async function withAvailableSlot({state,hostGeneration,slots},work,{signal}={}) {
+export async function withAvailableSlot({state,hostGeneration,slots},work,{signal,healthySlots}={}) {
   assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
+  assert.ok(healthySlots===undefined || Array.isArray(healthySlots) && healthySlots.every(slot=>Number.isSafeInteger(slot) && slot>=0 && slot<slots),'Invalid healthy slot inventory');
   refuseLegacy(state);
   for(let slot=0;slot<slots;slot++){
+    if(healthySlots!==undefined && !healthySlots.includes(slot))continue;
     let admitted=false;
     const result=await withKernelLock(join(state,'slot-'+slot),async()=>{
       const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});

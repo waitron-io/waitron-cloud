@@ -138,6 +138,22 @@ test('host down returns busy promptly without reserving', async t => {
   assert.ok(performance.now() - begin < 1000);
 });
 
+test('pool admission skips unhealthy server slots without changing their leases', async t => {
+  const {leases,dir}=await setup(t,{slots:12});
+  const {withAvailableSlot}=await import(module),{withKernelLock}=await import('./kernel-lock.mjs');
+  const state=join(dir,'..');
+  for(const slot of [0,6])await withKernelLock(join(state,'slot-'+slot),async()=>({code:0}),{bootstrap:true});
+  let selected;
+  const admitted=await withAvailableSlot({state,hostGeneration:'bridge-1',slots:12},context=>{
+    selected=context.slot;return context.leases.reserveLocal(request());
+  },{healthySlots:[6]});
+  assert.equal(admitted.code,0);assert.equal(selected,6);
+  assert.equal(leases.inspect().slots[0].state,'free');
+  assert.equal(leases.inspect().slots[6].state,'reserved');
+  const down=await withAvailableSlot({state,hostGeneration:'bridge-1',slots:12},()=>assert.fail('No server is healthy'),{healthySlots:[]});
+  assert.equal(down.code,75);
+});
+
 test('lease duration cannot exceed 55 minutes and invalid requests never reserve', async t => {
   const {leases} = await setup(t);
   for (const budget of [{durationMs: 3300001}, {durationMs: 0}, {durationMs: NaN}]) {

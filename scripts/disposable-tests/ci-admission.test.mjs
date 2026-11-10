@@ -5,6 +5,16 @@ const workflow='reviewed workflow bytes';
 const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',
  workflowDigest:createHash('sha256').update(workflow).digest('hex')};
 const input={runId:789,attempt:1,sourceSha:'3'.repeat(40),nonce:'a'.repeat(32)};
+test('two-host admission requires one trusted destination for every configured slot',async()=>{
+ const {validateCIConfig}=await import('./ci-canary.mjs');
+ const config={version:2,mode:'manual-slots',slots:12,host:'new.invalid',hostGeneration:'two-hosts',recipe:'/opt/waitron-disposable-fixture',
+  repository:'/fixture/repo/.git',state:'/fixture/state',ci:{...policy,appEnv:'/fixture/app.env',appKey:'/fixture/app.key'},
+  slotHosts:[...Array(6).fill('new.invalid'),...Array(6).fill('bench.invalid')]};
+ assert.doesNotThrow(()=>validateCIConfig(config));
+ for(const slotHosts of [[],config.slotHosts.slice(1),[...config.slotHosts,'extra.invalid'],config.slotHosts.map((host,i)=>i===6?'bad host':host)])
+  assert.throws(()=>validateCIConfig({...config,slotHosts}),/slot|host/i);
+ assert.throws(()=>validateCIConfig({...config,mode:'manual-one-slot',slots:undefined}),/slot|capacity/i);
+});
 function evidence(){return {repository:{id:123,full_name:'fixture/cloud'},workflow,
  run:{id:789,run_attempt:1,repository:{id:123},head_repository:{id:123},head_sha:'1'.repeat(40),workflow_id:456,
  path:policy.workflowPath,event:'workflow_dispatch',display_title:'disposable-'+input.nonce,status:'in_progress'},

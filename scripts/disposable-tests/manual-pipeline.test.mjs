@@ -40,7 +40,7 @@ if mode=='health':
  if os.environ['FIXTURE_MODE']=='unreachable':
   import signal
   signal.signal(signal.SIGTERM,signal.SIG_IGN);(root/'health.pid').write_text(str(os.getpid()));time.sleep(60)
- print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy'}))
+ print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy' and os.environ.get('FIXTURE_DOWN_HOST','') not in sys.argv}))
 elif mode=='transfer':sys.stdin.buffer.read();(root/rid).touch();print('{}')
 elif mode=='prepare':
  if os.environ['FIXTURE_MODE']=='work':(root/'work.pid').write_text(str(os.getpid()));print('WORK-READY',flush=True);time.sleep(60)
@@ -117,6 +117,21 @@ test('an occupied recorded lease refuses before packaging or host contact',t=>{
 });
 test('an unhealthy host refuses before snapshot and private package preparation',t=>{
  const f=fixture(t,'unhealthy');const r=run(f);assert.equal(r.status,75,r.stdout+r.stderr);assert.equal(existsSync(join(f.root,'packaged')),false);assertNoTemporaries(f);
+});
+for(const mode of ['normal','unhealthy'])test(`two-host manual admission returns the command result or busy without packaging: ${mode}`,async t=>{
+ const f=fixture(t,mode),config=JSON.parse(readFileSync(f.config,'utf8'));
+ config.mode='manual-slots';config.slots=2;config.host='new.invalid';config.slotHosts=['new.invalid','bench.invalid'];
+ writeFileSync(f.config,JSON.stringify(config));
+ rmSync(join(f.root,'state/ledger'),{recursive:true});
+ new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:2,bootstrap:true});
+ const {withKernelLock}=await import('./kernel-lock.mjs');
+ for(const slot of [0,1])await withKernelLock(join(f.root,'state/slot-'+slot),async()=>({code:0}),{bootstrap:true});
+ f.env.FIXTURE_DOWN_HOST='root@new.invalid';
+ const result=run(f);
+ assert.equal(result.status,mode==='normal'?3:75,result.stdout+result.stderr);
+ assert.equal(existsSync(join(f.root,'packaged')),mode==='normal');
+ assert.ok(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots.every(slot=>slot.state==='free'));
+ assertNoTemporaries(f);
 });
 test('a failed snapshot leaves no admitted work or owned temporary data',t=>{
  const f=fixture(t,'snapshot-failure');const r=run(f);assert.equal(r.status,125,r.stdout+r.stderr);assertNoTemporaries(f);assertControllerReleased(f);

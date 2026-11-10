@@ -14,6 +14,8 @@ import time
 import unittest
 
 MANAGER = sys.argv.pop(1)
+sys.path.insert(0,str(Path(MANAGER).resolve().parent))
+import host as host_recipe
 
 
 def qmp_request(resource, command, arguments=None):
@@ -112,8 +114,9 @@ class GuestLifecycle(unittest.TestCase):
                     else:
                         clean = self.command(*ssh, 'test ! -e /root/predecessor')
                         self.assertEqual(clean.returncode, 0, clean.stderr)
-                    probe = """import socket
-for host,port in [('10.0.2.2',22),('169.254.169.254',80),('2.29.248.230',22),('2a01:4f9:3120:2fd2::2',22),('127.0.0.1',22000)]:
+                    blocked=[('10.0.2.2',22),('169.254.169.254',80),('127.0.0.1',22000)]
+                    blocked.extend((address,22) for address in sorted(host_recipe.protected_addresses()))
+                    probe = "import socket\nfor host,port in "+repr(blocked)+""":
  try:
   connection=socket.create_connection((host,port),2)
  except OSError:

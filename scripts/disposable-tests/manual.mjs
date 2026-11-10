@@ -151,7 +151,7 @@ export async function main(args) {
   }
   const config=JSON.parse(readFileSync(configuration,'utf8'));
   if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
-  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
   const slots=configuredSlots(config);
   assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
   const cancellation=new AbortController();
@@ -161,15 +161,16 @@ export async function main(args) {
   const budget=AbortSignal.timeout(7500);
   const admission=AbortSignal.any([cancellation.signal,budget]);
   let admitted=false;
-  const withController=work=>!bootstrap && slots>1
-    ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal})
+  const withController=async work=>!bootstrap && slots>1
+    ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal,
+      ...(config.slotHosts===undefined?{}:{healthySlots:await new SSHTransport(config).healthySlots({signal:admission})})})
     :withKernelLock(config.state,()=>{refuseLegacy(config.state);return withTemporaryState(config.state,()=>work());},{bootstrap,deadline,signal:cancellation.signal});
   let lastRecovery=-Infinity;
   const recover=async()=>{
     if(Date.now()-lastRecovery<30000)return;
     lastRecovery=Date.now();
     return reconcileManual({state:config.state,hostGeneration:config.hostGeneration,slots,
-      transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
+      transport:new SSHTransport(config),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
   };
   try {
     const result=reconciling
@@ -188,7 +189,7 @@ export async function main(args) {
       const leases=selected??new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots});
       const state=leases.inspect();
       if (state.slots.some(slot=>slot.state!=='free')) return {code:75,reason:'recorded-slot-busy-or-quarantined'};
-      const transport=new SSHTransport({host:config.host,recipe:config.recipe});
+      const transport=new SSHTransport({...config,slot:leases.slot});
       let healthy;
       try { healthy=await transport.healthy({signal:admission}); } catch { healthy=false; }
       if (!healthy) return {code:cancellation.signal.aborted?143:75,reason:'host-unavailable'};

@@ -25,6 +25,7 @@ IMAGE_SHA512 = 'd25999de0770d4cde1be72c299ba3ad94eac7ea8fd4d18f8cc86c69df69337e2
 
 GUEST_MEMORY_MIB = 16384
 HOST_CAP_MIB = 18432
+PEER_ADDRESSES = Path(__file__).with_name('peer-addresses.json')
 
 
 def resource_id(value):
@@ -175,10 +176,26 @@ def observation(resource):
             'absent': service['absent'] and not disk and not network}
 
 
-def network_policy(resource):
+def peer_addresses():
+    if not PEER_ADDRESSES.exists():
+        return set()
+    peers = json.loads(PEER_ADDRESSES.read_text())
+    if not isinstance(peers, list) or not all(isinstance(value, str) for value in peers):
+        raise ValueError('Invalid peer address list')
+    addresses = {ipaddress.ip_address(value) for value in peers}
+    if any(value.version != 4 for value in addresses):
+        raise ValueError('Peer addresses must be IPv4; IPv6 is already refused')
+    return {str(value) for value in addresses}
+
+
+def protected_addresses():
     interfaces = json.loads(run('ip', '-json', 'address', 'show').stdout)
-    hosts = {str(ipaddress.ip_address(address['local'])) for interface in interfaces
-             for address in interface.get('addr_info', []) if address['family'] == 'inet'}
+    return {str(ipaddress.ip_address(address['local'])) for interface in interfaces
+            for address in interface.get('addr_info', []) if address['family'] in ('inet', 'inet6')} | peer_addresses()
+
+
+def network_policy(resource):
+    hosts = {value for value in protected_addresses() if ipaddress.ip_address(value).version == 4}
     denied = ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
               '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24',
               '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24',

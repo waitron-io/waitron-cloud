@@ -157,25 +157,34 @@ def collect(home=None):
         pass
     if not isinstance(config.get('host'), str) or not config['host']:
         return result
-    payload = dict(recipe=config['recipe'], resources=[job['resource'] for job in result['jobs'] if job['resource'] != UNKNOWN], budget=max(0, deadline-time.monotonic()-0.2))
+    slot_hosts=config.get('slotHosts',[config['host']]*total)
+    if not isinstance(slot_hosts,list) or len(slot_hosts)!=total or not all(isinstance(host,str) and re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.:-]*',host) for host in slot_hosts):
+        return result
     options = ['BatchMode=yes', 'StrictHostKeyChecking=yes', 'ConnectTimeout=3', 'ServerAliveInterval=15', 'ServerAliveCountMax=2',
                'ForwardAgent=no', 'ForwardX11=no', 'ClearAllForwardings=yes', 'ControlMaster=no', 'ControlPersist=600',
                'ControlPath='+str(home/'.cache/wt-ssh/%C'), 'ProxyCommand=false']
-    remote = 'python3 -B - --host '+shlex.quote(base64.b64encode(json.dumps(payload).encode()).decode())
-    raw = command(['ssh', *[word for option in options for word in ['-o', option]], 'root@'+config['host'], remote], deadline, input=Path(__file__).read_text())
-    try:
-        host = json.loads(raw)
-        assert isinstance(host, dict) and all(isinstance(value, dict) for value in host.values())
-        result['host'] = host
+    expected={job['resource']:slot_hosts[job['slot']] for job in result['jobs'] if job['resource']!=UNKNOWN}
+    def read_host(target):
+        payload=dict(recipe=config['recipe'],resources=[resource for resource,host in expected.items() if host==target],budget=max(0,deadline-time.monotonic()-0.2))
+        remote='python3 -B - --host '+shlex.quote(base64.b64encode(json.dumps(payload).encode()).decode())
+        raw=command(['ssh',*[word for option in options for word in ['-o',option]],'root@'+target,remote],deadline,input=Path(__file__).read_text())
+        try:
+            values=json.loads(raw)
+            assert isinstance(values,dict) and all(isinstance(value,dict) for value in values.values())
+            return target,{resource:value for resource,value in values.items() if expected.get(resource,target)==target}
+        except (ValueError,TypeError,AssertionError):
+            return target,None
+    with ThreadPoolExecutor(max_workers=len(set(slot_hosts))) as pool:
+        observed=dict(pool.map(read_host,dict.fromkeys(slot_hosts)))
+    if any(values is not None for values in observed.values()):
+        result['host']={resource:value for values in observed.values() if values is not None for resource,value in values.items()}
         for job in result['jobs']:
-            seen = host.get(job['resource'], {})
+            seen = (observed[slot_hosts[job['slot']]] or {}).get(job['resource'], {})
             job['guestState'] = seen.get('state', UNKNOWN)
             job['executionRequested'] = seen.get('executionRequested', UNKNOWN)
             started = seen.get('workerStart', UNKNOWN)
             if type(started) is int and 0 <= started <= now:
                 job.update(start=started, runtimeSeconds=(now-started)/1000)
-    except (ValueError, TypeError, AssertionError):
-        pass
     return result
 
 

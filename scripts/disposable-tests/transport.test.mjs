@@ -5,6 +5,34 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
+test('slot mapping sends transfer, results and cleanup to the same server across the pool boundary', async t => {
+  const {spawnSync} = await import('node:child_process');
+  const root=mkdtempSync(join(tmpdir(),'disposable-slot-hosts-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'bin'));
+  writeFileSync(join(root,'bin/ssh'),`#!/usr/bin/env python3
+import json,os,sys
+with open(os.environ['SLOT_HOST_CALLS'],'a') as out:out.write(json.dumps(sys.argv)+'\\n')
+print('{"healthy":true}')
+`,{mode:0o700});
+  const program=`import {SSHTransport} from ${JSON.stringify(new URL('./transport.mjs',import.meta.url).href)};
+    const transport=new SSHTransport({host:'old.invalid',recipe:'/opt/waitron-disposable-fixture',slotHosts:[...Array(6).fill('new.invalid'),...Array(6).fill('bench.invalid')]});
+    for(const slot of [5,6,11]){
+      const lease={slot,resourceId:'dt-pool-'+slot+'-1'};
+      for(const mode of ['transfer-ci','result','destroy','inspect'])await transport.remote(mode,lease,{capture:true});
+      if(!await transport.healthy({slot}))throw Error('Selected server is unhealthy');
+    }
+    if(typeof transport.healthySlots!=='function')throw Error('Pool health does not enumerate its slots');
+    console.log(JSON.stringify(await transport.healthySlots({})));`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:10000,
+    env:{...process.env,PATH:join(root,'bin')+':'+process.env.PATH,SLOT_HOST_CALLS:join(root,'calls'),XDG_CACHE_HOME:join(root,'cache')}});
+  assert.equal(result.status,0,result.stderr);
+  const calls=readFileSync(join(root,'calls'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(JSON.parse(result.stdout),[0,1,2,3,4,5,6,7,8,9,10,11]);
+  assert.deepEqual(calls.slice(0,15).map(argv=>argv.at(-2)),[...Array(5).fill('root@new.invalid'),...Array(10).fill('root@bench.invalid')]);
+  assert.deepEqual(calls.slice(15).map(argv=>argv.at(-2)).sort(),['root@bench.invalid','root@new.invalid']);
+  assert.deepEqual(calls.filter(argv=>argv.at(-1).includes('destroy')).map(argv=>argv.at(-1).split(' ').at(-1)),['dt-pool-5-1','dt-pool-6-1','dt-pool-11-1']);
+});
+
 test('an unavailable SSH cleanup channel refuses after one request instead of reconnecting in a burst', async t => {
   const {spawnSync} = await import('node:child_process');
   const directory=mkdtempSync(join(tmpdir(),'disposable-ssh-unavailable-'));
