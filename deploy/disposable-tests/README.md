@@ -216,9 +216,12 @@ snapshot program. Download retries, registration and execution checks keep their
 
 Run the portable image and dispatch cases with
 `node --test scripts/disposable-tests/{dependencies,session,host}.test.mjs scripts/ci-plan.test.mjs`.
-The opt-in host and guest proofs remain separate. A hosted image-smoke pass does not qualify
-this disk: before using a new recipe for ordinary CI, run image smoke inside a prebuilt guest,
-check fresh successor identities and cleanup, and record an ordinary job using that disk.
+The opt-in host and guest proofs remain separate. Before publishing a new recipe to the pool,
+check fresh successor identities and cleanup, record an ordinary job using that disk, and run
+image smoke inside a prebuilt guest. A1463 inherits the existing hosted-only image-smoke
+exception (watcher, 10 November 2026, 06:16): its guest run built both images and passed the
+application and packaging checks before the known Bluetooth `dbus_unreachable` refusal.
+Keep the complete image-smoke job on GitHub's machines; the prebuilt disk serves other server jobs.
 For startup comparisons, report disk hashing separately and define cold as a fresh guest and
 overlay. Shared host page-cache state is uncontrolled; never clear shared caches for a benchmark.
 

@@ -24,15 +24,6 @@ those transfers' existing budgets, with HTTP 4xx and integrity failures refusing
 The controlled dependency tests exercise retries and refusals; a healthy cold guest usually
 uses only its first attempt. Frozen host recipes still change only through explicit publication.
 
-A1463's [prebuilt guest disk plan](superpowers/plans/2026-11-09-a1463-prebuilt-guest.md)
-was approved by the watcher on 10 November at 04:37. The candidate built a reusable disk and
-passed [an ordinary server job](https://github.com/clintongormley/waitron/actions/runs/42756794228/job/129633776383).
-Guest image smoke built both images and passed the application and packaging checks before
-failing Bluetooth availability with `dbus_unreachable`; qualification and fleet publication remain
-blocked there. Observed preparation was 12.9 seconds and admission-to-worker startup 21.5 seconds,
-but the run's slowest checkout took 19 seconds, so these timings are unqualified. Shared host
-cache state is uncontrolled; no measured saving is claimed.
-
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
 ## Keep the private shared UI release current (D579)
