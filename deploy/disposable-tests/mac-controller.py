@@ -11,7 +11,9 @@ def main(argv):
     node, configuration, *args = argv
     if not Path(node).is_absolute() or not Path(configuration).is_absolute():
         raise ValueError('Node and immutable configuration need absolute paths')
-    if len(args) >= 3 and args[2] == '--':
+    if len(args)>=6 and args[0]=='remote' and args[5]=='--':
+        args[4]=os.path.abspath(args[4])
+    elif len(args) >= 3 and args[2] == '--':
         args[1] = os.path.abspath(args[1])
     environment = {key: value for key, value in os.environ.items()
                    if key not in ('NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONHOME')}

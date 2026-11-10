@@ -1,6 +1,6 @@
 import {withRequestCounts} from './github-app.mjs';
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync, statSync} from 'node:fs';
 import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -140,14 +140,19 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
 
 export async function main(args) {
   protectOutputStreams();
+  const remote=args.length>=8 && args[1]==='remote' && args[6]==='--';
+  const bundled=args.length===3 && args[1]==='--bundle';
   const bootstrap=args.length===2 && args[1]==='--bootstrap';
   const reconciling=args.length===2 && args[1]==='--once';
-  assert.ok(bootstrap || reconciling || (args.length>=5 && args[3]==='--'),
+  assert.ok(bootstrap || reconciling || bundled || remote || (args.length>=5 && args[3]==='--'),
     'Usage: manual.mjs CONFIG LANE CLOUD_CHECKOUT -- COMMAND [ARGS] | CONFIG --once | CONFIG --bootstrap');
-  const [configuration,lane,checkout,,...argv]=args;
+  let [configuration,lane,checkout,,...argv]=args;
+  let remoteHost,remoteConfiguration;
+  if(remote){[,,remoteHost,remoteConfiguration,lane,checkout,,...argv]=args;assert.match(remoteHost,/^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/);assert.match(remoteConfiguration,/^\/opt\/waitron-disposable-controller-[a-zA-Z0-9_-]+\/config\.json$/);}
+  if(bundled){lane=args[2];argv=[];}
   if (!bootstrap && !reconciling) {
     assert.match(lane,/^[A-K]$/,'Invalid campaign lane');
-    assert.ok(argv.length>0 && argv[0] && argv.every(v=>!v.includes('\0')),'A literal command argument list is required');
+    if(!bundled)assert.ok(argv.length>0 && argv[0] && argv.every(v=>!v.includes('\0')),'A literal command argument list is required');
   }
   const config=JSON.parse(readFileSync(configuration,'utf8'));
   if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
@@ -157,11 +162,9 @@ export async function main(args) {
   const cancellation=new AbortController();
   const cancel=()=>cancellation.abort();
   for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.on(signal,cancel);
-  const deadline=Date.now()+7500;
-  const budget=AbortSignal.timeout(7500);
-  const admission=AbortSignal.any([cancellation.signal,budget]);
+  let deadline,budget,admission,incoming,upload;
   let admitted=false;
-  const withController=async work=>!bootstrap && slots>1
+  const withController=async work=>remote?work():!bootstrap && slots>1
     ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal,
       ...(config.slotHosts===undefined?{}:{healthySlots:await new SSHTransport(config).healthySlots({signal:cancellation.signal,timeoutMs:2500})})})
     :withKernelLock(config.state,()=>{refuseLegacy(config.state);return withTemporaryState(config.state,()=>work());},{bootstrap,deadline,signal:cancellation.signal});
@@ -173,41 +176,76 @@ export async function main(args) {
       transport:new SSHTransport(config),signal:cancellation.signal,deadline:Date.now()+7500,ci:config.ci});
   };
   try {
+    if(bundled){
+      incoming=mkdtempSync(join(tmpdir(),'disposable-upload-'));
+      const received=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,'--receive',incoming],{inheritStdin:true,capture:true,signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(3300000)])});
+      if(received.code===143){cancel();cancellation.signal.throwIfAborted();}
+      assert.equal(received.code,0,'Manual upload refused');
+      upload=JSON.parse(received.stdout);argv=upload.argv;
+      assert.ok(Array.isArray(argv)&&argv.length>0&&argv[0]&&argv.every(v=>typeof v==='string'&&!v.includes('\0')),'A literal command argument list is required');
+      process.stdin.once('end',cancel);process.stdin.resume();
+    }
+    deadline=Date.now()+7500;budget=AbortSignal.timeout(7500);admission=AbortSignal.any([cancellation.signal,budget]);
     const result=reconciling
       ? await recover()
       : await withController(async selected=>{
       cancellation.signal.throwIfAborted();
-      refuseLegacy(config.state);
+      if(!remote)refuseLegacy(config.state);
       if (bootstrap) {
         new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots,bootstrap:true});
         if(slots>1)for(let slot=0;slot<slots;slot++)await withKernelLock(join(config.state,'slot-'+slot),async()=>({code:0}),{bootstrap:true,signal:cancellation.signal});
         return {code:0};
       }
+      if(!bundled){
       const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:admission});
       assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');
       assert.equal(realpathSync(commonRead.stdout.trim()),realpathSync(config.repository),'This manual helper accepts only the configured Cloud repository');
-      const leases=selected??new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots});
+      }
+      let leases,transport;
+      if(!remote){
+      leases=selected??new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots});
       const state=leases.inspect();
       if (state.slots.some(slot=>slot.state!=='free')) return {code:75,reason:'recorded-slot-busy-or-quarantined'};
-      const transport=new SSHTransport({...config,slot:leases.slot});
+      transport=new SSHTransport({...config,slot:leases.slot});
       let healthy;
       try { healthy=await transport.healthy({signal:admission}); } catch { healthy=false; }
       if (!healthy) return {code:cancellation.signal.aborted?143:75,reason:'host-unavailable'};
+      }
+      if(remote){
+        const seen=await runProcess('python3',['-I','-B',new URL('../../deploy/disposable-tests/ci-status.py',import.meta.url).pathname,'--remote',remoteHost,remoteConfiguration],{capture:true,signal:admission});
+        const capacity=seen.code===0?JSON.parse(seen.stdout).slots?.free:undefined;
+        if(capacity===0)return {code:75,reason:'recorded-slot-busy-or-quarantined'};
+      }
       admitted=true;
-      console.log(`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
-      const temporary = mkdtempSync(join(tmpdir(), 'disposable-manual-'));
+      console.log(remote?`Disposable tests: remote controller ${remoteHost}`:`Disposable tests: ${config.mode}, generation ${config.hostGeneration}`);
+      const temporary = incoming??mkdtempSync(join(tmpdir(), 'disposable-manual-'));
       try {
         const source = join(temporary, 'source.tar');
+        let snapshot,privatePackage;
+        if(bundled){
+          snapshot=upload.snapshot;privatePackage=join(temporary,'ui.tgz');
+        }else{
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
-        const snapshot = JSON.parse(copied.stdout).sha256;
+        snapshot = JSON.parse(copied.stdout).sha256;
         const selected=await runProcess('python3',['-I','-B',new URL('./private-packages.py',import.meta.url).pathname,'select',source],{signal:cancellation.signal,capture:true});
         assert.equal(selected.code,0,'Captured source needs one reviewed private release');
         const privateFile=selected.stdout.trim();assert.match(privateFile,/^ui-core-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
         const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
+        privatePackage=join(temporary,'private',privateFile);
+        }
+        if(remote){
+          const bundle=join(temporary,'upload.tar');
+          const packaged=await runProcess('python3',['-I','-B',new URL('./bundle.py',import.meta.url).pathname,source,privatePackage,bundle],{input:JSON.stringify({snapshot,argv}),capture:true,signal:cancellation.signal});
+          assert.equal(packaged.code,0,'Manual bundle preparation failed');
+          const release=remoteConfiguration.slice(0,-'/config.json'.length);
+          const command=`python3 -I -B ${release}/deploy/disposable-tests/mac-controller.py /opt/waitron-controller-node-v26.13.0/bin/node ${remoteConfiguration} --bundle ${lane}`;
+          const result=await runProcess('bash',[new URL('../../deploy/disposable-tests/ssh.sh',import.meta.url).pathname,remoteHost,command],{input:statSync(bundle).size+'\n',inputPath:bundle,keepStdinOpen:true,signal:cancellation.signal,terminationGraceMs:500000});
+          return {code:result.code};
+        }
         transport.source = source;
-        transport.privatePackage = join(temporary, 'private', privateFile);
+        transport.privatePackage = privatePackage;
         console.log(`Source ${snapshot}; command starts in a fresh VM, maximum 55 minutes.`);
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
@@ -224,10 +262,13 @@ export async function main(args) {
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:
-      budget.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
+      budget?.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
     if(refusal){console.log(JSON.stringify(refusal));return refusal.code;}
     throw error;
   } finally {
+    if(incoming)rmSync(incoming,{recursive:true,force:true});
+    process.stdin.off('end',cancel);
+    if(bundled)process.stdin.pause();
     for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.off(signal,cancel);
   }
 }

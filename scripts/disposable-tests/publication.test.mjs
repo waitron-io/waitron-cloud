@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -97,7 +97,7 @@ test('a failed status-reader installation leaves the old service admitting work'
 test('publication rewrites manual command arguments once even when the new path contains the old root',async t=>{
  const f=await fixture(t),{publish}=await import('./publish.mjs');
  const original=f.p.oldController;f.p.oldController=f.root;
- for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original,f.root));
+ for(const path of [f.p.launchAgent,f.p.wrapper])writeFileSync(path,readFileSync(path,'utf8').replaceAll(original+'/deploy/disposable-tests/mac-controller.py',f.root+'/deploy/disposable-tests/mac-controller.py'));
  f.p.newController=f.root+'/release';
  writeFileSync(f.p.wrapper,readFileSync(f.p.wrapper,'utf8').replace('#!/bin/sh\n','#!/bin/sh\nlane=$1; checkout=$2; shift 2\n').replace(' \"$@\"',' \"$lane\" \"$checkout\" -- \"$@\"'));
  await publish(f.p,{api:f.api,transport:f.transport,candidateTransport:{healthySlots:async()=>[0,1]},execute:f.execute});
@@ -172,4 +172,178 @@ for(const fail of [false,true])test(`publication uses fresh state and preserves 
  assert.ok(ledger.slots.every(slot=>slot.state==='free'));
  assert.equal(config.host,fail?'old.invalid':'new.invalid');
  assert.ok(Object.keys(JSON.parse(readFileSync(f.old.state+'/ledger/state.json','utf8')).turns).includes('I:ci-789-1-901'));
+});
+
+
+test('server staging stays private and disabled until fresh-state activation',async t=>{
+ const f=await fixture(t),installer=new URL('../../deploy/disposable-tests/install-controller.py',import.meta.url).pathname;
+ const program=`import importlib.util,json,os,sys,uuid,subprocess
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+root=Path(sys.argv[2]);m.OPT=root/'opt';m.OPT.mkdir();m.ROOT=root/'controller';m.HOME=root/'home';m.HOME.mkdir();m.OWNER=os.getuid();m.UNITS=root/'units';m.UNITS.mkdir()
+calls=[]
+def command(argv,timeout=300):
+ calls.append(argv)
+ if '--bootstrap' in argv:subprocess.run(argv,check=True,stdout=subprocess.DEVNULL)
+ if argv[0]=='ssh-keygen':
+  key=Path(argv[argv.index('-f')+1]);key.write_text('private host identity');key.chmod(0o600);key.with_suffix('.pub').write_text('ssh-ed25519 fixture')
+ return ''
+m.command=command;m.NODE=sys.argv[3]
+config=json.loads(sys.argv[4]);config['state']=str(m.ROOT/'states'/'first');config['ci'].update(appEnv=str(m.ROOT/'app.env'),appKey=str(m.ROOT/'app.key'))
+plan={'release':str(m.OPT/'waitron-disposable-controller-first'),'configuration':config,'knownHosts':'fixture.invalid ssh-ed25519 fixture\\n'}
+keydata=('private-'+uuid.uuid4().hex).encode();receipt=m.install(plan,b'private-app-identity',keydata)
+release=Path(receipt['release']);assert (release/'scripts/disposable-tests/manual.mjs').is_file()
+assert (m.ROOT/'app.key').read_bytes()==keydata
+assert (m.ROOT/'app.key').stat().st_mode&0o777==0o600
+assert not any(keydata in p.read_bytes() for p in release.rglob('*') if p.is_file())
+assert not Path(config['state']).exists()
+assert not any(argv[0]=='systemctl' for argv in calls)
+assert not any(keydata.decode() in arg for argv in calls for arg in argv)
+before=(release/'scripts/disposable-tests/manual.mjs').stat().st_mtime_ns;m.install(plan,b'private-app-identity',keydata);assert (release/'scripts/disposable-tests/manual.mjs').stat().st_mtime_ns==before
+(m.ROOT/'app.key').chmod(0o644)
+try:m.install(plan,b'private-app-identity',keydata);raise AssertionError('publicly readable credential accepted')
+except ValueError:pass
+(m.ROOT/'app.key').chmod(0o600)
+m.activate(receipt)
+ledger=json.loads((Path(config['state'])/'ledger/state.json').read_text());assert ledger['hostGeneration']=='new' and ledger['turns']=={}
+boot=next(i for i,a in enumerate(calls) if '--bootstrap' in a);start=next(i for i,a in enumerate(calls) if a[:2]==['systemctl','start']);assert boot<start
+try:m.activate(receipt);raise AssertionError('existing ledger reopened')
+except ValueError:pass
+second=json.loads(json.dumps(plan));second['release']=str(m.OPT/'waitron-disposable-controller-second');second['configuration']['state']=str(m.ROOT/'states'/'second');second['configuration']['hostGeneration']='second'
+next_receipt=m.install(second,b'private-app-identity',keydata);m.activate(next_receipt)
+assert next_receipt['configuration'] in (m.UNITS/'waitron-disposable-controller.service').read_text()
+print('private frozen staging; no active ledger or pickup until activation')`;
+ const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root,process.execPath,JSON.stringify(f.p.configuration)],{encoding:'utf8',timeout:10000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/no active ledger or pickup/);
+});
+
+test('controller runtime verifies pinned packages and the Node archive before installation',async t=>{
+ const f=await fixture(t),installer=new URL('../../deploy/disposable-tests/install-controller.py',import.meta.url).pathname;
+ const program=`import importlib.util,json,os,sys,hashlib
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+root=Path(sys.argv[2]);m.NODE=str(root/'runtime/bin/node');m.NODE_ARCHIVE_SHA=hashlib.sha256(b'node archive fixture').hexdigest();bad=False;calls=[]
+def command(argv,timeout=300):
+ calls.append(argv)
+ if argv[0]=='dpkg-query':return {'git':'1:2.47.3-0+deb13u1','python3':'3.13.5-1'}[argv[-1]]
+ if argv[0]=='curl':Path(argv[-1]).write_bytes(b'bad' if bad else b'node archive fixture')
+ if argv[0]=='tar':
+  directory=Path(argv[argv.index('--directory')+1])/'node-v26.13.0-linux-x64/bin';directory.mkdir(parents=True);(directory/'node').write_text('verified fixture')
+ if argv[0]==m.NODE:return 'v26.13.0\\n'
+ return ''
+m.command=command;bad=True
+try:m.prepare_runtime();raise AssertionError('corrupt Node installed')
+except ValueError:pass
+assert not Path(m.NODE).exists();assert not any(a[0]=='tar' for a in calls)
+original_rename=os.rename
+def same_filesystem(source,destination):
+ assert Path(source).parent.parent==Path(destination).parent,'Node staging crossed filesystems'
+ return original_rename(source,destination)
+os.rename=same_filesystem
+bad=False;m.prepare_runtime();assert Path(m.NODE).read_text()=='verified fixture'
+assert any('git=1:2.47.3-0+deb13u1' in a and 'python3=3.13.5-1' in a for a in calls)
+print('pinned runtime verified')`;
+ const result=spawnSync(f.p.python,['-I','-B','-c',program,installer,f.root],{encoding:'utf8',timeout:10000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stdout,/pinned runtime verified/);
+});
+
+test('server preparation sends private App bytes only over stdin with the pinned source',async t=>{
+ const f=await fixture(t),{stageServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n'});
+ let sent=0;
+ const execute=async(command,argv,options)=>{
+  sent++;assert.equal(command,'bash');assert.equal(argv[1],'new.invalid');assert.ok(!argv.join(' ').includes('private signing material'));
+  const newline=options.input.indexOf(10),header=JSON.parse(options.input.subarray(0,newline)),body=options.input.subarray(newline+1);
+  const archive=body.subarray(0,header.archiveBytes),files=execFileSync('tar',['-tf','-'],{input:archive,encoding:'utf8'});
+  assert.match(files,/deploy\/disposable-tests\/install-controller.py/);
+  assert.equal(body.subarray(header.archiveBytes,header.archiveBytes+header.envBytes).toString(),'private identity');
+  assert.equal(body.subarray(header.archiveBytes+header.envBytes).toString(),'private signing material');
+  assert.equal(header.configuration.ci.appKey,'/var/lib/waitron-disposable-controller/app.key');assert.equal(header.configuration.state,f.p.serverState);
+  return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};
+ };
+ const receipt=await stageServer(f.p,{execute});assert.equal(receipt.release,f.p.serverRelease);assert.equal(sent,1);
+ chmodSync(f.p.configuration.ci.appKey,0o644);await assert.rejects(stageServer(f.p,{execute}),/private/i);assert.equal(sent,1);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),false);
+});
+
+for(const fail of [false,'activation','callers'])test(`server cutover retires Mac state and rolls back to fresh state on activation failure: ${fail}`,async t=>{
+ const f=await fixture(t),{publishServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\nbench.invalid ssh-ed25519 fixture\n',peerAddresses:['8.8.8.8','9.9.9.9','1.1.1.1']});
+ f.p.statusAdapter=f.root+'/status.py';writeFileSync(f.p.statusAdapter,'print("old Mac status")\n',{mode:0o500});
+ const calls=[];let stopped=false,callerFailed=false,probed=false;
+ const execute=async(command,argv,options)=>{
+  calls.push([command,...argv]);
+  if(command==='launchctl'&&argv[0]==='bootout'){assert.equal(probed,true);stopped=true;}
+  if(command==='bash'){
+   const text=argv.at(-1);
+   if(options.input&&Buffer.isBuffer(options.input)){assert.equal(JSON.parse(options.input.subarray(0,options.input.indexOf(10))).release,f.p.serverRelease);return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',node:'/opt/waitron-controller-node-v26.13.0/bin/node',publicKey:'ssh-ed25519 fixture'})};}
+   if(text.includes('/probe-controller.py')){assert.equal((await withKernelLock(f.old.state+'/slot-0',async()=>({code:0}))).code,0,'Probe held OLD admission');probed=true;}
+   if(text.includes('server-activate')){assert.equal(stopped,true);assert.equal(existsSync(f.old.state+'/manual.lock'),true);return {code:fail==='activation'?1:0,stdout:'{}'};}
+   return {code:0,stdout:'{}'};
+  }
+  const result=await f.execute(command,argv,options);
+  if(fail==='callers'&&!callerFailed&&options.input&&JSON.parse(options.input).remoteController){callerFailed=true;return {code:1};}
+  return result;
+ };
+ const operation=publishServer(f.p,{api:f.api,transport:f.transport,execute});
+ if(fail)await assert.rejects(operation,/rollback/i);else assert.equal((await operation).published,true);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),true);
+ if(fail){
+  const text=readFileSync(f.p.launchAgent,'utf8');assert.match(text,/rollback-config/);assert.equal(readFileSync(f.p.statusAdapter,'utf8'),'print("old Mac status")\n');
+  const config=JSON.parse(readFileSync(f.p.newController+'/rollback-config.json','utf8'));assert.notEqual(config.state,f.old.state);assert.notEqual(config.hostGeneration,'old');assert.ok(text.includes(config.state+'/recovery.stdout.log'));
+  assert.deepEqual(JSON.parse(readFileSync(config.state+'/ledger/state.json','utf8')).turns,{});
+ }else{
+  assert.match(readFileSync(f.p.wrapper,'utf8'),/remote new.invalid/);assert.equal(statSync(f.p.newController).mode&0o222,0);
+  assert.equal(existsSync(f.p.configuration.state),false);
+  mkdirSync(f.root+'/bin');const expected={observedAt:1000,slots:{total:2,busy:1,free:1},jobs:[{slot:1,state:'running'}],lastAdmission:900,host:{},controller:{registered:true,state:'running',pid:321,lastExit:0,version:'/opt/waitron-disposable-controller-new',recipe:'/opt/waitron-disposable-old'},errors:[],errorsWrittenAt:1000};
+  writeFileSync(f.root+'/bin/ssh','#!'+f.p.python+'\nimport sys\nsys.stdin.read()\nprint('+JSON.stringify(JSON.stringify(expected))+')\n',{mode:0o700});
+  const actual=JSON.parse(execFileSync(f.p.python,[f.p.statusAdapter],{env:{...process.env,PATH:f.root+'/bin:'+process.env.PATH,XDG_CACHE_HOME:f.root+'/cache'},encoding:'utf8',timeout:5000}));assert.deepEqual(actual,expected);
+  assert.ok(calls.some(([command,hostWrapper,host])=>command==='bash'&&host==='bench.invalid'));
+ }
+});
+
+test('server activation CLI reads its request from stdin and refuses an invalid receipt',t=>{
+ const result=spawnSync(process.execPath,[new URL('./publish.mjs',import.meta.url).pathname,'server-activate'],{input:'{"receipt":{}}',encoding:'utf8',timeout:5000});
+ assert.equal(result.status,1);assert.match(result.stderr,/Invalid server activation receipt/);assert.equal(result.stdout,'');
+});
+
+for(const fail of [false,true])test(`an on-server release retires its old ledger and uses fresh rollback state: ${fail}`,async t=>{
+ const f=await fixture(t),{activateServer}=await import('./publish.mjs'),{cpSync}=await import('node:fs');
+ const oldRelease=f.root+'/old-server',newRelease=f.root+'/new-server';
+ for(const release of [oldRelease,newRelease])for(const area of ['scripts/disposable-tests','deploy/disposable-tests'])cpSync(f.p.source+area,release+'/'+area,{recursive:true});
+ const oldServer={release:oldRelease,configuration:oldRelease+'/config.json',node:process.execPath};writeFileSync(oldServer.configuration,JSON.stringify(f.old));
+ const receipt={release:newRelease,configuration:newRelease+'/config.json',node:process.execPath};writeFileSync(receipt.configuration,JSON.stringify(f.p.configuration));
+ let failed=false;const stopped=[];
+ const execute=async(command,argv,options={})=>{
+  if(command==='systemctl'){stopped.push(argv.join(' '));return {code:0};}
+  assert.equal(command,'/usr/bin/python3');const target=JSON.parse(options.input);
+  if(fail&&!failed){failed=true;return {code:1};}
+  return runProcess(f.p.python,['-I','-B',target.release+'/deploy/disposable-tests/mac-controller.py',process.execPath,target.configuration,'--bootstrap'],{capture:true});
+ };
+ const result=await activateServer({receipt,oldServer},{api:f.api,transport:f.transport,execute});
+ assert.equal(existsSync(f.old.state+'/manual.lock'),true);assert.deepEqual(stopped,['disable --now waitron-disposable-controller.timer','stop waitron-disposable-controller.service']);
+ const target=fail?result.rollback:receipt;assert.equal(result.code,fail?1:0);
+ const c=JSON.parse(readFileSync(target.configuration));assert.notEqual(c.state,f.old.state);assert.notEqual(c.hostGeneration,f.old.hostGeneration);
+ assert.deepEqual(JSON.parse(readFileSync(c.state+'/ledger/state.json','utf8')).turns,{});
+ if(fail){assert.notEqual(target.release,oldRelease);assert.equal(statSync(target.release).mode&0o222,0);assert.equal(statSync(target.release+'/scripts/disposable-tests/manual.mjs').mode&0o222,0);}
+});
+
+for(const field of ['state','hostGeneration'])test(`server updates refuse reusing the retired ${field} before stopping anything`,async t=>{
+ const f=await fixture(t),{activateServer}=await import('./publish.mjs'),candidate={...f.p.configuration,[field]:f.old[field]},path=f.root+'/candidate.json';writeFileSync(path,JSON.stringify(candidate));
+ await assert.rejects(activateServer({receipt:{release:f.p.source,configuration:path,node:process.execPath},oldServer:{release:f.p.source,configuration:f.p.oldConfiguration}},{api:f.api,transport:f.transport,execute:async()=>assert.fail('Must refuse before stopping the server')}),/fresh state and generation/);
+ assert.equal(existsSync(f.old.state+'/manual.lock'),false);
+});
+
+for(const reply of ['', '{"code":1}', '{'])test(`an interrupted server update preserves callers and reports its closed rollback: ${reply}`,async t=>{
+ const f=await fixture(t),{publishServer}=await import('./publish.mjs');
+ writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\n',oldServer:{release:'/opt/waitron-disposable-controller-old',configuration:'/opt/waitron-disposable-controller-old/config.json'}});
+ const before=readFileSync(f.p.wrapper);
+ const execute=async(command,argv,options)=>{
+  if(command==='bash')return argv.at(-1).includes('server-activate')?{code:1,stdout:reply}:{code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',publicKey:'ssh-ed25519 fixture'})};
+  return f.execute(command,argv,options);
+ };
+ await assert.rejects(publishServer(f.p,{execute}),/Server rollback stopped; callers remain closed/);assert.deepEqual(readFileSync(f.p.wrapper),before);
 });

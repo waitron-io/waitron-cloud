@@ -1,0 +1,10 @@
+[Unit]
+Description=Reconcile Waitron disposable CI
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+Unit=waitron-disposable-controller.service
+
+[Install]
+WantedBy=timers.target
