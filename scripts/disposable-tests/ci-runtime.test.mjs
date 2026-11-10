@@ -383,3 +383,17 @@ for(const [label,options,code] of [['caller',{callerMs:300},143],['turn',{turnMs
  const result=await monitorReadFailure(t,{...options,healthyRounds:100000,stepMs:15000,failure:new TypeError('fetch failed')});
  assert.equal(result.code,code);assert.equal(result.aborted,true);assert.equal(result.cleanup,'absent');
 });
+
+for(const status of [403,429])test(`rate-limited HTTP ${status} keeps a healthy guest and pauses GitHub reads`,async t=>{
+ const records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const retryAt=Date.now()+3600000;
+ const result=await monitorReadFailure(t,{failure:Object.assign(new Error('Rate limited'),{status,retryAt})});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);
+ assert.equal(result.jobReads,0);assert.equal(records.length,1);
+ assert.equal(records[0].status,status);assert.equal(records[0].retryAt,retryAt);assert.equal(records[0].operation,'run');
+});
+test('GitHub monitor reads resume once the rate-limit reset passes',async t=>{
+ const reset=Date.now()+100000;
+ const result=await monitorReadFailure(t,{failure:round=>round===1?Object.assign(new Error('Rate limited'),{status:403,retryAt:reset}):undefined});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);assert.equal(result.liveInspections,3);assert.equal(result.jobReads,2);
+});

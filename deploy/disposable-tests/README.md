@@ -247,7 +247,7 @@ Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hoste
 During an assigned job, failed GitHub network reads, request timeouts, interrupted response
 bodies and HTTP 5xx replies retry while a separate inspection confirms that the owned guest
 is running. A failed read skips only its dependent checks; other readable confirmations
-still apply. Confirmed cancellation, a changed attempt or assignment, and a missing guest
+still apply. A 403/429 with a finite rate-limit reset pauses GitHub monitor reads until that time while guest inspections and deadlines continue. The first monitor refusal per job records its operation, error class, status and reset time. A genuine permission refusal still aborts the guest; GitHub may show the lost job running until its workflow job timeout, because this path does not cancel its other jobs. Confirmed cancellation, a changed attempt or assignment, and a missing guest
 still stop execution. Other API refusals keep the existing one-minute failure limit;
 original preparation, execution and overall turn deadlines remain in force.
 
