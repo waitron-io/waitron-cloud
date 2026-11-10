@@ -504,7 +504,8 @@ a request with no region.
      ContextKeyName=aws:RequestedRegion,ContextKeyValues="$REGION",ContextKeyType=string
    ```
 
-4. Check direct instance launch and role creation. Expect **implicitDeny** for both:
+4. Check direct instance launch and role creation. Expect **implicitDeny** for both.
+   The project’s region guard does not apply to the global `iam:CreateRole` action:
 
    ```sh
    aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
