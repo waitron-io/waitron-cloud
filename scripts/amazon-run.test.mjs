@@ -73,6 +73,15 @@ for (const mode of ['apply', '', '--help']) test('launcher refuses unsupported m
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Use start or stop/);
 });
+test('launcher explains missing D618_CONFIG before starting or stopping', () => {
+  const env = {...process.env};
+  delete env.D618_CONFIG;
+  for (const mode of ['start', 'stop']) {
+    const result = spawnSync(process.execPath, ['scripts/amazon-run.mjs', mode], {encoding: 'utf8', env});
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Set D618_CONFIG to your private run configuration JSON file\./);
+  }
+});
 test('bootstrap refuses an unsupported phase before touching the host', () => {
   const result = spawnSync('bash', ['deploy/kubernetes/bounded-amazon/bootstrap.sh', 'unknown'], {encoding: 'utf8'});
   assert.equal(result.status, 1);
