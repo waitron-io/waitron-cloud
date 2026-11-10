@@ -6,6 +6,7 @@ import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 test('App authentication uses a short JWT and keeps the installation token off request URLs',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:120000});
  const {GithubApp,withRequestCounts}=await import('./github-app.mjs');
  const directory=mkdtempSync(join(tmpdir(),'ci-app-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
  const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
@@ -49,6 +50,7 @@ test('the App can read exact immutable Git comparisons without admitting parent 
 });
 
 test('request counts share clients, retain quota snapshots and omit external log downloads',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:120000});
  const {GithubApp,withRequestCounts}=await import('./github-app.mjs');
  const rows=[];t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
  const server=createServer((req,res)=>{res.setHeader('x-ratelimit-resource','core');res.setHeader('x-ratelimit-remaining','17');res.setHeader('x-ratelimit-reset','2000000000');

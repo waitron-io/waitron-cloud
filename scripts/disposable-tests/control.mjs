@@ -103,9 +103,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    if(!remaining)return;
    pending=Buffer.concat([pending,data]);let end;const excerpts=[];
    while((end=pending.indexOf(10))!==-1){excerpts.push(withoutCount(pending.subarray(0,end+1)));pending=pending.subarray(end+1);}
-   if(pending.length>=4096){const start=pending.indexOf(marker),cut=start===-1?pending.length-marker.length+1:start;
-    excerpts.push(pending.subarray(0,cut));pending=pending.subarray(cut);
-   }
+   if(pending.length>=4096){excerpts.push(withoutCount(pending));pending=Buffer.alloc(0);}
    tag(Buffer.concat(excerpts));
   }}).finally(()=>tag(withoutCount(pending)));
  };

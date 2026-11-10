@@ -260,7 +260,7 @@ from all processes; tokens, admission, recovery, cleanup and the initial job-log
 read count, while the external log download does not. Requests belong to the minute
 when they start; `failedFetches` belongs to the minute when fetch rejects. These are
 local fetch attempts, not the whole App's consumption. `latestResponse` keeps one
-returned timestamp, status and raw resource/remaining/reset snapshot; `kind`
+local observation timestamp, status and raw resource/remaining/reset snapshot; `kind`
 distinguishes token replies from ordinary API replies, and missing headers are null.
 The snapshot is the latest reply when the line is emitted; it can be older or newer
 than the request bucket. Attribute quota samples by their own `at` timestamp. Count events stay out of each

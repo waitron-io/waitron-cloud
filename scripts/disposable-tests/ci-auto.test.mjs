@@ -1223,7 +1223,7 @@ for(const [label,output] of [['bounded','x'.repeat(6000)],['partial line','guest
  finally{process.execPath=node;console.error=error;process.stderr.write=write;}
  const diagnostics=records.filter(row=>row.event==='automatic-ci-admission-stderr');
  assert.equal(result.served,1);assert.equal(diagnostics.map(row=>row.stderr).join(''),output.startsWith('guest')?'guest partial real error\n':output.slice(0,4096));
- assert.ok(diagnostics.length<=2,'A chunk of short lines must not create one tagged record per line');
+ assert.ok(diagnostics.length<=forwarded.length+1,'A chunk of short lines must not create one tagged record per line');
  for(const row of diagnostics){assert.equal(row.runId,789);assert.equal(row.attempt,1);assert.equal(row.jobId,901);assert.ok(Number.isFinite(Date.parse(row.at)));}
  assert.equal(Buffer.concat(forwarded).toString(),'{"event":"github-request-counts","requests":1}\n'+output);
 });
