@@ -1,10 +1,30 @@
 # Prepare the practice account for one D618 run
 
 The launcher needs four roles and a budget before it can create its three machines.
-You do this setup once, as the account administrator; then run the experiment as
+You do this setup once in the console; then run the experiment as
 `d618-launcher`. Use the standalone practice account shown in your private desk note,
 not an Organization member. Nothing here authorises a lane to access Amazon or spend.
 These policies have offline checks only; complete the live checks below before launch.
+
+## Which login, for which step
+
+For this one-time setup, use the practice account's **root user** with MFA
+(see your private note). Root is the account's original email login, not an IAM user.
+
+| Action | Login |
+| --- | --- |
+| Step 1: retire the old user and create the new user | Root, in the console |
+| Step 2: create roles and attach policies | Root, in the console |
+| Step 2: `aws login --remote --profile d618-owner` | Sign into the browser as `d618-owner-login`, the new IAM user |
+| Steps 2–4: CLI checks, and the experiment | The `d618` profile, which assumes `d618-launcher` from that user |
+| Step 3: create or edit the budget and deny policy | Root, in the console |
+
+Set `OWNER_PRINCIPAL_ARN` to `d618-owner-login`'s IAM user ARN.
+The restricted user and launcher role cannot create their own setup permissions.
+Keep the root console session separate from the browser session used for CLI login;
+check the selected identity before authorising it. Do not use root for the experiment
+or create root access keys. This is one-time account preparation;
+[AWS recommends an administrative identity for everyday work](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html).
 
 ## 1. Retire the expired identity, then prepare the files
 
@@ -23,13 +43,13 @@ credentials. Do not delete buckets, keys or roles belonging to other
 rehearsals. Check: the user search returns no match and neither policy has an
 attachment to that user. Expiry on 3 November did not delete anything.
 
-Keep your root MFA enabled. In IAM, use an existing non-root IAM user with MFA,
-or create a console-only user `d618-owner-login` with MFA and no access keys.
-As administrator, set its console password privately without requiring a first-login
+Keep your root MFA enabled. In the root console session, create a console-only
+IAM user `d618-owner-login` with MFA and no access keys.
+Set its console password privately without requiring a first-login
 reset, then register its MFA device under Security credentials.
 Give this identity only `sts:AssumeRole` on the launcher role below, plus AWS's
 `SignInLocalDevelopmentAccess` managed policy for browser-based CLI login.
-Use your administrator session for setup, not this restricted identity.
+Use the root console session for setup, not this restricted identity.
 
 In a clean Cloud checkout, set these values privately. `OWNER_PRINCIPAL_ARN` is the
 IAM user ARN from IAM, never a root ARN or an STS session ARN. Choose an official
@@ -64,7 +84,8 @@ or command output into Git, a pull request or chat. Do not create or copy access
 
 ## 2. Create the four roles
 
-In IAM → Roles → Create role → Custom trust policy, paste the matching rendered
+In the root console session, IAM → Roles → Create role → Custom trust policy,
+paste the matching rendered
 `*-trust.json`; create each role with the exact name below. Then Permissions →
 Add permissions → Create inline policy → JSON: paste its `*-policy.json`, naming
 the inline policy `d618`. Do not attach administrator or EC2-full-access policies.
@@ -84,7 +105,8 @@ owner identity's Permissions → Add inline policy, paste the rendered
 `owner-policy.json`. Check that a newly created user has only this inline policy and
 `SignInLocalDevelopmentAccess`.
 
-On the x86 test box use AWS CLI **2.32.0 or later**. Configure browser login and the
+On the x86 test box use AWS CLI **2.32.0 or later**. For the browser login below,
+sign in as `d618-owner-login`, not root. Configure browser login and the
 role profile (these settings contain no secret). CLI-managed session caches stay
 private; never export credentials or put access keys in a file.
 
@@ -109,7 +131,7 @@ Do not start with a root identity or the old rehearsal profile.
 
 ## 3. Make the USD 10 budget deny new launches
 
-As administrator, IAM → Policies → Create policy → JSON: paste `deny-launch.json`,
+In the root console session, IAM → Policies → Create policy → JSON: paste `deny-launch.json`,
 name it **d618-deny-launch**. Leave it unattached; Budgets attaches it at the threshold.
 Billing → Budgets → Create budget → Customize → Cost budget: name **D618**, monthly,
 fixed **USD 10**, all account costs, including tax, without service/tag filters.
