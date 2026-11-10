@@ -6,7 +6,7 @@ import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -39,13 +39,13 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   finally{wake.abort();}
  };
  let served=0,healthy,lastCapacity=-Infinity;
- const publish=async()=>{
+ const publish=async pass=>{
   if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
   try{
-   snapshot=await overflowInventory({api,policy,signal,includeHosted:false});
+   snapshot=await overflowInventory({api:pass?.api??api,policy,signal,includeHosted:false,runs:pass?.runs});
    await publishCapacity({api,policy,state,snapshot,healthy:healthy!==false,signal});lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   return snapshot;
@@ -66,12 +66,13 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const exclude=new Set([...seen,...recorded]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  const free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
- await read(()=>reconcileDeadRuns({api,policy,signal,onError:(error,runId)=>{
+ const pass=await read(()=>readAutomaticPass({api,policy,signal}));
+ await read(()=>reconcileDeadRuns({api,policy,signal,pass,hosted,onError:(error,runId)=>{
   console.error(JSON.stringify({event:'automatic-ci-dead-run-pending',runId,error:error.message}));
   if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;
  }}));
  if(!free){
-  await read(publish);
+  await read(()=>publish(pass));
   if(active.size){await waitForWorker();continue;}break;
  }
  transport??=new CITransport(config);
@@ -80,11 +81,11 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   try{healthy=await transport.healthy({signal:signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500)});}catch{signal?.throwIfAborted();}
   if(!healthy){
    if(await read(()=>routingMode({api,policy,signal}))!=='hosted')await setRoutingMode({api,policy,mode:'hosted',signal});
-   await read(publish);
+   await read(()=>publish(pass));
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
- const jobs=await read(()=>findAutomatic({api,policy,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
+ const jobs=await read(()=>findAutomatic({api:pass.api,policy,runs:pass.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
  runWorker??=ci=>{
   let remaining=4096;
@@ -115,7 +116,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   active.set(worker,ci);
  });
  if(active.size)await waitForWorker();
- await read(publish);
+ await read(()=>publish(pass));
  signal?.throwIfAborted();
  }catch(error){
   signal?.throwIfAborted();

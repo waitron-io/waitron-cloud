@@ -31,7 +31,7 @@ function fixture(){
   if(path.includes('/jobs?'))return {total_count:jobs.length,jobs};
   if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from(workflow).toString('base64')};
   if(path.endsWith('/commits/'+head))return {sha:head,commit:{tree:{sha:'4'.repeat(40)}}};
-  if(path.includes('/pulls?state=open'))return [{number:12,head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];
+  if(path.includes('/pulls?state=open')){const pull=await api.get('/repos/fixture/waitron/pulls/12');return pull.state==='open'?[pull]:[];}
  if(path.endsWith('/commits/'+head+'/pulls'))return [{number:12}];
  if(path.endsWith('/pulls/12'))return {number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}};
   if(path==='/repos/fixture/waitron')return {id:123,full_name:policy.repository};
@@ -154,7 +154,7 @@ test('an incomplete run inventory does not hold free capacity behind a still-run
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.includes('/workflows/456/runs?') && path.includes('status=queued')){
+  if(path.includes('/actions/runs?') && path.includes('status=queued')){
    scans++;if(ids.includes(902) && inventoryFailures++<3)return {total_count:1,workflow_runs:[]};
   }
   if(path.includes('/jobs?'))return {total_count:inventoryFailures<3?2:3,jobs:inventoryFailures<3?[first,second]:[first,second,third]};
@@ -656,7 +656,7 @@ for(const fault of ['inventory','run-http','marker-http','head-http','network','
  const held=new Promise(resolve=>release=()=>{heldActive=false;resolve();}),ids=[];
  const timeout=setTimeout(release,2000);t.after(()=>clearTimeout(timeout));let inventoryFailures=0;const waits=[];
  f.api.get=async path=>{
-  if(fault==='inventory' && ids.includes(902) && inventoryFailures<3 && path.includes('/workflows/456/runs?') && path.includes('status=queued')){
+  if(fault==='inventory' && ids.includes(902) && inventoryFailures<3 && path.includes('/actions/runs?') && path.includes('status=queued')){
    injected=true;inventoryFailures++;return {total_count:1,workflow_runs:[]};
   }
   if(fault!=='inventory' && !injected && ids.includes(902) && ((fault==='marker-http' && path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')) || (fault==='head-http' && path.endsWith('DISPOSABLE_TESTS_HEAD')) || (!fault.startsWith('marker') && !fault.startsWith('head') && (fault==='rate-pr'?path.endsWith('/pulls/12'):path.includes('/runs?'))))){
@@ -1226,7 +1226,7 @@ test('the real automatic worker tags bounded stderr and forwards the original by
  assert.equal(Buffer.concat(forwarded).toString(),'x'.repeat(6000));
 });
 
-for(const state of ['replaced','closed','merged-empty-links','assigned','current-fail-fast','unknown-link','foreign','main','schedule','advanced-during-read','incomplete-jobs'])test(`dead-run reconciliation handles ${state}`,async()=>{
+for(const state of ['replaced','closed','closed-with-current-other','merged-empty-links','assigned','current-fail-fast','unknown-link','foreign','main','schedule','advanced-during-read','incomplete-jobs'])test(`dead-run reconciliation handles ${state}`,async()=>{
  const f=fixture(),get=f.api.get,posts=[];let refreshes=0;
  const obsolete=!['current-fail-fast','unknown-link','foreign','main','schedule'].includes(state);
  if(state==='merged-empty-links'||state==='unknown-link')f.run.pull_requests=[];
@@ -1236,8 +1236,9 @@ for(const state of ['replaced','closed','merged-empty-links','assigned','current
  if(state==='assigned'){f.jobs[0].runner_id=42;f.jobs[0].status='in_progress';}
  if(state==='current-fail-fast'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  f.api.get=async(path,options)=>{
+  if(path.includes('/pulls?state=open')&&state==='closed-with-current-other')return [{number:13,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];
   if(path.includes('/pulls?state=open')&&['merged-empty-links','unknown-link'].includes(state))return [];
-  if(path.endsWith('/pulls/12'))return {number:12,state:['closed','merged-empty-links'].includes(state)?'closed':'open',head:{sha:obsolete?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/pulls/12'))return {number:12,state:['closed','closed-with-current-other','merged-empty-links'].includes(state)?'closed':'open',head:{sha:obsolete?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/commits/'+head+'/pulls')&&state==='unknown-link')return [];
   if(path.endsWith('/runs/789')&&state==='advanced-during-read')return {...f.run,run_attempt:++refreshes+1};
   if(path.includes('/jobs?')&&state==='incomplete-jobs')return {total_count:6,jobs:f.jobs};
@@ -1276,4 +1277,17 @@ test('a full pool still cancels an obsolete run before returning',async t=>{
  f.api.post=async path=>posts.push(path);
  await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
  assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
+});
+test('one automatic pass shares run, PR and job observations across its readers',async()=>{
+ const f=fixture(),get=f.api.get,reads=[];
+ f.api.get=async(path,options)=>{reads.push(path);if(path.includes('/pulls?state=open'))return [{number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];return get(path,options);};
+ assert.equal(typeof controller.readAutomaticPass,'function');
+ const pass=await controller.readAutomaticPass({api:f.api,policy});
+ await controller.reconcileDeadRuns({api:f.api,policy,pass,hosted:{}});
+ assert.equal((await controller.findAutomatic({api:pass.api,policy,limit:1,runs:pass.runs})).length,1);
+ assert.equal((await controller.overflowInventory({api:pass.api,policy,runs:pass.runs,includeHosted:false})).size,1);
+ assert.equal(reads.filter(path=>path.includes('/runs?')).length,2);
+ assert.equal(reads.filter(path=>path.includes('/pulls?state=open')).length,1);
+ assert.equal(reads.filter(path=>path.includes('/jobs?')).length,1);
+ assert.equal(reads.filter(path=>path.endsWith('/runs/789')||path.endsWith('/pulls/12')).length,0);
 });

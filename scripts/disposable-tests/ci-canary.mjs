@@ -86,9 +86,25 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
-export async function overflowInventory({api,policy,signal,includeHosted=true}){
- const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(),snapshot=new Map();
+export async function readAutomaticPass({api,policy,signal}){
+ const base=`/repos/${policy.repository}`,runs=new Map(),reads=new Map();
  for(const status of ['queued','in_progress']){
+  const data=await runInventory(api,`${base}/actions/runs?status=${status}&per_page=100`,signal);
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete automatic run inventory');
+  for(const run of data.workflow_runs)runs.set(run.id,run);
+ }
+ const pulls=[...runs.values()].some(run=>run.event==='pull_request')?await api.get(`${base}/pulls?state=open&per_page=100`,{signal}):[];
+ assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');
+ for(const run of runs.values())reads.set(`${base}/actions/runs/${run.id}`,Promise.resolve(run));
+ for(const pull of pulls)reads.set(`${base}/pulls/${pull.number}`,Promise.resolve(pull));
+ return {runs,pulls,api:{get:(path,options)=>{
+  if(!reads.has(path))reads.set(path,api.get(path,options));return reads.get(path);
+ }}};
+}
+export async function overflowInventory({api,policy,signal,includeHosted=true,runs:observed}){
+ const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(observed),snapshot=new Map();
+ if(!observed)for(const status of ['queued','in_progress']){
   const data=await runInventory(api,`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,signal);
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
    data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete hosted run inventory');
@@ -180,21 +196,12 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }
-export async function reconcileDeadRuns({api,policy,signal,onError}){
- const base=`/repos/${policy.repository}`,runs=new Map(),marked=await hostedAttempts({api,policy,signal});
+export async function reconcileDeadRuns({api,policy,signal,onError,pass,hosted}){
+ const base=`/repos/${policy.repository}`,marked=hosted??await hostedAttempts({api,policy,signal});
  const identity=run=>run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
   run.workflow_id===policy.workflowId && run.path===policy.workflowPath && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0;
- for(const status of ['queued','in_progress']){
-  const data=await runInventory(api,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal);
-  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
-   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete dead-run inventory');
-  for(const run of data.workflow_runs)if(identity(run) && run.event==='pull_request')runs.set(run.id,run);
- }
- let pulls=[];
- if(runs.size){
-  pulls=await api.get(`${base}/pulls?state=open&per_page=100`,{signal});
-  assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');
- }
+ pass??=await readAutomaticPass({api,policy,signal});
+ const {runs,pulls}=pass;
  const pullFor=async run=>{
   let links=run.pull_requests;
   if(!links?.length){
@@ -209,6 +216,10 @@ export async function reconcileDeadRuns({api,policy,signal,onError}){
  };
  const dead=(pull,run)=>pull && (pull.state==='closed' || pull.head.sha!==run.head_sha);
  for(const [id,observed] of runs)try{
+  if(!identity(observed) || observed.event!=='pull_request')continue;
+  if(pulls.some(pull=>(!observed.pull_requests?.length || observed.pull_requests.some(link=>link.number===pull.number)) &&
+   pull.state==='open' && pull.head?.sha===observed.head_sha &&
+   pull.head.repo?.id===policy.repositoryId && pull.base?.repo?.id===policy.repositoryId))continue;
   const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
   if(!identity(run) || run.id!==id || run.event!=='pull_request' || run.head_sha!==observed.head_sha ||
    run.run_attempt!==observed.run_attempt || !['queued','in_progress'].includes(run.status))continue;
@@ -368,14 +379,14 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused,runs:observed}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
  const upstream=api,reads=new Map();
  api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
- const inventories=await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
- const runs=new Map();
+ const inventories=observed?[]:await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
+ const runs=new Map(observed);
  for(const inventory of inventories){
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
