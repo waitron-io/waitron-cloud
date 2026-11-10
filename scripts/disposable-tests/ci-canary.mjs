@@ -86,9 +86,26 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
-export async function overflowInventory({api,policy,signal,includeHosted=true}){
- const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(),snapshot=new Map();
+export async function readAutomaticPass({api,policy,signal}){
+ const base=`/repos/${policy.repository}`,observedAt=Date.now(),runs=new Map(),reads=new Map();
  for(const status of ['queued','in_progress']){
+  const data=await runInventory(api,`${base}/actions/runs?status=${status}&per_page=100`,signal);
+  if(Number.isSafeInteger(data.total_count) && data.total_count>100)throw Object.assign(new Error('Repository run inventory exceeds its 100-run limit'),{code:'CI_REPOSITORY_RUN_LIMIT'});
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete automatic run inventory');
+  for(const run of data.workflow_runs)runs.set(run.id,run);
+ }
+ const pulls=[...runs.values()].some(run=>run.event==='pull_request')?await api.get(`${base}/pulls?state=open&per_page=100`,{signal}):[];
+ assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');
+ for(const run of runs.values())reads.set(`${base}/actions/runs/${run.id}`,Promise.resolve(run));
+ for(const pull of pulls)reads.set(`${base}/pulls/${pull.number}`,Promise.resolve(pull));
+ return {observedAt,runs,pulls,api:{get:(path,options)=>{
+  if(!reads.has(path))reads.set(path,api.get(path,options));return reads.get(path);
+ }}};
+}
+export async function overflowInventory({api,policy,signal,includeHosted=true,runs:observed}){
+ const marked=includeHosted?await hostedAttempts({api,policy,signal}):{},runs=new Map(observed),snapshot=new Map();
+ if(!observed)for(const status of ['queued','in_progress']){
   const data=await runInventory(api,`/repos/${policy.repository}/actions/runs?status=${status}&per_page=100`,signal);
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
    data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete hosted run inventory');
@@ -179,6 +196,55 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  }
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
+}
+export async function reconcileDeadRuns({api,policy,signal,onError,pass,hosted}){
+ const base=`/repos/${policy.repository}`,marked=hosted??await hostedAttempts({api,policy,signal});
+ const identity=run=>run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+  run.workflow_id===policy.workflowId && run.path===policy.workflowPath && Number.isSafeInteger(run.run_attempt) && run.run_attempt>0;
+ pass??=await readAutomaticPass({api,policy,signal});
+ const {runs,pulls}=pass;
+ const pullFor=async run=>{
+  let links=run.pull_requests;
+  if(!links?.length){
+   links=pulls.filter(pull=>pull.head?.sha===run.head_sha && pull.head.repo?.id===policy.repositoryId);
+   if(!links.length)links=await api.get(`${base}/commits/${run.head_sha}/pulls`,{signal});
+  }
+  if(!Array.isArray(links) || links.length!==1 || !Number.isSafeInteger(links[0].number))return;
+  const pull=await api.get(`${base}/pulls/${links[0].number}`,{signal});
+  if(pull.number!==links[0].number || pull.head?.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId ||
+   !['open','closed'].includes(pull.state))return;
+  return pull;
+ };
+ const dead=(pull,run)=>pull && (pull.state==='closed' || pull.head.sha!==run.head_sha);
+ for(const [id,observed] of runs)try{
+  if(!identity(observed) || observed.event!=='pull_request')continue;
+  if(pulls.some(pull=>(!observed.pull_requests?.length || observed.pull_requests.some(link=>link.number===pull.number)) &&
+   pull.state==='open' && pull.head?.sha===observed.head_sha &&
+   pull.head.repo?.id===policy.repositoryId && pull.base?.repo?.id===policy.repositoryId))continue;
+  const path=`${base}/actions/runs/${id}`,run=await api.get(path,{signal});
+  if(!identity(run) || run.id!==id || run.event!=='pull_request' || run.head_sha!==observed.head_sha ||
+   run.run_attempt!==observed.run_attempt || !['queued','in_progress'].includes(run.status))continue;
+  if(!dead(await pullFor(run),run))continue;
+  const {jobs}=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
+  assert.ok(jobs.every(job=>job.run_id===id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Foreign dead-run job inventory');
+  const latest=await api.get(path,{signal});
+  if(!identity(latest) || latest.id!==id || latest.event!=='pull_request' || latest.head_sha!==run.head_sha ||
+   latest.run_attempt!==run.run_attempt || !['queued','in_progress'].includes(latest.status))continue;
+  const action=jobs.every(job=>job.status==='completed' || !job.runner_id)?'force-cancel':'cancel';
+  await api.post(path+'/'+action,undefined,{signal});
+  console.log(JSON.stringify({event:'automatic-ci-dead-run',at:new Date().toISOString(),runId:id,attempt:run.run_attempt,action}));
+ }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,id)===false)break;}
+ for(const [id,attempt] of Object.entries(marked))try{
+  let run;
+  try{run=await api.get(`${base}/actions/runs/${id}`,{signal});}catch(error){if(error.status!==404)throw error;}
+  if(run && (!identity(run) || run.id!==Number(id) || run.status!=='completed'))continue;
+  if(run && run.run_attempt<attempt && !(run.event==='pull_request' && dead(await pullFor(run),run)))continue;
+  const current=await hostedAttempts({api,policy,signal});
+  if(current[id]!==attempt)continue;
+  delete current[id];
+  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(current),signal});
+  console.log(JSON.stringify({event:'automatic-ci-marker-retired',at:new Date().toISOString(),runId:Number(id),attempt}));
+ }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
 }
 export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set(),onError}){
  const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
@@ -314,14 +380,14 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused,runs:observed}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
  const upstream=api,reads=new Map();
  api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
- const inventories=await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
- const runs=new Map();
+ const inventories=observed?[]:await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
+ const runs=new Map(observed);
  for(const inventory of inventories){
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
