@@ -1,7 +1,8 @@
 # Prepare the practice account for one D618 run
 
-First check which kind of account you have in part 2. The eight parts below
-use a classic standalone practice account, as described in your private desk note. Setup creates four roles and a USD 10 budget backstop;
+Before part 1, read the account check in part 2. The eight parts below use a
+classic standalone practice account, as described in your private desk note.
+Setup creates four roles and a USD 10 budget backstop;
 the experiment comes afterwards. The lane has no permission to access Amazon or spend.
 
 **If IAM offers API keys but no console sign-in, stop before part 2.** The
@@ -11,6 +12,8 @@ invite an administrator teammate, or activate advanced features to work around
 this. See [the account check](#2-check-the-account-and-create-the-console-login).
 
 ## Which login, for which step
+
+This table applies to the classic standalone account.
 
 | Part | Window and login |
 | --- | --- |
