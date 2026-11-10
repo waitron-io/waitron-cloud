@@ -16,7 +16,8 @@ then delete the user. In IAM → Policies, delete `waitron-lane-d-rehearsal` and
 policy and inspect its users. Check the policy’s **Permissions boundary** usage too;
 a boundary used by a retained role must stay. After revocation, use a local editor
 to remove only the retired `waitron-rehearsal` profile from
-`~/.config/waitron-cloud/aws/credentials` and its matching config stanza; preserve
+`~/.config/waitron-cloud/aws/credentials` and the matching stanza in
+`~/.config/waitron-cloud/aws/config`; preserve
 other profiles. Check locally that both retired stanzas are gone, without printing
 credentials. Do not delete buckets, keys or roles belonging to other
 rehearsals. Check: the user search returns no match and neither policy has an
@@ -163,6 +164,7 @@ aws iam simulate-principal-policy --policy-source-arn "$CALLER_ROLE" \
 aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
   --action-names cloudformation:DeleteStack --resource-arns "$SIM_STACK" \
   --context-entries ContextKeyName=cloudformation:RoleArn,ContextKeyValues="$STACK_ROLE",ContextKeyType=string
+aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-west-1
 aws iam simulate-principal-policy --policy-source-arn "$SCHEDULER_ROLE" \
   --action-names iam:PassRole --resource-arns "$STACK_ROLE" \
   --context-entries ContextKeyName=iam:PassedToService,ContextKeyValues=cloudformation.amazonaws.com,ContextKeyType=string
@@ -177,7 +179,6 @@ aws iam simulate-principal-policy --policy-source-arn "$STACK_ROLE" \
   --action-names ec2:TerminateInstances \
   --resource-arns "arn:aws:ec2:eu-west-1:$ACCOUNT_ID:instance/i-0123456789abcdef0" \
   --context-entries ContextKeyName=ec2:ResourceTag/aws:cloudformation:stack-name,ContextKeyValues=other-experiment,ContextKeyType=string
-aws ec2 describe-key-pairs --key-names "$KEY_NAME" --region eu-west-1
 ```
 
 Require, in order: create allowed; passing the stack role allowed; direct EC2 launch
