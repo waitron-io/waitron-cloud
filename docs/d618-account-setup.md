@@ -324,7 +324,9 @@ Finish by reopening **IAM → Roles → each role → Permissions → expand `d6
 
 If the launcher lacks the events action, re-render part 4 from the current
 checkout and replace its existing `d618` inline policy using steps 1–4 above.
-This grants access to D618 stack events. A failed wait can report only the stack
+### Inspect a failed stack
+
+The grant lets you read D618 stack events. A failed wait can report only the stack
 status; the launcher does not fetch the failing resource's reason and deletes
 the failed stack during cleanup. In your **setup console → CloudFormation →
 Stacks → filter Deleted → select the stack → Events**, read the failed
@@ -771,7 +773,7 @@ practice account only; it is not a production deployment role.
 | Owner AssumeRole | The IAM user's one-run access key authenticates only the call to assume `d618-launcher` |
 | Launcher create/tag, describe/delete, pass-role | `startAmazon.create`, waiters and error/`stop` teardown; the launcher passes only the stack role |
 | Launcher stop/describe EC2 | `stopWorker`, `waitStopped`, `checkStopped`; image/key/usage checks in the run checklist |
-| Launcher budget, IAM, quota, cost reads | Parts 5–8 above and the run checklist; `GetCallerIdentity` needs no IAM grant |
+| Launcher budget, IAM, quota, cost reads | Parts 5–8 and the run checklist; `startAmazon` refuses a standard vCPU quota below 12 before building; `GetCallerIdentity` needs no IAM grant |
 | Stack network create/tag/configure/delete | `Vpc`, `Subnet` (DNS/public IP attributes), `Internet`, `Attachment`, `Routes`, `Route`, `Association`, `Firewall`, `Mesh`; ingress/egress rule handling and rollback |
 | Stack EC2/SSM reads | Declared CloudFormation create/read/delete checks for those resources and A/B/C, including launch-template, VPC-encryption and VPN-gateway discovery and Systems Manager association reads; no Systems Manager write is granted |
 | Stack RunInstances/CreateTags/TerminateInstances | A/B/C, pinned AMI and key, m7i.xlarge, automatic root volumes/network interfaces; deletion removes root disks |
@@ -790,5 +792,5 @@ Sources checked 10 November 2026: AWS's [service-role guidance](https://docs.aws
 and [CLI access-key configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html).
 Live role assumption, CloudFormation tagging, rollback and independent deletion
 remain checks for your practice-account run. If creation fails, keep the stack roles
-until every stack resource has been deleted; inspect CloudFormation events as the
-administrator rather than broadening the launcher permissions.
+until every stack resource has been deleted; [inspect its events](#inspect-a-failed-stack)
+using the setup console or the launcher's existing D618-scoped read permission.

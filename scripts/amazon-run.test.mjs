@@ -172,6 +172,19 @@ test('wrong account or root identity cannot build or create resources', async ()
       aws: async (service, args) => {assert.equal(service, 'sts'); assert.equal(args[0], 'get-caller-identity'); return JSON.stringify(identity);}}), /amazon.identity/);
   }
 });
+test('launcher refuses a standard vCPU quota below twelve before building or creating a stack', async () => {
+  for (const value of [8, 12]) {
+    await assert.rejects(api.startAmazon(config, {
+      aws: async (service, args) => {
+        if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
+        assert.equal(service, 'service-quotas');
+        assert.deepEqual(args, ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A']);
+        return JSON.stringify({Quota: {Value: value}});
+      },
+      run: async () => {throw Error('builder reached');},
+    }), value < 12 ? /D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is 8/ : /builder reached/);
+  }
+});
 for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
@@ -184,6 +197,7 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (args[0] === 'delete-stack') deleting = true;
       if (args[0] === 'wait' && args[1] === 'stack-delete-complete' && scenario === 'late deletion' && !deleting) throw Object.assign(Error('timeout'), {code: 'ETIMEDOUT'});
       if (service === 'sts') return JSON.stringify({Account: config.account, Arn: 'arn:aws:iam::123456789012:user/test'});
+      if (service === 'service-quotas') return JSON.stringify({Quota: {Value: 12}});
       if (args[0] === 'describe-stacks') return JSON.stringify({Stacks: [{Outputs: Object.entries(output).map(([OutputKey, OutputValue]) => ({OutputKey, OutputValue}))}]});
       if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: output.C, State: {Name: 'stopped'}}]}]});
       assert.ok(['create-stack', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);

@@ -75,6 +75,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
   assert.match(config.image, /^ami-[a-f0-9]{17}$/);
   assert.match(config.operatorCidr, /^(?:\d{1,3}\.){3}\d{1,3}\/32$/);
+  const quota = JSON.parse(await aws('service-quotas', ['get-service-quota', '--service-code', 'ec2', '--quota-code', 'L-1216C47A'])).Quota.Value;
+  assert.ok(quota >= 12, `D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${quota}. Request an increase in ${config.region} before retrying.`);
   assert.equal(await run('uname', ['-m']), 'x86_64', 'Use the x86 test-box builder');
   assert.equal(await run('git', ['status', '--porcelain']), '', 'Use a clean, committed Cloud checkout');
   const name = 'd618-' + randomUUID();
