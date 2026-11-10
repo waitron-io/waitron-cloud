@@ -211,18 +211,10 @@ def guest_ssh(directory):
             '-p', str(22000+host.slot_id(directory.name)), 'root@127.0.0.1']
 
 
-def prepare(resource):
-    directory = turn_directory(resource)
-    request = request_identity(json.loads((directory/'request.json').read_text()), resource)
-    deadline = request['deadline']
-    if 'ci' not in request and not (directory/'ui.tgz').is_file():
-        raise ValueError('Reviewed private dependency bytes are required')
-    command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
-    public = ' '.join((directory/'key.pub').read_text().split()[:2])
-    host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public})
+def wait_for_guest(directory, deadline):
     boot_end = min(deadline, int(time.time()*1000)+120000)
     while int(time.time()*1000) < boot_end:
-        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', str(22000+host.slot_id(resource)), '127.0.0.1'],
+        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', str(22000+host.slot_id(directory.name)), '127.0.0.1'],
                                boot_end, capture=True, check=False)
         if code == 0 and output.strip():
             (directory/'known').write_bytes(output)
@@ -241,15 +233,35 @@ def prepare(resource):
         time.sleep(0.25)
     else:
         raise TimeoutError('Guest did not boot within120seconds')
+    return ssh
+
+
+def prepare(resource):
+    directory = turn_directory(resource)
+    request = request_identity(json.loads((directory/'request.json').read_text()), resource)
+    deadline = request['deadline']
+    if 'ci' not in request and not (directory/'ui.tgz').is_file():
+        raise ValueError('Reviewed private dependency bytes are required')
+    command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
+    public = ' '.join((directory/'key.pub').read_text().split()[:2])
+    preparation = host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public})['preparation']
+    ssh = wait_for_guest(directory, deadline)
     with (RECIPE/'guest-tools.sh').open('rb') as source:
-        command([*ssh, 'bash -s'], min(deadline, int(time.time()*1000)+360000), stdin=source)
+        command([*ssh, 'bash -s -- --check' if preparation == 'prebuilt' else 'bash -s'],
+                min(deadline, int(time.time()*1000)+360000), stdin=source)
+    if preparation == 'prebuilt':
+        with (RECIPE/'runner-tools.sh').open('rb') as source:
+            command([*ssh, 'bash -s -- --check'], deadline, stdin=source)
     command([*ssh, 'mkdir -p /work/source /work/private /opt/waitron-disposable'], deadline)
     if 'ci' in request:
-        for source_path, target in [(RECIPE/'runner-tools.sh','/opt/waitron-disposable/runner-tools.sh'),
-                                    (RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
+        runtime = [(RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]
+        if preparation != 'prebuilt':
+            runtime.append((RECIPE/'runner-tools.sh','/opt/waitron-disposable/runner-tools.sh'))
+        for source_path, target in runtime:
             with source_path.open('rb') as source:
                 command([*ssh,'cat > '+target],deadline,stdin=source)
-        command([*ssh,'bash /opt/waitron-disposable/runner-tools.sh'],min(deadline,int(time.time()*1000)+180000))
+        if preparation != 'prebuilt':
+            command([*ssh,'bash /opt/waitron-disposable/runner-tools.sh'],min(deadline,int(time.time()*1000)+180000))
         (directory/'prepared').touch(exist_ok=False)
         return
     for source_path, target in [(RECIPE/'snapshot.py', '/opt/waitron-disposable/snapshot.py'),

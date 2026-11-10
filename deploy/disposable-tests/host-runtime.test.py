@@ -55,6 +55,7 @@ class GuestLifecycle(unittest.TestCase):
         account = pwd.getpwnam('dt-slot-0')
         self.assertEqual(account.pw_uid, 62000)
         self.assertEqual(account.pw_shell, '/usr/sbin/nologin')
+        identities=[]
         with tempfile.TemporaryDirectory(prefix='disposable-runtime-') as temporary:
             key = Path(temporary) / 'key'
             generated = self.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))
@@ -67,6 +68,7 @@ class GuestLifecycle(unittest.TestCase):
                 try:
                     created = self.manager('create', request)
                     self.assertEqual(created.returncode, 0, created.stderr)
+                    self.assertIn(json.loads(created.stdout)['preparation'],['install','prebuilt'])
                     observed = self.manager('inspect', {'resourceId': resource})
                     self.assertEqual(observed.returncode, 0, observed.stderr)
                     self.assertTrue(json.loads(observed.stdout)['running'])
@@ -87,6 +89,15 @@ class GuestLifecycle(unittest.TestCase):
                            '-o', 'ConnectTimeout=3', '-p', '22000', 'root@127.0.0.1']
                     ready = self.command(*ssh, 'cloud-init status --wait', timeout=120)
                     self.assertEqual(ready.returncode, 0, ready.stderr)
+                    identity=self.command(*ssh, 'cat /etc/machine-id /etc/ssh/ssh_host_ed25519_key.pub; cat /var/lib/cloud/data/instance-id')
+                    self.assertEqual(identity.returncode,0,identity.stderr)
+                    current=identity.stdout.splitlines();self.assertEqual(current[-1],resource)
+                    if identities:
+                        self.assertNotEqual(current[0],identities[0][0])
+                        self.assertNotEqual(current[1],identities[0][1])
+                    identities.append(current)
+                    clean=self.command(*ssh, 'test ! -e /work && test ! -e /opt/waitron-disposable && test ! -e /opt/actions-runner/.credentials && test ! -e /opt/actions-runner/.runner')
+                    self.assertEqual(clean.returncode,0,clean.stderr)
                     serial = self.command(*ssh, "python3 -c \"import termios; f=open('/dev/ttyS0','wb'); f.write(b's'*1048576+b'D592-SERIAL-END'); f.flush(); termios.tcdrain(f.fileno())\"")
                     self.assertEqual(serial.returncode, 0, serial.stderr)
                     turn = Path('/var/lib/waitron-disposable/turns') / resource

@@ -15,13 +15,13 @@ test('host operations serialize competing processes and permanently fence closed
   assert.match(result.stderr, /Ran 4 tests/);
 });
 
-for (const [file,count] of [['capacity.test.py',8],['completion.test.py',6],['guards.test.py',14],['startup.test.py',20]]) test(`trusted host ${file} policy executes all ${count} portable cases`,()=>{
+for (const [file,count] of [['capacity.test.py',8],['completion.test.py',6],['guards.test.py',14],['image.test.py',11],['startup.test.py',20]]) test(`trusted host ${file} policy executes all ${count} portable cases`,()=>{
   const result=spawnSync('python3',['-B',new URL('../../deploy/disposable-tests/'+file,import.meta.url).pathname],{encoding:'utf8',timeout:15000});
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.match(result.stderr,new RegExp('Ran '+count+' tests'));
 });
 
-test('CI host preparation and memory-only credentials execute all fourteen portable cases',()=>{
+test('CI host preparation and memory-only credentials execute all fifteen portable cases',()=>{
  const result=spawnSync('python3',['-B',new URL('../../deploy/disposable-tests/ci-session.test.py',import.meta.url).pathname],{encoding:'utf8',timeout:15000});
- assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/Ran 14 tests/);
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/Ran 15 tests/);
 });

@@ -145,7 +145,7 @@ class Guards(unittest.TestCase):
   (self.root/'turns').mkdir();(self.root/'history').mkdir()
   key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGiUcL7F9BcOzhFJbD97eQj+L6u16A5RylAnj1BrChgC'
   request={'resourceId':'dt-budget-1-1','deadline':int(time.time()*1000)+60000,'sshPublicKey':key}
-  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',create=True,side_effect=ValueError('Insufficient memory')),patch.object(host,'image_verified',lambda:None),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None):
+  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',create=True,side_effect=ValueError('Insufficient memory')),patch.object(host,'select_image',return_value={'path':host.IMAGE,'mode':'install','entries':[]}),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None):
    with self.assertRaisesRegex(ValueError,'memory'):host.create(request)
   self.assertFalse((self.root/'active-1.json').exists());self.assertEqual(list((self.root/'turns').iterdir()),[])
 
@@ -180,8 +180,8 @@ class Guards(unittest.TestCase):
   (self.root/'turns').mkdir();(self.root/'history').mkdir();calls=[]
   key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGiUcL7F9BcOzhFJbD97eQj+L6u16A5RylAnj1BrChgC'
   request={'resourceId':'dt-affinity-1-1','deadline':int(time.time()*1000)+60000,'sshPublicKey':key}
-  def provider(*argv,**kwargs):calls.append(argv);return subprocess.CompletedProcess(argv,0,stdout='',stderr='')
-  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',lambda extra=None:{'slots':1,'cpus':[4,5,20,21]}),patch.object(host,'image_verified',lambda:None),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None),patch.object(host,'run',provider):
+  def provider(*argv,**kwargs):calls.append(argv);return subprocess.CompletedProcess(argv,0,stdout='{"format":"qcow2"}' if argv[:2]==('qemu-img','info') else '',stderr='')
+  with patch.object(host,'locked',contextlib.nullcontext),patch.object(host,'capacity',lambda extra=None:{'slots':1,'cpus':[4,5,20,21]}),patch.object(host,'select_image',return_value={'path':host.IMAGE,'mode':'install','entries':[]}),patch.object(host,'guest_account',lambda slot:None),patch.object(host,'network_policy',lambda resource:'synthetic'),patch.object(host.os,'chown',lambda *args:None),patch.object(host,'run',provider):
    host.create(request)
   service=next(argv for argv in calls if argv[0]=='systemd-run')
   self.assertIn('AllowedCPUs=4,5,20,21',service);self.assertIn('User=62001',service)

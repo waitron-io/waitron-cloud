@@ -12,11 +12,17 @@ RECIPE = Path(sys.argv.pop(1)).resolve()
 SOURCE = Path(sys.argv.pop(1)).resolve()
 DIGEST = sys.argv.pop(1)
 PRIVATE = Path(sys.argv.pop(1)).resolve()
+RESOURCE = sys.argv.pop(1) if len(sys.argv) > 1 else None
+SLOT = int(RESOURCE.rsplit('-', 2)[1]) if RESOURCE else 0
 
 
 class GuestTools(unittest.TestCase):
     def command(self, *args, input=None, timeout=30):
-        return subprocess.run(args, input=input, capture_output=True, timeout=timeout)
+        try:
+            return subprocess.run(args, input=input, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            print('COMMAND_TIMEOUT', args, error.stdout, error.stderr, flush=True)
+            raise
 
     def manager(self, mode, request):
         result = self.command('python3', str(RECIPE/'host.py'), mode,
@@ -30,33 +36,47 @@ class GuestTools(unittest.TestCase):
             key = Path(temporary)/'key'
             generated = self.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))
             self.assertEqual(generated.returncode, 0, generated.stderr)
-            resource = f'dt-tools-proof-0-{int(time.time()*1000)}'
+            resource = RESOURCE or f'dt-tools-proof-0-{int(time.time()*1000)}'
             request = {'resourceId': resource, 'deadline': int(time.time()*1000)+1200000,
                        'sshPublicKey': ' '.join(key.with_suffix('.pub').read_text().split()[:2])}
             try:
-                self.assertTrue(self.manager('create', request)['running'])
+                created=self.manager('create', request)
+                self.assertTrue(created['running'])
+                self.assertIn(created['preparation'],['install','prebuilt'])
                 known = Path(temporary)/'known'; end=time.monotonic()+120
                 while time.monotonic()<end:
-                    scan=self.command('ssh-keyscan','-T','2','-t','ed25519','-p','22000','127.0.0.1')
+                    scan=self.command('ssh-keyscan','-T','2','-t','ed25519','-p',str(22000+SLOT),'127.0.0.1')
                     if scan.returncode==0 and scan.stdout.strip():
                         known.write_bytes(scan.stdout); break
                     time.sleep(1)
                 else:self.fail('Guest SSH did not boot within120seconds')
                 ssh=['ssh','-i',str(key),'-o','IdentitiesOnly=yes','-o','BatchMode=yes',
                      '-o','StrictHostKeyChecking=yes','-o',f'UserKnownHostsFile={known}',
-                     '-o','ConnectTimeout=3','-p','22000','root@127.0.0.1']
+                     '-o','ConnectTimeout=3','-p',str(22000+SLOT),'root@127.0.0.1']
                 def guest(command, data=None, timeout=30):
+                    print('GUEST_START',command,flush=True)
                     result=self.command(*ssh,command,input=data,timeout=timeout)
                     print('GUEST',command,result.returncode,result.stdout.decode(errors='replace'),result.stderr.decode(errors='replace'),flush=True)
                     return result
                 self.assertEqual(guest('cloud-init status --wait',timeout=120).returncode,0)
-                prepared=guest('bash -s', (RECIPE/'guest-tools.sh').read_bytes(), timeout=360)
+                identity=guest('cat /etc/machine-id /etc/ssh/ssh_host_ed25519_key.pub /var/lib/cloud/data/instance-id')
+                self.assertEqual(identity.returncode,0,identity.stderr.decode())
+                prepared=guest('bash -s -- --check' if created['preparation']=='prebuilt' else 'bash -s', (RECIPE/'guest-tools.sh').read_bytes(), timeout=360)
                 self.assertEqual(prepared.returncode,0,prepared.stderr.decode())
                 tools=guest('node --version && pnpm --version && docker compose version && docker info --format "{{.ServerVersion}}"')
                 self.assertEqual(tools.returncode,0,tools.stderr.decode())
                 self.assertIn(b'v26.13.0',tools.stdout)
                 self.assertIn(b'9.15.0',tools.stdout)
                 self.assertIn(b'26.1.5',tools.stdout)
+                if created['preparation']=='prebuilt':
+                    checked=guest('bash -s -- --check',(RECIPE/'runner-tools.sh').read_bytes())
+                    self.assertEqual(checked.returncode,0,checked.stderr.decode())
+                    owner=guest('stat -c %U /opt/actions-runner/_diag')
+                    self.assertEqual(owner.stdout,b'runner\n')
+                    ordinary=guest('runuser -u runner -- /opt/actions-runner/bin/Runner.Listener --version')
+                    self.assertEqual(ordinary.returncode,0,ordinary.stderr.decode())
+                    self.assertEqual(ordinary.stdout.strip(),b'2.338.2')
+
                 inventory=guest('cat /opt/waitron-tools/installed-packages.txt')
                 self.assertEqual(inventory.returncode,0,inventory.stderr.decode())
                 self.assertIn(b'docker-cli=26.1.5+dfsg1-9+deb13u1',inventory.stdout)
@@ -82,7 +102,7 @@ class GuestTools(unittest.TestCase):
                 self.assertEqual(failed.returncode,0,failed.stderr.decode())
                 receipt=guest('cat /run/waitron-disposable/result.json');self.assertEqual(receipt.returncode,0)
                 self.assertEqual(json.loads(receipt.stdout),{'resourceId':resource,'nonce':'c'*32,'code':3})
-                owning=guest('cd /work/source && node --test scripts/ci-disposable-local.test.mjs',timeout=60)
+                owning=guest('cd /work/source && node --test scripts/ci-disposable-local.test.mjs',timeout=180)
                 self.assertEqual(owning.returncode,0,owning.stderr.decode())
                 self.assertRegex(owning.stdout.decode(),r'(?:# pass|ℹ pass) [1-9][0-9]*')
                 empty=guest("docker ps -aq")

@@ -1,8 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 # This runs only after guest-tools.sh has verified the disposable KVM guest.
+# BEGIN offline check
+packages=('libicu76=76.1-4' 'sudo=1.9.16p2-3+deb13u2')
+check_tools() {
+  local pin
+  for pin in "${packages[@]}"; do
+    test "$(dpkg-query -W -f='${Version}' "${pin%%=*}")" = "${pin#*=}"
+  done
+  test "$(cat /opt/waitron-tools/runner-version.txt)" = 2.338.2
+  test "$(runuser -u runner -- /opt/actions-runner/bin/Runner.Listener --version)" = 2.338.2
+  sha256sum --check --status /opt/waitron-tools/runner-listener.sha256
+}
+# END offline check
+if test "${1:-}" = --check; then check_tools; exit; fi
 export DEBIAN_FRONTEND=noninteractive
-timeout 60s apt-get install -y --no-install-recommends 'libicu76=76.1-4' 'sudo=1.9.16p2-3+deb13u2'
+timeout 60s apt-get install -y --no-install-recommends "${packages[@]}"
 temporary=$(mktemp -d /tmp/disposable-runner.XXXXXXXX)
 trap 'rm -rf -- "$temporary"' EXIT
 # BEGIN bounded download

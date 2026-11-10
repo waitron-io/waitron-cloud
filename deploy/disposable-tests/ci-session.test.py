@@ -43,7 +43,7 @@ class CISession(unittest.TestCase):
   def keygen(argv,deadline,stdin=None,capture=False,check=True):
    if argv[0]=='ssh-keygen':(directory/'key.pub').write_text('ssh-ed25519 fake')
    return command(argv,deadline,stdin,capture,check)
-  with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=keygen),patch.object(session.host,'create'):
+  with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=keygen),patch.object(session.host,'create',return_value={'preparation':'install'}):
    session.prepare(self.resource)
   self.assertTrue((directory/'prepared').exists())
   joined='\n'.join(' '.join(argv) for argv in calls)
@@ -64,13 +64,33 @@ class CISession(unittest.TestCase):
     def sleep(_):
      nonlocal now
      now+=0.25 if remaining==[0] else 121
-    with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create'),patch.object(session.time,'time',side_effect=lambda:now),patch.object(session.time,'sleep',side_effect=sleep):
+    with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create',return_value={'preparation':'install'}),patch.object(session.time,'time',side_effect=lambda:now),patch.object(session.time,'sleep',side_effect=sleep):
      if statuses==[255,0]:session.prepare(self.resource);self.assertTrue((directory/'prepared').exists());self.assertEqual(len(readiness),2);self.assertEqual(readiness[0],readiness[1])
      else:
       expected=ValueError if statuses==[2] else TimeoutError
       message='status 2$' if statuses==[2] else 'within120seconds'
       with self.assertRaisesRegex(expected,message):session.prepare(self.resource)
       self.assertFalse((directory/'prepared').exists());self.assertEqual(len(readiness),1)
+ def test_prebuilt_manual_and_ci_check_tools_offline_and_stage_current_execution_files(self):
+  for ci in [True,False]:
+   with self.subTest(ci=ci),tempfile.TemporaryDirectory() as temporary:
+    root=Path(temporary);directory=root/self.resource;directory.mkdir();recipe=root/'recipe';recipe.mkdir()
+    for name in ['guest-tools.sh','runner-tools.sh','guest-exec.py','snapshot.py']:(recipe/name).write_text('CURRENT-'+name)
+    value=request(self.resource)
+    if not ci:
+     value.pop('ci');value['argv']=['true'];(directory/'source.tar').write_bytes(b'source');(directory/'ui.tgz').write_bytes(b'private')
+    (directory/'request.json').write_text(json.dumps(value));calls=[]
+    def command(argv,deadline,stdin=None,**kwargs):
+     if argv[0]=='ssh-keygen':(directory/'key.pub').write_text('ssh-ed25519 fake')
+     calls.append((argv,stdin.read() if stdin else None));return 0,b'guest-key\n' if argv[0]=='ssh-keyscan' else b''
+    with patch.object(session,'RECIPE',recipe),patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=command),patch.object(session.host,'create',return_value={'preparation':'prebuilt'}):session.prepare(self.resource)
+    checks=[data for argv,data in calls if argv[-1]=='bash -s -- --check']
+    self.assertEqual(checks,[b'CURRENT-guest-tools.sh',b'CURRENT-runner-tools.sh'])
+    self.assertFalse(any(argv[-1]=='bash -s' or argv[-1]=='bash /opt/waitron-disposable/runner-tools.sh' for argv,_ in calls))
+    self.assertIn(b'CURRENT-guest-exec.py',[data for _,data in calls])
+    self.assertEqual(b'CURRENT-snapshot.py' in [data for _,data in calls],not ci)
+    self.assertTrue((directory/'prepared').is_file())
+
  def test_jit_is_delivered_only_to_listener_environment_and_not_to_argv_or_receipt(self):
   self.assertTrue(callable(getattr(guest,'complete_ci',None)),'CI execution entry point missing')
   output=self.root/'result.json';value={'deadline':int(time.time()*1000)+5000,'nonce':'a'*32,'jitconfig':'synthetic-base64'}
