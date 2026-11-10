@@ -1,6 +1,6 @@
 # D254: Portal request-body refusals
 
-Lane G, plan only. The watcher reviews and clears this plan before implementation; no owner approval step.
+Lane G, plan only. Claude reviewed it once; the watcher cleared it on 10 November at 23:10 with the message-composition amendment below. No owner approval of this technical plan is claimed.
 Request: `~/waitron-campaign-g/queue.md`, D254, watcher 21:02 on 10 November:
 > The passkey piece landed in #1122; extend the same 408/413/415 handling (packages/account-http/src/request.ts:3-21) to the account, security, alerts, backups, diagnostics, installations, recovery, remote access, translation consent and usage screens, EN/ES, through one shared helper if it removes repetition. Leave out billing (D604 parked), pairing (pairing v2 gated) and malformed JSON (a portal bug, not a person's). About 300–600 lines. One-page plan first.
 
@@ -22,6 +22,12 @@ Deliver EN/ES explanations of interruption (408), unaccepted size (413), or unsu
 - Preserve clearing, confirmations, cooldowns, reconciliation and list-confirmed success. Other codes retain their handling, including network/5xx uncertainty, credentials and permissions. Preserve alert confirmation invalidation independently of the changed display key (`alert-controller.ts:28–33`).
 - Keep passkeys unchanged; reuse their boundary example (`passkey-controller.ts:78–87`, `test/passkey-refusal.test.ts`). Exclude backend/API changes, dependencies, billing, pairing, malformed JSON, new records/tables/protocols/ledgers, retry mechanisms and speculative branches.
 
+## Message composition (watcher clearance, 10 November 23:10)
+
+Add only three shared cause keys per language: `requestBodyInterrupted` (“This request was interrupted.” / “Esta solicitud se interrumpió.”), `requestBodySize` (“This request’s size wasn’t accepted; retrying may not help.” / “No se ha aceptado el tamaño de esta solicitud; puede que reintentarlo no sirva.”), and `requestBodyFormat` (“This request arrived in an unsupported format.” / “Esta solicitud llegó en un formato no admitido.”). Derive contextual messages by joining that cause with the existing localized action text, with one space; do not repeat cause sentences in each screen’s copy.
+
+The new contextual key families are `{account,factorSignIn,factor,sessionRevoke,logout,alerts,snapshots,diagnostic,installations,recovery,remote,translationConsent,usage}Request{Interrupted,Size,Format}`. Reuse these action keys in that order: `retry`, `login`, `factorRefresh`, `sessionRevoke`, `signout`, `alertsSave`, `retry`, `diagnosticDownload`, `refreshStatus`, `recoveryCheckRequest`, `refreshStatus`, `translationConsentRefresh`, `usageRefresh`. Both signup/reset submission and completion use `account`; both password and factor login use `factorSignIn`; every JSON action within one controller uses its context. No independent per-screen cause sentence is needed for these joins. In particular, session revocation names its existing revoke action instead of promising an unavailable refresh, and size/format text promises no repair from waiting or another submission. The helper still classifies only; compose text in `locale.ts` and leave controller state and existing action behavior as specified above.
+
 ## Build and focused verification after watcher clearance
 
 - [ ] Append behavioral tests, observe expected failure, implement minimally, rerun. Keep every existing assertion.
@@ -34,4 +40,4 @@ Deliver EN/ES explanations of interruption (408), unaccepted size (413), or unsu
 
 Estimated added/removed lines: production **+165/−20**, behavioral tests **+250/−0**, test support **0/0**, documentation including this plan **+65/−5**; total **+480/−25**. No test-support framework. Budget three active hours to PR: 80 minutes implementation/native tests, 45 browser coverage, 15 visual/docs, 40 review fixes and PR.
 
-One Claude source-only read (134s) removed activity state, duplicate test matrices and copied browser setup, and named the logout focus condition. The manual visual grid remains required by `CLAUDE.md`. No implementation/runtime checks yet; watcher clearance is pending.
+One Claude source-only read (134s) removed activity state, duplicate test matrices and copied browser setup, and named the logout focus condition. The manual visual grid remains required by `CLAUDE.md`. No implementation/runtime checks yet. The watcher cleared the corrected plan; the required copy/key amendment is recorded above.
