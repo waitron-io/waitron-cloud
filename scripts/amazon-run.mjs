@@ -35,7 +35,7 @@ async function command(binary, args, input, signal, timeout = 180000) {
   return new Promise((resolve, reject) => {
     const child = execFile(binary, args, {signal, timeout, maxBuffer: 32 * 1024 * 1024}, (error, stdout, stderr) => {
       if (binary !== 'aws' && stderr) process.stderr.write(stderr);
-      if (error) reject(Error('amazon.command_failed:' + binary + ':' + error.name + ':' + error.code));
+      if (error) reject(Object.assign(Error('amazon.command_failed:' + binary + ':' + error.name + ':' + (error.killed ? 'ETIMEDOUT' : error.code)), {code: error.killed ? 'ETIMEDOUT' : error.code}));
       else resolve(stdout.trim());
     });
     child.stdin.on('error', () => {}); child.stdin.end(input);
@@ -76,19 +76,16 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   assert.match(config.operatorCidr, /^(?:\d{1,3}\.){3}\d{1,3}\/32$/);
   assert.equal(await run('uname', ['-m']), 'x86_64', 'Use the x86 test-box builder');
   assert.equal(await run('git', ['status', '--porcelain']), '', 'Use a clean, committed Cloud checkout');
-  const name = 'd618-' + randomUUID(), builder = name.replace('d618-', 'd618-amd64-');
+  const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
   const cloud = name + ':cloud', waitron = name + ':waitron';
-  let builderCreated = false;
   try {
-    builderCreated = true;
-    await run('docker', ['buildx', 'create', '--name', builder, '--driver', 'docker-container']);
     ownedImages.push(cloud);
-    await run('docker', ['buildx', 'build', '--builder', builder, '--platform', 'linux/amd64', '--load',
+    await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
       '--secret', 'id=npm_token,env=NODE_AUTH_TOKEN', '--build-arg', 'SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d',
       '-f', 'deploy/local-stack/Dockerfile', '-t', cloud, '.'], undefined, false, 900000);
     ownedImages.push(waitron);
-    await run('env', ['BUILDX_BUILDER=' + builder, 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
+    await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
       process.execPath, 'scripts/build-backup-verifier.mjs'], undefined, false, 900000);
     const manifest = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
     const images = [...new Set(JSON.stringify(manifest).match(/"image":"([^"]+)"/g)?.map(row => JSON.parse('{' + row + '}').image) ?? [])].filter(image => image !== 'CLOUD_IMAGE');
@@ -96,13 +93,21 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       try {await run('docker', ['image', 'inspect', image]);} catch {ownedImages.push(image);}
       await run('docker', ['pull', '--platform', 'linux/amd64', image]);
     }
-    const ids = {};
     for (const image of [cloud, waitron, ...images]) {
       const [row] = JSON.parse(await run('docker', ['image', 'inspect', image]));
-      assert.ok(row.Architecture === 'amd64' && row.Os === 'linux' && /^sha256:[a-f0-9]{64}$/.test(row.Id), 'amazon.image_architecture');
-      ids[image] = row.Id;
+      assert.ok(row.Architecture === 'amd64' && row.Os === 'linux', 'amazon.image_architecture');
     }
     await run('docker', ['save', '-o', join(directory, 'images.tar'), cloud, waitron, ...images], undefined, false, 300000);
+    const archive = JSON.parse(await run('tar', ['-xOf', join(directory, 'images.tar'), 'manifest.json'])), ids = {};
+    for (const image of [cloud, waitron, ...images]) {
+      const canonical = 'docker.io/' + (image.includes('/') ? image : 'library/' + image);
+      const config = archive.find(row => row.RepoTags?.some(tag => tag === image || tag === canonical))?.Config;
+      const digest = config?.split('/').at(-1).replace(/\.json$/, '');
+      assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'amazon.archive_image');
+      ids[image] = 'sha256:' + digest;
+    }
+    const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
+    process.stderr.write('Image bundle ' + bytes + ' bytes; each 300-second upload needs at least ' + (bytes * 8 / 300 / 1e6).toFixed(1) + ' Mbit/s plus headroom\n');
     await run('git', ['archive', '--format=tar', '-o', join(directory, 'source.tar'), 'HEAD']);
     const expiry = now() + 90 * 60000;
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
@@ -113,6 +118,10 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const copy = (index, file, path) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, 300000);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kube = args => ssh(0, ['sudo', 'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name, ...args]);
+    const waitDeleted = async () => {
+      try {await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', name], true);}
+      catch (error) {if (error.code === 'ETIMEDOUT') throw Error('amazon.deletion_late'); throw error;}
+    };
     const outcome = await runAmazonExperiment({
       create: async () => {
         process.stderr.write('Creating owned Amazon stack ' + name + '; expiry ' + new Date(expiry).toISOString() + '\n');
@@ -151,9 +160,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           await copy(index, 'images.tar', '/tmp/d618-images.tar');
           await ssh(index, ['sudo', 'ctr', '-n', 'k8s.io', 'images', 'import', '/tmp/d618-images.tar']);
           for (const [image, id] of Object.entries(ids)) {
-            const text = await ssh(index, ['sudo', 'ctr', '-n', 'k8s.io', 'images', 'export', '--platform', 'linux/amd64', '/tmp/d618-check.tar', image]);
-            void text;
-            await ssh(index, ['sudo', 'sh', '-ec', 'tar -xOf /tmp/d618-check.tar ' + quote('blobs/sha256/' + id.slice(7)) + ' | sha256sum | cut -d" " -f1']).then(digest => assert.equal(digest, id.slice(7), 'amazon.import_digest'));
+            const info = JSON.parse(await ssh(index, ['sudo', 'crictl', '--image-endpoint', 'unix:///run/containerd/containerd.sock', 'inspecti', '-o', 'json', image]));
+            assert.equal(info.status.id, id, 'amazon.import_digest');
           }
         }
         await ssh(0, ['sudo', 'docker', 'load', '-i', '/tmp/d618-images.tar']);
@@ -181,13 +189,12 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         const response = JSON.parse(await aws('ec2', ['describe-instances', '--instance-ids', outputs.C]));
         assert.equal(response.Reservations[0].Instances[0].State.Name, 'stopped', 'amazon.worker_restarted');
       },
-      waitDeleted: () => aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', name], true),
+      waitDeleted,
       deleteStack: () => aws('cloudformation', ['delete-stack', '--stack-name', name], true),
     }, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } finally {
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}
-    if (builderCreated) await run('docker', ['buildx', 'rm', builder], undefined, true);
     await rm(directory, {recursive: true, force: true});
   }
 }

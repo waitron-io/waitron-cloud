@@ -18,7 +18,7 @@ prepare)
   printf 'net.ipv4.ip_forward=1\nnet.bridge.bridge-nf-call-iptables=1\n' > /etc/sysctl.d/90-d618.conf
   sysctl --system
   apt-get update
-  apt-get install -y ca-certificates curl gnupg xz-utils wireguard-tools nfs-common nfs-kernel-server docker.io docker-buildx python3
+  apt-get install -y ca-certificates curl gnupg xz-utils wireguard-tools nfs-common nfs-kernel-server docker.io python3
   mkdir -p /etc/apt/keyrings
   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.34/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg
   echo 'deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://pkgs.k8s.io/core:/stable:/v1.34/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
@@ -28,7 +28,13 @@ prepare)
   containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
   systemctl restart containerd
   printf 'KUBELET_EXTRA_ARGS=--node-ip=%s\n' "$address" > /etc/default/kubelet
+  if [ "$address" = 10.77.0.1 ]; then
+    apt-get install -y docker-buildx
+    mkdir -p /etc/docker
+    echo '{"features":{"containerd-snapshotter":false}}' > /etc/docker/daemon.json
+  fi
   systemctl enable --now docker kubelet
+  systemctl restart docker
   iptables -P FORWARD ACCEPT
   work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
   cd "$work"
@@ -43,7 +49,7 @@ mesh)
   systemctl enable --now wg-quick@wg0
   ;;
 storage)
-  mkdir -p /var/local/d620-config
+  mkdir -p /var/local/d620-config /etc/exports.d
   if [ "$2" = control ]; then
     chmod 700 /var/local/d620-config
     echo '/var/local/d620-config 10.77.0.2(rw,sync,no_subtree_check,no_root_squash) 10.77.0.3(rw,sync,no_subtree_check,no_root_squash)' > /etc/exports.d/d618.exports

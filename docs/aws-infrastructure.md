@@ -1058,6 +1058,10 @@ to that file. Its keys are `region` (`eu-west-1`), `account` (your practice acco
 `stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
 (a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
 No package token or AWS credential is copied to the three machines.
+The launcher prints the measured image-bundle bytes and minimum upload throughput.
+Each of the three SSH copies has a 300-second limit: a 4-GiB bundle needs at least
+115 Mbit/s sustained upload, plus headroom, per copy. The archive size is measured
+when you build it; no actual Cloud/Waitron bundle has been transferred by this lane.
 
 Before starting, check these yourself; the lane has no account or spending authority:
 
@@ -1079,7 +1083,9 @@ Before starting, check these yourself; the lane has no account or spending autho
    (end is exclusive), then re-read the plan’s linked Ireland prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
-   at 90 minutes. If deletion is late it requests deletion and reports failure. To stop early,
+   at 90 minutes, allowing five more minutes for deletion. A timeout reports
+   `amazon.deletion_late`, requests deletion immediately and allows five minutes
+   to confirm that cleanup, while keeping the run failed. To stop early,
    use `node scripts/amazon-run.mjs stop d618-<run-uuid>`.
 7. Confirm `aws cloudformation describe-stacks --stack-name "$STACK" --region eu-west-1`
    reports that the named stack no longer exists (or `DELETE_COMPLETE` when you use its retained stack ID), and inspect the bill before another run.

@@ -1,5 +1,6 @@
-// Local only: prebuild the existing Cloud and pinned Waitron images, then run
+// Local targets: prebuild the existing Cloud and pinned Waitron images, then run
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
+// The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --worker-loss adds a three-node rehearsal; plan for 10 GiB RAM and 30 GiB disk, using the approved shared Docker wrapper.
 // Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ export async function loadVerifierImage(image, kubeArgs, env, signal) {
   finally {clearTimeout(timer); for (const child of children) child.kill('SIGKILL'); await Promise.all(exits);}
 }
 
-export function createKubernetesVerifier({template, kube, pod, loadImage}) {
+export function createKubernetesVerifier({template, kube, pod, loadImage, classicImages = false}) {
   const status = async () => (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
   const exec = args => kube(['exec', '-i', 'pod/verifier', '-c', 'verifier', '--', ...args]);
   return {
@@ -36,6 +37,7 @@ export function createKubernetesVerifier({template, kube, pod, loadImage}) {
       assert.ok(/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(pointId) &&
         /^sha256:[a-f0-9]{64}$/.test(image) && /^[a-f0-9]{40}$/.test(revision), 'kubernetes.verifier_binding');
       const value = structuredClone(template), worker = value.spec.containers.find(row => row.name === 'verifier');
+      if (classicImages) value.spec.containers.find(row => row.name === 'docker').args.push('--feature=containerd-snapshotter=false');
       value.spec.hostAliases[0].ip = (await pod('cloud')).status.podIP;
       const environment = {CLOUD_INTEGRATION_POINT_ID: pointId, CLOUD_VERIFIER_IMAGE: image, CLOUD_INTEGRATION_WAITRON_REVISION: revision};
       for (const row of worker.env) if (Object.hasOwn(environment, row.name)) row.value = environment[row.name];
@@ -190,7 +192,7 @@ try {
     else await kube(['rollout', 'status', 'deployment/manifest', '--timeout=60s']);
   }};
   process.stderr.write('Running native signup, pairing and remote-access journey against Kubernetes\n');
-  const verifier = createKubernetesVerifier({template: verifierTemplate, kube, pod,
+  const verifier = createKubernetesVerifier({template: verifierTemplate, kube, pod, classicImages: Boolean(amazon),
     loadImage: id => loadVerifierImage(id, ['--context', context, '--namespace', 'default', 'exec', '-i',
       'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, stop.signal)});
   const journeys = [];
