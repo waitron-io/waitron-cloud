@@ -103,8 +103,9 @@ test('translation runs both phases and preserves a failure from either phase', t
   }
 });
 
-
 test('translation accepts test runner arguments after the package command', t => {
-  const result = runPackageCommand(t, 'translation', undefined, ['--test-name-pattern=.']);
+  const result = runPackageCommand(t, 'translation', undefined, ['--test-reporter=spec', '--test-reporter-destination=stdout']);
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /✔ quality\/newly-added/, 'the second phase must use the requested reporter');
+  assert.doesNotMatch(result.stdout, /✔ test\/local-stack-runtime/, 'the launcher remains unfiltered');
 });
