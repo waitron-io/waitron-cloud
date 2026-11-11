@@ -13,6 +13,10 @@ export async function createAccountRecoveryCodes(client:PoolClient,accountId:str
  return codes;
 }
 
+export function recoveryCodeHash(accountId:string,version:number,code:string):string {
+ return createHash('sha256').update(JSON.stringify(['cloud-factor-recovery-v1',accountId,version,code])).digest('hex');
+}
+
 /** Caller holds the account lock; a refused action must roll back this consumption. */
 export async function consumeAccountRecoveryCode(client:PoolClient,accountId:string,code:string,deadline:Date):Promise<boolean> {
  if(typeof code!=='string'||!/^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3})$/.test(code))return false;
@@ -22,7 +26,7 @@ export async function consumeAccountRecoveryCode(client:PoolClient,accountId:str
  const normalised=code.replaceAll('-','').toUpperCase();
  const rows=await client.query('SELECT * FROM cloud_factor_recovery_codes WHERE account_id=$1 AND consumed_at IS NULL FOR UPDATE',[accountId]);
  const row=rows.rows.find(row=>row.code_hash===(row.factor_version===null?accountRecoveryCodeHash(accountId,normalised)
-  :createHash('sha256').update(JSON.stringify(['cloud-factor-recovery-v1',accountId,row.factor_version,normalised])).digest('hex')));
+  :recoveryCodeHash(accountId,row.factor_version,normalised)));
  const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
  if(!row||now>=deadline)return false;
  await client.query(`UPDATE cloud_factor_recovery_codes SET consumed_at=$4

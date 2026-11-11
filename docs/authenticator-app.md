@@ -16,7 +16,7 @@ Your other entries stay in the form so you can correct the missing value and try
 Scan the QR code or enter the setup secret in your authenticator, then confirm with
 its current code. The portal renders the QR locally. Save the ten recovery codes
 when they appear: each works once, and Cloud stores only their hashes. Setup secrets
-and recovery codes stay in the current tab; leaving or reloading clears them. Adding or replacing a method keeps your unused codes; only **New recovery codes** replaces them. Removing your app keeps codes while a passkey remains. Removing your last method retires them.
+and recovery codes stay in the current tab; leaving or reloading clears them. Adding or replacing a method keeps your unused codes. If none remain when you activate an app, save the ten new codes shown. **New recovery codes** replaces an existing set. Removing your app keeps codes while a passkey remains. Removing your last method retires them.
 
 Enrolment, replacement, removal and code regeneration end every Cloud session.
 Sign in again afterwards. Each change requires your current password and live
@@ -78,7 +78,7 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 | POST `/login/factor` | `challengeToken`, `proof`, exact Origin | 200 with account ID and cookies |
 | GET `/authenticator` | Live session | `active`, `version`, `recoveryCodesRemaining`, `available` |
 | POST `/authenticator/begin` | Password, optional existing-factor proof, live session and CSRF | Pending token, setup secret, URI and expiry |
-| POST `/authenticator/activate` | Password, pending token, new six-digit `code`, optional existing-factor proof, live session and CSRF | Changed active status; ten codes only when none have ever been issued; clears cookies |
+| POST `/authenticator/activate` | Password, pending token, new six-digit `code`, optional existing-factor proof, live session and CSRF | Changed active status; ten codes only when none remain unused; clears cookies |
 | POST `/authenticator/regenerate` | Password, existing-app proof when an app is active, live session and CSRF | Changed app status and ten new account codes; clears cookies |
 | POST `/authenticator/remove` | Password, existing-factor proof, live session and CSRF | Changed inactive status; clears cookies |
 | POST `/authenticator/cancel` | Pending token, exact live session and CSRF | 204 |

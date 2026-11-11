@@ -168,7 +168,7 @@ export class AuthenticatorFactorStore {
       if(!deadline) throw new FactorManagementError(await factorNow(c.client)>=pending.expires_at?'setup_unavailable':'permission_denied');c.deadline=deadline;
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=$2,secret_generation=$3,secret_envelope=$4 WHERE account_id=$1',[c.accountId,version,pending.id,envelope]);
-      const previous=await c.client.query('SELECT 1 FROM cloud_factor_recovery_codes WHERE account_id=$1 LIMIT 1',[c.accountId]);
+      const previous=await c.client.query('SELECT 1 FROM cloud_factor_recovery_codes WHERE account_id=$1 AND consumed_at IS NULL LIMIT 1',[c.accountId]);
       const recoveryCodes=previous.rowCount?undefined:await createAccountRecoveryCodes(c.client,c.accountId);
       await this.#changed(c);return {status:'changed',active:true,...(recoveryCodes?{recoveryCodes}:{})};
     },pendingToken);

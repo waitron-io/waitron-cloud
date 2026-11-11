@@ -312,9 +312,16 @@ export class PortalApp {
   async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin();if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
   async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh',passkeyRecovery=false){
     this.readFields();const route=this.#route;
-    if(passkeyRecovery){this.authenticator.password=this.passkeys.password;this.passkeys.password='';}
+    if(passkeyRecovery){this.authenticator.password=this.passkeys.password;this.passkeys.password='';this.passkeys.error=undefined;}
     if(action==='begin'||action==='cancel'||action==='refresh'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
-    const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
+    const result=await this.authenticator[action]();if(route!==this.#route)return;
+    if(!result){
+      if(passkeyRecovery&&this.authenticator.error){
+        this.passkeys.error=this.authenticator.error;this.authenticator.error=undefined;this.draw();
+        const alert=this.root.querySelector<HTMLElement>('.passkeys [role=alert]');if(alert){alert.tabIndex=-1;alert.focus();}
+      }
+      return;
+    }
     const codes=typeof result==='object'&&result.recoveryCodes?[...result.recoveryCodes]:[];
     this.session.dispose();this.session=this.#session();
     // Clear ended account authority before the login view can start another sign-in.

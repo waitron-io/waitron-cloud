@@ -82,9 +82,9 @@ test('legacy codes retain their original version hash without an app secret',asy
 const keys={activeKeyId:'test',keys:{test:'07'.repeat(32)}};
 const management=()=>new registration.AuthenticatorFactorStore(pool,keys,{pendingLifetimeMs:300_000,enrolmentAttempts:5});
 async function authority(){return {...await transaction(pool,client=>createSession(client,accountId)),password};}
-function totp(secret:string){
+function totp(secret:string,offset=0){
  const bits=[...secret].map(c=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30_000)));
+ const key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30_000)+offset));
  const mac=createHmac('sha1',key).update(counter).digest();return ((mac.readUInt32BE(mac[19]!&15)&0x7fffffff)%1_000_000).toString().padStart(6,'0');
 }
 async function activeApp(){await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope)
@@ -166,4 +166,55 @@ test('an app added after a passkey fallback challenge still requires the current
  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
  const store=new registration.PasswordLoginStore(pool,keys,policy,outbox),current=await store.start({email:'owner@example.test',password});assert.equal(current.kind,'factor');
  assert.equal((await store.complete(current.challengeToken,{kind:'recovery',code})).accountId,accountId);
+});
+
+
+test('concurrent removal of the final two passkeys retires every unused recovery code',async t=>{
+ await codes();const a=await authority(),b=await authority(),blocker=await pool.connect();let removal:Promise<boolean[]>|undefined;
+ const second=randomUUID();await pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
+ VALUES($1,$2,'c2Vjb25k',$3,0,'multiDevice',true)`,[second,accountId,Buffer.from([3,2,1])]);
+ const ids=(await pool.query('SELECT id FROM cloud_passkeys ORDER BY id')).rows.map(row=>row.id);
+ const store=new registration.PasskeyStore(pool,{rpName:'Cloud',rpId:'cloud.example.test',origin:'https://cloud.example.test'});
+ try{
+  await blocker.query('SELECT pg_advisory_lock(hashtext($1))',[schema]);
+  await pool.query(`CREATE FUNCTION hold_passkey_removal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+   PERFORM pg_advisory_xact_lock(hashtext(current_schema())); RETURN OLD; END $$`);
+  await pool.query('CREATE TRIGGER hold_passkey_removal AFTER DELETE ON cloud_passkeys FOR EACH ROW EXECUTE FUNCTION hold_passkey_removal()');
+  removal=Promise.all([store.remove(a.token,a.csrfToken,ids[0],password),store.remove(b.token,b.csrfToken,ids[1],password)]);
+  await t.waitFor(async()=>assert.equal((await pool.query(`SELECT count(*) FROM pg_stat_activity
+   WHERE application_name=$1 AND wait_event_type='Lock'`,[schema])).rows[0].count,'2'),{timeout:5000});
+  assert.equal((await pool.query(`SELECT count(*) FROM pg_stat_activity WHERE application_name=$1
+   AND wait_event_type='Lock' AND query LIKE 'DELETE FROM cloud_passkeys%'`,[schema])).rows[0].count,'1','one removal must wait before deleting its method');
+  await blocker.query('SELECT pg_advisory_unlock(hashtext($1))',[schema]);
+  assert.deepEqual(await removal,[true,true]);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count,'0');
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'0');
+ }finally{
+  await blocker.query('SELECT pg_advisory_unlock_all()');blocker.release();await removal;
+  await pool.query('DROP TRIGGER IF EXISTS hold_passkey_removal ON cloud_passkeys');await pool.query('DROP FUNCTION IF EXISTS hold_passkey_removal()');
+ }
+});
+
+
+test('reactivating an app after last-method retirement returns ten fresh codes once',async()=>{
+ await pool.query('DELETE FROM cloud_passkeys');const store=management(),a=await authority(),first=await store.begin(a);
+ const created=await store.activate(a,first.pendingToken,totp(first.secret));assert.ok(created.recoveryCodes);assert.equal(created.recoveryCodes.length,10);
+ await store.remove({...await authority(),proof:{kind:'recovery',code:created.recoveryCodes[0]!}});
+ assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'0');
+ const next=await authority(),pending=await store.begin(next),result=await store.activate(next,pending.pendingToken,totp(pending.secret));
+ assert.ok(result.recoveryCodes);assert.equal(result.recoveryCodes.length,10);
+ assert.equal(result.recoveryCodes.some(code=>created.recoveryCodes!.includes(code)),false);
+ assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'20');
+ assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
+});
+
+test('app activation after code exhaustion issues a fresh set and retains consumed hashes',async()=>{
+ await codes();await pool.query('UPDATE cloud_factor_recovery_codes SET consumed_at=clock_timestamp()');await activeApp();
+ const before=(await pool.query('SELECT * FROM cloud_factor_recovery_codes ORDER BY code_hash')).rows;
+ const store=management(),a=await authority(),secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+ const pending=await store.begin({...a,proof:{kind:'totp',code:totp(secret)}});
+ const result=await store.activate({...a,proof:{kind:'totp',code:totp(secret,1)}},pending.pendingToken,totp(pending.secret));
+ assert.ok(result.recoveryCodes);assert.equal(result.recoveryCodes.length,10);
+ assert.deepEqual((await pool.query('SELECT * FROM cloud_factor_recovery_codes WHERE consumed_at IS NOT NULL ORDER BY code_hash')).rows,before);
+ assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
 });

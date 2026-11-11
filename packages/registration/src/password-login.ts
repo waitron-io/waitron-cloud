@@ -24,9 +24,7 @@ export interface ActiveFactor {
 }
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 export const factorDigest = (value: string) => createHash('sha256').update(value).digest('hex');
-export function recoveryCodeHash(accountId: string, version: number, code: string): string {
-  return factorDigest(JSON.stringify(['cloud-factor-recovery-v1', accountId, version, code]));
-}
+export {recoveryCodeHash} from './account-recovery-codes.ts';
 export async function factorNow(client: PoolClient): Promise<Date> {
   return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
 }

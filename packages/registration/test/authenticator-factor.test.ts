@@ -138,7 +138,7 @@ test('replacement requires old proof again and invalid confirmation spends an at
   assert.equal(row.attempts,1);assert.equal(row.consumed_at,null);
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes WHERE code_hash=$1',[digest(JSON.stringify(['cloud-factor-recovery-v1',accountId,1,codes[1]]))])).rows[0].consumed_at,null);
   const changed=await s.activate({...a,proof:recovery(codes[1]!)},pending.pendingToken,totp(pending.secret));
-  assert.equal('recoveryCodes' in changed,false);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'2');assert.equal((await factor()).version,2);assert.notEqual((await factor()).secret_generation,generation);await assertEnded();
+  assert.ok(changed.recoveryCodes);assert.equal(changed.recoveryCodes.length,10);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=1 AND consumed_at IS NOT NULL')).rows[0].count,'2');assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'12');assert.equal((await factor()).version,2);assert.notEqual((await factor()).secret_generation,generation);await assertEnded();
   row=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];assert.equal(row.attempts,2);assert.ok(row.consumed_at);
 });
 test('starting replacement keeps the old factor available for password sign-in and requires a fresh old proof to confirm',async()=>{
