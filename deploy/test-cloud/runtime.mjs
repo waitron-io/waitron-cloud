@@ -15,7 +15,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(venueFlag!==undefined)result.CLOUD_VENUE_SERVICE_LEVELS=venueFlag;
  if(allowances&&['account','translation'].includes(role)){result.CLOUD_TEST_ALLOWANCES='1';result.CLOUD_ALLOWANCE_CALENDAR=allowances.calendar;}
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';
- if(role==='account'){result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
+ if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
  if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';result.GATEWAY_CERTIFICATE_REFRESH='1';}
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}

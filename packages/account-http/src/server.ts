@@ -63,12 +63,11 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
   const receiving=new WeakMap<Duplex,(status:number)=>void>();
   const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: options.translation ? submitRequestMs : 5000, connectionsCheckingInterval: 1000}, (request,response)=>{
     const started=performance.now(),group=requestGroup(request.url??'',!!options.portalAssets);
-    let settled=false;
     const forget=()=>{if(receiving.get(request.socket)===settle)receiving.delete(request.socket);};
-    const settle=(status:number)=>{if(settled)return;settled=true;forget();metrics.record(group,status,(performance.now()-started)/1000);};
+    const settle=(status:number)=>{forget();metrics.record(group,status,(performance.now()-started)/1000);};
     receiving.set(request.socket,settle);
     response.once('finish',()=>settle(response.statusCode));
-    response.once('close',()=>{settled=true;forget();});
+    response.once('close',forget);
     void listener(request,response);
   });
   server.maxConnections = 200;

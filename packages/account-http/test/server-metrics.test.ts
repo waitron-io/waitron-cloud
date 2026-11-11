@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {once} from 'node:events';
-import {createServer,request,Agent} from 'node:http';
+import {createServer,request,Agent,Server} from 'node:http';
 import {connect} from 'node:net';
 import type {Pool} from 'pg';
 import {EmailOutbox} from '@waitron-cloud/registration';
@@ -95,12 +95,18 @@ test('parsed body timeout settles once and a disconnected unfinished response is
  }finally{release?.();await running.close();}
 });
 
-test('disabled metrics open no listener and partial startup failure closes the account socket',async()=>{
+test('disabled metrics open no listener and partial startup failure closes the account socket',async t=>{
  await assert.rejects(startAccountServer({...options(),config:{...options().config,production:true,portalOrigin:'https://example.invalid'}})
   .then(async running=>{await running.close();return running;}),/Local metrics are unavailable in production/);
  const disabled=await startAccountServer({...options(),localMetrics:undefined});
  assert.equal(disabled.metricsServer,undefined);await disabled.close();
  const occupied=createServer();await new Promise<void>(resolve=>occupied.listen(0,'127.0.0.1',resolve));
- try{await assert.rejects(startAccountServer({...options(),localMetrics:{host:'127.0.0.1',port:port(occupied)}}).then(async running=>{await running.close();return running;}),{code:'EADDRINUSE'});}
- finally{await new Promise<void>(resolve=>occupied.close(()=>resolve()));}
+ const started:Server[]=[],listen=Server.prototype.listen;
+ t.mock.method(Server.prototype,'listen',function(this:Server,...args:Parameters<Server['listen']>){started.push(this);return Reflect.apply(listen,this,args);});
+ try{
+  await assert.rejects(startAccountServer({...options(),localMetrics:{host:'127.0.0.1',port:port(occupied)}}).then(async running=>{await running.close();return running;}),{code:'EADDRINUSE'});
+  assert.equal(started[0]?.listening,false,'failed metrics startup must close the actual account listener');
+ }finally{
+  for(const server of [...started,occupied])if(server.listening)await new Promise<void>(resolve=>{server.close(()=>resolve());server.closeAllConnections();});
+ }
 });

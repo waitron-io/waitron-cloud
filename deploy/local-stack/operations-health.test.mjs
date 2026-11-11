@@ -18,10 +18,11 @@ test('account count acquisition bounds status, redirects, body and deadline inde
  let mode='valid',requested;
  const sample={version:1,startedAt:1000,series:[]};
  const server=createServer((request,response)=>{
+  if(request.url==='/valid'){response.end(JSON.stringify(sample));return;}
   if(mode==='stall'){response.writeHead(200);response.write('{');return;}
-  if(mode==='redirect'){response.writeHead(302,{location:'/metrics'});response.end();return;}
-  if(mode==='refused'){response.writeHead(503);response.end();return;}
-  response.end(mode==='large'?' '.repeat(16385):mode==='invalid'?'{}':JSON.stringify(sample));
+  if(mode==='redirect'){response.writeHead(302,{location:'/valid'});response.end();return;}
+  if(mode==='refused')response.writeHead(503);
+  response.end(mode==='large'?' '.repeat(16385)+JSON.stringify(sample):mode==='invalid'?'{}':JSON.stringify(sample));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const fetcher=(url,options)=>{requested=url;return fetch(`http://127.0.0.1:${server.address().port}/metrics`,options);};

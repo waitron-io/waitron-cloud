@@ -174,6 +174,8 @@ and the standalone operations command keep their existing JSON and metrics.
 (408 or an observed receive timeout). Labels never include request paths, query strings,
 account details or exception messages. Parser-only failures count without invented timings;
 disconnected unfinished responses are excluded.
+Connections dropped before parsing at the account server's 200-connection limit are
+also excluded; they have no completed HTTP response to classify.
 
 For two readings from the same process, calculate the failure share as the increase in
 `server_error` plus `timed_out`, divided by the increase across all outcomes. Read the
@@ -196,8 +198,8 @@ with other health probes for the existing account API rate allowance. Set
 `LOCAL_STACK_OPERATIONS_PORT` to change the loopback port. The collector has its own
 network endpoint, so restarting the account API does not hide collection failures. Its
 local health requests connect to the account service with that service's required
-`localhost:3000` Host header. No listener or reserved host port exists when the optional
-collector is absent.
+`localhost:3000` Host header. The collector opens no listener or reserved host port
+when its optional service is absent.
 
 The local account runtime enables `CLOUD_LOCAL_REQUEST_METRICS=1` to serve bounded JSON
 on container port 9092, which Compose does not publish to the host. The collector reads

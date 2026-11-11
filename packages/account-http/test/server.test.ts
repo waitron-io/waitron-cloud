@@ -4,6 +4,9 @@ import { request, type ClientRequest } from 'node:http';
 import { connect } from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import { generateKeyPairSync,randomBytes,randomUUID } from 'node:crypto';
 import {encryptFactorSecret,hashSecret} from '@waitron-cloud/identity';
 import {recoveryCodeHash} from '../../registration/src/password-login.ts';
@@ -149,10 +152,15 @@ function cli(overrides: NodeJS.ProcessEnv = {}) {
     assert.equal(child.exitCode, null, stderr); return JSON.parse(stdout.trim()).port as number;
   }, async stop() {child.kill('SIGTERM'); return exited;}};
 }
-test('CLI fails closed with fixed diagnostics for invalid settings', async () => {
+test('CLI fails closed with fixed diagnostics for invalid settings', async t => {
+  const directory=await mkdtemp(join(tmpdir(),'cloud-metrics-cli-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  const corpus=join(directory,'passwords.sha256');await writeFile(corpus,'33'.repeat(32)+'\n');
+  const production={NODE_ENV:'production',CLOUD_PORTAL_ORIGIN:'https://example.invalid',CLOUD_COMPROMISED_PASSWORD_CORPUS:corpus};
+  const enabled=cli({...production,CLOUD_LOCAL_REQUEST_METRICS:'0'});
+  try{await enabled.ready();}finally{assert.equal((await enabled.stop()).code,0);}
   for (const overrides of [{CLOUD_HTTP_RATE_KEY: ''}, {CLOUD_EMAIL_KEYS: 'private-secret'}, {CLOUD_HTTP_TRUSTED_PROXY_IPS: '*'},
     {NODE_ENV: 'production'}, {DATABASE_URL: ''}, {CLOUD_HTTP_PORT: '-1'}, {CLOUD_PORTAL_ASSETS_DIR: '/missing-cloud-portal-build'},
-    {CLOUD_LOCAL_REQUEST_METRICS:'private-invalid'}, {CLOUD_LOCAL_REQUEST_METRICS:'1',NODE_ENV:'production',CLOUD_PORTAL_ORIGIN:'https://example.invalid'}]) {
+    {CLOUD_LOCAL_REQUEST_METRICS:'private-invalid'}, {...production,CLOUD_LOCAL_REQUEST_METRICS:'1'}]) {
     const outcome = await cli(overrides).exited;
     assert.equal(outcome.code, 1); assert.equal(outcome.stdout, '');
     assert.equal(outcome.stderr, 'Account server failed; check database, migrations and configuration\n');

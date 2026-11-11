@@ -7,7 +7,7 @@ type Series={group:Group;outcome:Outcome;total:number;count:number;sum:number;bu
 export type RequestSnapshot={version:1;startedAt:number;series:Series[]};
 
 export function requestGroup(path:string,portal:boolean):Group{
- path=path.split(/[?#]/,1)[0]!;
+ try{path=new URL(path,'http://localhost').pathname;}catch{return 'other';}
  if(portal&&!path.startsWith('/api/')&&!path.startsWith('/v1/installations/email/'))return 'portal';
  try{path=decodeURI(path);}catch{return 'other';}
  for(const [prefix,group] of [['/api/health','health'],['/api/account','account'],['/api/installations','installations'],['/v1/installations/email','relay']] as const)
@@ -50,11 +50,16 @@ export function parseRequestMetrics(input:unknown):RequestSnapshot{
 }
 export function formatRequestMetrics(input:unknown):string{
  const value=parseRequestMetrics(input);
- let text='# TYPE waitron_cloud_account_requests_total counter\n# TYPE waitron_cloud_account_request_duration_seconds histogram\n# TYPE waitron_cloud_account_requests_started_timestamp_seconds gauge\n';
+ let text='# HELP waitron_cloud_account_requests_started_timestamp_seconds Account process start time.\n# TYPE waitron_cloud_account_requests_started_timestamp_seconds gauge\n';
  text+=`waitron_cloud_account_requests_started_timestamp_seconds ${value.startedAt/1000}\n`;
+ text+='# HELP waitron_cloud_account_requests_total Completed responses and observed receive failures.\n# TYPE waitron_cloud_account_requests_total counter\n';
  for(const row of value.series){
   const labels=`group="${row.group}",outcome="${row.outcome}"`;
   text+=`waitron_cloud_account_requests_total{${labels}} ${row.total}\n`;
+ }
+ text+='# HELP waitron_cloud_account_request_duration_seconds Parsed request response or receive timeout duration.\n# TYPE waitron_cloud_account_request_duration_seconds histogram\n';
+ for(const row of value.series){
+  const labels=`group="${row.group}",outcome="${row.outcome}"`;
   for(const [i,bound] of bounds.entries())text+=`waitron_cloud_account_request_duration_seconds_bucket{${labels},le="${bound===Infinity?'+Inf':bound}"} ${row.buckets[i]}\n`;
   text+=`waitron_cloud_account_request_duration_seconds_sum{${labels}} ${row.sum}\nwaitron_cloud_account_request_duration_seconds_count{${labels}} ${row.count}\n`;
  }

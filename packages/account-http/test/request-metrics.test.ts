@@ -8,7 +8,19 @@ test('route groups use segment boundaries and never retain private request value
   ['/api/accounting/private',false,'other'],['/api/installations/private/translation',false,'installations'],
   ['/v1/installations/email/submit',true,'relay'],['/account?email=private',true,'portal'],
   ['/api/private?token=private',true,'other'],['/private',false,'other'],['/%ff',false,'other'],
+  ['/api/account/../health/live',false,'health'],['http://localhost/api/health/live',true,'health'],['/api/%2e%2e/signup',true,'portal'],
  ] as const)assert.equal(requestGroup(path,portal),want,path);
+});
+
+test('each Prometheus metric family keeps its metadata and samples in one contiguous group',()=>{
+ const metrics=new RequestMetrics(1000);metrics.record('health',200,.1);metrics.record('account',503,1);
+ const blocks=formatRequestMetrics(metrics.snapshot()).split(/(?=# TYPE )/).filter(block=>block.startsWith('# TYPE '));
+ assert.equal(blocks.length,3);
+ for(const name of ['waitron_cloud_account_requests_started_timestamp_seconds','waitron_cloud_account_requests_total','waitron_cloud_account_request_duration_seconds']){
+  const block=blocks.find(value=>value.startsWith('# TYPE '+name+' '));assert(block);
+  const samples=block.trim().split('\n').filter(line=>!line.startsWith('#'));
+  assert(samples.length>0);for(const sample of samples)assert(sample.startsWith(name),sample);
+ }
 });
 
 test('counts classify wire status and cumulative timings include exact boundaries',()=>{
