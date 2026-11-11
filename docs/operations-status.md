@@ -229,7 +229,30 @@ and timeouts by the increase in all responses, including refused responses. The 
 breaches when that share reaches `failureTargets[group] × multiplier`, allowing a relative
 rounding tolerance of `1e-9` at equality. This is a request-weighted rolling share against
 your configured normal allowance, rather than a learned baseline or a requirement that
-every poll in the window breached. Timing bands do not trigger these rules.
+every poll in the window breached. These failure rules ignore timing bands.
+
+To detect requests taking too long, add `slownessTargets` to the same JSON. It shares
+those explicit `fast` and `slow` windows and multipliers. For example, this synthetic
+setting counts account responses taking more than 0.1 seconds against a 1% allowance:
+
+```json
+{"failureTargets":{"account":0.001},"slownessTargets":{"account":{"limitSeconds":0.1,"allowance":0.01}},"fast":{"windowMs":300000,"multiplier":10},"slow":{"windowMs":10800000,"multiplier":2}}
+```
+
+Choose a `limitSeconds` of 0.05, 0.1, 0.5, 1 or 5, matching an existing timing band,
+and an `allowance` greater than 0 and at most 1. There are no limit or allowance defaults.
+Use any nonempty subset of the groups except `parser`, whose failures have no timing.
+Leave `slownessTargets` out to keep failure rules alone. For each window, slow share
+is the increase in measured counts minus the increase in the chosen bucket, divided
+by the increase in measured counts. A response exactly at the limit is allowed;
+untimed responses do not dilute the share. The same threshold comparison applies.
+
+Scrape `waitron_cloud_account_slowness_rule_ready{group,rule}` and
+`waitron_cloud_account_slowness_rule_breached{group,rule}` for the same readiness and
+breach values as failure rules. A timeout can count in both. Installation timings
+include translation uploads, and health probes include the collector's own requests.
+For both metric families, `rule="slow"` means the design's long-window rule (about
+twice normal for some hours), rather than requests taking too long.
 
 Scrape `waitron_cloud_account_failure_rule_ready{group,rule}` (`rule` is `fast` or `slow`).
 It is 0 during startup, an empty window, missing/old counts or incomplete coverage.

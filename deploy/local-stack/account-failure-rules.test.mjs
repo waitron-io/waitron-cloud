@@ -68,3 +68,47 @@ test('process resets discard unrelated counters while missed polls retain covera
   assert.deepEqual(view(rules.update(counts([['account',500,total]],startedAt),at)),[['account','fast',false,null],['account','slow',false,null]],label);
  }
 });
+
+test('slowness requires explicit measured-group targets and shares existing windows',async()=>{
+ const {parseFailureRules}=await import('./account-failure-rules.mjs');
+ const config={...settings,slownessTargets:{account:{limitSeconds:.1,allowance:.2}}};
+ assert.deepEqual(parseFailureRules(JSON.stringify(config),1000),config);
+ for(const slownessTargets of [{},null,[],{parser:{limitSeconds:.1,allowance:.2}},
+  {account:{limitSeconds:.2,allowance:.2}},{account:{limitSeconds:5}},
+  {account:{allowance:.2}},{account:{limitSeconds:.1,allowance:0}},
+  {account:{limitSeconds:.1,allowance:1.1}},{account:{limitSeconds:'.1',allowance:.2}},
+  {account:{limitSeconds:.1,allowance:'0.2'}},{account:{limitSeconds:.1,allowance:.2,extra:1}}])
+  assert.throws(()=>parseFailureRules(JSON.stringify({...config,slownessTargets}),1000),{message:'invalid_account_failure_rules'});
+});
+
+test('slowness shares use measured counts and strict boundaries for every timing band',async()=>{
+ const {createSlownessRules}=await import('./account-failure-rules.mjs');
+ assert.equal(typeof createSlownessRules,'function');
+ for(const limitSeconds of [.05,.1,.5,1,5])for(const [allowance,breached] of [[.5,true],[.50001,false]]){
+  const config={slownessTargets:{account:{limitSeconds,allowance}},fast:{windowMs:1000,multiplier:1},slow:{windowMs:3000,multiplier:1}};
+  const rules=createSlownessRules(config,{intervalMs:1000,timeoutMs:2000}),counter=new RequestMetrics(1);
+  rules.update(counter.snapshot(),0);
+  for(const status of [200,403,500,408]){
+   counter.record('account',status,limitSeconds);counter.record('account',status,limitSeconds+.001);
+   counter.record('account',status);counter.record('portal',status,10);
+  }
+  assert.deepEqual(view(rules.update(counter.snapshot(),1000)),[['account','fast',true,breached],['account','slow',false,null]]);
+  for(let i=0;i<8;i++)counter.record('account',200,limitSeconds);
+  assert.deepEqual(view(rules.update(counter.snapshot(),3000)),[['account','fast',true,false],['account','slow',true,false]]);
+ }
+});
+
+test('decreasing measured counts or selected buckets starts new slowness coverage',async()=>{
+ const {createSlownessRules}=await import('./account-failure-rules.mjs');
+ assert.equal(typeof createSlownessRules,'function');
+ for(const changed of ['count','bucket']){
+  const config={slownessTargets:{account:{limitSeconds:.1,allowance:.2}},fast:{windowMs:1000,multiplier:1},slow:{windowMs:3000,multiplier:1}};
+  const rules=createSlownessRules(config,{intervalMs:1000,timeoutMs:2000}),counter=new RequestMetrics(1);
+  rules.update(counter.snapshot(),0);
+  for(let i=0;i<10;i++)counter.record('account',200,i<5?.1:.2);
+  assert.equal(rules.update(counter.snapshot(),1000)[0].breached,true);
+  const next=counter.snapshot(),row=next.series[0];
+  if(changed==='count'){row.count=9;row.buckets=row.buckets.map(n=>Math.min(n,9));}else row.buckets[1]=4;
+  assert.deepEqual(view(rules.update(next,2000)),[['account','fast',false,null],['account','slow',false,null]],changed);
+ }
+});
