@@ -364,8 +364,8 @@ While hosted CI or the final summary runs, the controller releases the slot lock
 Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hosted jobs run Ubuntu. The guest account owns its home and runner tree and can use its private Docker daemon and passwordless sudo. Registration requests `/home/runner/work` as its working root to match hosted checkout paths; mixed coverage still needs an actual successful merge before qualification. Provisioning, supervision and completion recording stay privileged; local manual Cloud commands still run as root. Run `node --test scripts/disposable-tests/session.test.mjs scripts/disposable-tests/guest-exec.test.mjs` to check the listener’s launch settings and command completion.
 
 During an assigned job, successful run and job reads wait a minute before their next
-normal read. Guest inspections and failed or busy-read confirmation stay on the
-15-second tick. A guest whose run is cancelled stops at its next
+normal read once our runner is assigned. Unresolved assignment, guest inspections
+and failed or busy-read confirmation stay on the 15-second tick. A guest whose run is cancelled stops at its next
 job check once the job reports cancellation. Completion still compares the exact
 `run_attempt`, so a successful listener cannot report success for a newer attempt.
 Run `node --test scripts/disposable-tests/ci-runtime.test.mjs` for cadence,
@@ -385,7 +385,7 @@ distinguishes token replies from ordinary API replies, and missing headers are n
 method/endpoint `categories` with requests, failed fetches, 304 (`notModified`) counts
 and their own latest raw quota snapshot. Categories retain no URL, repository, job
 id, body or credential. Top-level `notModified` counts all 304 replies. The App client revalidates JSON GETs
-with ETags, retaining at most 64 bodies and 4 MiB of encoded JSON per client; it clears
+with ETags. Its cache holds at most 64 bodies and 4 MiB of encoded JSON per client; it clears
 those bodies after token changes or writes. A 304 without its matching body gets one
 unconditional GET; writes are never replayed. Response counts belong to their completion
 minute, which can differ from the request's start minute. Compare quota observations

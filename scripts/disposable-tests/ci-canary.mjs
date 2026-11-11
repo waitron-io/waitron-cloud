@@ -589,7 +589,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    const execution=new AbortController(),monitor=new AbortController();let ended=false,monitorFailure;
    const work=AbortSignal.any([options.signal,execution.signal]);
    const watching=(async()=>{
-    let healthyAt=Date.now(),lastRunRead=-Infinity,lastJobRead=-Infinity,refusal,retryAt=0,reported=false,reportedLimit=false;
+    let healthyAt=Date.now(),lastRunRead=-Infinity,lastJobRead=-Infinity,assigned=false,refusal,retryAt=0,reported=false,reportedLimit=false;
     while(!ended){
      try{await wait(15000,undefined,{signal:monitor.signal});}catch{if(ended)return;throw new Error('CI monitor stopped');}
      if(ended)return;
@@ -614,9 +614,10 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
        const current=await read(`${base}/runs/${ci.runId}`,'run');
        if(current!==undefined){lastRunRead=Date.now();assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');}
       }
-      const job=Date.now()-lastJobRead>=60000 || refusal?await read(`${base}/jobs/${ci.jobId}`,'job'):undefined;
+      const job=!assigned || Date.now()-lastJobRead>=60000 || refusal?await read(`${base}/jobs/${ci.jobId}`,'job'):undefined;
       if(job!==undefined){
        assert.ok(!job.runner_id || job.runner_id===registration.runner.id,'CI runner assignment differs');
+       assigned=job.runner_id===registration.runner.id;
        assert.ok(job.status!=='completed' || job.conclusion==='success','CI job assignment completed without success');
        if(!job.runner_id){
         const runner=await read(`${base}/runners/${registration.runner.id}`,'runner');

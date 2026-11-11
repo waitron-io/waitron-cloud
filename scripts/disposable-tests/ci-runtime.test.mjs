@@ -376,7 +376,7 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false,jobFailure}={}) {
+async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false,jobFailure,busyAt}={}) {
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
  const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
@@ -385,7 +385,7 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
  const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[],jobReadRounds=[];
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
-  if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
+  if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:busyAt===undefined || rounds>=busyAt};
   if(executing && busyFirst && path.includes('/jobs/') && rounds>1){const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=busyFirst && rounds===1?undefined:typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.includes('/jobs/')){jobReads++;jobReadRounds.push(rounds);const error=jobFailure?.(rounds);if(error)throw error;}
@@ -526,4 +526,17 @@ for(const failed of [false,true])test(`normal job polling is once a minute${fail
  assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);
  assert.deepEqual(result.jobReadRounds,failed?[1,2,6]:[1,5,9]);
  assert.equal(result.liveInspections,failed?6:9,'the owned guest is checked every 15 seconds');
+});
+
+test('an unresolved runner assignment detects a later busy runner at the next tick',async t=>{
+ const result=await monitorReadFailure(t,{busyFirst:true,busyAt:2,stepMs:15000,healthyRounds:10});
+ assert.equal(result.code,125);assert.match(result.error,/busy elsewhere/);assert.equal(result.rounds,6);
+ assert.equal(result.cleanup,'absent');
+});
+
+test('a permanent run-read refusal keeps job confirmations on each tick after earlier job failures',async t=>{
+ const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:7,
+  failure:round=>round>=5?Object.assign(new Error('refused'),{status:401}):undefined,
+  jobFailure:round=>round<=2?new TypeError('fetch failed'):undefined});
+ assert.equal(result.code,0,result.error);assert.deepEqual(result.jobReadRounds,[1,2,3,5,6,7]);
 });

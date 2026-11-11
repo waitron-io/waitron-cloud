@@ -190,12 +190,13 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
   checkedAt=Date.now();const head=ci?.workflowSha??(await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal})).head_sha;
   return findOrdinary({api,policy,approvedHead:head,runId,jobId,automatic:true,signal});
  };
- if(!ci || Date.now()-checkedAt>60000)ci=await refresh();
+ if(!ci)ci=await refresh();
  if(!ci)return {code:75,reason:'job-no-longer-queued'};
  const healthySlots=config.slotHosts===undefined?undefined:await new CITransport(config).healthySlots({signal});
  return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,async()=>{
   if(Date.now()-checkedAt>60000)ci=await refresh();
-  if(!ci || Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
+  if(!ci)return {code:75,reason:'job-no-longer-queued'};
+  if(Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
   return executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true});
  }),{signal,healthySlots});
 }

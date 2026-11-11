@@ -59,7 +59,7 @@ export class GithubApp {
   const comparison=method==='GET' && /^\/repos\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1&page=2)?$/.test(path);
   assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && (!path.includes('..') || comparison),'Invalid GitHub API path');
   const clear=()=>{this.responses=new Map();this.responseBytes=0;this.responseEpoch=(this.responseEpoch??0)+1;};
-  if(!this.responses || this.responseAuthorization!==authorization || method!=='GET')clear();
+  if(!this.responses || this.responseAuthorization!==authorization)clear();
   this.responseAuthorization=authorization;const epoch=this.responseEpoch,cacheable=method==='GET' && !path.startsWith('/app/');
   try{for(let attempt=0;attempt<2;attempt++){
   const cached=cacheable && attempt===0?this.responses.get(path):undefined;

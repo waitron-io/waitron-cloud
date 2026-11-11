@@ -13,12 +13,12 @@ Mixed jobs, server restart, runtime exit and SSH cancellation have been exercise
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 remains separate from this admission retry. The publication fixture
 now supplies its own Git metadata. App quota exhaustion has paused admission; the published
-counters separate command roles, endpoint categories and raw quota headers. Future
-routing remains hosted until the watcher-cleared quota reduction is published and qualified.
+counters separate command roles, endpoint categories and raw quota headers. Use hosted
+routing until a release is ready for its watched server-qualification hour.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
 The controller revalidates bounded JSON bodies, shares run admission for at most 60 seconds,
-and reads healthy jobs once a minute while guest and refusal checks stay at 15 seconds.
+and reads assigned jobs once a minute while assignment, guest and refusal checks stay at 15 seconds.
 Before relying on a release for server routing, qualify a full busy hour below about 4,000
 used requests in each returned quota series; restore hosted if it crosses that threshold.
 OLD's CI startup is disabled; it stays

@@ -1423,24 +1423,33 @@ test('shared capacity keeps the observation time from before worker waits',async
  assert.equal(JSON.parse(capacity).observedAt,start);
 });
 
-for(const age of ['fresh','stale','aging'])test(`workers use ${age} shared admission before taking a guest`,async t=>{
+for(const age of ['fresh','stale','aging','gone'])test(`workers use ${age} shared admission before taking a guest`,async t=>{
  const {automaticJob}=await import('./control.mjs'),{CITransport}=await import('./transport.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  config.host='new.invalid';config.recipe='/opt/waitron-disposable-fixture';config.slotHosts=Array(6).fill('new.invalid');let permissions=0,elapsed=0;const now=Date.now();t.mock.method(Date,'now',()=>now+elapsed);
  f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval'))permissions++;return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);};
- for(const [name,method] of Object.entries({healthySlots:async()=>{if(age==='aging')elapsed=2000;return [0];},healthy:async()=>true,transfer:async()=>{throw new Error('fixture transfer failed');},destroy:async()=>{},inspect:async({resourceId})=>({resourceId,absent:true})}))t.mock.method(CITransport.prototype,name,method);
- const result=await automaticJob({config,api:f.api,runId:789,jobId:901,admission:{ci,checkedAt:now-(age==='stale'?61000:age==='aging'?59000:0)}});
- assert.equal(result.code,125);assert.match(result.error,/fixture transfer failed/);assert.equal(result.cleanup,'absent');
+ for(const [name,method] of Object.entries({healthySlots:async()=>{if(age==='aging' || age==='gone')elapsed=2000;if(age==='gone')f.jobs.length=0;return [0];},healthy:async()=>true,transfer:async()=>{throw new Error('fixture transfer failed');},destroy:async()=>{},inspect:async({resourceId})=>({resourceId,absent:true})}))t.mock.method(CITransport.prototype,name,method);
+ const result=await automaticJob({config,api:f.api,runId:789,jobId:901,admission:{ci,checkedAt:now-(age==='stale'?61000:age==='aging' || age==='gone'?59000:0)}});
+ if(age==='gone'){assert.equal(result.code,75);assert.equal(result.reason,'job-no-longer-queued');}
+ else{assert.equal(result.code,125);assert.match(result.error,/fixture transfer failed/);assert.equal(result.cleanup,'absent');}
  assert.equal(permissions,age==='fresh'?0:1,'fresh per-run permission evidence is shared; stale evidence is reread');
 });
 
-for(const stale of [false,true])test(`pickup sends ${stale?'refreshed':'shared'} bounded admission to its workers`,async t=>{
+for(const mode of ['fresh','stale','expired-refresh'])test(`pickup sends bounded ${mode} admission to its workers`,async t=>{
  const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
  const now=Date.now();let elapsed=0,permissions=0;const admissions=[];t.mock.method(Date,'now',()=>now+elapsed);
- f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval'))permissions++;return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);};
- await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>{if(stale)elapsed=61000;return true;}},
+ f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval')){permissions++;if(mode==='expired-refresh' && permissions>1)elapsed+=61000;}return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>{if(mode!=='fresh')elapsed=61000;return true;}},
   runWorker:async(ci,admission)=>{admissions.push({ci,admission});return {code:0};}});
- assert.equal(admissions.length,5);
- for(const {ci,admission} of admissions){assert.deepEqual(admission?.ci,ci);assert.ok(admission.checkedAt>=now+(stale?61000:0) && admission.checkedAt<=Date.now());}
- assert.ok(stale?permissions>=2:permissions===1);
+ assert.equal(admissions.length,mode==='expired-refresh'?0:5);
+ for(const {ci,admission} of admissions){assert.deepEqual(admission?.ci,ci);assert.ok(admission.checkedAt>=now+(mode==='fresh'?0:61000) && admission.checkedAt<=Date.now());}
+ assert.ok(mode==='fresh'?permissions===1:permissions>=2);
+});
+
+test('shared pickup never hands a fork PR without contributor approval to a worker',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,admissions=[];
+ f.run.head_repository.id=999;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('fork-pr-contributor-approval')?{approval_policy:'first_time_contributors'}:get(path);
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{admissions.push(ci);return {code:0};}});
+ assert.deepEqual(admissions,[]);
 });
