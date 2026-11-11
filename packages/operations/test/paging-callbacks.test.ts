@@ -12,10 +12,10 @@ const attempts:PageAttempt[]=[{...notification,provider:'twilio',text:{state:'ac
  {...notification,provider:'vonage',text:{state:'accepted',ids:['sms-1']},call:{state:'accepted',ids:['call-1']}}];
 const options={origin:common.origin,twilio:{provider:twilio,authToken:secrets.twilio},vonage:{provider:vonage,apiKey:secrets.apiKey,signatureSecret:secrets.vonage},attempts:()=>attempts};
 const twilioFields={AccountSid:sid,CallSid:call,Digits:'1'};
-async function fixture(onEvent?:(e:TrustedEvent)=>void){
+async function fixture(onEvent?:(e:TrustedEvent)=>void|Promise<void>){
  const {createPagingCallbackListener}=await import('../src/paging-callbacks.ts');
  const events:TrustedEvent[]=[];
- const server=await callbackServer(createPagingCallbackListener({...options,onEvent:onEvent??(e=>events.push(e))}));
+ const server=await callbackServer(createPagingCallbackListener({...options,onEvent:onEvent??(e=>{events.push(e);})}));
  return {...server,events,async send(path:string,init?:RequestInit){const r=await fetch(server.url+path,init);const body=await r.text();return {status:r.status,body,type:r.headers.get('content-type')};}};
 }
 

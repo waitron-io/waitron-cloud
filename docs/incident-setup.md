@@ -188,7 +188,8 @@ For a local callback rehearsal, pass `createPagingCallbackListener` from
 `packages/operations/src/paging-callbacks.ts` to your own loopback HTTP server.
 Supply the same HTTPS origin as the adapters, the Twilio provider and AuthToken,
 the Vonage provider, API key and signature secret, an `attempts` reader and a
-`onEvent` consumer that returns nothing or a promise. Credentials duplicated between the adapters and
+`onEvent` consumer that returns nothing or a promise.
+Credentials duplicated between the adapters and
 listener must agree; the listener does not check that agreement. Record the
 accepted attempts returned by `sendPage` before sending callbacks. An event
 arriving before those IDs are recorded cannot be accepted; there is no buffer.
@@ -245,12 +246,13 @@ Vonage Voice uses POST JSON with a Bearer JWT signed using the signature secret.
 The listener requires HS256, the configured API key, issuer `Vonage`, integer
 issue time, a token ID and a matching SHA-256 `payload_hash` over the exact body.
 Vonage signs the fields or body, not the callback URL; recorded accepted IDs
-bind its path context, and the existing readers distinguish callback kinds.
+bind its path context.
 Payload verification is required here even though [Vonage's guide](https://developer.vonage.com/en/getting-started/concepts/webhooks)
 calls it optional under HTTPS. Older Voice applications may need signing enabled.
 
 The session suppresses repeated normalized events, including newly signed
-repeats. The listener awaits the consumer; a throw or rejected promise returns 500 and permits another attempt. This
+repeats. The listener awaits the consumer; a throw or rejected promise returns 500 and
+permits another attempt. This
 memory has no eviction during the rehearsal and disappears on restart; loading
 old attempts into a new listener can accept old signed callbacks again. There
 is no durable replay protection or timestamp expiry policy. Signed ignored or
