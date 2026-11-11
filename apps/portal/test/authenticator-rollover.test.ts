@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHmac,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
-import {startPortalFixture} from './fixtures.ts';
+import {startPortalFixture,completeBrowserEmail} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 const password='A real authenticator account password';
 const keys={activeKeyId:'browser',keys:{browser:'ac'.repeat(32)}};
@@ -21,7 +21,7 @@ test('first authenticator sign-in uses an unused adjacent code after enrolment r
   try{
     await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner.id]);
     await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',[owner.id,owner.email,await hashSecret(password)]);
-    await page.goto(`${f.origin}/login`);await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
+    await page.goto(`${f.origin}/login`);await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,owner.email,'en');await page.getByText(c.accountIntro).waitFor();
     await page.locator('input[name=factorPassword]').fill(password);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
     const secret=await page.locator('.factor-secret').textContent();assert.ok(secret);
     await page.locator('input[name=factorPassword]').fill(password);await page.locator('input[name=factorConfirmation]').fill(totp(secret));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();

@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
-import {startPortalFixture} from './fixtures.ts';
+import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 for(const locale of ['en','es'] as const)test(`${locale} owner sees isolated measured usage and honest freshness`,async()=>{
@@ -33,7 +33,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner sees isolated mea
   await seed(owner.organisationId,sol.venueId,['9007199254740994','1','1536','2048','3','4','5','6','7','8']);
   await seed(otherOrganisation,luna.venueId,['1024','1','1024','1024','1','2','3','4','5','6']);
   const context=await f.browser.newContext({locale,colorScheme:locale==='en'?'light':'dark',viewport:{width:390,height:844}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
-  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   const usage=locale==='en'?'Measured Cloud usage':'Uso medido de Cloud',pending=locale==='en'?'Measurement is not complete yet. Totals can increase after reconciliation runs.':'La medición aún no está completa. Los totales pueden aumentar cuando se ejecute la conciliación.';
   await page.getByRole('heading',{name:usage,exact:true}).waitFor();await page.getByText(pending,{exact:true}).waitFor();
   await page.getByText(locale==='en'?'9,007,199,254,740,993 bytes':'9.007.199.254.740.993 bytes',{exact:true}).waitFor();

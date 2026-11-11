@@ -1,3 +1,4 @@
+import {completeEmailProof,emailLoginPolicy} from '../../account-http/test/fixtures.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
@@ -43,7 +44,7 @@ async function certificate(v:Awaited<ReturnType<typeof venue>>){
 async function due(worker:RemoteConfigurationReconciler,kind:string,id:string){await worker.schedule();await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");await db.pool.query('UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind=$1 AND target_id=$2',[kind,id]);}
 function barrier(){let enter!:()=>void,release!:()=>void;return {started:new Promise<void>(r=>enter=r),gate:new Promise<void>(r=>release=r),enter:()=>enter(),release:()=>release()};}
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as never;
-function app(resolve?: (name:string)=>Promise<string[]>){return createAccountApp({pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,staffCertificates:true,planMode:mode,remoteResolve:resolve,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});}
+function app(resolve?: (name:string)=>Promise<string[]>){return createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,leaseIssuer:issuer,staffCertificates:true,planMode:mode,remoteResolve:resolve,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});}
 
 // Removing a paid admission must expose an operation or a route for the free venue.
 for(const action of ['provision','stage','hostname','dns','certificate'] as const)test(`free refuses remote ${action} before work or configuration changes`,async()=>{
@@ -114,7 +115,7 @@ test('signed submit and status refuse a free plan even when old setup remains st
 });
 
 test('account hostname refusal maps to forbidden and retains read-only setup status',async()=>{
- const v=await venue('free'),server=app();const response=await server.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:v.email,password})},bindings);assert.equal(response.status,200);
+ const v=await venue('free'),server=app();const response=await completeEmailProof(db,await server.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:v.email,password})},bindings),body=>server.request(origin+'/api/account/login/email',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)},bindings));assert.equal(response.status,200);
  await db.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '2 minutes' WHERE id=$1",[v.installationId]);
  await db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at,received_at) VALUES($1,'remote_access',1,'healthy',clock_timestamp(),clock_timestamp())",[v.installationId]);
  const cookie=response.headers.getSetCookie().map(c=>c.split(';')[0]).join('; '),csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;

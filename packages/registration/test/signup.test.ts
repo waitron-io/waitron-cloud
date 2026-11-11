@@ -72,6 +72,7 @@ test('verified signup atomically creates the first business and owner, then perm
   assert.equal(await count('platform_permissions'), 0);
   assert.equal(await count('venues'), 0);
   assert.equal(await count('cloud_sessions'), 0, 'email proof is not a session');
+  assert.equal(await count('cloud_recognised_browsers'),0,'signup without the explicit choice remembers nothing');
   const session = await transaction(pool, client => login(client, { email, password: details.password }));
   assert.equal(session.accountId, result.accountId);
   await expectCode(transaction(pool, client => requirePlatformPermission(client, session.token, 'platform.manage')), 'permission_denied');
@@ -273,4 +274,13 @@ test('expiry during a database wait rolls back account and business creation', a
     assert.equal(await count('cloud_accounts'), 0);
     assert.equal(await count('organisations'), 0);
   } finally { await blocker.query('ROLLBACK'); blocker.release(); await completion; }
+});
+
+test('verified signup remembers an explicitly chosen browser without creating a session', async () => {
+  const message=await request();
+  const result=await store.complete(message.token,{...details,rememberBrowser:true});
+  assert.match(result.browserToken!,/^[A-Za-z0-9_-]{43}$/);
+  assert.equal(await count('cloud_sessions'),0);
+  const row=(await pool.query('SELECT * FROM cloud_recognised_browsers')).rows[0];
+  assert.equal(row.account_id,result.accountId);assert.equal(row.token_hash,digest(result.browserToken!));
 });

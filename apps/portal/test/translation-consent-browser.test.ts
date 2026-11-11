@@ -4,7 +4,7 @@ import {mkdir} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
-import {startPortalFixture} from './fixtures.ts';
+import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 import {portalTrace} from './portal-trace.ts';
 import {failConsentDatabaseWait} from './consent-database-evidence.ts';
@@ -37,7 +37,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(route.request().method()==='POST'&&!heldWrite){heldWrite=true;writeEntered();await released;}
    await route.continue();
   });
-  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   const section=page.getByRole('group',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
   const allow=locale==='en'?'Allow menu translation':'Permitir la traducción del menú',stop=locale==='en'?'Stop menu translation':'Dejar de traducir el menú';
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
@@ -94,7 +94,7 @@ for(const locale of ['en','es'] as const)test(`${locale}: two venues keep access
    await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());await r.complete(b);
   }
   const context=await f.browser.newContext({locale}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
-  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   const articles=page.locator('article.installation');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).waitFor();assert.equal(await articles.count(),2);
   await page.evaluate(axe.source);const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations);
   f.loseAccountReply('/translation-consent','body');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).click();await page.getByText(c.translationConsentUncertain,{exact:true}).first().waitFor();

@@ -4,7 +4,7 @@ import {mkdir} from 'node:fs/promises';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator,startPortalFixture,mailFor} from './fixtures.ts';
+import {completeBrowserEmail,addVirtualAuthenticator,startPortalFixture,mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 const password='A real authenticator account password';
 const keys={activeKeyId:'browser',keys:{browser:'ac'.repeat(32)}};
@@ -37,7 +37,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   async function save(){await page.locator('.factor-codes').waitFor().catch(async error=>{throw new Error(JSON.stringify({outcomes:outcomes.slice(-5),heading:await page.locator('h1').textContent(),alerts:await page.locator('[role=alert]').allTextContents()}),{cause:error});});const codes=await page.locator('.factor-codes code').allTextContents();assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);await look('codes');assert.equal(await page.evaluate(()=>document.activeElement===document.querySelector('h1')),true);await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await page.locator('.factor-codes').waitFor({state:'hidden'});assert.equal(await page.locator('.factor-codes code').count(),0);return codes;}
   try{
     await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner.id]);await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',[owner.id,owner.email,await hashSecret(password)]);
-    await page.goto(`${f.origin}/login#lang=${locale}`);await login();await page.getByText(c.accountIntro).waitFor();
+    await page.goto(`${f.origin}/login#lang=${locale}`);await login();await completeBrowserEmail(f,page,owner.email,locale);await page.getByText(c.accountIntro).waitFor();
     await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();await page.getByText(c.passkeyAdded,{exact:true}).waitFor();
     await page.getByText(c.factorOff??'Authenticator is off.',{exact:true}).waitFor();await authority();await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
     await page.locator('.factor-secret').waitFor();await look('pending');assert.ok(await page.locator('canvas').evaluate((canvas:HTMLCanvasElement)=>canvas.width>0));

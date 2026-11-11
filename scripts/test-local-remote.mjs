@@ -113,7 +113,7 @@ try{
  s3=await startBackupStorage();f=await startPortalFixture({vault:backupVault,objects:backupObjects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca),managedStreams:s3.managedStreams});catalogue=new BackupCatalogue(f.db.pool,backupVault,backupObjects);acme=await startAcme();
  const signup=new SignupStore(f.db.pool,f.db.outbox),email=`remote-${randomUUID()}@example.test`,password='Local remote integration password';
  await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);
- const owner=await signup.complete(mail.token,{password,organisationName:'Remote test',legalBusinessName:'Remote test SL',countryCode:'ES'});
+ const owner=await signup.complete(mail.token,{rememberBrowser:true,password,organisationName:'Remote test',legalBusinessName:'Remote test SL',countryCode:'ES'});
  const session=await transaction(f.db.pool,client=>login(client,{email,password}));
  const databaseUrl=new URL(process.env.TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+f.db.schema);
  const operator=async(command,value)=>{const file=join(root,'operator-'+randomUUID()+'.json');await secret(file,JSON.stringify(value));return execFileSync(process.execPath,['packages/remote-access/src/operator-cli.ts',command,file],{encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl.toString()}}).trim();};
@@ -214,7 +214,7 @@ try{
  const routeEvidence=values=>values.map(result=>({installationId:result.installationId,staffHostname:result.staffHostname,publicHostname:result.publicHostname,publicFingerprint:result.public.certificate.fingerprint256,staffFingerprint:result.staff.certificate.fingerprint256})).sort((a,b)=>a.installationId.localeCompare(b.installationId));
  const runMonitor=async(worker=monitor)=>{await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');let count=0;while(await worker.runOnce()){if(++count>venues.length)throw Error('monitor processed too many venues');}return count;};
  const openIncidents=async()=>{const result=await f.db.pool.query("SELECT venue_id,kind FROM venue_incidents WHERE status='open' ORDER BY venue_id,kind");return result.rows;};
- const accountContext=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900},colorScheme:'light'}),accountLogin=await accountContext.request.post(f.origin+'/api/account/login',{headers:{origin:f.origin},data:{email,password}});assert.equal(accountLogin.status(),200,await accountLogin.text());
+ const accountContext=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900},colorScheme:'light'});await accountContext.addCookies([{name:'cloud_browser',value:owner.browserToken,url:f.origin,httpOnly:true,sameSite:'Lax'}]);const accountLogin=await accountContext.request.post(f.origin+'/api/account/login',{headers:{origin:f.origin},data:{email,password}});assert.equal(accountLogin.status(),200,await accountLogin.text());
  const csrf=(await accountContext.cookies()).find(cookie=>cookie.name.endsWith('cloud_csrf'))?.value;assert.ok(csrf);
  const preference=await accountContext.request.post(f.origin+'/api/account/alerts',{headers:{origin:f.origin,'x-csrf-token':csrf},data:{enabled:'on',locale:'en'}});assert.equal(preference.status(),200,await preference.text());
  const overview=async()=>{const response=await accountContext.request.get(f.origin+'/api/account/installations');assert.equal(response.status(),200,await response.text());return (await response.json()).installations;};

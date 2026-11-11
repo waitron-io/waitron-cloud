@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHmac, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
+import {completeBrowserEmail,addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real session race account password';
@@ -36,7 +36,7 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
     try {
       await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [owner.id]);
       await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())', [owner.id, owner.email, await hashSecret(password)]);
-      await page.goto(`${f.origin}/login`); await login(); await page.getByText(c.accountIntro).waitFor();
+      await page.goto(`${f.origin}/login`); await login(); await completeBrowserEmail(f,page,owner.email); await page.getByText(c.accountIntro).waitFor();
       await page.locator('input[name=passkeyPassword]').fill(password); await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click(); await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
       await page.locator('input[name=factorPassword]').fill(password); await page.getByRole('button', {name: c.factorEnable, exact: true}).click();
       const secret = await page.locator('.factor-secret').textContent(); assert.ok(secret);

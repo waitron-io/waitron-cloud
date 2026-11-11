@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
 import { test } from 'node:test';
-import { startPortalFixture } from './fixtures.ts';
+import {contextSignIn, startPortalFixture } from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 test('pending requests, language changes, resend cooldown and Retry-After do not duplicate writes', async () => {
   const f = await startPortalFixture();
@@ -213,7 +213,6 @@ test('a real legacy query-token recovery link is scrubbed before completing in S
     await page.getByRole('button', {name: 'Guardar nueva contraseña', exact: true}).click();
     await page.getByText('Tu contraseña ha cambiado y se han cerrado las sesiones existentes. Inicia sesión para continuar.').waitFor();
     assert.ok(requests.slice(1).every(request => !request.includes(token)));
-    assert.equal((await page.request.post(`${f.origin}/api/account/login`, {headers: {origin: f.origin},
-      data: {email, password: 'Una nueva contraseña de café'}})).status(), 200);
+    assert.equal((await contextSignIn(f,page.context(),email,'Una nueva contraseña de café','es')).status(), 200);
   } finally { await f.close(); }
 });

@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError,FactorManagementError,transaction,type FactorProof} from '@waitron-cloud/registration';
 import {AccountHttpError} from './errors.ts';
-import {readSessionCookie,writeSessionCookies} from './cookies.ts';
+import {readSessionCookie,writeSessionCookies,writeBrowserCookie} from './cookies.ts';
 import {readBoundedJsonObject} from './request.ts';
 import type {FactorPolicy} from './config.ts';
 import type {RateRule} from './rate-limit.ts';
@@ -48,14 +48,15 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     if(action==='')return c.json(await options.store.status(sessionToken));
     const body=await readBoundedJsonObject(c.req.raw);
     if(completion) {
-      exact(body,['challengeToken',email?'code':'proof']);const challengeToken=token(body.challengeToken),parsed=email?code(body.code):proof(body.proof);
+      exact(body,['challengeToken',email?'code':'proof'],email?['rememberBrowser']:[]);
+      if(body.rememberBrowser!==undefined&&typeof body.rememberBrowser!=='boolean')throw new AccountHttpError(400,'invalid_input');const challengeToken=token(body.challengeToken),parsed=email?code(body.code):proof(body.proof);
       const p=options.policy;if(!p)unavailable();
       // IP rejection precedes derived account/challenge counters, so a blocked source cannot spend them.
       await options.consume([{scope:'factor-complete-ip',subject:options.ip,...p.completeIp}]);
       const candidate=(await options.pool.query(`SELECT account_id FROM ${email?'cloud_sign_in_checks':'cloud_factor_login_challenges'} WHERE token_hash=$1`,[digest(challengeToken)])).rows[0];
       await options.consume([{scope:'factor-complete-challenge',subject:challengeToken,...p.completeChallenge},
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
-      const credentials=await (email?options.login.completeEmailCheck(challengeToken,parsed as string):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);return c.json({accountId:credentials.accountId});
+      const credentials=await (email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
     }
     exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['password','pendingToken','code']:['password'],action==='/cancel'?[]:['proof']);
     const parsedPassword=action==='/cancel'?undefined:password(body.password);

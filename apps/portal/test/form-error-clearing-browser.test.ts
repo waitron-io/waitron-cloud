@@ -85,7 +85,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await t.test('hiding organisation clears only its message',async()=>{
     const {page,calls,errors}=await open(browser,flows[3],locale,theme,width);
     try {
-     const checkbox=page.getByRole('checkbox'),submit=page.getByRole('button',{name:c.create,exact:true});
+     const checkbox=page.getByRole('checkbox',{name:c.differentOrg,exact:true}),submit=page.getByRole('button',{name:c.create,exact:true});
      await checkbox.check();await submit.click();
      assert.equal(await page.locator('input[aria-invalid=true]').count(),3);
      await checkbox.uncheck();

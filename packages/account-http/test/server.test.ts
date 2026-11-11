@@ -297,7 +297,7 @@ test('CLI factor configuration survives restart, uses its own keys and emits no 
   const plainId=randomUUID(),plainEmail=`plain-${plainId}@example.test`;
   await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[plainId]);
   await db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[plainId,plainEmail,await hashSecret(password)]);
-  assert.equal((await send(port,'/login',JSON.stringify({email:plainEmail,password})).result).status,200);
+  assert.equal((await send(port,'/login',JSON.stringify({email:plainEmail,password})).result).status,202);
   ended=await running.stop();assert.equal(ended.code,0);assert.equal(ended.stderr,'');assert.match(ended.stdout,/^\{"status":"listening","port":\d+\}\n$/);
  }finally{if(running.child.exitCode===null)await running.stop();}
 });

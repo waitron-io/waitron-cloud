@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { database } from '../../../packages/account-http/test/fixtures.ts';
+import {emailLoginPolicy, database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '@waitron-cloud/account-http';
 import { loadPortalAssets } from '../../../packages/account-http/src/portal.ts';
 import { EmailWorker, createLocalAccountMailer, createLeaseIssuer } from '@waitron-cloud/registration';
@@ -39,7 +39,7 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
     translations=translation?new TranslationFixture(db.pool,issuer,origin,translation.pageBytes):undefined;
-    running = await startAccountServer({translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor,leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    running = await startAccountServer({translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: []},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     translations?.attach(running.server);
@@ -128,4 +128,20 @@ export async function mailFor(email: string, subject: string, evidence?: () => P
   }
   const message = await (await fetch(`${inbox}/api/v1/message/${found.ID}`)).json() as {Text: string};
   return message.Text;
+}
+
+export async function completeBrowserEmail(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page,email:string,locale:'en'|'es'='en') {
+  await page.getByRole('heading',{name:locale==='en'?'Check your email':'Revisa tu correo',exact:true}).waitFor();
+  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+  const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+  await page.locator('input[name=factorProof]').fill(code);
+  await page.locator('#submit').click();
+}
+
+export async function contextSignIn(f:Awaited<ReturnType<typeof startPortalFixture>>,context:BrowserContext,email:string,password:string,locale:'en'|'es'='en') {
+  const started=await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email,password,locale}});
+  assert.equal(started.status(),202);const check=await started.json() as {emailRequired:boolean;challengeToken:string};assert.equal(check.emailRequired,true);
+  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+  const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+  return context.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:check.challengeToken,code}});
 }

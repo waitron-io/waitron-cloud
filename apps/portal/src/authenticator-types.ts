@@ -1,6 +1,6 @@
 export type FactorProof={kind:'totp'|'recovery';code:string};
 export type FactorChallenge={factorRequired:true;challengeToken:string;expiresAt:string};
-export type EmailChallenge={emailRequired:true;challengeToken:string;expiresAt:string};
+export type EmailChallenge={emailRequired:true;challengeToken:string;expiresAt:string;rememberBrowserAllowed?:true};
 export type PasswordLogin={accountId:string}|FactorChallenge|EmailChallenge;
 export type FactorStatus={active:boolean;version:number;recoveryCodesRemaining:number;available:boolean};
 export type FactorEnrolment={pendingToken:string;secret:string;uri:string;expiresAt:string};
@@ -13,7 +13,7 @@ export function validPasswordLogin(value:unknown,status:number):value is Passwor
   if(!object(value))return false;
   if(status===200)return exact(value,['accountId'])&&typeof value.accountId==='string'&&value.accountId.length>0;
   return status===202&&token(value.challengeToken)&&date(value.expiresAt)&&
-    (exact(value,['factorRequired','challengeToken','expiresAt'])&&value.factorRequired===true||exact(value,['emailRequired','challengeToken','expiresAt'])&&value.emailRequired===true);
+    (exact(value,['factorRequired','challengeToken','expiresAt'])&&value.factorRequired===true||(exact(value,['emailRequired','challengeToken','expiresAt'])||exact(value,['emailRequired','challengeToken','expiresAt','rememberBrowserAllowed'])&&value.rememberBrowserAllowed===true)&&value.emailRequired===true);
 }
 export function validFactorStatus(value:unknown):value is FactorStatus {
   return object(value)&&exact(value,['active','version','recoveryCodesRemaining','available'])&&typeof value.active==='boolean'&&typeof value.available==='boolean'

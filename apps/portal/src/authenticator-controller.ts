@@ -10,6 +10,7 @@ export class AuthenticatorController {
   enrolment:FactorEnrolment|undefined;
   status:FactorStatus|undefined;
   password='';proofKind:FactorProof['kind']='totp';proofCode='';confirmation='';
+  rememberBrowser=false;
   pending=false;loaded=false;loadAttempted=false;error:keyof Copy|undefined;
   requiredField:'password'|'proof'|'confirmation'|undefined;
   // Server delays measure elapsed time, including across account and wall-clock changes.
@@ -19,7 +20,7 @@ export class AuthenticatorController {
   #account:string|undefined;#generation=0;#request:Request;#changed:()=>void;
   constructor(changed:()=>void,request:Request=accountRequest){this.#changed=changed;this.#request=request;}
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
-  fence(){this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
+  fence(){this.rememberBrowser=false;this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false,context?:'factor'|'factorSignIn'|'factorVerify'){
     this.#retryUntil=performance.now()+result.retryAfterMs;
@@ -51,7 +52,7 @@ export class AuthenticatorController {
     const email='emailRequired' in this.challenge;
     if(!validCode(code,email?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,...(email?{code}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
+    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
     const result=await this.#request<{accountId:string}>(email?'/login/email':'/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}

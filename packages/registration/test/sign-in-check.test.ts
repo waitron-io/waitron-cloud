@@ -37,6 +37,14 @@ test('password fallback for a passkey owner queues an email check before any ses
   assert.equal(JSON.stringify(record).includes(email),false,'the challenge must not duplicate the raw email address');
 });
 
+test('a password-only sign-in on a new browser needs email proof before any session', async () => {
+  await pool.query('DELETE FROM cloud_passkeys');
+  const result = await new PasswordLoginStore(pool, null, policy, outbox).start({email,password});
+  assert.equal(result.kind, 'email');
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count, '1');
+});
+
 
 test('a mailbox code completes one session and cannot be replayed', async () => {
   const store = new PasswordLoginStore(pool,null,policy,outbox);
@@ -194,4 +202,72 @@ test('a mailbox worker rechecks account authority after its account-row wait',as
     await blocker.query('COMMIT');assert.equal(await work,true);assert.equal(await worker.runOnce(),false);
     assert.deepEqual(sent,[]);assert.equal((await pool.query('SELECT status FROM email_outbox')).rows[0].status,'cancelled');
   }finally{await blocker.query('ROLLBACK');blocker.release();await work;}
+});
+
+// Omitting recognition issuance/lookup or its account, expiry or password binding breaks these flows.
+test('email proof remembers only an explicitly chosen browser and keeps only its hash', async () => {
+  await pool.query('DELETE FROM cloud_passkeys');
+  const store = new PasswordLoginStore(pool,null,policy,outbox);
+  const first = await queued(store);
+  const ordinary = await store.completeEmailCheck(first.challengeToken,first.code);
+  assert.equal(ordinary.browserToken,undefined);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'0');
+  const next = await queued(store);
+  const remembered = await store.completeEmailCheck(next.challengeToken,next.code,true);
+  assert.match(remembered.browserToken!,/^[A-Za-z0-9_-]{43}$/);
+  const row=(await pool.query('SELECT * FROM cloud_recognised_browsers')).rows[0];
+  assert.equal(row.token_hash,createHash('sha256').update(remembered.browserToken!).digest('hex'));
+  assert.equal(JSON.stringify(row).includes(remembered.browserToken!),false);
+  assert.equal(row.expires_at-row.created_at,30*24*60*60_000);
+  assert.equal((await store.start({email,password,browserToken:remembered.browserToken})).kind,'session');
+  assert.equal((await new PasswordLoginStore(pool,null,null).start({email,password,browserToken:remembered.browserToken})).kind,'session');
+  assert.equal((await store.start({email,password,browserToken:'A'.repeat(43)})).kind,'email');
+  await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day'");
+  assert.equal((await store.start({email,password,browserToken:remembered.browserToken})).kind,'email');
+});
+
+test('recognition is account bound and never bypasses a passkey or app requirement', async () => {
+  await pool.query('DELETE FROM cloud_passkeys');
+  const store=new PasswordLoginStore(pool,null,policy,outbox), check=await queued(store);
+  const remembered=await store.completeEmailCheck(check.challengeToken,check.code,true);
+  const other=randomUUID();
+  await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[other]);
+  await pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[other,'other@example.test',await hashSecret(password)]);
+  assert.equal((await store.start({email:'other@example.test',password,browserToken:remembered.browserToken})).kind,'email');
+  await pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
+    VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[randomUUID(),accountId,Buffer.from([1,2,3])]);
+  assert.equal((await store.start({email,password,browserToken:remembered.browserToken})).kind,'email');
+  const keys={activeKeyId:'test',keys:{test:'07'.repeat(32)}};
+  await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,$3)`,
+    [accountId,randomUUID(),encryptFactorSecret('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',keys,{accountId,version:1,purpose:'active'})]);
+  assert.equal((await new PasswordLoginStore(pool,keys,policy,outbox).start({email,password,browserToken:remembered.browserToken})).kind,'factor');
+});
+
+test('password reset forgets every recognised browser', async () => {
+  await pool.query('DELETE FROM cloud_passkeys');
+  const store=new PasswordLoginStore(pool,null,policy,outbox),tokens:string[]=[];
+  for(let i=0;i<2;i++){const check=await queued(store);tokens.push((await store.completeEmailCheck(check.challengeToken,check.code,true)).browserToken!);}
+  const recovery=new PasswordRecoveryStore(pool,outbox);await recovery.request(email);
+  const reset=outbox.open((await pool.query("SELECT * FROM email_outbox WHERE kind='password_reset'")).rows[0]);assert.ok('token' in reset);
+  await recovery.complete(reset.token,password);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'0');
+  for(const browserToken of tokens)assert.equal((await store.start({email,password,browserToken})).kind,'email');
+});
+
+test('passkey fallback cannot remember a browser even when the client asks',async()=>{
+  const store=new PasswordLoginStore(pool,null,policy,outbox),check=await queued(store);
+  const signed=await store.completeEmailCheck(check.challengeToken,check.code,true);
+  assert.equal(signed.browserToken,undefined);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'0');
+});
+
+test('remembering again removes the account expired recognition hashes',async()=>{
+  await pool.query('DELETE FROM cloud_passkeys');
+  const store=new PasswordLoginStore(pool,null,policy,outbox),first=await queued(store);
+  const expired=await store.completeEmailCheck(first.challengeToken,first.code,true);
+  const second=await queued(store),live=await store.completeEmailCheck(second.challengeToken,second.code,true);
+  await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day' WHERE token_hash=$1",[createHash('sha256').update(expired.browserToken!).digest('hex')]);
+  const next=await queued(store);await store.completeEmailCheck(next.challengeToken,next.code,true);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'2');
+  assert.equal((await store.start({email,password,browserToken:live.browserToken})).kind,'session');
 });

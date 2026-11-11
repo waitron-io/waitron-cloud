@@ -4,7 +4,7 @@ import {before,after,beforeEach,test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
 import {SignupStore} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const origin='https://cloud.example.test',password='A sufficiently long test password';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,cookie:string,csrf:string;
@@ -12,12 +12,12 @@ before(async()=>{db=await database();});after(async()=>db?.close());
 async function account(email:string){
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in mail);
  await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
- const login=await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email,password})},bindings);assert.equal(login.status,200);
+ const login=await completeEmailProof(db,await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email,password})},bindings),body=>app.request(origin+'/api/account/login/email',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)},bindings));assert.equal(login.status,200);
  cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 }
 beforeEach(async()=>{
  await resetSchema(db.pool);
- app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});await account('alerts@example.test');
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});await account('alerts@example.test');
 });
 function request(body?:unknown,headers:Record<string,string>={}){return app.request(origin+'/api/account/alerts',{method:body===undefined?'GET':'POST',headers:{origin,cookie,'x-csrf-token':csrf,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})},bindings);}
 test('preferences default off, persist per account and do not renew passive sessions',async()=>{

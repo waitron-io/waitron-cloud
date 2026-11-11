@@ -8,7 +8,7 @@ import {SignupStore} from '@waitron-cloud/registration';
 import {pairingPayload,type PairingClaims} from '../../registration/src/pairing-proof.ts';
 import {startAccountServer} from '../src/server.ts';
 import {createAccountApp} from '../src/app.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;let app:ReturnType<typeof createAccountApp>;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string};let cookie:string;let csrf:string;
 const origin='https://cloud.example.test',password='A long enough café password';
@@ -24,10 +24,10 @@ function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClai
 const choice=(m:ReturnType<typeof machine>)=>({requestId:m.c.requestId,code:m.c.code,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
-  await resetSchema(db.pool);app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings()});
+  await resetSchema(db.pool);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings()});
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
-  const logged=await request('/api/account/login',{email:'owner@example.test',password},{origin});assert.equal(logged.status,200);
+  const logged=await completeEmailProof(db,await request('/api/account/login',{email:'owner@example.test',password},{origin}),body=>request('/api/account/login/email',body,{origin}));assert.equal(logged.status,200);
   cookie=logged.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 });
 test('signed machines and browser approval link two distinct venues with durable retry',async()=>{
@@ -40,7 +40,7 @@ test('signed machines and browser approval link two distinct venues with durable
   }
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
   const first=await a.call('complete');assert.equal(first.status,200);const result=await first.json();
-  app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:settings()});assert.deepEqual(await (await a.call('complete')).json(),result);
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:settings()});assert.deepEqual(await (await a.call('complete')).json(),result);
   assert.equal((await b.call('complete')).status,200);assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
   assert.equal((await a.call('status',{publicKey:b.c.publicKey})).status,401);
 });
@@ -63,7 +63,7 @@ test('code refusal persists and public errors never echo private input',async()=
   assert.equal((await browser('approve',choice(m))).status,400);
 });
 test('pairing start limits persist across app workers',async()=>{
-  for(let i=0;i<10;i++){const m=machine();assert.equal((await m.call('start')).status,200);app=createAccountApp({pool:i%2?db.pool:db.secondPool,outbox:db.outbox,config:settings()});}
+  for(let i=0;i<10;i++){const m=machine();assert.equal((await m.call('start')).status,200);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:i%2?db.pool:db.secondPool,outbox:db.outbox,config:settings()});}
   const response=await machine().call('start');assert.equal(response.status,429);assert.ok(Number(response.headers.get('retry-after'))>0);
 });
 
@@ -94,20 +94,20 @@ test('real sockets retain pairing state after server restart with portal assets 
 
 test('HTTP pairing requires an external key, preserves rotation overlap and never echoes secrets',async()=>{
   const old={activeKeyId:'old',keys:{old:'a'.repeat(64)}};
-  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:old});
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:old});
   const a=machine();assert.equal((await a.call('start')).status,200);
   const hash=(await db.pool.query('SELECT code_hash FROM pairing_requests WHERE id=$1',[a.c.requestId])).rows[0].code_hash;
   assert.match(hash,/^v1:old:/);
-  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:null});
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:null});
   const refused=await browser('approve',choice(a));assert.equal(refused.status,503);
   const text=await refused.text();assert.equal(text.includes(a.c.code),false);assert.equal(text.includes(old.keys.old),false);
   assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests')).rows[0].failed_codes,0);
   assert.equal((await a.call('status')).status,200);
   assert.equal((await machine().call('start')).status,503);
   const wrong={activeKeyId:'old',keys:{old:'b'.repeat(64)}};
-  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:wrong});
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings(),pairingCodeKeys:wrong});
   assert.equal((await browser('approve',choice(a))).status,400);
-  app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:settings(),pairingCodeKeys:{activeKeyId:'new',keys:{...old.keys,new:'c'.repeat(64)}}});
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:settings(),pairingCodeKeys:{activeKeyId:'new',keys:{...old.keys,new:'c'.repeat(64)}}});
   assert.equal((await a.call('start')).status,200);assert.equal((await browser('approve',choice(a))).status,200);
   assert.equal((await a.call('complete')).status,200);
   const dump=JSON.stringify((await db.pool.query('SELECT * FROM security_audit_events')).rows);

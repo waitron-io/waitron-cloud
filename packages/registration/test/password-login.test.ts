@@ -62,11 +62,9 @@ beforeEach(async () => {
     [accountId,email,await hashSecret(password)]);
 });
 
-test('without a factor login still creates a full session when factor configuration is absent', async () => {
-  const result = await store(null, null).start({email: `  ${email.toUpperCase()} `,password});
-  assert.equal(result.kind, 'session');
-  assert.equal((await transaction(pool,c => resolveSession(c,result.credentials.token))).accountId,accountId);
-  assert.equal(await sessionCount(), 1);
+test('a new browser without email policy refuses password-only session issuance', async () => {
+  await refused(store(null,null).start({email:`  ${email.toUpperCase()} `,password}),'temporarily_unavailable');
+  assert.equal(await sessionCount(),0);
 });
 test('factor challenges store only a hash and cannot authenticate a session endpoint', async () => {
   await enrol(); const token = await challenge();
@@ -154,7 +152,7 @@ test('recovery codes are account/version-bound, single-use and cannot authentica
   await refused(s.complete(await challenge(s),recovery('22222222222222222222222222222222')));
   assert.equal(await sessionCount(),1);
 });
-test('missing policy or unreadable keys refuse active-factor password login without affecting no-factor login', async () => {
+test('missing policy or unreadable keys refuse active-factor password login without issuing a session', async () => {
   await enrol();
   await refused(store(keys,null).start({email,password}),'temporarily_unavailable');
   for(const bad of [null,{activeKeyId:'test',keys:{test:'08'.repeat(32)}}]) {

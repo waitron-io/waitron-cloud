@@ -5,7 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import type { HttpBindings } from '@hono/node-server';
 import { EmailWorker, PasswordRecoveryStore, createLocalAccountMailer, SignupStore, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { createAccountApp } from '../src/app.ts';
-import { database } from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 import {createMailCapture} from './mail-capture.ts';
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -17,7 +17,7 @@ before(async () => {db = await database();});
 after(async () => db?.close());
 beforeEach(async () => {
   await resetSchema(db.pool);
-  app = createAccountApp({pool: db.pool, outbox: db.outbox, config: config()});
+  app = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: config()});
 });
 function request(path: string, body?: unknown, options: {headers?: Record<string, string>; peer?: string; target?: typeof app; url?: string; method?: string} = {}) {
   const headers = new Headers(options.headers);
@@ -27,6 +27,10 @@ function request(path: string, body?: unknown, options: {headers?: Record<string
   const bindings = {incoming: {socket: {remoteAddress: options.peer ?? '192.0.2.4'}}} as HttpBindings;
   return (options.target ?? app).request(options.url ?? `${origin}/api/account${path}`,
     {method, headers, ...(body === undefined ? {} : {body: JSON.stringify(body)})}, bindings);
+}
+async function signIn(email:string, secret=password, options:Parameters<typeof request>[2]={}) {
+  return completeEmailProof(db,await request('/login',{email,password:secret},options),body=>request('/login/email',body,
+    {...options,...(options.url?{url:options.url.replace('/login','/login/email')}:{})}));
 }
 function cookies(response: Response) {
   const lines = response.headers.getSetCookie();
@@ -63,7 +67,7 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.equal(signup.status, 201); assert.equal(signup.headers.has('set-cookie'), false);
   const created = await signup.json() as {accountId: string; organisationId: string}; assert.ok(created.organisationId);
   assert.equal((await request('/signup/complete', {token, ...details})).status, 400);
-  const signedIn = await request('/login', {email, password}); assert.equal(signedIn.status, 200);
+  const signedIn = await signIn(email); assert.equal(signedIn.status, 200);
   assert.deepEqual(await signedIn.json(), {accountId: created.accountId});
   const session = cookies(signedIn); assert.ok(session.token); assert.ok(session.csrf);
   for (const line of signedIn.headers.getSetCookie()) {
@@ -82,14 +86,14 @@ test('HTTP signup and recovery through Mailpit preserve accounts, cookies and se
   assert.equal(activity.status, 200);
   assert.ok((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime() > oldSeen);
   const resetRequest = await request('/password-reset/request', {email}); assert.equal(resetRequest.status, 202);
-  await capture.runOnce(worker); const resetToken = await capture.tokenFromMail(email, 'Reset your Waitron Cloud password');
+  while(await capture.runOnce(worker)) {} const resetToken = await capture.tokenFromMail(email, 'Reset your Waitron Cloud password');
   const newPassword = 'A different long café password';
   const reset = await request('/password-reset/complete', {token: resetToken, password: newPassword});
   assert.equal(reset.status, 200); assert.equal(reset.headers.has('set-cookie'), false);
   assert.equal((await request('/password-reset/complete', {token: resetToken, password: newPassword})).status, 400);
   assert.equal((await request('/session', undefined, {headers})).status, 401);
   assert.equal((await request('/login', {email, password})).status, 401);
-  assert.equal((await request('/login', {email, password: newPassword})).status, 200);
+  assert.equal((await signIn(email,newPassword)).status, 200);
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_accounts')).rows[0].count, '1');
 });
 test('a forced reset-mail miss reports real queue and SMTP outcomes without private values', async () => {
@@ -153,7 +157,7 @@ test('health routes separate process liveness from migration-backed readiness', 
     assert.equal((await request('', {}, {url: `${origin}${path}`, method: 'POST'})).status, 405);
     assert.equal((await request('', undefined, {url: `${origin}${path}?private=1`})).status, 400);
   }
-  const unavailable = createAccountApp({pool: {query: async () => {throw new Error('private database detail');}} as unknown as typeof db.pool,
+  const unavailable = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: {query: async () => {throw new Error('private database detail');}} as unknown as typeof db.pool,
     outbox: db.outbox, config: config()});
   const liveWithoutDatabase = await request('', undefined, {url: `${origin}/api/health/live`, target: unavailable});
   assert.equal(liveWithoutDatabase.status, 200); assert.deepEqual(await liveWithoutDatabase.json(), {status: 'live'});
@@ -186,7 +190,7 @@ test('HTTP password screening reports compromised input and retryable provider f
     if (mode === 'unavailable') throw new Error('private provider detail');
     return mode;
   }};
-  const screened = createAccountApp({pool: db.pool, outbox: db.outbox, config: config(), passwordScreening: screening});
+  const screened = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: config(), passwordScreening: screening});
   const signup = new SignupStore(db.pool, db.outbox);
   await signup.request('screened@example.test');
   let queued = (await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0];
@@ -210,8 +214,8 @@ test('HTTP password screening reports compromised input and retryable provider f
   assert.equal((await request('/password-reset/complete', {token: content.token, password: 'a replacement café password'}, {target: screened})).status, 200);
 });
 test('CSRF belongs to a live session; duplicate cookies cannot choose a different session', async () => {
-  const owner = await account(); const first = cookies(await request('/login', {email: owner.email, password}));
-  const second = cookies(await request('/login', {email: owner.email, password}));
+  const owner = await account(); const first = cookies(await signIn(owner.email));
+  const second = cookies(await signIn(owner.email));
   for (const csrf of ['', second.csrf]) {
     assert.equal((await request('/session/activity', {}, {headers: {cookie: first.header, 'x-csrf-token': csrf}})).status, 403);
     assert.equal((await request('/logout', {}, {headers: {cookie: first.header, 'x-csrf-token': csrf}})).status, 403);
@@ -242,7 +246,7 @@ test('unknown/wrong logins and eligible/ineligible/cooldown email requests have 
   assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind = 'password_reset'")).rows[0].count, '1');
 });
 test('IP limits are shared across apps and cannot be bypassed with untrusted forwarded headers', async () => {
-  const other = createAccountApp({pool: db.secondPool, outbox: db.outbox, config: config()});
+  const other = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.secondPool, outbox: db.outbox, config: config()});
   for (let i = 0; i < 10; i++) assert.equal((await request('/login', {email: 'missing@example.test', password: 'wrong'},
     {target: i % 2 ? other : app, peer: i % 2 ? '::ffff:192.0.2.4' : '192.0.2.4', headers: {'x-forwarded-for': `198.51.100.${i}`}})).status, 401);
   const blocked = await request('/login', {email: 'missing@example.test', password: 'wrong'});
@@ -257,7 +261,7 @@ test('address login limits survive case changes and different IPs', async () => 
 });
 test('trusted proxies must supply exactly one valid address; proxy trust cannot be mutated by the caller', async () => {
   const settings = {...config(), trustedProxyIps: ['192.0.2.4']};
-  const proxied = createAccountApp({pool: db.pool, outbox: db.outbox, config: settings});
+  const proxied = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: settings});
   settings.trustedProxyIps.length = 0;
   for (const value of ['', 'garbage-secret', '192.0.2.1, 192.0.2.2', '127.1', '2001:db8::1%eth0']) {
     assert.equal((await request('/session', undefined, {target: proxied, headers: {'x-forwarded-for': value}})).status, 400);
@@ -266,7 +270,7 @@ test('trusted proxies must supply exactly one valid address; proxy trust cannot 
 });
 test('configuration fails closed and database failure returns a secret-free 503', async () => {
   for (const change of [{portalOrigin: 'http://cloud.example.test'}, {portalOrigin: 'http://localhost:3000'}, {portalOrigin: 'https://user:secret@example.test'}, {rateKey: ''}, {trustedProxyIps: ['*']}]) {
-    assert.throws(() => createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), ...change}}), /Invalid account HTTP configuration/);
+    assert.throws(() => createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: {...config(), ...change}}), /Invalid account HTTP configuration/);
   }
   await db.pool.query('ALTER TABLE account_rate_limits RENAME TO hidden_rate_limits');
   try {
@@ -296,7 +300,7 @@ test('the general request allowance also bounds passive session reads', async ()
   assert.equal((await request('/session', undefined, {peer: '192.0.2.5'})).status, 401);
 });
 test('session expiry after an HTTP request waits on its row cannot extend activity', async () => {
-  const owner = await account(); const session = cookies(await request('/login', {email: owner.email, password}));
+  const owner = await account(); const session = cookies(await signIn(owner.email));
   const before = (await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime();
   const lock = await db.secondPool.connect(); await lock.query('BEGIN');
   await lock.query("UPDATE cloud_sessions SET absolute_expires_at = clock_timestamp() + interval '150 milliseconds'");
@@ -309,25 +313,25 @@ test('session expiry after an HTTP request waits on its row cannot extend activi
   assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows[0].last_seen_at.getTime(), before);
 });
 test('suspension denies an existing HTTP session and the development cookie stays separate', async () => {
-  const owner = await account(); const session = cookies(await request('/login', {email: owner.email, password}));
+  const owner = await account(); const session = cookies(await signIn(owner.email));
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp() WHERE id = $1', [owner.accountId]);
   const suspended = await request('/session', undefined, {headers: {cookie: session.header}});
   assert.equal(suspended.status, 401); assert.deepEqual(await suspended.json(), {error: 'unauthenticated'});
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = NULL WHERE id = $1', [owner.accountId]);
-  const dev = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), production: false, portalOrigin: 'http://localhost:3000'}});
-  const response = await request('/login', {email: owner.email, password}, {target: dev, url: 'http://localhost:3000/api/account/login', headers: {origin: 'http://localhost:3000'}});
+  const dev = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: {...config(), production: false, portalOrigin: 'http://localhost:3000'}});
+  const response = await signIn(owner.email,password, {target: dev, url: 'http://localhost:3000/api/account/login', headers: {origin: 'http://localhost:3000'}});
   assert.equal(response.status, 200);
   assert.ok(response.headers.getSetCookie().some(value => value.startsWith('cloud_session=') && value.includes('HttpOnly') && !value.includes('Secure')));
 });
 test('IP-blocked login requests cannot spend another account’s address allowance', async () => {
   const owner = await account();
-  const otherApp = createAccountApp({pool: db.secondPool, outbox: db.outbox, config: config()});
+  const otherApp = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.secondPool, outbox: db.outbox, config: config()});
   const attempts = await Promise.all(Array.from({length: 31}, (_, i) => request('/login',
     {email: i % 2 ? owner.email.toUpperCase() : owner.email, password: 'a wrong password'},
     {peer: i % 2 ? '::ffff:203.0.113.8' : '203.0.113.8', target: i % 2 ? app : otherApp})));
   assert.equal(attempts.filter(response => response.status === 401).length, 10);
   assert.equal(attempts.filter(response => response.status === 429).length, 21);
-  const signedIn = await request('/login', {email: owner.email, password}, {peer: '198.51.100.4'});
+  const signedIn = await signIn(owner.email,password, {peer: '198.51.100.4'});
   assert.equal(signedIn.status, 200);
   assert.deepEqual(await signedIn.json(), {accountId: owner.accountId});
 });

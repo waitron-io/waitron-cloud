@@ -46,7 +46,7 @@ import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
 import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
-import { readSessionCookie, writeSessionCookies } from './cookies.ts';
+import { readSessionCookie, writeSessionCookies, readBrowserCookie, writeBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
 const paths: Record<string, readonly string[]> = {
   '/signup/request': ['email'], '/signup/complete': ['token', 'password', 'organisationName', 'legalBusinessName', 'countryCode'],
@@ -173,8 +173,9 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : path === '/signup/complete' ? ['rememberBrowser'] : []);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
+    if (body.rememberBrowser !== undefined && body.rememberBrowser !== 'true') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     const started = performance.now();
     const slow = ['/login', '/signup/request', '/password-reset/request'].includes(path);
@@ -188,12 +189,12 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
         await consume([{scope: 'login-ip', subject: ip, limit: 10, windowSeconds: 60}]);
         await consume([{scope: 'login-email', subject: email!, limit: 30, windowSeconds: 900}]);
         if(factor.policy)await consume([{scope:'factor-login-email',subject:email!,...factor.policy.loginAccount}]);
-        const result=await passwordLogin.start({email:email!,password:body.password!,locale},factor.policy?async (accountId,client)=>{
+        const result=await passwordLogin.start({email:email!,password:body.password!,locale,browserToken:readBrowserCookie(c,secure)},factor.policy?async (accountId,client)=>{
           const decision=await limiter.consume([{scope:'factor-login-account',subject:accountId,...factor.policy!.loginAccount}],client);
           if(!decision.allowed)return new AccountHttpError(429,'rate_limited',decision.retryAfterSeconds);
         }:undefined);
         if(result.kind==='factor')return c.json({factorRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
-        if(result.kind==='email')return c.json({emailRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
+        if(result.kind==='email')return c.json({emailRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt,...(result.rememberBrowserAllowed?{rememberBrowserAllowed:true}:{})},202);
         const credentials=result.credentials;
         writeSessionCookies(c, secure, credentials);
         return c.json({accountId: credentials.accountId});
@@ -206,9 +207,12 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       if (path.endsWith('/complete')) {
         await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900},
           {scope: `${path}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
-        if (path === '/signup/complete') return c.json(await signup.complete(body.token!, {
-          password: body.password!, organisationName: body.organisationName!, legalBusinessName: body.legalBusinessName!, countryCode: body.countryCode!,
-        }), 201);
+        if (path === '/signup/complete') {
+          const {browserToken,...result} = await signup.complete(body.token!, {
+          password: body.password!, organisationName: body.organisationName!, legalBusinessName: body.legalBusinessName!, countryCode: body.countryCode!, rememberBrowser:body.rememberBrowser === 'true',
+          });
+          writeBrowserCookie(c,secure,browserToken);return c.json(result,201);
+        }
         return c.json(await recovery.complete(body.token!, body.password!, locale));
       }
       const token = readSessionCookie(c, secure) ?? '';

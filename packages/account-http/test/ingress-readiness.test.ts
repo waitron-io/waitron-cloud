@@ -75,10 +75,10 @@ test('real account instances behind a streaming proxy preserve ingress authority
   await signup.request(email);
   const queued = (await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];
   const message = db.outbox.open(queued); assert.ok('token' in message);
-  await signup.complete(message.token, {password, organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES'});
+  const recognised = await signup.complete(message.token, {rememberBrowser:true,password, organisationName: 'Café Sol', legalBusinessName: 'Café Sol SL', countryCode: 'ES'});
   await db.pool.query('TRUNCATE account_rate_limits, email_outbox CASCADE');
   const running = await ingress();
-  const json = {'content-type': 'application/json', origin};
+  const json = {'content-type': 'application/json', origin, cookie:`__Host-cloud_browser=${recognised.browserToken}`};
   try {
     assert.equal((await send(running.port, '/api/account/login', {body: JSON.stringify({email, password}), headers: {...json, origin: 'https://other.example.test'}}).result).status, 403);
     assert.equal((await send(running.port, '/api/account/login', {body: JSON.stringify({email, password}), headers: {'content-type': 'application/json'}}).result).status, 403);

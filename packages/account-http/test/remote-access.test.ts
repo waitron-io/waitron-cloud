@@ -6,13 +6,13 @@ import type {HttpBindings} from '@hono/node-server';
 import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import {createAccountApp} from '../src/app.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const origin='https://cloud.example.test',password='A sufficiently long test password';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,store:RemoteAccessStore,cookie:string,csrf:string;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string},venue:{venueId:string;installationId:string},assigned:string;
 let resolve:(name:string)=>Promise<string[]>;
-const options=()=>({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},remoteResolve:(name:string)=>resolve(name)});
+const options=()=>({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},remoteResolve:(name:string)=>resolve(name)});
 const request=async(action:string,extra:Record<string,string>={},headers:Record<string,string>={})=>app.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,cookie,'content-type':'application/json','x-csrf-token':csrf,...headers},body:JSON.stringify({installationId:venue.installationId,...extra})},bindings);
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
@@ -22,7 +22,7 @@ beforeEach(async()=>{
  const r=new RegistrationStore(db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());venue=await r.complete(b);
  store=new RemoteAccessStore(db.pool);const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'cell.example.test',subnet:7,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'};await store.createCell(cell);const p=await store.provision(venue.installationId,cell.id,randomBytes(32).toString('base64'));assigned=p.staffHostname;
  resolve=async name=>[name.startsWith('_acme-challenge.')?'_acme-challenge.'+assigned:assigned];app=createAccountApp(options());
- const login=await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password})},bindings);assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+ const login=await completeEmailProof(db,await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password})},bindings),body=>app.request(origin+'/api/account/login/email',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)},bindings));assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 });
 test('owner sees only public setup metadata with passive session, exact origin and CSRF',async()=>{
  const before=(await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows;

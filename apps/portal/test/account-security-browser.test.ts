@@ -3,7 +3,7 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import type {Request} from 'playwright';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
+import {contextSignIn,addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real account security password';
@@ -74,8 +74,7 @@ test('lost session-revoke replies reconcile the list and current-session state',
     const other = await f.browser.newContext({locale: 'en'});
     try {
       for (const target of [context, other]) {
-        const login = await target.request.post(`${f.origin}/api/account/login`,
-          {headers: {origin: f.origin}, data: {email: account.email, password}});
+        const login = await contextSignIn(f,target,account.email,password);
         assert.equal(login.status(), 200);
       }
       const page = await context.newPage(); page.setDefaultTimeout(5000);
@@ -113,8 +112,7 @@ test('sign out remains available while a passkey prompt is open', async t => {
       }});
     });
     try {
-      const login = await context.request.post(`${f.origin}/api/account/login`,
-        {headers: {origin: f.origin}, data: {email: account.email, password}});
+      const login = await contextSignIn(f,context,account.email,password);
       assert.equal(login.status(), 200);
       const page = await context.newPage(); page.setDefaultTimeout(5000);
       const pending = new Map<Request, string>(), trace: {path: string; phase: string; ms: number}[] = [];

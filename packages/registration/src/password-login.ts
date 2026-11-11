@@ -2,7 +2,7 @@ import {createHash, randomBytes} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {createSession, decryptFactorSecret, IdentityError, matchedTotpSteps, requirePasswordAuthority,
   type FactorKeys, type SessionCredentials} from '@waitron-cloud/identity';
-import {issueSignInCheck, completeSignInCheck, SignInCheckError, type EmailSignInChallenge} from './sign-in-check.ts';
+import {issueSignInCheck, completeSignInCheck, recognisedBrowser, SignInCheckError, type EmailSignInChallenge} from './sign-in-check.ts';
 import type {EmailOutbox} from './email-outbox.ts';
 import type {AccountLocale} from './account-input.ts';
 import {transaction} from './transaction.ts';
@@ -87,7 +87,7 @@ export class PasswordLoginStore {
   constructor(pool: Pool, keys: FactorKeys | null, policy: PasswordLoginPolicy | null, outbox?: EmailOutbox) {
     this.#pool = pool; this.#keys = keys; this.#policy = policy; this.#outbox = outbox;
   }
-  async start(input: {email: string; password: string; locale?: AccountLocale},
+  async start(input: {email: string; password: string; locale?: AccountLocale; browserToken?: string},
     verified?: (accountId:string, client:PoolClient)=>Promise<Error|void>): Promise<PasswordLoginResult> {
     const result = await transaction<PasswordLoginResult | Error>(this.#pool, async client => {
       const authority = await requirePasswordAuthority(client, {email: input.email}, input.password, 'update');
@@ -100,9 +100,9 @@ export class PasswordLoginStore {
           [authority.accountId])).rows[0];
         if (!factor?.secret_envelope) {
           const passkeys = await client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1', [authority.accountId]);
-          if (passkeys.rowCount) {
+          if (passkeys.rowCount || !await recognisedBrowser(client,authority.accountId,input.browserToken)) {
             const email = (await client.query('SELECT email FROM cloud_credentials WHERE account_id=$1', [authority.accountId])).rows[0].email;
-            return await issueSignInCheck(client,this.#outbox,this.#policy,{...authority,email,locale:input.locale});
+            return await issueSignInCheck(client,this.#outbox,this.#policy,{...authority,email,locale:input.locale,rememberBrowserAllowed:!passkeys.rowCount});
           }
           return {kind:'session',credentials:await createSession(client,authority.accountId)};
         }
@@ -126,7 +126,7 @@ export class PasswordLoginStore {
     if(result instanceof Error)throw result;
     return result;
   }
-  completeEmailCheck(token: string, code: string) { return completeSignInCheck(this.#pool,token,code); }
+  completeEmailCheck(token: string, code: string, remember = false) { return completeSignInCheck(this.#pool,token,code,remember); }
   async complete(token: string, proof: FactorProof): Promise<SessionCredentials> {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw new FactorError();
     requirePolicy(this.#policy);

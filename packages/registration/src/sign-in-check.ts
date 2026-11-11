@@ -13,13 +13,27 @@ export class SignInCheckError extends Error {
   readonly code: 'credentials_invalid' | 'temporarily_unavailable';
   constructor(code: SignInCheckError['code'] = 'credentials_invalid') {super(code); this.name = 'SignInCheckError'; this.code = code;}
 }
-export type EmailSignInChallenge = {kind: 'email'; challengeToken: string; expiresAt: string};
+export type EmailSignInChallenge = {kind: 'email'; challengeToken: string; expiresAt: string; rememberBrowserAllowed?: true};
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 // Bind the code digest to the opaque browser challenge, rather than a six-digit value alone.
 export const signInCodeHash = (token: string, code: string) => digest(JSON.stringify(['cloud-email-sign-in-v1',token,code]));
 
+export type RememberedCredentials = import('@waitron-cloud/identity').SessionCredentials & {browserToken?: string};
+export async function rememberBrowser(client: PoolClient, accountId: string): Promise<string> {
+  const token = randomBytes(32).toString('base64url');
+  await client.query('DELETE FROM cloud_recognised_browsers WHERE account_id=$1 AND expires_at<=clock_timestamp()',[accountId]);
+  await client.query(`INSERT INTO cloud_recognised_browsers(token_hash,account_id,created_at,expires_at)
+    VALUES($1,$2,statement_timestamp(),statement_timestamp()+interval '30 days')`,[digest(token),accountId]);
+  return token;
+}
+export async function recognisedBrowser(client: PoolClient, accountId: string, token?: string): Promise<boolean> {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  return !!(await client.query(`SELECT 1 FROM cloud_recognised_browsers
+    WHERE token_hash=$1 AND account_id=$2 AND expires_at>clock_timestamp()`,[digest(token),accountId])).rowCount;
+}
+
 export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox | undefined,
-  policy: {challengeAttempts: number} | null, input: {accountId: string; email: string; passwordFingerprint: string; locale?: AccountLocale}): Promise<EmailSignInChallenge> {
+  policy: {challengeAttempts: number} | null, input: {accountId: string; email: string; passwordFingerprint: string; locale?: AccountLocale; rememberBrowserAllowed?: boolean}): Promise<EmailSignInChallenge> {
   if (!outbox || !policy || !Number.isSafeInteger(policy.challengeAttempts) || policy.challengeAttempts < 1 || policy.challengeAttempts > 2147483647)
     throw new SignInCheckError('temporarily_unavailable');
   const token = randomBytes(32).toString('base64url'), code = randomInt(1_000_000).toString().padStart(6,'0');
@@ -29,10 +43,10 @@ export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox |
     VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [digest(token),input.accountId,digest(input.email),input.passwordFingerprint,signInCodeHash(token,code),now,expiresAt,policy.challengeAttempts]);
   await outbox.enqueue(client,'sign_in_check',{email:input.email,token,code,expiresAt,locale:input.locale});
   if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[expiresAt])).rows[0].expired) throw new SignInCheckError();
-  return {kind:'email',challengeToken:token,expiresAt};
+  return {kind:'email',challengeToken:token,expiresAt,...(input.rememberBrowserAllowed?{rememberBrowserAllowed:true as const}:{})};
 }
 
-export async function completeSignInCheck(pool: Pool, token: string, code: string): Promise<import('@waitron-cloud/identity').SessionCredentials> {
+export async function completeSignInCheck(pool: Pool, token: string, code: string, remember = false): Promise<RememberedCredentials> {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignInCheckError();
   const result = await transaction(pool,async client => {
     const tokenHash = digest(token);
@@ -54,8 +68,10 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
     try {
       await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE token_hash=$1',[tokenHash]);
       const credentials = await createSession(client,candidate.account_id);
+      const passkeys=remember?await client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1',[candidate.account_id]):undefined;
+      const browserToken=remember&&!passkeys?.rowCount?await rememberBrowser(client,candidate.account_id):undefined;
       if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[check.expires_at])).rows[0].expired) throw new SignInCheckError();
-      return credentials;
+      return {...credentials,...(browserToken ? {browserToken} : {})};
     } catch (error) {
       if (!(error instanceof SignInCheckError) && !(error instanceof IdentityError)) throw error;
       await client.query('ROLLBACK TO SAVEPOINT email_sign_in_effects');
