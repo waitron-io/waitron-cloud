@@ -130,6 +130,7 @@ function startedWork(job){
  if(job.name==='server-queue-watchdog'||job.name==='changes'&&job.status==='completed'&&job.conclusion==='success')return false;
  return job.runner_id>0 || job.status==='in_progress' || job.status==='completed'&&!['skipped','cancelled'].includes(job.conclusion);
 }
+const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
 export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
  const usable=healthy?state.slots.filter(s=>(!Array.isArray(healthy)||healthy.includes(s.id))&&s.state!=='quarantined'&&!s.orphanRunners?.length):[];
  const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
@@ -196,18 +197,22 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
  }
  if(hostedRunning>=20 || serverWaiting/capacity.slots<=hostedWaiting/20)return;
  await markHostedAttempt({api,policy,ci,signal});
+ const retire=async()=>{
+  const values=await hostedAttempts({api,policy,signal});
+  if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
+ };
+ let refused;
+ try{
  const finalJobs=await started(),latest=await api.get(base,{signal});
  const pull=latest.event==='pull_request'&&latest.pull_requests?.length===1?await api.get(`/repos/${policy.repository}/pulls/${latest.pull_requests[0].number}`,{signal}):undefined;
  const room=local();
- if(finalJobs.busy || room.busy<room.slots || room.owned.has(ci.runId) || latest.id!==ci.runId || latest.run_attempt!==ci.attempt ||
+ refused=finalJobs.busy || room.busy<room.slots || room.owned.has(ci.runId) || latest.id!==ci.runId || latest.run_attempt!==ci.attempt ||
   latest.head_sha!==ci.workflowSha || latest.repository?.id!==policy.repositoryId || latest.head_repository?.id!==policy.repositoryId ||
   latest.workflow_id!==policy.workflowId || latest.path!==policy.workflowPath || !['queued','in_progress'].includes(latest.status) ||
   !pull || pull.state!=='open' || pull.number!==latest.pull_requests[0].number || pull.head?.sha!==ci.sourceSha ||
-  pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId){
-  const values=await hostedAttempts({api,policy,signal});
-  if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
-  return;
- }
+  pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
+ }catch(error){await retire();throw error;}
+ if(refused){await retire();return;}
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }
@@ -285,7 +290,7 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
     pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
   }
-  if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
+  if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion!=='cancelled'){
    await retire(id,attempt);
    continue;
   }

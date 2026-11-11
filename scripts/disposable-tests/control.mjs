@@ -54,7 +54,13 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
  };
  const publish=async pass=>{
-  if(!pass || Date.now()-lastCapacity<60000)return;
+  if(!pass)return;
+  if(lastCapacity===-Infinity)try{
+   const previous=await api.get(`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_CAPACITY`,{signal});
+   const at=previous.value?JSON.parse(previous.value).observedAt:undefined,updated=Date.parse(previous.updated_at);
+   if(Number.isSafeInteger(at)&&at>=0)lastCapacity=Math.max(at,Number.isFinite(updated)?updated:0);
+  }catch(error){if(error.status!==404){pending(error);return;}}
+  if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;

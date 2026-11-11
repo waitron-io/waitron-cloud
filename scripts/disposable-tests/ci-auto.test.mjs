@@ -136,6 +136,22 @@ for(const action of ['overflow','fallback'])test(`${action} preserves a hosted a
  else await controller.fallbackOrdinary({api:observed,policy,ci,automatic:true,leases:{inspect:()=>({ciInvocation:{ordinaryStage:'admitted',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}}});
  assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
 });
+test('a handled final read failure retires provisional intent before a hosted sibling starts',async()=>{
+ const f=fixture(),get=f.api.get,api=routingVariables(f.api),ci=(await controller.findAutomatic({api,policy,limit:1}))[0],posts=[];
+ let marked=false,failed=false;
+ f.api.get=async path=>{
+  if(path.endsWith('/pulls/12')&&marked&&!failed){failed=true;throw Object.assign(new Error('Final PR read HTTP 502'),{status:502});}
+  return path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ };
+ const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{await target.patch(path,body);marked=Boolean(JSON.parse(body.value)['789']);};return Reflect.get(target,key);}});
+ f.api.post=async path=>posts.push(path);
+ await assert.rejects(controller.overflowOrdinary({local:f.local,api:observed,policy,ci}),/Final PR read HTTP 502/);
+ assert.equal(failed,true);assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
+ f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'in_progress',runner_id:7,labels:['ubuntu-latest']});
+ await controller.recoverHostedAttempts({api:observed,policy});
+ assert.deepEqual(posts,[]);
+ assert.deepEqual((await controller.findAutomatic({api,policy,limit:1,hosted:await controller.hostedAttempts({api,policy})})).map(ci=>ci.jobId),[901]);
+});
 test('automatic pickup admits each routed shard on the current same-repository PR without a chosen head',async()=>{
  const {api}=fixture();assert.equal(typeof controller.findAutomatic,'function');
  const jobs=await controller.findAutomatic({api:routingVariables(api),policy,limit:6});
@@ -869,7 +885,7 @@ test('pickup does not hide malformed local state as a temporary API read',async 
  await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),SyntaxError);
 });
 
-for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','completed-runner','terminal-failure','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
+for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','completed-runner','terminal-failure','terminal-timed_out','terminal-startup_failure','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
  const f=fixture(),get=f.api.get,actions=[];let value='{"789":2}';
  if(['cancel-ack-lost','rerun-ack-lost'].includes(state)){f.run.status='completed';f.run.conclusion='cancelled';}
  if(state==='active-hosted')f.run.run_attempt=2;
@@ -881,7 +897,7 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  if(state==='running-sibling'){f.jobs[1].status='in_progress';f.jobs[1].runner_id=42;}
  if(state==='completed-runner'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';f.jobs[0].runner_id=42;}
- if(state==='terminal-failure'){f.run.status='completed';f.run.conclusion='failure';}
+ if(state.startsWith('terminal-')){f.run.status='completed';f.run.conclusion=state.slice('terminal-'.length);}
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
   if(path.endsWith('/pulls/12') && ['stale-head','closed'].includes(state))return {number:12,state:state==='closed'?'closed':'open',head:{sha:state==='stale-head'?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
@@ -896,7 +912,7 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  else await recover();
  const expected=['cancel-not-sent','force-queued','completed-runner'].includes(state)?['force-cancel']:state==='running-sibling'?['cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
  assert.deepEqual(actions,expected);
- assert.equal(value,['newer-attempt','stale-head','closed'].includes(state)?'{}':'{"789":2}');
+ assert.equal(value,['newer-attempt','stale-head','closed'].includes(state)||state.startsWith('terminal-')?'{}':'{"789":2}');
 });
 
 test('recovery retirement preserves another movement marker written after its first read',async()=>{
@@ -1307,13 +1323,24 @@ test('capacity publication waits a minute while a completed slot refills',async 
  assert.equal(writes,1);
 });
 
+for(const slow of [false,true])test(`full-pool capacity passes keep their minute cadence across restarts after ${slow?'delayed':'immediate'} publication`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ f.jobs.length=0;let now=Date.now(),capacity='',writes=0,publishedAt;t.mock.method(Date,'now',()=>now);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity,updated_at:publishedAt}:get(path);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));writes++;capacity=body.value;if(slow)now+=35000;publishedAt=new Date(now).toISOString();};
+ const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api});
+ await tick();now+=30000;await tick();assert.equal(writes,1);
+ now+=30000;await tick();assert.equal(writes,2);
+});
+
 for(const marker of [0,1,2])test(`automatic overflow respects recorded intent with marker ${marker}`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
- const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];let value=marker?JSON.stringify({789:marker}):'{}';
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];let value=marker?JSON.stringify({789:marker}):'{}',capacity='';
  for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),before=leases.inspect();
- f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))value=body.value;};
+ f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))value=body.value;else if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;};
  await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
  assert.deepEqual(actions,marker===1?[]:[`/repos/fixture/waitron/actions/runs/789/${marker===2?'force-cancel':'cancel'}`]);
  assert.equal(value,JSON.stringify({789:marker===1?1:2}));assert.deepEqual(leases.inspect(),before);
@@ -1492,7 +1519,7 @@ for(const mode of ['move','assigned','free','owned','recover','short','released'
  assert.deepEqual(actions,mode==='move'?['cancel']:mode==='recover'?['force-cancel']:[]);
  assert.equal(value,['move','recover'].includes(mode)?'{"789":2}':'{}');
  assert.deepEqual(served,mode==='free'?[901,902,903,904,905]:[]);
- assert.ok(jobReads>0);
+ if(mode==='permission')assert.equal(jobReads,0);else assert.ok(jobReads>0);
  if(['move','recover','owned'].includes(mode))t.diagnostic(`${mode}: ${requests} API requests in the controlled full-pool tick`);
 });
 
