@@ -1,6 +1,6 @@
 # D632: machine trends on the local collector
 
-**Authority/status:** separate GPT-6.1 Sol/high draft, corrected by the driver after Claude's source-only review. Watcher assignment in Lane G `questions.md`, 11 November 2026 13:01: “next: D632 (signal 2 trend rules), then D633 (D609 first-piece plan)”. Monitoring design §16 and backlog item 2 permit local building/rehearsal only. Claude read204s plus one fixes read (report retained locally); both used source only. The final correction uses per-signal windows/horizons, following that fixes read. Watcher clearance of this revised plan is pending; no owner approval of it is claimed.
+**Authority/status:** separate GPT-6.1 Sol/high draft, corrected by the driver after Claude's source-only review. Watcher assignment in Lane G `questions.md`, 11 November 2026 13:01: “next: D632 (signal 2 trend rules), then D633 (D609 first-piece plan)”. Monitoring design §16 and backlog item 2 permit local building/rehearsal only. Claude read204s plus one fixes read (report retained locally); both used source only. The final correction uses per-signal windows/horizons, following that fixes read. Watcher cleared this final per-signal/container plan on 11 November 2026 at13:51 in Lane G questions.md; no owner approval of it is claimed.
 
 **Request, verbatim from Lane G `queue.md:82-84`:**
 

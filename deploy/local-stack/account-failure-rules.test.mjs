@@ -114,3 +114,48 @@ test('decreasing measured counts or selected buckets starts new slowness coverag
   assert.deepEqual(view(rules.update(counter.snapshot(),4000))[1],['account','slow',false,null],changed);
  }
 });
+
+const trendSettings={machine:'local-a',limits:Object.fromEntries(['disk','memory','load','email','backup_due'].map(signal=>[signal,{limit:signal==='disk'||signal==='memory'?.9:10,windowMs:1000,horizonMs:60000}]))};
+test('machine trends require explicit per-signal limits, windows and horizons',async()=>{
+ const {parseTrendRules}=await import('./account-failure-rules.mjs');
+ assert.equal(typeof parseTrendRules,'function');
+ assert.equal(parseTrendRules(undefined,1000),null);assert.equal(parseTrendRules('',1000),null);
+ assert.deepEqual(parseTrendRules(JSON.stringify(trendSettings),1000),trendSettings);
+ for(const invalid of [{},null,[],{...trendSettings,extra:1},{...trendSettings,machine:'private.example'},
+  {...trendSettings,machine:'a'.repeat(33)},{...trendSettings,limits:{}},
+  ...[{limit:0,windowMs:1000,horizonMs:1},{limit:1.1,windowMs:1000,horizonMs:1},
+   {limit:.9,windowMs:999,horizonMs:1},{limit:.9,windowMs:1000.5,horizonMs:1},
+   {limit:.9,windowMs:1000,horizonMs:0},{limit:.9,windowMs:1000,horizonMs:'1'},
+   {limit:.9,windowMs:1000},{limit:.9,windowMs:1000,horizonMs:1,extra:1}]
+   .map(disk=>({...trendSettings,limits:{...trendSettings.limits,disk}}))])
+  assert.throws(()=>parseTrendRules(JSON.stringify(invalid),1000),{message:'invalid_machine_trend_rules'});
+ assert.throws(()=>parseTrendRules('private-invalid',1000),{message:'invalid_machine_trend_rules'});
+});
+
+test('machine trends distinguish a growth horizon, current limits and falling readings',async()=>{
+ const {createTrendRules}=await import('./account-failure-rules.mjs');
+ assert.equal(typeof createTrendRules,'function');
+ const config={machine:'local-a',limits:{disk:{limit:.9,windowMs:1000,horizonMs:3000},memory:{limit:.9,windowMs:3000,horizonMs:1000},
+  load:{limit:2,windowMs:1000,horizonMs:1000},email:{limit:10,windowMs:1000,horizonMs:1000},backup_due:{limit:10,windowMs:1000,horizonMs:1000}}};
+ const rules=createTrendRules(config,{intervalMs:1000,timeoutMs:2000});
+ const update=(at,values)=>rules.update(Object.fromEntries(Object.entries(values).map(([signal,value])=>[signal,{value,at}])),at).map(({signal,ready,breached})=>[signal,ready,breached]);
+ assert.deepEqual(update(0,{disk:.5,memory:.9,load:2,email:0,backup_due:10}),[
+  ['disk',false,null],['memory',true,true],['load',true,true],['email',false,null],['backup_due',true,true]]);
+ assert.deepEqual(update(1000,{disk:.6,memory:.8,load:1,email:5,backup_due:1}),[
+  ['disk',true,true],['memory',false,null],['load',true,false],['email',true,true],['backup_due',true,false]]);
+ assert.deepEqual(update(2000,{disk:.59999,memory:.7,load:1,email:0,backup_due:0}),[
+  ['disk',true,false],['memory',false,null],['load',true,false],['email',true,false],['backup_due',true,false]]);
+});
+
+test('missing machine signals recover independently and backward time discards coverage',async()=>{
+ const {createTrendRules}=await import('./account-failure-rules.mjs');
+ assert.equal(typeof createTrendRules,'function');
+ const rules=createTrendRules(trendSettings,{intervalMs:1000,timeoutMs:2000});
+ rules.update({disk:{value:.1,at:0},memory:{value:.1,at:0}},0);
+ assert.equal(rules.update({disk:{value:.2,at:1000},memory:{value:.2,at:1000}},1000)[0].ready,true);
+ const missing=rules.update({disk:{value:1,at:-10000},memory:{value:1,at:2000}},2000);
+ assert.deepEqual(missing.slice(0,2).map(({ready,breached})=>[ready,breached]),[[false,null],[true,true]]);
+ const recovered=rules.update({disk:{value:.1,at:7001},memory:{value:.1,at:7001}},7001);
+ assert.deepEqual(recovered.slice(0,2).map(({ready,breached})=>[ready,breached]),[[false,null],[true,false]]);
+ assert.equal(rules.update({memory:{value:.1,at:500}},500)[1].ready,false);
+});

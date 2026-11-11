@@ -720,8 +720,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    drills remain open; the checklist
    creates no account or operational service.
    The local collector now exposes account-service request counts, timing bands and
-   configurable fast/slow failure and slowness breaches per request group, exercised
-   with synthetic local collector checks. It pages nobody and opens no work items.
+   configurable fast/slow failure and slowness breaches per request group. Local Linux
+   sampling and synthetic collector checks also exercise disk, available memory,
+   15-minute load and stack-wide email/overdue-backup age warnings, with explicit
+   per-signal limits and horizons. It pages nobody and opens no work items.
    Here `rule="slow"` names the design's long-window rule, rather than requests taking
    too long: the design intends about twice normal for some hours, while actual values
    are explicit settings. Trial-derived targets and hosted-server measurements remain
