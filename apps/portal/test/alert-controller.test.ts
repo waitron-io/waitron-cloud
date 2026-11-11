@@ -78,3 +78,14 @@ test('alert save keeps pending and 429 gates and resumes a changed choice when t
  t.mock.timers.tick(60000);const retry=c.save();assert.equal(writes,2);
  finish({ok:true,value:{enabled:false,locale:'en'}});await retry;await c.save();assert.equal(writes,2);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`alert save body refusal ${status} keeps confirmation invalidation`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new AlertController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  if(body)calls.push({path,body});return body?{ok:false,status,code:'invalid_input',retryAfterMs:0}:{ok:true,value:{enabled:true,locale:'es'} as T};
+ });
+ c.account('owner');await c.load();c.choose(false,'en');await c.save();
+ assert.equal(c.error,`alertsRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.saved,false);
+ assert.deepEqual(calls,[{path:'/alerts',body:{enabled:'off',locale:'en'}}]);
+ c.choose(true,'es');assert.equal(c.dirty,true,'a refused save still invalidates the last confirmation');
+});

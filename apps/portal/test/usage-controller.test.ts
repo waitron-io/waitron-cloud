@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {UsageController} from '../src/usage-controller.ts';
 import type {ApiResult} from '../src/api.ts';
+import {translations} from '../src/locale.ts';
 import type {UsageSummary} from '../src/usage-types.ts';
 
 const first='12345678-1234-4234-8234-123456789abc';
@@ -51,3 +52,19 @@ test('retry-after blocks repeated reads and an ownership failure clears totals',
  await controller.load();assert.equal(calls,limitedCalls);assert(controller.waiting>0);
  elapsed=60_000;mode='denied';await controller.load();assert.equal(controller.error,'forbidden');assert.equal(controller.summary,undefined);
 });
+
+for (const [status, expected, en, es] of [
+ [408, 'usageRequestInterrupted', 'This request was interrupted. Refresh measured usage.', 'Esta solicitud se interrumpió. Actualizar uso medido.'],
+ [413, 'usageRequestSize', 'This request’s size wasn’t accepted; sending it again won’t help.', 'No se ha aceptado el tamaño de esta solicitud; volver a enviarla no sirve.'],
+ [415, 'usageRequestFormat', 'This request arrived in an unsupported format; sending it again won’t help.', 'Esta solicitud llegó en un formato no admitido; volver a enviarla no sirve.'],
+] as const) {
+ test(`usage body refusal ${status} explains its cause without a successful load`, async()=>{
+  const calls: {path:string;body?:Record<string,unknown>}[]=[];
+  const controller=new UsageController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+   calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+  });
+  controller.account('owner');controller.organisation(first);await controller.load();
+  assert.equal(controller.error,expected);assert.equal(translations.en[expected],en);assert.equal(translations.es[expected],es);assert.equal(controller.pending,false);assert.equal(controller.loaded,false);
+  assert.deepEqual(calls,[{path:'/usage/read',body:{organisationId:first}}]);
+ });
+}

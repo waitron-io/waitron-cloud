@@ -152,3 +152,14 @@ test('apply clears private evidence before drawing or awaiting a configuration c
  const applying=c.apply();assert.equal(c.view?.publicForward,null);assert(draws.every(value=>value===null));
  finish({ok:true,value:{...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:dns.hostname}}}});await applying;assert.equal(c.view?.publicForward,null);assert.equal(c.notice,'remoteSaved');
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['load','preview','apply'] as const)test(`remote ${action} body refusal ${status} sends once`,async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
+ });
+ c.account('owner');c.installationId=id;c.view=view as NonNullable<typeof c.view>;c.hostname=dns.hostname;
+ c.confirmation={kind:'staff',hostname:dns.hostname,revision:1,records:[]};await c[action]();
+ assert.equal(c.error,`remoteRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.notice,undefined);
+ assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/remote-access/${action==='load'?'status':action==='preview'?'dns':'apply'}`);
+});

@@ -15,11 +15,11 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-09-26T00:00:00Z',
   lastUsedAt: '2026-09-26T00:20:00Z', expiresAt: '2099-01-01T00:00:00Z', current: true};
 const other = {...current, id: '22345678-1234-4234-8234-123456789abc', current: false};
-type Scenario = 'current' | 'lost-reply' | 'other' | 'stale-revoke' | 'passive' | 'expired' | 'logout' | 'recheck-expired' | 'navigate-away' | 'single-navigation' | 'navigate-signup' | 'rejected-revoke' | 'passive-list' | 'recheck-unavailable' | 'new-session' | 'navigate-protected';
+type Scenario = 'body-refusal' | 'current' | 'lost-reply' | 'other' | 'stale-revoke' | 'passive' | 'expired' | 'logout' | 'recheck-expired' | 'navigate-away' | 'single-navigation' | 'navigate-signup' | 'rejected-revoke' | 'passive-list' | 'recheck-unavailable' | 'new-session' | 'navigate-protected';
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   const scenarios: Scenario[] = theme === 'light' && width === 390
-    ? ['current', 'lost-reply', 'other', 'stale-revoke', 'passive', 'expired', 'logout', 'recheck-expired', 'navigate-away', 'single-navigation', 'navigate-signup', 'rejected-revoke', 'passive-list', 'recheck-unavailable', 'new-session', 'navigate-protected'] : ['current'];
+    ? ['body-refusal', 'current', 'lost-reply', 'other', 'stale-revoke', 'passive', 'expired', 'logout', 'recheck-expired', 'navigate-away', 'single-navigation', 'navigate-signup', 'rejected-revoke', 'passive-list', 'recheck-unavailable', 'new-session', 'navigate-protected'] : ['current', 'body-refusal'];
   for (const scenario of scenarios) test(`${locale} ${theme} ${width}: ${scenario} session sign-out feedback`, async () => {
     const browser = await chromium.launch({headless: true});
     let releaseCheck!: () => void;
@@ -53,6 +53,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           return ended ? anonymous() : route.fulfill({json: {accountId: 'owner', expiresAt: current.expiresAt}});
         }
         if (path === '/sessions/revoke') {
+          if (scenario === 'body-refusal') return route.fulfill({status: 408, json: {error: 'invalid_input'}});
           revoked = true;
           ended = scenario !== 'other';
           if (scenario === 'lost-reply') return route.abort('connectionreset');
@@ -110,7 +111,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           });
         }
       }
-      if (scenario === 'other') {
+      if (scenario === 'body-refusal') {
+        const message = page.locator('.sessions').getByRole('alert'); await message.waitFor();
+        assert.equal(await message.textContent(), `${c.requestBodyInterrupted} ${c.sessionSignOut}.`);
+        assert.equal(new URL(page.url()).pathname, '/account'); assert.equal(await page.locator('.session-list li').count(), 2);
+        assert.equal(await page.locator('.sessions').getByRole('button', {name: c.sessionSignOut, exact: true}).isEnabled(), true);
+        if (process.env.SIGNOUT_RECEIPT_DIR) {await mkdir(process.env.SIGNOUT_RECEIPT_DIR, {recursive: true}); await page.locator('.sessions').screenshot({path: `${process.env.SIGNOUT_RECEIPT_DIR}/${locale}-${theme}-${width}-refused.png`});}
+      } else if (scenario === 'other') {
         await page.locator('.sessions').getByRole('status').filter({hasText: c.sessionRevoked}).waitFor();
         assert.equal(new URL(page.url()).pathname, '/account');
         assert.equal(await page.locator('.session-list li').count(), 1);

@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {UsageSummary} from './usage-types.ts';
@@ -27,6 +28,7 @@ export class UsageController{
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403)this.#clear();
-  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
+  const cause=bodyRefusal(result);
+  this.error=cause?`usageRequest${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
  }
 }

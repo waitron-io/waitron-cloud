@@ -23,7 +23,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    (window as any).backupClock = clock; Date.now = () => clock.wall;
    performance.now = () => clock.elapsed;
   });
-  let reads=0;const unexpected:string[]=[],pageErrors:string[]=[];
+  let reads=0,bodyRefused=false;const unexpected:string[]=[],pageErrors:string[]=[];
   page.on('pageerror',error=>pageErrors.push(error.message));
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
@@ -36,7 +36,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/sessions'))return route.fulfill({json:{sessions:[{id,createdAt:'2026-10-01T00:00:00Z',lastUsedAt:'2026-10-28T10:00:00Z',expiresAt:'2027-01-01T00:00:00Z',current:true}]}});
    if(path.endsWith('/translation-consent'))return route.fulfill({json:{consents:[]}});
    if(path.endsWith('/alerts'))return route.fulfill({json:{enabled:false,locale}});
-   if(path.endsWith('/backups/list')){reads++;return reads===1?route.fulfill({status:429,headers:{'Retry-After':'2'},json:{error:'rate_limited'}}):route.fulfill({json:{venueId:id,points:[{id,capturedAt:'2026-10-28T09:00:00.000Z',expiresAt:'2026-11-28T09:00:00.000Z',verification:'verified',retention:'daily',protection:'fallback'}],defaultPointId:id,nextCursor:null,continuousRecovery:null}});}
+   if(path.endsWith('/backups/list')){reads++;return bodyRefused?route.fulfill({status:408,json:{error:'invalid_input'}}):reads===1?route.fulfill({status:429,headers:{'Retry-After':'2'},json:{error:'rate_limited'}}):route.fulfill({json:{venueId:id,points:[{id,capturedAt:'2026-10-28T09:00:00.000Z',expiresAt:'2026-11-28T09:00:00.000Z',verification:'verified',retention:'daily',protection:'fallback'}],defaultPointId:id,nextCursor:null,continuousRecovery:null}});}
    unexpected.push(path);return route.fulfill({status:500,json:{error:'unexpected_fixture_request'}});
   });
   await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
@@ -60,5 +60,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.evaluate(()=>(window as any).app.waiting),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   assert.deepEqual(unexpected,[]);assert.deepEqual(pageErrors,[]);
+  bodyRefused=true;await refresh.click();const c=translations[locale],message=section.getByRole('alert').filter({hasText:c.requestBodyInterrupted});await message.waitFor();
+  assert.equal(await message.textContent(),`${c.requestBodyInterrupted} ${c.latestSnapshots}.`);assert.equal(await refresh.isEnabled(),true);
+  if(process.env.BACKUP_CLOCK_RECEIPT_DIR)await section.screenshot({path:`${process.env.BACKUP_CLOCK_RECEIPT_DIR}/${locale}-${theme}-${width}-refused.png`});
  }finally{await browser.close();}
 });

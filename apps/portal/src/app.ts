@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {validEmail} from './email.ts';
 import {AuthenticatorController} from './authenticator-controller.ts';
 import {RecoveryController} from './recovery-controller.ts';
@@ -276,7 +277,9 @@ export class PortalApp {
       if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, performance.now() + 60_000); }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
-      if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
+      const cause = bodyRefusal(result);
+      if (cause) this.error = `${path==='/signup/complete'?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
+      else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
         : result.status === 429 ? 'limited' : result.status === 403 ? 'forbidden'
@@ -345,8 +348,8 @@ export class PortalApp {
     if (!success && route !== this.#route) return;
     // A confirmed anonymous session may already have routed to login.
     if (success) { if (this.path !== '/login') this.navigate('/login'); this.notice = 'signedOut'; }
-    else this.error = 'logoutFailed';
+    else this.error = this.session.logoutCause ? `logoutRequest${this.session.logoutCause}` : 'logoutFailed';
     this.pending = false; this.draw();
-    if (this.error === 'logoutFailed') this.#focusErrors();
+    if (!success && this.error) this.#focusErrors();
   }
 }

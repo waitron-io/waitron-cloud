@@ -188,3 +188,14 @@ for (const [label, protocol, cookie, token] of [
   assert.deepEqual(requests[0]!.init.headers, {});
   assert.deepEqual(requests[2]!.init.headers, {});
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`logout body refusal ${status} keeps the session and server delay`,async t=>{
+ const {session,replies,requests}=fixture(t);
+ replies.push({body:owner},{body:owner},{status,body:{error:'invalid_input'},retry:'2'});
+ await session.check();assert.equal(await session.logout(),false);
+ assert.equal(session.logoutCause,cause);assert.equal(session.state.kind,'authenticated');assert.equal(session.waiting,2);
+ assert.equal(requests.filter(r=>r.url.endsWith('/logout')).length,1);
+ assert.equal(await session.logout(),false);assert.equal(requests.length,3);
+ t.mock.timers.tick(2000);replies.push({body:owner},{status:204});assert.equal(await session.logout(),true);
+ assert.equal(session.logoutCause,undefined);assert.equal(session.state.kind,'anonymous');assert.equal(replies.length,0);
+});

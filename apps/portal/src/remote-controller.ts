@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import {remoteHostname,validRemoteView,validRemoteDns,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
@@ -19,7 +20,8 @@ export class RemoteController {
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#clearForward();
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-  this.error=result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
+  const cause=bodyRefusal(result);
+  this.error=cause?`remoteRequest${cause}`:result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
   if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
  }
  expireForward(now=Date.now()){if(this.view?.publicForward&&Date.parse(this.view.publicForward.expiresAt)<=now)this.view={...this.view,publicForward:null};}

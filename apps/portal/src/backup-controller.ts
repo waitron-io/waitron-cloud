@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {BackupPage} from './backup-types.ts';
@@ -23,7 +24,8 @@ export class BackupController {
    this.selectedSource=previousSource==='snapshot'&&this.selected?'snapshot':this.page.continuousRecovery?'continuous':this.selected?'snapshot':undefined;
   }else if(!result.ok){
    this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
+   const cause=bodyRefusal(result);
+   this.error=cause?`snapshotsRequest${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
    if(result.status===401||result.status===403){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}
   }else this.error='unavailable';
   this.#changed();

@@ -231,3 +231,15 @@ for(const reset of ['fence','account','load'] as const)test(`required field move
   if(reset==='fence')c.fence();else if(reset==='account')c.account('other');else await c.load();
   assert.equal(c.requiredField,undefined);assert.equal(c.error,undefined);
 });
+
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['startLogin','completeLogin','begin','activate','remove','regenerate','cancel'] as const)test(`${action} body refusal ${status} explains the cause`,async()=>{
+ const calls:{path:string;body:unknown}[]=[];
+ const statusFixture={active:true,version:1,recoveryCodesRemaining:10,available:true};
+ const c=controller([{ok:false,status,code:'invalid_input',retryAfterMs:0}],calls);
+ c.account('owner');c.status={...statusFixture,active:true};c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
+ c.password='current';c.proofCode='123456';c.confirmation='654321';
+ if(action==='startLogin')await c.startLogin('owner@example.test','current');else await c[action]();
+ assert.equal(c.error,`${action==='startLogin'?'factorSignIn':action==='completeLogin'?'factorVerify':'factor'}Request${cause}`);
+ assert.equal(c.pending,false);assert.equal(calls.length,1);assert.equal(c.password,'');assert.equal(c.proofCode,'');
+ assert.equal(calls[0]?.path,action==='startLogin'?'/login':action==='completeLogin'?'/login/factor':`/authenticator/${action}`);
+});

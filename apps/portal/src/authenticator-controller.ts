@@ -1,3 +1,4 @@
+import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import type {FactorChallenge,FactorChange,FactorEnrolment,FactorProof,FactorStatus,PasswordLogin} from './authenticator-types.ts';
@@ -20,13 +21,14 @@ export class AuthenticatorController {
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
   fence(){this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
-  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
+  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false,context?:'factor'|'factorSignIn'|'factorVerify'){
     this.#retryUntil=performance.now()+result.retryAfterMs;
-    this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
+    const cause=context&&bodyRefusal(result);
+    this.error=cause?`${context}Request${cause}`:result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
   #managementFailure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
-    this.#failure(result,change);
+    this.#failure(result,change,'factor');
     if(result.status===400){
       if(result.code==='invalid_input')this.error='factorCheckSettings';
       if(result.code==='setup_unavailable'){this.error='factorSetupUnavailable';this.enrolment=undefined;}
@@ -42,7 +44,7 @@ export class AuthenticatorController {
     const result=await this.#request<PasswordLogin>('/login',{email,password});
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){if('factorRequired' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
-    this.#failure(result);if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
+    this.#failure(result,false,'factorSignIn');if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
@@ -52,7 +54,7 @@ export class AuthenticatorController {
     const result=await this.#request<{accountId:string}>('/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
-    this.#failure(result);
+    this.#failure(result,false,'factorVerify');
     // An uncertain completion may have consumed its proof; only a session read can reconcile it.
     if(result.status===0||result.status>=500){this.challenge=undefined;this.error='factorLoginUncertain';this.#changed();return 'reconcile';}
     if(result.status===401){this.challenge=undefined;this.#changed();return 'reconcile';}this.#changed();return false;
