@@ -133,13 +133,13 @@ test('category totals include token, writes, 304 and rejected fetches without re
   await assert.rejects(app.get('/unchanged'),{status:304});
   await assert.rejects(app.get('/broken'),TypeError);
  },'controller');
- assert.equal(rows[0].role,'controller');assert.equal(rows[0].requests,4);
+ assert.equal(rows[0].role,'controller');assert.equal(rows[0].requests,5);
  assert.equal(rows[0].categories['POST token'].requests,1);
  assert.equal(rows[0].categories['POST variable'].requests,1);
- assert.equal(rows[0].categories['GET other'].requests,2);
- assert.equal(rows[0].categories['GET other'].notModified,1);
+ assert.equal(rows[0].categories['GET other'].requests,3);
+ assert.equal(rows[0].categories['GET other'].notModified,2);
  assert.equal(rows[0].categories['GET other'].failedFetches,1);
- assert.equal(rows[0].notModified,1);assert.equal(rows[0].failedFetches,1);
+ assert.equal(rows[0].notModified,2);assert.equal(rows[0].failedFetches,1);
  assert.doesNotMatch(JSON.stringify(rows),/private|venue|456|unchanged|broken/);
 });
 
@@ -158,4 +158,72 @@ test('admission source and log reads have distinct fixed quota categories',async
   {'GET repository':1,'GET contents':1,'GET commit':1,'GET permissions':1,'GET workflow-runs':1,'GET job-log':1,'GET job':1,'GET ref':1,'GET pull':1});
  assert.equal(rows[0].requests,9);
  assert.doesNotMatch(JSON.stringify(rows),/fixture|venue|abc/);
+});
+
+test('conditional JSON reads revalidate current bodies and isolate cached results',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');let revision=1;const seen=[];
+ const server=createServer((req,res)=>{
+  const etag='"revision-'+revision+'"';seen.push(req.headers['if-none-match']??null);res.setHeader('etag',etag);
+  if(req.headers['if-none-match']===etag){res.writeHead(304);res.end();}else res.end(JSON.stringify({revision,nested:{value:'original'}}));
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ const first=await app.get('/current');first.nested.value='changed by caller';
+ assert.deepEqual(await app.get('/current'),{revision:1,nested:{value:'original'}});
+ revision=2;assert.deepEqual(await app.get('/current'),{revision:2,nested:{value:'original'}});
+ assert.deepEqual(seen,[null,'"revision-1"','"revision-1"']);
+});
+
+for(const large of [false,true])test(`conditional cache evicts by ${large?'body bytes':'entry recency'}`,async t=>{
+ const {GithubApp}=await import('./github-app.mjs'),seen=[];
+ const server=createServer((req,res)=>{seen.push([req.url,req.headers['if-none-match']??null]);res.setHeader('etag','"'+req.url+'"');
+  if(req.headers['if-none-match']==='"'+req.url+'"'){res.writeHead(304);res.end();}
+  else res.end(JSON.stringify({payload:large?'x'.repeat(1536*1024):req.url}));
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ for(let i=0;i<(large?3:64);i++)await app.get('/bounded'+i);
+ if(!large){await app.get('/bounded0');await app.get('/bounded64');await app.get('/bounded0');}
+ await app.get(large?'/bounded0':'/bounded1');
+ assert.equal(seen.at(-1)[1],null,'the evicted body cannot supply a conditional request');
+ if(!large)assert.deepEqual(seen.at(-2),['/bounded0','"/bounded0"'],'recently used body stays cached');
+});
+
+for(const change of ['token','mutation','missing-etag'])test(`conditional bodies are discarded after ${change}`,async t=>{
+ const {GithubApp}=await import('./github-app.mjs');let etag=true,token='first';const seen=[];
+ const server=createServer((req,res)=>{if(req.method==='POST'){res.end('{}');return;}
+  seen.push(req.headers['if-none-match']??null);if(etag)res.setHeader('etag','"stable"');
+  if(etag && req.headers['if-none-match']==='"stable"'){res.writeHead(304);res.end();}else res.end('{}');
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>token;
+ await app.get('/current');
+ if(change==='token')token='second';else if(change==='mutation')await app.post('/change',{});else{etag=false;await app.get('/current');}
+ await app.get('/current');assert.equal(seen.at(-1),null);
+});
+
+for(const persistent of [false,true])test(`a bodyless 304 ${persistent?'refuses a second 304':'retries unconditionally once'}`,async t=>{
+ const {GithubApp}=await import('./github-app.mjs');let reads=0;
+ const server=createServer((req,res)=>{reads++;if(persistent || reads===1){res.writeHead(304);res.end();}else res.end('{"current":true}');});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ if(persistent)await assert.rejects(app.get('/current'),{status:304});else assert.deepEqual(await app.get('/current'),{current:true});
+ assert.equal(reads,2);
+});
+
+test('an in-flight conditional response cannot restore a body invalidated by a write',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');let revision=1,release,started;const ready=new Promise(resolve=>{started=resolve;});
+ const server=createServer(async(req,res)=>{
+  if(req.method==='POST'){revision=2;res.end('{}');return;}
+  if(req.headers['if-none-match']==='"one"'){started();await new Promise(resolve=>{release=resolve;});res.writeHead(304);res.end();return;}
+  res.setHeader('etag',revision===1?'"one"':'"two"');res.end(JSON.stringify({revision}));
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ await app.get('/current');const pending=app.get('/current');await ready;await app.post('/change',{});release();
+ assert.deepEqual(await pending,{revision:2});
+});
+
+test('a mutation receiving 304 is refused without replaying the write',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');let writes=0;
+ const server=createServer((req,res)=>{writes++;res.writeHead(304);res.end();});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ await assert.rejects(app.post('/change',{}),{status:304});assert.equal(writes,1);
 });
