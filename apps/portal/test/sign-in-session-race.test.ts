@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createHmac, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator, startPortalFixture} from './fixtures.ts';
+import {addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real session race account password';
@@ -67,7 +67,15 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
       const sessionDone = page.waitForResponse('**/api/account/session'); sessionRelease.resolve(); await (await sessionDone).finished();
       // Let the response's application callback run before releasing the new sign-in.
       await page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+      const emailReply=lost?undefined:page.waitForResponse('**/api/account/login');
       loginRelease.resolve();
+      if(emailReply){
+        const response=await emailReply;assert.equal(response.status(),202);assert.equal((await response.json() as {emailRequired:boolean}).emailRequired,true);
+        await page.getByText(c.emailCheckHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
+        await f.drainMail();const message=await mailFor(owner.email,'Your Waitron Cloud sign-in code',f.mailEvidence);
+        const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+        await page.locator('input[name=factorProof]').fill(code);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
+      }
       await page.getByText(c.accountIntro).waitFor();
       assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL', [owner.id])).rows[0].count, '1');
       assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL', [owner.id])).rows[0].count, lost ? '1' : '0');
