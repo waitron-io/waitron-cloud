@@ -1,0 +1,11 @@
+# D618 one-bundle upload plan
+
+**Finish line:** You can rerun the launcher with one owner-side image upload, bounded private-network distribution and persistent SSH masters. Lane G `questions.md`, WATCHER 2026-11-11 13:36, supersedes 13:31. Parent handles commit, Claude review and watcher clearance before implementation. This plan authorises no provider commands; Amazon qualification awaits the owner's rerun.
+
+**Evidence and reuse:** `scripts/amazon-run.mjs:146,186–194` caps three sequential image uploads at 300,000 ms. Two inspection groups followed by SCP timeout fit the third upload; the actual network cause remains an owner-log inference. Reuse the existing command harness and NFS shared directory over WireGuard (`deploy/kubernetes/bounded-amazon/bootstrap.sh:53–60`).
+
+- [ ] In `scripts/amazon-run.test.mjs`, extend the existing distribution test first; run `node --test scripts/amazon-run.test.mjs` and observe the expected failures. Pin one image SCP to machine 0, all storage setup before distribution, root copies through one shared temporary file to workers' `/tmp`, and shared-file removal before imports. Record command timeouts for 1,303,994,368 bytes; inject upload/internal-copy failures and retain deletion/wait, no-journey and master-cleanup checks. Replace only the specified `ControlPersist=600` expectation with `ControlPersist=yes`.
+- [ ] In `scripts/amazon-run.mjs`, implement that ordering using `/var/local/d620-config/d618-images.tar` temporarily, retaining `/tmp/d618-images.tar` on each machine. Set each archive-copy deadline to `ceil(bytes*8/10000000*1000)+60000` ms: 1,103,196 ms for the measured bundle, assuming minimum 10 Mbit/s plus 60 seconds. Print bytes/budget once; identify upload versus internal-copy stages. Keep masters through explicit final `-O exit`. Preserve imports, digest checks, Docker load, guards and other limits. Rerun the same focused file; retain all existing assertions except the specified persistence value.
+- [ ] Update `docs/aws-infrastructure.md` and D618's paragraph in `docs/backlog.md` with this behavior and owner-rerun limit.
+
+No server, registry, credentials forwarding, retry/check/reopen policy, knobs or test helper. Expected additions/removals: production +25–40/−8–15; tests +35–55/−1–3; support +0/−0; documentation +8–14/−4–6, excluding this plan.
