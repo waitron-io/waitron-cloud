@@ -8,8 +8,10 @@ test('saved explicit language wins, then first supported browser language, then 
   assert.equal(chooseLocale(null, ['fr', 'de']), 'en');
 });
 
-for(const locale of ['en','es'] as const)test(`${locale}: size and format messages do not direct another submission`,()=>{
+for(const locale of ['en','es'] as const)test(`${locale}: size and format messages offer only a different read`,()=>{
   const c=translations[locale];
-  for(const context of ['account','factorSignIn','sessionRevoke','logout','alerts','snapshots','diagnostic','recovery','remote','usage'] as const)
+  for(const context of ['account','accountCreate','accountReset','accountPassword','factorSignIn','factorVerify','sessionRevoke','sessionSignOut','logout','alerts','snapshots','diagnostic','recovery','recoveryInspect','remote','usage'] as const)
     for(const cause of ['Size','Format'] as const)assert.equal(c[`${context}Request${cause}`],c[`requestBody${cause}`]);
+  for(const [context,action] of [['factor','factorRefresh'],['installations','refreshStatus'],['translationConsent','translationConsentRefresh']] as const)
+    for(const cause of ['Size','Format'] as const)assert.equal(c[`${context}Request${cause}`],`${c[`requestBody${cause}`]} ${c[action]}.`);
 });
