@@ -16,7 +16,14 @@ now resets passwords and revokes existing sessions. The [account HTTP API](../pa
 provides the account routes and serves the [bilingual portal](../README.md#run-the-account-portal).
 Optional passkeys are implemented in [the passkey slice](superpowers/specs/2026-09-26-cloud-passkeys-design.md),
 with password-confirmed enrolment/removal, account-scoped credentials and Chromium
-sign-in checks. Password login and email recovery remain available. Optional [authenticator-app protection](authenticator-app.md) now adds a second step to
+sign-in checks. On the portal, select **Remember me** before signing in with a passkey
+if you want saved passkeys offered first next time. The preference is saved only after
+verified sign-in and contains no account or credential identifier. Uncheck it to clear it.
+Browsers with passkey autofill can offer their saved keys; the explicit passkey button
+and password form remain available. Refusing browser storage does not prevent sign-in.
+`node --test apps/portal/test/passkey-controller.test.ts apps/portal/test/passkey-preference-browser.test.ts`
+checks this flow with a virtual authenticator in Chromium; other browsers' prompts
+are not qualified by that run. Password login and email recovery remain available. Optional [authenticator-app protection](authenticator-app.md) now adds a second step to
 password sign-in. Email reset keeps the factor and saved codes; successful factor changes
 end every session. Live delivery and production factor policy remain deployment work.
 

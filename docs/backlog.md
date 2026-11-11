@@ -760,10 +760,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    codes for every enrolled second method, password resets forgetting recognised devices,
    handover defaults and no manual recovery or support/operator override. The watcher
    cleared the [build plan](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md)
-   for publication on 11 November. Remaining sign-in, fresh-proof, handover and recovery
-   work stays unbuilt; the owner must give the build go-ahead. Whether one re-proof can
-   cover several risky actions for a short window also awaits the owner. Earlier sign-in
-   slices do not depend on that choice; later handover/recovery need their actual interfaces.
+   for publication on 11 November; the owner authorised building it at 14:05 with
+   “10-min window; build (Recommended)”. Slice 1 remembers passkey-first sign-in locally.
+   Email checks, browser recognition, account recovery codes, enrollment policy and fresh
+   proof remain; later handover/recovery need their actual interfaces. Billing stays parked.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
    activation permission.

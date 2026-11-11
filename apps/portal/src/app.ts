@@ -51,6 +51,7 @@ export class PortalApp {
   billing: BillingController;
   diagnostics: DiagnosticController;
   #route = 0;
+  #passkeyOffered = false;
   #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -96,7 +97,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -135,6 +136,12 @@ export class PortalApp {
       if (state.expired || signedOut) { this.notice = state.expired ? 'sessionExpired' : 'signedOut'; this.draw(); }
     }
     else this.draw();
+    this.#offerPasskeys();
+  }
+  #offerPasskeys() {
+    if (this.path !== '/login' || this.session.state.kind !== 'anonymous' || !this.passkeys.preferred || this.#passkeyOffered) return;
+    this.#passkeyOffered = true;
+    void this.signInWithPasskey(true);
   }
   get copy() { return translations[this.locale]; }
   get completion() { return (this.path === '/signup' && !!this.link.token) || this.path === '/reset-password'; }
@@ -180,6 +187,7 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
     this.billing.fence();
+    this.#passkeyOffered = false;
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
@@ -195,6 +203,7 @@ export class PortalApp {
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.draw(); this.focusHeading();
     if (['/account','/','/connect','/recover'].includes(path)) void this.session.check();
+    this.#offerPasskeys();
   }
   follow(event: MouseEvent, path: string) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -241,7 +250,7 @@ export class PortalApp {
     if (this.path === '/connect') { await this.submitPairing(); return; }
     if (this.pending || this.waiting) return;
     this.readFields(); this.errors = {}; this.error = undefined;
-    if (this.path === '/login') this.passkeys.notice = undefined;
+    if (this.path === '/login') this.passkeys.fence();
     const f = this.fields;
     const emailNeeded = this.path === '/login' || !this.completion;
     const passwordNeeded = this.path === '/login' || this.completion;
@@ -310,10 +319,10 @@ export class PortalApp {
     this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':result.active?'factorChanged':'factorRemoved';this.draw();this.focusHeading();
     void this.session.check();
   }
-  async signInWithPasskey() {
+  async signInWithPasskey(autofill = false) {
     const route = this.#route;
     this.authenticator.fence();this.factorCodes=[];
-    const result = await this.passkeys.signIn();
+    const result = await this.passkeys.signIn(autofill);
     if (route !== this.#route || !result) return;
     this.session.dispose(); this.session = this.#session();
     if (result === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
