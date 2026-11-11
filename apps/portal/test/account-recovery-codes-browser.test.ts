@@ -26,7 +26,7 @@ test(`passkey recovery ${locale} ${colorScheme} ${width}`,async()=>{
   await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
   const codes=await page.locator('.factor-codes code').allTextContents();assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);await look('codes');
   await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await login();
-  await page.getByLabel(c.factorProofType,{exact:true}).selectOption('recovery');await look('challenge');
+  await page.getByLabel(c.factorProofType,{exact:true}).selectOption('recovery');await page.getByRole('heading',{name:c.factorRecovery,exact:true}).waitFor();await look('challenge');
   assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).count(),0);
   await page.locator('input[name=factorProof]').fill(codes[0]!);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
   assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),true);

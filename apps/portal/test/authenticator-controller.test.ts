@@ -280,3 +280,9 @@ test('a saved recovery code completes a passkey fallback without remembering a b
  assert.deepEqual(calls[1],{path:'/login/recovery',body:{challengeToken:token,code:'A'.repeat(32)}});
  assert.equal(c.proofCode,'');assert.equal(c.challenge,undefined);
 });
+
+
+test('a new password challenge starts on its ordinary code choice after recovery use',async()=>{
+ const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt})]);c.proofKind='recovery';
+ await c.startLogin('owner@example.test','password');assert.equal(c.proofKind,'totp');
+});

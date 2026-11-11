@@ -176,7 +176,7 @@ export class PortalApp {
   title(): string {
     const c = this.copy;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
-    if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?c.emailCheckTitle:c.factorTitle;
+    if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];

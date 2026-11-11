@@ -41,7 +41,7 @@ export class AuthenticatorController {
   #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&!this.waiting){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
   async startLogin(email:string,password:string,locale?:'en'|'es'):Promise<'authenticated'|'factor'|'reconcile'|false>{
     const generation=this.#start();if(generation===undefined)return false;
-    this.challenge=undefined;this.#clearInput();
+    this.challenge=undefined;this.proofKind='totp';this.#clearInput();
     const result=await this.#request<PasswordLogin>('/login',{email,password,...(locale?{locale}:{})});
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){if('challengeToken' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
