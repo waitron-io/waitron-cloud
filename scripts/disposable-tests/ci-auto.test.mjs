@@ -210,6 +210,15 @@ test('automatic pickup leaves a predecessor marked for its hosted retry unclaime
  assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6,hosted:{789:2}}),[]);
 });
 
+test('a controller tick leaves a marked predecessor unclaimed while cancellation waits',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[];
+ routingStores.set(f.api,{value:'{"789":2}'});const api=routingVariables(f.api);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ f.api.post=async()=>{throw Object.assign(new Error('Cancellation temporarily unavailable'),{status:503});};
+ await automaticTick({configuration:'/fixture/config',config,api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(served,[]);assert.equal((await api.get('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')).value,'{"789":2}');
+});
+
 test('automatic pickup serves older waiting PR runs before newer runs fill the pool',async()=>{
  const f=fixture(),get=f.api.get;
  f.run.created_at='2026-11-07T23:00:00Z';
@@ -941,7 +950,7 @@ for(const [state,running,wave,wantCancel] of [
  ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,true],
  ['large wave',0,21,true],['queued hosted',0,5,true],['unknown jobs',0,5,false],
  ['unknown runs',0,5,false],['wrong attempt',0,5,false],['duplicate runs',0,5,false],
- ['reserved retry',15,5,true],['balanced queue',0,5,false],['unrecognized status',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
+ ['locally owned',0,5,false],['reserved retry',15,5,true],['balanced queue',0,5,false],['unrecognized status',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
 ])test(`overflow requires observed hosted room: ${state}`,async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  const target=f.jobs[0];f.jobs.splice(0,f.jobs.length,...Array.from({length:wave},(_,i)=>({...target,id:901+i})));
@@ -963,10 +972,12 @@ for(const [state,running,wave,wantCancel] of [
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:hosted.length+(state==='unknown jobs'?1:0),jobs:hosted};
   return get(path,options);
  };
- f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
+ let markerWrites=0;f.api.patch=async(path,body)=>{markerWrites++;marker=body.value;};f.api.post=async path=>{posts.push(path);};
+ if(state==='locally owned')f.local=()=>({slots:6,busy:6,owned:new Set([789])});
  let error;try{await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});}catch(e){error=e;}
  if(state.startsWith('unknown') || state==='wrong attempt' || state==='duplicate runs')assert.match(error?.message??'',/inventory/i);
  else assert.equal(error,undefined);
+ if(state==='locally owned')assert.equal(markerWrites,0);
  assert.deepEqual(posts,wantCancel?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
  assert.deepEqual(JSON.parse(marker),wantCancel?{...(state==='reserved retry'?{790:2}:{}),789:2}:state==='reserved retry'?{790:2}:{});
 });
@@ -1323,10 +1334,10 @@ test('capacity publication waits a minute while a completed slot refills',async 
  assert.equal(writes,1);
 });
 
-for(const slow of [false,true])test(`full-pool capacity passes keep their minute cadence across restarts after ${slow?'delayed':'immediate'} publication`,async t=>{
+for(const [label,slow,initial] of [['immediate',false,''],['delayed',true,''],['malformed',false,'{bad']])test(`full-pool capacity passes keep their minute cadence across restarts after ${label} publication`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
  for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
- f.jobs.length=0;let now=Date.now(),capacity='',writes=0,publishedAt;t.mock.method(Date,'now',()=>now);
+ f.jobs.length=0;let now=Date.now(),capacity=initial,writes=0,publishedAt;t.mock.method(Date,'now',()=>now);
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity,updated_at:publishedAt}:get(path);
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));writes++;capacity=body.value;if(slow)now+=35000;publishedAt=new Date(now).toISOString();};
  const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api});

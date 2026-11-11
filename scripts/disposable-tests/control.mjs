@@ -57,8 +57,10 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(!pass)return;
   if(lastCapacity===-Infinity)try{
    const previous=await api.get(`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_CAPACITY`,{signal});
-   const at=previous.value?JSON.parse(previous.value).observedAt:undefined,updated=Date.parse(previous.updated_at);
-   if(Number.isSafeInteger(at)&&at>=0)lastCapacity=Math.max(at,Number.isFinite(updated)?updated:0);
+   try{
+    const at=previous.value?JSON.parse(previous.value).observedAt:undefined,updated=Date.parse(previous.updated_at);
+    if(Number.isSafeInteger(at)&&at>=0)lastCapacity=Math.max(at,Number.isFinite(updated)?updated:0);
+   }catch(error){console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   }catch(error){if(error.status!==404){pending(error);return;}}
   if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
