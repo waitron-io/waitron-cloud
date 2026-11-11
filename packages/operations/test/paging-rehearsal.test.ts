@@ -15,7 +15,7 @@ for(const name of ['twilio','vonage'] as const)test(`${name} fake sends reach si
   const vonage=createVonage({...common,apiKey:secrets.apiKey,apiSecret:'synthetic',token:async()=>'synthetic-token',fetcher:fake.fetcher});
   const attempts:PageAttempt[]=[],events:TrustedEvent[]=[];
   listener=await callbackServer(createPagingCallbackListener({origin:common.origin,twilio:{provider:twilio,authToken:secrets.twilio},
-   vonage:{provider:vonage,apiKey:secrets.apiKey,signatureSecret:secrets.vonage},attempts:()=>attempts,onEvent:e=>events.push(e)}));
+   vonage:{provider:vonage,apiKey:secrets.apiKey,signatureSecret:secrets.vonage},attempts:()=>attempts,onEvent:e=>{events.push(e);}}));
   const attempt=await sendPage(name==='twilio'?twilio:vonage,notification);attempts.push(attempt);
   assert.equal(pageDecision({notification,attempts,events}).acknowledged,false);
   const [text,callRequest]=fake.requests;
