@@ -24,7 +24,7 @@ test(`email sign-in ${locale} ${colorScheme} ${width}: password waits for the ma
     await page.getByRole('heading',{name:locale==='en'?'Check your email':'Revisa tu correo',exact:true}).waitFor();
     assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).count(),0);
     assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
-    assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');assert.equal(await page.getByLabel(c.factorProofType,{exact:true}).count(),0);
+    assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');assert.equal(await page.getByLabel(c.factorProofType,{exact:true}).inputValue(),'totp');
     if(process.env.EMAIL_SIGN_IN_RECEIPT_DIR)await page.screenshot({path:`${process.env.EMAIL_SIGN_IN_RECEIPT_DIR}/${locale}-${colorScheme}-${width}.png`,fullPage:true});
     await f.drainMail();const message=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
     const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);

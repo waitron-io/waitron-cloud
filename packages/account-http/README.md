@@ -152,7 +152,7 @@ An authenticated account can read `GET /passkeys`, begin enrolment with
 `POST /passkeys/registration/verify`, and remove an account-scoped row with
 `POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
 These mutations require the current session's CSRF header. If you use a password
-while a passkey is enrolled, sign-in also requires an emailed six-digit code. With neither method enrolled, a new browser also needs the emailed code. Choose
+while a passkey is enrolled, sign-in also requires an emailed six-digit code or a saved recovery code. With neither method enrolled, a new browser also needs the emailed code. Choose
 **Remember this browser (30 days)** only on a browser you control to use your password
 alone next time. The choice is unchecked by default; password reset forgets every
 recognised browser. An active
@@ -163,7 +163,7 @@ Email recovery remains available, and password reset does not delete enrolled pa
 202 with `emailRequired:true`, `challengeToken` and `expiresAt`, without cookies.
 Send `POST /login/email {"challengeToken":"<browser challenge>","code":"000123"}`
 from the exact portal origin. A valid code returns 200 with the account ID and session
-cookies. To remember that browser, add `"rememberBrowser":true` to this completion.
+cookies. For a passkey fallback, send a saved code to `/login/recovery` with the same challenge and `code` fields instead. This never remembers the browser. To remember that browser, add `"rememberBrowser":true` to this completion.
 The response sets a 30-day HttpOnly cookie, `__Host-cloud_browser` on HTTPS or
 `cloud_browser` in local HTTP tests. It cannot replace an app code or passkey fallback's
 email check. Signup completion accepts the optional string `"rememberBrowser":"true"`

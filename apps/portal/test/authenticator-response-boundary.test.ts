@@ -140,7 +140,7 @@ for (const action of actions) {
     {name: 'lost connection', network: true},
     {name: 'service refusal', status: 503, body: {error: 'temporarily_unavailable'}},
     ...(action === 'remove' ? [{name: 'unexpected recovery codes', body: {...valid, recoveryCodes: codes}}] : [
-      {name: 'missing recovery codes', body: {status: 'changed', active: true}},
+      ...(action === 'regenerate' ? [{name: 'missing recovery codes', body: {status: 'changed', active: true}}] : []),
       {name: 'too few recovery codes', body: {...changed, recoveryCodes: codes.slice(1)}},
       {name: 'duplicate recovery codes', body: {...changed, recoveryCodes: [...codes.slice(1), codes[1]]}},
       {name: 'invalid recovery code', body: {...changed, recoveryCodes: [...codes.slice(1), 'not-a-code']}},
@@ -195,3 +195,29 @@ for (const action of actions) {
     assert.equal(calls.length, before + 2); assert.equal(c.error, undefined); cleared(c);
   });
 }
+
+
+for(const contradictory of [false,true])test(`passkey-only regeneration ${contradictory?'rejects a changed app state':'accepts its inactive app state'}`,async t=>{
+ const {controller:c,replies,calls}=harness(t),inactive={...status,active:false};replies['/authenticator']={body:inactive};await c.load();c.password='current password';
+ const reply={...changed,active:contradictory};replies['/authenticator/regenerate']={body:reply};const before=calls.length;
+ if(contradictory){assert.equal(await c.regenerate(),'reconcile');assert.equal(c.error,'factorChangeUncertain');assert.deepEqual(c.status,inactive);}
+ else{assert.deepEqual(await c.regenerate(),reply);assert.equal(c.status,undefined);assert.equal(c.error,undefined);}
+ cleared(c);assert.equal(calls.length,before+1);
+});
+
+
+test('authenticator activation preserves a working recovery set without publishing codes again', async t => {
+  const {controller: c, replies, calls} = harness(t);
+  await c.load(); authority(c); await c.begin(); authority(c);
+  const before = calls.length;
+  const preserved = {status: 'changed', active: true};
+  replies['/authenticator/activate'] = {body: preserved};
+  const result = await c.activate();
+  assert.deepEqual(result, preserved);
+  assert.ok(result && typeof result === 'object');
+  assert.equal(Object.hasOwn(result, 'recoveryCodes'), false);
+  assert.equal(c.status, undefined); assert.equal(c.loaded, false);
+  assert.equal(c.enrolment, undefined); assert.equal(c.challenge, undefined);
+  assert.equal(c.error, undefined); cleared(c);
+  assert.equal(calls.length, before + 1, 'successful activation must not retry or reload');
+});

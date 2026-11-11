@@ -41,7 +41,7 @@ export class AuthenticatorController {
   #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&!this.waiting){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
   async startLogin(email:string,password:string,locale?:'en'|'es'):Promise<'authenticated'|'factor'|'reconcile'|false>{
     const generation=this.#start();if(generation===undefined)return false;
-    this.challenge=undefined;this.#clearInput();
+    this.challenge=undefined;this.proofKind='totp';this.#clearInput();
     const result=await this.#request<PasswordLogin>('/login',{email,password,...(locale?{locale}:{})});
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){if('challengeToken' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
@@ -50,10 +50,11 @@ export class AuthenticatorController {
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
     const email='emailRequired' in this.challenge;
-    if(!validCode(code,email?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
+    const recovery='emailRequired' in this.challenge&&!this.challenge.rememberBrowserAllowed&&this.proofKind==='recovery';
+    if(!validCode(code,email&&!recovery?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
-    const result=await this.#request<{accountId:string}>(email?'/login/email':'/login/factor',body);
+    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(!recovery&&this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
+    const result=await this.#request<{accountId:string}>(email?(recovery?'/login/recovery':'/login/email'):'/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
     this.#failure(result,false,'factorVerify');
@@ -87,10 +88,14 @@ export class AuthenticatorController {
     if(action==='activate'&&!code)return this.#required('factorCodeRequired','confirmation');
     if(action==='activate'&&!validCode(code,'totp'))return this.#required('factorConfirmationInvalid','confirmation');
     const generation=this.#start();if(generation===undefined)return false;
+    const active=this.status?.active;
     const body={...authority,...(action==='activate'?{pendingToken:this.enrolment!.pendingToken,code}:{})};this.#clearInput();
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);
     if(generation!==this.#generation)return false;this.pending=false;
-    if(result.ok){this.fence();this.#changed();return result.value;}
+    if(result.ok){
+      if(action==='regenerate'&&active!==undefined&&result.value.active!==active){this.enrolment=undefined;this.challenge=undefined;this.error='factorChangeUncertain';this.#changed();return 'reconcile';}
+      this.fence();this.#changed();return result.value;
+    }
     this.#managementFailure(result,true);
     if(result.status===403&&result.code==='credentials_invalid'){
       this.pending=true;const session=await this.#request<{accountId:string}>('/session');

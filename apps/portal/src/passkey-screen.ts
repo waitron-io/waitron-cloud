@@ -51,6 +51,10 @@ export function passkeyAccountScreen(app: PortalApp) {
         }
         app.draw();
       }}></wt-input>
+    ${app.passkeys.passkeys.length&&app.authenticator.loaded&&!app.authenticator.status?.active?html`<p>${c.accountRecoveryHelp}</p>
+      <p>${c.factorRemaining} ${app.authenticator.status?.recoveryCodesRemaining??0}</p>
+      <wt-button .disabled=${app.passkeys.pending||app.authenticator.pending||!!app.authenticator.waiting||!app.passkeys.password} .loading=${app.authenticator.pending}
+        @click=${()=>{void app.manageFactor('regenerate',true);}}>${c.factorRegenerate}</wt-button>`:nothing}
     ${app.passkeys.supported === false ? nothing : html`<wt-form-actions>
       <wt-button id="passkey-add" .disabled=${app.passkeys.pending || !!app.passkeys.waiting || !app.passkeys.password} .loading=${app.passkeys.pending}
         @click=${() => {void app.addPasskey();}}>${app.passkeys.pending ? c.wait : c.passkeyAdd}</wt-button>

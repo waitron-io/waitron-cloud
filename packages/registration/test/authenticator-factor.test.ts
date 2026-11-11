@@ -108,11 +108,11 @@ for (const hostClockShift of [0, 180_000]) for (const activationOffset of [0, -1
   }
   const activationCode=totp(pending.secret,verifierNow.getTime()+activationOffset*30_000);
   const changed=await s.activate(a,pending.pendingToken,activationCode);
-  assert.equal(changed.status,'changed');assert.equal(changed.active,true);assert.equal(changed.recoveryCodes.length,10);
+  assert.equal(changed.status,'changed');assert.equal(changed.active,true);assert.ok(changed.recoveryCodes);assert.equal(changed.recoveryCodes.length,10);
   assert.equal(new Set(changed.recoveryCodes).size,10);assert.ok(changed.recoveryCodes.every(c=>/^[0-9A-F]{32}$/.test(c)));
   await assertEnded();assert.equal((await factor()).version,1);
   const codes=(await pool.query('SELECT * FROM cloud_factor_recovery_codes')).rows;
-  assert.equal(codes.length,10);assert.ok(codes.every(r=>!changed.recoveryCodes.includes(r.code_hash)));
+  assert.equal(codes.length,10);assert.ok(codes.every(r=>!changed.recoveryCodes!.includes(r.code_hash)));
   const challenge=await loginChallenge();
   await refused(new registration.PasswordLoginStore(clockPool,keys,loginPolicy).complete(challenge,proof(activationCode)),'credentials_invalid');
   const credentials=await new registration.PasswordLoginStore(clockPool,keys,loginPolicy).complete(challenge,recovery(changed.recoveryCodes[0]!));
@@ -138,7 +138,7 @@ test('replacement requires old proof again and invalid confirmation spends an at
   assert.equal(row.attempts,1);assert.equal(row.consumed_at,null);
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes WHERE code_hash=$1',[digest(JSON.stringify(['cloud-factor-recovery-v1',accountId,1,codes[1]]))])).rows[0].consumed_at,null);
   const changed=await s.activate({...a,proof:recovery(codes[1]!)},pending.pendingToken,totp(pending.secret));
-  assert.equal(changed.recoveryCodes.length,10);assert.equal((await factor()).version,2);assert.notEqual((await factor()).secret_generation,generation);await assertEnded();
+  assert.ok(changed.recoveryCodes);assert.equal(changed.recoveryCodes.length,10);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=1 AND consumed_at IS NOT NULL')).rows[0].count,'2');assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'12');assert.equal((await factor()).version,2);assert.notEqual((await factor()).secret_generation,generation);await assertEnded();
   row=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];assert.equal(row.attempts,2);assert.ok(row.consumed_at);
 });
 test('starting replacement keeps the old factor available for password sign-in and requires a fresh old proof to confirm',async()=>{
@@ -360,7 +360,7 @@ test('concurrent regenerations from independent pools cannot publish two recover
   try {
     const results=await Promise.allSettled([store().regenerate({...a,proof:recovery('D'.repeat(32))}),store(keys,policy,other).regenerate({...b,proof:recovery('E'.repeat(32))})]);
     assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected' && r.reason.code==='permission_denied').length,1);
-    assert.equal((await factor()).version,2);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=2 AND consumed_at IS NULL')).rows[0].count,'10');
+    assert.equal((await factor()).version,2);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version IS NULL AND consumed_at IS NULL')).rows[0].count,'10');
     assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=1')).rows[0].count,'2');await assertEnded();
   } finally {await other.end();}
 });

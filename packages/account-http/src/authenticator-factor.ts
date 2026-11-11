@@ -36,8 +36,8 @@ function proof(value:unknown):FactorProof {
 }
 function unavailable():never {throw new AccountHttpError(503,'temporarily_unavailable',1);}
 export async function authenticatorResponse(c:Context,options: Options):Promise<Response> {
-  const email=c.req.path==='/api/account/login/email';
-  const completion=email||c.req.path==='/api/account/login/factor';
+  const email=c.req.path==='/api/account/login/email',recovery=c.req.path==='/api/account/login/recovery';
+  const completion=email||recovery||c.req.path==='/api/account/login/factor';
   const action=completion?'/complete':c.req.path.slice('/api/account/authenticator'.length);
   if(!completion&&!['','/begin','/activate','/remove','/regenerate','/cancel'].includes(action))throw new AccountHttpError(404,'not_found');
   const method=action===''?'GET':'POST';
@@ -48,15 +48,15 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     if(action==='')return c.json(await options.store.status(sessionToken));
     const body=await readBoundedJsonObject(c.req.raw);
     if(completion) {
-      exact(body,['challengeToken',email?'code':'proof'],email?['rememberBrowser']:[]);
-      if(body.rememberBrowser!==undefined&&typeof body.rememberBrowser!=='boolean')throw new AccountHttpError(400,'invalid_input');const challengeToken=token(body.challengeToken),parsed=email?code(body.code):proof(body.proof);
+      exact(body,['challengeToken',email||recovery?'code':'proof'],email?['rememberBrowser']:[]);
+      if(body.rememberBrowser!==undefined&&typeof body.rememberBrowser!=='boolean')throw new AccountHttpError(400,'invalid_input');const challengeToken=token(body.challengeToken),parsed=email?code(body.code):recovery?proof({kind:'recovery',code:body.code}).code:proof(body.proof);
       const p=options.policy;if(!p)unavailable();
       // IP rejection precedes derived account/challenge counters, so a blocked source cannot spend them.
       await options.consume([{scope:'factor-complete-ip',subject:options.ip,...p.completeIp}]);
-      const candidate=(await options.pool.query(`SELECT account_id FROM ${email?'cloud_sign_in_checks':'cloud_factor_login_challenges'} WHERE token_hash=$1`,[digest(challengeToken)])).rows[0];
+      const candidate=(await options.pool.query(`SELECT account_id FROM ${email||recovery?'cloud_sign_in_checks':'cloud_factor_login_challenges'} WHERE token_hash=$1`,[digest(challengeToken)])).rows[0];
       await options.consume([{scope:'factor-complete-challenge',subject:challengeToken,...p.completeChallenge},
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
-      const credentials=await (email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
+      const credentials=await (recovery?options.login.completeRecoveryCheck(challengeToken,parsed as string):email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
     }
     exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['password','pendingToken','code']:['password'],action==='/cancel'?[]:['proof']);
     const parsedPassword=action==='/cancel'?undefined:password(body.password);

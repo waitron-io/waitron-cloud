@@ -386,3 +386,22 @@ test('a new password browser can opt into a private 30-day cookie after email pr
   const known=await request('/login',{email:owner.email,password},{headers});assert.equal(known.status,200);
   await refusal(await request('/login',{email:owner.email,password},{headers:{cookie:headers.cookie+'; '+headers.cookie}}),400,'invalid_input');
 });
+
+
+test('passkey-only recovery codes are returned once and complete the password-bound recovery route',async()=>{
+ const owner=await account(),headers=await signIn(owner.email);
+ await db.pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[owner.accountId,randomBytes(32)]);
+ await db.pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
+ VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[randomUUID(),owner.accountId,Buffer.from([1,2,3])]);
+ const generated=await request('/authenticator/regenerate',{password},{headers});assert.equal(generated.status,200);
+ const reply=await generated.json() as {status:string;active:boolean;recoveryCodes:string[]};
+ assert.equal(reply.active,false);assert.equal(reply.recoveryCodes.length,10);
+ const start=await request('/login',{email:owner.email,password});assert.equal(start.status,202);assert.equal(start.headers.getSetCookie().length,0);
+ const {challengeToken}=await start.json() as {challengeToken:string},body={challengeToken,code:reply.recoveryCodes[0]};
+ await refusal(await request('/login/recovery',body,{headers:{origin:'https://other.example.test'}}),403,'forbidden');
+ await refusal(await request('/login/recovery',{...body,rememberBrowser:true}),400,'invalid_input');
+ const signed=await request('/login/recovery',body);assert.equal(signed.status,200);
+ assert.deepEqual(await signed.json(),{accountId:owner.accountId});assert.equal(signed.headers.getSetCookie().length,2);
+ assert.equal((await request('/session',undefined,{headers:cookies(signed)})).status,200);
+ await refusal(await request('/login/recovery',body),401,'credentials_invalid');
+});

@@ -249,15 +249,15 @@ test('email sign-in keeps its browser challenge and posts the six-digit mailbox 
   const calls:{path:string;body:unknown}[]=[];
   const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),ok({accountId:'owner'})],calls);
   assert.equal(await c.startLogin('owner@example.test','password'),'factor');
-  assert.equal(c.challenge?.challengeToken,token);c.proofKind='recovery';c.proofCode=' 000 123 ';
+  assert.equal(c.challenge?.challengeToken,token);c.proofKind='totp';c.proofCode=' 000 123 ';
   assert.equal(await c.completeLogin(),'authenticated');assert.equal(c.challenge,undefined);assert.equal(c.proofCode,'');
   assert.deepEqual(calls[1],{path:'/login/email',body:{challengeToken:token,code:'000123'}});
 });
 
 
-test('an incorrect mailbox code keeps the challenge for another attempt without accepting a recovery code',async()=>{
+test('a password-only mailbox check keeps its challenge and cannot use a saved recovery code',async()=>{
   const calls:{path:string;body:unknown}[]=[];
-  const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),{ok:false,status:401,code:'credentials_invalid',retryAfterMs:0},ok({accountId:'owner'})],calls);
+  const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt,rememberBrowserAllowed:true}),{ok:false,status:401,code:'credentials_invalid',retryAfterMs:0},ok({accountId:'owner'})],calls);
   await c.startLogin('owner@example.test','password');c.proofKind='recovery';c.proofCode='A'.repeat(32);
   assert.equal(await c.completeLogin(),false);assert.equal(calls.length,1);
   c.proofCode='123456';assert.equal(await c.completeLogin(),false);assert.equal(c.challenge?.challengeToken,token);
@@ -270,4 +270,19 @@ test('remember browser is explicit, applies only to the email step and clears on
  await c.startLogin('owner@example.test','password');c.proofCode='123456';await c.completeLogin();
  assert.deepEqual(calls[1],{path:'/login/email',body:{challengeToken:token,code:'123456',rememberBrowser:true}});
  c.fence();assert.equal(c.rememberBrowser,false);
+});
+
+
+test('a saved recovery code completes a passkey fallback without remembering a browser',async()=>{
+ const calls:{path:string;body:unknown}[]=[],c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),ok({accountId:'owner'})],calls);
+ await c.startLogin('owner@example.test','password');c.proofKind='recovery';c.proofCode='A'.repeat(32);c.rememberBrowser=true;
+ assert.equal(await c.completeLogin(),'authenticated');
+ assert.deepEqual(calls[1],{path:'/login/recovery',body:{challengeToken:token,code:'A'.repeat(32)}});
+ assert.equal(c.proofCode,'');assert.equal(c.challenge,undefined);
+});
+
+
+test('a new password challenge starts on its ordinary code choice after recovery use',async()=>{
+ const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt})]);c.proofKind='recovery';
+ await c.startLogin('owner@example.test','password');assert.equal(c.proofKind,'totp');
 });

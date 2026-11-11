@@ -4,7 +4,7 @@ For a password-only account, a new browser needs an emailed code. If you choose
 **Remember this browser (30 days)**, that browser can then use your password alone.
 Keep the choice off on a shared browser. Password reset forgets every recognised browser. You can add an optional
 authenticator app from **Account**, then use its six-digit code or a saved recovery
-code when signing in with your password. Passkey sign-in remains available separately.
+code when signing in with your password. Passkey sign-in remains available separately. If you have a passkey, you can also create recovery codes under **Passkeys** with your current password. After entering your email and password, choose **Recovery code** to use one instead of the emailed code. You do not need an authenticator app for this.
 
 You can paste codes with spaces, such as `123 456`. The portal removes whitespace
 from authenticator and recovery codes, keeping recovery-code hyphens. Blank codes
@@ -16,7 +16,7 @@ Your other entries stay in the form so you can correct the missing value and try
 Scan the QR code or enter the setup secret in your authenticator, then confirm with
 its current code. The portal renders the QR locally. Save the ten recovery codes
 when they appear: each works once, and Cloud stores only their hashes. Setup secrets
-and recovery codes stay in the current tab; leaving or reloading clears them.
+and recovery codes stay in the current tab; leaving or reloading clears them. Adding or replacing a method keeps your unused codes. If none remain when you activate an app, save the ten new codes shown. **New recovery codes** replaces an existing set. Removing your app keeps codes while a passkey remains. Removing your last method retires them.
 
 Enrolment, replacement, removal and code regeneration end every Cloud session.
 Sign in again afterwards. Each change requires your current password and live
@@ -59,7 +59,7 @@ runtime configuration before enablement; preserve any keys needed by existing da
 
 Missing policy or unreadable secrets refuse factor operations. Password-only sign-in from an already recognised browser, passkeys and existing live sessions remain available.
 Password fallback for a passkey account needs the configured challenge-attempt limit
-and the email outbox keys, even without an app. It requires an emailed code; an active
+and the email outbox keys, even without an app. You can use the emailed code or a saved recovery code; an active
 app always takes priority. An enrolled
 factor is never silently treated as absent. Cancellation of pending setup remains
 available with its exact live session and CSRF proof during a configuration outage.
@@ -74,11 +74,12 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 | Request | Body and authority | Successful reply |
 | --- | --- | --- |
 | POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true` (app) or `emailRequired:true` (a new password-only browser or passkey password fallback), `challengeToken`, `expiresAt` and no cookies |
+| POST `/login/recovery` | Email-step `challengeToken`, saved recovery `code`, exact Origin | 200 with account ID and session cookies; no browser-recognition cookie |
 | POST `/login/factor` | `challengeToken`, `proof`, exact Origin | 200 with account ID and cookies |
 | GET `/authenticator` | Live session | `active`, `version`, `recoveryCodesRemaining`, `available` |
 | POST `/authenticator/begin` | Password, optional existing-factor proof, live session and CSRF | Pending token, setup secret, URI and expiry |
-| POST `/authenticator/activate` | Password, pending token, new six-digit `code`, optional existing-factor proof, live session and CSRF | Changed active status and ten recovery codes; clears cookies |
-| POST `/authenticator/regenerate` | Password, existing-factor proof, live session and CSRF | Changed active status and ten new codes; clears cookies |
+| POST `/authenticator/activate` | Password, pending token, new six-digit `code`, optional existing-factor proof, live session and CSRF | Changed active status; ten codes only when none remain unused; clears cookies |
+| POST `/authenticator/regenerate` | Password, existing-app proof when an app is active, live session and CSRF | Changed app status and ten new account codes; clears cookies |
 | POST `/authenticator/remove` | Password, existing-factor proof, live session and CSRF | Changed inactive status; clears cookies |
 | POST `/authenticator/cancel` | Pending token, exact live session and CSRF | 204 |
 
@@ -86,7 +87,7 @@ Challenges are not session credentials and expire after the supplied lifetime. I
 login proof returns 401 `credentials_invalid`; invalid management authority returns
 403 with the same code. If setup has expired, been cancelled or been replaced,
 you receive 400 `setup_unavailable`: start setup again with your password and fresh
-codes. A removal or code-regeneration request for an inactive factor returns
+codes. A removal request for an inactive app, or code regeneration with no enrolled app or passkey, returns
 400 `factor_not_active`; use **Check authenticator settings** to refresh the status.
 Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
 current account password rather than retrying the same value. For example,

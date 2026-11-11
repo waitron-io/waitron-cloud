@@ -1,5 +1,6 @@
 import {createSession, IdentityError} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
+import {consumeAccountRecoveryCode} from './account-recovery-codes.ts';
 import {createHash, randomBytes, randomInt} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import type {AccountLocale, AccountSignInCheck} from './account-input.ts';
@@ -46,7 +47,7 @@ export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox |
   return {kind:'email',challengeToken:token,expiresAt,...(input.rememberBrowserAllowed?{rememberBrowserAllowed:true as const}:{})};
 }
 
-export async function completeSignInCheck(pool: Pool, token: string, code: string, remember = false): Promise<RememberedCredentials> {
+export async function completeSignInCheck(pool: Pool, token: string, code: string, remember = false, method:'email'|'recovery' = 'email'): Promise<RememberedCredentials> {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignInCheckError();
   const result = await transaction(pool,async client => {
     const tokenHash = digest(token);
@@ -62,14 +63,15 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
     if (factor?.secret_envelope || !check || check.consumed_at || check.expires_at <= now || check.attempts >= check.attempt_limit
       || !credential?.password_hash || digest(credential.email) !== check.email_hash || digest(credential.password_hash) !== check.password_fingerprint) return new SignInCheckError();
     await client.query('UPDATE cloud_sign_in_checks SET attempts=attempts+1 WHERE token_hash=$1',[tokenHash]);
-    if (typeof code !== 'string' || !/^[0-9]{6}$/.test(code) || signInCodeHash(token,code) !== check.code_hash) return new SignInCheckError();
+    if (method==='email'&&(typeof code !== 'string' || !/^[0-9]{6}$/.test(code) || signInCodeHash(token,code) !== check.code_hash)) return new SignInCheckError();
     // Refused late effects roll back while the spent proof attempt remains committed.
     await client.query('SAVEPOINT email_sign_in_effects');
     try {
+      if(method==='recovery'&&!await consumeAccountRecoveryCode(client,candidate.account_id,code,check.expires_at))throw new SignInCheckError();
       await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE token_hash=$1',[tokenHash]);
       const credentials = await createSession(client,candidate.account_id);
       const passkeys=remember?await client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1',[candidate.account_id]):undefined;
-      const browserToken=remember&&!passkeys?.rowCount?await rememberBrowser(client,candidate.account_id):undefined;
+      const browserToken=method==='email'&&remember&&!passkeys?.rowCount?await rememberBrowser(client,candidate.account_id):undefined;
       if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[check.expires_at])).rows[0].expired) throw new SignInCheckError();
       return {...credentials,...(browserToken ? {browserToken} : {})};
     } catch (error) {

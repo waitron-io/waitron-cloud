@@ -6,6 +6,7 @@ import {issueSignInCheck, completeSignInCheck, recognisedBrowser, SignInCheckErr
 import type {EmailOutbox} from './email-outbox.ts';
 import type {AccountLocale} from './account-input.ts';
 import {transaction} from './transaction.ts';
+import {consumeAccountRecoveryCode} from './account-recovery-codes.ts';
 
 export type FactorProof = {kind: 'totp' | 'recovery'; code: string};
 export interface PasswordLoginPolicy {loginLifetimeMs: number; challengeAttempts: number}
@@ -23,9 +24,7 @@ export interface ActiveFactor {
 }
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 export const factorDigest = (value: string) => createHash('sha256').update(value).digest('hex');
-export function recoveryCodeHash(accountId: string, version: number, code: string): string {
-  return factorDigest(JSON.stringify(['cloud-factor-recovery-v1', accountId, version, code]));
-}
+export {recoveryCodeHash} from './account-recovery-codes.ts';
 export async function factorNow(client: PoolClient): Promise<Date> {
   return (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
 }
@@ -42,17 +41,7 @@ export async function consumeFactorProof(client: PoolClient, factor: ActiveFacto
   if (!proof || typeof proof !== 'object' || Object.keys(proof).sort().join(',') !== 'code,kind'
     || typeof proof.code !== 'string') return null;
   if (proof.kind === 'recovery') {
-    if (!/^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3})$/.test(proof.code)) return null;
-    const codeHash = recoveryCodeHash(factor.account_id, factor.version, proof.code.replaceAll('-', '').toUpperCase());
-    const row = (await client.query(`SELECT consumed_at FROM cloud_factor_recovery_codes
-      WHERE account_id=$1 AND secret_generation=$2 AND factor_version=$3 AND code_hash=$4 FOR UPDATE`,
-      [factor.account_id, factor.secret_generation, factor.version, codeHash])).rows[0];
-    const now = await factorNow(client);
-    if (!row || row.consumed_at || now >= deadline) return null;
-    await client.query(`UPDATE cloud_factor_recovery_codes SET consumed_at=$5
-      WHERE account_id=$1 AND secret_generation=$2 AND factor_version=$3 AND code_hash=$4`,
-      [factor.account_id, factor.secret_generation, factor.version, codeHash, now]);
-    return deadline;
+    return await consumeAccountRecoveryCode(client,factor.account_id,proof.code,deadline)?deadline:null;
   }
   if (proof.kind !== 'totp') return null;
   const now = await factorNow(client);
@@ -127,6 +116,7 @@ export class PasswordLoginStore {
     return result;
   }
   completeEmailCheck(token: string, code: string, remember = false) { return completeSignInCheck(this.#pool,token,code,remember); }
+  completeRecoveryCheck(token:string,code:string) { return completeSignInCheck(this.#pool,token,code,false,'recovery'); }
   async complete(token: string, proof: FactorProof): Promise<SessionCredentials> {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw new FactorError();
     requirePolicy(this.#policy);

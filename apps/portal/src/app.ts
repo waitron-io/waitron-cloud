@@ -176,7 +176,7 @@ export class PortalApp {
   title(): string {
     const c = this.copy;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
-    if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?c.emailCheckTitle:c.factorTitle;
+    if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
@@ -310,16 +310,24 @@ export class PortalApp {
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
   async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin();if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
-  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh'){
+  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh',passkeyRecovery=false){
     this.readFields();const route=this.#route;
+    if(passkeyRecovery){this.authenticator.password=this.passkeys.password;this.passkeys.password='';this.passkeys.error=undefined;}
     if(action==='begin'||action==='cancel'||action==='refresh'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
-    const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
-    const codes=typeof result==='object'&&result.active?[...result.recoveryCodes]:[];
+    const result=await this.authenticator[action]();if(route!==this.#route)return;
+    if(!result){
+      if(passkeyRecovery&&this.authenticator.error){
+        this.passkeys.error=this.authenticator.error==='credentials'?'passkeyPasswordInvalid':this.authenticator.error;this.authenticator.error=undefined;this.draw();
+        const alert=this.root.querySelector<HTMLElement>('.passkeys [role=alert]');if(alert){alert.tabIndex=-1;alert.focus();}
+      }
+      return;
+    }
+    const codes=typeof result==='object'&&result.recoveryCodes?[...result.recoveryCodes]:[];
     this.session.dispose();this.session=this.#session();
     // Clear ended account authority before the login view can start another sign-in.
     this.#sessionChanged(this.session.state);this.navigate('/login');
     // Keep the committed one-time reply in this view after navigation fences all earlier authority.
-    this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':result.active?'factorChanged':'factorRemoved';this.draw();this.focusHeading();
+    this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':action==='remove'?'factorRemoved':action==='regenerate'?'recoveryCodesChanged':'factorChanged';this.draw();this.focusHeading();
     void this.session.check();
   }
   async signInWithPasskey(autofill = false) {

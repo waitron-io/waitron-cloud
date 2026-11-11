@@ -50,8 +50,8 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
     await page.locator('input[name=factorProof]').fill(signInCode(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await look('active');
     await authority(codes[1]);await page.getByRole('button',{name:c.factorReplace,exact:true}).click();const replacement=await page.locator('.factor-secret').textContent();assert.ok(replacement);
-    await authority(codes[2]);await page.locator('input[name=factorConfirmation]').fill(totp(replacement));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();codes=await save();
-    await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await authority(codes[1]);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
+    await authority(codes[2]);await page.locator('input[name=factorConfirmation]').fill(totp(replacement));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.getByText(c.factorChanged,{exact:true}).waitFor();assert.equal(await page.locator('.factor-codes code').count(),0);
+    await login();await recovery(codes[3]!);await page.getByText(c.accountIntro).waitFor();await authority(codes[4]);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
     // A consumed recovery proof cannot complete a fresh password challenge.
     await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await page.getByRole('button',{name:c.signout,exact:true}).click();
     await login();await recovery(codes[0]!);await page.getByText(c.credentials,{exact:true}).first().waitFor();await login();await recovery(codes[1]!);await page.getByText(c.accountIntro).waitFor();
@@ -75,7 +75,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
     for(const loss of ['whole','body'] as const){await login(newPassword);await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();f.loseAccountReply('/login/factor',loss);await recovery(codes[loss==='whole'?0:1]!);
       if(loss==='whole'){await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login(newPassword);await recovery(codes[2]!);}await page.getByText(c.accountIntro).waitFor();if(loss==='whole')await page.getByRole('button',{name:c.signout,exact:true}).click();}
     await authority(codes[3],newPassword);await page.getByRole('button',{name:c.factorRemove,exact:true}).click();await page.getByText(c.factorRemoved,{exact:true}).waitFor();await login(newPassword);
-    await page.getByText(c.emailCheckHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
+    await page.getByText(c.emailOrRecoveryHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
     await f.drainMail();const checkMail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
     const checkCode=checkMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(checkCode);await page.locator('input[name=factorProof]').fill(checkCode);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
     await page.getByText(c.accountIntro).waitFor();await page.getByText(c.factorOff,{exact:true}).waitFor();
