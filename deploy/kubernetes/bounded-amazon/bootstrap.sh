@@ -25,8 +25,19 @@ prepare)
   apt-get update
   apt-get install -y kubelet=1.34.3-1.1 kubeadm=1.34.3-1.1 kubectl=1.34.3-1.1
   apt-mark hold kubelet kubeadm kubectl
-  containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+  # Debian's containerd defaults to /usr/lib/cni and an older pause image; flannel and
+  # kubernetes-cni install their plugins in /opt/cni/bin.
+  pause=$(kubeadm config images list --kubernetes-version=v1.34.3 | grep '/pause:')
+  containerd config default | sed -e 's/SystemdCgroup = false/SystemdCgroup = true/' \
+    -e 's#bin_dir = "/usr/lib/cni"#bin_dir = "/opt/cni/bin"#' -e "s#sandbox_image = \".*\"#sandbox_image = \"$pause\"#" > /etc/containerd/config.toml
   systemctl restart containerd
+  effective=$(containerd config dump)
+  grep -q 'bin_dir = "/opt/cni/bin"' <<<"$effective" || { echo 'containerd does not look for network plugins in /opt/cni/bin' >&2; exit 1; }
+  grep -qF "sandbox_image = \"$pause\"" <<<"$effective" || { echo "containerd sandbox image is not kubeadm's $pause" >&2; exit 1; }
+  grep -q 'SystemdCgroup = true' <<<"$effective" || { echo 'containerd does not use systemd cgroups' >&2; exit 1; }
+  for plugin in bridge loopback portmap; do
+    [ -x /opt/cni/bin/$plugin ] || { echo "network plugin $plugin is missing from /opt/cni/bin" >&2; exit 1; }
+  done
   printf 'KUBELET_EXTRA_ARGS=--node-ip=%s\n' "$address" > /etc/default/kubelet
   if [ "$address" = 10.77.0.1 ]; then
     apt-get install -y docker-buildx
