@@ -190,12 +190,23 @@ test('invalid rule settings fail before collection with a fixed setting diagnost
 test('configured rules reach the HTTP scrape through service startup',async()=>{
  const {serveCollection}=await import('./operations-collector.mjs');
  const controller=new AbortController();
- const failureRules=JSON.stringify({failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}});
- const {server,done}=await serveCollection({collect:async()=>snapshot(),collectRequests:async()=>new RequestMetrics(1).snapshot(),failureRules,intervalMs:1000,port:0,host:'127.0.0.1',signal:controller.signal});
+ const counter=new RequestMetrics(1);
+ const failureRules=JSON.stringify({failureTargets:{account:.1},slownessTargets:{account:{limitSeconds:.1,allowance:.2}},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}});
+ const {server,done}=await serveCollection({collect:async()=>snapshot(),collectRequests:async()=>counter.snapshot(),failureRules,intervalMs:1000,port:0,host:'127.0.0.1',signal:controller.signal});
  try{
   const response=await fetch(`http://127.0.0.1:${server.address().port}/metrics`);
   assert.equal(response.status,200);
-  assert.match(await response.text(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+  const body=await response.text();
+  assert.match(body,/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+  assert.match(body,/account_slowness_rule_ready\{group="account",rule="fast"\} 0\n/);
+  counter.record('account',200,.2);
+  const deadline=Date.now()+4000;let text='';
+  while(Date.now()<deadline){
+   text=await (await fetch(`http://127.0.0.1:${server.address().port}/metrics`)).text();
+   if(/account_slowness_rule_breached\{group="account",rule="fast"\} 1\n/.test(text))break;
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.match(text,/account_slowness_rule_breached\{group="account",rule="fast"\} 1\n/);
  }finally{controller.abort();await done;}
 });
 
@@ -257,4 +268,22 @@ test('rule freshness covers a timeout inspection and the following bounded accou
  assert.match(midReadMetrics,/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
  assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="fast"\} 1\n/);
  time=66999;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+});
+
+
+test('slowness is shown beside failure with shared freshness and grouped metrics',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const failureRules={failureTargets:{account:.1},slownessTargets:{account:{limitSeconds:.1,allowance:.2}},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
+ let time=0;const counter=new RequestMetrics(1);
+ const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:2000,failureRules,
+  collect:async()=>snapshot(),collectRequests:async()=>counter.snapshot()});
+ await collection.poll();counter.record('account',200,.2);time=1000;await collection.poll();
+ const text=collection.metrics();
+ assert.match(text,/account_failure_rule_breached\{group="account",rule="fast"\} 0\n/);
+ assert.match(text,/account_slowness_rule_breached\{group="account",rule="fast"\} 1\n/);
+ assert.doesNotMatch(text,/account_slowness_rule_breached\{group="account",rule="slow"/);
+ assert.match(text,/# TYPE waitron_cloud_account_slowness_rule_ready gauge\n(?:waitron_cloud_account_slowness_rule_ready[^\n]+\n){2}# TYPE waitron_cloud_account_slowness_rule_breached gauge\n/);
+ time=6000;
+ assert.match(collection.metrics(),/account_slowness_rule_ready\{group="account",rule="fast"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/account_slowness_rule_breached\{/);
 });

@@ -6,26 +6,28 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {operationsMetrics} from '../../packages/operations/src/metrics.ts';
 import {formatRequestMetrics} from '../../packages/account-http/src/request-metrics.ts';
 import {readAccountRequests} from './operations-health.mjs';
-import {parseFailureRules,createFailureRules} from './account-failure-rules.mjs';
+import {parseFailureRules,createFailureRules,createSlownessRules} from './account-failure-rules.mjs';
 
 const execute=promisify(execFile);
 const timeoutMs=30000;
 export function createCollection({collect,collectRequests=async()=>null,intervalMs=60000,timeoutMs=30000,now=Date.now,failureRules=null}){
  let sample=null,text='',attemptedAt=null,succeededAt=null,state='pending',running=false,requestsAvailable=false;
- const rules=failureRules?createFailureRules(failureRules,{intervalMs,timeoutMs}):null;
+ const rules=failureRules?[{name:'failure',targets:failureRules.failureTargets,evaluate:createFailureRules(failureRules,{intervalMs,timeoutMs})},
+  ...(failureRules.slownessTargets?[{name:'slowness',targets:failureRules.slownessTargets,evaluate:createSlownessRules(failureRules,{intervalMs,timeoutMs})}]:[])]:[];
  let rulesAt=null,rulesAvailable=false;
- let rows=Object.keys(failureRules?.failureTargets??{}).flatMap(group=>['fast','slow'].map(rule=>({group,rule,ready:false,breached:null})));
+ for(const entry of rules)entry.rows=Object.keys(entry.targets).flatMap(group=>['fast','slow'].map(rule=>({group,rule,ready:false,breached:null})));
  function ruleMetrics(){
-  if(!rules)return '';
   const fresh=rulesAvailable&&now()<rulesAt+intervalMs+timeoutMs+2000;
+  return rules.map(({name,rows})=>{
   const readyLines=[],breachLines=[];
   for(const row of rows){
    const labels=`group="${row.group}",rule="${row.rule}"`,ready=fresh&&row.ready;
-   readyLines.push(`waitron_cloud_account_failure_rule_ready{${labels}} ${ready?1:0}\n`);
-   if(ready)breachLines.push(`waitron_cloud_account_failure_rule_breached{${labels}} ${row.breached?1:0}\n`);
+   readyLines.push(`waitron_cloud_account_${name}_rule_ready{${labels}} ${ready?1:0}\n`);
+   if(ready)breachLines.push(`waitron_cloud_account_${name}_rule_breached{${labels}} ${row.breached?1:0}\n`);
   }
-  return '# TYPE waitron_cloud_account_failure_rule_ready gauge\n'+readyLines.join('')
-   +'# TYPE waitron_cloud_account_failure_rule_breached gauge\n'+breachLines.join('');
+  return `# TYPE waitron_cloud_account_${name}_rule_ready gauge\n`+readyLines.join('')
+   +`# TYPE waitron_cloud_account_${name}_rule_breached gauge\n`+breachLines.join('');
+  }).join('');
  }
  function status(){
   const current=state==='current'&&now()<succeededAt+intervalMs+timeoutMs;
@@ -52,7 +54,8 @@ export function createCollection({collect,collectRequests=async()=>null,interval
   try{
    const counts=await collectRequests(),readAt=now();
    const metrics=formatRequestMetrics(counts);
-   if(rules){rows=rules.update(counts,readAt);rulesAt=readAt;rulesAvailable=true;}
+   for(const entry of rules)entry.rows=entry.evaluate.update(counts,readAt);
+   rulesAt=readAt;rulesAvailable=true;
    nextText+=metrics;requestsAvailable=true;
   }catch{requestsAvailable=false;rulesAvailable=false;}
   finally{
