@@ -363,9 +363,9 @@ While hosted CI or the final summary runs, the controller releases the slot lock
 
 Your CI jobs run as the ordinary `runner` user in a fresh Debian 13 guest; hosted jobs run Ubuntu. The guest account owns its home and runner tree and can use its private Docker daemon and passwordless sudo. Registration requests `/home/runner/work` as its working root to match hosted checkout paths; mixed coverage still needs an actual successful merge before qualification. Provisioning, supervision and completion recording stay privileged; local manual Cloud commands still run as root. Run `node --test scripts/disposable-tests/session.test.mjs scripts/disposable-tests/guest-exec.test.mjs` to check the listener’s launch settings and command completion.
 
-During an assigned job, successful run and job reads wait a minute before their next
-normal read once our runner is assigned. Unresolved assignment, guest inspections
-and failed or busy-read confirmation stay on the 15-second tick. A guest whose run is cancelled stops at its next
+During execution, successful run reads wait a minute before another normal read.
+Successful job reads do so once our runner is assigned. Unresolved assignment, guest
+inspections and failed or busy-read confirmation stay on the 15-second tick. A guest whose run is cancelled stops at its next
 job check once the job reports cancellation. Completion still compares the exact
 `run_attempt`, so a successful listener cannot report success for a newer attempt.
 Run `node --test scripts/disposable-tests/ci-runtime.test.mjs` for cadence,

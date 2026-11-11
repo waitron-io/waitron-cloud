@@ -17,8 +17,8 @@ counters separate command roles, endpoint categories and raw quota headers. Use 
 routing until a release is ready for its watched server-qualification hour.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
-The controller revalidates bounded JSON bodies, shares run admission for at most 60 seconds,
-and reads assigned jobs once a minute while assignment, guest and refusal checks stay at 15 seconds.
+The controller revalidates JSON bodies and shares recent checked admission; see the
+[controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
 Before relying on a release for server routing, qualify a full busy hour below about 4,000
 used requests in each returned quota series; restore hosted if it crosses that threshold.
 OLD's CI startup is disabled; it stays

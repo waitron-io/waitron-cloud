@@ -1446,10 +1446,12 @@ for(const mode of ['fresh','stale','expired-refresh'])test(`pickup sends bounded
  assert.ok(mode==='fresh'?permissions===1:permissions>=2);
 });
 
-test('shared pickup never hands a fork PR without contributor approval to a worker',async t=>{
- const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,admissions=[];
- f.run.head_repository.id=999;
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('fork-pr-contributor-approval')?{approval_policy:'first_time_contributors'}:get(path);
+for(const fork of [true,false])test(`shared pickup rejects ${fork?'fork code even with contributor approval':'unapproved same-repository code'}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,admissions=[],refusals=[];let permissionReads=0;
+ if(fork)f.run.head_repository.id=999;
+ t.mock.method(console,'error',line=>refusals.push(JSON.parse(line)));
+ f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval')){permissionReads++;return {approval_policy:fork?'all_external_contributors':'first_time_contributors'};}return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);};
  await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{admissions.push(ci);return {code:0};}});
  assert.deepEqual(admissions,[]);
+ if(!fork){assert.equal(permissionReads,1);assert.ok(refusals.some(row=>row.event==='automatic-ci-refused' && /External contributor approval/.test(row.error)));}
 });
