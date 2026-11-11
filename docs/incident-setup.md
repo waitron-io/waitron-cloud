@@ -154,6 +154,45 @@ bilingual status updates plus manual publishing over mobile data. Paging must
 start when investigation finishes or 15 minutes after confirmation, whichever
 comes first; the repeat is 10 minutes after the first page attempt and the
 unattended marker is at 20 minutes. Keep times and results in the private launch
-record. Account recovery, verified-health wording, the publisher, phone adapters
+record. Account recovery, verified-health wording, the publisher, live paging
 and these drills remain open until actually completed. The local history bundle
 does not qualify public delivery or those launch checks.
+
+## Exercise the phone adapters locally
+
+The local operations package has Twilio and Vonage adapters behind one interface.
+You can check their requests without an account, number or real delivery:
+
+```sh
+node --test packages/operations/test/paging.test.ts packages/operations/test/paging-twilio.test.ts packages/operations/test/paging-vonage.test.ts
+```
+
+These tests remap the fixed provider hosts to temporary loopback HTTP servers.
+They check English and Spanish messages, text followed by a call even when the
+text refuses, multipart delivery and press-1 interpretation. They do not check
+audible voice quality, a live provider or whether your phone wakes you.
+
+For the later integration, use `createTwilio` or `createVonage`, then `sendPage`.
+Supply the transport explicitly; the adapters never choose global fetch or read
+credentials from the environment. Configuration supplies the recipient, sender,
+HTTPS portal origin and a request timeout of at most ten seconds. Vonage voice
+also needs an injected function that returns a fresh JWT for each call.
+
+Supply only the incident and notification IDs, fixed service, affected venue
+count, UTC start time, language and whether a fix is proposed. Messages contain
+the incident link and fixed wording. They accept no venue names, raw errors or
+arbitrary action descriptions. The action-name detail still needs P4's vocabulary.
+
+`readTrustedEvent` normalizes already trusted provider fields; it authenticates
+no incoming request. A future receiver must verify the provider signature and
+bind the incident, notification, provider and callback kind from the path first.
+It can then pass those facts to `pageDecision`. Only digit `1` from a matching
+placed call acknowledges; delivery or an answered call does not. Either placed
+provider call can acknowledge after fallback. `deliveryConfirmed` requires every
+SMS part's matching delivery event.
+
+The decision function requests Vonage once after Twilio refusal or failed or
+unconfirmed delivery; your caller makes that attempt explicitly. It never waits
+for callbacks, retries or runs the 15/10/20-minute incident clock. That clock,
+its durable records, the receiver and an actual go-ahead page remain separate
+work. Nothing here starts unattended paging or changes the launch checks above.
