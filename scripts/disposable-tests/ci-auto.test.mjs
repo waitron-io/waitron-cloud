@@ -37,7 +37,7 @@ function fixture(){
   if(path==='/repos/fixture/waitron')return {id:123,full_name:policy.repository};
   throw new Error('Unexpected '+path);
  }};
- return {run,jobs,api};
+ return {run,jobs,api,local:()=>({slots:6,busy:6,owned:new Set()})};
 }
 for(const consumer of ['findAutomatic','overflowInventory'])for(const persistent of [false,true])test(`${consumer} ${persistent?'bounds repeated mismatches':'rereads a mismatched run inventory'}`,async()=>{
  const f=fixture(),get=f.api.get,signal=new AbortController().signal;let reads=0;
@@ -82,24 +82,24 @@ for(const healthy of [true,false])test(`capacity publication counts usable occup
  await controller.publishCapacity({api:f.api,policy,state,snapshot,healthy,now:123000});
  assert.deepEqual(JSON.parse(published),{observedAt:123000,slots:healthy?4:0,serverRunning:healthy?3:0,serverWaiting:2,hostedRunning:2,hostedWaiting:4});
 });
-for(const action of ['overflow','recover'])for(const [name,status,runner,blocked,conclusion] of [
- ['bundle-smoke','in_progress',7,true],['bundle-smoke','queued',7,true],
- ['bundle-smoke','in_progress',0,true],['server-queue-watchdog','in_progress',7,false],
- ['server-queue-watchdog-copy','in_progress',7,true],['changes','completed',7,false,'success'],
- ['changes','completed',7,true,'failure'],['bundle-smoke','completed',7,true,'success']
-])test(`${action} protects hosted siblings except the exact watchdog: ${name} ${status} runner ${runner}`,async()=>{
+for(const action of ['overflow','recover'])for(const [name,status,runner,blocked,conclusion,recovery] of [
+ ['bundle-smoke','in_progress',7,true,undefined,'cancel'],['bundle-smoke','queued',7,true,undefined,'cancel'],
+ ['bundle-smoke','in_progress',0,true,undefined,'force-cancel'],['server-queue-watchdog','in_progress',7,false,undefined,'cancel'],
+ ['server-queue-watchdog-copy','in_progress',7,true,undefined,'cancel'],['changes','completed',7,false,'success','force-cancel'],
+ ['changes','completed',7,true,'failure','force-cancel'],['bundle-smoke','completed',7,true,'success','force-cancel']
+])test(`${action==='overflow'?'overflow protects useful work':'recovery retains its owned intent'}: ${name} ${status} runner ${runner}`,async()=>{
  const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get,posts=[];
  f.jobs.push({...f.jobs[0],id:999,name,status,conclusion,runner_id:runner,labels:['ubuntu-latest']});
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{posts.push(path);};
  const api=routingVariables(f.api);
- if(action==='overflow')await controller.overflowOrdinary({api,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api,policy,ci});
  else{
   await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
   await controller.recoverHostedAttempts({api,policy});
  }
- assert.deepEqual(posts,blocked?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
- assert.deepEqual(await controller.hostedAttempts({api,policy}),blocked?{}:{789:2});
+ assert.deepEqual(posts,action==='recover'?['/repos/fixture/waitron/actions/runs/789/'+recovery]:blocked?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
+ assert.deepEqual(await controller.hostedAttempts({api,policy}),action==='recover'||!blocked?{789:2}:{});
 });
 for(const conclusion of ['success','failure'])for(const name of ['bundle-smoke','ci','ci-copy'])for(const action of ['completed recovery','failed-guest fallback','owned cancellation'])test(`${action} checks completed ${name} with ${conclusion}`,async()=>{
  const f=fixture(),ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],get=f.api.get,posts=[];
@@ -107,7 +107,7 @@ for(const conclusion of ['success','failure'])for(const name of ['bundle-smoke',
  f.jobs.push({...f.jobs[0],id:999,name,status:'completed',conclusion,runner_id:7,labels:['ubuntu-latest']});
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.post=async path=>{posts.push(path);if(path.endsWith('/cancel')){f.run.status='completed';f.run.conclusion='cancelled';}};
- const api=routingVariables(f.api),allowed=name==='ci'&&action!=='failed-guest fallback';
+ const api=routingVariables(f.api),allowed=action==='completed recovery'||name==='ci'&&action!=='failed-guest fallback';
  if(action==='completed recovery'){
   await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
   await controller.recoverHostedAttempts({api,policy});
@@ -120,7 +120,7 @@ for(const action of ['overflow','fallback','recovery'])test(`automatic ${action}
  const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);f.api.post=async path=>posts.push(path);
  const api=routingVariables(f.api);
- if(action==='overflow')await controller.overflowOrdinary({api,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api,policy,ci});
  else if(action==='fallback')await controller.fallbackOrdinary({api,policy,ci,automatic:true});
  else {await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":3}'});await controller.recoverHostedAttempts({api,policy});}
  assert.deepEqual(posts,[]);assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
@@ -132,9 +132,30 @@ for(const action of ['overflow','fallback'])test(`${action} preserves a hosted a
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{const result=await target.patch(path,body);if(JSON.parse(body.value)['789'])f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'queued',runner_id:7,labels:['ubuntu-latest']});return result;};return Reflect.get(target,key);}});
  f.api.post=async()=>assert.fail('The new hosted assignment must survive');
- if(action==='overflow')await controller.overflowOrdinary({api:observed,policy,ci});
+ if(action==='overflow')await controller.overflowOrdinary({local:f.local,api:observed,policy,ci});
  else await controller.fallbackOrdinary({api:observed,policy,ci,automatic:true,leases:{inspect:()=>({ciInvocation:{ordinaryStage:'admitted',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}}});
  assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
+});
+for(const cleanupFailure of [false,true])test(`a handled final read failure ${cleanupFailure?'reports both read and retirement failures':'retires provisional intent before a hosted sibling starts'}`,async t=>{
+ const f=fixture(),get=f.api.get,api=routingVariables(f.api),ci=(await controller.findAutomatic({api,policy,limit:1}))[0],posts=[];
+ let marked=false,failed=false;const errors=[];t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ f.api.get=async path=>{
+  if(path.endsWith('/pulls/12')&&marked&&!failed){failed=true;throw Object.assign(new Error('Final PR read HTTP 502'),{status:502});}
+  return path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ };
+ const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{if(cleanupFailure&&marked)throw Object.assign(new Error('Retirement HTTP 502'),{status:502});await target.patch(path,body);marked=Boolean(JSON.parse(body.value)['789']);};return Reflect.get(target,key);}});
+ f.api.post=async path=>posts.push(path);
+ const moving=controller.overflowOrdinary({local:f.local,api:observed,policy,ci});
+ if(cleanupFailure){
+  await assert.rejects(moving,/Retirement HTTP 502/);assert.deepEqual(await controller.hostedAttempts({api,policy}),{789:2});
+  assert.ok(errors.some(row=>row.runId===789&&row.error==='Final PR read HTTP 502'));return;
+ }
+ await assert.rejects(moving,/Final PR read HTTP 502/);
+ assert.equal(failed,true);assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
+ f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'in_progress',runner_id:7,labels:['ubuntu-latest']});
+ await controller.recoverHostedAttempts({api:observed,policy});
+ assert.deepEqual(posts,[]);
+ assert.deepEqual((await controller.findAutomatic({api,policy,limit:1,hosted:await controller.hostedAttempts({api,policy})})).map(ci=>ci.jobId),[901]);
 });
 test('automatic pickup admits each routed shard on the current same-repository PR without a chosen head',async()=>{
  const {api}=fixture();assert.equal(typeof controller.findAutomatic,'function');
@@ -187,6 +208,21 @@ test('automatic pickup accepts same-repository workflow edits without an executi
 test('automatic pickup never starts beyond the free-slot count',async()=>{
  const f=fixture();assert.deepEqual((await controller.findAutomatic({api:routingVariables(f.api),policy,limit:2})).map(j=>j.jobId),[901,902]);
  assert.deepEqual(await controller.findAutomatic({api:{get:async()=>assert.fail('Full pool must not poll GitHub')},policy,limit:0}),[]);
+});
+
+test('automatic pickup leaves a predecessor marked for its hosted retry unclaimed',async()=>{
+ const f=fixture();
+ assert.deepEqual(await controller.findAutomatic({api:f.api,policy,limit:6,hosted:{789:2}}),[]);
+});
+
+test('a controller tick leaves a marked predecessor unclaimed while cancellation waits',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],posts=[];
+ routingStores.set(f.api,{value:'{"789":2}'});const api=routingVariables(f.api);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ f.api.post=async path=>{posts.push(path);throw Object.assign(new Error('Cancellation temporarily unavailable'),{status:503});};
+ await automaticTick({configuration:'/fixture/config',config,api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.deepEqual(served,[]);assert.equal((await api.get('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')).value,'{"789":2}');
 });
 
 test('automatic pickup serves older waiting PR runs before newer runs fill the pool',async()=>{
@@ -864,7 +900,7 @@ test('pickup does not hide malformed local state as a temporary API read',async 
  await assert.rejects(automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}}),SyntaxError);
 });
 
-for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
+for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active-hosted','newer-attempt','stale-head','closed','foreign-repository','foreign-workflow','foreign-path','foreign-event','force-queued','completed-runner','terminal-failure','terminal-timed_out','terminal-startup_failure','running-sibling','incomplete-jobs'])test(`hosted overflow recovery handles ${state}`,async()=>{
  const f=fixture(),get=f.api.get,actions=[];let value='{"789":2}';
  if(['cancel-ack-lost','rerun-ack-lost'].includes(state)){f.run.status='completed';f.run.conclusion='cancelled';}
  if(state==='active-hosted')f.run.run_attempt=2;
@@ -875,6 +911,8 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state==='foreign-event')f.run.event='workflow_run';
  if(['force-queued','running-sibling','incomplete-jobs'].includes(state)){f.run.status='queued';f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';}
  if(state==='running-sibling'){f.jobs[1].status='in_progress';f.jobs[1].runner_id=42;}
+ if(state==='completed-runner'){f.jobs[0].status='completed';f.jobs[0].conclusion='cancelled';f.jobs[0].runner_id=42;}
+ if(state.startsWith('terminal-')){f.run.status='completed';f.run.conclusion=state.slice('terminal-'.length);}
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
   if(path.endsWith('/pulls/12') && ['stale-head','closed'].includes(state))return {number:12,state:state==='closed'?'closed':'open',head:{sha:state==='stale-head'?'a'.repeat(40):head,repo:{id:123}},base:{repo:{id:123}}};
@@ -887,20 +925,44 @@ for(const state of ['cancel-not-sent','cancel-ack-lost','rerun-ack-lost','active
  if(state.startsWith('foreign-') || state==='incomplete-jobs'){await assert.rejects(recover());assert.deepEqual(actions,[]);return;}
  if(state==='rerun-ack-lost'){await assert.rejects(recover(),/Reply lost/);await recover();}
  else await recover();
- const expected=state==='cancel-not-sent'?['cancel']:state==='force-queued'?['force-cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
+ const expected=['cancel-not-sent','force-queued','completed-runner'].includes(state)?['force-cancel']:state==='running-sibling'?['cancel']:['cancel-ack-lost','rerun-ack-lost'].includes(state)?['rerun']:[];
  assert.deepEqual(actions,expected);
- assert.equal(value,['newer-attempt','stale-head','closed','running-sibling'].includes(state)?'{}':'{"789":2}');
+ assert.equal(value,['newer-attempt','stale-head','closed'].includes(state)||state.startsWith('terminal-')?'{}':'{"789":2}');
+});
+
+test('recovery retirement preserves another movement marker written after its first read',async()=>{
+ const f=fixture(),get=f.api.get;f.run.run_attempt=2;f.run.status='completed';let reads=0,written;
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:written?JSON.stringify(written):++reads===1?'{"789":2}':'{"789":2,"790":2}'}:get(path);
+ f.api.patch=async(_path,body)=>{written=JSON.parse(body.value);};
+ await controller.recoverHostedAttempts({api:f.api,policy});
+ assert.deepEqual(written,{'790':2});
+});
+
+for(const change of ['successor','head','local'])test(`recovery refreshes ${change} after its job inventory before cancelling`,async()=>{
+ const f=fixture(),get=f.api.get,excluded=new Set(),actions=[];let runs=0,pulls=0;
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value:'{"789":2}'};
+  if(path.endsWith('/runs/789'))return {...f.run,run_attempt:++runs>1&&change==='successor'?2:1};
+  if(path.endsWith('/pulls/12')){const pull=await get(path);return ++pulls>1&&change==='head'?{...pull,head:{...pull.head,sha:'9'.repeat(40)}}:pull;}
+  if(path.includes('/jobs?')&&change==='local')excluded.add(789);
+  return get(path);
+ };
+ f.api.post=async path=>actions.push(path);f.api.patch=async()=>assert.fail('Keep unresolved movement intent');
+ await controller.recoverHostedAttempts({api:f.api,policy,excludeRuns:excluded});
+ assert.deepEqual(actions,[]);
 });
 
 for(const [state,running,wave,wantCancel] of [
- ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,false],
- ['large wave',0,21,false],['queued hosted',0,5,false],['unknown jobs',0,5,false],
+ ['no room',20,5,false],['exact room',15,5,true],['one short',16,5,true],
+ ['large wave',0,21,true],['queued hosted',0,5,true],['unknown jobs',0,5,false],
  ['unknown runs',0,5,false],['wrong attempt',0,5,false],['duplicate runs',0,5,false],
- ['reserved retry',15,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,false])
+ ['locally owned',0,5,false],['reserved retry',15,5,true],['balanced queue',0,5,false],['unrecognized status',0,5,false],...['waiting','pending','requested'].map(state=>[state,0,5,true])
 ])test(`overflow requires observed hosted room: ${state}`,async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
  const target=f.jobs[0];f.jobs.splice(0,f.jobs.length,...Array.from({length:wave},(_,i)=>({...target,id:901+i})));
  const other={...f.run,id:790},hosted=Array.from({length:running},(_,i)=>({...target,id:1000+i,run_id:790,status:'in_progress',runner_id:42,labels:['ubuntu-latest']}));
+ if(state==='unrecognized status')hosted.push({...target,id:2000,run_id:790,status:'unrecognized',labels:['ubuntu-latest']});
+ if(state==='balanced queue')hosted.push(...Array.from({length:17},(_,i)=>({...target,id:2000+i,run_id:790,labels:['ubuntu-latest']})));
  if(state==='queued hosted')hosted.push({...target,id:2000,run_id:790,labels:['ubuntu-latest']});
  if(['waiting','pending','requested'].includes(state))hosted.push({...target,id:2000,run_id:790,status:state,labels:['ubuntu-latest']});
  if(state==='wrong attempt')hosted.push({...target,id:2000,run_id:790,run_attempt:2,labels:['ubuntu-latest']});
@@ -916,12 +978,14 @@ for(const [state,running,wave,wantCancel] of [
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:hosted.length+(state==='unknown jobs'?1:0),jobs:hosted};
   return get(path,options);
  };
- f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- let error;try{await controller.overflowOrdinary({api:f.api,policy,ci});}catch(e){error=e;}
+ let markerWrites=0;f.api.patch=async(path,body)=>{markerWrites++;marker=body.value;};f.api.post=async path=>{posts.push(path);};
+ if(state==='locally owned')f.local=()=>({slots:6,busy:6,owned:new Set([789])});
+ let error;try{await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});}catch(e){error=e;}
  if(state.startsWith('unknown') || state==='wrong attempt' || state==='duplicate runs')assert.match(error?.message??'',/inventory/i);
  else assert.equal(error,undefined);
+ if(state==='locally owned')assert.equal(markerWrites,0);
  assert.deepEqual(posts,wantCancel?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
- assert.equal(marker,wantCancel?'{"789":2}':state==='reserved retry'?'{"790":2}':'{}');
+ assert.deepEqual(JSON.parse(marker),wantCancel?{...(state==='reserved retry'?{790:2}:{}),789:2}:state==='reserved retry'?{790:2}:{});
 });
 
 for(const names of ['distinct','repeated'])test(`overflow reserves a marked retry while its hosted job list is still growing: ${names}`,async()=>{
@@ -938,7 +1002,7 @@ for(const names of ['distinct','repeated'])test(`overflow reserves a marked retr
   return get(path,options);
  };
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.deepEqual(posts,[]);assert.equal(marker,'{"790":2}');
 });
 
@@ -956,8 +1020,8 @@ for(const state of ['missing marked run','missing skipped run','stale marker','s
   return get(path,options);
  };
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>posts.push(path);
- if(state.startsWith('foreign'))await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}),/inventory/);
- else await controller.overflowOrdinary({api:f.api,policy,ci});
+ if(state.startsWith('foreign'))await assert.rejects(controller.overflowOrdinary({local:f.local,api:f.api,policy,ci}),/inventory/);
+ else await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.deepEqual(posts,['stale marker','skipped reservation','missing skipped run','retry visible'].includes(state)?['/repos/fixture/waitron/actions/runs/789/cancel']:[]);
 });
 
@@ -988,7 +1052,7 @@ for(const failure of ['write','readback','assigned','advanced'])test(`overflow d
  f.api.get=async path=>path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  if(failure==='assigned')f.jobs[0].runner_id=42;
  if(failure==='advanced')f.run.run_attempt=2;
- await assert.rejects(controller.overflowOrdinary({api:f.api,policy,ci}));assert.equal(posts,0);
+ await assert.rejects(controller.overflowOrdinary({local:f.local,api:f.api,policy,ci}));assert.equal(posts,0);
 });
 
 for(const state of ['running','completed','assigned','young','late-assignment','waiting','cancelled'])test(`overflow preserves a ${state} server run`,async()=>{
@@ -1001,7 +1065,7 @@ for(const state of ['running','completed','assigned','young','late-assignment','
  if(state==='cancelled'){f.jobs[1].status='completed';f.jobs[1].conclusion='cancelled';}
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{writes++;marker=body.value;if(state==='late-assignment')start();};f.api.post=async()=>{posts++;};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.equal(posts,0);assert.equal(marker,'{}');if(state!=='late-assignment')assert.equal(writes,0);
 });
 
@@ -1033,14 +1097,14 @@ for(const clock of ['attempt','job'])test(`overflow gives a newly queued ${clock
  else f.jobs[0].started_at=new Date().toISOString();
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
 });
 
 test('overflow leaves a workflow without hosted-attempt routing on the server',async()=>{
  const f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];let marker='{}';const posts=[];
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.includes('/contents/')?{encoding:'base64',content:Buffer.from('legacy workflow').toString('base64')}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{marker=body.value;};f.api.post=async path=>{posts.push(path);};
- await controller.overflowOrdinary({api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});assert.equal(marker,'{}');assert.deepEqual(posts,[]);
 });
 
 test('a rate-limit callback stops recovery reads until its caller can release the lock and wait',async()=>{
@@ -1158,7 +1222,7 @@ for(const [label,conclusion,runner,late,wantCancel] of [
  f.api.get=async path=>path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS'));marker=body.value;if(late)skipped.runner_id=42;};
  f.api.post=async path=>{assert.equal(path,'/repos/fixture/waitron/actions/runs/789/cancel');assert.equal(marker,'{"789":2}');posts++;};
- await controller.overflowOrdinary({api:f.api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api:f.api,policy,ci});
  assert.equal(posts,wantCancel?1:0);assert.equal(marker,wantCancel?'{"789":2}':'{}');
 });
 
@@ -1217,20 +1281,20 @@ for(const assigned of [true,false])test(`overflow reads the page-three sibling b
  f.api.get=async(path,options)=>path.endsWith('/actions/jobs/901')?f.target:get(path,options);
  f.api.post=async path=>{posts.push(path);f.run.status='completed';};
  const api=routingVariables(f.api),ci={repositoryId:123,workflowId:456,workflowSha:head,sourceSha:head,runId:789,attempt:1,jobId:901};
- await controller.overflowOrdinary({api,policy,ci});
+ await controller.overflowOrdinary({local:f.local,api,policy,ci});
  assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/cancel']);
  assert.deepEqual(await controller.hostedAttempts({api,policy}),assigned?{}:{789:2});
 });
 
-for(const assigned of [true,false])test(`hosted-attempt recovery reads the page-three sibling before ${assigned?'retiring':'cancelling'} the run`,async()=>{
+for(const assigned of [true,false])test(`hosted-attempt recovery reads the page-three sibling before ${assigned?'resending cancellation for':'forcing cancellation for'} the run`,async()=>{
  const f=pagedJobFixture(),posts=[];f.run.status='queued';
  for(const job of f.jobs)if(job!==f.target){job.conclusion='skipped';job.runner_id=0;}
  f.jobs[82]={...f.target,id:2000,status:assigned?'in_progress':'queued',runner_id:assigned?77:0};
  f.api.post=async path=>{posts.push(path);};
  const api=routingVariables(f.api);
  await api.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS',{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{"789":2}'});
- assert.deepEqual(await controller.recoverHostedAttempts({api,policy}),assigned?{}:{789:2});
- assert.deepEqual(posts,assigned?[]:['/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.deepEqual(await controller.recoverHostedAttempts({api,policy}),{789:2});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/'+(assigned?'cancel':'force-cancel')]);
  assert.deepEqual(f.pages,[1,2,3]);
 });
 
@@ -1276,24 +1340,36 @@ test('capacity publication waits a minute while a completed slot refills',async 
  assert.equal(writes,1);
 });
 
-for(const marker of [0,1,2])test(`automatic measured routes stay on their queue with marker ${marker}`,async t=>{
- const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
- const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];
+for(const [label,slow,initial] of [['immediate',false,''],['delayed',true,''],['malformed',false,'{bad']])test(`full-pool capacity passes keep their minute cadence across restarts after ${label} publication`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
  for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker?JSON.stringify({789:marker}):'{}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
- const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),before=leases.inspect();
- f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY'))actions.push([path,body]);};
- await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
- assert.deepEqual(actions,[],'A completed tick must never rebalance a measured route');assert.deepEqual(leases.inspect(),before);
+ f.jobs.length=0;let now=Date.now(),capacity=initial,writes=0,publishedAt;t.mock.method(Date,'now',()=>now);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity,updated_at:publishedAt}:get(path);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));writes++;capacity=body.value;if(slow)now+=35000;publishedAt=new Date(now).toISOString();};
+ const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api});
+ await tick();now+=30000;await tick();assert.equal(writes,1);
+ now+=30000;await tick();assert.equal(writes,2);
 });
 
-test('a stale hosted marker permits pickup without rewriting the marker',async t=>{
- const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],writes=[];
+for(const marker of [0,1,2])test(`automatic overflow respects recorded intent with marker ${marker}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];let value=marker?JSON.stringify({789:marker}):'{}',capacity='';
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),before=leases.inspect();
+ f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))value=body.value;else if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;};
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
+ assert.deepEqual(actions,marker===1?[]:[`/repos/fixture/waitron/actions/runs/789/${marker===2?'force-cancel':'cancel'}`]);
+ assert.equal(value,JSON.stringify({789:marker===1?1:2}));assert.deepEqual(leases.inspect(),before);
+});
+
+test('a stale hosted marker is retired while later attempts remain eligible',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],writes=[];let value='{"789":2}';
  f.run.run_attempt=3;f.jobs.forEach(job=>{job.run_attempt=3;job.labels=job.labels.map(label=>label.replace('-789-1-','-789-3-'));});
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
- f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY'))writes.push([path,body]);};
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY')){writes.push([path,body]);value=body.value;}};
  await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
- assert.deepEqual(served,[901,902,903,904,905]);assert.deepEqual(writes,[]);
+ assert.deepEqual(served,[901,902,903,904,905]);assert.deepEqual(writes,[[`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS`,{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{}'}]]);
 });
 
 test('automatic worker failure retires its intent without invoking fallback',async()=>{
@@ -1423,6 +1499,58 @@ test('shared capacity keeps the observation time from before worker waits',async
  assert.equal(JSON.parse(capacity).observedAt,start);
 });
 
+for(const mode of ['move','assigned','free','owned','recover','short','released','local-late','head','permission','main'])test(`full-pool overflow wiring handles ${mode}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[],served=[],errors=[];
+ t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];if(mode==='main')f.run.event='push';
+ if(mode!=='free')for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot})
+  .reserveLocal(mode==='owned'&&slot===0?ciRequest('I',ci):{lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ let value=mode==='recover'?'{"789":2}':'{}',jobReads=0,requests=0;const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
+ f.api.get=async path=>{
+  requests++;
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
+  if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))return {value:''};
+  if(path.endsWith('/actions/jobs/901'))return f.jobs[0];
+  if(path.endsWith('/pulls/12')&&mode==='head'&&value!=='{}')return {...await get(path),state:'closed'};
+  if(path.includes('/jobs?')){
+   jobReads++;if(mode==='assigned'&&value!=='{}')f.jobs[1].runner_id=42;
+   return {total_count:f.jobs.length+(mode==='short'?1:0),jobs:mode==='short'&&path.endsWith('page=2')?[]:f.jobs};
+  }
+  return get(path);
+ };
+ f.api.patch=async(path,body)=>{requests++;if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')){
+  value=body.value;
+  if(value!=='{}'&&mode==='released'){const slot=leases.inspect().slots[0];leases.release(slot.lease,{resourceId:slot.lease.resourceId,absent:true});}
+  if(value!=='{}'&&mode==='local-late'){const slot=leases.inspect().slots[0];leases.release(slot.lease,{resourceId:slot.lease.resourceId,absent:true});new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0}).reserveLocal(ciRequest('I',ci));}
+ }};
+ // Capacity publication has its own readback; keep that unrelated fixture state.
+ const api=new Proxy(f.api,{get(target,key){
+  if(key==='get')return path=>path.endsWith('DISPOSABLE_TESTS_CAPACITY')?(requests++,mode==='permission'?Promise.reject(Object.assign(new Error('Not authorised'),{status:403})):Promise.resolve({value:api.capacity??''})):target.get(path);
+  if(key==='patch')return (path,body)=>path.endsWith('DISPOSABLE_TESTS_CAPACITY')?(requests++,api.capacity=body.value,Promise.resolve()):target.patch(path,body);
+  return Reflect.get(target,key);
+ }});
+ f.api.post=async path=>{requests++;actions.push(path.split('/').at(-1));};
+ const tick=automaticTick({configuration:'/fixture/config',config,api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ if(mode==='permission')await assert.rejects(tick,error=>error.status===403);else await tick;
+ assert.deepEqual(actions,mode==='move'?['cancel']:mode==='recover'?['force-cancel']:[]);
+ assert.equal(value,['move','recover'].includes(mode)?'{"789":2}':'{}');
+ assert.deepEqual(served,mode==='free'?[901,902,903,904,905]:[]);
+ if(mode==='permission'){assert.equal(jobReads,0);assert.ok(errors.some(row=>row.event==='automatic-ci-capacity-pending'));}else assert.ok(jobReads>0);
+ if(['move','recover','owned'].includes(mode))t.diagnostic(`${mode}: ${requests} API requests in the controlled full-pool tick`);
+});
+
+test('a failed hosted recovery leaves unrelated local pickup available',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],errors=[];
+ t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"790":2}'}:
+  path.endsWith('/runs/790')?Promise.reject(new Error('Recovery read unavailable')):get(path);
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(served,[901,902,903,904,905]);
+ assert.ok(errors.some(row=>row.event==='automatic-ci-overflow-pending'&&row.runId===790));
+});
+
 for(const age of ['fresh','stale','aging','gone'])test(`workers use ${age} shared admission before taking a guest`,async t=>{
  const {automaticJob}=await import('./control.mjs'),{CITransport}=await import('./transport.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
@@ -1454,4 +1582,25 @@ for(const fork of [true,false])test(`shared pickup rejects ${fork?'fork code eve
  await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{admissions.push(ci);return {code:0};}});
  assert.deepEqual(admissions,[]);
  if(!fork){assert.equal(permissionReads,1);assert.ok(refusals.some(row=>row.event==='automatic-ci-refused' && /External contributor approval/.test(row.error)));}
+});
+
+for(const [state,count] of [['completed',47],['in_progress',5]])test(`overflow selection skips an older PR with ${count} ${state} jobs`,async()=>{
+ const f=fixture(),get=f.api.get;
+ f.jobs.push(...Array.from({length:count},(_,i)=>({...f.jobs[0],id:2000+i,name:'useful-'+i,status:state,conclusion:state==='completed'?'success':null,runner_id:42,labels:['ubuntu-latest']})));
+ const run={...f.run,id:790,created_at:new Date(Date.now()-90000).toISOString(),pull_requests:[{number:13}],referenced_workflows:f.run.referenced_workflows.map(value=>({...value,ref:'refs/pull/13/merge'}))};
+ const jobs=f.jobs.slice(0,5).map((job,i)=>({...job,id:1001+i,run_id:790,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
+ const api={get:async(path,options)=>path.endsWith('/actions/runs/790')?run:path.includes('/runs/790/attempts/')?{total_count:jobs.length,jobs}:path.endsWith('/pulls/13')?{number:13,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}:path.endsWith('/actions/jobs/1001')?jobs[0]:get(path,options)};
+ const found=await controller.findAutomatic({api,policy,limit:1,onePerRun:true,untouched:true,runs:new Map([[789,f.run],[790,run]])});
+ assert.deepEqual(found.map(ci=>ci.jobId),[1001]);
+});
+
+test('overflow selection skips an older workflow without hosted-marker support',async()=>{
+ const f=fixture(),get=f.api.get,run={...f.run,id:790,head_sha:execution,pull_requests:[{number:13}],created_at:new Date(Date.now()-90000).toISOString()};
+ const jobs=f.jobs.map((job,i)=>({...job,id:1001+i,run_id:790,head_sha:execution,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
+ const api={get:async(path,options)=>path.endsWith('/actions/runs/790')?run:path.includes('/runs/790/attempts/')?{total_count:jobs.length,jobs}:
+  path.endsWith('/pulls/13')?{number:13,state:'open',head:{sha:execution,repo:{id:123}},base:{repo:{id:123}}}:
+  path.endsWith('/commits/'+execution)?{sha:execution,commit:{tree:{sha:'4'.repeat(40)}}}:
+  path.includes('/contents/')&&path.endsWith(head)?{encoding:'base64',content:Buffer.from('old workflow').toString('base64')}:get(path,options)};
+ const found=await controller.findAutomatic({api,policy,limit:1,onePerRun:true,untouched:true,runs:new Map([[789,f.run],[790,run]])});
+ assert.deepEqual(found.map(ci=>ci.jobId),[1001]);
 });

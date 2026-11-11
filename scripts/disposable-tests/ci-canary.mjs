@@ -145,7 +145,7 @@ export async function publishCapacity({api,policy,state,snapshot,healthy,signal,
  return value;
 }
 // The repository variable survives a full pool and a controller restart.
-export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
+export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
  const current=await findOrdinary({api,policy,approvedHead:ci.sourceSha,runId:ci.runId,jobId:ci.jobId,automatic:true,requireHostedRouting:true,signal});
  if(!current)return;
  assert.equal(current.attempt,ci.attempt,'Overflow attempt changed');
@@ -166,35 +166,56 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot}){
  };
  const selected=await started();
  if(selected.busy)return;
- const wave=selected.jobs.filter(job=>job.conclusion!=='skipped').length;
- if(wave>20)return;
  snapshot??=await overflowInventory({api,policy,signal});
  const marked=await hostedAttempts({api,policy,signal});
  if(Object.keys(marked).some(id=>!snapshot.has(Number(id))))return;
- let occupied=0;
+ const capacity=local();
+ if(!capacity.busy || !capacity.slots || capacity.owned.has(ci.runId))return;
+ if(!snapshot.has(ci.runId))snapshot=new Map([...snapshot,[ci.runId,{run,jobs:selected.jobs}]]);
+ let serverWaiting=0,hostedWaiting=0,hostedRunning=0;
+ const waiting=job=>['queued','pending','waiting','requested'].includes(job.status);
  for(const [id,{run,jobs,previous}] of snapshot){
-  if(id===ci.runId)continue;
-  if(marked[id]===run.run_attempt+1)occupied+=jobs.filter(job=>job.conclusion!=='skipped').length;
+  const pending=marked[id]===run.run_attempt+1;
+  if(pending)hostedWaiting+=jobs.filter(job=>job.conclusion!=='skipped').length;
   if(marked[id]===run.run_attempt && run.run_attempt>1 && run.status!=='completed'){
    if(!previous.length)return;
    const appeared=jobs.map(job=>job.name);
    for(const job of previous)if(job.conclusion!=='skipped'){
-    const index=appeared.indexOf(job.name);if(index<0)occupied++;else appeared.splice(index,1);
+    const index=appeared.indexOf(job.name);if(index<0)hostedWaiting++;else appeared.splice(index,1);
    }
   }
   for(const job of jobs){
-   if(!job.labels.length || job.labels.includes('self-hosted'))continue;
-   if(!['completed','in_progress'].includes(job.status))return;
-   if(job.status==='in_progress')occupied++;
+   if(!job.labels.length)continue;
+   if(!['completed','in_progress'].includes(job.status) && !waiting(job))return;
+   if(job.labels.includes('self-hosted')){
+    if(!pending && waiting(job) && !capacity.jobs?.has(job.id))serverWaiting++;
+   }else{
+    if(job.status==='in_progress')hostedRunning++;
+    if(!pending && waiting(job))hostedWaiting++;
+   }
   }
  }
- if(occupied+wave>20)return;
+ if(hostedRunning>=20 || serverWaiting/capacity.slots<=hostedWaiting/20)return;
  await markHostedAttempt({api,policy,ci,signal});
- if((await started()).busy){
+ const retire=async()=>{
   const values=await hostedAttempts({api,policy,signal});
   if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
-  return;
+ };
+ let refused;
+ try{
+ const finalJobs=await started(),latest=await api.get(base,{signal});
+ const pull=latest.event==='pull_request'&&latest.pull_requests?.length===1?await api.get(`/repos/${policy.repository}/pulls/${latest.pull_requests[0].number}`,{signal}):undefined;
+ const room=local();
+ refused=finalJobs.busy || room.busy<room.slots || room.owned.has(ci.runId) || latest.id!==ci.runId || latest.run_attempt!==ci.attempt ||
+  latest.head_sha!==ci.workflowSha || latest.repository?.id!==policy.repositoryId || latest.head_repository?.id!==policy.repositoryId ||
+  latest.workflow_id!==policy.workflowId || latest.path!==policy.workflowPath || !['queued','in_progress'].includes(latest.status) ||
+  !pull || pull.state!=='open' || pull.number!==latest.pull_requests[0].number || pull.head?.sha!==ci.sourceSha ||
+  pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
+ }catch(error){
+  try{await retire();}catch(cleanup){console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId:ci.runId,error:error.message}));throw cleanup;}
+  throw error;
  }
+ if(refused){await retire();return;}
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));
 }
@@ -248,14 +269,19 @@ export async function reconcileDeadRuns({api,policy,signal,onError,pass,hosted})
  }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
 }
 export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new Set(),onError}){
- const values=await hostedAttempts({api,policy,signal}),base=`/repos/${policy.repository}`;
+ let values=await hostedAttempts({api,policy,signal});const base=`/repos/${policy.repository}`;
+ const retire=async(id,attempt)=>{
+  const latest=await hostedAttempts({api,policy,signal});
+  if(latest[id]!==attempt)return;
+  delete latest[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(latest),signal});values=latest;
+ };
  for(const [id,attempt] of Object.entries(values)){
   if(excludeRuns.has(Number(id)))continue;
   try{
   const path=`${base}/actions/runs/${id}`;let run;
   try{run=await api.get(path,{signal});}catch(error){
    if(error.status!==404)throw error;
-   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+   await retire(id,attempt);continue;
   }
   assert.ok(run.id===Number(id) && run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
    run.workflow_id===policy.workflowId && run.path===policy.workflowPath && ['pull_request','push','schedule','workflow_dispatch'].includes(run.event) &&
@@ -267,28 +293,33 @@ export async function recoverHostedAttempts({api,policy,signal,excludeRuns=new S
    obsolete=pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
     pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
   }
-  if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion==='success'){
-   delete values[id];
-   await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
+  if(obsolete || attempt>2 || run.run_attempt>attempt || run.run_attempt===attempt && run.status==='completed' || run.run_attempt===attempt-1 && run.status==='completed' && run.conclusion!=='cancelled'){
+   await retire(id,attempt);
    continue;
   }
   if(run.run_attempt===attempt)continue;
   assert.equal((await api.get(`${base}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,'all_external_contributors','External contributor approval is not enabled');
   const inventory=await jobInventory(api,path+`/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(inventory.jobs.length===inventory.total_count && inventory.total_count<=100,'Incomplete overflow job inventory');
-  if(inventory.jobs.some(job=>job.run_id!==run.id || job.run_attempt!==run.run_attempt || job.head_sha!==run.head_sha || blocksRecovery(job))){
-   delete values[id];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});continue;
+  assert.ok(inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Foreign overflow job inventory');
+  const latest=await api.get(path,{signal});
+  assert.ok(latest.id===run.id && latest.head_sha===run.head_sha && latest.repository?.id===policy.repositoryId &&
+   latest.head_repository?.id===policy.repositoryId && latest.workflow_id===policy.workflowId && latest.path===policy.workflowPath,'Hosted overflow identity changed');
+  if(latest.run_attempt!==run.run_attempt)continue;
+  run=latest;
+  if(run.event==='pull_request'){
+   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+   if(pull.number!==run.pull_requests[0].number || pull.state!=='open' || pull.head?.sha!==run.head_sha ||
+    pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
   }
+  if(excludeRuns.has(Number(id)))continue;
   if(run.status==='completed'){
+   if(run.conclusion!=='cancelled')continue;
    await api.post(path+'/rerun',undefined,{signal});
    console.log(JSON.stringify({event:'automatic-ci-overflow-rerun',at:new Date().toISOString(),runId:run.id,hostedAttempt:attempt}));
   }
   else {
-   let force=false;
-   if(run.status==='queued'){
-    force=inventory.jobs.every(job=>job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha &&
-     (job.status==='completed' || job.status==='queued' && !job.runner_id));
-   }
+   const force=inventory.jobs.every(job=>job.status==='completed' || !job.runner_id);
    await api.post(path+(force?'/force-cancel':'/cancel'),undefined,{signal});
   }
   }catch(error){signal?.throwIfAborted();if(!onError)throw error;if(await onError(error,Number(id))===false)break;}
@@ -381,7 +412,7 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,onRefused,runs:observed}){
+export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,untouched=false,onRefused,runs:observed}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
  const base=`/repos/${policy.repository}`,found=[];
@@ -394,7 +425,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
  for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
-  if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt)continue;
+  if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt || hosted[run.id]===run.run_attempt+1)continue;
   let candidate;
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
@@ -406,12 +437,13 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   }
   const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
+  if(untouched && inventory.jobs.some(startedWork))continue;
   for(const job of inventory.jobs){
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name,job.labels);
    if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
    candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`};
-   const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
+   const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,requireHostedRouting:untouched,signal});
    if(ci)found.push(ci);
    if(found.length===limit)return found;
    if(ci && onePerRun)break;
