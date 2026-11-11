@@ -10,7 +10,7 @@ export {decideCountryFlow,spainCountryPolicy,type CountryPolicy,type CountryFlow
 export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
 export { EmailOutbox, EmailWorker, emailDeliveryStatus, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
-export type { AccountEmail } from './account-input.ts';
+export type { AccountEmail, AccountSignInCheck } from './account-input.ts';
 export { createSmtpAccountMailer, type SmtpAccountMailConfig } from './smtp-mailer.ts';
 export { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
 export { createLocalAccountMailer } from './local-mailer.ts';
@@ -329,3 +329,5 @@ export type {BoundFlow,FlowPermit} from './flow-authority.ts';
 
 export {readBillingVenue,readVenueHistory} from './billing-venues.ts';
 export {effectiveVenueLevel} from './venue-service-rules.ts';
+
+export {SignInCheckError, type SignInCheckMailer} from './sign-in-check.ts';

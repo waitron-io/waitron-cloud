@@ -74,7 +74,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      assert.deepEqual(calls,[]);
      await page.getByRole('button',{name:translations[other][flow.button],exact:true}).click();
      await page.locator('wt-form-error-summary').getByText(translations[other].unavailable,{exact:true}).waitFor();
-     const expected=flow.path==='/login'?{path:'/login',body:{email:'owner@example.es',password}}:
+     const expected=flow.path==='/login'?{path:'/login',body:{email:'owner@example.es',password,locale:other}}:
       'completion' in flow?flow.path==='/signup'?{path:'/signup/complete',body:{token,password,legalBusinessName:'Bar Pepe SL',organisationName:'Bar Pepe SL',countryCode:'ES'}}:
        {path:'/password-reset/complete',body:{token,password,locale:other}}:
        {path:flow.path==='/signup'?'/signup/request':'/password-reset/request',body:{email:'owner@example.es',locale:other}};

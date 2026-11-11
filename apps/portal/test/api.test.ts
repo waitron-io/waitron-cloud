@@ -167,3 +167,16 @@ for (const path of ['/session', '/session/activity']) test(`${path} accepts only
     assert.equal((await accountRequest(path,path.endsWith('activity')?{}:undefined)).ok,false);
   }
 });
+
+
+test('email login validates a challenge response and only accepts a session answer on completion',async t=>{
+  const challenge={emailRequired:true,challengeToken:'A'.repeat(43),expiresAt:'2030-01-01T00:00:00.000Z'};
+  let status=202,body:unknown=challenge;
+  t.mock.method(globalThis,'fetch',async()=>Response.json(body,{status}));
+  assert.deepEqual(await accountRequest('/login',{}),{ok:true,value:challenge});
+  for(const bad of [{...challenge,emailRequired:false},{...challenge,factorRequired:true},{...challenge,challengeToken:'x'}]){
+    body=bad;assert.equal((await accountRequest('/login',{})).ok,false);
+  }
+  body=challenge;assert.equal((await accountRequest('/login/email',{})).ok,false);
+  status=200;body={accountId:'owner'};assert.deepEqual(await accountRequest('/login/email',{}),{ok:true,value:body});
+});

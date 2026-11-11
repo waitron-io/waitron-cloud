@@ -3,13 +3,16 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import type {Request} from 'playwright';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator, startPortalFixture} from './fixtures.ts';
+import {addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real account security password';
+const rule={limit:1000,windowSeconds:60};
+const policy={loginLifetimeMs:300000,pendingLifetimeMs:300000,challengeAttempts:5,enrolmentAttempts:5,
+  loginAccount:rule,completeIp:rule,completeAccount:rule,completeChallenge:rule,manageIp:rule,manageAccount:rule};
 
 test('account security is clear in both languages at phone and desktop widths', async () => {
-  const f = await startPortalFixture();
+  const f = await startPortalFixture(undefined,undefined,{keys:null,policy});
   try {
     for (const [locale, colorScheme, viewport, label] of [
       ['en', 'light', {width: 1280, height: 900}, 'desktop-light'],
@@ -31,8 +34,12 @@ test('account security is clear in both languages at phone and desktop widths', 
       try {
         for (const target of [context, other]) {
           const login = await target.request.post(`${f.origin}/api/account/login`,
-            {headers: {origin: f.origin}, data: {email: account.email, password}});
-          assert.equal(login.status(), 200);
+            {headers: {origin: f.origin}, data: {email: account.email, password,locale}});
+          assert.equal(login.status(),202);assert.equal((await target.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
+          const challenge=await login.json() as {emailRequired:boolean;challengeToken:string};assert.equal(challenge.emailRequired,true);
+          await f.drainMail();const message=await mailFor(account.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+          const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+          assert.equal((await target.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:challenge.challengeToken,code}})).status(),200);
         }
         const page = await context.newPage(); page.setDefaultTimeout(5000);
         const c = translations[locale];

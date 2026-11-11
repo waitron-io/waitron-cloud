@@ -10,5 +10,5 @@ export function createTestCaptureMailer(options){
   try{await transport.sendMail({from:'Waitron Cloud <cloud@example.test>',to:{address:message.email,name:''},subject:rendered.subject,text:rendered.text});}
   catch{throw new Error('Test capture delivery failed');}finally{transport.close();}
  };
- return {sendVerification:message=>action('verification',message),sendPasswordReset:message=>action('password_reset',message),sendPasswordChanged:message=>action('password_changed',message),sendServiceAlert:message=>action('service_alert',message)};
+ return {sendSignInCheck:message=>action('sign_in_check',message),sendVerification:message=>action('verification',message),sendPasswordReset:message=>action('password_reset',message),sendPasswordChanged:message=>action('password_changed',message),sendServiceAlert:message=>action('service_alert',message)};
 }

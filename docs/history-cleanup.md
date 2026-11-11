@@ -14,6 +14,7 @@ Put exact cutoff timestamps in a JSON file:
     "sessions": "2026-01-01T00:00:00.000Z",
     "signupRequests": "2026-01-01T00:00:00.000Z",
     "passwordResetRequests": "2026-01-01T00:00:00.000Z",
+    "signInChecks": "2026-01-01T00:00:00.000Z",
     "webauthnCeremonies": "2026-01-01T00:00:00.000Z",
     "pairingRequests": "2026-01-01T00:00:00.000Z",
     "registrationOperations": "2025-10-01T00:00:00.000Z",
@@ -61,7 +62,7 @@ An applied deletion cannot be rolled back after the transaction commits. Restore
 ## What each category removes
 
 - `sessions` removes ended or expired management sessions after WebAuthn ceremony and authenticator enrolment references are gone. Authenticator history has no approved deletion policy yet, so its referenced sessions remain blocked even after confirmation or cancellation.
-- `signupRequests` and `passwordResetRequests` remove consumed or expired token rows, but not while their encrypted email is pending or processing.
+- `signupRequests`, `passwordResetRequests` and `signInChecks` remove consumed or expired token rows, but not while their encrypted email is pending or processing.
 - `webauthnCeremonies` removes consumed or expired five-minute challenges.
 - `pairingRequests` removes completed or expired matching-code requests.
 - `registrationOperations` removes completed or expired connection requests and old installation replay results.

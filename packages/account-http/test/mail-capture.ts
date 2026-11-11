@@ -7,7 +7,7 @@ type Event = {kind?: string; result: string; ms: number};
 const allowed = (value: unknown, values: readonly string[]) => typeof value === 'string' && values.includes(value) ? value : 'other';
 const count = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0 ? value : null;
 
-export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: string; mailer: Mailer}) {
+export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: string; mailer: Omit<Mailer,'sendSignInCheck'> & Partial<Pick<Mailer,'sendSignInCheck'>>}) {
   const workerEvents: Event[] = [], smtpEvents: Event[] = [];
   const record = (events: Event[], result: string, started: number, kind?: string) => {
     events.push({...(kind ? {kind} : {}), result, ms: Math.round(performance.now() - started)});
@@ -59,7 +59,7 @@ export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: 
       const {rows} = await readOutbox();
       // Allow only known states and counts; no row IDs, payloads, recipients or raw errors.
       outbox = rows.map(row => ({
-        kind: allowed(row.kind, ['verification', 'password_reset', 'password_changed', 'service_alert']),
+        kind: allowed(row.kind, ['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check']),
         status: allowed(row.status, ['pending', 'processing', 'sent', 'expired', 'cancelled', 'failed']),
         attempts: count(row.attempts), failures: count(row.failures),
         lastError: row.last_error === null ? null : allowed(row.last_error, ['payload_unavailable', 'attempts_exhausted',
@@ -73,7 +73,7 @@ export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: 
   return {
     evidence,
     mailer: {sendVerification: observe('sendVerification', 'verification'), sendPasswordReset: observe('sendPasswordReset', 'password_reset'),
-      sendPasswordChanged: observe('sendPasswordChanged', 'password_changed'), sendServiceAlert: observe('sendServiceAlert', 'service_alert')},
+      sendSignInCheck: observe('sendSignInCheck', 'sign_in_check'), sendPasswordChanged: observe('sendPasswordChanged', 'password_changed'), sendServiceAlert: observe('sendServiceAlert', 'service_alert')},
     async runOnce(worker: Pick<EmailWorker, 'runOnce'>) {
       const started = performance.now();
       try {const handled = await worker.runOnce(); record(workerEvents, handled ? 'handled' : 'idle', started); return handled;}

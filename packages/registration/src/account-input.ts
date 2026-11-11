@@ -1,6 +1,7 @@
 export type AccountLocale = 'en' | 'es';
 export interface AccountNotification { email: string; locale?: AccountLocale; }
 export interface AccountEmail extends AccountNotification { token: string; expiresAt: string; }
+export interface AccountSignInCheck extends AccountEmail { code: string; }
 export const validLocale = (value: unknown): value is AccountLocale => value === 'en' || value === 'es';
 
 export function validNewPassword(value: unknown): value is string {

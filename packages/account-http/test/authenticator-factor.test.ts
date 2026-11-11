@@ -347,3 +347,27 @@ test('HTTP overlong passwords use a byte-length refusal while malformed input ke
   await refusal(await request('/authenticator/begin',{password:'é'.repeat(512)},{headers}),403,'credentials_invalid');
   assert.equal((await request('/session',undefined,{headers})).status,200);
 });
+
+
+test('passkey password fallback returns an email challenge without cookies, then completes the mailbox proof',async()=>{
+  const owner=await account();
+  await db.pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[owner.accountId,randomBytes(32)]);
+  await db.pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
+    VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[randomUUID(),owner.accountId,Buffer.from([1,2,3])]);
+  const response=await request('/login',{email:owner.email,password,locale:'es'});
+  assert.equal(response.status,202);assert.equal(response.headers.getSetCookie().length,0);assert.equal(await count(),0);
+  const body=await response.json() as {emailRequired:boolean;challengeToken:string;expiresAt:string};
+  assert.deepEqual(Object.keys(body).sort(),['challengeToken','emailRequired','expiresAt']);assert.equal(body.emailRequired,true);
+  const queued=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check'")).rows[0]);
+  assert.ok('code' in queued);assert.equal(queued.locale,'es');
+  await refusal(await request('/login/email',{challengeToken:body.challengeToken,code:queued.code},{headers:{origin:'https://other.example.test'}}),403,'forbidden');
+  await refusal(await request('/login/email',{challengeToken:body.challengeToken,code:queued.code,accountId:owner.accountId}),400,'invalid_input');
+  const signed=await request('/login/email',{challengeToken:body.challengeToken,code:queued.code});
+  assert.equal(signed.status,200);assert.deepEqual(await signed.json(),{accountId:owner.accountId});assert.equal(signed.headers.getSetCookie().length,2);
+  assert.equal((await request('/session',undefined,{headers:cookies(signed)})).status,200);assert.equal(await count(),1);
+  await refusal(await request('/login/email',{challengeToken:body.challengeToken,code:queued.code}),401,'credentials_invalid');
+  const defaultLanguage=await request('/login',{email:owner.email,password});
+  assert.equal(defaultLanguage.status,202);assert.equal(defaultLanguage.headers.getSetCookie().length,0);assert.equal(await count(),1);
+  const defaultMail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);
+  assert.equal(defaultMail.locale,'en');
+});

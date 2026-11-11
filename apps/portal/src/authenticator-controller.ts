@@ -1,12 +1,12 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import type {FactorChallenge,FactorChange,FactorEnrolment,FactorProof,FactorStatus,PasswordLogin} from './authenticator-types.ts';
+import type {EmailChallenge,FactorChallenge,FactorChange,FactorEnrolment,FactorProof,FactorStatus,PasswordLogin} from './authenticator-types.ts';
 type Request=<T>(path:string,body?:Record<string,unknown>)=>Promise<ApiResult<T>>;
 const normaliseCode=(code:string)=>code.replace(/\s/g,'');
 const validCode=(code:string,kind:FactorProof['kind'])=>kind==='totp'?/^\d{6}$/.test(code):/^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{8}){3})$/.test(code);
 export class AuthenticatorController {
-  challenge:FactorChallenge|undefined;
+  challenge:FactorChallenge|EmailChallenge|undefined;
   enrolment:FactorEnrolment|undefined;
   status:FactorStatus|undefined;
   password='';proofKind:FactorProof['kind']='totp';proofCode='';confirmation='';
@@ -38,25 +38,27 @@ export class AuthenticatorController {
   }
   #start(){if(this.pending||this.waiting)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
   #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&!this.waiting){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
-  async startLogin(email:string,password:string):Promise<'authenticated'|'factor'|'reconcile'|false>{
+  async startLogin(email:string,password:string,locale?:'en'|'es'):Promise<'authenticated'|'factor'|'reconcile'|false>{
     const generation=this.#start();if(generation===undefined)return false;
     this.challenge=undefined;this.#clearInput();
-    const result=await this.#request<PasswordLogin>('/login',{email,password});
+    const result=await this.#request<PasswordLogin>('/login',{email,password,...(locale?{locale}:{})});
     if(generation!==this.#generation)return false;this.pending=false;
-    if(result.ok){if('factorRequired' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
+    if(result.ok){if('challengeToken' in result.value){this.challenge=result.value;this.#changed();return 'factor';}this.#changed();return 'authenticated';}
     this.#failure(result,false,'factorSignIn');if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
-    if(!validCode(code,this.proofKind))return this.#required('factorCodeInvalid','proof');
+    const email='emailRequired' in this.challenge;
+    if(!validCode(code,email?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,proof:{kind:this.proofKind,code}};this.#clearInput();
-    const result=await this.#request<{accountId:string}>('/login/factor',body);
+    const body={challengeToken:this.challenge.challengeToken,...(email?{code}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
+    const result=await this.#request<{accountId:string}>(email?'/login/email':'/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
     this.#failure(result,false,'factorVerify');
     // An uncertain completion may have consumed its proof; only a session read can reconcile it.
     if(result.status===0||result.status>=500){this.challenge=undefined;this.error='factorLoginUncertain';this.#changed();return 'reconcile';}
+    if(result.status===401&&email){this.error='emailCheckInvalid';this.#changed();return false;}
     if(result.status===401){this.challenge=undefined;this.#changed();return 'reconcile';}this.#changed();return false;
   }
   async load(){if(!this.#account)return;const generation=this.#start();if(generation===undefined)return;

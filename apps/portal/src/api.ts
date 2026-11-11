@@ -15,7 +15,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
   if(path==='/billing/read'||path==='/billing/start-trial')return status===200&&validBillingView(value);
   if(path==='/login')return validPasswordLogin(value,status);
-  if(path==='/login/factor')return validPasswordLogin(value,status)&&status===200;
+  if((path==='/login/factor'||path==='/login/email'))return validPasswordLogin(value,status)&&status===200;
   if(path==='/authenticator')return status===200&&validFactorStatus(value);
   if(path==='/authenticator/begin')return status===200&&validFactorEnrolment(value);
   if(path==='/authenticator/activate'||path==='/authenticator/regenerate')return status===200&&validFactorChange(value,true);
@@ -58,7 +58,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;

@@ -8,6 +8,7 @@ export const historyCleanupCategories = [
   'sessions',
   'signupRequests',
   'passwordResetRequests',
+  'signInChecks',
   'pairingRequests',
   'registrationOperations',
   'emailDeliveries',
@@ -118,6 +119,7 @@ export class HistoryCleanup {
           AND NOT EXISTS(SELECT 1 FROM cloud_factor_enrolments f WHERE f.session_id=s.id) RETURNING s.token_hash`,
       });
       case 'signupRequests': return this.#requestCategory(client, 'signup_requests', cutoff, limit, apply);
+      case 'signInChecks': return this.#requestCategory(client, 'cloud_sign_in_checks', cutoff, limit, apply);
       case 'passwordResetRequests': return this.#requestCategory(client, 'password_reset_requests', cutoff, limit, apply);
       case 'webauthnCeremonies': return this.#simple(client, cutoff, limit, apply, {
         eligible: `SELECT count(*)::integer AS count FROM cloud_webauthn_ceremonies
@@ -166,7 +168,7 @@ export class HistoryCleanup {
     return {cutoff, eligible, blocked, deleted, hasMore: apply ? eligible > deleted : eligible > 0};
   }
 
-  #requestCategory(client: PoolClient, table: 'signup_requests' | 'password_reset_requests',
+  #requestCategory(client: PoolClient, table: 'signup_requests' | 'password_reset_requests' | 'cloud_sign_in_checks',
     cutoff: string, limit: number, apply: boolean) {
     const base = `COALESCE(r.consumed_at,r.expires_at)<$1 AND (r.consumed_at IS NOT NULL OR r.expires_at<=clock_timestamp())`;
     const work = `EXISTS(SELECT 1 FROM email_outbox e WHERE e.token_hash=r.token_hash AND e.status IN ('pending','processing'))`;

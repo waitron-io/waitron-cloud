@@ -766,7 +766,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    cleared the [build plan](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md)
    for publication on 11 November; the owner authorised building it at 14:05 with
    “10-min window; build (Recommended)”. Slice 1 remembers passkey-first sign-in locally.
-   Email checks, browser recognition, account recovery codes, enrollment policy and fresh
+   Browser recognition, account recovery codes, enrollment policy and fresh
    proof remain; later handover/recovery need their actual interfaces. Billing stays parked.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or

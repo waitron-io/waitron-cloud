@@ -111,7 +111,7 @@ export async function mailFor(email: string, subject: string, evidence?: () => P
   if (!found) {
     let boundaries: object;
     try { boundaries = await evidence?.() ?? {}; } catch { boundaries = {boundaries: 'unavailable'}; }
-    const knownSubjects = new Set(['Verify your Waitron Cloud email', 'Verifica tu correo de Waitron Cloud',
+    const knownSubjects = new Set(['Your Waitron Cloud sign-in code', 'Tu código de acceso a Waitron Cloud', 'Verify your Waitron Cloud email', 'Verifica tu correo de Waitron Cloud',
       'Reset your Waitron Cloud password', 'Restablece tu contraseña de Waitron Cloud',
       'Your Waitron Cloud password changed', 'Tu contraseña de Waitron Cloud ha cambiado',
       'Waitron Cloud: a venue needs attention', 'Waitron Cloud: un local necesita atención',

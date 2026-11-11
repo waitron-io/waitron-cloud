@@ -108,7 +108,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.getByRole('button', {name: c.login, exact: true}).click();
           await page.getByText(c.accountIntro, {exact: true}).waitFor();
           assert.equal(new URL(page.url()).pathname, '/account');
-          assert.deepEqual(passwords, [{email: 'owner@example.test', password: 'Incorrect password'}, {email: 'owner@example.test', password: 'Correct account password'}]);
+          assert.deepEqual(passwords, [{email: 'owner@example.test', password: 'Incorrect password',locale}, {email: 'owner@example.test', password: 'Correct account password',locale}]);
           const section = page.locator('.passkeys');
           await section.getByRole('alert').waitFor();
           assert.equal(await section.getByRole('alert').innerText(), guidance[locale]);

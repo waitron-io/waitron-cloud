@@ -55,7 +55,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(await page.locator('wt-input[name=email]').getByText(c.emailError, {exact: true}).count(), 0, 'surrounding spaces must not produce an email error');
           await (flow.path === '/login' ? page.getByRole('alert').filter({hasText: c.credentials}) : page.getByRole('status').filter({hasText: c.emailSent})).waitFor();
           assert.deepEqual(calls, [{path: flow.endpoint, body: flow.path === '/login'
-            ? {email: 'owner@example.test', password}
+            ? {email: 'owner@example.test', password, locale}
             : {email: 'owner@example.test', locale}}]);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
           if (kind === 'nonbreaking' && process.env.EMAIL_TRIMMING_RECEIPT_DIR) {
@@ -100,7 +100,7 @@ test('a padded email at the length boundary is sent without its surrounding spac
         await page.getByRole('button', {name: c[flow.button], exact: true}).click();
         assert.equal(await page.locator('wt-input[name=email]').getByText(c.emailError, {exact: true}).count(), 0);
         await (flow.path === '/login' ? page.getByRole('alert').filter({hasText: c.credentials}) : page.getByRole('status').filter({hasText: c.emailSent})).waitFor();
-        assert.deepEqual(calls, [{path: flow.endpoint, body: flow.path === '/login' ? {email, password} : {email, locale: 'en'}}]);
+        assert.deepEqual(calls, [{path: flow.endpoint, body: flow.path === '/login' ? {email, password, locale:'en'} : {email, locale: 'en'}}]);
       } finally { await page.close(); }
     });
   } finally { await browser.close(); }

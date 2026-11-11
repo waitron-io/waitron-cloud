@@ -23,7 +23,9 @@ Browsers with passkey autofill can offer their saved keys; the explicit passkey 
 and password form remain available. Refusing browser storage does not prevent sign-in.
 `node --test apps/portal/test/passkey-controller.test.ts apps/portal/test/passkey-preference-browser.test.ts`
 checks this flow with a virtual authenticator in Chromium; other browsers' prompts
-are not qualified by that run. Password login and email recovery remain available. Optional [authenticator-app protection](authenticator-app.md) now adds a second step to
+are not qualified by that run. Password fallback with an enrolled passkey now requires
+a six-digit email code before a session; see the [HTTP flow and focused test commands](../packages/account-http/README.md).
+Email recovery remains available. Optional [authenticator-app protection](authenticator-app.md) now adds a second step to
 password sign-in. Email reset keeps the factor and saved codes; successful factor changes
 end every session. Live delivery and production factor policy remain deployment work.
 
