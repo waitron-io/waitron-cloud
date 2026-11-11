@@ -5,7 +5,7 @@
   "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
-    "test": "node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 test/local-stack-runtime.test.ts; launcher_status=$?; node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 'test/!(local-stack-runtime).test.ts' quality/*.test.ts && exit $launcher_status",
+    "test": "trap \"exit 130\" INT; run_translation_tests() { node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 test/local-stack-runtime.test.ts; launcher_status=$?; node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 \"test/!(local-stack-runtime).test.ts\" quality/*.test.ts \"$@\" && return $launcher_status; }; run_translation_tests",
     "worker": "node src/worker-cli.ts",
     "quality:test": "node --test --test-timeout=30000 quality/*.test.ts",
     "quality:score": "node quality/scorer.ts",

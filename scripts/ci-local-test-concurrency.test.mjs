@@ -7,7 +7,7 @@ import test from 'node:test';
 
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
-function runPackageCommand(t, packageName, failingFile) {
+function runPackageCommand(t, packageName, failingFile, args = []) {
   const holder = mkdtempSync(join(tmpdir(), 'cloud-local-test-concurrency-'));
   const root = join(holder, 'packages', packageName);
   t.after(() => rmSync(holder, {recursive: true, force: true}));
@@ -49,7 +49,7 @@ test(${JSON.stringify(name)}, async () => {
 `);
   const env = {...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`};
   delete env.NODE_TEST_CONTEXT;
-  const result = spawnSync('sh', ['-c', manifest.scripts.test], {
+  const result = spawnSync('sh', ['-c', `${manifest.scripts.test} ${args.map(quote).join(' ')}`], {
     cwd: root, env, encoding: 'utf8', timeout: 15_000, detached: true,
   });
   // This process group contains only the command and file workers created by this probe.
@@ -101,4 +101,10 @@ test('translation runs both phases and preserves a failure from either phase', t
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /controlled package failure/);
   }
+});
+
+
+test('translation accepts test runner arguments after the package command', t => {
+  const result = runPackageCommand(t, 'translation', undefined, ['--test-name-pattern=.']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 });
