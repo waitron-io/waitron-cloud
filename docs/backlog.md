@@ -753,8 +753,12 @@ order. Remote access matters most because Waitron's customer-facing features wai
    [D608 lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
    on 9 November 2026, including organisation-limited box recovery, single-use recovery
    codes for every enrolled second method, password resets forgetting recognised devices,
-   handover defaults and no manual recovery or support/operator override. Sign-in,
-   handover and recovery remain unbuilt; implement them under their own approved plan.
+   handover defaults and no manual recovery or support/operator override. The watcher
+   cleared the [build plan](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md)
+   for publication on 11 November. Remaining sign-in, fresh-proof, handover and recovery
+   work stays unbuilt; the owner must give the build go-ahead. Whether one re-proof can
+   cover several risky actions for a short window also awaits the owner. Earlier sign-in
+   slices do not depend on that choice; later handover/recovery need their actual interfaces.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
    activation permission.
