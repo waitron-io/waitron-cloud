@@ -51,3 +51,18 @@ for (const locale of ['en', 'es', undefined] as const) {
     }
   });
 }
+
+for (const locale of ['en','es'] as const) test(`mailbox sign-in code renders ${locale} without exposing the browser challenge`, () => {
+  const mail = accountMail(new URL('https://cloud.example'),'sign_in_check',{
+    email:'owner@example.test',token,code:'000123',expiresAt:'2030-01-01T12:00:00.000Z',locale,
+  });
+  assert.equal(mail.subject,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud');
+  assert.match(mail.text,/\b000123\b/); assert.match(mail.text,/UTC/);
+  assert.equal(mail.text.includes(token),false); assert.doesNotMatch(mail.text,/token=/);
+});
+
+test('mailbox sign-in templates refuse malformed codes', () => {
+  assert.throws(() => accountMail(new URL('https://cloud.example'),'sign_in_check',{
+    email:'owner@example.test',token,code:'12345',expiresAt:'2030-01-01T12:00:00.000Z',
+  }),/Invalid account email/);
+});

@@ -113,7 +113,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | --- | --- | --- |
 | POST `/signup/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password","organisationName":"Casa Norte","legalBusinessName":"Casa Norte SL","countryCode":"ES"}` | 201 `{"accountId":"<uuid>","organisationId":"<uuid>","legalBusinessId":"<uuid>"}` |
-| POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 factor challenge without cookies |
+| POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 app or email challenge without cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | POST `/session/activity` | `{}`, session cookie and `X-CSRF-Token` | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
 | GET `/sessions` | No body; session cookie | 200 with this account's live session IDs, creation, last-use and expiry times, and current-session marker |
@@ -151,8 +151,26 @@ An authenticated account can read `GET /passkeys`, begin enrolment with
 `POST /passkeys/registration/options {"password":"<current password>"}`, finish it at
 `POST /passkeys/registration/verify`, and remove an account-scoped row with
 `POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
-These mutations require the current session's CSRF header. Password login and email
-recovery remain available, and password reset does not delete enrolled passkeys.
+These mutations require the current session's CSRF header. If you use a password
+while a passkey is enrolled, sign-in also requires an emailed six-digit code. An active
+authenticator app takes priority: its code or recovery code is required instead.
+Email recovery remains available, and password reset does not delete enrolled passkeys.
+
+`POST /login` accepts an optional `locale` (`en` or `es`). For the email step it returns
+202 with `emailRequired:true`, `challengeToken` and `expiresAt`, without cookies.
+Send `POST /login/email {"challengeToken":"<browser challenge>","code":"000123"}`
+from the exact portal origin. A valid code returns 200 with the account ID and session
+cookies. Codes keep leading zeroes, expire after five minutes and use the configured
+`CLOUD_FACTOR_POLICY.challengeAttempts` limit and existing sign-in request budgets.
+Keep the challenge in memory. No session exists until completion succeeds; replay,
+password or email changes, password reset, disabled accounts and a newly active app
+refuse the older code. Missing email keys or policy refuse fallback; direct passkeys
+remain available. The focused store and browser commands are:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/sign-in-check.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test test/sign-in-check-browser.test.ts
+```
 
 The portal test drives the production bundle and server through Chromium's virtual
 authenticator. It creates a resident, user-verified credential, signs out, signs in with

@@ -31,7 +31,7 @@ test('the handoff upgrade preserves the exact 49-entry ledger and never attribut
   await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   const after=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(after.length,55);assert.deepEqual(after.slice(0,49),f.before);assert.equal(after[49].name,'050_mail_legacy_suppression_scopes.sql');
+  assert.equal(after.length,56);assert.deepEqual(after.slice(0,49),f.before);assert.equal(after[49].name,'050_mail_legacy_suppression_scopes.sql');
   assert.deepEqual((await f.pool.query('SELECT key_id,digest FROM relay_suppressions')).rows,f.legacy);
   assert.deepEqual((await f.pool.query('SELECT * FROM mail_legacy_suppression_scopes')).rows,[]);
   await checkConsumerSchema(f.pool,root);

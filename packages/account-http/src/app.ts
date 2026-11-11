@@ -42,7 +42,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { endSession, IdentityError, resolveSession } from '@waitron-cloud/identity';
 import { EmailOutbox, pairingCodeKeysFromEnv, type PairingCodeKeys, PasskeyStore, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction, type PasskeyCeremonyAdapter, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { type AccountHttpConfig, validateConfig, factorConfigFromEnv, validateFactorConfig, type FactorConfig } from './config.ts';
-import {AuthenticatorFactorStore,PasswordLoginStore,FactorError} from '@waitron-cloud/registration';
+import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError} from '@waitron-cloud/registration';
 import { AccountRateLimiter, type RateRule } from './rate-limit.ts';
 import { clientAddress } from './client-address.ts';
 import { readAccountBody } from './request.ts';
@@ -58,7 +58,7 @@ function protect(c: Context) {
 }
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
-  if(error instanceof FactorError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
+  if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
     if (error.code === 'csrf_invalid') return new AccountHttpError(403, 'forbidden');
@@ -91,7 +91,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
-  const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy);
+  const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy);
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
@@ -144,7 +144,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
+    if(c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
@@ -173,7 +173,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
+    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
     const started = performance.now();
@@ -188,11 +188,12 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
         await consume([{scope: 'login-ip', subject: ip, limit: 10, windowSeconds: 60}]);
         await consume([{scope: 'login-email', subject: email!, limit: 30, windowSeconds: 900}]);
         if(factor.policy)await consume([{scope:'factor-login-email',subject:email!,...factor.policy.loginAccount}]);
-        const result=await passwordLogin.start({email:email!,password:body.password!},factor.policy?async (accountId,client)=>{
+        const result=await passwordLogin.start({email:email!,password:body.password!,locale},factor.policy?async (accountId,client)=>{
           const decision=await limiter.consume([{scope:'factor-login-account',subject:accountId,...factor.policy!.loginAccount}],client);
           if(!decision.allowed)return new AccountHttpError(429,'rate_limited',decision.retryAfterSeconds);
         }:undefined);
         if(result.kind==='factor')return c.json({factorRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
+        if(result.kind==='email')return c.json({emailRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
         const credentials=result.credentials;
         writeSessionCookies(c, secure, credentials);
         return c.json({accountId: credentials.accountId});

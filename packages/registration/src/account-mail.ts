@@ -1,6 +1,6 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
-import { validLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
-export type AccountMailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert';
+import { validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+export type AccountMailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check';
 const copy = {
   en: {
     verification: 'Verify your Waitron Cloud email', password_reset: 'Reset your Waitron Cloud password',
@@ -15,10 +15,17 @@ const copy = {
     expiry: 'Este enlace de un solo uso caduca el', ignore: 'Si no has solicitado este correo, puedes ignorarlo.',
   },
 };
-export function accountMail(origin: URL, kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert): {subject: string; text: string} {
+export function accountMail(origin: URL, kind: AccountMailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert): {subject: string; text: string} {
   if (message.locale !== undefined && !validLocale(message.locale)) throw new Error('Invalid account email');
   const locale = message.locale ?? 'en';
   const text = copy[locale];
+  if (kind==='sign_in_check') {
+    if (!('code' in message) || typeof message.code!=='string' || !/^[0-9]{6}$/.test(message.code)
+      || !('expiresAt' in message) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid account email');
+    const subject=locale==='es'?'Tu código de acceso a Waitron Cloud':'Your Waitron Cloud sign-in code';
+    const expiry=new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(message.expiresAt));
+    return {subject,text:[subject,'',message.code,'',`${locale==='es'?'Este código de un solo uso caduca el':'This single-use code expires at'} ${expiry}.`,text.ignore].join('\n')};
+  }
   if(kind==='service_alert'){
     if(!validServiceAlert(message))throw new Error('Invalid account email');
     const subjects=locale==='es'?{open:'Waitron Cloud: un local necesita atención',recovered:'Waitron Cloud: comprobación recuperada'}:{open:'Waitron Cloud: a venue needs attention',recovered:'Waitron Cloud: venue check recovered'};

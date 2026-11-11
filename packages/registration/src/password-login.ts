@@ -2,12 +2,15 @@ import {createHash, randomBytes} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {createSession, decryptFactorSecret, IdentityError, matchedTotpSteps, requirePasswordAuthority,
   type FactorKeys, type SessionCredentials} from '@waitron-cloud/identity';
+import {issueSignInCheck, completeSignInCheck, SignInCheckError, type EmailSignInChallenge} from './sign-in-check.ts';
+import type {EmailOutbox} from './email-outbox.ts';
+import type {AccountLocale} from './account-input.ts';
 import {transaction} from './transaction.ts';
 
 export type FactorProof = {kind: 'totp' | 'recovery'; code: string};
 export interface PasswordLoginPolicy {loginLifetimeMs: number; challengeAttempts: number}
 export type PasswordLoginResult = {kind: 'session'; credentials: SessionCredentials}
-  | {kind: 'factor'; challengeToken: string; expiresAt: string};
+  | {kind: 'factor'; challengeToken: string; expiresAt: string} | EmailSignInChallenge;
 export class FactorError extends Error {
   readonly code: 'credentials_invalid' | 'temporarily_unavailable';
   constructor(code: FactorError['code'] = 'credentials_invalid') {super(code); this.name = 'FactorError'; this.code = code;}
@@ -80,10 +83,11 @@ export class PasswordLoginStore {
   readonly #pool: Pool;
   readonly #keys: FactorKeys | null;
   readonly #policy: PasswordLoginPolicy | null;
-  constructor(pool: Pool, keys: FactorKeys | null, policy: PasswordLoginPolicy | null) {
-    this.#pool = pool; this.#keys = keys; this.#policy = policy;
+  readonly #outbox: EmailOutbox | undefined;
+  constructor(pool: Pool, keys: FactorKeys | null, policy: PasswordLoginPolicy | null, outbox?: EmailOutbox) {
+    this.#pool = pool; this.#keys = keys; this.#policy = policy; this.#outbox = outbox;
   }
-  async start(input: {email: string; password: string},
+  async start(input: {email: string; password: string; locale?: AccountLocale},
     verified?: (accountId:string, client:PoolClient)=>Promise<Error|void>): Promise<PasswordLoginResult> {
     const result = await transaction<PasswordLoginResult | Error>(this.#pool, async client => {
       const authority = await requirePasswordAuthority(client, {email: input.email}, input.password, 'update');
@@ -94,7 +98,14 @@ export class PasswordLoginStore {
       try {
         const factor = (await client.query(`SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE`,
           [authority.accountId])).rows[0];
-        if (!factor?.secret_envelope) return {kind: 'session', credentials: await createSession(client, authority.accountId)};
+        if (!factor?.secret_envelope) {
+          const passkeys = await client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1', [authority.accountId]);
+          if (passkeys.rowCount) {
+            const email = (await client.query('SELECT email FROM cloud_credentials WHERE account_id=$1', [authority.accountId])).rows[0].email;
+            return await issueSignInCheck(client,this.#outbox,this.#policy,{...authority,email,locale:input.locale});
+          }
+          return {kind:'session',credentials:await createSession(client,authority.accountId)};
+        }
         const policy = requirePolicy(this.#policy);
         secretFor(factor, this.#keys);
         const token = randomBytes(32).toString('base64url');
@@ -107,7 +118,7 @@ export class PasswordLoginStore {
         if (await factorNow(client) >= expiresAt) throw new FactorError();
         return {kind: 'factor', challengeToken: token, expiresAt: expiresAt.toISOString()};
       } catch(error) {
-        if(!(error instanceof FactorError))throw error;
+        if(!(error instanceof FactorError) && !(error instanceof SignInCheckError))throw error;
         await client.query('ROLLBACK TO SAVEPOINT login_issuance_effects');
         return error;
       }
@@ -115,6 +126,7 @@ export class PasswordLoginStore {
     if(result instanceof Error)throw result;
     return result;
   }
+  completeEmailCheck(token: string, code: string) { return completeSignInCheck(this.#pool,token,code); }
   async complete(token: string, proof: FactorProof): Promise<SessionCredentials> {
     if (typeof token !== 'string' || !TOKEN.test(token)) throw new FactorError();
     requirePolicy(this.#policy);

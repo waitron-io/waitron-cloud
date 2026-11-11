@@ -36,6 +36,7 @@ const enBase = {
   billingIntro:'Try Connected free for 30 days. No card is needed.',billingStart:'Start free trial',billingLastDay:'Last trial day',billingIneligible:'A free trial is unavailable for this venue.',billingEmpty:'No venues are available.',
   billingChanged:'The trial choice changed. Check the current plan below.',billingUncertain:'We could not confirm the change. Check the current plan before trying again.',billingRefresh:'Check current plan',
 
+  emailCheckTitle:'Check your email', emailCheckHelp:'Enter the six-digit code we emailed you. It expires in five minutes.', emailCheckInvalid:'The code is incorrect or expired. Try again or start sign-in again.',
   factorTitle:'Authenticator', factorIntro:'Add a code to password sign-in. Passkeys still work.',
   factorOn:'Authenticator is on.', factorOff:'Authenticator is off.', factorEnable:'Set up authenticator', factorReplace:'Replace authenticator', factorRemove:'Remove authenticator', factorRegenerate:'New recovery codes',
   factorPassword:'Current password', factorProofType:'Code type', factorTotp:'Authenticator code', factorRecovery:'Recovery code', factorProof:'Current code', factorConfirmation:'New authenticator code',
@@ -308,6 +309,7 @@ const esBase: typeof enBase = {
   billingIntro:'Prueba Connected gratis durante 30 días. No necesitas tarjeta.',billingStart:'Iniciar prueba gratis',billingLastDay:'Último día de prueba',billingIneligible:'La prueba gratis no está disponible para este local.',billingEmpty:'No hay locales disponibles.',
   billingChanged:'La opción de prueba ha cambiado. Revisa el plan actual.',billingUncertain:'No hemos podido confirmar el cambio. Revisa el plan actual antes de volver a intentarlo.',billingRefresh:'Consultar plan actual',
 
+  emailCheckTitle:'Revisa tu correo', emailCheckHelp:'Introduce el código de seis dígitos que te enviamos. Caduca en cinco minutos.', emailCheckInvalid:'El código es incorrecto o ha caducado. Inténtalo de nuevo o vuelve a iniciar sesión.',
   factorTitle:'Autenticador', factorIntro:'Añade un código al acceso con contraseña. Las llaves de acceso siguen funcionando.',
   factorOn:'El autenticador está activo.', factorOff:'El autenticador está desactivado.', factorEnable:'Configurar autenticador', factorReplace:'Cambiar autenticador', factorRemove:'Quitar autenticador', factorRegenerate:'Nuevos códigos de recuperación',
   factorPassword:'Contraseña actual', factorProofType:'Tipo de código', factorTotp:'Código del autenticador', factorRecovery:'Código de recuperación', factorProof:'Código actual', factorConfirmation:'Código del nuevo autenticador',

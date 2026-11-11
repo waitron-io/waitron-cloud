@@ -1,6 +1,6 @@
 # Protect password sign-in with an authenticator app
 
-A stolen password can otherwise open your Cloud account. You can add an optional
+For a password-only account, a stolen password can open your Cloud account. You can add an optional
 authenticator app from **Account**, then use its six-digit code or a saved recovery
 code when signing in with your password. Passkey sign-in remains available separately.
 
@@ -55,8 +55,10 @@ the local example. Older runtime configuration stays intact without invented rep
 keys. Add an explicit `factor` object with `activeKeyId` and `keys` to that private
 runtime configuration before enablement; preserve any keys needed by existing data.
 
-Missing policy or unreadable secrets refuse factor operations. Password sign-in without
-an enrolled factor, passkeys and existing live sessions remain independent. An enrolled
+Missing policy or unreadable secrets refuse factor operations. Password-only sign-in, passkeys and existing live sessions remain independent.
+Password fallback for a passkey account needs the configured challenge-attempt limit
+and the email outbox keys, even without an app. It requires an emailed code; an active
+app always takes priority. An enrolled
 factor is never silently treated as absent. Cancellation of pending setup remains
 available with its exact live session and CSRF proof during a configuration outage.
 
@@ -69,7 +71,7 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 
 | Request | Body and authority | Successful reply |
 | --- | --- | --- |
-| POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true`, `challengeToken`, `expiresAt` and no cookies |
+| POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true` (app) or `emailRequired:true` (passkey password fallback), `challengeToken`, `expiresAt` and no cookies |
 | POST `/login/factor` | `challengeToken`, `proof`, exact Origin | 200 with account ID and cookies |
 | GET `/authenticator` | Live session | `active`, `version`, `recoveryCodesRemaining`, `available` |
 | POST `/authenticator/begin` | Password, optional existing-factor proof, live session and CSRF | Pending token, setup secret, URI and expiry |

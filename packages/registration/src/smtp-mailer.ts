@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
 import nodemailer from 'nodemailer';
 import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
-import { normaliseEmail, type AccountEmail, type AccountNotification } from './account-input.ts';
+import { normaliseEmail, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
 import {sesSmtpHeaders,sesProviderReceipt} from './ses-smtp-metadata.ts';
 import {isValidatedSesFeedbackConfig,type SesFeedbackConfig,type MailPurpose} from './ses-feedback-config.ts';
@@ -91,7 +91,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
 export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={},ses?:SesFeedbackConfig){
  const deliver=createSmtpDelivery(config,trust,ses);
  const origin=new URL(config.portalOrigin),domain=config.from.split('@')[1]!;
- const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|ServiceAlert,context?:EmailDeliveryContext)=>{
+ const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|AccountSignInCheck|ServiceAlert,context?:EmailDeliveryContext)=>{
   if(!message||typeof message.email!=='string'||normaliseEmail(message.email)!==message.email
    ||(kind!=='password_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
   const deliveryId=context?.deliveryId??randomUUID();
@@ -99,6 +99,7 @@ export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:
   return deliver(message.email,()=>accountMail(origin,kind,message),`<${deliveryId}@${domain}>`,context);
  };
   return {
+    sendSignInCheck: (message: AccountSignInCheck, context?: EmailDeliveryContext) => send('sign_in_check', message, context),
     sendVerification: (message: AccountEmail, context?: EmailDeliveryContext) => send('verification', message, context),
     sendPasswordReset: (message: AccountEmail, context?: EmailDeliveryContext) => send('password_reset', message, context),
     sendPasswordChanged: (message: AccountNotification, context?: EmailDeliveryContext) => send('password_changed', message, context),

@@ -176,7 +176,7 @@ export class PortalApp {
   title(): string {
     const c = this.copy;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
-    if (this.path === '/login' && this.authenticator.challenge) return c.factorTitle;
+    if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?c.emailCheckTitle:c.factorTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
@@ -269,7 +269,7 @@ export class PortalApp {
     if (Object.keys(this.errors).length) { this.draw(); this.#focusErrors(); return; }
     if (this.link.invalid || (this.path === '/reset-password' && !this.link.token)) return;
     if(this.path==='/login'){
-      const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.startLogin(f.email,f.password);this.fields.password='';
+      const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.startLogin(f.email,f.password,this.locale);this.fields.password='';
       if(route!==this.#route)return;await this.#factorLoginResult(result,route,previouslyAnonymous);return;
     }
     let path: string; let body: Record<string, string>;

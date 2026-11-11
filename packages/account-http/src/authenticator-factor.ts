@@ -2,7 +2,7 @@ import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {createHash} from 'node:crypto';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
-import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,FactorManagementError,transaction,type FactorProof} from '@waitron-cloud/registration';
+import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError,FactorManagementError,transaction,type FactorProof} from '@waitron-cloud/registration';
 import {AccountHttpError} from './errors.ts';
 import {readSessionCookie,writeSessionCookies} from './cookies.ts';
 import {readBoundedJsonObject} from './request.ts';
@@ -36,7 +36,8 @@ function proof(value:unknown):FactorProof {
 }
 function unavailable():never {throw new AccountHttpError(503,'temporarily_unavailable',1);}
 export async function authenticatorResponse(c:Context,options: Options):Promise<Response> {
-  const completion=c.req.path==='/api/account/login/factor';
+  const email=c.req.path==='/api/account/login/email';
+  const completion=email||c.req.path==='/api/account/login/factor';
   const action=completion?'/complete':c.req.path.slice('/api/account/authenticator'.length);
   if(!completion&&!['','/begin','/activate','/remove','/regenerate','/cancel'].includes(action))throw new AccountHttpError(404,'not_found');
   const method=action===''?'GET':'POST';
@@ -47,14 +48,14 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     if(action==='')return c.json(await options.store.status(sessionToken));
     const body=await readBoundedJsonObject(c.req.raw);
     if(completion) {
-      exact(body,['challengeToken','proof']);const challengeToken=token(body.challengeToken),parsed=proof(body.proof);
+      exact(body,['challengeToken',email?'code':'proof']);const challengeToken=token(body.challengeToken),parsed=email?code(body.code):proof(body.proof);
       const p=options.policy;if(!p)unavailable();
       // IP rejection precedes derived account/challenge counters, so a blocked source cannot spend them.
       await options.consume([{scope:'factor-complete-ip',subject:options.ip,...p.completeIp}]);
-      const candidate=(await options.pool.query('SELECT account_id FROM cloud_factor_login_challenges WHERE token_hash=$1',[digest(challengeToken)])).rows[0];
+      const candidate=(await options.pool.query(`SELECT account_id FROM ${email?'cloud_sign_in_checks':'cloud_factor_login_challenges'} WHERE token_hash=$1`,[digest(challengeToken)])).rows[0];
       await options.consume([{scope:'factor-complete-challenge',subject:challengeToken,...p.completeChallenge},
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
-      const credentials=await options.login.complete(challengeToken,parsed);writeSessionCookies(c,options.secure,credentials);return c.json({accountId:credentials.accountId});
+      const credentials=await (email?options.login.completeEmailCheck(challengeToken,parsed as string):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);return c.json({accountId:credentials.accountId});
     }
     exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['password','pendingToken','code']:['password'],action==='/cancel'?[]:['proof']);
     const parsedPassword=action==='/cancel'?undefined:password(body.password);
@@ -74,7 +75,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
       action==='/remove'?await options.store.remove(authority):await options.store.regenerate(authority);
     writeSessionCookies(c,options.secure);return c.json(changed);
   }catch(error){
-    if(error instanceof FactorError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
+    if(error instanceof FactorError||error instanceof SignInCheckError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
     if(error instanceof FactorManagementError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:error.code==='permission_denied'?403:400,
       error.code==='permission_denied'?'credentials_invalid':error.code,error.code==='temporarily_unavailable'?1:undefined);
     if(!completion&&action!==''&&error instanceof IdentityError)throw new AccountHttpError(403,'credentials_invalid');

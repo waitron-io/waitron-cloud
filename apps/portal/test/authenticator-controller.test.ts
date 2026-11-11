@@ -243,3 +243,23 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  assert.equal(c.pending,false);assert.equal(calls.length,1);assert.equal(c.password,'');assert.equal(c.proofCode,'');
  assert.equal(calls[0]?.path,action==='startLogin'?'/login':action==='completeLogin'?'/login/factor':`/authenticator/${action}`);
 });
+
+
+test('email sign-in keeps its browser challenge and posts the six-digit mailbox code to its own completion route',async()=>{
+  const calls:{path:string;body:unknown}[]=[];
+  const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),ok({accountId:'owner'})],calls);
+  assert.equal(await c.startLogin('owner@example.test','password'),'factor');
+  assert.equal(c.challenge?.challengeToken,token);c.proofKind='recovery';c.proofCode=' 000 123 ';
+  assert.equal(await c.completeLogin(),'authenticated');assert.equal(c.challenge,undefined);assert.equal(c.proofCode,'');
+  assert.deepEqual(calls[1],{path:'/login/email',body:{challengeToken:token,code:'000123'}});
+});
+
+
+test('an incorrect mailbox code keeps the challenge for another attempt without accepting a recovery code',async()=>{
+  const calls:{path:string;body:unknown}[]=[];
+  const c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),{ok:false,status:401,code:'credentials_invalid',retryAfterMs:0},ok({accountId:'owner'})],calls);
+  await c.startLogin('owner@example.test','password');c.proofKind='recovery';c.proofCode='A'.repeat(32);
+  assert.equal(await c.completeLogin(),false);assert.equal(calls.length,1);
+  c.proofCode='123456';assert.equal(await c.completeLogin(),false);assert.equal(c.challenge?.challengeToken,token);
+  c.proofCode='654321';assert.equal(await c.completeLogin(),'authenticated');assert.equal(calls.length,3);
+});
