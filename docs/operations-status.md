@@ -247,11 +247,6 @@ the samples needed for the longest configured window and that allowance, in memo
 Collector restart loses this history; account restart, decreasing counters or backward
 time starts new coverage. Frequent restarts or low traffic can leave rules unknown; one
 failure in one request can breach. Health counts include the collector's own probes.
-These local rules page nobody and open no work items. Trial targets and hosted-server
-measurements remain open. Verification: `node --test
-deploy/local-stack/account-failure-rules.test.mjs deploy/local-stack/operations-collector.test.mjs`
-(the Compose check needs Docker).
-
 To detect requests taking too long, add `slownessTargets` to the same JSON. It shares
 those explicit `fast` and `slow` windows and multipliers. For example, this synthetic
 setting counts account responses taking more than 0.1 seconds against a 1% allowance:
@@ -275,6 +270,11 @@ include translation uploads, and health probes include the collector's own reque
 For both metric families, `rule="slow"` names the design's long-window rule, rather
 than requests taking too long. The design intends about twice normal for some hours;
 the actual window and multiplier are your explicit `slow` settings.
+
+These local rules page nobody and open no work items. Trial targets and hosted-server
+measurements remain open. Verification: `node --test
+deploy/local-stack/account-failure-rules.test.mjs deploy/local-stack/operations-collector.test.mjs`
+(the Compose check needs Docker).
 
 The collector starts with no sample after a restart. You can stop it without stopping the workers:
 
