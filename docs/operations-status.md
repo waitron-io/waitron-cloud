@@ -162,10 +162,11 @@ and last success without adding labels. When collection succeeds, the endpoint a
 exports the status command's existing bounded-label metrics. An unreachable collector
 must be treated as a scrape failure by the client; it cannot report its own disappearance.
 
-The collector also reads account-request counts independently of the status command.
+After each operations inspection attempt, the collector reads account-request counts,
+even if the inspection failed.
 `waitron_cloud_account_requests_available` is 1 for a valid current reading and 0
 otherwise. A failed read omits the request series while preserving operations diagnostics.
-Failed or stale operations collection suppresses both sets of measurements. `/status`
+Failed or stale operations collection suppresses the status and raw request measurements. `/status`
 and the standalone operations command keep their existing JSON and metrics.
 
 `waitron_cloud_account_requests_total` groups completed responses by `health`, `account`,
@@ -207,8 +208,50 @@ only `http://account:9092/metrics`, with a two-second deadline and a 16 KiB body
 This flag defaults to 0 in the account CLI, accepts only 0 or 1, and refuses production.
 The read listener has no public account route; account shutdown closes both listeners.
 
-The collector keeps only the current result in memory and starts with no sample after a
-restart. It does not retain a time series. You can stop it without stopping the workers:
+To evaluate abnormal account failures locally, set `CLOUD_ACCOUNT_FAILURE_RULES` before
+creating the collector. Leave it unset or empty to disable the rules. Supply JSON with
+`failureTargets`, `fast` and `slow`; there are no target, multiplier or window defaults.
+For example, this uses synthetic values to illustrate the required shape; replace them
+with your trial settings:
+
+```json
+{"failureTargets":{"account":0.001},"fast":{"windowMs":300000,"multiplier":10},"slow":{"windowMs":10800000,"multiplier":2}}
+```
+
+Name any nonempty subset of the seven request groups in `failureTargets`. Each value is
+a failure allowance greater than 0 and at most 1. Each rule needs a positive finite
+`multiplier` and an integer `windowMs` at least as long as the collection interval.
+Unknown keys, missing values and invalid settings refuse startup with a setting-name
+diagnostic. The collector validates the interval first.
+
+For each configured group and window, the collector divides the increase in server errors
+and timeouts by the increase in all responses, including refused responses. The rule
+breaches when that share reaches `failureTargets[group] × multiplier`, allowing a relative
+rounding tolerance of `1e-9` at equality. This is a request-weighted rolling share against
+your configured normal allowance, rather than a learned baseline or a requirement that
+every poll in the window breached. Timing bands do not trigger these rules.
+
+Scrape `waitron_cloud_account_failure_rule_ready{group,rule}` (`rule` is `fast` or `slow`).
+It is 0 during startup, an empty window, missing/old counts or incomplete coverage.
+`waitron_cloud_account_failure_rule_breached{group,rule}` appears only when ready: 1 for a
+breach and 0 otherwise. Unnamed groups emit neither metric. Rule freshness is independent
+of operations inspection, so current account readings still report breaches during a
+database outage. Failed reads suppress breach values; a later successful read can recover
+from cumulative counts across missed polls.
+
+Coverage uses the latest baseline at least one window old and no more than
+`collection interval + 30 seconds + 2 seconds` older than that window. Counts expire after
+`collection interval + 30 seconds` without a successful read. The collector retains only
+the samples needed for the longest configured window and that allowance, in memory.
+Collector restart loses this history; account restart, decreasing counters or backward
+time starts new coverage. Frequent restarts or low traffic can leave rules unknown; one
+failure in one request can breach. Health counts include the collector's own probes.
+These local rules page nobody and open no work items. Trial targets and hosted-server
+measurements remain open. Verification: `node --test
+deploy/local-stack/account-failure-rules.test.mjs deploy/local-stack/operations-collector.test.mjs`
+(the Compose check needs Docker).
+
+The collector starts with no sample after a restart. You can stop it without stopping the workers:
 
 ```sh
 docker compose --env-file deploy/local-stack/local.env --profile operations stop operations-collector

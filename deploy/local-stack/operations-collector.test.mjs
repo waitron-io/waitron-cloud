@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {test} from 'node:test';
+import {RequestMetrics} from '../../packages/account-http/src/request-metrics.ts';
 
 // Missing opt-in wiring would leave the status command unscheduled.
 test('operations collection is opt-in, loopback-only and has no writable mount or Docker socket',()=>{
- const config=profiles=>JSON.parse(execFileSync('docker',['compose',...profiles,'config','--format','json'],{encoding:'utf8'}));
+ const config=profiles=>JSON.parse(execFileSync('docker',['compose',...profiles,'config','--format','json'],{encoding:'utf8',env:{...process.env,CLOUD_ACCOUNT_FAILURE_RULES:'explicit-test-setting'}}));
  assert.equal(config([]).services['operations-collector'],undefined);
  const services=config(['--profile','operations']).services;
  const service=services['operations-collector'];
  assert.ok(service,'the opt-in collector must exist');
+ assert.equal(service.environment.CLOUD_ACCOUNT_FAILURE_RULES,'explicit-test-setting');
  assert.equal(service.read_only,true);
  assert.equal(service.restart,'unless-stopped');
  assert.equal(service.network_mode,undefined);
@@ -131,4 +133,68 @@ test('invalid collection intervals name the setting without starting inspection'
   assert.equal(error.code,1);assert.equal(error.stdout,'');
   assert.equal(error.stderr,'Local operations collector failed; check CLOUD_OPERATIONS_INTERVAL_MS\n');return true;
  });
+});
+
+// Dropping independent acquisition, freshness, or history would misreport an outage or recovery.
+test('failure rules are optional and expose only current bounded series',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const failureRules={failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
+ const counter=new RequestMetrics(1);let time=0,requestFail=false,operationFail=false,readDelay=0;
+ const inputs={now:()=>time,intervalMs:1000,timeoutMs:2000,
+  collect:async()=>{if(operationFail)throw Error('private database');return snapshot();},
+  collectRequests:async()=>{if(requestFail)throw Error('private counts');time+=readDelay;return counter.snapshot();}};
+ const disabled=createCollection(inputs);await disabled.poll();
+ assert.doesNotMatch(disabled.metrics(),/account_failure_rule/);
+ const collection=createCollection({...inputs,failureRules});
+ assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/account_failure_rule_breached\{/);
+ await collection.poll();
+ for(let i=0;i<8;i++)counter.record('account',200);
+ counter.record('account',500);counter.record('account',408);time=1000;operationFail=true;
+ await collection.poll();
+ assert.equal(collection.status().snapshot,null);
+ assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
+ assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="fast"\} 1\n/);
+ assert.doesNotMatch(collection.metrics(),/account_requests_total|private|group="(?:health|parser|portal)"/);
+ time=2000;requestFail=true;await collection.poll();
+ assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/account_failure_rule_breached\{/);
+ // At 4s, slow coverage recovers from 1s despite the missed poll; fast is now clear.
+ time=4000;requestFail=false;operationFail=false;readDelay=500;
+ for(let i=0;i<100;i++)counter.record('account',200);
+ await collection.poll();
+ assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="fast"\} 0\n/);
+ assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="slow"\} 0\n/);
+ time=7001;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
+ time=7500;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/account_failure_rule_breached\{/);
+});
+
+test('invalid rule settings fail before collection with a fixed setting diagnostic',async()=>{
+ const {serveCollection}=await import('./operations-collector.mjs');
+ let calls=0;const controller=new AbortController();
+ await assert.rejects(async()=>{
+  const {done}=await serveCollection({collect:async()=>{calls++;return snapshot();},failureRules:'private-invalid',port:0,host:'127.0.0.1',signal:controller.signal});
+  controller.abort();await done;
+ },{message:'invalid_account_failure_rules'});
+ assert.equal(calls,0);
+ const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');
+ await assert.rejects(promisify(execFile)(process.execPath,[new URL('./operations-collector.mjs',import.meta.url).pathname],{
+  env:{PATH:process.env.PATH,CLOUD_ACCOUNT_FAILURE_RULES:'private-invalid'},timeout:3000,
+ }),error=>{
+  assert.equal(error.code,1);assert.equal(error.stdout,'');
+  assert.equal(error.stderr,'Local operations collector failed; check CLOUD_ACCOUNT_FAILURE_RULES\n');return true;
+ });
+});
+
+test('configured rules reach the HTTP scrape through service startup',async()=>{
+ const {serveCollection}=await import('./operations-collector.mjs');
+ const controller=new AbortController();
+ const failureRules=JSON.stringify({failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}});
+ const {server,done}=await serveCollection({collect:async()=>snapshot(),collectRequests:async()=>new RequestMetrics(1).snapshot(),failureRules,intervalMs:1000,port:0,host:'127.0.0.1',signal:controller.signal});
+ try{
+  const response=await fetch(`http://127.0.0.1:${server.address().port}/metrics`);
+  assert.equal(response.status,200);
+  assert.match(await response.text(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+ }finally{controller.abort();await done;}
 });
