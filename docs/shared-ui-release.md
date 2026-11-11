@@ -104,8 +104,9 @@ the published support. Use a capture whose lockfile imports the contract to prov
 actual frozen and offline installation; merely seeding an archive into the guest
 store does not qualify adoption. Keep Cloud-only trust and fixed-vector checks;
 remove a duplicate format check only when the pinned Waitron source tests it at
-least as strictly. Dependabot proposes signing-package updates on the existing
-daily schedule; each update still needs this review and publication path.
+least as strictly. The existing daily Dependabot configuration includes the
+signing package; read its next run to confirm access. Each proposed update still
+needs this review and publication path.
 
 ## Install locally
 
