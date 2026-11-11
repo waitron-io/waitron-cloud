@@ -10,8 +10,8 @@ reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull
 The matched two-archive support is published on NEW/BENCH with twelve mapped slots;
 the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
-Physical Mac sleep is watcher-deferred to a coordinated window. The matched release passed the unchanged guest-tools, local-runtime and cancellation
-proofs; the consuming adoption remains separate. The publication fixture
+Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
+remains separate from this quota repair. The publication fixture
 now supplies its own Git metadata. App quota exhaustion has paused admission; the published
 counters separate command roles, endpoint categories and raw quota headers. Future
 routing remains hosted while a reduction is chosen from the reset-window counts.
