@@ -202,20 +202,25 @@ test('configured rules reach the HTTP scrape through service startup',async()=>{
 test('published rule and raw readings survive an unfinished single-flight poll',async()=>{
  const {createCollection}=await import('./operations-collector.mjs');
  const failureRules={failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
- let time=0,release,held=true,calls=0;
+ let time=0,release,held=true,calls=0,operationFail=false;
  const counter=new RequestMetrics(1);
- const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:2000,failureRules,collect:async()=>snapshot(),
+ const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:2000,failureRules,collect:async()=>{if(operationFail)throw Error();return snapshot();},
   collectRequests:async()=>{calls++;if(held)await new Promise(resolve=>{release=resolve;});return counter.snapshot();}});
  const first=collection.poll();await new Promise(resolve=>setImmediate(resolve));
  try{assert.equal(collection.status().collection.state,'pending');}finally{held=false;release();await first;}
  time=1000;counter.record('account',500);await collection.poll();
- const before=collection.metrics();held=true;
+ time=2000;operationFail=true;held=true;counter.record('account',200);
  const pending=collection.poll();await new Promise(resolve=>setImmediate(resolve));
  try{
   await collection.poll();assert.equal(calls,3,'the pending account read must keep the poll single-flight');
   assert.equal(collection.status().collection.state,'current');
-  assert.equal(collection.metrics(),before,'a pending read must retain the current published sample');
+  const text=collection.metrics();
+  assert.match(text,/account_requests_total\{group="account",outcome="server_error"\} 1\n/);
+  assert.match(text,/account_failure_rule_breached\{group="account",rule="fast"\} 1\n/);
+  assert.doesNotMatch(text,/outcome="success"/,'the unfinished read must not publish its newer counts');
  }finally{held=false;release();await pending;}
+ assert.equal(collection.status().snapshot,null);
+ assert.doesNotMatch(collection.metrics(),/account_requests_total/);
 });
 
 test('failure rule metric families remain contiguous and typed',async()=>{

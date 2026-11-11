@@ -240,7 +240,7 @@ database outage. Failed reads suppress breach values; a later successful read ca
 from cumulative counts across missed polls.
 
 Coverage uses the latest baseline at least one window old and no more than
-`collection interval + 30 seconds + 2 seconds` older than that window. Counts expire after
+`collection interval + 30 seconds + 2 seconds` older than that window. Rule readings expire after
 `collection interval + 30 seconds + 2 seconds` without a successful read, allowing
 the next inspection and account read to finish. The collector retains only
 the samples needed for the longest configured window and that allowance, in memory.
