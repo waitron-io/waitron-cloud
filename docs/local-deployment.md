@@ -165,6 +165,8 @@ to create a separate disposable project. The rehearsal starts PostgreSQL, the ac
 and the collector, then changes usage evidence from missing to current and stale. It
 changes a migration digest, stops PostgreSQL, restores each dependency, restarts the
 collector, and checks that failed collection never exports the old health metrics.
+It also sends one unauthenticated account-session request and checks that its exact
+refusal count increases across the account process and collector, keeping labels fixed.
 It also proves the collector's PostgreSQL settings refuse a write. No worker runs during
 this fixture, so collection itself cannot make the usage evidence fresh.
 

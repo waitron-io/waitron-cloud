@@ -14,6 +14,7 @@ test('dedicated runtime selects capture mail and forwards validated dormant plan
   assert.throws(()=>api.testRuntimeEnvironment(role,config,{CLOUD_TEST_SERVICE_PLANS:'yes'}),/test_cloud.plan_mode/);
  }
  const account=api.testRuntimeEnvironment('account',config,{});assert.equal(account.CLOUD_TEST_SERVICE_PLANS,'0');assert.equal(account.CLOUD_TRANSLATION,'0');assert.equal(account.CLOUD_HTTP_TRUSTED_PROXY_IPS,'10.79.0.2');assert.equal(account.CLOUD_PORTAL_ORIGIN,'https://waitron.local:3000');
+ assert.equal(account.CLOUD_LOCAL_REQUEST_METRICS,undefined);
  assert.equal(api.testRuntimeCommand('email'),'deploy/test-cloud/email-worker.mjs');assert.equal(api.testRuntimeEnvironment('email',config,{}).CLOUD_MAIL_TRANSPORT,'test-capture');
  assert.equal(runtimeEnvironment('account',config).CLOUD_PORTAL_ORIGIN,'http://localhost:3000');
 });
