@@ -13,7 +13,7 @@ Mixed jobs, server restart, runtime exit and SSH cancellation have been exercise
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 still waits for republication and the unchanged live proof. The publication fixture
 now supplies its own Git metadata. App quota exhaustion has paused admission; this slice
-adds controller/worker endpoint counters and raw quota headers, without caching or
+adds counts by command and endpoint, with raw quota headers, without caching or
 changing the 15-second cadence. Qualify one real reset window and name other App
 consumers before choosing the quota fix. OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.

@@ -276,6 +276,6 @@ export async function main(args) {
 }
 
 if (process.argv[1] && process.argv[1]!=='-' && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href) {
-  try { process.exitCode=await withRequestCounts(()=>main(process.argv.slice(2)),!process.argv[3]||process.argv[3]==='--once'?'controller':'lane'); }
+  try { process.exitCode=await withRequestCounts(()=>main(process.argv.slice(2)),process.argv[3]==='--bootstrap'?'operator':!process.argv[3]||process.argv[3]==='--once'?'controller':'lane'); }
   catch(error) { console.error(error.message);process.exitCode=125; }
 }

@@ -35,7 +35,7 @@ async function githubFetch(url,options,kind='api'){
   /\/actions\/runs\/[0-9]+(?:\/.*)?$/.test(path)?'run':/\/actions\/runs$/.test(path)?'runs':
   /\/actions\/runners(?:\/.*)?$/.test(path)?'runner':/\/actions\/variables(?:\/.*)?$/.test(path)?'variable':
   /\/actions\/workflows\/[^/]+\/runs$/.test(path)?'workflow-runs':/\/actions\/permissions(?:\/.*)?$/.test(path)?'permissions':
-  /\/contents\//.test(path)?'contents':/\/commits\//.test(path)?'commit':/\/git\/ref\//.test(path)?'ref':
+  /\/contents\//.test(path)?'contents':/\/commits\/[^/]+$/.test(path)?'commit':/\/git\/ref\//.test(path)?'ref':
   /^\/repos\/[^/]+\/[^/]+$/.test(path)?'repository':/\/pulls(?:\/.*)?$/.test(path)?'pull':/\/compare\//.test(path)?'compare':'other';
  const method=options?.method??'GET',key=(/^(GET|POST|PATCH|DELETE|PUT|HEAD)$/.test(method)?method:'OTHER')+' '+category;
  const bucket=()=>{const minute=Math.floor(Date.now()/60000)*60000;

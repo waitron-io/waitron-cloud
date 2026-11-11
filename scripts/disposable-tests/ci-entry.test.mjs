@@ -152,7 +152,7 @@ test('all three CLI guards activate request logging and flush on refusal',t=>{
  }
  const worker=spawnSync(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,'/missing','job'],{encoding:'utf8',timeout:10000});
  assert.equal(worker.status,125);assert.equal(JSON.parse(worker.stderr.split('\n').find(line=>line.startsWith('{'))).role,'worker');
- for(const [entry,args,role] of [['manual',['/missing','--once'],'controller'],['manual',['/missing','I','/tmp','--','true'],'lane'],
+ for(const [entry,args,role] of [['manual',['/missing','--once'],'controller'],['manual',['/missing','--bootstrap'],'operator'],['manual',['/missing','I','/tmp','--','true'],'lane'],
   ['manual',['/missing','--bundle','I'],'lane'],['control',['/missing','run','I'],'lane'],['control',['/missing','status'],'operator']]){
   const result=spawnSync(process.execPath,[new URL('./'+entry+'.mjs',import.meta.url).pathname,...args],{encoding:'utf8',timeout:10000});
   assert.equal(result.status,125);assert.equal(JSON.parse(result.stderr.split('\n').find(line=>line.startsWith('{'))).role,role);

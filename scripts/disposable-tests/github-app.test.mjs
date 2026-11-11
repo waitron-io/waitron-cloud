@@ -152,10 +152,10 @@ test('admission source and log reads have distinct fixed quota categories',async
   for(const path of ['/repos/fixture/venue','/repos/fixture/venue/contents/.github/workflows/ci.yml?ref=abc',
    '/repos/fixture/venue/commits/abc','/repos/fixture/venue/actions/permissions/fork-pr-contributor-approval',
    '/repos/fixture/venue/actions/workflows/123/runs?status=queued','/repos/fixture/venue/actions/jobs/123/logs',
-   '/repos/fixture/venue/actions/jobs/123','/repos/fixture/venue/git/ref/heads/main'])await app.get(path);
+   '/repos/fixture/venue/actions/jobs/123','/repos/fixture/venue/git/ref/heads/main','/repos/fixture/venue/commits/abc/pulls'])await app.get(path);
  },'controller');
  assert.deepEqual(Object.fromEntries(Object.entries(rows[0].categories).map(([key,value])=>[key,value.requests])),
-  {'GET repository':1,'GET contents':1,'GET commit':1,'GET permissions':1,'GET workflow-runs':1,'GET job-log':1,'GET job':1,'GET ref':1});
- assert.equal(rows[0].requests,8);
+  {'GET repository':1,'GET contents':1,'GET commit':1,'GET permissions':1,'GET workflow-runs':1,'GET job-log':1,'GET job':1,'GET ref':1,'GET pull':1});
+ assert.equal(rows[0].requests,9);
  assert.doesNotMatch(JSON.stringify(rows),/fixture|venue|abc/);
 });
