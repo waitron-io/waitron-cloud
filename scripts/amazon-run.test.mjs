@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
 
 // Skipping EC2's stopped confirmation would let the repeat race the old host.
@@ -205,7 +206,6 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
     }, run: async (binary, args, input, cleanup) => {
       calls.push([binary, ...args]);
       if (['ssh','scp'].includes(binary)) {
-        const {existsSync} = await import('node:fs');
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
         transports.push({binary,args,cleanup,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
@@ -259,7 +259,6 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       assert.match(path, /\/d618-[^/]+\/%C$/); paths.add(path.slice('ControlPath='.length));
     }
     assert.equal(paths.size, 1, 'all machine commands and copies share the run-private template');
-    const {existsSync} = await import('node:fs');
     assert.equal(existsSync([...paths][0].slice(0,-3)), false, 'private sockets directory is removed after closure');
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
