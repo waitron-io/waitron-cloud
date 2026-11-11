@@ -1,6 +1,5 @@
-import {rememberBrowserChoice} from './authenticator-screen.ts';
 import {billingScreen} from './billing-screen.ts';
-import {authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
+import {rememberBrowserChoice,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
 import {installationScreen} from './installation-screen.ts';
 import { pairingScreen } from './pairing-screen.ts';

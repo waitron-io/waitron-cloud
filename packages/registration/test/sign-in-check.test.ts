@@ -220,6 +220,7 @@ test('email proof remembers only an explicitly chosen browser and keeps only its
   assert.equal(JSON.stringify(row).includes(remembered.browserToken!),false);
   assert.equal(row.expires_at-row.created_at,30*24*60*60_000);
   assert.equal((await store.start({email,password,browserToken:remembered.browserToken})).kind,'session');
+  assert.equal((await new PasswordLoginStore(pool,null,null).start({email,password,browserToken:remembered.browserToken})).kind,'session');
   assert.equal((await store.start({email,password,browserToken:'A'.repeat(43)})).kind,'email');
   await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day'");
   assert.equal((await store.start({email,password,browserToken:remembered.browserToken})).kind,'email');
@@ -251,4 +252,20 @@ test('password reset forgets every recognised browser', async () => {
   await recovery.complete(reset.token,password);
   assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'0');
   for(const browserToken of tokens)assert.equal((await store.start({email,password,browserToken})).kind,'email');
+});
+
+test('passkey fallback cannot remember a browser even when the client asks',async()=>{
+  const store=new PasswordLoginStore(pool,null,policy,outbox),check=await queued(store);
+  const signed=await store.completeEmailCheck(check.challengeToken,check.code,true);
+  assert.equal(signed.browserToken,undefined);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'0');
+});
+
+test('remembering again removes the account expired recognition hashes',async()=>{
+  await pool.query('DELETE FROM cloud_passkeys');
+  const store=new PasswordLoginStore(pool,null,policy,outbox),first=await queued(store);
+  await store.completeEmailCheck(first.challengeToken,first.code,true);
+  await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day'");
+  const next=await queued(store);await store.completeEmailCheck(next.challengeToken,next.code,true);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'1');
 });

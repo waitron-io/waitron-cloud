@@ -180,3 +180,10 @@ test('email login validates a challenge response and only accepts a session answ
   body=challenge;assert.equal((await accountRequest('/login/email',{})).ok,false);
   status=200;body={accountId:'owner'};assert.deepEqual(await accountRequest('/login/email',{}),{ok:true,value:body});
 });
+
+test('email recognition eligibility is optional and accepts only literal true',async t=>{
+ const challenge={emailRequired:true,challengeToken:'A'.repeat(43),expiresAt:'2030-01-01T00:00:00.000Z',rememberBrowserAllowed:true};let body:unknown=challenge;
+ t.mock.method(globalThis,'fetch',async()=>Response.json(body,{status:202}));
+ assert.deepEqual(await accountRequest('/login',{}),{ok:true,value:challenge});
+ for(const flag of [false,'true',1,null]){body={...challenge,rememberBrowserAllowed:flag};assert.equal((await accountRequest('/login',{})).ok,false);}
+});

@@ -168,14 +168,16 @@ The response sets a 30-day HttpOnly cookie, `__Host-cloud_browser` on HTTPS or
 `cloud_browser` in local HTTP tests. It cannot replace an app code or passkey fallback's
 email check. Signup completion accepts the optional string `"rememberBrowser":"true"`
 under the same explicit-choice policy; it sets only this recognition cookie, never a
-session. Both flows store only the cookie's hash, tied to the account and expiry.
+session. Both flows store only the cookie's hash, tied to the account and expiry; remembering again removes that account's expired hashes.
+The email challenge includes `rememberBrowserAllowed:true` only for a password-only account;
+passkey fallback neither offers the choice nor stores a new recognition cookie.
 Codes keep leading zeroes, expire after five minutes and use the configured
 `CLOUD_FACTOR_POLICY.challengeAttempts` limit and existing sign-in request budgets.
 Keep the challenge in memory. The code row keeps a hash of the address; the recipient
 stays in the existing credentials and encrypted outbox. No session exists until completion succeeds; replay,
 password or email changes, password reset, disabled accounts and a newly active app
 refuse the older code. Missing email keys or policy refuse a required email step with 503 `temporarily_unavailable`; direct passkeys
-remain available. The focused store and browser commands are:
+remain available. After reset forgets every browser, a password-only account needs the missing policy restored before signing in. The focused store and browser commands are:
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/sign-in-check.test.ts

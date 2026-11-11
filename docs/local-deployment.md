@@ -42,6 +42,7 @@ Before testing password sign-in on a new browser, configure `CLOUD_FACTOR_POLICY
 as shown in the [authenticator guide](authenticator-app.md#configure-a-local-account-worker).
 The stack has no default policy: without it, a required email step refuses sign-in with `503 temporarily_unavailable`.
 Direct passkey sign-in and password-only sign-in from an already recognised browser remain available.
+After a password reset forgets every browser, a password-only account needs that policy restored before it can sign in.
 
 Use `localhost` for the API probes. The server rejects a different `Host` authority, even
 when it resolves to the same loopback interface.

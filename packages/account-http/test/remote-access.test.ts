@@ -68,7 +68,7 @@ test('status shows missing placement and revoked access without claiming readine
  await db.pool.query('DELETE FROM remote_hostnames');await db.pool.query('DELETE FROM remote_placements');const empty=await request('status');assert.equal(empty.status,200);assert.equal((await empty.json()).names,null);
 });
 test('request rate limits persist across processes',async()=>{
- for(let n=0;n<30;n++){assert.equal((await request('status')).status,200);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},...options(),pool:db.secondPool});}
+ for(let n=0;n<30;n++){assert.equal((await request('status')).status,200);app=createAccountApp({...options(),pool:db.secondPool});}
  const limited=await request('status');assert.equal(limited.status,429);assert(Number(limited.headers.get('retry-after'))>0);
 });
 test('stale received observations and old revisions never advertise working remote access',async()=>{
@@ -131,7 +131,7 @@ test('DNS instructions recheck ownership after a blocked metadata lookup',async(
 
 for(const [condition,code] of [['free','remote_plan_required'],['unconfigured','remote_setup_required'],['production','remote_test_only'],['revoked','revoked']] as const)
  test(`real database: ${condition} explains the remote refusal without changing setup`,async()=>{
-  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},...options(),planMode:'test-free-paid'});
+  app=createAccountApp({...options(),planMode:'test-free-paid'});
   await db.pool.query("UPDATE organisations SET service_plan=$1",[condition==='free'?'free':'paid']);
   if(condition==='unconfigured')await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE service='remote_access'");
   if(condition==='production')await db.pool.query("UPDATE venues SET environment='production'");
@@ -147,7 +147,7 @@ for(const [condition,code] of [['free','remote_plan_required'],['unconfigured','
  });
 
 for(const condition of ['free','unconfigured','revoked'] as const)test(`real database: ${condition} during DNS is refused with its current cause`,async()=>{
- app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},...options(),planMode:'test-free-paid'});
+ app=createAccountApp({...options(),planMode:'test-free-paid'});
  await db.pool.query("UPDATE organisations SET service_plan='paid'");
  resolve=async name=>{
   if(condition==='free')await db.secondPool.query("UPDATE organisations SET service_plan='free'");
@@ -162,7 +162,7 @@ for(const condition of ['free','unconfigured','revoked'] as const)test(`real dat
 });
 
 for(const condition of ['free','revoked'] as const)test(`real database: late owner loss hides ${condition} remote metadata`,async()=>{
- app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},...options(),planMode:'test-free-paid'});
+ app=createAccountApp({...options(),planMode:'test-free-paid'});
  await db.pool.query("UPDATE organisations SET service_plan='paid'");
  if(condition==='revoked')await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');
  const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;

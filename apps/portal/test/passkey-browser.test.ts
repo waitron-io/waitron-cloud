@@ -118,6 +118,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         await page.getByLabel(c.email).fill(owner.email);
         await page.locator('input[name=password]').fill(password);
         await page.getByRole('button', {name: c.login, exact: true}).click();
+        await completeBrowserEmail(f,page,owner.email,locale);
         await page.getByText(c.accountIntro).waitFor();
         assert.deepEqual(errors, []);
       } finally {

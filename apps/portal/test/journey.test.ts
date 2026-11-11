@@ -84,7 +84,7 @@ test('another account can complete signup without changing the existing session;
     assert.equal((await (await context.request.get(`${f.origin}/api/account/session`)).json()).accountId,owner.accountId);
     await page.getByRole('link',{name:'Sign in',exact:true}).click();await page.getByRole('heading',{name:'Sign in',exact:true}).waitFor();
     await page.getByLabel('Email').fill(second);await page.locator('input[name=password]').fill(password);
-    await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByText(translations.en.accountIntro).waitFor();
+    await page.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,page,second);await page.getByText(translations.en.accountIntro).waitFor();
     assert.notEqual((await (await context.request.get(`${f.origin}/api/account/session`)).json()).accountId,owner.accountId);
     await page.getByRole('link',{name:'Forgot your password?',exact:true}).click();await page.getByLabel('Email').fill(second);
     await page.getByRole('button',{name:'Send reset link',exact:true}).click();await page.getByRole('heading',{name:'Check your email'}).waitFor();await f.drainMail();

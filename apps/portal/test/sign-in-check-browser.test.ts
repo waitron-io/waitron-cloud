@@ -22,7 +22,7 @@ test(`email sign-in ${locale} ${colorScheme} ${width}: password waits for the ma
     await page.goto(`${f.origin}/login#lang=${locale}`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);
     const answer=page.waitForResponse('**/api/account/login');await page.getByRole('button',{name:c.login,exact:true}).click();assert.equal((await answer).status(),202);
     await page.getByRole('heading',{name:locale==='en'?'Check your email':'Revisa tu correo',exact:true}).waitFor();
-    assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).isChecked(),false);
+    assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).count(),0);
     assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');assert.equal(await page.getByLabel(c.factorProofType,{exact:true}).count(),0);
     if(process.env.EMAIL_SIGN_IN_RECEIPT_DIR)await page.screenshot({path:`${process.env.EMAIL_SIGN_IN_RECEIPT_DIR}/${locale}-${colorScheme}-${width}.png`,fullPage:true});
@@ -46,7 +46,10 @@ test(`password-only recognition ${locale} ${colorScheme} ${width}`,async()=>{
     await page.goto(`${f.origin}/signup#token=${verification.token}&lang=${locale}`);await page.getByLabel(c.legalName).fill('Synthetic Café');await page.locator('input[name=password]').fill(password);
     const signupChoice=page.getByRole('checkbox',{name:c.rememberBrowser});assert.equal(await signupChoice.isChecked(),false);await signupChoice.check();
     if(process.env.EMAIL_SIGN_IN_RECEIPT_DIR)await page.screenshot({path:`${process.env.EMAIL_SIGN_IN_RECEIPT_DIR}/signup-${locale}-${colorScheme}-${width}.png`,fullPage:true});
-    await page.getByRole('button',{name:c.create,exact:true}).click();await page.getByText(c.signupReady).waitFor();
+    const signupReply=page.waitForResponse('**/api/account/signup/complete');
+    await page.getByRole('button',{name:c.create,exact:true}).click();
+    assert.deepEqual(Object.keys(await (await signupReply).json()).sort(),['accountId','legalBusinessId','organisationId']);
+    await page.getByText(c.signupReady).waitFor();
     assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);assert.ok((await context.cookies()).find(cookie=>cookie.name==='cloud_browser')?.httpOnly);
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
     await context.clearCookies();

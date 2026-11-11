@@ -194,7 +194,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
           if(!decision.allowed)return new AccountHttpError(429,'rate_limited',decision.retryAfterSeconds);
         }:undefined);
         if(result.kind==='factor')return c.json({factorRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
-        if(result.kind==='email')return c.json({emailRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt},202);
+        if(result.kind==='email')return c.json({emailRequired:true,challengeToken:result.challengeToken,expiresAt:result.expiresAt,...(result.rememberBrowserAllowed?{rememberBrowserAllowed:true}:{})},202);
         const credentials=result.credentials;
         writeSessionCookies(c, secure, credentials);
         return c.json({accountId: credentials.accountId});

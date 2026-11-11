@@ -102,7 +102,7 @@ export class PasswordLoginStore {
           const passkeys = await client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1', [authority.accountId]);
           if (passkeys.rowCount || !await recognisedBrowser(client,authority.accountId,input.browserToken)) {
             const email = (await client.query('SELECT email FROM cloud_credentials WHERE account_id=$1', [authority.accountId])).rows[0].email;
-            return await issueSignInCheck(client,this.#outbox,this.#policy,{...authority,email,locale:input.locale});
+            return await issueSignInCheck(client,this.#outbox,this.#policy,{...authority,email,locale:input.locale,rememberBrowserAllowed:!passkeys.rowCount});
           }
           return {kind:'session',credentials:await createSession(client,authority.accountId)};
         }

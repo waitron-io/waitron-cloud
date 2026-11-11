@@ -21,7 +21,7 @@ export function rememberBrowserChoice(app:PortalApp){const c=app.copy,f=app.auth
     @change=${(event:Event)=>{f.rememberBrowser=(event.target as HTMLInputElement).checked;}}> ${c.rememberBrowser}</label><p class="help">${c.rememberBrowserHelp}</p>`;
 }
 export function authenticatorLoginScreen(app:PortalApp){const c=app.copy,f=app.authenticator;
-  return html`<p>${f.challenge&&'emailRequired' in f.challenge?c.emailCheckHelp:c.factorLoginHelp}</p>${proof(app)}${f.challenge&&'emailRequired' in f.challenge?rememberBrowserChoice(app):nothing}<wt-form-actions>
+  return html`<p>${f.challenge&&'emailRequired' in f.challenge?c.emailCheckHelp:c.factorLoginHelp}</p>${proof(app)}${f.challenge&&'emailRequired' in f.challenge&&f.challenge.rememberBrowserAllowed?rememberBrowserChoice(app):nothing}<wt-form-actions>
     <wt-button id="submit" variant="primary" .disabled=${f.pending||!!f.waiting} .loading=${f.pending} @click=${()=>{void app.completeFactorLogin();}}>${c.factorVerify}</wt-button>
     <wt-button .disabled=${f.pending} @click=${()=>{app.navigate('/login');}}>${c.factorRestart}</wt-button></wt-form-actions>`;}
 export function authenticatorCodesScreen(app:PortalApp){const c=app.copy;

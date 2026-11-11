@@ -57,7 +57,7 @@ the local example. Older runtime configuration stays intact without invented rep
 keys. Add an explicit `factor` object with `activeKeyId` and `keys` to that private
 runtime configuration before enablement; preserve any keys needed by existing data.
 
-Missing policy or unreadable secrets refuse factor operations. Password-only sign-in, passkeys and existing live sessions remain independent.
+Missing policy or unreadable secrets refuse factor operations. Password-only sign-in from an already recognised browser, passkeys and existing live sessions remain available.
 Password fallback for a passkey account needs the configured challenge-attempt limit
 and the email outbox keys, even without an app. It requires an emailed code; an active
 app always takes priority. An enrolled

@@ -72,6 +72,7 @@ test('verified signup atomically creates the first business and owner, then perm
   assert.equal(await count('platform_permissions'), 0);
   assert.equal(await count('venues'), 0);
   assert.equal(await count('cloud_sessions'), 0, 'email proof is not a session');
+  assert.equal(await count('cloud_recognised_browsers'),0,'signup without the explicit choice remembers nothing');
   const session = await transaction(pool, client => login(client, { email, password: details.password }));
   assert.equal(session.accountId, result.accountId);
   await expectCode(transaction(pool, client => requirePlatformPermission(client, session.token, 'platform.manage')), 'permission_denied');
