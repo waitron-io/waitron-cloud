@@ -106,7 +106,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   const cloud = name + ':cloud', waitron = name + ':waitron';
   let hosts;
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
-    '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=600'];
+    '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=600', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
   try {
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',

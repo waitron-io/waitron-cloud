@@ -139,6 +139,7 @@ D618 passes the key name to EC2 and the private-key path to OpenSSH's `ssh` and
 Debian 13 is Linux. This is documented compatibility, not a live AMI connection test.
 SSH and SCP reuse a private connection for each machine. The launcher closes these
 connections when the run ends; a connection idle for ten minutes may close sooner.
+Keep-alives check every 15 seconds and allow four missed replies; command deadlines stay unchanged.
 
 **Window: your Mac's terminal.** If you downloaded the key on the Mac, protect it
 and copy it over your existing SSH connection to the x86 test box. Replace

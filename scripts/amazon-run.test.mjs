@@ -204,7 +204,11 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       return '';
     }, run: async (binary, args, input, cleanup) => {
       calls.push([binary, ...args]);
-      if (['ssh','scp'].includes(binary)) transports.push({binary,args,cleanup});
+      if (['ssh','scp'].includes(binary)) {
+        const {existsSync} = await import('node:fs');
+        const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
+        transports.push({binary,args,cleanup,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
+      }
       if (binary === 'uname') return 'x86_64';
       if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
       if (binary === 'wc') return '104857600 images.tar';
@@ -245,9 +249,12 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
   else {
     assert.deepEqual(closes.map(row => row.args.at(-1)), ['admin@203.0.113.1','admin@203.0.113.2','admin@203.0.113.3']);
     assert.ok(closes.every(row => row.cleanup === true && row.args.includes('exit')));
+    assert.ok(closes.every(row => row.socketDirectoryPresent), 'socket directory remains until every master is closed');
     const paths = new Set();
     for (const row of transports) {
-      for (const option of ['ControlMaster=auto','ControlPersist=600']) assert.ok(row.args.includes(option), option);
+      for (const option of ['ServerAliveInterval=15','ServerAliveCountMax=4']) assert.ok(row.args.includes(option), option);
+      if (row.binary === 'ssh') for (const option of ['ControlMaster=auto','ControlPersist=600']) assert.ok(row.args.includes(option), option);
+      if (row.binary === 'scp') assert.ok(transports.slice(0,transports.indexOf(row)).some(prior => prior.binary === 'ssh' && prior.args.includes(row.args.at(-1).split(':')[0])), 'SSH establishes a master before SCP reuses it');
       const path = row.args.find(arg => arg.startsWith('ControlPath='));
       assert.match(path, /\/d618-[^/]+\/%C$/); paths.add(path.slice('ControlPath='.length));
     }
@@ -347,4 +354,6 @@ test('saved tar requires the selected amd64 manifest, config and every layer', a
   }
   await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected}]}));
   pack(); await api.checkAmazonArchive(archive,['synthetic:local'],run);
+  await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected,platform:{os:'linux',architecture:'arm64'}}]}));
+  pack(); await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run), /amazon.archive_platform/);
 });
