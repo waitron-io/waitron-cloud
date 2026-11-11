@@ -273,6 +273,13 @@ policy format, category guards and repeat-until-complete procedure.
 
 ## Signed pairing
 
+The pairing, machine-proof and access-lease functions use the pinned
+`@waitron-io/contract@0.2.9` release from Waitron. The existing Cloud exports remain;
+Cloud keeps trusted-key list parsing, configured trust and fixed wire vectors.
+Shared format checks live in Waitron's signing tests; Cloud retains its trust, action and
+consumer checks. Follow the [shared-package update guide](../../docs/shared-ui-release.md#prepare-private-signing-packages-for-disposable-tests)
+before changing the pin.
+
 Use `verifyPairingProof(payload, signature, origin, action)` before calling the machine
 methods of `PairingStore`. It accepts the canonical version 1 Ed25519 format in the
 [pairing design](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md).

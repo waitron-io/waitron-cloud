@@ -145,6 +145,9 @@ importers:
       '@waitron-cloud/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron-io/contract':
+        specifier: 0.2.9
+        version: 0.2.9
       nodemailer:
         specifier: ^10.0.10
         version: 10.0.10
@@ -819,6 +822,9 @@ packages:
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [win32]
+
+  '@waitron-io/contract@0.2.9':
+    resolution: {integrity: sha512-L69COV7C5WiqiuyVGfICKwnK0irYLClis8AKCtDnIJtTiOByROrnu8rnbc2YFCFwQ98MdGr5BPeyW9Wk2VRY3g==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.9/9a5a01d89bf30a5df255f2c22ca0116d99da5508}
 
   '@waitron-io/ui-core@0.2.1':
     resolution: {integrity: sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58}
@@ -1961,6 +1967,8 @@ snapshots:
 
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
+
+  '@waitron-io/contract@0.2.9': {}
 
   '@waitron-io/ui-core@0.2.1(lit@3.3.3)':
     dependencies:
