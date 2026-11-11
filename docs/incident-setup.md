@@ -184,10 +184,18 @@ count, UTC start time, language and whether a fix is proposed. Messages contain
 the incident link and fixed wording. They accept no venue names, raw errors or
 arbitrary action descriptions. The action-name detail still needs P4's vocabulary.
 
-`readTrustedEvent` normalizes already trusted provider fields; it authenticates
-no incoming request. A future receiver must verify the provider signature and
-bind the incident, notification, provider and callback kind from the path first.
-It can then pass those facts to `pageDecision`. Only digit `1` from a matching
+For a local callback rehearsal, pass `createPagingCallbackListener` from
+`packages/operations/src/paging-callbacks.ts` to your own loopback HTTP server.
+Supply the same HTTPS origin as the adapters, the Twilio provider and AuthToken,
+the Vonage provider, API key and signature secret, an `attempts` reader and a
+synchronous `onEvent` consumer. Credentials duplicated between the adapters and
+listener must agree; the listener does not check that agreement. Record the
+accepted attempts returned by `sendPage` before sending callbacks. An event
+arriving before those IDs are recorded cannot be accepted; there is no buffer.
+
+The listener checks signatures before passing fields to `readTrustedEvent`, then
+binds recognized events to the path's incident, notification, provider, kind and
+accepted resource ID. Append its trusted events for `pageDecision`. Only digit `1` from a matching
 placed call acknowledges; delivery or an answered call does not. Either placed
 provider call can acknowledge after fallback. `deliveryConfirmed` requires every
 SMS part's matching delivery event.
@@ -204,5 +212,46 @@ provider for that notification. The future clock owns that admission rule.
 The decision function requests Vonage once after Twilio refusal or failed or
 unconfirmed delivery; your caller makes that attempt explicitly. It never waits
 for callbacks, retries or runs the 15/10/20-minute incident clock. That clock,
-its durable records, the receiver and an actual go-ahead page remain separate
+its durable records, production callback wiring and an actual go-ahead page remain separate
 work. Nothing here starts unattended paging or changes the launch checks above.
+
+### Rehearse signed replies locally
+
+Run the receiver checks and both complete fake-provider exchanges:
+
+```sh
+node --test packages/operations/test/paging-callbacks.test.ts packages/operations/test/paging-rehearsal.test.ts
+```
+
+These exchanges use only loopback servers. They send a page, feed signed delivery
+and press-1 replies to the listener and inspect the existing acknowledgment
+result. One forged press-1 remains unacknowledged. They do not qualify a live
+provider, public proxy, early callback delivery or production deployment.
+
+Twilio replies use form POST and `X-Twilio-Signature`: HMAC-SHA1 with the
+AuthToken, over the configured origin, exact path/query and every sorted form
+field. The configured origin supplies the authority; request Host and forwarding
+headers do not. See [Twilio's signing rules](https://www.twilio.com/docs/usage/security).
+
+For Vonage SMS delivery reports, explicitly select GET or POST JSON, enable
+signed incoming webhooks through provider support and select SHA-256 HMAC.
+The listener requires string fields including the signed timestamp, removes
+`sig`, and signs sorted fields with `&`/`=` in values replaced by `_`.
+It accepts no weaker fallback. See [SMS signing](https://developer.vonage.com/en/getting-started/concepts/signing-messages)
+and [callback settings](https://developer.vonage.com/en/dashboard/control/api-settings).
+The existing text adapter does not choose this callback method for you.
+
+Vonage Voice uses POST JSON with a Bearer JWT signed using the signature secret.
+The listener requires HS256, the configured API key, issuer `Vonage`, integer
+issue time, a token ID and a matching SHA-256 `payload_hash` over the exact body.
+Payload verification is required here even though [Vonage's guide](https://developer.vonage.com/en/getting-started/concepts/webhooks)
+calls it optional under HTTPS. Older Voice applications may need signing enabled.
+
+The session suppresses repeated normalized events, including newly signed
+repeats. A consumer exception returns 500 and permits another attempt. This
+memory has no eviction during the rehearsal and disappears on restart; loading
+old attempts into a new listener can accept old signed callbacks again. There
+is no durable replay protection or timestamp expiry policy. Signed ignored or
+repeated replies succeed without another event. Input replies return empty
+Twilio XML or a Vonage action list; reports return 204. Malformed or unsupported
+requests return 400, forged or unbound events 403, and bodies over 64 KiB 413.

@@ -705,8 +705,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    approved automatic updates, text then call and press-1 acknowledgment. The
    [local generator](incident-setup.md#generate-a-bundle-locally) produces the current
    post and optional dated resolved history. Local Twilio/Vonage phone adapters now
-   pass fake-provider text/call, delivery and press-1 checks; no automatic caller or
-   authenticated callback receiver is connected. Verified-health wording, account setup, publisher,
+   pass fake-provider text/call, delivery and press-1 checks. The local signed
+   callback listener now binds accepted attempts, refuses forged events and suppresses
+   session repeats; both providers have complete fake send-to-acknowledgment rehearsals.
+   No automatic caller or production callback service is connected. Verified-health wording, account setup, publisher,
    supplier review, spending approval and outage/delivery/coverage
    drills remain open; the checklist
    creates no account or operational service.
