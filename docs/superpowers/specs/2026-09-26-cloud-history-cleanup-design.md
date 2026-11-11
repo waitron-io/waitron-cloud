@@ -8,7 +8,7 @@ This change adds one PostgreSQL-backed cleanup runner. You give it a policy file
 
 ## Policy and operator contract
 
-The policy is a JSON object with a `cutoffs` object and an optional `chunkSize` from 1 through 1,000. The accepted cutoff keys are:
+The policy is a JSON object with a `cutoffs` object and an optional `chunkSize` from 1 through 1,000. The initial cutoff keys are listed below. The [operator guide](../../history-cleanup.md) lists the current categories, including `signInChecks`, and their commands.
 
 - `sessions`
 - `signupRequests`
