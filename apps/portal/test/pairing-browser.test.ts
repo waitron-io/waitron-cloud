@@ -41,7 +41,7 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     assert.ok(urls.every(url=>!url.includes(requestId)&&!url.includes(code)));
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByText(c.signedOut).waitFor();
     let businessLoads=0;await page.route('**/pairing/businesses',route=>++businessLoads===1?route.fulfill({status:503,json:{error:'unavailable'}}):route.continue());
-    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
     await page.getByText(c.unavailable,{exact:true}).waitFor();assert.equal(await page.getByText(c.sessionUnavailable,{exact:true}).count(),0);
     await page.getByRole('button',{name:c.retry,exact:true}).click();
     await page.getByRole('textbox',{name:c.pairCode,exact:true}).waitFor();assert.equal(await page.getByRole('textbox',{name:c.pairCode,exact:true}).inputValue(),'');
@@ -50,7 +50,7 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.getByText(c.limited,{exact:false}).waitFor();
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByText(c.signedOut).waitFor();
     await page.reload();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
-    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
     await page.getByRole('button',{name:c.signout,exact:true}).waitFor();
     await page.goto(`${f.origin}/connect`);await page.getByText(c.pairMissing).waitFor();
   }finally{await f.close();}
