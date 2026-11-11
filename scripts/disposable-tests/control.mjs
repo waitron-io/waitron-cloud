@@ -7,7 +7,7 @@ import {LocalLeases,configuredSlots,ciRetryReady} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {ciIdentity} from './ci-identity.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
-import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
+import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,overflowOrdinary,recoverHostedAttempts,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
@@ -40,15 +40,38 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   finally{wake.abort();}
  };
  let served=0,healthy,lastCapacity=-Infinity;
+ const local=()=>{
+  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+  const usable=state.slots.filter(slot=>slot.state!=='quarantined'&&!slot.orphanRunners?.length&&(!Array.isArray(healthy)||healthy.includes(slot.id)));
+  const identities=state.slots.flatMap(slot=>[slot.ciInvocation,slot.lease?.ci,...(slot.orphanRunners??[]).map(runner=>runner.ci)]).filter(Boolean);
+  const starting=[...active.values()].filter(ci=>!identities.some(value=>value.jobId===ci.jobId));
+  return {slots:usable.length,busy:usable.filter(slot=>slot.state!=='free'||slot.ciInvocation).length+starting.length,
+   owned:new Set([...identities,...active.values()].map(ci=>ci.runId)),jobs:new Set(identities.map(ci=>ci.jobId))};
+ };
+ const pending=(error,runId)=>{
+  signal?.throwIfAborted();
+  console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId,error:error.message}));
+  if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
+ };
  const publish=async pass=>{
   if(!pass || Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   let snapshot;
   try{
-   snapshot=await overflowInventory({api:pass?.api??api,policy,signal,includeHosted:false,runs:pass?.runs});
+   snapshot=await overflowInventory({api:pass.api,policy,signal,runs:pass.runs});
    await publishCapacity({api,policy,state,snapshot,healthy:healthy??true,signal,now:pass.observedAt});lastCapacity=Date.now();
-  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
+  }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));
+   if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
+  }
+  const capacity=local();
+  if(snapshot && capacity.busy>=capacity.slots && capacity.slots){
+   try{
+    const runs=new Map([...pass.runs].filter(([,run])=>run.event==='pull_request'&&run.run_attempt===1));
+    const [ci]=await findAutomatic({api:pass.api,policy,signal,runs,limit:1,hosted:await hostedAttempts({api,policy,signal}),excludeRuns:local().owned,onePerRun:true,untouched:true});
+    if(ci)await overflowOrdinary({api,policy,ci,signal,snapshot,local});
+   }catch(error){pending(error);}
+  }
   return snapshot;
  };
  try{do{
@@ -81,6 +104,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   console.error(JSON.stringify({event:'automatic-ci-dead-run-pending',runId,error:error.message}));
   if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;
  }}));
+ await read(()=>recoverHostedAttempts({api,policy,signal,excludeRuns:{has:id=>local().owned.has(id)},onError:pending}));
  if(config.slotHosts!==undefined){
   transport??=new CITransport(config);
   healthy=await transport.healthySlots({signal});

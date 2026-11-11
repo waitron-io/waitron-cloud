@@ -197,7 +197,14 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
  }
  if(hostedRunning>=20 || serverWaiting/capacity.slots<=hostedWaiting/20)return;
  await markHostedAttempt({api,policy,ci,signal});
- if((await started()).busy){
+ const finalJobs=await started(),latest=await api.get(base,{signal});
+ const pull=latest.event==='pull_request'&&latest.pull_requests?.length===1?await api.get(`/repos/${policy.repository}/pulls/${latest.pull_requests[0].number}`,{signal}):undefined;
+ const room=local();
+ if(finalJobs.busy || room.busy<room.slots || room.owned.has(ci.runId) || latest.id!==ci.runId || latest.run_attempt!==ci.attempt ||
+  latest.head_sha!==ci.workflowSha || latest.repository?.id!==policy.repositoryId || latest.head_repository?.id!==policy.repositoryId ||
+  latest.workflow_id!==policy.workflowId || latest.path!==policy.workflowPath || !['queued','in_progress'].includes(latest.status) ||
+  !pull || pull.state!=='open' || pull.number!==latest.pull_requests[0].number || pull.head?.sha!==ci.sourceSha ||
+  pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId){
   const values=await hostedAttempts({api,policy,signal});
   if(values[String(ci.runId)]===ci.attempt+1){delete values[String(ci.runId)];await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});}
   return;

@@ -1307,24 +1307,25 @@ test('capacity publication waits a minute while a completed slot refills',async 
  assert.equal(writes,1);
 });
 
-for(const marker of [0,1,2])test(`automatic measured routes stay on their queue with marker ${marker}`,async t=>{
+for(const marker of [0,1,2])test(`automatic overflow respects recorded intent with marker ${marker}`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
- const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[];let value=marker?JSON.stringify({789:marker}):'{}';
  for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:marker?JSON.stringify({789:marker}):'{}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),before=leases.inspect();
- f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY'))actions.push([path,body]);};
+ f.api.post=async path=>actions.push(path);f.api.patch=async(path,body)=>{if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))value=body.value;};
  await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
- assert.deepEqual(actions,[],'A completed tick must never rebalance a measured route');assert.deepEqual(leases.inspect(),before);
+ assert.deepEqual(actions,marker===1?[]:[`/repos/fixture/waitron/actions/runs/789/${marker===2?'force-cancel':'cancel'}`]);
+ assert.equal(value,JSON.stringify({789:marker===1?1:2}));assert.deepEqual(leases.inspect(),before);
 });
 
-test('a stale hosted marker permits pickup without rewriting the marker',async t=>{
- const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],writes=[];
+test('a stale hosted marker is retired while later attempts remain eligible',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],writes=[];let value='{"789":2}';
  f.run.run_attempt=3;f.jobs.forEach(job=>{job.run_attempt=3;job.labels=job.labels.map(label=>label.replace('-789-1-','-789-3-'));});
- f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"789":2}'}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
- f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY'))writes.push([path,body]);};
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value}:path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ f.api.patch=async(path,body)=>{if(!path.endsWith('DISPOSABLE_TESTS_CAPACITY')){writes.push([path,body]);value=body.value;}};
  await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
- assert.deepEqual(served,[901,902,903,904,905]);assert.deepEqual(writes,[]);
+ assert.deepEqual(served,[901,902,903,904,905]);assert.deepEqual(writes,[[`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_HOSTED_ATTEMPTS`,{name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:'{}'}]]);
 });
 
 test('automatic worker failure retires its intent without invoking fallback',async()=>{
@@ -1452,6 +1453,57 @@ test('shared capacity keeps the observation time from before worker waits',async
  f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));capacity=body.value;};
  await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>{clock=start+30000;return {code:0};}});
  assert.equal(JSON.parse(capacity).observedAt,start);
+});
+
+for(const mode of ['move','assigned','free','owned','recover','short','released','local-late','head','permission','main'])test(`full-pool overflow wiring handles ${mode}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[],served=[];
+ const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];if(mode==='main')f.run.event='push';
+ if(mode!=='free')for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot})
+  .reserveLocal(mode==='owned'&&slot===0?ciRequest('I',ci):{lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ let value=mode==='recover'?'{"789":2}':'{}',jobReads=0,requests=0;const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
+ f.api.get=async path=>{
+  requests++;
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))return {value};
+  if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))return {value:''};
+  if(path.endsWith('/actions/jobs/901'))return f.jobs[0];
+  if(path.endsWith('/pulls/12')&&mode==='head'&&value!=='{}')return {...await get(path),state:'closed'};
+  if(path.includes('/jobs?')){
+   jobReads++;if(mode==='assigned'&&value!=='{}')f.jobs[1].runner_id=42;
+   return {total_count:f.jobs.length+(mode==='short'?1:0),jobs:mode==='short'&&path.endsWith('page=2')?[]:f.jobs};
+  }
+  return get(path);
+ };
+ f.api.patch=async(path,body)=>{requests++;if(path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')){
+  value=body.value;
+  if(value!=='{}'&&mode==='released'){const slot=leases.inspect().slots[0];leases.release(slot.lease,{resourceId:slot.lease.resourceId,absent:true});}
+  if(value!=='{}'&&mode==='local-late'){const slot=leases.inspect().slots[0];leases.release(slot.lease,{resourceId:slot.lease.resourceId,absent:true});new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:0}).reserveLocal(ciRequest('I',ci));}
+ }};
+ // Capacity publication has its own readback; keep that unrelated fixture state.
+ const api=new Proxy(f.api,{get(target,key){
+  if(key==='get')return path=>path.endsWith('DISPOSABLE_TESTS_CAPACITY')?(requests++,mode==='permission'?Promise.reject(Object.assign(new Error('Not authorised'),{status:403})):Promise.resolve({value:api.capacity??''})):target.get(path);
+  if(key==='patch')return (path,body)=>path.endsWith('DISPOSABLE_TESTS_CAPACITY')?(requests++,api.capacity=body.value,Promise.resolve()):target.patch(path,body);
+  return Reflect.get(target,key);
+ }});
+ f.api.post=async path=>{requests++;actions.push(path.split('/').at(-1));};
+ const tick=automaticTick({configuration:'/fixture/config',config,api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ if(mode==='permission')await assert.rejects(tick,error=>error.status===403);else await tick;
+ assert.deepEqual(actions,mode==='move'?['cancel']:mode==='recover'?['force-cancel']:[]);
+ assert.equal(value,['move','recover'].includes(mode)?'{"789":2}':'{}');
+ assert.deepEqual(served,mode==='free'?[901,902,903,904,905]:[]);
+ assert.ok(jobReads>0);
+ if(['move','recover','owned'].includes(mode))t.diagnostic(`${mode}: ${requests} API requests in the controlled full-pool tick`);
+});
+
+test('a failed hosted recovery leaves unrelated local pickup available',async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],errors=[];
+ t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS')?{value:'{"790":2}'}:
+  path.endsWith('/runs/790')?Promise.reject(new Error('Recovery read unavailable')):get(path);
+ await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(served,[901,902,903,904,905]);
+ assert.ok(errors.some(row=>row.event==='automatic-ci-overflow-pending'&&row.runId===790));
 });
 
 for(const age of ['fresh','stale','aging','gone'])test(`workers use ${age} shared admission before taking a guest`,async t=>{
