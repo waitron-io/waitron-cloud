@@ -81,7 +81,14 @@ for (const hostClockShift of [0, 180_000]) for (const activationOffset of [0, -1
   const uri=new URL(pending.uri);assert.equal(uri.protocol,'otpauth:');assert.equal(uri.hostname,'totp');
   assert.equal(uri.searchParams.get('secret'),pending.secret);assert.equal(uri.searchParams.get('issuer'),'Waitron Cloud');
   assert.equal((await s.status(a.token)).active,false);
-  assert.equal((await new registration.PasswordLoginStore(pool,null,null).start({email,password})).kind,'session');
+  const outbox=new registration.EmailOutbox({activeKeyId:'test',keys:{test:'07'.repeat(32)}});
+  const passwordLogin=new registration.PasswordLoginStore(pool,null,loginPolicy,outbox);
+  const emailCheck=await passwordLogin.start({email,password});assert.equal(emailCheck.kind,'email');
+  const emailMessage=outbox.open((await pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);
+  assert.ok('code' in emailMessage);
+  const remembered=await passwordLogin.completeEmailCheck(emailCheck.challengeToken,emailMessage.code,true);
+  assert.ok(remembered.browserToken);
+  assert.equal((await new registration.PasswordLoginStore(pool,null,null).start({email,password,browserToken:remembered.browserToken})).kind,'session');
   const row=(await pool.query('SELECT * FROM cloud_factor_enrolments')).rows[0];
   assert.equal(row.session_id,(await pool.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[digest(a.token)])).rows[0].id);
   assert.equal(row.expires_at-row.created_at,300_000);assert.equal(row.attempt_limit,3);
