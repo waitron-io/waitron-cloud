@@ -533,10 +533,10 @@ test('password authority returns the locked credential fingerprint without issui
 });
 
 
-test('required enrollment reads current app authority after an account-lock wait', async () => {
+test('required enrollment reads current passkey authority after an account-lock wait', async () => {
   const session = await run(client => createSession(client, accountId));
-  await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope)
-    VALUES($1,1,$2,'synthetic-encrypted-app')`, [accountId,randomUUID()]);
+  await pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[accountId,Buffer.alloc(32,2)]);
+  await pool.query("INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)",[randomUUID(),accountId,Buffer.from([1,2,3])]);
   const blocker = await pool.connect(); let completion: Promise<void> | undefined;
   try {
     await blocker.query('BEGIN'); await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
@@ -548,7 +548,7 @@ test('required enrollment reads current app authority after an account-lock wait
       if(waiting.rowCount){blocked=true;break;} await delay(20);
     }
     assert.ok(blocked,'the account lock was actually contested');
-    await blocker.query('UPDATE cloud_authenticator_factors SET version=version+1,secret_generation=NULL,secret_envelope=NULL WHERE account_id=$1',[accountId]);
+    await blocker.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[accountId]);
     await blocker.query('COMMIT'); await completion;
     assert.equal((await run(client => resolveSession(client,session.token))).accountId,accountId,'request policy must not leak to another context');
   } finally {await blocker.query('ROLLBACK');blocker.release();await completion?.catch(()=>{});}

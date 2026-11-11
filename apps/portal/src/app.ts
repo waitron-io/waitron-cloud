@@ -53,6 +53,7 @@ export class PortalApp {
   diagnostics: DiagnosticController;
   #route = 0;
   #passkeyOffered = false;
+  #enrollmentRestricted = false;
   #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -108,6 +109,10 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    const restricted = state.kind === 'authenticated' && state.enrollmentRequired === true;
+    // A restriction can follow a method change on the same account; reload its setup controls.
+    if (restricted && !this.#enrollmentRestricted) { this.passkeys.account(undefined); this.authenticator.account(undefined); }
+    this.#enrollmentRestricted = restricted;
     const ordinary = state.kind === 'authenticated' && !state.enrollmentRequired;
     if (state.kind === 'authenticated') this.#passkeyOffered = false;
     // Redirect before starting reads so navigation cannot discard their replies.

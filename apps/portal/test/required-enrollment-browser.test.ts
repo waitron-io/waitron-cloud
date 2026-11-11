@@ -11,6 +11,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
 test(`required passkey enrollment ${locale} ${colorScheme} ${width}`, async () => {
   const f = await startPortalFixture(undefined, undefined, undefined, undefined, true);
   const context = await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}), page = await context.newPage(); page.setDefaultTimeout(5000);
+  const activities:string[]=[];page.on('request',request=>{if(request.url().endsWith('/session/activity'))activities.push(request.url());});
   const ordinaryRequests:string[]=[];const ordinaryPaths=new Set(['/api/account/sessions','/api/account/alerts','/api/account/translation-consent','/api/account/installations']);
   page.on('request',request=>{if(ordinaryPaths.has(new URL(request.url()).pathname))ordinaryRequests.push(new URL(request.url()).pathname);});
   const authenticator = await addVirtualAuthenticator(context, page);
@@ -30,9 +31,10 @@ test(`required passkey enrollment ${locale} ${colorScheme} ${width}`, async () =
     await page.getByText(c.accountIntro,{exact:true}).waitFor();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1',[id])).rows[0].count,'1');
     assert.equal(await page.getByText(c.forbidden,{exact:true}).count(),0);
-    await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyRemove,exact:true}).click();
+    await page.locator('input[name=passkeyPassword]').fill(password);const activityBeforeRemoval=activities.length;await page.getByRole('button',{name:c.passkeyRemove,exact:true}).click();
     await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
     assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
+    assert.equal(activities.length,activityBeforeRemoval,'removal refresh must not borrow an activity recheck');
     await look(page,`${locale}-${colorScheme}-${width}-restricted-again`);
 
   } finally {await authenticator.close();await context.close();await f.close();}
@@ -59,9 +61,7 @@ test(`required app enrollment from recovery ${locale} ${colorScheme} ${width}`,a
   assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);assert.equal(await page.locator('.factor-secret').count(),0);
   await page.locator('input[name=factorPassword]').fill(password);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
   const secret=await page.locator('.factor-secret').textContent();assert.ok(secret);await look(page,`${locale}-${colorScheme}-${width}-pending`);
-  const bits=[...secret].map(ch=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(ch).toString(2).padStart(5,'0')).join(''),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
-  const mac=createHmac('sha1',Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2)))).update(counter).digest();
-  const code=((mac.readUInt32BE(mac[19]!&15)&0x7fffffff)%1000000).toString().padStart(6,'0');
+  const code=currentCode(secret);
   await page.locator('input[name=factorPassword]').fill(password);await page.locator('input[name=factorConfirmation]').fill(code);
   await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
   assert.equal(await page.locator('.factor-codes code').count(),10);
@@ -80,21 +80,31 @@ async function look(page: import('playwright').Page,name: string){
 }
 
 
-test('an enrollment refusal on an open account refreshes the current session into setup',async()=>{
+test('an enrollment refusal refreshes stale passkey settings into setup',async()=>{
  const f=await startPortalFixture(undefined,undefined,undefined,undefined,true),context=await f.browser.newContext(),page=await context.newPage();page.setDefaultTimeout(5000);
  const virtual=await addVirtualAuthenticator(context,page),id=randomUUID(),email=`changed-enrollment-${id}@example.test`,password='A synthetic changed enrollment password',c=translations.en;
+ const activities:string[]=[];page.on('request',request=>{if(request.url().endsWith('/session/activity'))activities.push(request.url());});
  try{
   await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
   await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[id,email,await hashSecret(password)]);
+  const accountReady=['/sessions','/alerts','/translation-consent','/installations','/authenticator'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
   await page.goto(`${f.origin}/login`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   await completeBrowserEmail(f,page,email,'en');await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
-  const accountReady=['/sessions','/alerts','/translation-consent','/installations'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
-  await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();await page.getByText(c.accountIntro,{exact:true}).waitFor();
-  await Promise.all(accountReady);await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
-  await f.db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[id]);
+  await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
+  await page.getByText(c.accountIntro,{exact:true}).waitFor();await Promise.all(accountReady);await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
+  if(!activities.length)await Promise.all([page.waitForResponse(response=>response.url().endsWith('/session/activity')&&response.status()===200),page.locator('h1').click()]);
+  const before=activities.length;await f.db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[id]);
   const refused=page.waitForResponse(response=>response.url().endsWith('/sessions/revoke'));
   await page.getByRole('button',{name:c.sessionSignOut,exact:true}).click();assert.equal((await refused).status(),403);
   await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
+  assert.equal(activities.length,before,'enrollment refusal refresh must not borrow an activity recheck');
   assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:c.passkeyRemove,exact:true}).count(),0,'a removed credential must not survive the session refresh');
  }finally{await virtual.close();await context.close();await f.close();}
 });
+
+function currentCode(secret:string){
+ const bits=[...secret].map(ch=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(ch).toString(2).padStart(5,'0')).join(''),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
+ const mac=createHmac('sha1',Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2)))).update(counter).digest();
+ return ((mac.readUInt32BE(mac[19]!&15)&0x7fffffff)%1000000).toString().padStart(6,'0');
+}
