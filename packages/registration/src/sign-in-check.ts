@@ -25,8 +25,8 @@ export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox |
   const token = randomBytes(32).toString('base64url'), code = randomInt(1_000_000).toString().padStart(6,'0');
   const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
   const expiresAt = new Date(now.getTime() + 300_000).toISOString();
-  await client.query(`INSERT INTO cloud_sign_in_checks(token_hash,account_id,email,password_fingerprint,code_hash,created_at,expires_at,attempt_limit)
-    VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [digest(token),input.accountId,input.email,input.passwordFingerprint,signInCodeHash(token,code),now,expiresAt,policy.challengeAttempts]);
+  await client.query(`INSERT INTO cloud_sign_in_checks(token_hash,account_id,email_hash,password_fingerprint,code_hash,created_at,expires_at,attempt_limit)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [digest(token),input.accountId,digest(input.email),input.passwordFingerprint,signInCodeHash(token,code),now,expiresAt,policy.challengeAttempts]);
   await outbox.enqueue(client,'sign_in_check',{email:input.email,token,code,expiresAt,locale:input.locale});
   if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[expiresAt])).rows[0].expired) throw new SignInCheckError();
   return {kind:'email',challengeToken:token,expiresAt};
@@ -46,7 +46,7 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
     const check = (await client.query('SELECT * FROM cloud_sign_in_checks WHERE token_hash=$1 FOR UPDATE',[tokenHash])).rows[0];
     const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
     if (factor?.secret_envelope || !check || check.consumed_at || check.expires_at <= now || check.attempts >= check.attempt_limit
-      || !credential?.password_hash || credential.email !== check.email || digest(credential.password_hash) !== check.password_fingerprint) return new SignInCheckError();
+      || !credential?.password_hash || digest(credential.email) !== check.email_hash || digest(credential.password_hash) !== check.password_fingerprint) return new SignInCheckError();
     await client.query('UPDATE cloud_sign_in_checks SET attempts=attempts+1 WHERE token_hash=$1',[tokenHash]);
     if (typeof code !== 'string' || !/^[0-9]{6}$/.test(code) || signInCodeHash(token,code) !== check.code_hash) return new SignInCheckError();
     // Refused late effects roll back while the spent proof attempt remains committed.

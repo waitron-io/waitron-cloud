@@ -66,7 +66,7 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
   assert.equal(rows.length,56);assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
   assert.deepEqual((await p.query('SELECT * FROM venues')).rows,venues);
   assert.equal((await p.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');
-  assert.equal(hasReleaseMigrationCount('47'),false);assert.equal(hasReleaseMigrationCount('48'),false);assert.equal(hasReleaseMigrationCount('49'),false);assert.equal(hasReleaseMigrationCount('50'),false);assert.equal(hasReleaseMigrationCount('51'),false);assert.equal(hasReleaseMigrationCount('52'),false);assert.equal(hasReleaseMigrationCount('53'),false);assert.equal(hasReleaseMigrationCount('54'),false);assert.equal(hasReleaseMigrationCount('55'),true);
+  assert.equal(hasReleaseMigrationCount('47'),false);assert.equal(hasReleaseMigrationCount('48'),false);assert.equal(hasReleaseMigrationCount('49'),false);assert.equal(hasReleaseMigrationCount('50'),false);assert.equal(hasReleaseMigrationCount('51'),false);assert.equal(hasReleaseMigrationCount('52'),false);assert.equal(hasReleaseMigrationCount('53'),false);assert.equal(hasReleaseMigrationCount('54'),false);assert.equal(hasReleaseMigrationCount('55'),false);assert.equal(hasReleaseMigrationCount('56'),true);
   await assert.rejects(checkConsumerSchema(p,previous),/schema_incompatible/);
   await checkConsumerSchema(p,new URL('../../../',import.meta.url).pathname);
   const applied=rows[46]!;

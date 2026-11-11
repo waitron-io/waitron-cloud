@@ -495,3 +495,14 @@ test('mailIndependentReplyObservationCannotRefuseActuallyAcceptedDelivery', asyn
   assert.equal(run.snapshot().status, 'unknown'); assert.equal(run.snapshot().reconciled, false);
   assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
 });
+
+
+test('mail measurement includes the mailbox sign-in renderer and its independent SMTP acceptance',async t=>{
+ const f=await fixture(t),{run,mailer}=await open(t,f);
+ assert.equal(typeof mailer.sendSignInCheck,'function');
+ await mailer.sendSignInCheck({...message,token:'x'.repeat(43),code:'000123',expiresAt:'2030-01-01T00:00:00Z'},context());
+ await run.close();const result=run.snapshot();
+ assert.equal(f.accepted(),1);assert.equal(result.producer.accepted,1);assert.equal(result.observer.accepted,1);
+ assert.deepEqual(result.operations.map(row=>[row.action,row.outcome,row.attempts]),[['sign_in_check','accepted',1]]);
+ const assessment=assessAccounting({producer:'service',sources:[{scope:'mail',record:result}]});assert.equal(assessment.publicationEligible,false);
+});

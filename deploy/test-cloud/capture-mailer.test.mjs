@@ -17,3 +17,12 @@ test('ordinary local and production mailers still refuse LAN origins',()=>{
  assert.throws(()=>createLocalAccountMailer({portalOrigin:'https://waitron.local:3000'}),/Invalid local mail/);
  assert.throws(()=>createSmtpAccountMailer({host:'smtp.example.test',port:465,user:'cloud',password:'secret',from:'cloud@example.test',portalOrigin:'https://waitron.local:3000'}),/Invalid production mail/);
 });
+
+
+test('test capture delivers a mailbox sign-in code through the loopback sink',async t=>{
+ const {createTestCaptureMailer}=await api(),{port,messages}=await sink(t);
+ const mailer=createTestCaptureMailer({origin:'https://waitron.local:3000',port});
+ assert.equal(typeof mailer.sendSignInCheck,'function');
+ await mailer.sendSignInCheck({email:'owner@example.test',token:'x'.repeat(43),code:'000123',expiresAt:'2030-01-01T00:00:00Z',locale:'en'});
+ assert.equal(messages.length,1);assert.match(messages[0],/000123/);assert.doesNotMatch(messages[0],/x{43}/);
+});

@@ -38,6 +38,11 @@ curl --fail http://localhost:3000/api/health/live
 curl --fail http://localhost:3000/api/health/ready
 ```
 
+Before testing password fallback with an enrolled passkey, configure `CLOUD_FACTOR_POLICY`
+as shown in the [authenticator guide](authenticator-app.md#configure-a-local-account-worker).
+The stack has no default policy: without it, passkey password fallback refuses sign-in.
+Direct passkey sign-in and password-only accounts remain available.
+
 Use `localhost` for the API probes. The server rejects a different `Host` authority, even
 when it resolves to the same loopback interface.
 

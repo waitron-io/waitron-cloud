@@ -294,12 +294,12 @@ export class EmailWorker {
       message.locale=live.locale;return true;
     }
     if (row.kind === 'sign_in_check') {
-      const live=(await client.query(`SELECT c.password_hash,s.password_fingerprint FROM cloud_sign_in_checks s
+      const live=(await client.query(`SELECT c.email,c.password_hash,s.password_fingerprint,s.email_hash FROM cloud_sign_in_checks s
         JOIN cloud_accounts a ON a.id=s.account_id JOIN cloud_credentials c ON c.account_id=a.id
-        WHERE s.token_hash=$1 AND s.email=$2 AND c.email=s.email AND a.disabled_at IS NULL
+        WHERE s.token_hash=$1 AND c.email=$2 AND a.disabled_at IS NULL
           AND c.password_hash IS NOT NULL AND s.consumed_at IS NULL AND s.attempts<s.attempt_limit
           AND s.expires_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM cloud_authenticator_factors f WHERE f.account_id=a.id AND f.secret_envelope IS NOT NULL)`,[row.token_hash,message.email])).rows[0];
-      return !!live && digest(live.password_hash)===live.password_fingerprint;
+      return !!live && digest(live.email)===live.email_hash && digest(live.password_hash)===live.password_fingerprint;
     }
     if (row.kind === 'password_changed') return true;
     if (row.kind === 'verification') {

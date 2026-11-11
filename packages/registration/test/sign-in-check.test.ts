@@ -33,6 +33,8 @@ test('password fallback for a passkey owner queues an email check before any ses
   assert.equal(result.kind, 'email');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
   assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count, '1');
+  const record=(await pool.query('SELECT to_jsonb(s) AS stored FROM cloud_sign_in_checks s')).rows[0].stored;
+  assert.equal(JSON.stringify(record).includes(email),false,'the challenge must not duplicate the raw email address');
 });
 
 
@@ -61,7 +63,8 @@ const refused = (action: Promise<unknown>) => assert.rejects(action,error => err
 
 test('wrong mailbox codes spend the configured attempt limit durably', async () => {
   const store = new PasswordLoginStore(pool,null,policy,outbox), challenge = await queued(store);
-  for (let i=0;i<5;i++) await refused(store.completeEmailCheck(challenge.challengeToken,'wrong'));
+  const wrong=challenge.code==='123456'?'654321':'123456';
+  for (let i=0;i<5;i++) await refused(store.completeEmailCheck(challenge.challengeToken,wrong));
   assert.equal((await pool.query('SELECT attempts FROM cloud_sign_in_checks')).rows[0].attempts,5);
   await refused(store.completeEmailCheck(challenge.challengeToken,challenge.code));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
@@ -94,6 +97,10 @@ test('an app enrolled while email is pending still wins at completion and the ne
   assert.equal((await store.start({email,password})).kind,'factor');
   assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'1');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
+  const sent:string[]=[],send=async()=>{sent.push('sent');};
+  const worker=new EmailWorker(pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send,sendSignInCheck:send});
+  while(await worker.runOnce()){}
+  assert.deepEqual(sent,[]);assert.equal((await pool.query('SELECT status FROM email_outbox')).rows[0].status,'cancelled');
 });
 
 test('two independent completions consume one mailbox code and create exactly one session', async () => {
@@ -164,4 +171,27 @@ test('an outbox refusal rolls back both the mailbox challenge and session issuan
   try{await assert.rejects(new PasswordLoginStore(pool,null,policy,outbox).start({email,password}),/refuse_test_check/);}
   finally{await pool.query('ALTER TABLE email_outbox DROP CONSTRAINT refuse_test_check');}
   for(const table of ['cloud_sessions','cloud_sign_in_checks','email_outbox'])assert.equal((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0',table);
+});
+
+
+test('a disabled account cannot complete a queued mailbox check',async()=>{
+  const store=new PasswordLoginStore(pool,null,policy,outbox),challenge=await queued(store);
+  await pool.query('UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',[accountId]);
+  await refused(store.completeEmailCheck(challenge.challengeToken,challenge.code));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
+});
+
+test('a mailbox worker rechecks account authority after its account-row wait',async t=>{
+  await queued();const blocker=await pool.connect(),sent:string[]=[],send=async()=>{sent.push('sent');};
+  const worker=new EmailWorker(pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send,sendSignInCheck:send});
+  let work:Promise<boolean>|undefined;
+  try{
+    await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
+    work=worker.runOnce();void work.catch(()=>{});
+    await t.waitFor(async()=>assert.equal((await pool.query(`SELECT count(*) FROM pg_stat_activity WHERE application_name=$1
+      AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM cloud_accounts%FOR SHARE'`,[schema])).rows[0].count,'1'),{timeout:5000});
+    await blocker.query('UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',[accountId]);
+    await blocker.query('COMMIT');assert.equal(await work,true);assert.equal(await worker.runOnce(),false);
+    assert.deepEqual(sent,[]);assert.equal((await pool.query('SELECT status FROM email_outbox')).rows[0].status,'cancelled');
+  }finally{await blocker.query('ROLLBACK');blocker.release();await work;}
 });

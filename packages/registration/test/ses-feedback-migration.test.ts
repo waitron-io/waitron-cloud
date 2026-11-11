@@ -63,7 +63,7 @@ test('interrupted SES ledger insert rolls back every new relation before a repea
     for(const name of tables)assert.equal((await f.pool.query('SELECT to_regclass($1) AS relation',[name])).rows[0].relation,null);
     assert.deepEqual((await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows,f.before.schema_migrations);
     await Promise.all([migrate(f.pool),migrate(f.pool)]);
-    assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'55');
+    assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'56');
   }finally{await held.query('ROLLBACK');held.release();await pending;await f.close();}
 });
 

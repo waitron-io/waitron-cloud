@@ -553,3 +553,23 @@ test('active_recovery_holds_survive: history evidence and job are kept until clo
  await cleanup.run(parseHistoryCleanupPolicy({cutoffs:{backupJobs:cutoff,recoveryHistory:cutoff,backupTombstones:cutoff}}),{apply:true});
  assert.deepEqual(await evidenceCounts(f.id),{points:0,captures:0,history:0,evidence:0,jobs:0});
 });
+
+
+test('mailbox cleanup deletes expired and used code rows but keeps a pending email and a live code',async()=>{
+  const boundary=(await pool.query("SELECT clock_timestamp()-interval '30 seconds' AS cutoff")).rows[0].cutoff.toISOString();
+  await pool.query(`INSERT INTO cloud_sign_in_checks(token_hash,account_id,email_hash,password_fingerprint,code_hash,created_at,expires_at,attempt_limit,consumed_at)
+    VALUES($1,$5,$1,$6,$6,statement_timestamp()-interval '6 minutes',statement_timestamp()-interval '1 minute',5,NULL),
+    ($2,$5,$2,$6,$6,statement_timestamp()-interval '4 minutes',statement_timestamp()+interval '1 minute',5,statement_timestamp()-interval '2 minutes'),
+    ($3,$5,$3,$6,$6,statement_timestamp()-interval '6 minutes',statement_timestamp()-interval '1 minute',5,NULL),
+    ($4,$5,$4,$6,$6,statement_timestamp(),statement_timestamp()+interval '5 minutes',5,NULL)`,[hash('a'),hash('b'),hash('c'),hash('d'),accountId,hash('e')]);
+  await pool.query(`INSERT INTO email_outbox(id,kind,token_hash,key_id,payload,expires_at)
+    VALUES($1,'sign_in_check',$2,'key',decode('00','hex'),clock_timestamp()+interval '1 minute')`,[randomUUID(),hash('c')]);
+  const policy=parseHistoryCleanupPolicy({cutoffs:{signInChecks:boundary},chunkSize:10});
+  const preview=await cleanup.run(policy,{apply:false});assert.equal(preview.categories.signInChecks?.eligible,2);assert.equal(preview.categories.signInChecks?.blocked,1);
+  assert.equal(await count('cloud_sign_in_checks'),4);
+  const result=await cleanup.run(policy,{apply:true});assert.equal(result.categories.signInChecks?.deleted,2);
+  assert.deepEqual((await pool.query('SELECT token_hash FROM cloud_sign_in_checks ORDER BY token_hash')).rows,[{token_hash:hash('c')},{token_hash:hash('d')}]);
+  await pool.query("UPDATE email_outbox SET status='cancelled',payload=NULL,key_id=NULL,finished_at=clock_timestamp()");
+  assert.equal((await cleanup.run(policy,{apply:true})).categories.signInChecks?.deleted,1);
+  assert.deepEqual((await pool.query('SELECT token_hash FROM cloud_sign_in_checks')).rows,[{token_hash:hash('d')}]);
+});

@@ -24,7 +24,8 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
       || !('expiresAt' in message) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid account email');
     const subject=locale==='es'?'Tu código de acceso a Waitron Cloud':'Your Waitron Cloud sign-in code';
     const expiry=new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(message.expiresAt));
-    return {subject,text:[subject,'',message.code,'',`${locale==='es'?'Este código de un solo uso caduca el':'This single-use code expires at'} ${expiry}.`,text.ignore].join('\n')};
+    const reset=new URL('/forgot-password',origin);reset.hash=new URLSearchParams({lang:locale}).toString();
+    return {subject,text:[subject,'',message.code,'',`${locale==='es'?'Este código de un solo uso caduca el':'This single-use code expires at'} ${expiry}.`,locale==='es'?'Si no has intentado acceder, restablece tu contraseña.':'If you did not try to sign in, reset your password.',reset.href].join('\n')};
   }
   if(kind==='service_alert'){
     if(!validServiceAlert(message))throw new Error('Invalid account email');

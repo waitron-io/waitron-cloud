@@ -366,4 +366,8 @@ test('passkey password fallback returns an email challenge without cookies, then
   assert.equal(signed.status,200);assert.deepEqual(await signed.json(),{accountId:owner.accountId});assert.equal(signed.headers.getSetCookie().length,2);
   assert.equal((await request('/session',undefined,{headers:cookies(signed)})).status,200);assert.equal(await count(),1);
   await refusal(await request('/login/email',{challengeToken:body.challengeToken,code:queued.code}),401,'credentials_invalid');
+  const defaultLanguage=await request('/login',{email:owner.email,password});
+  assert.equal(defaultLanguage.status,202);assert.equal(defaultLanguage.headers.getSetCookie().length,0);assert.equal(await count(),1);
+  const defaultMail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);
+  assert.equal(defaultMail.locale,'en');
 });

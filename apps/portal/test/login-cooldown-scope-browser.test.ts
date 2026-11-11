@@ -54,7 +54,7 @@ async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', w
   assert.equal(await page.getByRole('status').filter({hasText: c.cooldown}).textContent(), `${c.cooldown} 900 ${c.seconds}`);
   assert.equal(await page.getByRole('button', {name: c.login, exact: true}).isDisabled(), true);
   await page.locator('form').evaluate((form: HTMLFormElement) => form.requestSubmit());
-  assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password}}]);
+  assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password, locale}}]);
   return {page, calls};
 }
 
@@ -90,7 +90,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           const body = flow.endpoint === '/signup/complete'
             ? {token, password, legalBusinessName: 'Cafe owner', organisationName: 'Cafe owner', countryCode: 'ES'}
             : completion ? {token, password, locale} : {email: 'owner@example.test', locale};
-          assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password}}, {path: flow.endpoint, body}]);
+          assert.deepEqual(calls, [{path: '/login', body: {email: 'owner@example.test', password, locale}}, {path: flow.endpoint, body}]);
           if (!completion) {
             assert.equal(await page.getByRole('button', {name: c.resend, exact: true}).isDisabled(), true);
             assert.equal(await page.getByRole('status').filter({hasText: c.cooldown}).textContent(), `${c.cooldown} 60 ${c.seconds}`);

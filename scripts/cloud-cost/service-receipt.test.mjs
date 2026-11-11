@@ -174,3 +174,10 @@ test('serviceReceiptPublishedValidationRejectsHiddenAndArrayDataAtEveryExportedL
     assert.throws(() => module.validateServiceReceipt(receipt), bad, path || 'receipt');
   }
 });
+
+
+test('service receipt retains a measured mailbox sign-in action without changing its totals',()=>{
+ const f=fixture();f.mail.operations[2].action='sign_in_check';
+ const receipt=build(f);assert.deepEqual(receipt.summary.mail,{attempts:3,accepted:2,refused:1,retried:1,bytes:null});
+ assert.equal(module.validateServiceReceipt(receipt).mail.operations[2].action,'sign_in_check');
+});

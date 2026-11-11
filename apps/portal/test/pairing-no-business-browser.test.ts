@@ -82,7 +82,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await code.fill('12345678'); await page.getByRole('button', {name: c.pairInspect, exact: true}).click();
       await page.getByRole('button', {name: c.pairApprove, exact: true}).waitFor();
       assert.deepEqual(api.writes, [{path: '/logout', body: {}},
-        {path: '/login', body: {email: 'owner@example.test', password: 'A real café owner password'}},
+        {path: '/login', body: {email: 'owner@example.test', password: 'A real café owner password',locale}},
         {path: '/pairing/inspect', body: {requestId, code: '12345678'}}]);
       assert.deepEqual(api.unexpected, []);
     } finally { await browser.close(); }

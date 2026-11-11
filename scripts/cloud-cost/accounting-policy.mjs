@@ -177,7 +177,7 @@ function mail(record, gaps) {
   const totals = { attempts: 0, accepted: 0, refused: 0, retried: 0 };
   for (const row of record.operations) {
     exact(row, ['action', 'outcome', 'retryOrdinal', 'attempts']);
-    need(['verification', 'password_reset', 'password_changed', 'service_alert'].includes(row.action)
+    need(['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check'].includes(row.action)
       && ['accepted', 'refused'].includes(row.outcome) && count(row.retryOrdinal) && count(row.attempts) && row.attempts > 0);
     const key = [row.action, row.outcome, row.retryOrdinal].join(':'); need(!groups.has(key)); groups.add(key);
     totals.attempts += row.attempts; totals[row.outcome] += row.attempts;

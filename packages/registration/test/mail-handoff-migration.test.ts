@@ -48,7 +48,7 @@ test('interrupted handoff mapping creation rolls back its table and ledger witho
   assert.equal((await f.pool.query("SELECT to_regclass('mail_legacy_suppression_scopes') AS relation")).rows[0].relation,null);
   assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,f.before);
   assert.deepEqual((await f.pool.query('SELECT * FROM relay_suppressions')).rows,f.legacy);
-  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'55');
+  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'56');
  }finally{await held.query('ROLLBACK');held.release();await pending;await f.close();}
 });
 

@@ -162,7 +162,8 @@ Send `POST /login/email {"challengeToken":"<browser challenge>","code":"000123"}
 from the exact portal origin. A valid code returns 200 with the account ID and session
 cookies. Codes keep leading zeroes, expire after five minutes and use the configured
 `CLOUD_FACTOR_POLICY.challengeAttempts` limit and existing sign-in request budgets.
-Keep the challenge in memory. No session exists until completion succeeds; replay,
+Keep the challenge in memory. The code row keeps a hash of the address; the recipient
+stays in the existing credentials and encrypted outbox. No session exists until completion succeeds; replay,
 password or email changes, password reset, disabled accounts and a newly active app
 refuse the older code. Missing email keys or policy refuse fallback; direct passkeys
 remain available. The focused store and browser commands are:

@@ -59,6 +59,8 @@ for (const locale of ['en','es'] as const) test(`mailbox sign-in code renders ${
   assert.equal(mail.subject,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud');
   assert.match(mail.text,/\b000123\b/); assert.match(mail.text,/UTC/);
   assert.equal(mail.text.includes(token),false); assert.doesNotMatch(mail.text,/token=/);
+  assert.match(mail.text,locale==='en'?/reset your password/:/restablece tu contraseña/);
+  assert.ok(mail.text.includes(`/forgot-password#lang=${locale}`));
 });
 
 test('mailbox sign-in templates refuse malformed codes', () => {

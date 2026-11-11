@@ -1,7 +1,7 @@
 CREATE TABLE cloud_sign_in_checks (
   token_hash text PRIMARY KEY CHECK (token_hash ~ '^[0-9a-f]{64}$'),
   account_id uuid NOT NULL REFERENCES cloud_accounts(id),
-  email text NOT NULL,
+  email_hash text NOT NULL CHECK (email_hash ~ '^[0-9a-f]{64}$'),
   password_fingerprint text NOT NULL CHECK (password_fingerprint ~ '^[0-9a-f]{64}$'),
   code_hash text NOT NULL CHECK (code_hash ~ '^[0-9a-f]{64}$'),
   created_at timestamptz NOT NULL,
