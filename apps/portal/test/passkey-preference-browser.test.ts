@@ -50,12 +50,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (path === '/installations') return route.fulfill({json: {installations: []}});
         return route.fulfill({status: 503, json: {error: 'unavailable'}});
       });
-      const open = async () => {
+      const open = async (expectAuthentication = false) => {
         await page.goto('about:blank');
         await page.goto(`https://portal.test/login#lang=${locale}`);
         await page.addStyleTag({content: styles});
         await page.addScriptTag({content: bundle.outputFiles[0]!.text});
-        await page.getByRole('button', {name: translations[locale].passkeySignIn, exact: true}).waitFor();
+        await (expectAuthentication ? page.getByText(translations[locale].accountIntro, {exact: true})
+          : page.getByRole('button', {name: translations[locale].passkeySignIn, exact: true})).waitFor();
       };
       const c = translations[locale];
       await open();
@@ -88,7 +89,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await t.waitFor(() => assert.ok(optionRequests > beforeSignOut, 'signing out offers passkeys again'), {timeout: 4000});
       assert.ok((await page.getByRole('button', {name: c.passkeySignIn, exact: true}).boundingBox())!.y < (await page.locator('input[name=email]').boundingBox())!.y, 'same-tab sign-out picks up the newly saved preference');
       await cdp.send('WebAuthn.setAutomaticPresenceSimulation', {authenticatorId: authenticator.authenticatorId, enabled: true});
-      await open();
+      await open(true);
       await t.waitFor(() => assert.equal(verifications, completed + 1), {timeout: 4000});
       await page.getByText(c.accountIntro, {exact: true}).waitFor();
       assert.equal(verifications, completed + 1, 'returning autofill completes verification without an explicit button click');
