@@ -204,3 +204,17 @@ test('recovery-code replies distinguish creation, preserved codes and removal',a
  value={accountId:'owner'};assert.equal((await accountRequest('/login/recovery',{})).ok,true);
  value={accountId:'owner',recoveryCodes:codes};assert.equal((await accountRequest('/login/recovery',{})).ok,false);
 });
+
+for (const path of ['/session', '/session/activity']) test(`${path} rejects malformed enrollment restrictions`, async t => {
+  const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:''}});
+  t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+  let value:unknown;
+  t.mock.method(globalThis,'fetch',async()=>Response.json(value));
+  const session={accountId:'owner',expiresAt:'2030-01-01T12:00:00Z'};
+  for(const hint of [false,'true',1,null]){
+    value={...session,enrollmentRequired:hint};assert.equal((await accountRequest(path,path.endsWith('activity')?{}:undefined)).ok,false);
+  }
+  value={...session,enrollmentRequired:true};assert.equal((await accountRequest(path,path.endsWith('activity')?{}:undefined)).ok,true);
+});

@@ -53,6 +53,7 @@ export class PortalApp {
   diagnostics: DiagnosticController;
   #route = 0;
   #passkeyOffered = false;
+  #enrollmentRestricted = false;
   #signOutCheck: PortalSession | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
@@ -108,31 +109,36 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    const restricted = state.kind === 'authenticated' && state.enrollmentRequired === true;
+    // A restriction can follow a method change on the same account; reload its setup controls.
+    if (restricted && !this.#enrollmentRestricted) { this.passkeys.account(undefined); this.authenticator.account(undefined); }
+    this.#enrollmentRestricted = restricted;
+    const ordinary = state.kind === 'authenticated' && !state.enrollmentRequired;
     if (state.kind === 'authenticated') this.#passkeyOffered = false;
     // Redirect before starting reads so navigation cannot discard their replies.
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loadAttempted) void this.authenticator.load();
-    this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    const billingAccount=state.kind === 'authenticated' && state.billingTrialAvailable === true ? state.accountId : undefined;
+    if (state.kind === 'authenticated' && (['/account','/'].includes(this.path) || state.enrollmentRequired) && !this.authenticator.loadAttempted) void this.authenticator.load();
+    this.diagnostics.account(ordinary ? state.accountId : undefined);
+    this.usage.account(ordinary ? state.accountId : undefined);
+    const billingAccount=ordinary && state.billingTrialAvailable === true ? state.accountId : undefined;
     this.billing.account(billingAccount);
     if (['/account','/'].includes(this.path) && billingAccount && !this.billing.loadAttempted) void this.billing.load();
-    this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loadAttempted) void this.security.load();
+    this.security.account(ordinary ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && ordinary && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.passkeys.loaded) void this.passkeys.load();
-    this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded && !this.alerts.loadAttempted) void this.alerts.load();
-    this.translationConsent.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.translationConsent.loaded && !this.translationConsent.loadAttempted) void this.translationConsent.load();
-    this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/','/recover'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
-    this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
+    if (state.kind === 'authenticated' && (['/account','/'].includes(this.path) || state.enrollmentRequired) && !this.passkeys.loaded) void this.passkeys.load();
+    this.recovery.account(ordinary ? state.accountId : undefined);
+    this.alerts.account(ordinary ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && ordinary && !this.alerts.loaded && !this.alerts.loadAttempted) void this.alerts.load();
+    this.translationConsent.account(ordinary ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && ordinary && !this.translationConsent.loaded && !this.translationConsent.loadAttempted) void this.translationConsent.load();
+    this.remote.account(ordinary ? state.accountId : undefined);
+    this.backups.account(ordinary ? state.accountId : undefined);
+    this.installations.account(ordinary ? state.accountId : undefined);
+    if (['/account','/','/recover'].includes(this.path) && ordinary && !this.installations.loaded) void this.installations.load();
+    this.pairing.account(ordinary ? state.accountId : undefined);
+    if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
     if ((['/', '/account', '/connect', '/recover'].includes(this.path)) && state.kind === 'anonymous') {
       const signedOut = this.#signOutCheck === this.session;
       this.navigate('/login');
@@ -175,6 +181,7 @@ export class PortalApp {
   }
   title(): string {
     const c = this.copy;
+    if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) return c.enrollmentRequiredTitle;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
     if (this.path === '/login' && this.authenticator.challenge) return 'emailRequired' in this.authenticator.challenge?(this.authenticator.proofKind==='recovery'&&!this.authenticator.challenge.rememberBrowserAllowed?c.factorRecovery:c.emailCheckTitle):c.factorTitle;
     if (this.path === '/recover') return c.recoveryTitle;
@@ -349,11 +356,13 @@ export class PortalApp {
     this.readFields();
     if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
     await this.passkeys.enroll(this.passkeys.password);
+    if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) await this.session.check({fresh: true});
   }
   async removePasskey(id: string) {
     this.readFields();
     if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
     await this.passkeys.remove(id, this.passkeys.password);
+    if (this.passkeys.notice === 'passkeyRemoved') await this.session.check({fresh: true});
   }
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return this.session.waiting; }

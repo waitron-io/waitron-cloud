@@ -25,6 +25,7 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
+  enrollmentRequiredTitle:'Set up sign-in protection', enrollmentRequiredHelp:'Add a passkey or authenticator app before using your account.',
   requestBodyInterrupted:'This request was interrupted.',
   requestBodySize:'This request’s size wasn’t accepted; sending it again won’t help.',
   requestBodyFormat:'This request arrived in an unsupported format; sending it again won’t help.',
@@ -300,6 +301,7 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
+  enrollmentRequiredTitle:'Configura la protección de acceso', enrollmentRequiredHelp:'Añade una llave de acceso o una app de autenticación antes de usar tu cuenta.',
   requestBodyInterrupted:'Esta solicitud se interrumpió.',
   requestBodySize:'No se ha aceptado el tamaño de esta solicitud; volver a enviarla no sirve.',
   requestBodyFormat:'Esta solicitud llegó en un formato no admitido; volver a enviarla no sirve.',

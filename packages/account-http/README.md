@@ -159,6 +159,17 @@ recognised browser. An active
 authenticator app takes priority: its code or recovery code is required instead.
 Email recovery remains available, and password reset does not delete enrolled passkeys.
 
+Set `CLOUD_REQUIRE_ENROLLMENT=true` on every worker to require an app or passkey
+for everyone using that country service. The default is off. Each account request
+checks the current setting and enrollment, including sessions created before it
+was enabled. Without a method, `GET /session` and `/session/activity` include
+`enrollmentRequired:true`; ordinary account access is refused. For example,
+`GET /sessions` returns 403 `enrollment_required`. You can still read setup status, enroll a passkey or app,
+cancel app setup, and sign out using the existing session, Origin and CSRF rules.
+Only verified enrollment lifts the restriction. Disabling the setting lifts it
+on the next request without changing sessions or methods. No extra session state
+or migration is needed.
+
 `POST /login` accepts an optional `locale` (`en` or `es`). For the email step it returns
 202 with `emailRequired:true`, `challengeToken` and `expiresAt`, without cookies.
 Send `POST /login/email {"challengeToken":"<browser challenge>","code":"000123"}`

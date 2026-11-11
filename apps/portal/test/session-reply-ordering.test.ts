@@ -119,9 +119,11 @@ for (const [label, reply] of oldReplies) {
     assert.deepEqual(session.state, {kind: 'checking'});
     assert.equal(session.retryAt, 0);
     assert.deepEqual(changes, []);
-    assert.equal(removed.mock.calls.length, 1);
-    assert.deepEqual(removed.mock.calls[0]!.arguments, added.mock.calls[0]!.arguments);
+    assert.equal(removed.mock.calls.length, 2);
+    assert.deepEqual(removed.mock.calls.map(call => call.arguments[0]), ['visibilitychange', 'cloud-enrollment-required']);
+    assert.deepEqual(removed.mock.calls.map(call => call.arguments), added.mock.calls.map(call => call.arguments));
     document.dispatchEvent(new Event('visibilitychange'));
+    document.dispatchEvent(new Event('cloud-enrollment-required'));
     const fresh = session.check({fresh: true});
     assert.equal(requests.length, 1, 'a disposed instance must refuse a fresh check');
     await fresh;

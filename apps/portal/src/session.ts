@@ -1,6 +1,6 @@
 import {bodyRefusal} from './body-refusal.ts';
-import { accountRequest, type ApiResult } from './api.ts';
-type Session = {accountId: string; expiresAt: string; billingTrialAvailable?: true};
+import { accountRequest, enrollmentRequiredEvent, type ApiResult } from './api.ts';
+type Session = {accountId: string; expiresAt: string; billingTrialAvailable?: true; enrollmentRequired?: true};
 export type SessionState = {kind: 'checking' | 'unavailable'} | {kind: 'anonymous'; expired?: true} | ({kind: 'authenticated'} & Session);
 export class PortalSession {
   state: SessionState = {kind: 'checking'};
@@ -17,10 +17,12 @@ export class PortalSession {
   #expiry: ReturnType<typeof setTimeout> | undefined;
   #lastActivity = -Infinity;
   #disposed = false;
+  #enrollmentRequired = () => { void this.check({fresh: true}); };
   #visible = () => { if (document.visibilityState === 'visible') void this.check(); };
   constructor(changed: (state: SessionState) => void) {
     this.#changed = changed;
     document.addEventListener('visibilitychange', this.#visible);
+    document.addEventListener(enrollmentRequiredEvent, this.#enrollmentRequired);
   }
   #set(state: SessionState) {
     if (this.#disposed) return;
@@ -73,5 +75,6 @@ export class PortalSession {
   dispose() {
     this.#disposed = true; this.#generation++; clearTimeout(this.#expiry);
     document.removeEventListener('visibilitychange', this.#visible);
+    document.removeEventListener(enrollmentRequiredEvent, this.#enrollmentRequired);
   }
 }

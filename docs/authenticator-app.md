@@ -6,6 +6,12 @@ Keep the choice off on a shared browser. Password reset forgets every recognised
 authenticator app from **Account**, then use its six-digit code or a saved recovery
 code when signing in with your password. Passkey sign-in remains available separately. If you have a passkey, you can also create recovery codes under **Passkeys** with your current password. After entering your email and password, choose **Recovery code** to use one instead of the emailed code. You do not need an authenticator app for this.
 
+If your country service requires sign-in protection, you see **Set up sign-in
+protection** after signing in. Add a passkey or activate an authenticator app before
+opening your account. Starting or cancelling setup leaves access restricted. App
+activation still signs you out and shows new recovery codes once; save them and
+sign in again. A verified passkey opens your account immediately.
+
 You can paste codes with spaces, such as `123 456`. The portal removes whitespace
 from authenticator and recovery codes, keeping recovery-code hyphens. Blank codes
 show “Enter your code.” without sending a request, so they do not spend a server
@@ -35,6 +41,14 @@ if you need another set.
 
 ## Configure a local account worker
 
+To require an app or passkey for everyone using one country service, set
+`CLOUD_REQUIRE_ENROLLMENT=true` on every account worker. Leave it unset or use
+`false` to keep enrollment optional. Other values refuse startup so a spelling
+mistake cannot silently switch protection off. The current setting applies to
+existing sessions on their next request. Turning it off lifts the restriction;
+it does not remove enrolled methods. A passkey remains usable when app keys are
+unavailable.
+
 New factor operations require three explicit settings. Supply a separate encryption
 key from your secret store; never reuse email, backup, pairing, recovery or request-limit
 keys. Keep the same key ring and policy on every account worker.
@@ -57,7 +71,7 @@ the local example. Older runtime configuration stays intact without invented rep
 keys. Add an explicit `factor` object with `activeKeyId` and `keys` to that private
 runtime configuration before enablement; preserve any keys needed by existing data.
 
-Missing policy or unreadable secrets refuse factor operations. Password-only sign-in from an already recognised browser, passkeys and existing live sessions remain available.
+Missing policy or unreadable secrets refuse factor operations. Password-only sign-in from an already recognised browser, passkeys and existing live sessions remain available, subject to the country enrollment requirement.
 Password fallback for a passkey account needs the configured challenge-attempt limit
 and the email outbox keys, even without an app. You can use the emailed code or a saved recovery code; an active
 app always takes priority. An enrolled

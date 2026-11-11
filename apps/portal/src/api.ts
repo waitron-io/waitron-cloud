@@ -9,6 +9,7 @@ import {validAccountSessions} from './account-security-types.ts';
 import {validUsageSummary} from './usage-types.ts';
 import {validDiagnosticExport} from './diagnostic-types.ts';
 import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
+export const enrollmentRequiredEvent = 'cloud-enrollment-required';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
@@ -41,7 +42,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations') return Array.isArray(data.installations)&&data.installations.every(v=>validInstallation(v)&&typeof v.canRevoke==='boolean');
   if(path==='/installations/revoke') return validInstallation(data);
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
-  if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true);
+  if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true) && (data.enrollmentRequired === undefined || data.enrollmentRequired === true);
   if (path === '/signup/complete') return status === 201 && ['accountId', 'organisationId', 'legalBusinessId']
     .every(field => typeof data[field] === 'string' && data[field].trim().length > 0);
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
@@ -65,7 +66,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if (response.ok && (path === '/logout' || path === '/sessions/revoke' || path === '/passkeys/remove' || path === '/authenticator/cancel') && response.status === 204) return {ok: true, value: undefined as T};
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
-    const codes = ['dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    const codes = ['enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active','password_too_long');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
@@ -76,6 +77,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     }
     const code = !response.ok && value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
+    if (response.status === 403 && code === 'enrollment_required' && !['/session','/session/activity'].includes(path)) globalThis.document?.dispatchEvent?.(new Event(enrollmentRequiredEvent));
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
 }

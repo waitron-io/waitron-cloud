@@ -4,7 +4,7 @@ import crypto, { createHash, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, mock, test } from 'node:test';
 import { Pool } from 'pg';
 import { createSession, endSession, hashSecret, IdentityError, listAccountSessions, login, requireCurrentPassword,
-  requirePlatformPermission, resolveSession, revokeAccountSession, withPassiveRead } from '@waitron-cloud/identity';
+  requirePlatformPermission, resolveSession, revokeAccountSession, withPassiveRead, withEnrollmentPolicy } from '@waitron-cloud/identity';
 import { transaction } from '../src/transaction.ts';
 import { migrate } from '../src/migrate.ts';
 import { RegistrationStore } from '../src/index.ts';
@@ -530,4 +530,26 @@ test('password authority returns the locked credential fingerprint without issui
       {accountId, passwordFingerprint: digest(row.password_hash)});
   }
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count, '0');
+});
+
+
+test('required enrollment reads current passkey authority after an account-lock wait', async () => {
+  const session = await run(client => createSession(client, accountId));
+  await pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[accountId,Buffer.alloc(32,2)]);
+  await pool.query("INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)",[randomUUID(),accountId,Buffer.from([1,2,3])]);
+  const blocker = await pool.connect(); let completion: Promise<void> | undefined;
+  try {
+    await blocker.query('BEGIN'); await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accountId]);
+    completion = expectCode(withEnrollmentPolicy({required:true,allowEnrollment:false},
+      () => run(client => resolveSession(client,session.token))), 'enrollment_required');
+    const {setTimeout: delay} = await import('node:timers/promises'); let blocked = false;
+    for(let i=0;i<100;i++){
+      const waiting = await admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%cloud_accounts%FOR SHARE%'",[schema]);
+      if(waiting.rowCount){blocked=true;break;} await delay(20);
+    }
+    assert.ok(blocked,'the account lock was actually contested');
+    await blocker.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[accountId]);
+    await blocker.query('COMMIT'); await completion;
+    assert.equal((await run(client => resolveSession(client,session.token))).accountId,accountId,'request policy must not leak to another context');
+  } finally {await blocker.query('ROLLBACK');blocker.release();await completion?.catch(()=>{});}
 });
