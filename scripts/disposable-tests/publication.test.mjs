@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync,statSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,chmodSync,rmSync,symlinkSync,statSync,cpSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
@@ -13,7 +13,11 @@ async function fixture(t){
  const root=mkdtempSync(join(tmpdir(),'disposable-publish-'));
  const remove=path=>{chmodSync(path,0o700);for(const entry of readdirSync(path,{withFileTypes:true}))if(entry.isDirectory())remove(join(path,entry.name));};
  t.after(()=>{remove(root);rmSync(root,{recursive:true,force:true});});
- const source=new URL('../../',import.meta.url).pathname;
+ const source=root+'/source/';
+ const gitEnv=Object.fromEntries(Object.entries(process.env).filter(([name])=>!name.startsWith('GIT_')));
+ for(const area of ['scripts/disposable-tests','deploy/disposable-tests'])cpSync(new URL('../../'+area,import.meta.url),source+area,{recursive:true});
+ const git=(...args)=>execFileSync('git',['-C',source,'-c','user.name=Fixture','-c','user.email=fixture@example.test',...args],{env:gitEnv,stdio:'pipe'});
+ git('init','-q');git('add','.');git('commit','-s','-qm','Publication fixture');
  const python=execFileSync('python3',['-I','-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
  const ci={repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:'a'.repeat(64),appEnv:root+'/app.env',appKey:root+'/app.key'};
  const old={version:2,mode:'manual-slots',slots:2,host:'old.invalid',hostGeneration:'old',recipe:'/opt/waitron-disposable-old',state:root+'/old-state',repository:source+'.git',ci};
@@ -23,7 +27,6 @@ async function fixture(t){
  const identity={repositoryId:123,workflowId:456,workflowPath:ci.workflowPath,workflowSha:'1'.repeat(40),workflowDigest:ci.workflowDigest,event:'pull_request',sourceSha:'1'.repeat(40),sourceTree:'2'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'test-ui-1'};
  const lease=scoped.reserveLocal(ciRequest('I',identity)).lease;scoped.release(lease,{resourceId:lease.resourceId,absent:true});scoped.forgetRunner(scoped.inspect().orphanRunners[0]);
  const configuration={...old,state:root+'/new-state',hostGeneration:'new',host:'new.invalid',slotHosts:['new.invalid','bench.invalid']};
- const gitEnv=Object.fromEntries(Object.entries(process.env).filter(([name])=>!name.startsWith('GIT_')));
  const p={source,sha:execFileSync('git',['rev-parse','HEAD'],{cwd:source,env:gitEnv,encoding:'utf8'}).trim(),node:process.execPath,python,
   configuration,oldController:source.slice(0,-1),oldConfiguration:root+'/old-config.json',newController:root+'/release',
   launchAgent:root+'/agent.plist',wrapper:root+'/run.sh',launchLabel:'gui/'+process.getuid()+'/fixture'};

@@ -858,6 +858,6 @@ export function validateCIConfig(config){
 const cli=process.argv[1];
 if(cli && cli!=='-'){
  const {realpathSync}=await import('node:fs'),{pathToFileURL}=await import('node:url');
- if(import.meta.url===pathToFileURL(realpathSync(cli)).href){try{const result=await withRequestCounts(()=>main(process.argv.slice(2)));console.log(JSON.stringify(result));process.exitCode=result.code;}
+ if(import.meta.url===pathToFileURL(realpathSync(cli)).href){try{const result=await withRequestCounts(()=>main(process.argv.slice(2)),'canary');console.log(JSON.stringify(result));process.exitCode=result.code;}
  catch(error){console.error(error.message);process.exitCode=125;}}
 }

@@ -379,8 +379,16 @@ from all processes; tokens, admission, recovery, cleanup and the initial job-log
 read count, while the external log download does not. Requests belong to the minute
 when they start; `failedFetches` belongs to the minute when fetch rejects. These are
 local fetch attempts, not the whole App's consumption. `latestResponse` keeps one
-local observation timestamp, status and raw resource/remaining/reset snapshot; `kind`
+local observation timestamp, status and raw resource/limit/used/remaining/reset snapshot; `kind`
 distinguishes token replies from ordinary API replies, and missing headers are null.
+`role` distinguishes controller recovery/pickup, worker, lane, operator and canary commands. Each minute also has
+method/endpoint `categories` with requests, failed fetches, 304 (`notModified`) counts
+and their own latest raw quota snapshot. Categories retain no URL, repository, job
+id, body or credential. Top-level `notModified` counts all 304 replies; this logging
+does not implement conditional requests. Response counts belong to their completion
+minute, which can differ from the request's start minute. Compare quota observations
+only within the same reset/resource and endpoint category: live job and run replies
+have returned different used/reset values with the same installation token.
 The snapshot is the latest reply when the line is emitted; it can be older or newer
 than the request bucket. Attribute quota samples by their own `at` timestamp. Count events stay out of each
 worker's 4 KiB tagged error excerpt; original stderr still carries them. Check

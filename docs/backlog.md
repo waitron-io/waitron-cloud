@@ -7,12 +7,16 @@ publication, fresh-state rollback, systemd status and Mac-only manual capture.
 Controlled tests cover installation, cutover, rollback, upload completion/EOF and
 status. Both replacement hosts passed corrected native guest isolation and idle
 reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
-Before adopting shared signing, publish the two-package disposable-test support through A1479 and qualify guest-tools, local-runtime and cancellation against that matched release.
-Live CI still runs on OLD from the Mac. The watcher requires complete history/host
-preflight and a short queue before the twelve-slot handoff. Six concurrent mixed
-CI jobs per new host, installed on-server restart and Mac-sleep behavior remain
-unqualified. Keep OLD available for rollback until those proofs finish; it then
-stays running for periodic benchmarks and practice.
+The matched two-archive support is published on NEW/BENCH with twelve mapped slots;
+the server controller owns the sole ledger and the Mac controller is disabled.
+Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
+Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
+still waits for republication and the unchanged live proof. The publication fixture
+now supplies its own Git metadata. App quota exhaustion has paused admission; this slice
+adds counts by command and endpoint, with raw quota headers, without caching or
+changing the 15-second cadence. Qualify one real reset window and name other App
+consumers before choosing the quota fix. OLD's CI startup is disabled; it stays
+available for periodic benchmarks and practice, not as a quota fallback.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
