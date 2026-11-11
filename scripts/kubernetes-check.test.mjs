@@ -107,6 +107,7 @@ const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.app
 record({name,args:a});
 if(name==='docker'&&a[0]==='save'&&mode==='load-fails'){record({exporter:process.pid});process.stdout.on('error',()=>{});process.on('SIGTERM',()=>{});setInterval(()=>process.stdout.write(Buffer.alloc(1024)),25);}
 if(name==='docker'&&a[0]==='save'&&mode==='load-exit'){record({exporter:process.pid});process.stdout.write('archive');}
+if(name==='kind'&&a[0]==='delete'&&mode==='wait-cloud-cleanup-fails'){process.stderr.write('synthetic cleanup refusal');process.exit(24);}
 if(name==='kind'&&a[0]==='version')console.log('kind v0.31.0');
 if(name==='kind'&&a[0]==='create'&&a.includes('--config'))record({configuration:JSON.parse(fs.readFileSync(0,'utf8'))});
 if(name==='kind'&&a[0]==='create'&&mode==='create-fails')process.exit(17);
@@ -132,6 +133,7 @@ if(name==='kubectl'){
   for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
   setInterval(()=>{},1000);
  }
+ if(b[0]==='exec'&&mode==='retry-exhausted'){if(b.includes('/run/local-stack/lan/ca.pem'))console.log('synthetic-ca');else{process.stderr.write('last retry stderr');process.exit(23);}return;}
  if(b[0]==='exec'){if(mode==='load-exit'){process.stdin.resume();process.stdin.on('end',()=>{process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);});}else if(mode==='load-fails'){const refuse=()=>{if(fs.readFileSync(log,'utf8').includes('\"exporter\":')){process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);}setTimeout(refuse,5);};refuse();}else process.kill(process.ppid,'SIGTERM');}
 }
 `;
@@ -141,6 +143,7 @@ if(name==='kubectl'){
 }
 for (const [target, mode, resource, deadline, exitCode, signal] of [
   ['kind', 'wait-cloud-probe-fails', 'pod/cloud', '180s', 23, null],
+  ['kind', 'wait-cloud-cleanup-fails', 'pod/cloud', '180s', 23, null],
   ['amazon', 'wait-cloud', 'pod/cloud', '180s', 23, null],
   ['amazon', 'wait-gateway', 'pod/gateway', '120s', null, 'SIGTERM'],
 ]) test('failed ' + resource + ' wait retains bounded command and pod evidence on ' + target, async t => {
@@ -154,10 +157,10 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
   }
   const run = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', ...args], {env:fixture.env, encoding:'utf8', timeout:10000});
   assert.equal(run.status, 1, run.stderr);
-  assert.match(run.stderr, /kubernetes.command_failed:kubectl:wait/);
+  assert.match(run.stderr, mode === 'wait-cloud-cleanup-fails' ? /kubernetes.command_failed:kind:delete/ : /kubernetes.command_failed:kubectl:wait/);
   const line = run.stderr.split('\n').find(line => line.startsWith('Kubernetes command failure '));
   assert.ok(line, run.stderr);
-  assert.equal(run.stderr.split('\n').filter(line => line.startsWith('Kubernetes command failure ')).length, 1, 'caught diagnostic probes must not be reported as the terminal failure');
+  assert.equal(run.stderr.split('\n').filter(line => line.startsWith('Kubernetes command failure ')).length, mode === 'wait-cloud-cleanup-fails' ? 2 : 1, 'caught diagnostic probes must not be reported as the terminal failure');
   const failure = JSON.parse(line.slice('Kubernetes command failure '.length));
   assert.equal(failure.stage, 'kubectl:wait'); assert.equal(failure.target, target);
   assert.equal(failure.phase, target === 'amazon' ? 'before' : null);
@@ -173,6 +176,19 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), target === 'kind');
   assert.equal(rows.some(row => row.name === 'kind'), target === 'kind');
+});
+
+test('an exhausted journey retains recent caught command evidence with its terminal assertion', async t => {
+  const fixture = await commandFixture(t, 'retry-exhausted');
+  const source = `import {mock} from 'node:test';const real=await import('./scripts/test-cloud-integration.mjs');
+    mock.module('./scripts/test-cloud-integration.mjs',{namedExports:{...real,runTestCloudClients:async({kubernetes})=>{
+      for(let i=0;i<3;i++)try{await kubernetes.exec('account',['probe']);}catch{}throw Error('synthetic retries exhausted');}}});
+    const {runKubernetesCheck}=await import('./scripts/kubernetes-check.mjs');await runKubernetesCheck();`;
+  const run = spawnSync(process.execPath, ['--experimental-test-module-mocks','--input-type=module','-e',source], {env:fixture.env,encoding:'utf8',timeout:10000});
+  assert.equal(run.status,1); assert.match(run.stderr,/synthetic retries exhausted/);
+  const records=run.stderr.split('\n').filter(line=>line.startsWith('Earlier Kubernetes command failure '));
+  assert.equal(records.length,2,run.stderr);
+  for(const line of records){const value=JSON.parse(line.slice('Earlier Kubernetes command failure '.length));assert.equal(value.stage,'kubectl:exec');assert.equal(value.exitCode,23);assert.equal(value.stderr,'last retry stderr');}
 });
 
 test('interrupting failed-check pod evidence still stops it before owned cleanup', async t => {

@@ -93,6 +93,7 @@ const directory = await mkdtemp(join(tmpdir(), 'cloud-kubernetes-'));
 const env = {...process.env, KUBECONFIG: amazon ? '/etc/kubernetes/admin.conf' : join(directory, 'kubeconfig')};
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
+const recentFailures = [];
 let sharedVolume;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
   cluster + ((workerLoss || amazon) && ['manifest', 'verifier'].includes(role) ? role === 'manifest' && amazon?.phase !== 'after' ? '-worker2' : '-worker' : '-control-plane')]));
@@ -115,6 +116,8 @@ async function run(binary, args, input, cleanup = false) {
           exception: error.name, errorCode: typeof error.code === 'string' ? error.code : null,
           processTimeoutMs, elapsedMs: Math.round(performance.now() - started),
           stderr: stderr.slice(-8192), stderrTruncated: stderr.length > 8192};
+        recentFailures.push(failure.diagnostic);
+        if (recentFailures.length > 2) recentFailures.shift();
         reject(failure);
       });
     child.stdin.on('error', () => {}); child.stdin.end(input);
@@ -231,6 +234,7 @@ try {
     result = {journeys, workerLoss: {...loss, offBeforeSecondMs, runningAfterSecond: false}, kubernetes: {cluster, namespace: 'default'}};
   }
 } catch (error) {
+  for (const diagnostic of recentFailures) if (diagnostic !== error.diagnostic) process.stderr.write('Earlier Kubernetes command failure ' + JSON.stringify(diagnostic) + '\n');
   if (error.diagnostic) {
     process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n');
     delete error.diagnostic;
@@ -268,5 +272,9 @@ return result;
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const target = process.argv.length === 4 && process.argv[2] === '--amazon' ? JSON.parse(await readFile(process.argv[3], 'utf8')) : process.argv.length === 2 ? 'kind' : process.argv.length === 3 && process.argv[2] === '--worker-loss' ? 'kind-worker-loss' : undefined;
   assert.ok(target, 'kubernetes.target');
-  process.stdout.write(JSON.stringify(await runKubernetesCheck(target)) + '\n');
+  try {process.stdout.write(JSON.stringify(await runKubernetesCheck(target)) + '\n');}
+  catch (error) {
+    if (error.diagnostic) {process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n'); delete error.diagnostic;}
+    throw error;
+  }
 }
