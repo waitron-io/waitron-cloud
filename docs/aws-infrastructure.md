@@ -1071,8 +1071,8 @@ These are per-copy stall cutoffs; the unchanged 90-minute expiry covers setup an
 both journeys too. Small-file copies and image-import limits remain unchanged.
 The lane has not qualified an Amazon transfer; the owner reruns it after local checks.
 
-SSH masters persist until the launcher's explicit cleanup, including across long
-idle phases. Normal failure and abort close them. An outright killed launcher can
+SSH masters persist across long idle phases. Final cleanup requests their exit.
+An outright killed launcher can
 leave those connections alive until the disposable machines disappear.
 
 First follow [the one-time practice-account setup](d618-account-setup.md) to create

@@ -189,6 +189,8 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
 for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
+  let markRemoval,releaseRemoval;
+  const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const running = api.startAmazon(config, {now: () => time, sleep: async ms => {time += ms;},
@@ -225,6 +227,9 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) target = JSON.parse(await readFile(args.at(-2), 'utf8'));
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if(scenario==='complete'&&script==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'"){
+          markRemoval();await new Promise(resolve=>{releaseRemoval=resolve;});
+        }
         if (scenario === 'failed private copy' && args.at(-2) === 'admin@203.0.113.2' && script.includes("'cp' '/var/local/d620-config/d618-images.tar'")) throw Error('private copy failed');
         if (script.includes('169.254.169.254')) {const index = Number(args.at(-2).at(-1)); metadata.push(index); return scenario === 'wrong instance' ? 'i-00000000000000009' : output[['A','B','C'][index - 1]];}
         if (script.includes('sha256sum')) return hashes;
@@ -235,6 +240,11 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       }
       return '';
     }});
+  if(scenario==='complete'){
+    await Promise.race([removalReady,running]);
+    try{await new Promise(setImmediate);assert.equal(calls.some(row=>row[0]==='ssh'&&row.at(-1).includes("'ctr'")),false,'imports wait for shared-file removal to finish');}
+    finally{releaseRemoval?.();await running.catch(()=>{});}
+  }
   let result;
   if (expectedError) await assert.rejects(running, expectedError); else result = await running;
   if (scenario === 'incomplete archive') {
@@ -283,6 +293,8 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
   assert.deepEqual(privateCopies.map(row=>[row.args.at(-2),row.timeout]),[['admin@203.0.113.2',1103196],['admin@203.0.113.3',1103196]]);
   const staged=transports.find(row=>row.binary==='ssh'&&row.args.at(-1)==="'sudo' 'cp' '/tmp/d618-images.tar' '/var/local/d620-config/d618-images.tar'");
   assert.equal(staged?.timeout,1103196);
+  assert.equal(staged.args.at(-2),'admin@203.0.113.1','stage on the machine that received the upload');
+  assert.ok(transports.indexOf(uploads[0])<transports.indexOf(staged)&&transports.indexOf(staged)<transports.indexOf(privateCopies[0]),'upload, then stage, then copy to workers');
   const removed=transports.find(row=>row.binary==='ssh'&&row.args.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
   assert.ok(removed,'remove shared bundle before the application can mount that directory');
   const lastStorage=calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'storage'"));
