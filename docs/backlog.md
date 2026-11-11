@@ -702,8 +702,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    options with prices checked on 4 November 2026. The incident runbook follows the
    approved automatic updates, text then call and press-1 acknowledgment. The
    [local generator](incident-setup.md#generate-a-bundle-locally) produces the current
-   post and optional dated resolved history. Verified-health wording, account setup, publisher,
-   phone adapters, supplier review, spending approval and outage/delivery/coverage
+   post and optional dated resolved history. Local Twilio/Vonage phone adapters now
+   pass fake-provider text/call, delivery and press-1 checks; no automatic caller or
+   authenticated callback receiver is connected. Verified-health wording, account setup, publisher,
+   supplier review, spending approval and outage/delivery/coverage
    drills remain open; the checklist
    creates no account or operational service.
    The local collector now exposes account-service request counts and timing bands;
