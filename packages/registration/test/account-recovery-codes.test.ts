@@ -158,3 +158,12 @@ test('expiry during session insertion rolls back recovery-code consumption while
   assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions WHERE ended_at IS NULL')).rows[0].count,'0');
  }finally{await blocker.query('ROLLBACK');blocker.release();await completion;}
 });
+
+
+test('an app added after a passkey fallback challenge still requires the current app login path',async()=>{
+ const [code]=await codes();assert.ok(code);const token=await challenge();await activeApp();
+ await refused(login().completeRecoveryCheck(token,code));
+ assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
+ const store=new registration.PasswordLoginStore(pool,keys,policy,outbox),current=await store.start({email:'owner@example.test',password});assert.equal(current.kind,'factor');
+ assert.equal((await store.complete(current.challengeToken,{kind:'recovery',code})).accountId,accountId);
+});

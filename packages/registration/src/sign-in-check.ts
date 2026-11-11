@@ -60,7 +60,7 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
     const factor = (await client.query('SELECT secret_envelope FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE',[candidate.account_id])).rows[0];
     const check = (await client.query('SELECT * FROM cloud_sign_in_checks WHERE token_hash=$1 FOR UPDATE',[tokenHash])).rows[0];
     const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-    if (method==='email'&&factor?.secret_envelope || !check || check.consumed_at || check.expires_at <= now || check.attempts >= check.attempt_limit
+    if (factor?.secret_envelope || !check || check.consumed_at || check.expires_at <= now || check.attempts >= check.attempt_limit
       || !credential?.password_hash || digest(credential.email) !== check.email_hash || digest(credential.password_hash) !== check.password_fingerprint) return new SignInCheckError();
     await client.query('UPDATE cloud_sign_in_checks SET attempts=attempts+1 WHERE token_hash=$1',[tokenHash]);
     if (method==='email'&&(typeof code !== 'string' || !/^[0-9]{6}$/.test(code) || signInCodeHash(token,code) !== check.code_hash)) return new SignInCheckError();
