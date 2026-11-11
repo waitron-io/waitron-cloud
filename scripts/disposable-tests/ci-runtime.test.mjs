@@ -47,14 +47,14 @@ test('one CI turn persists registration and destroys its VM before deregistratio
  assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
  assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
-test('a pre-registration quota refusal retries once after reset and confirmed cleanup',async t=>{
+for(const status of [403,429])test(`a pre-registration quota refusal (${status}) retries once after reset and confirmed cleanup`,async t=>{
  const {runCI}=await import('./ci-canary.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity}),get=f.api.get;
  const retryAt=Date.now()+60000;let limited=true;
  f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,
   route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
  f.api.get=async(path,options)=>{
-  if(limited && path.endsWith('/runs/789'))throw Object.assign(new Error('GitHub GET refused (403)'),{status:403,retryAt});
+  if(limited && path.endsWith('/runs/789'))throw Object.assign(new Error(`GitHub GET refused (${status})`),{status,retryAt});
   return get(path,options);
  };
  const refused=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});

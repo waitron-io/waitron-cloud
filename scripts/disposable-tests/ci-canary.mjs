@@ -577,7 +577,7 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
     job.head_sha===ci.workflowSha && job.status==='queued' && !job.runner_id,'CI identity changed before registration');
    assert.equal((await namedRunners(api,repository,name,options.signal)).length,0,'CI runner name already registered; do not remint');
    }catch(error){
-    if(error.status===403 && Number.isSafeInteger(error.retryAt))admissionQuotaRetryAt=error.retryAt;
+    if([403,429].includes(error.status) && Number.isSafeInteger(error.retryAt))admissionQuotaRetryAt=error.retryAt;
     throw error;
    }
    // Match hosted checkouts because coverage blobs key source files by absolute path.
