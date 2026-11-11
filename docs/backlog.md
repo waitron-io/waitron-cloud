@@ -10,12 +10,14 @@ reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull
 The matched two-archive support is published on NEW/BENCH with twelve mapped slots;
 the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
-Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
-still waits for republication and the unchanged live proof. The publication fixture
-now supplies its own Git metadata. App quota exhaustion has paused admission; this slice
-adds counts by command and endpoint, with raw quota headers, without caching or
-changing the 15-second cadence. Qualify one real reset window and name other App
-consumers before choosing the quota fix. OLD's CI startup is disabled; it stays
+Physical Mac sleep is watcher-deferred to a coordinated window. The matched release passed the unchanged guest-tools, local-runtime and cancellation
+proofs; the consuming adoption remains separate. The publication fixture
+now supplies its own Git metadata. App quota exhaustion has paused admission; the published
+counters separate command roles, endpoint categories and raw quota headers. Future
+routing remains hosted while a reduction is chosen from the reset-window counts.
+The bounded pre-registration quota retry is implemented and tested locally; it still
+needs branch review, CI, publication and live qualification. No cache or cadence change
+is implemented. OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).

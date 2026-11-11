@@ -3,7 +3,7 @@ import {readFileSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp,withRequestCounts} from './github-app.mjs';
-import {LocalLeases,configuredSlots,busyRunnerRetryReady} from './leases.mjs';
+import {LocalLeases,configuredSlots,ciRetryReady} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
@@ -65,7 +65,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  for(const [turn,history] of Object.entries(state.turns)){
   const match=/^[A-K]:ci-[0-9]+-[0-9]+-([0-9]+)$/.exec(turn);if(!match)continue;
   const id=Number(match[1]);
-  if(busyRunnerRetryReady(history,state,id) && !recorded.has(id))seen.delete(id);else recorded.add(id);
+  if(ciRetryReady(history,state,id) && !recorded.has(id))seen.delete(id);else recorded.add(id);
  }
  const exclude=new Set([...seen,...recorded,...[...active.values()].map(ci=>ci.jobId)]);
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
