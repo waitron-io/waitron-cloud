@@ -11,12 +11,12 @@ The matched two-archive support is published on NEW/BENCH with twelve mapped slo
 the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
-remains separate from this quota repair. The publication fixture
+remains separate from this admission retry. The publication fixture
 now supplies its own Git metadata. App quota exhaustion has paused admission; the published
 counters separate command roles, endpoint categories and raw quota headers. Future
 routing remains hosted while a reduction is chosen from the reset-window counts.
-A quota-refused GET before runner registration can grant one retry after its reset
-and confirmed guest and runner removal; sent registration requests remain retired.
+A rate-limited GET before runner registration can grant one retry after the API client’s
+retry time and confirmed guest and runner removal; sent registration requests remain retired.
 Publication and live qualification remain open. No cache or cadence change is implemented. OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
 
