@@ -10,16 +10,17 @@ async function boundedBody(response,limit){
  return Buffer.concat(buffers);
 }
 let requestCounts;
-export async function withRequestCounts(work){
+export async function withRequestCounts(work,role='other'){
  assert.equal(requestCounts,undefined,'Request count scope already active');
  const startedAt=Date.now(),buckets=new Map(),scope={buckets,latestResponse:null};requestCounts=scope;
  let minute=Math.floor(startedAt/60000)*60000;
  const flush=final=>{
   const now=Date.now(),current=Math.floor(now/60000)*60000;
   while(minute<current || final && minute===current){
-   console.error(JSON.stringify({event:'github-request-counts',pid:process.pid,startedAt,minute,
+   console.error(JSON.stringify({event:'github-request-counts',pid:process.pid,role,startedAt,minute,
     from:Math.max(startedAt,minute),to:Math.min(now,minute+60000),requests:buckets.get(minute)?.requests??0,
-    failedFetches:buckets.get(minute)?.failedFetches??0,latestResponse:scope.latestResponse,final:final && minute===current}));
+    failedFetches:buckets.get(minute)?.failedFetches??0,notModified:buckets.get(minute)?.notModified??0,
+    categories:buckets.get(minute)?.categories??{},latestResponse:scope.latestResponse,final:final && minute===current}));
    buckets.delete(minute);minute+=60000;
   }
  };
@@ -28,13 +29,25 @@ export async function withRequestCounts(work){
 }
 async function githubFetch(url,options,kind='api'){
  const scope=requestCounts;
+ const path=new URL(url).pathname;
+ const category=kind==='token'?'token':/\/actions\/jobs\/[0-9]+(?:\/logs)?$/.test(path)?'job':
+  /\/actions\/runs\/[0-9]+\/(?:attempts\/[0-9]+\/)?jobs$/.test(path)?'jobs':
+  /\/actions\/runs\/[0-9]+(?:\/.*)?$/.test(path)?'run':/\/actions\/runs$/.test(path)?'runs':
+  /\/actions\/runners(?:\/.*)?$/.test(path)?'runner':/\/actions\/variables(?:\/.*)?$/.test(path)?'variable':
+  /\/pulls(?:\/.*)?$/.test(path)?'pull':/\/compare\//.test(path)?'compare':'other';
+ const method=options?.method??'GET',key=(/^(GET|POST|PATCH|DELETE|PUT|HEAD)$/.test(method)?method:'OTHER')+' '+category;
  const bucket=()=>{const minute=Math.floor(Date.now()/60000)*60000;
-  if(!scope.buckets.has(minute))scope.buckets.set(minute,{requests:0,failedFetches:0});return scope.buckets.get(minute);};
- if(scope)bucket().requests++;
+  if(!scope.buckets.has(minute))scope.buckets.set(minute,{requests:0,failedFetches:0,notModified:0,categories:{}});return scope.buckets.get(minute);};
+ const entry=()=>{const b=bucket();return b.categories[key]??=( {requests:0,failedFetches:0,notModified:0,latestResponse:null} );};
+ if(scope){bucket().requests++;entry().requests++;}
  let response;
- try{response=await fetch(url,options);}catch(error){if(scope)bucket().failedFetches++;throw error;}
- if(scope)scope.latestResponse={at:Date.now(),kind,status:response.status,resource:response.headers.get('x-ratelimit-resource'),
+ try{response=await fetch(url,options);}catch(error){if(scope){bucket().failedFetches++;entry().failedFetches++;}throw error;}
+ if(scope){scope.latestResponse={at:Date.now(),kind,status:response.status,resource:response.headers.get('x-ratelimit-resource'),
+  limit:response.headers.get('x-ratelimit-limit'),used:response.headers.get('x-ratelimit-used'),
   remaining:response.headers.get('x-ratelimit-remaining'),reset:response.headers.get('x-ratelimit-reset')};
+  entry().latestResponse=scope.latestResponse;
+  if(response.status===304){bucket().notModified++;entry().notModified++;}
+ }
  return response;
 }
 export class GithubApp {

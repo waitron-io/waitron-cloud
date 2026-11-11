@@ -65,14 +65,14 @@ test('request counts share clients, retain quota snapshots and omit external log
   await first.get('/ok');await assert.rejects(second.get('/invalid'),SyntaxError);
   await assert.rejects(second.get('/refused'),{status:403});
  });
- assert.equal(rows[0].requests,3);assert.deepEqual(rows[0].latestResponse,{at:rows[0].latestResponse.at,kind:'api',status:403,resource:'core',remaining:'17',reset:'2000000000'});
+ assert.equal(rows[0].requests,3);assert.deepEqual(rows[0].latestResponse,{at:rows[0].latestResponse.at,kind:'api',status:403,resource:'core',limit:null,used:null,remaining:'17',reset:'2000000000'});
  const fetch=globalThis.fetch;t.after(()=>{globalThis.fetch=fetch;});let calls=0;
  globalThis.fetch=async()=>{calls++;if(calls===1)throw new TypeError('private fetch failure');
   if(calls===2)return new Response(null,{status:302,headers:{location:'https://logs.actions.githubusercontent.com/private-download'}});
   return new Response('log');};
  await withRequestCounts(async()=>{await assert.rejects(first.get('/broken'),TypeError);assert.equal(await second.jobLog('/log'),'log');});
  assert.equal(calls,3);assert.equal(rows[1].requests,2);assert.equal(rows[1].failedFetches,1);
- assert.deepEqual(rows[1].latestResponse,{at:rows[1].latestResponse.at,kind:'api',status:302,resource:null,remaining:null,reset:null});
+ assert.deepEqual(rows[1].latestResponse,{at:rows[1].latestResponse.at,kind:'api',status:302,resource:null,limit:null,used:null,remaining:null,reset:null});
  assert.doesNotMatch(JSON.stringify(rows),/private|Bearer|fixture|127\.0\.0/);
  globalThis.fetch=fetch;const length=rows.length;await first.request('/outside',{authorization:'private'});assert.equal(rows.length,length);
 });
@@ -92,4 +92,51 @@ test('count logging owns one timer, UTC request buckets and a final flush even o
  await assert.rejects(withRequestCounts(async()=>{await app.get('/failure');throw new Error('work failed');}),/work failed/);
  assert.equal(rows.at(-1).final,true);assert.equal(rows.at(-1).requests,1);
  const end=rows.length;t.mock.timers.tick(60000);assert.equal(rows.length,end);
+});
+
+test('quota counts separate endpoint categories and keep each category raw headers',async t=>{
+ const {GithubApp,withRequestCounts}=await import('./github-app.mjs'),rows=[];
+ t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
+ const server=createServer((req,res)=>{
+  const job=req.url.includes('/jobs/');res.writeHead(job?403:200,{'x-ratelimit-resource':'core',
+   'x-ratelimit-limit':'5000','x-ratelimit-used':job?'5000':'813',
+   'x-ratelimit-remaining':job?'0':'4187','x-ratelimit-reset':job?'2000000000':'2000000100'});res.end('{}');
+ });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'private-token';
+ await withRequestCounts(async()=>{
+  await assert.rejects(app.get('/repos/private/venue/actions/jobs/123'),{status:403});
+  await app.get('/repos/private/venue/actions/runs?status=queued');
+ },'worker');
+ assert.equal(rows[0].role,'worker');assert.equal(rows[0].requests,2);
+ assert.equal(rows[0].categories['GET job'].requests,1);
+ assert.equal(rows[0].categories['GET runs'].requests,1);
+ assert.deepEqual(rows[0].categories['GET job'].latestResponse,{at:rows[0].categories['GET job'].latestResponse.at,
+  kind:'api',status:403,resource:'core',limit:'5000',used:'5000',remaining:'0',reset:'2000000000'});
+ assert.equal(rows[0].categories['GET runs'].latestResponse.used,'813');
+ assert.equal(rows[0].latestResponse.limit,'5000');assert.equal(rows[0].latestResponse.used,'813');
+ assert.doesNotMatch(JSON.stringify(rows),/private|venue|123|Bearer/);
+});
+
+test('category totals include token, writes, 304 and rejected fetches without retaining URLs',async t=>{
+ const {GithubApp,withRequestCounts}=await import('./github-app.mjs'),rows=[];
+ t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
+ const app=new GithubApp({});app.token=async()=>'private';
+ t.mock.method(globalThis,'fetch',async url=>{
+  if(url.endsWith('/broken'))throw new TypeError('failed');
+  return url.endsWith('/unchanged')?new Response(null,{status:304}):new Response('{}');
+ });
+ await withRequestCounts(async()=>{
+  await app.request('/app/installations/456/access_tokens',{method:'POST',authorization:'private'});
+  await app.post('/repos/private/venue/actions/variables',{secret:'private'});
+  await assert.rejects(app.get('/unchanged'),{status:304});
+  await assert.rejects(app.get('/broken'),TypeError);
+ },'controller');
+ assert.equal(rows[0].role,'controller');assert.equal(rows[0].requests,4);
+ assert.equal(rows[0].categories['POST token'].requests,1);
+ assert.equal(rows[0].categories['POST variable'].requests,1);
+ assert.equal(rows[0].categories['GET other'].requests,2);
+ assert.equal(rows[0].categories['GET other'].notModified,1);
+ assert.equal(rows[0].categories['GET other'].failedFetches,1);
+ assert.equal(rows[0].notModified,1);assert.equal(rows[0].failedFetches,1);
+ assert.doesNotMatch(JSON.stringify(rows),/private|venue|456|unchanged|broken/);
 });

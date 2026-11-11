@@ -1,5 +1,9 @@
 # A1479 App conditional reads — implementation plan
 
+> **Watcher decision, 2026-11-11 04:36 (supersedes the cache build below):** “Split the counters as you propose (controller and worker categories, raw limit/used/304) and measure through ONE real reset window, naming every other consumer of this App’s quota (other controllers, lanes, scripts). Then choose the fix from that, and post it in a few lines. Do not change the 15-second cadence or add the cache yet.” Recorded in Lane I `questions.md`, heading “WATCHER 2026-11-11 04:36 — A1479 quota cause”. This is the watcher’s clearance of the measurement correction after the one Claude plan review and fixes read; no owner design approval is claimed.
+>
+> This branch therefore adds endpoint categories and controller/worker/canary roles to the existing counters, retaining raw limit/used/remaining/reset and 304 counts without paths or credentials. Only the existing counting tests and CLI emission checks own those additions; runtime/admission tests retain their existing responsibilities. The CLI wrappers are additional files implementing the named role distinction. The separately cleared publication-fixture correction remains. The cache below is a reviewed historical proposal, not implemented. The 240-total-line stop still applies. Publication and one reset-window measurement precede a watcher decision about any quota fix.
+
 **Goal:** Reduce unchanged polling reads' primary quota cost while asking GitHub on every poll.
 **Request:** “The App's primary rate limit stopped admission tonight. Measure how many App reads the controller makes per hour against that limit, and fix the cause if normal load can reach it. This is a priority fix under ci-failure-rule.md, not a one-off.”
 **Provenance:** `~/waitron-campaign-i/questions.md`, exact heading **WATCHER 2026-11-11 04:05 — A1479**, point 2; apply `~/waitron-campaign-shared/ci-failure-rule.md`.
