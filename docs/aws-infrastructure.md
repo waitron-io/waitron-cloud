@@ -1105,8 +1105,9 @@ spending authority:
    (end is exclusive), then re-read the plan’s linked Stockholm prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
-   A failed Kubernetes command records its stage, journey phase, wait arguments,
-   exit code or signal, exception and the last 8,192 characters of stderr.
+   An unhandled Kubernetes command failure records its stage, journey phase,
+   wait arguments, elapsed time, exit code or signal, exception and the last
+   8,192 characters of stderr. Retried commands do not print terminal failures.
    A failed check also reads application pods and events on the Amazon target,
    keeping the last 16,384 characters of each. Keep this output private with the
    result; it may identify your machines. It preserves the existing time limits

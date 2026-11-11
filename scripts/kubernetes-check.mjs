@@ -100,19 +100,22 @@ const stop = new AbortController(), shutdown = () => stop.abort();
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 async function run(binary, args, input, cleanup = false) {
   if (!cleanup) stop.signal.throwIfAborted();
+  const started = performance.now(), processTimeoutMs = 180000;
   return new Promise((resolve, reject) => {
-    const child = execFile(binary, args, {env, timeout: 180000, maxBuffer: 2 * 1024 * 1024,
+    const child = execFile(binary, args, {env, timeout: processTimeoutMs, maxBuffer: 2 * 1024 * 1024,
       ...(cleanup ? {} : {signal: stop.signal})}, (error, stdout, stderr) => {
         if (!error) return resolve(stdout.trim());
         const command = args[0] === '--context' ? args.slice(4) : args;
         // Only wait arguments are diagnostic selectors; other commands can carry private input.
         const wait = command[0] === 'wait' ? command.slice(1) : null;
-        process.stderr.write('Kubernetes command failure ' + JSON.stringify({stage: binary + ':' + command[0],
+        const failure = Error('kubernetes.command_failed:' + binary + ':' + command[0]);
+        failure.diagnostic = {stage: binary + ':' + command[0],
           target: amazon ? 'amazon' : 'kind', phase: amazon?.phase ?? null, wait,
           exitCode: typeof error.code === 'number' ? error.code : null, signal: error.signal ?? null,
           exception: error.name, errorCode: typeof error.code === 'string' ? error.code : null,
-          processTimeoutMs: 180000, stderr: stderr.slice(-8192), stderrTruncated: stderr.length > 8192}) + '\n');
-        reject(Error('kubernetes.command_failed:' + binary + ':' + command[0]));
+          processTimeoutMs, elapsedMs: Math.round(performance.now() - started),
+          stderr: stderr.slice(-8192), stderrTruncated: stderr.length > 8192};
+        reject(failure);
       });
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
@@ -228,9 +231,13 @@ try {
     result = {journeys, workerLoss: {...loss, offBeforeSecondMs, runningAfterSecond: false}, kubernetes: {cluster, namespace: 'default'}};
   }
 } catch (error) {
+  if (error.diagnostic) {
+    process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n');
+    delete error.diagnostic;
+  }
   if ((created || amazon) && !stop.signal.aborted) for (const resource of ['pods', 'events']) {
     try {
-      const output = await kube(['get', resource, '--request-timeout=5s', ...(resource === 'events' ? ['--sort-by=.lastTimestamp'] : ['-o', 'wide'])], undefined, true);
+      const output = await kube(['get', resource, '--request-timeout=5s', ...(resource === 'events' ? ['--sort-by=.lastTimestamp'] : ['-o', 'wide'])]);
       process.stderr.write('Kubernetes failure ' + resource + ' ' + output.slice(-16384) + '\n');
     } catch {}
   }

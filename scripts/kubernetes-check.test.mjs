@@ -117,10 +117,12 @@ if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSetting
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
- if(b[0]==='wait'&&((mode==='wait-cloud'&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
- if(b[0]==='get'&&b[1]==='events'){console.log('cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
- if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')){console.log('cloud 0/8 Pending');process.exit(0);}
+ if(b[0]==='wait'&&((mode.startsWith('wait-cloud')&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
+ if(b[0]==='get'&&b[1]==='events'){console.log('x'.repeat(20000)+'cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
+ if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode!=='wait-cloud-slow-pods'){console.log('cloud 0/8 Pending');process.exit(0);}
  if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
+ if(b[0]==='get'&&b.includes('app=verifier')&&mode==='wait-cloud-probe-fails'){process.stderr.write('synthetic optional verifier missing');process.exit(17);}
+ if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode==='wait-cloud-slow-pods'){record({forward:process.pid});setTimeout(()=>console.log('slow pods'),20000);return;}
  if(b[0]==='get'){
   const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=a[1].slice(5);
   console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:cluster+'-control-plane',containers:[{name:'account',image:cluster+':cloud'}]},status:role==='verifier'&&mode==='signal'?{containerStatuses:[{name:'verifier',state:{terminated:{reason:'Error',exitCode:137}}}]}:undefined}]}));
@@ -138,7 +140,7 @@ if(name==='kubectl'){
     TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}};
 }
 for (const [target, mode, resource, deadline, exitCode, signal] of [
-  ['kind', 'wait-cloud', 'pod/cloud', '180s', 23, null],
+  ['kind', 'wait-cloud-probe-fails', 'pod/cloud', '180s', 23, null],
   ['amazon', 'wait-cloud', 'pod/cloud', '180s', 23, null],
   ['amazon', 'wait-gateway', 'pod/gateway', '120s', null, 'SIGTERM'],
 ]) test('failed ' + resource + ' wait retains bounded command and pod evidence on ' + target, async t => {
@@ -155,18 +157,41 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
   assert.match(run.stderr, /kubernetes.command_failed:kubectl:wait/);
   const line = run.stderr.split('\n').find(line => line.startsWith('Kubernetes command failure '));
   assert.ok(line, run.stderr);
+  assert.equal(run.stderr.split('\n').filter(line => line.startsWith('Kubernetes command failure ')).length, 1, 'caught diagnostic probes must not be reported as the terminal failure');
   const failure = JSON.parse(line.slice('Kubernetes command failure '.length));
   assert.equal(failure.stage, 'kubectl:wait'); assert.equal(failure.target, target);
   assert.equal(failure.phase, target === 'amazon' ? 'before' : null);
   assert.deepEqual(failure.wait, ['--for=condition=Ready', resource, '--timeout=' + deadline]);
   assert.equal(failure.exitCode, exitCode); assert.equal(failure.signal, signal);
   assert.equal(failure.exception, 'Error'); assert.equal(failure.processTimeoutMs, 180000);
+  assert.ok(Number.isInteger(failure.elapsedMs) && failure.elapsedMs > 0 && failure.elapsedMs < 10000);
   assert.equal(failure.stderr.length, 8192); assert.equal(failure.stderrTruncated, true);
   assert.ok(failure.stderr.endsWith('synthetic wait refusal'));
   assert.match(run.stderr, /cloud 0\/8 Pending/); assert.match(run.stderr, /FailedCreatePodSandBox synthetic event/);
+  const events = run.stderr.split('\n').find(line => line.startsWith('Kubernetes failure events '));
+  assert.equal(events.slice('Kubernetes failure events '.length).length, 16384);
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), target === 'kind');
   assert.equal(rows.some(row => row.name === 'kind'), target === 'kind');
+});
+
+test('interrupting failed-check pod evidence still stops it before owned cleanup', async t => {
+  const fixture = await commandFixture(t, 'wait-cloud-slow-pods');
+  const child = spawn(process.execPath, ['scripts/kubernetes-check.mjs'], {env:fixture.env, stdio:['ignore','ignore','pipe']});
+  child.stderr.resume();
+  t.after(() => child.kill('SIGKILL'));
+  const finished = new Promise(resolve => child.once('close', resolve));
+  const deadline = Date.now() + 8000;
+  while (!(await readFile(fixture.log, 'utf8').catch(() => '')).includes('"forward":')) {
+    assert.ok(Date.now() < deadline, 'the pod read must start');
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  const started = Date.now(); child.kill('SIGINT');
+  const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+  const code = await finished; clearTimeout(timer);
+  assert.equal(code, 1); assert.ok(Date.now() - started < 5000);
+  const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.ok(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'));
 });
 
 for (const mode of ['create-fails', 'signal', 'apply-fails']) test('local command cleans owned cluster, tag and scratch after ' + mode, async t => {
