@@ -131,6 +131,7 @@ test('JIT registration binds the workflow label and the hosted checkout root',as
 });
 
 for(const [label,change] of [
+ ['changed controller head',value=>{value.head_sha='9'.repeat(40);}],
  ['foreign repository',value=>{value.repository.id=999;}],
  ['fork repository',value=>{value.head_repository.id=999;}],
  ['missing head repository',value=>{value.head_repository=null;}]
