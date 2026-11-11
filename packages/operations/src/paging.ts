@@ -8,7 +8,11 @@ export interface TrustedEvent {incidentId:string;notificationId:string;event:Pro
 // The caller authenticates callbacks and binds their path context before passing trusted events.
 export interface PagingProvider {provider:Provider;text(n:Notification):Promise<Submission>;call(n:Notification):Promise<Submission>;readTrustedEvent(kind:Kind,body:unknown):ProviderEvent|null}
 export interface PageAttempt {provider:Provider;incidentId:string;notificationId:string;text:Submission;call:Submission}
-export interface Configuration {origin:string;to:string;from:string;timeoutMs:number;fetcher:typeof fetch}
+export interface Configuration {
+ origin:string;to:string;from:string;timeoutMs:number;
+ // The injected transport must honor the supplied AbortSignal, including response-body reads.
+ fetcher:typeof fetch;
+}
 const uuid=(s:unknown)=>typeof s==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s);
 function notification(n:Notification){
  try{
@@ -30,22 +34,16 @@ export function pagingMessage(n:Notification,base:string){
  return {text:es?`Alerta de Waitron Cloud: ${service}. Locales afectados: ${n.venues}. Desde: ${since}. ${fix} Detalles: ${link}`:`Waitron Cloud alert: ${service}. Affected venues: ${n.venues}. Since: ${since}. ${fix} Details: ${link}`,
   voice:es?`Alerta de Waitron Cloud: ${service}. Locales afectados: ${n.venues}. Detalles enviados por SMS. Pulsa 1 para confirmar la recepción.`:`Waitron Cloud alert: ${service}. Affected venues: ${n.venues}. Details sent by text. Press 1 to acknowledge.`};
 }
-type RequestResult={state:'ok';body:unknown}|{state:'failed'|'unknown'};
-export async function pagingRequest(c:Configuration,url:string,headers:Record<string,string>,body:string):Promise<RequestResult>{
- let reader:ReadableStreamDefaultReader<Uint8Array>|undefined,timer:ReturnType<typeof setTimeout>|undefined;
- const controller=new AbortController();
- const expired=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error());},c.timeoutMs);});
+export async function pagingRequest(c:Configuration,url:string,headers:Record<string,string>,body:string):Promise<{state:'ok';body:unknown}|{state:'failed'|'unknown'}>{
+ let reader:ReadableStreamDefaultReader<Uint8Array>|undefined;
  try{
-  return await Promise.race([expired,(async():Promise<RequestResult>=>{
-  const response=await c.fetcher(url,{method:'POST',headers,body,redirect:'error',signal:controller.signal});
-  if(controller.signal.aborted){void response.body?.cancel().catch(()=>{});return {state:'unknown' as const};}
+  const response=await c.fetcher(url,{method:'POST',headers,body,redirect:'error',signal:AbortSignal.timeout(c.timeoutMs)});
   if(!response.ok){void response.body?.cancel().catch(()=>{});return {state:response.status>=400&&response.status<500?'failed':'unknown'};}
   reader=response.body?.getReader();if(!reader)return {state:'unknown'};
   const chunks:Uint8Array[]=[];let size=0;
   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536)return {state:'unknown'};chunks.push(value);}
   return {state:'ok',body:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)))};
-  })()]);
- }catch{return {state:'unknown'};}finally{clearTimeout(timer);controller.abort();void reader?.cancel().catch(()=>{});}
+ }catch{return {state:'unknown'};}finally{void reader?.cancel().catch(()=>{});}
 }
 export function object(body:unknown):Record<string,unknown>{return body&&typeof body==='object'&&!Array.isArray(body)?body as Record<string,unknown>:{};}
 export async function sendPage(p:PagingProvider,n:Notification):Promise<PageAttempt>{

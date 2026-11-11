@@ -173,8 +173,9 @@ text refuses, multipart delivery and press-1 interpretation. They do not check
 audible voice quality, a live provider or whether your phone wakes you.
 
 For the later integration, use `createTwilio` or `createVonage`, then `sendPage`.
-Supply the transport explicitly; the adapters never choose global fetch or read
-credentials from the environment. Configuration supplies the recipient, sender,
+Supply a transport that honors the provided abort signal, including while reading
+response bodies. The adapters never choose global fetch or read credentials from
+the environment. Configuration supplies the recipient, sender,
 HTTPS portal origin and a request timeout of at most ten seconds. Vonage voice
 also needs an injected function that returns a fresh JWT for each call.
 
