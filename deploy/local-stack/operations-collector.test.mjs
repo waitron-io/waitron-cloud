@@ -5,12 +5,13 @@ import {RequestMetrics} from '../../packages/account-http/src/request-metrics.ts
 
 // Missing opt-in wiring would leave the status command unscheduled.
 test('operations collection is opt-in, loopback-only and has no writable mount or Docker socket',()=>{
- const config=profiles=>JSON.parse(execFileSync('docker',['compose',...profiles,'config','--format','json'],{encoding:'utf8',env:{...process.env,CLOUD_ACCOUNT_FAILURE_RULES:'explicit-test-setting'}}));
+ const config=profiles=>JSON.parse(execFileSync('docker',['compose',...profiles,'config','--format','json'],{encoding:'utf8',env:{...process.env,CLOUD_ACCOUNT_FAILURE_RULES:'explicit-test-setting',CLOUD_MACHINE_TREND_RULES:'explicit-machine-setting'}}));
  assert.equal(config([]).services['operations-collector'],undefined);
  const services=config(['--profile','operations']).services;
  const service=services['operations-collector'];
  assert.ok(service,'the opt-in collector must exist');
  assert.equal(service.environment.CLOUD_ACCOUNT_FAILURE_RULES,'explicit-test-setting');
+ assert.equal(service.environment.CLOUD_MACHINE_TREND_RULES,'explicit-machine-setting');
  assert.equal(service.read_only,true);
  assert.equal(service.restart,'unless-stopped');
  assert.equal(service.network_mode,undefined);
@@ -192,13 +193,15 @@ test('configured rules reach the HTTP scrape through service startup',async()=>{
  const controller=new AbortController();
  const counter=new RequestMetrics(1);
  const failureRules=JSON.stringify({failureTargets:{account:.1},slownessTargets:{account:{limitSeconds:.1,allowance:.2}},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}});
- const {server,done}=await serveCollection({collect:async()=>snapshot(),collectRequests:async()=>counter.snapshot(),failureRules,intervalMs:1000,port:0,host:'127.0.0.1',signal:controller.signal});
+ const trendRules=JSON.stringify({machine:'local-a',limits:Object.fromEntries(['disk','memory','load','email','backup_due'].map(signal=>[signal,{limit:.9,windowMs:1000,horizonMs:3000}]))});
+ const {server,done}=await serveCollection({collect:async()=>snapshot(),collectRequests:async()=>counter.snapshot(),collectMachine:async()=>({disk:1,memory:0,load:0}),failureRules,trendRules,intervalMs:1000,port:0,host:'127.0.0.1',signal:controller.signal});
  try{
   const response=await fetch(`http://127.0.0.1:${server.address().port}/metrics`);
   assert.equal(response.status,200);
   const body=await response.text();
   assert.match(body,/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
   assert.match(body,/account_slowness_rule_ready\{group="account",rule="fast"\} 0\n/);
+  assert.match(body,/machine_trend_rule_breached\{machine="local-a",signal="disk"\} 1\n/);
   counter.record('account',200,.2);
   const deadline=Date.now()+4000;let text='';
   while(Date.now()<deadline){
@@ -208,6 +211,59 @@ test('configured rules reach the HTTP scrape through service startup',async()=>{
   }
   assert.match(text,/account_slowness_rule_breached\{group="account",rule="fast"\} 1\n/);
  }finally{controller.abort();await done;}
+});
+
+test('machine trends keep independent queues and resources through failure, expiry and recovery',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const trendRules={machine:'local-a',limits:Object.fromEntries(['disk','memory','load','email','backup_due'].map(signal=>[signal,{limit:signal==='disk'||signal==='memory'?.9:5,windowMs:1000,horizonMs:signal==='disk'?3000:5000}]))};
+ let time=0,inspectionLag=0,operationFail=false,malformed=false,oldest=null,mail=0,due=0,machine={disk:.5,memory:.1,load:0};
+ const inputs={now:()=>time,intervalMs:1000,timeoutMs:2000,collectMachine:async()=>machine,collect:async()=>{
+  if(operationFail)throw Error('private database');
+  if(malformed)return {...snapshot(),components:{}};
+  const sample=snapshot();sample.checkedAt=new Date(time-inspectionLag).toISOString();
+  Object.assign(sample.components.email,{counts:{...sample.components.email.counts,pending:mail},oldestPendingAt:oldest});
+  Object.assign(sample.components.backups,{due,oldestDueAt:oldest});return sample;
+ }};
+ const disabled=createCollection(inputs);await disabled.poll();assert.doesNotMatch(disabled.metrics(),/machine_trend_rule/);
+ const collection=createCollection({...inputs,trendRules});await collection.poll();
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="disk"\} 0\n/);
+ time=1000;machine.disk=.6;oldest=new Date(0).toISOString();mail=1;due=1;await collection.poll();
+ assert.match(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="disk"\} 1\n/);
+ assert.match(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="memory"\} 0\n/);
+ assert.match(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="email"\} 1\n/);
+ time=2000;operationFail=true;await collection.poll();
+ assert.match(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="disk"\} 0\n/);
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="email"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="(?:email|backup_due)"/);
+ time=2001;operationFail=false;malformed=true;await collection.poll();malformed=false;
+ assert.equal(collection.status().snapshot,null);
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="email"\} 0\n/);
+ time=3000;operationFail=false;oldest=new Date(4000).toISOString();due=0;await collection.poll();
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="email"\} 0\n/);
+ assert.match(collection.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="backup_due"\} 0\n/);
+ time=8000;assert.doesNotMatch(collection.metrics(),/machine_trend_rule_breached\{/);
+ time=9000;oldest=new Date(8000).toISOString();machine.memory=null;await collection.poll();
+ time=10000;await collection.poll();
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="email"\} 1\n/);
+ assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="memory"\} 0\n/);
+ assert.doesNotMatch(collection.metrics(),/private/);
+ const lagged=createCollection({...inputs,trendRules:{...trendRules,limits:{...trendRules.limits,email:{limit:1.5,windowMs:1000,horizonMs:1}}}});
+ mail=1;inspectionLag=1000;time=11000;oldest=new Date(9000).toISOString();await lagged.poll();
+ time=12000;oldest=new Date(10000).toISOString();await lagged.poll();
+ assert.match(lagged.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="email"\} 0\n/);
+});
+
+test('invalid machine trend settings refuse startup with their own diagnostic',async()=>{
+ const {serveCollection}=await import('./operations-collector.mjs');let calls=0;const controller=new AbortController();
+ await assert.rejects(async()=>{
+  const {done}=await serveCollection({collect:async()=>{calls++;return snapshot();},trendRules:'private-invalid',port:0,host:'127.0.0.1',signal:controller.signal});
+  controller.abort();await done;
+ },{message:'invalid_machine_trend_rules'});
+ assert.equal(calls,0);
+ const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');
+ await assert.rejects(promisify(execFile)(process.execPath,[new URL('./operations-collector.mjs',import.meta.url).pathname],{env:{PATH:process.env.PATH,CLOUD_MACHINE_TREND_RULES:'private-invalid'},timeout:3000}),error=>{
+  assert.equal(error.code,1);assert.equal(error.stdout,'');assert.equal(error.stderr,'Local operations collector failed; check CLOUD_MACHINE_TREND_RULES\n');return true;
+ });
 });
 
 test('published rule and raw readings survive an unfinished single-flight poll',async()=>{

@@ -276,6 +276,49 @@ measurements remain open. Verification: `node --test
 deploy/local-stack/account-failure-rules.test.mjs deploy/local-stack/operations-collector.test.mjs`
 (the Compose check needs Docker).
 
+To warn before local resources reach a limit, set `CLOUD_MACHINE_TREND_RULES` before
+creating the collector. Leave it unset or empty to disable these warnings. This
+synthetic example gives disk growth more notice than queue ageing; replace the
+values with your trial settings:
+
+```json
+{"machine":"local-a","limits":{"disk":{"limit":0.9,"windowMs":3600000,"horizonMs":86400000},"memory":{"limit":0.9,"windowMs":900000,"horizonMs":3600000},"load":{"limit":1,"windowMs":900000,"horizonMs":900000},"email":{"limit":300,"windowMs":60000,"horizonMs":60000},"backup_due":{"limit":900,"windowMs":60000,"horizonMs":300000}}}
+```
+
+All five signals require a positive finite `limit`, a whole `windowMs` at least as
+long as the collection interval, and a positive whole `horizonMs`. There are no
+defaults. Disk and memory limits are fractions at most 1; load is the 15-minute
+load average divided by logical CPUs; queue limits are seconds. The machine alias
+uses 1–32 lowercase letters, digits, underscores or hyphens. Invalid or unknown
+settings refuse startup with the setting name.
+
+Disk measures the fraction of space unavailable to ordinary processes on the filesystem
+holding the existing `/run/local-stack` volume, including reserved space. Memory uses Linux's available-memory estimate.
+These are readings of the collector's Linux kernel machine. Docker Desktop reports
+its Linux VM, rather than the Mac, and this does not inspect every disk or discover
+other machines. Email age covers pending and processing messages. `backup_due` is
+time since overdue availability or an expired lease, excluding future work and
+healthy running jobs. Both queues cover the local stack; their machine alias
+identifies the observed stack, rather than a worker that owns the queue.
+
+The rule compares two readings over its window and warns if growth would reach the
+limit within its horizon. A current reading at the limit warns immediately; a
+falling reading below it clears once coverage exists. Comparisons allow the same
+`1e-9` relative rounding tolerance as request rules. A stuck queue item ages one
+second per second, so its warning acts as an earlier age threshold. This is no
+forecast of arrivals or a learned normal baseline.
+
+Scrape `waitron_cloud_machine_trend_rule_ready{machine,signal}` and
+`waitron_cloud_machine_trend_rule_breached{machine,signal}`. Ready is 0 without
+coverage or a fresh valid reading; breach appears only when ready. Missing resources
+and failed operations inspection suppress only the affected signals. Empty queues
+have age zero; missing/future timestamps with outstanding work are unknown. Queue
+ages use the inspection time. Readings expire after the collection interval plus
+30 seconds and 2 seconds; baseline coverage has that same allowance. Restart loses
+in-memory history, and backward observation time resets it. No warning pages anyone
+or opens a work item. The focused Linux check is `node --test
+deploy/local-stack/operations-machine.test.mjs deploy/local-stack/account-failure-rules.test.mjs deploy/local-stack/operations-collector.test.mjs`.
+
 The collector starts with no sample after a restart. You can stop it without stopping the workers:
 
 ```sh
