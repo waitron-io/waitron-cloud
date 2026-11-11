@@ -8,11 +8,11 @@ import type {PortalApp} from './app.ts';
 export function passkeySignInScreen(app: PortalApp) {
   const c = app.copy;
   return html`<div class="passkey-signin">
+    <p class="separator"><span>${c.passkeys}</span></p>
     <label class="disclosure"><input type="checkbox" .checked=${app.passkeys.remember}
       ?disabled=${app.passkeys.pending} @change=${(event: Event) => {
         app.readFields(); app.passkeys.fence(); app.passkeys.setRemember((event.target as HTMLInputElement).checked); app.draw();
       }}> ${c.passkeyRemember}</label>
-    <p class="separator"><span>${c.passkeys}</span></p>
     ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : nothing}
     <wt-button .disabled=${app.pending || app.passkeys.pending || !!app.passkeys.waiting} .loading=${app.passkeys.pending}
       @click=${() => {void app.signInWithPasskey();}}>${app.passkeys.pending ? c.wait : c.passkeySignIn}</wt-button>

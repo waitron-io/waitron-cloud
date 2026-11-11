@@ -54,7 +54,7 @@ export class PasskeyController {
   #request: Request;
   #browser: PasskeyBrowser;
 
-  constructor(changed: () => void, request: Request = accountRequest, browser: PasskeyBrowser = defaultBrowser, storage: () => PreferenceStorage = () => localStorage) {
+  constructor(changed: () => void, request: Request = accountRequest, browser: PasskeyBrowser = defaultBrowser, storage: () => PreferenceStorage = () => window.localStorage) {
     this.#changed = changed;
     this.#request = request;
     this.#browser = browser;
@@ -144,7 +144,6 @@ export class PasskeyController {
       try { available = this.preferred && !!await this.#browser.autofill?.(); } catch { /* Keep the explicit button available. */ }
       if (generation === this.#generation && !available) this.#autofill = false;
       if (!available) return false;
-      if (generation !== this.#generation) return false;
     }
     if (this.supported === undefined) await this.checkSupport();
     if (generation !== this.#generation) return false;
@@ -164,7 +163,7 @@ export class PasskeyController {
       this.#changed(); return false;
     }
     if (generation !== this.#generation) return false;
-    this.#autofill = false; this.pending = true;
+    this.#autofill = false; this.pending = true; this.#changed();
     const result = await this.#request<{accountId: string}>('/passkeys/authentication/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return false;
     this.pending = false;

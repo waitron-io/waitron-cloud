@@ -44,6 +44,7 @@ export class PortalApp {
   alerts: AlertController;
   translationConsent: TranslationConsentController;
   passkeys: PasskeyController;
+  readonly passkeyFirst: boolean;
   security: AccountSecurityController;
   authenticator: AuthenticatorController;
   factorCodes: string[] = [];
@@ -62,6 +63,7 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.authenticator = new AuthenticatorController(() => this.draw());
     this.passkeys = new PasskeyController(() => this.draw());
+    this.passkeyFirst = this.passkeys.preferred;
     this.security = new AccountSecurityController(() => this.draw(), async reason => {
       const session = this.session;
       if (reason === 'signedOut') this.#signOutCheck = session;
@@ -187,7 +189,6 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
     this.billing.fence();
-    this.#passkeyOffered = false;
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
@@ -248,7 +249,7 @@ export class PortalApp {
     if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
     if (['/','/account'].includes(this.path)) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
-    if (this.pending || this.waiting) return;
+    if (this.pending || this.waiting || (this.path === '/login' && this.passkeys.pending)) return;
     this.readFields(); this.errors = {}; this.error = undefined;
     if (this.path === '/login') this.passkeys.fence();
     const f = this.fields;

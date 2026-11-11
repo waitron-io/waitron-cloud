@@ -43,7 +43,7 @@ Each slice is one independently useful PR, aiming for at most three build hours.
 
 ### 1. Remember passkey-first sign-in
 
-**Usable:** after a verified passkey sign-in with Remember me checked, the next visit starts with saved passkeys and keeps password fallback. Store only a country-origin-local preference boolean, never account/credential/proof identifiers. Use supported browser passkey autofill; keep an explicit passkey button where browser activation is required. Do not assume a page-load prompt works on every browser.
+**Usable:** after a verified passkey sign-in with Use passkeys first next time checked, the next visit starts with saved passkeys and keeps password fallback. Store only a country-origin-local preference boolean, never account/credential/proof identifiers. Use supported browser passkey autofill; keep an explicit passkey button where browser activation is required. Do not assume a page-load prompt works on every browser.
 
 **Files/tests:** portal `src/{app,passkey-controller,screens,locale}.ts`; existing `test/{passkey-controller,passkey-browser}.test.ts`, plus `passkey-preference-browser.test.ts`. Test save-on-success, clearing the preference, returning visit, cancellation/unsupported/storage-refused fallback and delayed navigation replies. Reuse virtual authenticator; qualify browser-specific prompting before promising it. Backend sign-in assertions stay unchanged. No migration/dependency. Production +90/−15; tests +170/−10; support 0.
 

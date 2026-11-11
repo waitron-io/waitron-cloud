@@ -271,6 +271,10 @@ test('remembered autofill leaves password usable and a superseded reply cannot s
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(modes, [true]);
   assert.equal(controller.pending, false, 'autofill must not block password sign-in');
+  const duplicate = controller.signIn(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(modes, [true], 'only one autofill request may wait for a choice');
+  assert.equal(await duplicate, false);
   controller.fence();
   controller.setRemember(false);
   finish(authenticationResponse);
@@ -291,9 +295,9 @@ test('unsupported autofill leaves the explicit passkey action available', async 
 
 test('a late autofill capability reply cannot replace a deliberate sign-in', async () => {
   let support!: (value: boolean) => void;
-  const modes: boolean[] = [];
-  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> =>
-    ({ok: true, value: (path.endsWith('/options') ? authenticationOptions : {accountId: 'owner'}) as T}),
+  const modes: boolean[] = [], paths: string[] = [];
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+    paths.push(path); return ({ok: true, value: (path.endsWith('/options') ? authenticationOptions : {accountId: 'owner'}) as T});},
     browser({autofill: () => new Promise(resolve => {support = resolve;}), authenticate: async (_options, autofill) => {
       modes.push(!!autofill); return authenticationResponse;
     }}), () => ({getItem: () => 'true', setItem() {}, removeItem() {}}));
@@ -302,6 +306,7 @@ test('a late autofill capability reply cannot replace a deliberate sign-in', asy
   support(true);
   assert.equal(await automatic, false);
   assert.deepEqual(modes, [false]);
+  assert.deepEqual(paths, ['/passkeys/authentication/options', '/passkeys/authentication/verify']);
 });
 
 test('cancelled and obsolete verification replies never remember an unverified choice', async () => {
@@ -323,4 +328,22 @@ test('cancelled and obsolete verification replies never remember an unverified c
   verify({ok: true, value: {accountId: 'owner'}});
   assert.equal(await pending, false);
   assert.deepEqual([...saved], []);
+});
+
+test('an autofill choice redraws busy controls before its verification reply', async () => {
+  let choose!: (response: typeof authenticationResponse) => void;
+  let verify!: (result: ApiResult<unknown>) => void;
+  const notifications: boolean[] = [];
+  const controller = new PasskeyController(() => {notifications.push(controller.pending);},
+    async <T>(path: string): Promise<ApiResult<T>> => path.endsWith('/options') ? {ok: true, value: authenticationOptions as T}
+      : new Promise(resolve => {verify = resolve as (result: ApiResult<unknown>) => void;}),
+    browser({autofill: async () => true, authenticate: () => new Promise(resolve => {choose = resolve;})}),
+    () => ({getItem: () => 'true', setItem() {}, removeItem() {}}));
+  const signingIn = controller.signIn(true);
+  await new Promise(resolve => setImmediate(resolve));
+  notifications.length = 0;
+  choose(authenticationResponse);
+  await new Promise(resolve => setImmediate(resolve));
+  try { assert.deepEqual([...notifications], [true], 'redraw when a selected autofill passkey starts verification'); }
+  finally { verify({ok: true, value: {accountId: 'owner'}}); await signingIn; }
 });
