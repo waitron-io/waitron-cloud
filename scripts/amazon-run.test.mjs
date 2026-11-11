@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {readFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 const api = await import('./amazon-run.mjs').catch(error => {if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error; return {};});
 
 // Skipping EC2's stopped confirmation would let the repeat race the old host.
@@ -185,8 +186,8 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
-  const calls = [], phases = [], metadata = [], hashes = 'a'.repeat(64);
+for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+  const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
@@ -202,12 +203,22 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: output.C, State: {Name: 'stopped'}}]}]});
       assert.ok(['create-stack', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
       return '';
-    }, run: async (binary, args, input) => {
+    }, run: async (binary, args, input, cleanup) => {
       calls.push([binary, ...args]);
+      if (['ssh','scp'].includes(binary)) {
+        const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
+        transports.push({binary,args,cleanup,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
+      }
       if (binary === 'uname') return 'x86_64';
-      if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(3);
+      if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
       if (binary === 'wc') return '104857600 images.tar';
-    if (binary === 'tar') return JSON.stringify(savedTags.map(tag => ({Config: 'blobs/sha256/' + hashes, RepoTags: ['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
+      if (binary === 'tar') {
+        if (args[0] === '-tf') return ['index.json','manifest.json',...(scenario === 'incomplete archive' ? ['b','c'] : ['a','b','c']).map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
+        if (args.at(-1) === 'index.json') return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.index.v1+json',manifests:savedTags.map(tag => ({
+          annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
+        if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
+        return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + hashes,RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
+      }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
       if (binary === 'docker' && args[0] === 'image' && args[1] === 'inspect') return JSON.stringify([{Id: 'sha256:' + 'c'.repeat(64), Architecture: 'amd64', Os: 'linux'}]);
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) target = JSON.parse(await readFile(args.at(-2), 'utf8'));
@@ -222,8 +233,36 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       }
       return '';
     }});
+  let result;
+  if (expectedError) await assert.rejects(running, expectedError); else result = await running;
+  if (scenario === 'incomplete archive') {
+    assert.equal(calls.some(row => row[1] === 'create-stack'), false, 'no machines before archive closure');
+    assert.equal(calls.some(row => row[1] === 'delete-stack'), false);
+    assert.deepEqual(transports, []); return;
+  }
+  const save = calls.find(row => row[0] === 'docker' && row[1] === 'save');
+  assert.equal(save[save.indexOf('--platform') + 1], 'linux/amd64');
+  const preflight = calls.findIndex(row => row[0] === 'tar' && row[1] === '-tf');
+  assert.ok(preflight >= 0 && preflight < calls.findIndex(row => row[1] === 'create-stack'), 'archive closure checked before creating machines');
+  const closes = transports.filter(row => row.args.includes('-O'));
+  if (scenario === 'failed creation') assert.deepEqual(transports, []);
+  else {
+    assert.deepEqual(closes.map(row => row.args.at(-1)), ['admin@203.0.113.1','admin@203.0.113.2','admin@203.0.113.3']);
+    assert.ok(closes.every(row => row.cleanup === true && row.args.includes('exit')));
+    assert.ok(closes.every(row => row.socketDirectoryPresent), 'socket directory remains until every master is closed');
+    const paths = new Set();
+    for (const row of transports) {
+      for (const option of ['ServerAliveInterval=15','ServerAliveCountMax=4']) assert.ok(row.args.includes(option), option);
+      if (row.binary === 'ssh') for (const option of ['ControlMaster=auto','ControlPersist=600']) assert.ok(row.args.includes(option), option);
+      if (row.binary === 'scp') assert.ok(transports.slice(0,transports.indexOf(row)).some(prior => prior.binary === 'ssh' && prior.args.includes(row.args.at(-1).split(':')[0])), 'SSH establishes a master before SCP reuses it');
+      const path = row.args.find(arg => arg.startsWith('ControlPath='));
+      assert.match(path, /\/d618-[^/]+\/%C$/); paths.add(path.slice('ControlPath='.length));
+    }
+    assert.equal(paths.size, 1, 'all machine commands and copies share the run-private template');
+    assert.equal(existsSync([...paths][0].slice(0,-3)), false, 'private sockets directory is removed after closure');
+    assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
+  }
   if (expectedError) {
-    await assert.rejects(running, expectedError);
     const created = calls.find(row => row[1] === 'create-stack'), name = created[created.indexOf('--stack-name') + 1];
     assert.match(name, /^d618-[a-f0-9-]{36}$/);
     assert.equal(calls.find(row => row[1] === 'delete-stack')?.at(-1), name);
@@ -232,7 +271,6 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
     if (['wrong instance', 'wrong imported image'].includes(scenario)) assert.deepEqual(phases, []);
     return;
   }
-  const result = await running;
   assert.deepEqual(metadata, [1, 2, 3]);
   assert.deepEqual(phases, ['before', 'after']);
   assert.deepEqual(result.journeys, [{checked: 'before'}, {checked: 'after'}]);
@@ -287,4 +325,34 @@ test('Amazon nested verifier keeps Docker configuration ids used by the retained
     kube: async (args, input) => {if (args[0] === 'apply') applied = JSON.parse(input); return '';}, loadImage: async () => {}});
   await adapter.start('12345678-1234-4234-8234-123456789abc', {image: 'sha256:' + 'a'.repeat(64), revision: 'c'.repeat(40)});
   assert.ok(applied.spec.containers.find(row => row.name === 'docker').args.includes('--feature=containerd-snapshotter=false'));
+});
+
+test('saved tar requires the selected amd64 manifest, config and every layer', async t => {
+  assert.equal(typeof api.checkAmazonArchive, 'function');
+  const {mkdtemp, mkdir, writeFile, rm} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os'); const {join} = await import('node:path');
+  const {execFileSync} = await import('node:child_process');
+  const directory = await mkdtemp(join(tmpdir(), 'd618-tar-'));
+  t.after(() => rm(directory, {recursive:true,force:true}));
+  const digest = n => 'sha256:' + n.repeat(64), blob = n => 'blobs/sha256/' + n.repeat(64);
+  const selected = {digest:digest('2'),platform:{os:'linux',architecture:'amd64'}};
+  const root = {annotations:{'io.containerd.image.name':'docker.io/library/synthetic:local'},digest:digest('1')};
+  const files = {'index.json':JSON.stringify({manifests:[root]}),
+    [blob('1')]:JSON.stringify({manifests:[{digest:digest('9'),platform:{os:'linux',architecture:'arm64'}},selected]}),
+    [blob('2')]:JSON.stringify({config:{digest:digest('3')},layers:[{digest:digest('4')}]}),
+    [blob('3')]:JSON.stringify({os:'linux',architecture:'amd64'}),[blob('4')]:'synthetic layer'};
+  await mkdir(join(directory,'blobs/sha256'),{recursive:true});
+  for (const [name,data] of Object.entries(files)) await writeFile(join(directory,name),data);
+  const archive = join(directory,'images.tar');
+  const pack = omitted => execFileSync('tar',['-cf',archive,'-C',directory,...Object.keys(files).filter(name => name !== omitted)]);
+  const run = async (binary,args) => execFileSync(binary,args,{encoding:'utf8'}).trim();
+  pack(); await api.checkAmazonArchive(archive,['synthetic:local'],run);
+  for (const missing of ['index.json',blob('1'),blob('2'),blob('3'),blob('4')]) {
+    pack(missing);
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run), /amazon.archive_blob/);
+  }
+  await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected}]}));
+  pack(); await api.checkAmazonArchive(archive,['synthetic:local'],run);
+  await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected,platform:{os:'linux',architecture:'arm64'}}]}));
+  pack(); await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run), /amazon.archive_platform/);
 });

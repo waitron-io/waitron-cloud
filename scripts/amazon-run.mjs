@@ -69,6 +69,28 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {await main();} catch (error) {process.stderr.write(error.message + '\n'); process.exitCode = 1;}
 }
 
+export async function checkAmazonArchive(archive, images, run) {
+  const members = new Set((await run('tar', ['-tf', archive])).split('\n'));
+  const present = path => {assert.ok(members.has(path), 'amazon.archive_blob:' + path); return path;};
+  const read = async path => JSON.parse(await run('tar', ['-xOf', archive, present(path)]));
+  const blob = descriptor => 'blobs/' + descriptor.digest.replace(':', '/');
+  const index = await read('index.json');
+  for (const image of images) {
+    const canonical = 'docker.io/' + (image.includes('/') ? image : 'library/' + image);
+    let descriptor = index.manifests.find(row => [image, canonical].includes(row.annotations?.['io.containerd.image.name']));
+    assert.ok(descriptor, 'amazon.archive_image');
+    let manifest = await read(blob(descriptor));
+    while (manifest.manifests) {
+      // Other platforms and attestations need not be bundled for the selected runtime.
+      descriptor = manifest.manifests.find(row => row.platform?.os === 'linux' && row.platform.architecture === 'amd64');
+      assert.ok(descriptor, 'amazon.archive_platform');
+      manifest = await read(blob(descriptor));
+    }
+    assert.ok(descriptor.platform?.os === 'linux' && descriptor.platform.architecture === 'amd64', 'amazon.archive_platform');
+    for (const part of [manifest.config, ...manifest.layers]) present(blob(part));
+  }
+}
+
 export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now}) {
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
@@ -82,6 +104,9 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
   const cloud = name + ':cloud', waitron = name + ':waitron';
+  let hosts;
+  const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
+    '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=600', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
   try {
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
@@ -100,7 +125,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       const [row] = JSON.parse(await run('docker', ['image', 'inspect', image]));
       assert.ok(row.Architecture === 'amd64' && row.Os === 'linux', 'amazon.image_architecture');
     }
-    await run('docker', ['save', '-o', join(directory, 'images.tar'), cloud, waitron, ...images], undefined, false, 300000);
+    await run('docker', ['save', '--platform', 'linux/amd64', '-o', join(directory, 'images.tar'), cloud, waitron, ...images], undefined, false, 300000);
+    await checkAmazonArchive(join(directory, 'images.tar'), [cloud, waitron, ...images], run);
     const archive = JSON.parse(await run('tar', ['-xOf', join(directory, 'images.tar'), 'manifest.json'])), ids = {};
     for (const image of [cloud, waitron, ...images]) {
       const canonical = 'docker.io/' + (image.includes('/') ? image : 'library/' + image);
@@ -115,8 +141,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const expiry = now() + 90 * 60000;
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
       StackRole: config.stackRole, SchedulerRole: config.schedulerRole, ExpiryTime: new Date(expiry).toISOString().slice(0, 19)};
-    let outputs, hosts, target;
-    const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts')];
+    let outputs, target;
     const ssh = (index, args, input, timeout = 600000) => run('ssh', [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ')], input, false, timeout);
     const copy = (index, file, path) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, 300000);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
@@ -197,6 +222,10 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     }, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } finally {
+    for (const host of hosts ?? []) {
+      // A stopped worker or expired idle master may already have no socket to close.
+      try {await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true);} catch {}
+    }
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}
     await rm(directory, {recursive: true, force: true});
   }

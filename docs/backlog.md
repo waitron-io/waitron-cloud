@@ -3217,8 +3217,9 @@ implementation or production evidence.
   The owner dropped D570's first-machine proposal on 9 November. D618's
   [bounded three-machine plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md)
   supplies `node scripts/amazon-run.mjs start` for the owner-started Amazon run.
-  Its launcher/template checks run with `node --test scripts/amazon-run.test.mjs`;
-  actual Amazon bootstrap, host loss and independent deletion remain unrun.
+  Its local SSH reuse and selected-platform archive checks run with
+  `node --test scripts/amazon-run.test.mjs`; successful Amazon bootstrap, host loss
+  and independent deletion qualification remain open.
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
   policy files, numbered steps, SSH-key creation and owner-run checks. The owner's
   one-run access-key route keeps the existing restricted launcher and requires
