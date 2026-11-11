@@ -6,7 +6,7 @@ interface Options {
  twilio:{provider:PagingProvider;authToken:string};
  vonage:{provider:PagingProvider;apiKey:string;signatureSecret:string};
  attempts:()=>readonly PageAttempt[];
- onEvent:(event:TrustedEvent)=>void;
+ onEvent:(event:TrustedEvent)=>void|Promise<void>;
 }
 const malformed=()=>Object.assign(Error(),{status:400});
 const forbidden=()=>Object.assign(Error(),{status:403});
@@ -94,10 +94,10 @@ export function createPagingCallbackListener(options:Options):RequestListener{
      &&a[submission].state==='accepted'&&a[submission].ids.includes(event.id));
     if(!bound)throw forbidden();
     const key=JSON.stringify([provider,event.id,kind,event.state,event.digits??null]);
-    // Reserve before the synchronous consumer; failed delivery must remain retryable.
+    // Reserve before delivery; a failed consumer must leave the event retryable.
     if(!seen.has(key)){
      seen.add(key);
-     try{options.onEvent({incidentId,notificationId,event});}catch{seen.delete(key);throw Error();}
+     try{await options.onEvent({incidentId,notificationId,event});}catch{seen.delete(key);throw Error();}
     }
    }
    response.setHeader('cache-control','no-store');

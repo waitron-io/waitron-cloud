@@ -31,7 +31,7 @@ for(const name of ['twilio','vonage'] as const)test(`${name} fake sends reach si
    assert.equal(await submit(textUrl,signedTwilio(textUrl.pathname,{AccountSid:sid,MessageSid:message,MessageStatus:'delivered'})),204);
    assert.equal(await submit(callUrl,signedTwilio(callUrl.pathname,{AccountSid:sid,CallSid:call,CallStatus:'in-progress'})),204);
    const good=signedTwilio(inputUrl.pathname,{AccountSid:sid,CallSid:call,Digits:'1'});
-   assert.equal(await submit(inputUrl,{...good,body:form({AccountSid:sid,CallSid:call,Digits:'2'})}),403);
+   assert.equal(await submit(inputUrl,signedTwilio(inputUrl.pathname,{AccountSid:sid,CallSid:call,Digits:'1'},'wrong-token')),403);
    assert.equal(pageDecision({notification,attempts,events}).acknowledged,false);
    assert.equal(await submit(inputUrl,good),200);
   }else{

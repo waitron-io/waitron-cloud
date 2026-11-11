@@ -137,3 +137,35 @@ test('independent Vonage SMS and JWT vectors reach trusted events',async()=>{
   assert.equal(input.status,200);assert.deepEqual(f.events.map(e=>e.event.state),['delivered','input']);
  }finally{await f.close();}
 });
+
+test('SMS timestamp and query separation reject otherwise signed reports',async()=>{
+ const f=await fixture();try{
+  const path=callbackPath('vonage','text');
+  const base={'api-key':secrets.apiKey,messageId:'sms-1',status:'delivered'};
+  assert.equal((await f.send(path+'?'+form(sms(base)))).status,400);
+  const body=JSON.stringify(sms({...base,timestamp:'1794360000'}));
+  assert.equal((await f.send(path+'?extra=value',{method:'POST',headers:{'content-type':'application/json'},body})).status,400);
+  assert.equal(f.events.length,0);
+ }finally{await f.close();}
+});
+
+test('noncanonical signature encoding cannot emit an event',async()=>{
+ const f=await fixture();try{
+  const path=callbackPath('twilio','input'),init=signedTwilio(path,twilioFields);
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const sig=init.headers['x-twilio-signature'];
+  const noncanonical=sig.slice(0,-2)+alphabet[alphabet.indexOf(sig.at(-2)!)^1]+'=';
+  assert.deepEqual(Buffer.from(noncanonical,'base64'),Buffer.from(sig,'base64'));
+  assert.equal((await f.send(path,{...init,headers:{...init.headers,'x-twilio-signature':noncanonical}})).status,403);
+  assert.equal(f.events.length,0);
+ }finally{await f.close();}
+});
+
+test('an asynchronous consumer rejection returns 500 and permits retry',async()=>{
+ let fail=true;const events:TrustedEvent[]=[];
+ const f=await fixture(async e=>{await Promise.resolve();if(fail)throw Error('private async failure');events.push(e);});try{
+  const path=callbackPath('twilio','input'),init=signedTwilio(path,twilioFields);
+  const error=await f.send(path,init);assert.equal(error.status,500);assert.doesNotMatch(error.body,/private/);assert.equal(events.length,0);
+  fail=false;assert.equal((await f.send(path,init)).status,200);assert.equal(events.length,1);
+ }finally{await f.close();}
+});
