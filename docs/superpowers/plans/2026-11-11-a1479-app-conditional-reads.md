@@ -1,18 +1,32 @@
-# A1479 — one-minute job reads; the conditional-read proposal is retired
+# A1479 — installation demand
 
-Goal: reduce ordinary job-read demand with a 60-second gate, while retaining the 15-second monitor tick, guest checks and controller cadence.
-Authority: watcher 2026-11-11 05:47, Lane I `questions.md`: “Change worker job polling from 15 to 60 seconds; the controller cadence stays.” The watcher cleared this approach; no owner design approval is claimed. This replaces the unbuilt cache proposal in `1121c779c413`.
-Reason: the first 59 published counter rows contain 568 fetches: 501 ALL worker fetches, 67 controller fetches, and 153 job GETs. The 88% share is all worker traffic. The 59 rows span05:40:01.629–05:43:48.799 (227.17seconds), about9001localfetches/hour at that short startup/churn rate, not a qualified busy hour. The job-read series reached used5000/limit5000 at05:43:48, reset06:03:27. These are supplied runtime receipts, not plan-author experiments.
-Even removing75%of153jobcalls saves at most115/568(~20%)ofthat sample, less after fixed admission/final reads. Other worker calls include94run,52job-page,42runner,36variable,21token,19permission,72repository/content/commit/pull and12registration reads/writes. Reviewer F1 requires the watcher to reconsider the corrected benefit before build.
-The second header series is also this GithubApp installation client: controller/operator variable reads/writes and worker policy/registration calls normally use it. The hosted switch returned used758→760/reset06:15:59 on variable calls; it is not gh OAuth. Future routing became hosted05:50:56, cancelling nothing.
+PLANFORAPPROVAL: Lane I `questions.md`, WATCHER 2026-11-11 06:09 supersedes 05:47. Parent owns one source-only Claude plan read, corrections, then watcher clearance; no further plan reread or owner approval claimed.
 
-Files: `scripts/disposable-tests/ci-canary.mjs` owns the job-read gate; `ci-runtime.test.mjs` owns its cadence/refusal checks; `deploy/disposable-tests/README.md`, `docs/backlog.md` and this page record the resulting behavior and qualification.
+[GitHub documentation](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api?apiVersion=2026-03-10): “does not count against your primary rate limit if a 304 response is returned and the request was made while correctly authorized”. Authorization is required; this is not PAT-only.
 
-- Trace `runCI` monitor refusal/health callers and existing busy, error, cancellation and deadline consumers before changing the gate. Reuse local timestamps and `unavailable`/`refusal`; add no controller change, cache, protocol, persistence, helper framework or deadlines.
-- TDD: change the existing successful-cadence check to job rounds[1,5]/two reads while retaining run rounds[1,5], six guest checks and cleanup. Observe the expected failure, then add the minimum job gate. Only a fresh complete job/runner check with no unavailable read advances its clock and clears refusal. A skipped check leaves refusal untouched; busy/failed job or runner replies keep the gate due on the next15-second tick, preserving existing busy/permanent grace.
-- Keep the first job check on the first15-second tick. Failed reads stay due on the next tick under existing rate backoff. Reuse `monitorReadFailure`; add one failed-job-read/retry case if missing. Preserve busy grace, transient/permanent/limited errors, diagnostics, caller/turn deadlines and cleanup. Observe job rounds in the existing helper. In the failed-run case preserve run rounds[1,2,6]; the full-healthy-pass gate is expected to retry job rounds[1,2,6] too (verify with TDD). Rename the cancellation test that currently says “without another run read”: next job round5 also permits run round5. Preserve its failure/cleanup assertions; list intentional interval changes in the PR.
-- Keep listener execution and final exact-attempt readback unchanged. Job assignment/cancellation observation may be about45seconds later; this poll does not drive listener completion. Update affected README job-poll prose in the base-to-tip range (not all history) and the existing backlog’s stale guest-tools/publication/qualification sentences, as repository instructions require. No separate doc feature or other backlog entry.
-- Run `node --test scripts/disposable-tests/ci-runtime.test.mjs` and `node --test scripts/disposable-tests/ci-auto.test.mjs`; read actual counts. Claude reads this revised plan and the watcher clears it before inline build; finish through normal reviews, current-head CI, landing and exact-merge evidence readback.
+| Supplied provenance, 2026-11-11; no author experiments | Receipt |
+| --- | --- |
+| Documentation/installation probe; mint control | 200 used21 → authenticated304 used21 → control200 used22, same resource/reset. Reads198→199 after mint→200: no extra mint unit observed in that series. |
 
-Expected diff: production+5–10/-2, tests/support+20–35/-5, docs+30/-55, under140changedlines. Keep live guest/cancellation qualification unchanged.
-After the existing installer publishes the fix and the06:03:27reset has passed, restore server routing and watch one full hour of used-counter movement, separating reset/resource series and naming consumers. An incomplete hour is a checkpoint. If that hour exceeds about4000, conditional reads are the watcher-cleared next step through their own proportional plan/review; build none now.
+568 fetches/227.17s projects **9001/h startup/churn**, not hourly evidence. Excluding 22 App-JWT mints gives an upper-demand proxy of 8653/h; never sum distinct installation core/reset header series.
+
+| Change | Maximum saving/sample | Optimistic proxy/h, rounded |
+| --- | ---: | ---: |
+| a: conditional GETs | H, unknown | 8653−15.847H |
+| b: shared admission | 183 | 5753 |
+| c: minute polling | 97.5 | 7107 |
+| a+b | 183+H | 5753−15.847H |
+| b+c | 280.5 | 4208 |
+| a+b+c | 280.5+H | 4208−15.847H |
+
+H is residual304s after removals, separately per row. b assumes 19 permission+52 pages+72 source+up to40 startup-run calls removed; parent already paid. c retains ≥23 admission/final calls from153; ≤130 monitors, with finite-window first15s ticks reducing the asymptotic75% saving. Cold calls remain. Supplied169s sampler (cold200/conditional200/304): job23/47/55, run1/0/2, controller4/5/15 plus six404, page1/2/3. **No set honestly projects below4000 yet.** Missing: matched short-worker residual304 counts and finite-window avoided polls. a+b needs ≥111 hits; a+b+c ≥14 under optimistic bounds. Choose the smallest measured set; no blanket58% or overlapping savings.
+
+After clearance, implement inline in `scripts/disposable-tests/`:
+
+- a, `github-app.mjs`: settled always-revalidated authenticated JSON-GET cache, per-instance; 2MiB responses, 64 entries/4MiB bodies, least-recently-used eviction, refreshed200/304. Capture match before await; independently parse matching304. Valid200 replaces/noETag removes; errors refuse. No stale/token/mutation/log/persistent cache; reuse counters.
+- b, `control.mjs`: bounded optional JSON through trusted root-child `job`; validate existing `ciIdentity` against configured repository/workflow and requested run/job. Legacy `findOrdinary` remains. Preserve fresh pre-registration run/job reads, routing-head checks, assignment, five-attempt final readback, cleanup/locks.
+- c only if needed, `ci-canary.mjs`: `lastJobRead`60s, first15s tick; failed/busy retry15s. Only full fresh healthy checks advance/clear refusal; skips preserve it. Guest/controller cadence stays.
+
+TDD, then run existing named tests: `github-app.test.mjs` loopback200→304/changed200/error/noETag/mutation-isolation/eviction; `ci-auto.test.mjs`/`ci-entry.test.mjs` validate once, eliminate duplicates, refuse fresh changed run/job before mint; optional `ci-runtime.test.mjs` cadence/refusal/cancellation/busy/deadline. Preserve cleanup assertions. Update `deploy/disposable-tests/README.md`, `docs/backlog.md`, this plan. All-three forecast: production+110/−30, tests+100/−20, docs+40/−30 (~330 lines).
+
+Two run-it branch reviews, one fixes read, current-head CI/land, matched publisher. Future routing stays hosted until live and one qualifying full hour stays under limit, targeting4000 per series. Idle load cannot qualify busy headroom; watcher settles missing natural server-job cohorts through existing tools. No new framework/private logs; synthetic identifiers only.
