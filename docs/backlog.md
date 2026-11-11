@@ -12,15 +12,15 @@ the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 remains separate from this admission retry. The publication fixture
-now supplies its own Git metadata. App quota exhaustion has paused admission; the published
-counters separate command roles, endpoint categories and raw quota headers. Use hosted
-routing until a release is ready for its watched server-qualification hour.
+now supplies its own Git metadata. The published quota reduction has completed its watched request-budget hour,
+and server routing remains enabled. The counters separate command roles, endpoint
+categories and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
 The controller revalidates JSON bodies and shares recent checked admission; see the
 [controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
-Before relying on a release for server routing, qualify a full busy hour below about 4,000
-used requests in each returned quota series; restore hosted if it crosses that threshold.
+For a replacement release, qualify a full busy hour below about 4,000 used requests
+in each returned quota series; restore hosted if it crosses that threshold.
 OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
 
