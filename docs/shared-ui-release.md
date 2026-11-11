@@ -8,7 +8,8 @@ keeps publication there and dependency updates here.
 ## Review automatic dependency updates
 
 Cloud's [Dependabot configuration](../.github/dependabot.yml) checks
-`@waitron-io/ui-core` every day at 06:00 UTC, including weekends. The root
+`@waitron-io/ui-core` and `@waitron-io/contract` every day at 06:00 UTC, including
+weekends. For signing-package updates, follow [the signing-package steps](#prepare-private-signing-packages-for-disposable-tests). The root
 pnpm workspace contains `apps/portal`, `packages/ui-smoke` and their shared
 lockfile, so one update can keep both consumers on the same release.
 
@@ -19,7 +20,7 @@ existing authenticated setup below. Image builds still pass `NODE_AUTH_TOKEN`
 as the BuildKit `npm_token` secret; follow the existing
 [local image build instructions](local-deployment.md).
 
-Expect an unedited version-update PR to fail CI because its smoke-test
+For a UI update, expect an unedited version-update PR to fail CI because its smoke-test
 expectations still describe the previous release.
 Before merging:
 
@@ -94,7 +95,9 @@ registration package pins `0.2.9` and re-exports its signing functions. The
 disposable-test adapter recognizes those reviewed bytes alongside the UI package.
 UI-only historical captures continue to select their own approved release.
 
-For a future contract release, update its reviewed URL and full SHA512 integrity in
+For a future contract release, compare Cloud's retained `isPairingUuid`,
+base64url/SPKI public-key decoding and SHA-256 key-ID derivation with the new
+shared format rules. They must match. Update its reviewed URL and full SHA512 integrity in
 `scripts/disposable-tests/private-packages.py` and its filename-to-digest entry in
 `deploy/disposable-tests/session.py`. Keep approved historical releases. Publish a
 matched controller and host recipe through the existing installer before adopting
@@ -105,7 +108,7 @@ actual frozen and offline installation; merely seeding an archive into the guest
 store does not qualify adoption. Keep Cloud-only trust and fixed-vector checks;
 remove a duplicate format check only when the pinned Waitron source tests it at
 least as strictly. The existing daily Dependabot configuration includes the
-signing package; read its next run to confirm access. Each proposed update still
+signing package; read the first run after adoption to confirm access. Each proposed update still
 needs this review and publication path.
 
 ## Install locally

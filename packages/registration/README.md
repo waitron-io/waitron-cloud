@@ -276,8 +276,7 @@ policy format, category guards and repeat-until-complete procedure.
 The pairing, machine-proof and access-lease functions use the pinned
 `@waitron-io/contract@0.2.9` release from Waitron. The existing Cloud exports remain;
 Cloud keeps trusted-key list parsing, configured trust and fixed wire vectors.
-Cloud’s retained identifier and key rules must match the shared format rules. Shared
-format checks live in Waitron's signing tests; Cloud retains its trust, action and
+Shared format checks live in Waitron's signing tests; Cloud retains its trust, action and
 consumer checks. Follow the [shared-package update guide](../../docs/shared-ui-release.md#prepare-private-signing-packages-for-disposable-tests)
 before changing the pin.
 
