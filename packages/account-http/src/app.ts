@@ -39,7 +39,7 @@ import type { Context } from 'hono';
 import type { HttpBindings } from '@hono/node-server';
 import type { Pool } from 'pg';
 import { setTimeout as delay } from 'node:timers/promises';
-import { endSession, IdentityError, resolveSession } from '@waitron-cloud/identity';
+import { endSession, IdentityError, resolveSession, withEnrollmentPolicy } from '@waitron-cloud/identity';
 import { EmailOutbox, pairingCodeKeysFromEnv, type PairingCodeKeys, PasskeyStore, PasswordRecoveryError, PasswordRecoveryStore, SignupError, SignupStore, normaliseEmail, transaction, type PasskeyCeremonyAdapter, type PasswordScreeningProvider } from '@waitron-cloud/registration';
 import { type AccountHttpConfig, validateConfig, factorConfigFromEnv, validateFactorConfig, type FactorConfig } from './config.ts';
 import {AuthenticatorFactorStore,PasswordLoginStore,FactorError,SignInCheckError} from '@waitron-cloud/registration';
@@ -62,6 +62,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
     if (error.code === 'csrf_invalid') return new AccountHttpError(403, 'forbidden');
+    if (error.code === 'enrollment_required') return new AccountHttpError(403, 'enrollment_required');
     if (error.code === 'permission_denied') return new AccountHttpError(403, 'permission_denied');
     if (error.code === 'session_expired') return new AccountHttpError(401, 'session_expired');
     return new AccountHttpError(401, 'unauthenticated');
@@ -118,6 +119,13 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     const decision = await limiter.consume(rules);
     if (!decision.allowed) throw new AccountHttpError(429, 'rate_limited', decision.retryAfterSeconds);
   };
+  app.use('*', async (c, next) => {
+    const read = c.req.method === 'GET' && ['/api/account/session', '/api/account/passkeys', '/api/account/authenticator'].includes(c.req.path);
+    const write = c.req.method === 'POST' && ['/api/account/session/activity', '/api/account/logout',
+      '/api/account/passkeys/registration/options', '/api/account/passkeys/registration/verify',
+      '/api/account/authenticator/begin', '/api/account/authenticator/activate', '/api/account/authenticator/cancel'].includes(c.req.path);
+    return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write}, next);
+  });
   app.all('*', async c => {
     protect(c);
     const url = new URL(c.req.url);

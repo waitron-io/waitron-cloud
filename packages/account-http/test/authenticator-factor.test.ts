@@ -25,9 +25,9 @@ const policy={loginLifetimeMs:300000,pendingLifetimeMs:300000,challengeAttempts:
   completeAccount:{limit:100,windowSeconds:300},completeChallenge:{limit:100,windowSeconds:300},
   manageIp:{limit:100,windowSeconds:300},manageAccount:{limit:100,windowSeconds:300}};
 type FactorOptions={keys:typeof keys|null;policy:typeof policy|null};
-function application(factor:FactorOptions={keys,policy},pool:Pool=db.pool) {
+function application(factor:FactorOptions={keys,policy},pool:Pool=db.pool,requireEnrollment=false) {
   return createAccountApp({pool,outbox:db.outbox,leaseIssuer:issuer,captures,
-    config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},factor} as Parameters<typeof createAccountApp>[0]);
+    config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[],requireEnrollment},factor} as Parameters<typeof createAccountApp>[0]);
 }
 before(async()=>{db=await database();});
 after(async()=>db?.close());
@@ -404,4 +404,25 @@ test('passkey-only recovery codes are returned once and complete the password-bo
  assert.deepEqual(await signed.json(),{accountId:owner.accountId});assert.equal(signed.headers.getSetCookie().length,2);
  assert.equal((await request('/session',undefined,{headers:cookies(signed)})).status,200);
  await refusal(await request('/login/recovery',body),401,'credentials_invalid');
+});
+
+
+test('required enrollment permits app setup and cancellation but opens access only after activation and app sign-in',async()=>{
+  app=application({keys,policy},db.pool,true);
+  const owner=await account(),headers=await signIn(owner.email);
+  const first=await request('/authenticator/begin',{password},{headers});assert.equal(first.status,200);
+  const pending=await first.json();
+  await refusal(await request('/sessions',undefined,{headers}),403,'enrollment_required');
+  assert.equal((await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers})).status,204);
+  await refusal(await request('/sessions',undefined,{headers}),403,'enrollment_required');
+  const setup=await(await request('/authenticator/begin',{password},{headers})).json();
+  const activated=await request('/authenticator/activate',{password,pendingToken:setup.pendingToken,code:totp(setup.secret)},{headers});
+  assert.equal(activated.status,200);const changed=await activated.json();assert.equal(changed.recoveryCodes.length,10);
+  assert.equal((await request('/sessions',undefined,{headers})).status,401,'activation still ends the enrollment session');
+  const token=await challenge(owner.email);
+  const signedIn=await request('/login/factor',{challengeToken:token,proof:recovery(changed.recoveryCodes[0])});
+  assert.equal(signedIn.status,200);const live=cookies(signedIn);
+  const current=await(await request('/session',undefined,{headers:live})).json();
+  assert.equal(Object.hasOwn(current,'enrollmentRequired'),false);
+  assert.equal((await request('/sessions',undefined,{headers:live})).status,200);
 });

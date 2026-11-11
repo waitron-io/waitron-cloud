@@ -43,22 +43,24 @@ export function factorConfigFromEnv(env: NodeJS.ProcessEnv): FactorConfig {
   // A factor configuration outage leaves recognised password-only browsers, passkeys and live account access available.
   return validateFactorConfig({keys,policy});
 }
-export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; }
+export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; }
 export function validateConfig(config: AccountHttpConfig): Readonly<AccountHttpConfig> {
   try {
     const origin = new URL(config.portalOrigin);
+    if (config.requireEnrollment !== undefined && typeof config.requireEnrollment !== 'boolean') throw new Error();
     if (typeof config.production !== 'boolean' || !/^[0-9a-fA-F]{64}$/.test(config.rateKey)
       || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash
       || !['https:', 'http:'].includes(origin.protocol)
       || (origin.protocol === 'http:' && (config.production || !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)))
       || !Array.isArray(config.trustedProxyIps)) throw new Error();
     const trustedProxyIps = Object.freeze(config.trustedProxyIps.map(canonicalIp));
-    return Object.freeze({portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps});
+    return Object.freeze({portalOrigin: origin.origin, production: config.production, rateKey: config.rateKey, trustedProxyIps, ...(config.requireEnrollment ? {requireEnrollment: true} : {})});
   } catch { throw new Error('Invalid account HTTP configuration'); }
 }
 export function accountHttpConfig(env: NodeJS.ProcessEnv): AccountHttpConfig {
+  if (env.CLOUD_REQUIRE_ENROLLMENT !== undefined && !['true', 'false'].includes(env.CLOUD_REQUIRE_ENROLLMENT)) throw new Error('Invalid enrollment requirement');
   return validateConfig({portalOrigin: env.CLOUD_PORTAL_ORIGIN ?? '', production: env.NODE_ENV === 'production',
-    rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : []});
+    rateKey: env.CLOUD_HTTP_RATE_KEY ?? '', requireEnrollment: env.CLOUD_REQUIRE_ENROLLMENT === 'true', trustedProxyIps: env.CLOUD_HTTP_TRUSTED_PROXY_IPS ? env.CLOUD_HTTP_TRUSTED_PROXY_IPS.split(',').map(value => value.trim()) : []});
 }
 
 export function passwordCorpusPath(env: NodeJS.ProcessEnv): string | undefined {

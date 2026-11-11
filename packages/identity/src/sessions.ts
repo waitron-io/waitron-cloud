@@ -7,8 +7,9 @@ export const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const TOKEN_FORMAT = /^[A-Za-z0-9_-]{43}$/;
 const DUMMY_PASSWORD_HASH = await hashSecret('cloud-login-timing-dummy');
 const passiveRead = new AsyncLocalStorage<boolean>();
+const enrollmentPolicy = new AsyncLocalStorage<{required: boolean; allowEnrollment: boolean}>();
 export interface SessionCredentials { token: string; csrfToken: string; accountId: string; }
-export interface Session { accountId: string; expiresAt: string; }
+export interface Session { accountId: string; expiresAt: string; enrollmentRequired?: true; }
 export interface AccountSessionSummary {
   id: string;
   createdAt: string;
@@ -18,7 +19,7 @@ export interface AccountSessionSummary {
 }
 export interface AccountSessionRevocation { revoked: boolean; current: boolean; }
 export class IdentityError extends Error {
-  readonly code: 'credentials_invalid' | 'session_unavailable' | 'session_expired' | 'csrf_invalid' | 'permission_denied';
+  readonly code: 'credentials_invalid' | 'session_unavailable' | 'session_expired' | 'csrf_invalid' | 'permission_denied' | 'enrollment_required';
   constructor(code: IdentityError['code']) {
     super(code);
     this.name = 'IdentityError';
@@ -80,6 +81,11 @@ export async function createSession(client: PoolClient, accountId: string): Prom
 
 export function withPassiveRead<T>(read: () => T): T { return passiveRead.run(true, read); }
 
+// Country policy follows nested store checks; enrollment routes retain all ordinary session and CSRF checks.
+export function withEnrollmentPolicy<T>(policy: {required: boolean; allowEnrollment: boolean}, run: () => T): T {
+  return enrollmentPolicy.run({...policy}, run);
+}
+
 export async function resolveSession(client: PoolClient, token: string, options: {touch?: boolean; csrfToken?: string} = {}): Promise<Session> {
   if (!isToken(token)) throw new IdentityError('session_unavailable');
   const tokenHash = digest(token);
@@ -102,9 +108,19 @@ export async function resolveSession(client: PoolClient, token: string, options:
       throw new IdentityError('csrf_invalid');
     }
   }
+  let enrollmentRequired: true | undefined;
+  const policy = enrollmentPolicy.getStore();
+  if (policy?.required) {
+    const {rows} = await client.query(`SELECT EXISTS(SELECT 1 FROM cloud_passkeys WHERE account_id=$1)
+      OR EXISTS(SELECT 1 FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL) AS enrolled`, [accountId]);
+    if (!rows[0].enrolled) {
+      if (!policy.allowEnrollment) throw new IdentityError('enrollment_required');
+      enrollmentRequired = true;
+    }
+  }
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) await client.query('UPDATE cloud_sessions SET last_seen_at = $2 WHERE token_hash = $1', [tokenHash, now]);
-  return { accountId, expiresAt: new Date(Math.min(touch ? now.getTime() + IDLE_TIMEOUT_MS : idleDeadline, absoluteDeadline)).toISOString() };
+  return { accountId, expiresAt: new Date(Math.min(touch ? now.getTime() + IDLE_TIMEOUT_MS : idleDeadline, absoluteDeadline)).toISOString(), ...(enrollmentRequired ? {enrollmentRequired} : {}) };
 }
 
 export async function endSession(client: PoolClient, token: string): Promise<boolean> {

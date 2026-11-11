@@ -249,3 +249,34 @@ test('listing passkeys is passive and suspension invalidates it', async () => {
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp() WHERE id = $1', [owner.accountId]);
   assert.equal((await request('/passkeys', undefined, {headers: {cookie: session.header}})).status, 401);
 });
+
+// Without the current policy gate, an email-checked password session reaches ordinary account data.
+test('country enrollment policy restricts an existing session until a passkey is verified, even without app keys', async () => {
+  const owner = await account(), session = await signIn(owner.email);
+  const headers = {cookie: session.header, 'x-csrf-token': session.csrf};
+  app = createAccountApp({pool: db.pool, outbox: db.outbox, factor: {keys: null, policy: emailLoginPolicy},
+    config: {...config(), requireEnrollment: true}, passkeyAdapter: new FixtureAdapter()});
+  const restricted = await request('/session', undefined, {headers});
+  assert.equal(restricted.status, 200);
+  assert.equal((await restricted.json()).enrollmentRequired, true);
+  const blocked = await request('/sessions', undefined, {headers});
+  assert.equal(blocked.status, 403); assert.deepEqual(await blocked.json(), {error: 'enrollment_required'});
+  assert.equal((await request('/passkeys', undefined, {headers})).status, 200);
+  assert.equal((await request('/passkeys/registration/options', {password}, {headers: {cookie: session.header}})).status, 403);
+  const pending = await request('/passkeys/registration/options', {password}, {headers});
+  assert.equal(pending.status, 200); const ceremony = await pending.json();
+  assert.equal((await request('/sessions', undefined, {headers})).status, 403, 'starting enrollment grants no ordinary access');
+  const verified = await request('/passkeys/registration/verify', {ceremonyId: ceremony.ceremonyId, response: registrationResponse()}, {headers});
+  assert.equal(verified.status, 201); const passkey = await verified.json();
+  assert.equal(Object.hasOwn(await (await request('/session', undefined, {headers})).json(), 'enrollmentRequired'), false);
+  assert.equal((await request('/sessions', undefined, {headers})).status, 200);
+  const credential=(await db.pool.query('SELECT p.credential_id,u.user_handle FROM cloud_passkeys p JOIN cloud_passkey_users u USING(account_id) WHERE p.id=$1',[passkey.id])).rows[0];
+  const authentication=await(await request('/passkeys/authentication/options',{})).json();
+  const signedIn=await request('/passkeys/authentication/verify',{ceremonyId:authentication.ceremonyId,response:authenticationResponse(credential.credential_id,credential.user_handle.toString('base64url'))});
+  assert.equal(signedIn.status,200);
+  assert.equal((await request('/sessions',undefined,{headers:{cookie:cookies(signedIn).header}})).status,200,'standalone passkey sessions satisfy country policy');
+  assert.equal((await request('/passkeys/remove', {id: passkey.id, password}, {headers})).status, 204);
+  assert.equal((await request('/sessions', undefined, {headers})).status, 403, 'removing the last method restricts the live session again');
+  app = createAccountApp({pool: db.pool, outbox: db.outbox, factor: {keys: null, policy: emailLoginPolicy}, config: config()});
+  assert.equal((await request('/sessions', undefined, {headers})).status, 200, 'turning the country requirement off lifts it');
+});
