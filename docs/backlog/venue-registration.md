@@ -6,6 +6,8 @@ and first legal business. Signed matching-code pairing requires current Cloud ap
 to add venues and current local administrator approval, supports one person holding both
 permissions, enforces one organisation per venue, and handles existing links, renewable
 installation credentials, replacement and revocation.
+Keep pairing, machine-proof and access-lease formats in Waitron's published
+`@waitron-io/contract`; Cloud keeps its configured trust and fixed wire vectors.
 Keep venue identity stable across replacement and issue fresh installation credentials.
 Test that restoring data alone does not grant primary authority and that a returning
 old server follows Waitron's recovery rules. Cloud revocation alone does not establish

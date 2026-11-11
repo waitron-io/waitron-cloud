@@ -3170,8 +3170,8 @@ implementation or production evidence.
   for configured synthetic accounts. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
   covers test-only saved methods. Paid-plan choices, tax details, cancellation, account
   closure, hosting enrolment, supplier qualification and production billing remain open.
-- **Venue and node registration.** The agreed Waitron signup and connection journey is
-  implemented locally. Planned handover, diagnostics, retention, key provisioning
+- **Venue and node registration.** The agreed Waitron signup and connection journey uses
+  Waitron's published signing formats locally. Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open;
   see [the requirements and deliberate limits](backlog/venue-registration.md).
 - **Provisioning and placement.** The owner approved the
