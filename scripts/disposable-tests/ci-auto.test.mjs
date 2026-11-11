@@ -476,7 +476,7 @@ test('a full working pool keeps its occupied capacity when another guest cannot 
  assert.equal(capacity.slots,6);assert.equal(capacity.serverRunning,6);
 });
 
-test('pickup retries only its recorded busy-runner failure once, while other turns stay retired',async t=>{
+for(const quota of [false,true])test(`pickup retries only its recorded ${quota?'pre-registration quota':'busy-runner'} failure once, while other turns stay retired`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases,withAvailableSlot}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t),f=fixture(),get=f.api.get;
  f.jobs.splice(2);
@@ -487,7 +487,10 @@ test('pickup retries only its recorded busy-runner failure once, while other tur
   const lease=failed.reserveLocal(ciRequest('I',identity)).lease;
   failed.release(lease,{resourceId:lease.resourceId,absent:true});
   if(identity.jobId!==901)failed.forgetRunner(failed.inspect().orphanRunners.find(r=>r.ci.jobId===identity.jobId));
-  if(identity.jobId===901)failed.recordBusyRunnerFailure({code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'});
+  if(identity.jobId===901){
+   const result={code:125,cleanup:'absent',lease,error:quota?'GitHub GET refused (403)':'CI runner assignment is busy elsewhere'};
+   if(quota)failed.recordCIRetryFailure(result,Date.now()-1);else failed.recordBusyRunnerFailure(result);
+  }
  }
  const admitted=[];
  const options={configuration:'/fixture/config.json',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:ci=>withAvailableSlot(config,async({leases})=>{
@@ -500,7 +503,7 @@ test('pickup retries only its recorded busy-runner failure once, while other tur
  await automaticTick(options);await automaticTick(options);
  assert.deepEqual(admitted,[901]);
  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
- assert.equal(Object.keys(state.turns).length,2);assert.equal(state.turns['I:ci-789-1-901'].busyRunnerRetried,true);
+ assert.equal(Object.keys(state.turns).length,2);assert.equal(state.turns['I:ci-789-1-901'][quota?'admissionQuotaRetried':'busyRunnerRetried'],true);
  assert.equal(state.turns['I:ci-789-1-902'].busyRunnerRetried,undefined);
 });
 

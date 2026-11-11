@@ -564,17 +564,22 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
    pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
  }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
- let completion;
+ let completion,admissionQuotaRetryAt;
  let result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
   healthy:options=>transport.healthy(options),transfer:(lease,options)=>transport.transfer(lease,options),
   prepare:(lease,options)=>transport.prepare(lease,options),
   execute:async(lease,options)=>{
+   try{
    const run=await api.get(`${base}/runs/${ci.runId}`,options),job=await api.get(`${base}/jobs/${ci.jobId}`,options);
    assert.ok(run.id===ci.runId && run.run_attempt===ci.attempt && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
     ['queued','in_progress'].includes(run.status) && run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId &&
     job.name===jobName(ci) && job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt &&
     job.head_sha===ci.workflowSha && job.status==='queued' && !job.runner_id,'CI identity changed before registration');
    assert.equal((await namedRunners(api,repository,name,options.signal)).length,0,'CI runner name already registered; do not remint');
+   }catch(error){
+    if([403,429].includes(error.status) && Number.isSafeInteger(error.retryAt))admissionQuotaRetryAt=error.retryAt;
+    throw error;
+   }
    // Match hosted checkouts because coverage blobs key source files by absolute path.
    const registration=await api.post(`${base}/runners/generate-jitconfig`,{
     name,runner_group_id:1,labels:['self-hosted',routingLabel(ci)],work_folder:'/home/runner/work'},options);
@@ -661,7 +666,10 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
   },destroy:(lease,options)=>transport.destroy(lease,options),inspect:(lease,options)=>transport.inspect(lease,options)
  }});
  if(completion)result={...result,completion};
- try{leases.recordBusyRunnerFailure(result);}
+ try{
+  if(admissionQuotaRetryAt!==undefined)leases.recordCIRetryFailure(result,admissionQuotaRetryAt);
+  else leases.recordBusyRunnerFailure(result);
+ }
  finally{
   if(result.cleanup==='absent'){
    try{await cleanupRunners({leases,api,repository,signal:AbortSignal.timeout(120000)});}

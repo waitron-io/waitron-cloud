@@ -47,12 +47,44 @@ test('one CI turn persists registration and destroys its VM before deregistratio
  assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
  assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
+for(const status of [403,429])test(`a pre-registration quota refusal (${status}) retries once after reset and confirmed cleanup`,async t=>{
+ const {runCI}=await import('./ci-canary.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity}),get=f.api.get;
+ const retryAt=Date.now()+60000;let limited=true;
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,
+  route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ f.api.get=async(path,options)=>{
+  if(limited && path.endsWith('/runs/789'))throw Object.assign(new Error(`GitHub GET refused (${status})`),{status,retryAt});
+  return get(path,options);
+ };
+ const refused=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});
+ assert.equal(refused.code,125);assert.equal(refused.cleanup,'absent');
+ assert.equal(f.events.includes('register'),false);assert.equal(f.leases.inspect().orphanRunners.length,0);
+ assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,75);
+ f.leases.now=()=>retryAt+1;limited=false;
+ assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,0);
+ assert.equal(f.events.filter(event=>event==='register').length,1);
+ assert.equal(f.leases.reserveLocal(ciRequest('I',identity)).code,75,'a completed retry cannot gain a third guest');
+});
 test('lost registration never remints and reconciliation removes the recorded name after VM destruction',async t=>{
  const {runCI}=await import('./ci-canary.mjs');const f=fixture(t,{lost:true});
  const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud'});assert.equal(result.code,125);
  assert.deepEqual(f.events,['transfer','prepare','register','destroy','inspect','deregister']);
  const replay=await runCI({...f,lane:'I',ci,repository:'fixture/cloud'});assert.equal(replay.code,75);
  assert.equal(f.events.filter(x=>x==='register').length,1);
+});
+test('a quota refusal from registration remains retired after reset',async t=>{
+ const {runCI}=await import('./ci-canary.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity,lost:true}),post=f.api.post;
+ const retryAt=Date.now()+60000;
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,
+  route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ f.api.post=async(...args)=>{try{return await post(...args);}catch(error){throw Object.assign(error,{status:403,retryAt});}};
+ assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,125);
+ f.leases.now=()=>retryAt+1;
+ assert.equal(f.leases.reserveLocal(ciRequest('I',identity)).code,75);
+ assert.equal(f.events.filter(event=>event==='register').length,1);
+ assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 test('uncertain guest cleanup leaves capacity closed and never removes the runner',async t=>{
  const {runCI}=await import('./ci-canary.mjs');const f=fixture(t,{uncertain:true});
