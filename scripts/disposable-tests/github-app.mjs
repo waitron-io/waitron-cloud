@@ -30,11 +30,13 @@ export async function withRequestCounts(work,role='other'){
 async function githubFetch(url,options,kind='api'){
  const scope=requestCounts;
  const path=new URL(url).pathname;
- const category=kind==='token'?'token':/\/actions\/jobs\/[0-9]+(?:\/logs)?$/.test(path)?'job':
+ const category=kind==='token'?'token':/\/actions\/jobs\/[0-9]+\/logs$/.test(path)?'job-log':/\/actions\/jobs\/[0-9]+$/.test(path)?'job':
   /\/actions\/runs\/[0-9]+\/(?:attempts\/[0-9]+\/)?jobs$/.test(path)?'jobs':
   /\/actions\/runs\/[0-9]+(?:\/.*)?$/.test(path)?'run':/\/actions\/runs$/.test(path)?'runs':
   /\/actions\/runners(?:\/.*)?$/.test(path)?'runner':/\/actions\/variables(?:\/.*)?$/.test(path)?'variable':
-  /\/pulls(?:\/.*)?$/.test(path)?'pull':/\/compare\//.test(path)?'compare':'other';
+  /\/actions\/workflows\/[^/]+\/runs$/.test(path)?'workflow-runs':/\/actions\/permissions(?:\/.*)?$/.test(path)?'permissions':
+  /\/contents\//.test(path)?'contents':/\/commits\//.test(path)?'commit':/\/git\/ref\//.test(path)?'ref':
+  /^\/repos\/[^/]+\/[^/]+$/.test(path)?'repository':/\/pulls(?:\/.*)?$/.test(path)?'pull':/\/compare\//.test(path)?'compare':'other';
  const method=options?.method??'GET',key=(/^(GET|POST|PATCH|DELETE|PUT|HEAD)$/.test(method)?method:'OTHER')+' '+category;
  const bucket=()=>{const minute=Math.floor(Date.now()/60000)*60000;
   if(!scope.buckets.has(minute))scope.buckets.set(minute,{requests:0,failedFetches:0,notModified:0,categories:{}});return scope.buckets.get(minute);};

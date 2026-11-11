@@ -381,7 +381,7 @@ when they start; `failedFetches` belongs to the minute when fetch rejects. These
 local fetch attempts, not the whole App's consumption. `latestResponse` keeps one
 local observation timestamp, status and raw resource/limit/used/remaining/reset snapshot; `kind`
 distinguishes token replies from ordinary API replies, and missing headers are null.
-`role` distinguishes controller, worker and canary processes. Each minute also has
+`role` distinguishes controller recovery/pickup, worker, lane, operator and canary commands. Each minute also has
 method/endpoint `categories` with requests, failed fetches, 304 (`notModified`) counts
 and their own latest raw quota snapshot. Categories retain no URL, repository, job
 id, body or credential. Top-level `notModified` counts all 304 replies; this logging

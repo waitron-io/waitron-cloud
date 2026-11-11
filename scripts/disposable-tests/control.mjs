@@ -219,6 +219,6 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
- try{const result=await withRequestCounts(()=>main(process.argv.slice(2)),process.argv[3]==='job'?'worker':'controller');console.log(JSON.stringify(result));process.exitCode=result.code;}
+ try{const result=await withRequestCounts(()=>main(process.argv.slice(2)),process.argv[3]==='job'?'worker':process.argv[3]==='run'?'lane':'operator');console.log(JSON.stringify(result));process.exitCode=result.code;}
  catch(error){console.error(error.message);process.exitCode=125;}
 }

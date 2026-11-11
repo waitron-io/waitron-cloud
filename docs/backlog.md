@@ -11,8 +11,8 @@ The matched two-archive support is published on NEW/BENCH with twelve mapped slo
 the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
-still waits for the publication fixture's Git-free correction and the unchanged live
-proof. App quota exhaustion has paused admission twice; the measurement-first slice
+still waits for republication and the unchanged live proof. The publication fixture
+now supplies its own Git metadata. App quota exhaustion has paused admission; this slice
 adds controller/worker endpoint counters and raw quota headers, without caching or
 changing the 15-second cadence. Qualify one real reset window and name other App
 consumers before choosing the quota fix. OLD's CI startup is disabled; it stays
