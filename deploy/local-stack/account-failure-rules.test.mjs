@@ -110,5 +110,7 @@ test('decreasing measured counts or selected buckets starts new slowness coverag
   const next=counter.snapshot(),row=next.series[0];
   if(changed==='count'){row.count=9;row.buckets=row.buckets.map(n=>Math.min(n,9));}else row.buckets[1]=4;
   assert.deepEqual(view(rules.update(next,2000)),[['account','fast',false,null],['account','slow',false,null]],changed);
+  for(let i=0;i<6;i++)counter.record('account',200,.2);
+  assert.deepEqual(view(rules.update(counter.snapshot(),4000))[1],['account','slow',false,null],changed);
  }
 });

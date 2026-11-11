@@ -719,9 +719,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    The local collector now exposes account-service request counts, timing bands and
    configurable fast/slow failure and slowness breaches per request group, exercised
    with synthetic local collector checks. It pages nobody and opens no work items.
-   Here `rule="slow"` means the design's long-window rule (about twice normal for some
-   hours), rather than requests taking too long. Trial-derived targets and hosted-server
-   measurements remain open. See the
+   Here `rule="slow"` names the design's long-window rule, rather than requests taking
+   too long: the design intends about twice normal for some hours, while actual values
+   are explicit settings. Trial-derived targets and hosted-server measurements remain open. See the
    [request measurements](operations-status.md#collect-status-in-the-local-deployment)
    for scope and the cross-process rehearsal command.
 3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
