@@ -165,8 +165,8 @@ test('failure rules are optional and expose only current bounded series',async()
  await collection.poll();
  assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="fast"\} 0\n/);
  assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="slow"\} 0\n/);
- time=7001;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
- time=7500;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
+ time=9499;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
+ time=9500;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
  assert.doesNotMatch(collection.metrics(),/account_failure_rule_breached\{/);
 });
 
@@ -197,4 +197,59 @@ test('configured rules reach the HTTP scrape through service startup',async()=>{
   assert.equal(response.status,200);
   assert.match(await response.text(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
  }finally{controller.abort();await done;}
+});
+
+test('published rule and raw readings survive an unfinished single-flight poll',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const failureRules={failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
+ let time=0,release,held=true,calls=0;
+ const counter=new RequestMetrics(1);
+ const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:2000,failureRules,collect:async()=>snapshot(),
+  collectRequests:async()=>{calls++;if(held)await new Promise(resolve=>{release=resolve;});return counter.snapshot();}});
+ const first=collection.poll();await new Promise(resolve=>setImmediate(resolve));
+ try{assert.equal(collection.status().collection.state,'pending');}finally{held=false;release();await first;}
+ time=1000;counter.record('account',500);await collection.poll();
+ const before=collection.metrics();held=true;
+ const pending=collection.poll();await new Promise(resolve=>setImmediate(resolve));
+ try{
+  await collection.poll();assert.equal(calls,3,'the pending account read must keep the poll single-flight');
+  assert.equal(collection.status().collection.state,'current');
+  assert.equal(collection.metrics(),before,'a pending read must retain the current published sample');
+ }finally{held=false;release();await pending;}
+});
+
+test('failure rule metric families remain contiguous and typed',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const failureRules={failureTargets:{account:.1,portal:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
+ let time=0;const counter=new RequestMetrics(1);
+ const collection=createCollection({now:()=>time,intervalMs:1000,failureRules,collect:async()=>snapshot(),collectRequests:async()=>counter.snapshot()});
+ await collection.poll();time=3000;counter.record('account',500);counter.record('portal',200);await collection.poll();
+ const lines=collection.metrics().split('\n').filter(line=>line.includes('account_failure_rule'));
+ const families=[];
+ for(const line of lines){
+  const name=line.match(/(?:# TYPE )?(waitron_cloud_account_failure_rule_\w+)/)[1];
+  if(name!==families.at(-1))families.push(name);
+ }
+ assert.deepEqual(families,['waitron_cloud_account_failure_rule_ready','waitron_cloud_account_failure_rule_breached']);
+ assert.equal(lines[0],'# TYPE waitron_cloud_account_failure_rule_ready gauge');
+ assert.equal(lines[5],'# TYPE waitron_cloud_account_failure_rule_breached gauge');
+ assert.equal(lines.length,10);
+});
+
+test('rule freshness covers a timeout inspection and the following bounded account read',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ const failureRules={failureTargets:{account:.1},fast:{windowMs:1000,multiplier:2},slow:{windowMs:3000,multiplier:1}};
+ let time=0,slow=false,midReadMetrics;const counter=new RequestMetrics(1);
+ const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:30000,failureRules,
+  collect:async()=>{if(slow){time+=30000;throw Error();}return snapshot();},
+  collectRequests:async()=>{
+   if(slow){time+=1999;midReadMetrics=collection.metrics();}
+   return counter.snapshot();
+  }});
+ await collection.poll();time=1000;counter.record('account',500);await collection.poll();
+ time=2000;slow=true;counter.record('account',500);await collection.poll();
+ assert.equal(time,33999);
+ assert.match(midReadMetrics,/account_failure_rule_ready\{group="account",rule="fast"\} 1\n/);
+ assert.match(collection.metrics(),/account_failure_rule_breached\{group="account",rule="fast"\} 1\n/);
+ time=66999;assert.match(collection.metrics(),/account_failure_rule_ready\{group="account",rule="fast"\} 0\n/);
 });

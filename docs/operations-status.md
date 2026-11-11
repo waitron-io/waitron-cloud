@@ -241,7 +241,8 @@ from cumulative counts across missed polls.
 
 Coverage uses the latest baseline at least one window old and no more than
 `collection interval + 30 seconds + 2 seconds` older than that window. Counts expire after
-`collection interval + 30 seconds` without a successful read. The collector retains only
+`collection interval + 30 seconds + 2 seconds` without a successful read, allowing
+the next inspection and account read to finish. The collector retains only
 the samples needed for the longest configured window and that allowance, in memory.
 Collector restart loses this history; account restart, decreasing counters or backward
 time starts new coverage. Frequent restarts or low traffic can leave rules unknown; one

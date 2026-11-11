@@ -17,12 +17,15 @@ export function createCollection({collect,collectRequests=async()=>null,interval
  let rows=Object.keys(failureRules?.failureTargets??{}).flatMap(group=>['fast','slow'].map(rule=>({group,rule,ready:false,breached:null})));
  function ruleMetrics(){
   if(!rules)return '';
-  const fresh=rulesAvailable&&now()<rulesAt+intervalMs+timeoutMs;
-  return '# TYPE waitron_cloud_account_failure_rule_ready gauge\n# TYPE waitron_cloud_account_failure_rule_breached gauge\n'+rows.map(row=>{
+  const fresh=rulesAvailable&&now()<rulesAt+intervalMs+timeoutMs+2000;
+  const readyLines=[],breachLines=[];
+  for(const row of rows){
    const labels=`group="${row.group}",rule="${row.rule}"`,ready=fresh&&row.ready;
-   return `waitron_cloud_account_failure_rule_ready{${labels}} ${ready?1:0}\n`
-    +(ready?`waitron_cloud_account_failure_rule_breached{${labels}} ${row.breached?1:0}\n`:'');
-  }).join('');
+   readyLines.push(`waitron_cloud_account_failure_rule_ready{${labels}} ${ready?1:0}\n`);
+   if(ready)breachLines.push(`waitron_cloud_account_failure_rule_breached{${labels}} ${row.breached?1:0}\n`);
+  }
+  return '# TYPE waitron_cloud_account_failure_rule_ready gauge\n'+readyLines.join('')
+   +'# TYPE waitron_cloud_account_failure_rule_breached gauge\n'+breachLines.join('');
  }
  function status(){
   const current=state==='current'&&now()<succeededAt+intervalMs+timeoutMs;
@@ -40,19 +43,22 @@ export function createCollection({collect,collectRequests=async()=>null,interval
    +(current?text:'')+ruleMetrics();
  },async poll(){
   if(running)return;running=true;attemptedAt=now();
+  let nextSample=null,nextText='',nextState='failed';
   try{
    const next=await collect();
    if(next?.version!==1||!['ready','degraded','unready'].includes(next.state)||next.ready!==(next.state==='ready')||!Number.isFinite(Date.parse(next.checkedAt)))throw Error();
-   sample=next;text=operationsMetrics(next);state='current';
-  }catch{sample=null;text='';state='failed';}
+   nextSample=next;nextText=operationsMetrics(next);nextState='current';
+  }catch{}
   try{
-   requestsAvailable=false;rulesAvailable=false;
    const counts=await collectRequests(),readAt=now();
    const metrics=formatRequestMetrics(counts);
    if(rules){rows=rules.update(counts,readAt);rulesAt=readAt;rulesAvailable=true;}
-   if(state==='current'){text+=metrics;requestsAvailable=true;}
-  }catch{}
-  finally{if(state==='current')succeededAt=now();running=false;}
+   nextText+=metrics;requestsAvailable=true;
+  }catch{requestsAvailable=false;rulesAvailable=false;}
+  finally{
+   sample=nextSample;text=nextText;state=nextState;
+   if(state==='current')succeededAt=now();running=false;
+  }
  }};
 }
 
