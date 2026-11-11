@@ -216,11 +216,11 @@ test('configured rules reach the HTTP scrape through service startup',async()=>{
 test('machine trends keep independent queues and resources through failure, expiry and recovery',async()=>{
  const {createCollection}=await import('./operations-collector.mjs');
  const trendRules={machine:'local-a',limits:Object.fromEntries(['disk','memory','load','email','backup_due'].map(signal=>[signal,{limit:signal==='disk'||signal==='memory'?.9:5,windowMs:1000,horizonMs:signal==='disk'?3000:5000}]))};
- let time=0,operationFail=false,malformed=false,oldest=null,mail=0,due=0,machine={disk:.5,memory:.1,load:0};
+ let time=0,inspectionLag=0,operationFail=false,malformed=false,oldest=null,mail=0,due=0,machine={disk:.5,memory:.1,load:0};
  const inputs={now:()=>time,intervalMs:1000,timeoutMs:2000,collectMachine:async()=>machine,collect:async()=>{
   if(operationFail)throw Error('private database');
   if(malformed)return {...snapshot(),components:{}};
-  const sample=snapshot();sample.checkedAt=new Date(time).toISOString();
+  const sample=snapshot();sample.checkedAt=new Date(time-inspectionLag).toISOString();
   Object.assign(sample.components.email,{counts:{...sample.components.email.counts,pending:mail},oldestPendingAt:oldest});
   Object.assign(sample.components.backups,{due,oldestDueAt:oldest});return sample;
  }};
@@ -247,6 +247,10 @@ test('machine trends keep independent queues and resources through failure, expi
  assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="email"\} 1\n/);
  assert.match(collection.metrics(),/machine_trend_rule_ready\{machine="local-a",signal="memory"\} 0\n/);
  assert.doesNotMatch(collection.metrics(),/private/);
+ const lagged=createCollection({...inputs,trendRules:{...trendRules,limits:{...trendRules.limits,email:{limit:1.5,windowMs:1000,horizonMs:1}}}});
+ mail=1;inspectionLag=1000;time=11000;oldest=new Date(9000).toISOString();await lagged.poll();
+ time=12000;oldest=new Date(10000).toISOString();await lagged.poll();
+ assert.match(lagged.metrics(),/machine_trend_rule_breached\{machine="local-a",signal="email"\} 0\n/);
 });
 
 test('invalid machine trend settings refuse startup with their own diagnostic',async()=>{

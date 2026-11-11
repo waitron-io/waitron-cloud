@@ -153,6 +153,7 @@ test('missing machine signals recover independently and backward time discards c
  const rules=createTrendRules(trendSettings,{intervalMs:1000,timeoutMs:2000});
  rules.update({disk:{value:.1,at:0},memory:{value:.1,at:0}},0);
  assert.equal(rules.update({disk:{value:.2,at:1000},memory:{value:.2,at:1000}},1000)[0].ready,true);
+ assert.deepEqual(rules.update({disk:{value:1,at:5000}},2000).slice(0,1).map(({ready,breached})=>[ready,breached]),[[false,null]]);
  const missing=rules.update({disk:{value:1,at:-10000},memory:{value:1,at:2000}},2000);
  assert.deepEqual(missing.slice(0,2).map(({ready,breached})=>[ready,breached]),[[false,null],[true,true]]);
  const recovered=rules.update({disk:{value:.1,at:7001},memory:{value:.1,at:7001}},7001);
