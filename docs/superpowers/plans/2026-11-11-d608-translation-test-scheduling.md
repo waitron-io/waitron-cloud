@@ -1,0 +1,18 @@
+# D608 translation test scheduling plan
+
+Request, verbatim from Lane G questions.md, watcher 11 November 2026 at 19:09:
+> Run the launcher fixture apart from the package's concurrent database files, keeping its 20 s/30 s limits and assertions, in its own small PR, light review. Then rerun #1173 fresh.
+
+The watcher chose isolation after the Linux comparison: candidate startup/migrate 6,456/1,739 ms, main 6,076/1,614 ms; both complete packages passed 685 cases locally. PR1173 timed out twice. These observations do not establish the historical CI cause. No owner design approval is claimed. Claude reviewed the first plan in 159 seconds; this revision applies its simplifications.
+
+Finish line: the launcher runs alone before the other translation and quality files. Both phases still run when either fails, every file runs once, and either failure makes the package command fail. Then land this separate small PR and rerun1173; a clean rerun does not establish every timeout cause as fixed.
+
+Reuse the Node26 test runner, both existing reporters and the temporary-package/event/owned-process support in scripts/ci-local-test-concurrency.test.mjs. Keep the launcher file unchanged, including its20-second Compose limit; both invocations retain --test-timeout=30000. No helper runner, rename, workflow, new deadline or product behavior.
+
+- [ ] Add behavioral checks in scripts/ci-local-test-concurrency.test.mjs using its existing support: the real manifest command runs the launcher once alone and all current/new test and quality names once; a small failure variant proves each phase's nonzero status survives while both phases finish. Preserve existing registration/account-http cases. Use sh -c without its leading exec, which would bypass subsequent shell commands.
+- [ ] Run node --test scripts/ci-local-test-concurrency.test.mjs; observe the new ordering check fail, then change only packages/translation/package.json's test command. First run test/local-stack-runtime.test.ts; save launcher_status=$?; then run the remaining files via quoted Node glob 'test/!(local-stack-runtime).test.ts' and quality/*.test.ts, followed by && exit $launcher_status. Preserve current reporters/timeouts in each invocation. This runs both phases and returns failure from either.
+- [ ] In scripts/ci-input-audit-integration.test.mjs:144, replace only the manifest-pattern assertion with the explicit new remaining-file glob, retaining every planner, mismatch and restored-vector assertion. This changed check needs the watcher's clearance before editing.
+- [ ] Run node --test scripts/ci-local-test-concurrency.test.mjs scripts/ci-required-cases-routes.test.mjs; separately run the changed audit test file. These layers prove actual CLI discovery/order/exit status, required-case coverage and real vector mismatch/restoration. Existing launcher behavior is unchanged and already ran in the per-tree comparison; CI owns the full package command and its685cases. No duplicate standalone box run.
+- [ ] Add one short note in docs/backlog.md under Historical CI observations without a recorded recurrence, distinguishing D574's older startup observation from the new PR1173 timeout and keeping causation open. No README change: its documented command remains correct. Run the focused docs check, follow finish/land under RUNNER, then rerun1173fresh and read every selected current-head job.
+
+Expected added/removed lines: production code +0/-0; manifest configuration +1/-1; tests and test support about +75/-2; documentation about +24/-0 including this plan and the short backlog note. One small PR, no separate plan publication.

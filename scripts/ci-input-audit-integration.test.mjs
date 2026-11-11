@@ -141,7 +141,7 @@ test('a changed published translation vector retains its real package check', ()
     assert.ok(selected.packages.some(row => row.package === '@waitron-cloud/translation'), 'run the translation package');
     assert.deepEqual(selected.receipts, receipts);
     const manifest = JSON.parse(read('packages/translation/package.json'));
-    assert.match(manifest.scripts.test, /node --test .*test\/\*\.test\.ts/);
+    assert.match(manifest.scripts.test, /node --test .*test\/!\(local-stack-runtime\)\.test\.ts/);
     const changedCheck = checkVector();
     assert.equal(changedCheck.status, 1, changedCheck.stdout + changedCheck.stderr);
     assert.match(changedCheck.stdout, /controlled-mismatch/);

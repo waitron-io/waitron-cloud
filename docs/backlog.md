@@ -265,6 +265,10 @@ that they cannot recur. D152's replication failures and D507's cache-miss budget
 qualification remain separate below. A new matching failure joins its existing
 investigation, with the original assertions, limits and cleanup checks preserved.
 
+PR #1173 later hit the translation launcher’s unchanged 20-second startup limit
+twice. The real-stack launcher now runs apart from the package’s database-heavy tests;
+the CI timeout’s cause remains unproved, and no link to D574 is established.
+
 Lane J's local `receipts/d593/sweep-inventory.json` retains every original entry,
 its source revision and its investigation links. The matching failure records
 and review limits are in `receipts/d593/recurrence-review.json`. Use those records
