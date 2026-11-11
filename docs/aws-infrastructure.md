@@ -1071,6 +1071,13 @@ These are per-copy stall cutoffs; the unchanged 90-minute expiry covers setup an
 both journeys too. Small-file copies and image-import limits remain unchanged.
 The lane has not qualified an Amazon transfer; the owner reruns it after local checks.
 
+Debian's containerd looks for network plugins in `/usr/lib/cni` by default. Machine
+set-up points it at `/opt/cni/bin`, where Flannel and `kubernetes-cni` install theirs,
+and at the pause image kubeadm lists. It stops with a plain message if containerd's
+effective configuration disagrees or a base plugin is missing. Once the nodes are
+Ready, the launcher refuses with `amazon.flannel_plugin` if a machine lacks Flannel's
+plugin there, instead of waiting for pods.
+
 SSH masters persist across long idle phases. Final cleanup requests their exit.
 An outright killed launcher can
 leave those connections alive until the disposable machines disappear.

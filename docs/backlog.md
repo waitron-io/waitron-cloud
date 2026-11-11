@@ -3229,9 +3229,11 @@ implementation or production evidence.
   cutoffs use measured bytes and a stated 10 Mbit/s floor. Failed Kubernetes
   commands now retain bounded wait and process evidence; failed checks collect
   application pods and events on Amazon as well as Kind. The controlled checks
-  run with `node --test scripts/kubernetes-check.test.mjs`; they do not establish
-  the cause of the owner’s fourth run. Successful Amazon bootstrap, host loss
-  and independent deletion qualification remain open.
+  run with `node --test scripts/kubernetes-check.test.mjs`. The fifth run's pods
+  never started because Debian's containerd looked for network plugins in
+  `/usr/lib/cni`; machine set-up now points it at `/opt/cni/bin` and refuses at once
+  if it does not. Run results and what stays open are in
+  [the bounded plan](superpowers/plans/2026-11-09-d618-bounded-amazon-run.md#amazon-runs).
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
   policy files, numbered steps, SSH-key creation and owner-run checks. The owner's
   one-run access-key route keeps the existing restricted launcher and requires

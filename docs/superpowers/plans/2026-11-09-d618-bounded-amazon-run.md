@@ -34,3 +34,22 @@ Before launch, manually verify the practice account (STS expected identity/non-r
 **Price read 10 November 2026:** [Amazon On-Demand](https://aws.amazon.com/ec2/pricing/on-demand/) and its [Stockholm price rows](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-north-1/index.csv), effective 1 November, give Linux/shared m7i.xlarge USD 0.2142/hour (SKU CRUEMDX9AV9Q8348). Three × 1.5 hours = USD 0.9639. gp3 is USD 0.0836/GiB-month (SKU H33YTQG3Y9XKNSF3): three 60-GiB disks × 1.5/720 hours = USD 0.03135. [Public IPv4](https://aws.amazon.com/vpc/pricing/) is USD 0.005/address-hour: USD 0.0225. Incoming image transfer is free; allow one charged GB out at USD 0.09, without relying on the account’s free allowance. One subnet keeps machine traffic in the same availability zone. Total allowance: **USD 1.11 before / USD 1.35 after 21% VAT**, rounded up; actual runtime and outgoing bytes decide the bill.
 
 Late deletion has no finite worst-case cap: a deny-launch budget does not stop existing machines. All three left running cost about USD 0.6785/hour before tax, USD 0.8210 after 21% VAT, plus transfer; 24 hours costs USD 16.29/19.71 plus transfer. A ten-minute delay adds about USD 0.114/0.137. Failed teardown reports failure; the owner must confirm deletion and read the bill before another run. [Owner commands](../../aws-infrastructure.md#one-owner-started-amazon-experiment) cover the manual prerequisites.
+
+## Amazon runs
+
+The fifth run (11 November) reached Ready nodes, but every pod sandbox failed with
+`failed to find plugin "flannel" in path [/usr/lib/cni]`. A Debian 13 container's
+`containerd config default` (containerd 1.7.24) printed `bin_dir = "/usr/lib/cni"` and
+`sandbox_image = "registry.k8s.io/pause:3.8"`; Flannel and `kubernetes-cni` install
+into `/opt/cni/bin`. `bootstrap.sh` now sets both and checks containerd's effective
+configuration and base plugins; the launcher checks Flannel's plugin on every machine
+once nodes are Ready (`node --test scripts/amazon-run.test.mjs`).
+
+Run 7 (11 November, stack `d618-5a6df13c-…`, started 21:29 UTC) passed in
+`eu-north-1`: both journeys returned results, C stayed stopped, the manifest pod was
+replaced on B, and the stack's own schedule deleted it (`removed: true`;
+`describe-stacks` then reported that it does not exist). It used a private wrapper
+around `startAmazon` that keeps machines up only after a failure; no failure happened.
+Kubelet's one-off "invalid capacity 0 on image filesystem" warning at start-up was
+left as it is: it follows "Stats initialization may not have completed yet".
+D621's speed targets, database-host loss and production-mode checks remain open.

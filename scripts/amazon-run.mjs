@@ -207,6 +207,10 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         const joinCommand = await ssh(0, ['sudo', 'kubeadm', 'token', 'create', '--ttl', '20m', '--print-join-command']);
         for (const index of [1, 2]) await bootstrap(index, 'join', [], joinCommand + '\n');
         await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s']);
+        for (let index = 0; index < 3; index++) {
+          const found = await ssh(index, ['sh', '-c', 'test -x /opt/cni/bin/flannel && echo present || echo missing']);
+          assert.equal(found, 'present', 'amazon.flannel_plugin: machine ' + index + ' has no flannel network plugin in /opt/cni/bin, where containerd looks');
+        }
       },
       journey: async phase => {
         target.phase = phase;
