@@ -130,7 +130,6 @@ function startedWork(job){
  if(job.name==='server-queue-watchdog'||job.name==='changes'&&job.status==='completed'&&job.conclusion==='success')return false;
  return job.runner_id>0 || job.status==='in_progress' || job.status==='completed'&&!['skipped','cancelled'].includes(job.conclusion);
 }
-const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
 export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
  const usable=healthy?state.slots.filter(s=>(!Array.isArray(healthy)||healthy.includes(s.id))&&s.state!=='quarantined'&&!s.orphanRunners?.length):[];
  const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
@@ -436,7 +435,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
    const key=ordinaryKey(job.name,job.labels);
    if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
    candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`};
-   const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,signal});
+   const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,requireHostedRouting:untouched,signal});
    if(ci)found.push(ci);
    if(found.length===limit)return found;
    if(ci && onePerRun)break;

@@ -1548,3 +1548,14 @@ for(const [state,count] of [['completed',47],['in_progress',5]])test(`overflow s
  const found=await controller.findAutomatic({api,policy,limit:1,onePerRun:true,untouched:true,runs:new Map([[789,f.run],[790,run]])});
  assert.deepEqual(found.map(ci=>ci.jobId),[1001]);
 });
+
+test('overflow selection skips an older workflow without hosted-marker support',async()=>{
+ const f=fixture(),get=f.api.get,run={...f.run,id:790,head_sha:execution,pull_requests:[{number:13}],created_at:new Date(Date.now()-90000).toISOString()};
+ const jobs=f.jobs.map((job,i)=>({...job,id:1001+i,run_id:790,head_sha:execution,labels:job.labels.map(label=>label.replace('-789-','-790-'))}));
+ const api={get:async(path,options)=>path.endsWith('/actions/runs/790')?run:path.includes('/runs/790/attempts/')?{total_count:jobs.length,jobs}:
+  path.endsWith('/pulls/13')?{number:13,state:'open',head:{sha:execution,repo:{id:123}},base:{repo:{id:123}}}:
+  path.endsWith('/commits/'+execution)?{sha:execution,commit:{tree:{sha:'4'.repeat(40)}}}:
+  path.includes('/contents/')&&path.endsWith(head)?{encoding:'base64',content:Buffer.from('old workflow').toString('base64')}:get(path,options)};
+ const found=await controller.findAutomatic({api,policy,limit:1,onePerRun:true,untouched:true,runs:new Map([[789,f.run],[790,run]])});
+ assert.deepEqual(found.map(ci=>ci.jobId),[1001]);
+});
