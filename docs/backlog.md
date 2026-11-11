@@ -3223,7 +3223,11 @@ implementation or production evidence.
   supplies `node scripts/amazon-run.mjs start` for the owner-started Amazon run.
   Its local SSH reuse, selected-platform archive checks and one-upload/private-share
   distribution run with `node --test scripts/amazon-run.test.mjs`. Archive-copy
-  cutoffs use measured bytes and a stated 10 Mbit/s floor; successful Amazon bootstrap, host loss
+  cutoffs use measured bytes and a stated 10 Mbit/s floor. Failed Kubernetes
+  commands now retain bounded wait and process evidence; failed checks collect
+  application pods and events on Amazon as well as Kind. The controlled checks
+  run with `node --test scripts/kubernetes-check.test.mjs`; they do not establish
+  the cause of the owner’s fourth run. Successful Amazon bootstrap, host loss
   and independent deletion qualification remain open.
   The [practice-account setup](d618-account-setup.md) supplies the role and budget
   policy files, numbered steps, SSH-key creation and owner-run checks. The owner's

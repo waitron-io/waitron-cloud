@@ -1105,6 +1105,12 @@ spending authority:
    (end is exclusive), then re-read the plan’s linked Stockholm prices.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
+   A failed Kubernetes command records its stage, journey phase, wait arguments,
+   exit code or signal, exception and the last 8,192 characters of stderr.
+   A failed check also reads application pods and events on the Amazon target,
+   keeping the last 16,384 characters of each. Keep this output private with the
+   result; it may identify your machines. It preserves the existing time limits
+   and does not establish why an earlier run failed.
    It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes

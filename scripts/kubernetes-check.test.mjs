@@ -117,6 +117,9 @@ if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSetting
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
+ if(b[0]==='wait'&&((mode==='wait-cloud'&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
+ if(b[0]==='get'&&b[1]==='events'){console.log('cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
+ if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')){console.log('cloud 0/8 Pending');process.exit(0);}
  if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
  if(b[0]==='get'){
   const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=a[1].slice(5);
@@ -134,6 +137,38 @@ if(name==='kubectl'){
   return {directory, log, env: {...process.env, TMPDIR: directory, PATH: directory + ':' + process.env.PATH,
     TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}};
 }
+for (const [target, mode, resource, deadline, exitCode, signal] of [
+  ['kind', 'wait-cloud', 'pod/cloud', '180s', 23, null],
+  ['amazon', 'wait-cloud', 'pod/cloud', '180s', 23, null],
+  ['amazon', 'wait-gateway', 'pod/gateway', '120s', null, 'SIGTERM'],
+]) test('failed ' + resource + ' wait retains bounded command and pod evidence on ' + target, async t => {
+  const fixture = await commandFixture(t, mode), args = [];
+  if (target === 'amazon') {
+    const cluster = 'd618-12345678-1234-4234-8234-123456789abc', file = join(fixture.directory, 'target.json');
+    await writeFile(file, JSON.stringify({type:'amazon', cluster, context:cluster, phase:'before', address:'10.77.0.1',
+      instances:['i-'+'1'.repeat(17), 'i-'+'2'.repeat(17), 'i-'+'3'.repeat(17)],
+      nodes:['-control-plane','-worker','-worker2'].map(suffix => cluster + suffix)}));
+    args.push('--amazon', file);
+  }
+  const run = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', ...args], {env:fixture.env, encoding:'utf8', timeout:10000});
+  assert.equal(run.status, 1, run.stderr);
+  assert.match(run.stderr, /kubernetes.command_failed:kubectl:wait/);
+  const line = run.stderr.split('\n').find(line => line.startsWith('Kubernetes command failure '));
+  assert.ok(line, run.stderr);
+  const failure = JSON.parse(line.slice('Kubernetes command failure '.length));
+  assert.equal(failure.stage, 'kubectl:wait'); assert.equal(failure.target, target);
+  assert.equal(failure.phase, target === 'amazon' ? 'before' : null);
+  assert.deepEqual(failure.wait, ['--for=condition=Ready', resource, '--timeout=' + deadline]);
+  assert.equal(failure.exitCode, exitCode); assert.equal(failure.signal, signal);
+  assert.equal(failure.exception, 'Error'); assert.equal(failure.processTimeoutMs, 180000);
+  assert.equal(failure.stderr.length, 8192); assert.equal(failure.stderrTruncated, true);
+  assert.ok(failure.stderr.endsWith('synthetic wait refusal'));
+  assert.match(run.stderr, /cloud 0\/8 Pending/); assert.match(run.stderr, /FailedCreatePodSandBox synthetic event/);
+  const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), target === 'kind');
+  assert.equal(rows.some(row => row.name === 'kind'), target === 'kind');
+});
+
 for (const mode of ['create-fails', 'signal', 'apply-fails']) test('local command cleans owned cluster, tag and scratch after ' + mode, async t => {
   const fixture = await commandFixture(t, mode);
   const child = spawn(process.execPath, ['scripts/kubernetes-check.mjs'], {env: fixture.env, stdio: ['ignore', 'ignore', 'pipe']});
