@@ -8,7 +8,7 @@ The owner’s settled 8 November 11:25 sign-in rules replace earlier sign-in/res
 
 A sign-in proof is an authenticator app code, SMS code or passkey verified by unlocking your device. Each country has its own account; two countries mean two accounts.
 
-- A verified passkey signs you in alone. The browser offers saved passkeys; “Use passkeys first next time” remembers that preference and goes straight to it. Never reveal whether an email has an account or passkey.
+- A verified passkey signs you in alone. The browser offers saved passkeys; “Remember me” remembers that preference and goes straight to it. Never reveal whether an email has an account or passkey. The portal labels this preference “Use passkeys first next time” (“Usar primero llaves de acceso la próxima vez”).
 - With an app enrolled, password sign-in always asks for its code. Every owner with an app, passkey or SMS enrolled gets single-use recovery codes. A recovery code may stand in for any of those methods (owner, 2026-11-09).
 - If you use a password instead of an unavailable passkey, ask for an app code when enrolled; otherwise email a code, with SMS only if you choose it. SMS cannot bypass an enrolled app.
 - With neither app nor passkey, password alone works on a familiar device/browser. A new one needs email, or chosen SMS, then is remembered. Device recognition differs from remembering a passkey preference; its mechanism and expiry are unchosen.

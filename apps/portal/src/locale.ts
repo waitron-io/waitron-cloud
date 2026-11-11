@@ -543,7 +543,7 @@ const esBase: typeof enBase = {
   forbidden:'No hemos podido verificar la solicitud. Recarga esta página y vuelve a intentarlo.',
   signedOut:'Has cerrado sesión.', sessionExpired:'Tu sesión ha caducado. Inicia sesión de nuevo para continuar.',
   passkeys:'Llaves de acceso', passkeyIntro:'Usa una llave de acceso para iniciar sesión sin escribir tu correo ni tu contraseña. Tu contraseña y la recuperación por correo siguen disponibles.',
-  passkeyRemember:'Usar llaves de acceso la próxima vez',
+  passkeyRemember:'Usar primero llaves de acceso la próxima vez',
   passkeySignIn:'Iniciar sesión con una llave de acceso', passkeyAdd:'Añadir una llave de acceso', passkeyRemove:'Eliminar llave de acceso',
   passkeyCurrentPassword:'Contraseña actual', passkeyCreated:'Añadida', passkeyNone:'Todavía no has añadido ninguna llave de acceso.',
   passkeyUnsupported:'Las llaves de acceso no están disponibles en este navegador. Puedes seguir iniciando sesión con tu contraseña.',

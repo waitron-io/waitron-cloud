@@ -44,7 +44,7 @@ export class PortalApp {
   alerts: AlertController;
   translationConsent: TranslationConsentController;
   passkeys: PasskeyController;
-  readonly passkeyFirst: boolean;
+  passkeyFirst: boolean;
   security: AccountSecurityController;
   authenticator: AuthenticatorController;
   factorCodes: string[] = [];
@@ -108,6 +108,7 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    if (state.kind === 'authenticated') this.#passkeyOffered = false;
     // Redirect before starting reads so navigation cannot discard their replies.
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -189,6 +190,7 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
     this.billing.fence();
+    if (path === '/login') this.passkeyFirst = this.passkeys.preferred;
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
