@@ -18,6 +18,19 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 // Bind the code digest to the opaque browser challenge, rather than a six-digit value alone.
 export const signInCodeHash = (token: string, code: string) => digest(JSON.stringify(['cloud-email-sign-in-v1',token,code]));
 
+export type RememberedCredentials = import('@waitron-cloud/identity').SessionCredentials & {browserToken?: string};
+export async function rememberBrowser(client: PoolClient, accountId: string): Promise<string> {
+  const token = randomBytes(32).toString('base64url');
+  await client.query(`INSERT INTO cloud_recognised_browsers(token_hash,account_id,created_at,expires_at)
+    VALUES($1,$2,statement_timestamp(),statement_timestamp()+interval '30 days')`,[digest(token),accountId]);
+  return token;
+}
+export async function recognisedBrowser(client: PoolClient, accountId: string, token?: string): Promise<boolean> {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  return !!(await client.query(`SELECT 1 FROM cloud_recognised_browsers
+    WHERE token_hash=$1 AND account_id=$2 AND expires_at>clock_timestamp()`,[digest(token),accountId])).rowCount;
+}
+
 export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox | undefined,
   policy: {challengeAttempts: number} | null, input: {accountId: string; email: string; passwordFingerprint: string; locale?: AccountLocale}): Promise<EmailSignInChallenge> {
   if (!outbox || !policy || !Number.isSafeInteger(policy.challengeAttempts) || policy.challengeAttempts < 1 || policy.challengeAttempts > 2147483647)
@@ -32,7 +45,7 @@ export async function issueSignInCheck(client: PoolClient, outbox: EmailOutbox |
   return {kind:'email',challengeToken:token,expiresAt};
 }
 
-export async function completeSignInCheck(pool: Pool, token: string, code: string): Promise<import('@waitron-cloud/identity').SessionCredentials> {
+export async function completeSignInCheck(pool: Pool, token: string, code: string, remember = false): Promise<RememberedCredentials> {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignInCheckError();
   const result = await transaction(pool,async client => {
     const tokenHash = digest(token);
@@ -54,8 +67,9 @@ export async function completeSignInCheck(pool: Pool, token: string, code: strin
     try {
       await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE token_hash=$1',[tokenHash]);
       const credentials = await createSession(client,candidate.account_id);
+      const browserToken=remember?await rememberBrowser(client,candidate.account_id):undefined;
       if ((await client.query('SELECT clock_timestamp() >= $1::timestamptz AS expired',[check.expires_at])).rows[0].expired) throw new SignInCheckError();
-      return credentials;
+      return {...credentials,...(browserToken ? {browserToken} : {})};
     } catch (error) {
       if (!(error instanceof SignInCheckError) && !(error instanceof IdentityError)) throw error;
       await client.query('ROLLBACK TO SAVEPOINT email_sign_in_effects');

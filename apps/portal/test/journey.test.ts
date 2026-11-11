@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { startPortalFixture, mailFor } from './fixtures.ts';
+import {completeBrowserEmail,contextSignIn, startPortalFixture, mailFor } from './fixtures.ts';
 import { translations } from '../src/locale.ts';
 import {portalTrace} from './portal-trace.ts';
 for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions and recovery through the worker and Mailpit`, async () => {
@@ -28,7 +28,7 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.getByRole('link',{name:c.login,exact:true}).click();await page.getByLabel(c.email).fill(email);
     await page.locator('input[name=password]').fill(password);
     assert.equal(await page.locator('input[name=password]').getAttribute('autocomplete'),'current-password');
-    await page.locator('input[name=password]').press('Enter');await page.getByText(c.accountIntro).waitFor();
+    await page.locator('input[name=password]').press('Enter');await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
     const session=(await context.cookies()).find(cookie=>cookie.name==='cloud_session');assert.ok(session?.httpOnly);
     assert.equal((await context.cookies()).find(cookie=>cookie.name==='cloud_csrf')?.httpOnly,false);
     const before=(await f.db.pool.query('SELECT last_seen_at FROM cloud_sessions WHERE ended_at IS NULL')).rows[0].last_seen_at.toISOString();
@@ -39,7 +39,7 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByText(c.signedOut).waitFor();
     assert.equal((await context.request.get(`${f.origin}/api/account/session`)).status(),401);
     await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);
-    await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
+    await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
     const old=await f.browser.newContext({storageState:await context.storageState()});
     await page.getByRole('link',{name:c.forgot,exact:true}).click();await page.getByLabel(c.email).fill(email);
     await page.getByRole('button',{name:c.sendReset,exact:true}).click();await page.getByRole('heading',{name:c.checkEmail}).waitFor();
@@ -54,7 +54,7 @@ for (const locale of ['en','es'] as const) test(`real ${locale} signup, sessions
     await page.getByRole('link',{name:c.login,exact:true}).click();await page.getByLabel(c.email).fill(email);
     await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
     await page.getByText(c.credentials).waitFor();await page.locator('input[name=password]').fill(replacement);
-    await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
+    await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
     trace!.stage('reuse reset link');await page.goto(resetLink);await page.locator('input[name=password]').fill(replacement);
     await page.getByRole('button',{name:c.savePassword,exact:true}).click();await page.getByText(c.linkUnavailable).waitFor();
     const storage=await page.evaluate(()=>({local:{...localStorage},session:{...sessionStorage}}));
@@ -73,7 +73,7 @@ test('another account can complete signup without changing the existing session;
     await signup.request(first);let row=(await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];
     const payload=f.db.outbox.open(row);assert.ok('token' in payload);
     const owner=await signup.complete(payload.token,{password,organisationName:'First',legalBusinessName:'First',countryCode:'ES'});
-    assert.equal((await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email:first,password}})).status(),200);
+    assert.equal((await contextSignIn(f,context,first,password)).status(),200);
     await signup.request(second);await f.drainMail();
     const mail=await mailFor(second,'Verify your Waitron Cloud email',f.mailEvidence);const link=mail.match(/http:\/\/[^\s]+\/signup#[^\s]+/)?.[0];assert.ok(link);
     let writes=0;
@@ -93,7 +93,7 @@ test('another account can complete signup without changing the existing session;
     await page.goto(reset);await page.locator('input[name=password]').fill('A replacement account password');
     await page.getByRole('button',{name:'Save new password',exact:true}).click();await page.getByText(translations.en.uncertain).waitFor();
     assert.equal(resets,1);assert.equal((await context.request.get(`${f.origin}/api/account/session`)).status(),401);
-    const login=await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email:second,password:'A replacement account password'}});
+    const login=await contextSignIn(f,context,second,'A replacement account password');
     assert.equal(login.status(),200);
   } catch(error) {console.error('Portal journey trace',JSON.stringify({browser:trace?.events,server:f.trace}));throw error;} finally {await f.close();}
 });

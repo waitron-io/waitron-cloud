@@ -350,11 +350,11 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const token = /https:\/\/waitron\.local:3000\/signup#token=([A-Za-z0-9_-]{43})/.exec(message?.Text ?? '')?.[1];
       assert.ok(token, 'integration.signup_mail');
-      const signup = await api('/api/account/signup/complete', {token, password, organisationName: plan + ' café', legalBusinessName: plan + ' café SL', countryCode: 'ES'});
+      const signup = await api('/api/account/signup/complete', {token, password, rememberBrowser:'true', organisationName: plan + ' café', legalBusinessName: plan + ' café SL', countryCode: 'ES'});
       assert.equal(signup.status, 201, 'integration.signup');
       const {organisationId, legalBusinessId} = signup.body;
       const planResult = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'], JSON.stringify({organisationId, plan}), 'plan'));
-      const login = await api('/api/account/login', {email, password}); assert.equal(login.status, 200, 'integration.login');
+      const login = await api('/api/account/login', {email, password}, {cookie:signup.headers['set-cookie'].map(value=>value.split(';')[0]).join('; ')}); assert.equal(login.status, 200, 'integration.login');
       const cookie = login.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
       const csrf = /__Host-cloud_csrf=([^;]+)/.exec(cookie)?.[1]; assert.ok(csrf);
       const browser = {'cookie': cookie, 'x-csrf-token': csrf};

@@ -152,7 +152,10 @@ An authenticated account can read `GET /passkeys`, begin enrolment with
 `POST /passkeys/registration/verify`, and remove an account-scoped row with
 `POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
 These mutations require the current session's CSRF header. If you use a password
-while a passkey is enrolled, sign-in also requires an emailed six-digit code. An active
+while a passkey is enrolled, sign-in also requires an emailed six-digit code. With neither method enrolled, a new browser also needs the emailed code. Choose
+**Remember this browser (30 days)** only on a browser you control to use your password
+alone next time. The choice is unchecked by default; password reset forgets every
+recognised browser. An active
 authenticator app takes priority: its code or recovery code is required instead.
 Email recovery remains available, and password reset does not delete enrolled passkeys.
 
@@ -160,12 +163,18 @@ Email recovery remains available, and password reset does not delete enrolled pa
 202 with `emailRequired:true`, `challengeToken` and `expiresAt`, without cookies.
 Send `POST /login/email {"challengeToken":"<browser challenge>","code":"000123"}`
 from the exact portal origin. A valid code returns 200 with the account ID and session
-cookies. Codes keep leading zeroes, expire after five minutes and use the configured
+cookies. To remember that browser, add `"rememberBrowser":true` to this completion.
+The response sets a 30-day HttpOnly cookie, `__Host-cloud_browser` on HTTPS or
+`cloud_browser` in local HTTP tests. It cannot replace an app code or passkey fallback's
+email check. Signup completion accepts the optional string `"rememberBrowser":"true"`
+under the same explicit-choice policy; it sets only this recognition cookie, never a
+session. Both flows store only the cookie's hash, tied to the account and expiry.
+Codes keep leading zeroes, expire after five minutes and use the configured
 `CLOUD_FACTOR_POLICY.challengeAttempts` limit and existing sign-in request budgets.
 Keep the challenge in memory. The code row keeps a hash of the address; the recipient
 stays in the existing credentials and encrypted outbox. No session exists until completion succeeds; replay,
 password or email changes, password reset, disabled accounts and a newly active app
-refuse the older code. Missing email keys or policy refuse fallback; direct passkeys
+refuse the older code. Missing email keys or policy refuse a required email step with 503 `temporarily_unavailable`; direct passkeys
 remain available. The focused store and browser commands are:
 
 ```sh

@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {RegistrationStore,SignupStore,MonitorWorker} from '@waitron-cloud/registration';
-import {startPortalFixture,mailFor} from './fixtures.ts';
+import {completeBrowserEmail,startPortalFixture,mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 async function mailCount(email:string,subject:string){
  const list=await(await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages`)).json() as {messages:{Subject:string;To:{Address:string}[]}[]};
@@ -28,7 +28,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner manages service a
   await f.db.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '16 minutes'");
   const monitor=new MonitorWorker(f.db.pool,f.db.outbox);await monitor.schedule();await monitor.runOnce();
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812},colorScheme:locale==='en'?'light':'dark'}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
-  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   const receive=locale==='en'?'Receive service alerts by email':'Recibir alertas de servicio por correo',language=locale==='en'?'Email language':'Idioma del correo',save=locale==='en'?'Save alert preferences':'Guardar preferencias de alertas',saved=locale==='en'?'Alert preferences saved.':'Preferencias de alertas guardadas.';
   const checkbox=page.getByRole('checkbox',{name:receive});await checkbox.waitFor();assert.equal(await checkbox.isChecked(),false);
   await checkbox.check();await page.getByLabel(language,{exact:true}).selectOption(locale);await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();

@@ -5,7 +5,7 @@ import {test} from 'node:test';
 import axe from 'axe-core';
 import {admitPointFixture} from '../../../packages/backups/test/fixtures/verification.ts';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
-import {startPortalFixture} from './fixtures.ts';
+import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)test(`${locale} installation status and deliberate stop access work at phone width`,async()=>{
  const f=await startPortalFixture();try{
@@ -19,7 +19,7 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   const b2={...b,organisationId:org2,legalBusinessId:biz2,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')};
   await r.start(b2);await r.approveCloud(b2,owner.accountId);await r.approveLocal(b2,randomUUID());const other=await r.complete(b2);
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
-  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
   await page.getByRole('button',{name:stop,exact:true}).waitFor();
   await page.getByRole('heading',{name:/Sol SL/}).waitFor();

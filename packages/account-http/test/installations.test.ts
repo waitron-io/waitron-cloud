@@ -12,7 +12,7 @@ import type {HttpBindings} from '@hono/node-server';
 import {SignupStore,RegistrationStore,createLeaseIssuer,encodeMachine,type MachineAction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const origin='https://cloud.example.test',password='A sufficiently long test password';
 const key=generateKeyPairSync('ed25519'),issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,id:string,cookie:string,csrf:string;
@@ -23,12 +23,12 @@ const browser=(action:string,body?:unknown,headers:Record<string,string>={})=>re
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await resetSchema(db.pool);
- app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer});
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer});
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());id=(await r.complete(binding)).installationId;
- const login=await request('/api/account/login',{email:'owner@example.test',password},{origin});assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+ const login=await completeEmailProof(db,await request('/api/account/login',{email:'owner@example.test',password},{origin}),body=>request('/api/account/login/email',body,{origin}));assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 });
 test('machine configuration exposes translation only through the exact signed version-2 opt-in',async()=>{
  const renewed=await request('/api/installations/renew',proof('renew'));assert.equal(renewed.status,200);
@@ -58,10 +58,10 @@ test('machine authority, browser sessions and configured issuer remain separate'
  for(const headers of [{origin:'https://wrong.test'},{'x-csrf-token':'wrong'},{cookie:''}] as Record<string,string>[])assert.ok([401,403].includes((await browser('/revoke',{installationId:id},headers)).status));
  assert.equal((await browser('/revoke',{installationId:id})).status,200);
  assert.equal((await request('/api/installations/renew',proof('renew'))).status,403);
- app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config()});assert.equal((await request('/api/installations/renew',proof('renew'))).status,503);
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config()});assert.equal((await request('/api/installations/renew',proof('renew'))).status,503);
 });
 test('machine limits persist across app workers',async()=>{
- for(let n=0;n<30;n++){assert.equal((await request('/api/installations/renew',proof('renew'))).status,200);app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:config(),leaseIssuer:issuer});}
+ for(let n=0;n<30;n++){assert.equal((await request('/api/installations/renew',proof('renew'))).status,200);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:config(),leaseIssuer:issuer});}
  const limited=await request('/api/installations/renew',proof('renew'));assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
 });
 test('real socket renewal survives server restart and revocation rejects subsequent access',async()=>{

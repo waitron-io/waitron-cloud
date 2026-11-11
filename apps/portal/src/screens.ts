@@ -1,3 +1,4 @@
+import {rememberBrowserChoice} from './authenticator-screen.ts';
 import {billingScreen} from './billing-screen.ts';
 import {authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
@@ -54,7 +55,7 @@ export function screen(app: PortalApp) {
       <p class="help">${c.soleTrader}</p>
       <label class="disclosure"><input type="checkbox" .checked=${app.differentOrg} ?disabled=${app.pending}
         @change=${(event: Event) => {app.readFields(); app.differentOrg = (event.target as HTMLInputElement).checked; if (!app.differentOrg) delete app.errors.organisationName; app.draw();}}> ${c.differentOrg}</label>
-      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<p>${c.country}: <strong>${c.spain}</strong></p>${action(c.create)}`;
+      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<p>${c.country}: <strong>${c.spain}</strong></p>${rememberBrowserChoice(app)}${action(c.create)}`;
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;

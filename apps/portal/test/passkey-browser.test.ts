@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
-import {addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
+import {completeBrowserEmail,contextSignIn,addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 
 const password = 'A real passkey account password';
@@ -51,6 +51,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         await page.getByLabel(c.email).fill(owner.email);
         await page.locator('input[name=password]').fill(password);
         await page.getByRole('button', {name: c.login, exact: true}).click();
+        await completeBrowserEmail(f,page,owner.email,locale);
         await page.getByText(c.accountIntro).waitFor();
         await page.locator('input[name=passkeyPassword]').fill(password);
         const registrationReply = page.waitForResponse('**/passkeys/registration/verify').then(response => ({response}));
@@ -78,7 +79,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         const created = (await f.db.pool.query('SELECT id FROM cloud_passkeys WHERE account_id = $1', [owner.id])).rows[0].id as string;
         const otherContext = await f.browser.newContext({locale});
         try {
-          const login = await otherContext.request.post(`${f.origin}/api/account/login`, {headers: {origin: f.origin}, data: {email: other.email, password}});
+          const login = await contextSignIn(f,otherContext,other.email,password,locale);
           assert.equal(login.status(), 200);
           assert.deepEqual(await (await otherContext.request.get(`${f.origin}/api/account/passkeys`)).json(), {passkeys: []});
           const csrf = (await otherContext.cookies()).find(cookie => cookie.name === 'cloud_csrf')?.value; assert.ok(csrf);

@@ -5,7 +5,7 @@ import {after, before, beforeEach, test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
 import {hashSecret} from '@waitron-cloud/identity';
 import {createAccountApp} from '../src/app.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -17,7 +17,7 @@ before(async () => { db = await database(); });
 after(async () => db?.close());
 beforeEach(async () => {
   await resetSchema(db.pool);
-  app = createAccountApp({pool: db.pool, outbox: db.outbox, config: config()});
+  app = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: config()});
 });
 
 function request(path: string, body?: unknown, options: {headers?: Record<string, string>; method?: string} = {}) {
@@ -43,7 +43,7 @@ async function account(email: string) {
 }
 
 async function signIn(email: string) {
-  const response = await request('/login', {email, password});
+  const response = await completeEmailProof(db,await request('/login', {email, password}),body=>request('/login/email',body));
   assert.equal(response.status, 200);
   return cookies(response);
 }

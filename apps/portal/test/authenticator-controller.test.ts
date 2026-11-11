@@ -263,3 +263,11 @@ test('an incorrect mailbox code keeps the challenge for another attempt without 
   c.proofCode='123456';assert.equal(await c.completeLogin(),false);assert.equal(c.challenge?.challengeToken,token);
   c.proofCode='654321';assert.equal(await c.completeLogin(),'authenticated');assert.equal(calls.length,3);
 });
+
+test('remember browser is explicit, applies only to the email step and clears on navigation',async()=>{
+ const calls:{path:string;body:unknown}[]=[],c=controller([ok({emailRequired:true,challengeToken:token,expiresAt}),ok({accountId:'owner'})],calls);
+ assert.equal(c.rememberBrowser,false);c.rememberBrowser=true;
+ await c.startLogin('owner@example.test','password');c.proofCode='123456';await c.completeLogin();
+ assert.deepEqual(calls[1],{path:'/login/email',body:{challengeToken:token,code:'123456',rememberBrowser:true}});
+ c.fence();assert.equal(c.rememberBrowser,false);
+});

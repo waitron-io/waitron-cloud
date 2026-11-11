@@ -16,3 +16,14 @@ export function writeSessionCookies(c: Context, secure: boolean, session?: {toke
   setCookie(c, names.session, session?.token ?? '', {...options, httpOnly: true});
   setCookie(c, names.csrf, session?.csrfToken ?? '', options);
 }
+
+export function readBrowserCookie(c: Context, secure: boolean): string | undefined {
+  const name = secure ? '__Host-cloud_browser' : 'cloud_browser';
+  const values = (c.req.header('cookie') ?? '').split(';').map(value => value.trim()).filter(value => value.split('=')[0] === name);
+  if (values.length > 1) throw new AccountHttpError(400, 'invalid_input');
+  return values[0]?.slice(name.length + 1);
+}
+export function writeBrowserCookie(c: Context, secure: boolean, token?: string) {
+  if (token) setCookie(c, secure ? '__Host-cloud_browser' : 'cloud_browser', token,
+    {secure, httpOnly:true, sameSite:'Lax', path:'/', maxAge:30*24*60*60});
+}

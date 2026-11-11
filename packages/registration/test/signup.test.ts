@@ -274,3 +274,12 @@ test('expiry during a database wait rolls back account and business creation', a
     assert.equal(await count('organisations'), 0);
   } finally { await blocker.query('ROLLBACK'); blocker.release(); await completion; }
 });
+
+test('verified signup remembers an explicitly chosen browser without creating a session', async () => {
+  const message=await request();
+  const result=await store.complete(message.token,{...details,rememberBrowser:true});
+  assert.match(result.browserToken!,/^[A-Za-z0-9_-]{43}$/);
+  assert.equal(await count('cloud_sessions'),0);
+  const row=(await pool.query('SELECT * FROM cloud_recognised_browsers')).rows[0];
+  assert.equal(row.account_id,result.accountId);assert.equal(row.token_hash,digest(result.browserToken!));
+});

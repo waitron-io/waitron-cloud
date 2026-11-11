@@ -10,7 +10,7 @@ import {
 } from '@waitron-cloud/registration';
 import { encryptFactorSecret,hashSecret } from '@waitron-cloud/identity';
 import { createAccountApp } from '../src/app.ts';
-import { database } from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -58,7 +58,7 @@ before(async () => { db = await database(); });
 after(async () => db?.close());
 beforeEach(async () => {
   await resetSchema(db.pool);
-  app = createAccountApp({pool: db.pool, outbox: db.outbox, config: config(), passkeyAdapter: new FixtureAdapter()});
+  app = createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool: db.pool, outbox: db.outbox, config: config(), passkeyAdapter: new FixtureAdapter()});
 });
 function request(path: string, body?: unknown, options: {headers?: Record<string, string>; peer?: string; method?: string; raw?: string} = {}) {
   const headers = new Headers(options.headers);
@@ -81,7 +81,7 @@ async function account(email = `owner-${randomUUID()}@example.test`) {
   return {accountId, email};
 }
 async function signIn(email: string) {
-  const response = await request('/login', {email, password});
+  const response = await completeEmailProof(db,await request('/login', {email, password}),body=>request('/login/email',body));
   assert.equal(response.status, 200);
   return cookies(response);
 }
@@ -127,7 +127,7 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.deepEqual(await wrongPassword.json(), {error: 'credentials_invalid'});
   assert.equal((await request('/passkeys/remove', {id: created.id, password}, {headers})).status, 204);
   assert.deepEqual(await (await request('/passkeys', undefined, {headers: {cookie: session.header}})).json(), {passkeys: []});
-  assert.equal((await request('/login', {email: owner.email, password})).status, 200);
+  assert.equal((await completeEmailProof(db,await request('/login', {email: owner.email, password}),body=>request('/login/email',body))).status, 200);
 });
 
 test('passkey HTTP sign-in remains independent when an active factor has no usable key or policy',async()=>{

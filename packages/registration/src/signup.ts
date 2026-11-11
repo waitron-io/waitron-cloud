@@ -3,14 +3,15 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
 import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
+import {rememberBrowser} from './sign-in-check.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail } from './account-input.ts';
 import { screenPassword, type PasswordScreeningProvider } from './compromised-passwords.ts';
 
 export type SignupEmail = AccountEmail;
 export interface SignupMailer { sendVerification(message: SignupEmail, context?: EmailDeliveryContext): Promise<void | EmailDeliveryReceipt>; }
-export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; }
-export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; }
+export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; rememberBrowser?: boolean; }
+export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; browserToken?: string; }
 export class SignupError extends Error {
   readonly code: 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
@@ -73,11 +74,12 @@ export class SignupStore {
         [legalBusinessId, organisationId, legalBusinessName, countryCode]);
       await client.query(`INSERT INTO organisation_memberships (account_id, organisation_id, can_register_venues, is_owner)
         VALUES ($1, $2, true, true)`, [accountId, organisationId]);
+      const browserToken=input.rememberBrowser?await rememberBrowser(client,accountId):undefined;
       // Expiry after a contended write rolls back the account, business and membership together.
       const consumed = await client.query(`UPDATE signup_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
       if (!consumed.rowCount) throw new SignupError('verification_unavailable');
-      return { accountId, organisationId, legalBusinessId };
+      return { accountId, organisationId, legalBusinessId, ...(browserToken ? {browserToken} : {}) };
     });
   }
 }

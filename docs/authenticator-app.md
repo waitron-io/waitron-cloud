@@ -1,6 +1,8 @@
 # Protect password sign-in with an authenticator app
 
-For a password-only account, a stolen password can open your Cloud account. You can add an optional
+For a password-only account, a new browser needs an emailed code. If you choose
+**Remember this browser (30 days)**, that browser can then use your password alone.
+Keep the choice off on a shared browser. Password reset forgets every recognised browser. You can add an optional
 authenticator app from **Account**, then use its six-digit code or a saved recovery
 code when signing in with your password. Passkey sign-in remains available separately.
 
@@ -71,7 +73,7 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 
 | Request | Body and authority | Successful reply |
 | --- | --- | --- |
-| POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true` (app) or `emailRequired:true` (passkey password fallback), `challengeToken`, `expiresAt` and no cookies |
+| POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true` (app) or `emailRequired:true` (a new password-only browser or passkey password fallback), `challengeToken`, `expiresAt` and no cookies |
 | POST `/login/factor` | `challengeToken`, `proof`, exact Origin | 200 with account ID and cookies |
 | GET `/authenticator` | Live session | `active`, `version`, `recoveryCodesRemaining`, `available` |
 | POST `/authenticator/begin` | Password, optional existing-factor proof, live session and CSRF | Pending token, setup secret, URI and expiry |

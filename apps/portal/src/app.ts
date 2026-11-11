@@ -275,7 +275,7 @@ export class PortalApp {
     let path: string; let body: Record<string, string>;
     if (this.path === '/signup' && this.link.token) {
       path = '/signup/complete'; body = {token: this.link.token, password: f.password,
-        legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: 'ES'};
+        legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: 'ES',...(this.authenticator.rememberBrowser?{rememberBrowser:'true'}:{})};
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
     else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
     this.pending = true; const route = this.#route;

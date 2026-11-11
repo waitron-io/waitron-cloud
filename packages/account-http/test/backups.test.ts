@@ -8,7 +8,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
 import {createAccountApp} from '../src/app.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
 const origin='https://cloud.example.test',password='A sufficiently long test password';
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,cookie:string,csrf:string;
@@ -19,7 +19,7 @@ function request(body:unknown,headers:Record<string,string>={},path='/api/accoun
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await resetSchema(db.pool);
- app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),registration=new RegistrationStore(db.pool);venues=[];
  for(let i=0;i<2;i++){
@@ -28,7 +28,7 @@ beforeEach(async()=>{
   await db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://secret-store.test',$3,'local')",[v.venueId,v.installationId,'private-'+i]);
   await db.pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'private-sealed-key')",[v.venueId]);
  }
- const login=await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password})},bindings);assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+ const login=await completeEmailProof(db,await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password})},bindings),body=>app.request(origin+'/api/account/login/email',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)},bindings));assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
 });
 async function point(venue=venues[0]!,capturedAt='2026-01-31T12:00:00.000Z',verification='pending',retention='daily'){
  const id=randomUUID();await db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[id,venue.venueId,venue.installationId]);
@@ -82,7 +82,7 @@ test('another organisation is refused even with a valid session and a known venu
 test('catalogue limits persist across API processes',async()=>{
  for(let n=0;n<30;n++){
   assert.equal((await request({venueId:venues[0]!.venueId})).status,200);
-  app=createAccountApp({pool:db.secondPool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]}});
  }
  const limited=await request({venueId:venues[0]!.venueId});assert.equal(limited.status,429);assert(Number(limited.headers.get('retry-after'))>0);
 });

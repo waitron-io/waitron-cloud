@@ -11,7 +11,7 @@ import {BackupKeyVault} from '@waitron-cloud/backups/keys';
 import {recoveryCodeHash} from '../../registration/src/password-login.ts';
 import {createAccountApp} from '../src/app.ts';
 import * as configuration from '../src/config.ts';
-import {database} from './fixtures.ts';
+import {database,completeEmailProof} from './fixtures.ts';
 
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -65,7 +65,7 @@ async function challenge(email:string,target=app,peer?:string) {
   assert.ok(Date.parse(body.expiresAt)>Date.now());return body.challengeToken;
 }
 async function signIn(email:string) {
-  const response=await request('/login',{email,password});assert.equal(response.status,200);return cookies(response);
+  const response=await completeEmailProof(db,await request('/login',{email,password}),body=>request('/login/email',body));assert.equal(response.status,200);return cookies(response);
 }
 function recovery(code:string) {return {kind:'recovery' as const,code};}
 async function refusal(response:Response,status:number,error:string) {
@@ -84,7 +84,7 @@ function count() {return db.pool.query('SELECT count(*)::integer AS count FROM c
 
 // Removing the login union or completion gate would create cookies/sessions before a valid second proof.
 test('password login issues no session until exactly one concurrent factor completion succeeds',async()=>{
-  const plain=await account();const full=await request('/login',{email:plain.email,password});
+  const plain=await account();const full=await completeEmailProof(db,await request('/login',{email:plain.email,password}),body=>request('/login/email',body));
   assert.equal(full.status,200);assert.deepEqual(await full.json(),{accountId:plain.accountId});assert.equal(full.headers.getSetCookie().length,2);
   const owner=await activeAccount(),token=await challenge(owner.email);
   assert.equal(await count(),1);
@@ -136,7 +136,7 @@ for(const activationOffset of [0,-1])test('management activates once, returns co
   const grouped=body.recoveryCodes[1]!.toLowerCase().match(/.{8}/g)!.join('-');
   const removed=await request('/authenticator/remove',{password,proof:recovery(grouped)},{headers:live});assert.equal(removed.status,200);
   assert.deepEqual(await removed.json(),{status:'changed',active:false});assert.equal(await count(),0);
-  assert.equal((await request('/login',{email:owner.email,password})).status,200);
+  assert.equal((await completeEmailProof(db,await request('/login',{email:owner.email,password}),body=>request('/login/email',body))).status,200);
 });
 
 test('regeneration and cancellation enforce fresh authority without exposing codes from status',async()=>{
@@ -181,11 +181,12 @@ test('nested proofs and management bodies reject extra keys, malformed types and
   assert.equal((await request('/authenticator/begin',undefined,{headers,raw:'[]'})).status,400);
 });
 
-test('factor keys and policy outages preserve ordinary login and live access but refuse proof operations',async()=>{
+test('factor keys and policy outages preserve live access and require available email policy for a new browser',async()=>{
   const plain=await account(),headers=await signIn(plain.email),owner=await activeAccount(),token=await challenge(owner.email);
   for(const factor of [{keys:null,policy},{keys,policy:null},{keys:{activeKeyId:'missing',keys:keys.keys},policy}]){
     const target=application(factor);
-    assert.equal((await request('/login',{email:plain.email,password},{app:target})).status,200);
+    if(factor.policy)assert.equal((await completeEmailProof(db,await request('/login',{email:plain.email,password},{app:target}),body=>request('/login/email',body,{app:target}))).status,200);
+    else await refusal(await request('/login',{email:plain.email,password},{app:target}),503,'temporarily_unavailable');
     assert.equal((await request('/session',undefined,{app:target,headers})).status,200);
     const status=await request('/authenticator',undefined,{app:target,headers});assert.equal(status.status,200);assert.equal((await status.json() as {available:boolean}).available,false);
     await refusal(await request('/login',{email:owner.email,password},{app:target}),503,'temporarily_unavailable');
@@ -320,7 +321,7 @@ test('factor configuration has strict independent keys and policy while bad inpu
     JSON.stringify({...policy,manageIp:{limit:1,windowSeconds:0}})])
     assert.equal(parse!({...env,CLOUD_FACTOR_POLICY:value}).policy,null);
   const invalid=parse!({...env,CLOUD_FACTOR_KEYS:'bad',CLOUD_FACTOR_POLICY:'bad'}),target=application(invalid),owner=await account();
-  assert.equal((await request('/login',{email:owner.email,password},{app:target})).status,200);
+  await refusal(await request('/login',{email:owner.email,password},{app:target}),503,'temporarily_unavailable');
 });
 
 for(const reason of ['expired','consumed','superseded'] as const)test(`HTTP ${reason} setup gives restart guidance without clearing the session`,async()=>{
@@ -370,4 +371,18 @@ test('passkey password fallback returns an email challenge without cookies, then
   assert.equal(defaultLanguage.status,202);assert.equal(defaultLanguage.headers.getSetCookie().length,0);assert.equal(await count(),1);
   const defaultMail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);
   assert.equal(defaultMail.locale,'en');
+});
+
+test('a new password browser can opt into a private 30-day cookie after email proof',async()=>{
+  const owner=await account(),start=await request('/login',{email:owner.email,password});
+  assert.equal(start.status,202);assert.equal(start.headers.getSetCookie().length,0);assert.equal(await count(),0);
+  const check=await start.json() as {emailRequired:boolean;challengeToken:string};assert.equal(check.emailRequired,true);
+  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check'")).rows[0]);assert.ok('code' in mail);
+  const finish=await request('/login/email',{challengeToken:check.challengeToken,code:mail.code,rememberBrowser:true});
+  assert.equal(finish.status,200);assert.deepEqual(await finish.json(),{accountId:owner.accountId});
+  const browser=finish.headers.getSetCookie().find(c=>c.startsWith('__Host-cloud_browser='));assert.ok(browser);
+  for(const flag of ['HttpOnly','Secure','SameSite=Lax','Path=/','Max-Age=2592000'])assert.ok(browser.includes(flag),flag);
+  const headers={cookie:browser.split(';')[0]!};
+  const known=await request('/login',{email:owner.email,password},{headers});assert.equal(known.status,200);
+  await refusal(await request('/login',{email:owner.email,password},{headers:{cookie:headers.cookie+'; '+headers.cookie}}),400,'invalid_input');
 });

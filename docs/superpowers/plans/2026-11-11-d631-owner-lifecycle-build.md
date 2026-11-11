@@ -61,6 +61,8 @@ Use existing transaction/counters/outbox; add only hashed expiring challenge/out
 
 **Files/tests:** registration `src/{password-login,password-recovery,sign-in-check,signup}.ts`; HTTP cookies/config/app; portal sign-in controller/types/screens/locale; extend the owning files from 2 and signup tests. Add only hashed recognition state. Tests own recognition expiry, account/browser separation and reset forgetting every recognition; signup recognition shares this owner. Do not repeat slice 2's challenge matrix. Requires settled recognition policy, not D112. Production +220/−25; tests +230/−15; support 0.
 
+The watcher settled recognition on 11 November at 18:58: an opaque HttpOnly cookie, only its hash stored, 30 days after email proof, and an explicit unchecked-by-default “Remember this browser” choice. Reset forgets every browser; app and passkey rules always win. Watcher 20:33 assigned migration 057; watcher 20:44 cleared stricter new-browser email-step tests and 503 when required email policy is unavailable.
+
 ### 4. Recovery codes for every enrolled method
 
 **Usable:** passkey-only owners can obtain/use codes too; app owners keep their unused codes through upgrade and mailbox reset. Extend existing code storage/consumption rather than a parallel ledger. Preserve legacy factor-version/generation hash inputs for existing codes until consumed or explicitly regenerated; new codes can be account-bound independently of an app secret.
