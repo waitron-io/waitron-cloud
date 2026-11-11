@@ -156,8 +156,8 @@ test('CLI fails closed with fixed diagnostics for invalid settings', async t => 
   const directory=await mkdtemp(join(tmpdir(),'cloud-metrics-cli-'));t.after(()=>rm(directory,{recursive:true,force:true}));
   const corpus=join(directory,'passwords.sha256');await writeFile(corpus,'33'.repeat(32)+'\n');
   const production={NODE_ENV:'production',CLOUD_PORTAL_ORIGIN:'https://example.invalid',CLOUD_COMPROMISED_PASSWORD_CORPUS:corpus};
-  const enabled=cli({...production,CLOUD_LOCAL_REQUEST_METRICS:'0'});
-  try{await enabled.ready();}finally{assert.equal((await enabled.stop()).code,0);}
+  const metricsOff=cli({...production,CLOUD_LOCAL_REQUEST_METRICS:'0'});
+  try{await metricsOff.ready();}finally{const outcome=await metricsOff.stop();assert.equal(outcome.code,0,outcome.stderr);}
   for (const overrides of [{CLOUD_HTTP_RATE_KEY: ''}, {CLOUD_EMAIL_KEYS: 'private-secret'}, {CLOUD_HTTP_TRUSTED_PROXY_IPS: '*'},
     {NODE_ENV: 'production'}, {DATABASE_URL: ''}, {CLOUD_HTTP_PORT: '-1'}, {CLOUD_PORTAL_ASSETS_DIR: '/missing-cloud-portal-build'},
     {CLOUD_LOCAL_REQUEST_METRICS:'private-invalid'}, {...production,CLOUD_LOCAL_REQUEST_METRICS:'1'}]) {

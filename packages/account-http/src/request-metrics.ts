@@ -7,7 +7,7 @@ type Series={group:Group;outcome:Outcome;total:number;count:number;sum:number;bu
 export type RequestSnapshot={version:1;startedAt:number;series:Series[]};
 
 export function requestGroup(path:string,portal:boolean):Group{
- try{path=new URL(path,'http://localhost').pathname;}catch{return 'other';}
+ try{path=new URL(/^https?:\/\//.test(path)?path:'http://localhost'+path).pathname;}catch{return 'other';}
  if(portal&&!path.startsWith('/api/')&&!path.startsWith('/v1/installations/email/'))return 'portal';
  try{path=decodeURI(path);}catch{return 'other';}
  for(const [prefix,group] of [['/api/health','health'],['/api/account','account'],['/api/installations','installations'],['/v1/installations/email','relay']] as const)

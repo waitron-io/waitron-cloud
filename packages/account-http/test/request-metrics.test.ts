@@ -9,6 +9,7 @@ test('route groups use segment boundaries and never retain private request value
   ['/v1/installations/email/submit',true,'relay'],['/account?email=private',true,'portal'],
   ['/api/private?token=private',true,'other'],['/private',false,'other'],['/%ff',false,'other'],
   ['/api/account/../health/live',false,'health'],['http://localhost/api/health/live',true,'health'],['/api/%2e%2e/signup',true,'portal'],
+  ['//private/api/account/x',true,'portal'],['//private/api/account/x',false,'other'],
  ] as const)assert.equal(requestGroup(path,portal),want,path);
 });
 
