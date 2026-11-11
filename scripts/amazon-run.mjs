@@ -106,7 +106,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   const cloud = name + ':cloud', waitron = name + ':waitron';
   let hosts;
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
-    '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=600', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
+    '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
   try {
     ownedImages.push(cloud);
     await run('docker', ['buildx', 'build', '--builder', 'default', '--platform', 'linux/amd64', '--load',
@@ -136,14 +136,15 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       ids[image] = 'sha256:' + digest;
     }
     const bytes = parseInt(await run('wc', ['-c', join(directory, 'images.tar')]), 10);
-    process.stderr.write('Image bundle ' + bytes + ' bytes; each 300-second upload needs at least ' + (bytes * 8 / 300 / 1e6).toFixed(1) + ' Mbit/s plus headroom\n');
+    const archiveCopyTimeout = Math.ceil(bytes * 8 / 10000000 * 1000) + 60000;
+    process.stderr.write('Image bundle ' + bytes + ' bytes; one upload and private copies each have ' + archiveCopyTimeout + ' ms (10 Mbit/s cutoff plus 60 seconds)\n');
     await run('git', ['archive', '--format=tar', '-o', join(directory, 'source.tar'), 'HEAD']);
     const expiry = now() + 90 * 60000;
     const parameters = {Image: config.image, Key: config.key, OperatorCidr: config.operatorCidr,
       StackRole: config.stackRole, SchedulerRole: config.schedulerRole, ExpiryTime: new Date(expiry).toISOString().slice(0, 19)};
     let outputs, target;
     const ssh = (index, args, input, timeout = 600000) => run('ssh', [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ')], input, false, timeout);
-    const copy = (index, file, path) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, 300000);
+    const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
     const kube = args => ssh(0, ['sudo', 'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name, ...args]);
     const waitDeleted = async () => {
@@ -183,9 +184,17 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           const peers = [0, 1, 2].filter(peer => peer !== index).map(peer => '\n[Peer]\nPublicKey=' + publicKeys[peer] + '\nAllowedIPs=10.77.0.' + (peer + 1) + '/32\nEndpoint=' + outputs['Private' + ['A', 'B', 'C'][peer]] + ':51821\nPersistentKeepalive=15\n').join('');
           await bootstrap(index, 'mesh', [], '[Interface]\nAddress=10.77.0.' + (index + 1) + '/24\nListenPort=51821\nPrivateKey=' + privateKeys[index] + '\n' + peers);
         }
+        for (let index = 0; index < 3; index++) await bootstrap(index, 'storage', [index === 0 ? 'control' : 'worker']);
+        process.stderr.write('Uploading image bundle once to machine 0\n');
+        await copy(0, 'images.tar', '/tmp/d618-images.tar', archiveCopyTimeout);
+        await ssh(0, ['sudo', 'cp', '/tmp/d618-images.tar', '/var/local/d620-config/d618-images.tar'], undefined, archiveCopyTimeout);
+        for (const index of [1, 2]) {
+          process.stderr.write('Copying image bundle to machine ' + index + ' over the private share\n');
+          await ssh(index, ['sudo', 'cp', '/var/local/d620-config/d618-images.tar', '/tmp/d618-images.tar'], undefined, archiveCopyTimeout);
+        }
+        // Pods mount this directory, so only their intended configuration may remain.
+        await ssh(0, ['sudo', 'rm', '/var/local/d620-config/d618-images.tar']);
         for (let index = 0; index < 3; index++) {
-          await bootstrap(index, 'storage', [index === 0 ? 'control' : 'worker']);
-          await copy(index, 'images.tar', '/tmp/d618-images.tar');
           await ssh(index, ['sudo', 'ctr', '-n', 'k8s.io', 'images', 'import', '/tmp/d618-images.tar']);
           for (const [image, id] of Object.entries(ids)) {
             const info = JSON.parse(await ssh(index, ['sudo', 'crictl', '--image-endpoint', 'unix:///run/containerd/containerd.sock', 'inspecti', '-o', 'json', image]));
@@ -223,7 +232,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     return {stack: name, ...outcome};
   } finally {
     for (const host of hosts ?? []) {
-      // A stopped worker or expired idle master may already have no socket to close.
+      // A stopped worker or disconnected master may already have no socket to close.
       try {await run('ssh', [...sshOptions, '-O', 'exit', 'admin@' + host], undefined, true);} catch {}
     }
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}

@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
@@ -203,15 +203,16 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (args[0] === 'describe-instances') return JSON.stringify({Reservations: [{Instances: [{InstanceId: output.C, State: {Name: 'stopped'}}]}]});
       assert.ok(['create-stack', 'stop-instances', 'wait', 'delete-stack'].includes(args[0]), 'unexpected provider command ' + args[0]);
       return '';
-    }, run: async (binary, args, input, cleanup) => {
+    }, run: async (binary, args, input, cleanup, timeout) => {
       calls.push([binary, ...args]);
       if (['ssh','scp'].includes(binary)) {
         const socket = args.find(arg => arg.startsWith('ControlPath='))?.slice('ControlPath='.length);
-        transports.push({binary,args,cleanup,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
+        transports.push({binary,args,cleanup,timeout,socketDirectoryPresent:socket && existsSync(socket.slice(0,-3))});
       }
       if (binary === 'uname') return 'x86_64';
       if (binary === 'docker' && args[0] === 'save') savedTags = args.slice(args.indexOf('-o') + 2);
-      if (binary === 'wc') return '104857600 images.tar';
+      if (binary === 'wc') return '1303994368 images.tar';
+      if (binary === 'scp' && args.at(-2).endsWith('images.tar') && scenario === 'failed bundle upload') throw Error('upload failed');
       if (binary === 'tar') {
         if (args[0] === '-tf') return ['index.json','manifest.json',...(scenario === 'incomplete archive' ? ['b','c'] : ['a','b','c']).map(n => 'blobs/sha256/' + n.repeat(64))].join('\n');
         if (args.at(-1) === 'index.json') return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.index.v1+json',manifests:savedTags.map(tag => ({
@@ -224,6 +225,7 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) target = JSON.parse(await readFile(args.at(-2), 'utf8'));
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (scenario === 'failed private copy' && args.at(-2) === 'admin@203.0.113.2' && script.includes("'cp' '/var/local/d620-config/d618-images.tar'")) throw Error('private copy failed');
         if (script.includes('169.254.169.254')) {const index = Number(args.at(-2).at(-1)); metadata.push(index); return scenario === 'wrong instance' ? 'i-00000000000000009' : output[['A','B','C'][index - 1]];}
         if (script.includes('sha256sum')) return hashes;
         if (script.includes('crictl')) return JSON.stringify({status: {id: 'sha256:' + (scenario === 'wrong imported image' ? 'b'.repeat(64) : hashes), pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
@@ -253,7 +255,7 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
     const paths = new Set();
     for (const row of transports) {
       for (const option of ['ServerAliveInterval=15','ServerAliveCountMax=4']) assert.ok(row.args.includes(option), option);
-      if (row.binary === 'ssh') for (const option of ['ControlMaster=auto','ControlPersist=600']) assert.ok(row.args.includes(option), option);
+      if (row.binary === 'ssh') for (const option of ['ControlMaster=auto','ControlPersist=yes']) assert.ok(row.args.includes(option), option);
       if (row.binary === 'scp') assert.ok(transports.slice(0,transports.indexOf(row)).some(prior => prior.binary === 'ssh' && prior.args.includes(row.args.at(-1).split(':')[0])), 'SSH establishes a master before SCP reuses it');
       const path = row.args.find(arg => arg.startsWith('ControlPath='));
       assert.match(path, /\/d618-[^/]+\/%C$/); paths.add(path.slice('ControlPath='.length));
@@ -268,10 +270,26 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
     assert.equal(calls.find(row => row[1] === 'delete-stack')?.at(-1), name);
     assert.equal(calls.find(row => row[1] === 'wait' && row[2] === 'stack-delete-complete')?.at(-1), name);
     assert.equal(calls.some(row => row[0] === 'docker' && row[1] === 'buildx' && ['create', 'rm'].includes(row[2])), false);
-    if (['wrong instance', 'wrong imported image'].includes(scenario)) assert.deepEqual(phases, []);
+    if (['wrong instance', 'wrong imported image', 'failed bundle upload', 'failed private copy'].includes(scenario)) assert.deepEqual(phases, []);
+    if (['failed bundle upload','failed private copy'].includes(scenario)) assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes("'ctr'")),false,'no import after a failed distribution');
     return;
   }
   assert.deepEqual(metadata, [1, 2, 3]);
+  const uploads=transports.filter(row=>row.binary==='scp'&&row.args.at(-2).endsWith('images.tar'));
+  assert.equal(uploads.length,1,'the owner uploads the image archive only once');
+  assert.equal(uploads[0].args.at(-1),'admin@203.0.113.1:/tmp/d618-images.tar');
+  assert.equal(uploads[0].timeout,1103196,'size-derived 10 Mbit/s cutoff plus 60 seconds');
+  const privateCopies=transports.filter(row=>row.binary==='ssh'&&row.args.at(-1).includes("'cp' '/var/local/d620-config/d618-images.tar' '/tmp/d618-images.tar'"));
+  assert.deepEqual(privateCopies.map(row=>[row.args.at(-2),row.timeout]),[['admin@203.0.113.2',1103196],['admin@203.0.113.3',1103196]]);
+  const staged=transports.find(row=>row.binary==='ssh'&&row.args.at(-1)==="'sudo' 'cp' '/tmp/d618-images.tar' '/var/local/d620-config/d618-images.tar'");
+  assert.equal(staged?.timeout,1103196);
+  const removed=transports.find(row=>row.binary==='ssh'&&row.args.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
+  assert.ok(removed,'remove shared bundle before the application can mount that directory');
+  const lastStorage=calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'storage'"));
+  const upload=calls.findIndex(row=>row[0]==='scp'&&row.at(-2).endsWith('images.tar'));
+  assert.ok(lastStorage>=0&&lastStorage<upload,'every worker has its private mount before distribution');
+  const removal=calls.findIndex(row=>row[0]==='ssh'&&row.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
+  assert.ok(removal>calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'cp'"))&&removal<calls.findIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'ctr'")));
   assert.deepEqual(phases, ['before', 'after']);
   assert.deepEqual(result.journeys, [{checked: 'before'}, {checked: 'after'}]);
   assert.equal(result.removed, true);

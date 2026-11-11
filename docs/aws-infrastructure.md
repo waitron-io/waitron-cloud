@@ -1061,10 +1061,19 @@ No package token or AWS credential is copied to the three machines.
 The launcher saves only Linux/AMD64 images and checks that the selected image
 manifest, configuration and layer files are in the archive before creating machines.
 A missing file stops the run there (`node --test scripts/amazon-run.test.mjs`).
-The launcher prints the measured image-bundle bytes and minimum upload throughput.
-Each of the three SSH copies has a 300-second limit: a 4-GiB bundle needs at least
-115 Mbit/s sustained upload, plus headroom, per copy. The archive size is measured
-when you build it; no actual Cloud/Waitron bundle has been transferred by this lane.
+The launcher uploads the image bundle once to machine 0. After all three machines
+have mounted the existing WireGuard-protected NFS share, it copies the archive
+through that share to machines 1 and 2, then removes the shared file before imports
+and application checks. Each machine still imports and verifies its own images.
+It prints the measured bytes and gives each archive copy a cutoff calculated at
+10 Mbit/s plus 60 seconds. A 1,303,994,368-byte archive gets 1,103,196 ms per copy.
+These are per-copy stall cutoffs; the unchanged 90-minute expiry covers setup and
+both journeys too. Small-file copies and image-import limits remain unchanged.
+The lane has not qualified an Amazon transfer; the owner reruns it after local checks.
+
+SSH masters persist until the launcher's explicit cleanup, including across long
+idle phases. Normal failure and abort close them. An outright killed launcher can
+leave those connections alive until the disposable machines disappear.
 
 First follow [the one-time practice-account setup](d618-account-setup.md) to create
 the CLI identity, external roles and USD 10 deny-launch budget. Then check these

@@ -1,6 +1,6 @@
 # D618 one-bundle upload plan
 
-**Finish line:** You can rerun the launcher with one owner-side image upload, bounded private-network distribution and persistent SSH masters. Lane G `questions.md`, WATCHER 2026-11-11 13:36, supersedes 13:31. Separate Sol/high draft, source-checked by the driver and reviewed once by Claude. Watcher clearance remains pending before implementation; no owner approval of this plan is claimed. This plan authorises no provider commands; Amazon qualification awaits the owner's rerun.
+**Finish line:** You can rerun the launcher with one owner-side image upload, bounded private-network distribution and persistent SSH masters. Lane G `questions.md`, WATCHER 2026-11-11 13:36, supersedes 13:31. Separate Sol/high draft, source-checked by the driver and reviewed once by Claude (173 seconds). The watcher cleared it on 11 November at14:01; no owner approval of this plan is claimed. This plan authorises no provider commands; Amazon qualification awaits the owner's rerun.
 
 **Evidence and reuse:** `scripts/amazon-run.mjs:146,186–194` caps three sequential image uploads at 300,000 ms. Two inspection groups followed by SCP timeout fit the third upload; the actual network cause remains an owner-log inference, not a claim that the link is slow. The 73-second gap between the first two inspection groups suggests much higher throughput before the third copy. Reuse the existing command harness and NFS shared directory over WireGuard (`deploy/kubernetes/bounded-amazon/bootstrap.sh:53–60`).
 
