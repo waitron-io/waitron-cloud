@@ -375,19 +375,19 @@ test('stopping final readback still cleans up without cancelling the run',async 
  assert.deepEqual(f.leases.inspect().orphanRunners,[]);
 });
 
-async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false}={}) {
+async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=false, healthyRounds=3, stepMs=61000, callerMs=2000, turnMs, runCancelled=false,busyFirst=false,jobFailure}={}) {
  const {runCI}=await import('./ci-canary.mjs');
  const identity={...ci,event:'push',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-workforce-1'};
  const f=fixture(t,{identity,apiJobName:'test-workforce'}),get=f.api.get,inspect=f.transport.inspect;
  if(turnMs){const reserve=f.leases.reserveLocal.bind(f.leases);f.leases.reserveLocal=(request,options)=>reserve(request,{...options,durationMs:turnMs});}
  f.leases.setInvocation({nonce:'c'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'admitted'});
- const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[];
+ const originalNow=Date.now;let elapsed=0,executing=false,aborted=false,finish,liveInspections=0,rounds=0,jobReads=0;const runReads=[],jobReadRounds=[];
  Date.now=()=>originalNow()+elapsed;t.after(()=>{Date.now=originalNow;});
  f.api.get=async(path,options)=>{
   if(executing && busyFirst && path.endsWith('/runners/1001'))return {id:1001,name:'dt-123-789-1-901',busy:true};
   if(executing && busyFirst && path.includes('/jobs/') && rounds>1){const error=typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
   if(executing && path.endsWith('/runs/789')){runReads.push(rounds);const error=busyFirst && rounds===1?undefined:typeof failure==='function'?failure(rounds):failure;if(error)throw error;}
-  if(executing && path.includes('/jobs/'))jobReads++;
+  if(executing && path.includes('/jobs/')){jobReads++;jobReadRounds.push(rounds);const error=jobFailure?.(rounds);if(error)throw error;}
   const value=await get(path,options);
   const cancelled=typeof jobCancelled==='function'?jobCancelled(rounds):jobCancelled;
   return executing && path.endsWith('/runs/789') && runCancelled && rounds>=2?{...value,status:'completed',conclusion:'cancelled'}:
@@ -403,7 +403,7 @@ async function monitorReadFailure(t, {failure, guestRunning=true, jobCancelled=f
   return inspect(lease,options);
  };
  const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud',signal:AbortSignal.timeout(callerMs),wait:async(ms)=>{if(ms===15000){elapsed+=stepMs;rounds++;}await new Promise(resolve=>setTimeout(resolve,1));}});
- return {...result,aborted,liveInspections,rounds,jobReads,runReads,events:f.events};
+ return {...result,aborted,liveInspections,rounds,jobReads,jobReadRounds,runReads,events:f.events};
 }
 
 for(const [label,failure] of [
@@ -502,18 +502,27 @@ test('repeated temporary read failures record one diagnostic',async t=>{
  assert.equal(result.code,0,result.error);assert.equal(records.length,1);
 });
 
-test('successful run reads wait a minute while each job and guest check stays at 15 seconds',async t=>{
+test('successful run and job reads wait a minute while guest checks stay at 15 seconds',async t=>{
  const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6});
  assert.equal(result.code,0,result.error);assert.deepEqual(result.runReads,[1,5]);
- assert.equal(result.jobReads,6);assert.equal(result.liveInspections,6);assert.equal(result.cleanup,'absent');
+ assert.equal(result.jobReads,2);assert.equal(result.liveInspections,6);assert.equal(result.cleanup,'absent');
 });
 test('a failed run read stays due on the next tick before the minute cadence resumes',async t=>{
  const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6,failure:round=>round===1?Object.assign(new Error('unavailable'),{status:502}):undefined});
- assert.equal(result.code,0,result.error);assert.deepEqual(result.runReads,[1,2,6]);assert.equal(result.jobReads,6);
+ assert.equal(result.code,0,result.error);assert.deepEqual(result.runReads,[1,2,6]);assert.equal(result.jobReads,3);
 });
-for(const [label,cancelAt,runCancelled] of [['job',2,false],['run between reads',3,true]])test(`a cancelled ${label} stops at the next readable job check without another run read`,async t=>{
- const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:6,runCancelled,jobCancelled:round=>round>=cancelAt});
- assert.equal(result.code,125);assert.equal(result.aborted,true);assert.deepEqual(result.runReads,[1]);
- assert.equal(result.jobReads,cancelAt);assert.equal(result.rounds,cancelAt);
+for(const [label,cancelAt,runCancelled] of [['job',2,false],['run between reads',3,true]])test(`a cancelled ${label} stops at its next scheduled successful job read`,async t=>{
+ const result=await monitorReadFailure(t,{stepMs:15000,healthyRounds:8,runCancelled,jobCancelled:round=>round>=cancelAt,
+  jobFailure:runCancelled?round=>round===1?new TypeError('fetch failed'):undefined:undefined});
+ assert.equal(result.code,125);assert.equal(result.aborted,true);assert.deepEqual(result.runReads,[1,5]);
+ assert.equal(result.jobReads,runCancelled?3:2);assert.equal(result.rounds,runCancelled?6:5);
  assert.match(result.error,/assignment completed without success/);assert.equal(result.cleanup,'absent');
+});
+
+for(const failed of [false,true])test(`normal job polling is once a minute${failed?' after a failed read is retried at the next tick':''}`,async t=>{
+ const result=await monitorReadFailure(t,{healthyRounds:failed?6:9,stepMs:15000,
+  jobFailure:failed?round=>round===1?new TypeError('fetch failed'):undefined:undefined});
+ assert.equal(result.code,0,result.error);assert.equal(result.aborted,false);
+ assert.deepEqual(result.jobReadRounds,failed?[1,2,6]:[1,5,9]);
+ assert.equal(result.liveInspections,failed?6:9,'the owned guest is checked every 15 seconds');
 });
