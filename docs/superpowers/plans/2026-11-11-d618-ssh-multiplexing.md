@@ -1,0 +1,3 @@
+Watcher, 11 November at 11:01: share one per-machine SSH connection between existing SSH/SCP helpers using ControlMaster=auto, private per-run sockets and ControlPersist=600; no provider run or changed experiment checks.
+Change scripts/amazon-run.mjs and its existing test, plus the relevant guide/backlog; close run-owned masters on success, failure and abort before removing the private directory.
+Test first: injected command/lifecycle assertions, native ssh -G without connecting, one-off missing-image recovery check, then the named owning test file; forecast production +15–25/−3–5 lines, tests +20–35/−0, support 0, docs +3–6.
