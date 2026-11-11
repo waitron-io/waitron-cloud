@@ -16,14 +16,17 @@ import { portalErrorResponse, portalResponse, portalSecurityHeaders, securityHea
 import { createAccountApp } from './app.ts';
 import { clientAddress } from './client-address.ts';
 import { submitPath, submitRequestMs, submitSlots } from './translation.ts';
+import {RequestMetrics,requestGroup} from './request-metrics.ts';
+import type {Duplex} from 'node:stream';
 function unavailable(request?: Request, portal = false, testBillingMethods=false) {
   if (request && portal && !new URL(request.url).pathname.startsWith('/api/')) return portalErrorResponse(request, 503,testBillingMethods);
   return Response.json({error: 'temporarily_unavailable'}, {status: 503, headers: {
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number;localMetrics?:{host:string;port:number}; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server;metricsServer?:Server; close(): Promise<void>}> {
   const config = validateConfig(options.config);
+  if(options.localMetrics&&config.production)throw Error('Local metrics are unavailable in production');
   const app = createAccountApp({...options, config});
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
   let submitting = 0; const submitters = new Set<string>();
@@ -56,12 +59,28 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     try {return await app.fetch(request, bindings);}
     finally {active--;if(readiness)readinessActive--;}
   }, {overrideGlobalObjects: false, errorHandler: () => unavailable()});
-  const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: options.translation ? submitRequestMs : 5000, connectionsCheckingInterval: 1000}, listener);
+  const metrics=new RequestMetrics();
+  const receiving=new WeakMap<Duplex,(status:number)=>void>();
+  const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: options.translation ? submitRequestMs : 5000, connectionsCheckingInterval: 1000}, (request,response)=>{
+    const started=performance.now(),group=requestGroup(request.url??'',!!options.portalAssets);
+    let settled=false;
+    const forget=()=>{if(receiving.get(request.socket)===settle)receiving.delete(request.socket);};
+    const settle=(status:number)=>{if(settled)return;settled=true;forget();metrics.record(group,status,(performance.now()-started)/1000);};
+    receiving.set(request.socket,settle);
+    response.once('finish',()=>settle(response.statusCode));
+    response.once('close',()=>{settled=true;forget();});
+    void listener(request,response);
+  });
   server.maxConnections = 200;
   server.on('clientError', (error: NodeJS.ErrnoException, socket) => {
     if (!socket.writable || socket.writableEnded) return;
     const status = error.code === 'HPE_HEADER_OVERFLOW' ? '431 Request Header Fields Too Large'
       : error.code === 'ERR_HTTP_REQUEST_TIMEOUT' ? '408 Request Timeout' : '400 Bad Request';
+    // A peer ending an unfinished body supplies no completed response or timeout measurement.
+    if(!['ECONNRESET','HPE_INVALID_EOF_STATE'].includes(error.code??'')){
+      const settle=receiving.get(socket);
+      if(settle)settle(Number(status.slice(0,3)));else metrics.record('parser',Number(status.slice(0,3)));
+    }
     const body = '{"error":"invalid_input"}';
     socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\n\r\n${body}`);
   });
@@ -69,13 +88,23 @@ export async function startAccountServer(options: {pool: Pool; outbox: EmailOutb
     server.once('error', reject);
     server.listen(options.port ?? 3000, options.host ?? '127.0.0.1', () => {server.removeListener('error', reject); resolve();});
   });
-  return {server, close() {
+  let metricsServer:Server|undefined;
+  if(options.localMetrics){
+    metricsServer=createServer((request,response)=>{
+      response.setHeader('cache-control','no-store');
+      if(request.method!=='GET'||request.url!=='/metrics'){response.writeHead(404);response.end();return;}
+      response.setHeader('content-type','application/json');response.end(JSON.stringify(metrics.snapshot()));
+    });
+    try{await new Promise<void>((resolve,reject)=>{metricsServer!.once('error',reject);metricsServer!.listen(options.localMetrics!.port,options.localMetrics!.host,()=>{metricsServer!.removeListener('error',reject);resolve();});});}
+    catch(error){await new Promise<void>(resolve=>{server.close(()=>resolve());server.closeAllConnections();});throw error;}
+  }
+  return {server,metricsServer, close() {
     if (!closing) {
       stopping = true;
-      closing = new Promise<void>((resolve, reject) => {
-        const deadline = setTimeout(() => server.closeAllConnections(), 10000); deadline.unref();
-        server.close(error => {clearTimeout(deadline); if (error) reject(error); else resolve();});
-      });
+      closing = Promise.all([server,...(metricsServer?[metricsServer]:[])].map(current=>new Promise<void>((resolve, reject) => {
+        const deadline = setTimeout(() => current.closeAllConnections(), 10000); deadline.unref();
+        current.close(error => {clearTimeout(deadline); if (error) reject(error); else resolve();});
+      }))).then(()=>{});
     }
     return closing;
   }};

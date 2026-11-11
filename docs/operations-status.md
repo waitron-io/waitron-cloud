@@ -162,6 +162,34 @@ and last success without adding labels. When collection succeeds, the endpoint a
 exports the status command's existing bounded-label metrics. An unreachable collector
 must be treated as a scrape failure by the client; it cannot report its own disappearance.
 
+The collector also reads account-request counts independently of the status command.
+`waitron_cloud_account_requests_available` is 1 for a valid current reading and 0
+otherwise. A failed read omits the request series while preserving operations diagnostics.
+Failed or stale operations collection suppresses both sets of measurements. `/status`
+and the standalone operations command keep their existing JSON and metrics.
+
+`waitron_cloud_account_requests_total` groups completed responses by `health`, `account`,
+`installations`, `relay`, `portal`, `other` or `parser`. Outcomes are `success` (2xx/3xx),
+`refused` (4xx except 408), `server_error` (5xx, including admission 503), and `timed_out`
+(408 or an observed receive timeout). Labels never include request paths, query strings,
+account details or exception messages. Parser-only failures count without invented timings;
+disconnected unfinished responses are excluded.
+
+For two readings from the same process, calculate the failure share as the increase in
+`server_error` plus `timed_out`, divided by the increase across all outcomes. Read the
+refused share separately. An empty interval has no measured share. The process start
+gauge, `waitron_cloud_account_requests_started_timestamp_seconds`, changes on restart;
+discard intervals spanning a restart instead of subtracting unrelated counts.
+
+`waitron_cloud_account_request_duration_seconds` is a cumulative histogram with bands
+at 0.05, 0.1, 0.5, 1 and 5 seconds and `+Inf`, plus `_sum` and `_count`. Timing starts
+when Node admits a parsed request and ends when its response finishes or a receive timeout
+is observed. These bands are measurements, not service targets. Receive timeouts bound
+incoming headers or bodies; they do not impose a server-response deadline. Parser-only
+counts have no duration, so histogram counts can be lower than request counts. Translation
+submission belongs to `installations`; its existing maximum 60-second receive budget can
+place a result in the `+Inf` band.
+
 Set `CLOUD_OPERATIONS_INTERVAL_MS` to an integer from 1,000 to 3,600,000 before creating
 the service to change the interval. The default is 60,000. A very short interval competes
 with other health probes for the existing account API rate allowance. Set
@@ -170,6 +198,12 @@ network endpoint, so restarting the account API does not hide collection failure
 local health requests connect to the account service with that service's required
 `localhost:3000` Host header. No listener or reserved host port exists when the optional
 collector is absent.
+
+The local account runtime enables `CLOUD_LOCAL_REQUEST_METRICS=1` to serve bounded JSON
+on container port 9092, which Compose does not publish to the host. The collector reads
+only `http://account:9092/metrics`, with a two-second deadline and a 16 KiB body limit.
+This flag defaults to 0 in the account CLI, accepts only 0 or 1, and refuses production.
+The read listener has no public account route; account shutdown closes both listeners.
 
 The collector keeps only the current result in memory and starts with no sample after a
 restart. It does not retain a time series. You can stop it without stopping the workers:

@@ -16,6 +16,30 @@ test('operations collection is opt-in, loopback-only and has no writable mount o
  assert(service.ports.some(port=>port.target===9091));
  assert(service.volumes.every(volume=>volume.read_only&&volume.target==='/run/local-stack'));
  assert.equal(service.depends_on.migrate.condition,'service_completed_successfully');
+ assert(!services.account.ports.some(port=>port.target===9092),'the account metrics listener must have no published host port');
+});
+
+test('account counts enrich metrics without changing status or hiding operations when acquisition fails',async()=>{
+ const {createCollection}=await import('./operations-collector.mjs');
+ let time=100000,fail=false,operationFail=false;
+ let counts={version:1,startedAt:1000,series:[{group:'account',outcome:'server_error',total:2,count:2,sum:1,buckets:[0,0,2,2,2,2]}]};
+ const sample=snapshot();
+ const collection=createCollection({now:()=>time,intervalMs:1000,timeoutMs:2000,
+  collect:async()=>{if(operationFail)throw Error();return sample;},
+  collectRequests:async()=>{if(fail)throw Error('private URL');return counts;}});
+ await collection.poll();assert.deepEqual(collection.status().snapshot,sample);
+ assert.match(collection.metrics(),/waitron_cloud_account_requests_available 1\n/);
+ assert.match(collection.metrics(),/waitron_cloud_account_requests_total\{group="account",outcome="server_error"\} 2\n/);
+ fail=true;await collection.poll();assert.deepEqual(collection.status().snapshot,sample);
+ assert.match(collection.metrics(),/waitron_cloud_operations_ready 1\n/);
+ assert.match(collection.metrics(),/waitron_cloud_account_requests_available 0\n/);
+ assert.doesNotMatch(collection.metrics(),/account_requests_total|private/);
+ fail=false;counts={version:1,startedAt:2000,series:[]};await collection.poll();
+ assert.match(collection.metrics(),/account_requests_started_timestamp_seconds 2\n/);
+ time+=3001;assert.doesNotMatch(collection.metrics(),/account_requests_started_timestamp_seconds/);
+ assert.match(collection.metrics(),/account_requests_available 0\n/);
+ operationFail=true;await collection.poll();assert.equal(collection.status().snapshot,null);
+ assert.doesNotMatch(collection.metrics(),/account_requests_started_timestamp_seconds/);
 });
 
 const snapshot=()=>({version:1,checkedAt:new Date().toISOString(),state:'ready',ready:true,components:{

@@ -33,6 +33,9 @@ try {
   const staffCertificates=staffFlag==='1';
   const translationFlag=process.env.CLOUD_TRANSLATION??'0';if(!['0','1'].includes(translationFlag))throw new Error();
   const translation=translationFlag==='1';
+  const metricsFlag=process.env.CLOUD_LOCAL_REQUEST_METRICS??'0';
+  if(!['0','1'].includes(metricsFlag)||metricsFlag==='1'&&process.env.NODE_ENV==='production')throw new Error();
+  const localMetrics=metricsFlag==='1'?{host:'0.0.0.0',port:9092}:undefined;
   const config = accountHttpConfig(process.env);
   const billingMethods=billingMethodsOptionsFromEnv(process.env,planMode,billingAccount,config.portalOrigin);
   const factor = factorConfigFromEnv(process.env);
@@ -50,7 +53,7 @@ try {
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
     if (translation) await sweepTranslationJobs(pool);
-    running = await startAccountServer({planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));

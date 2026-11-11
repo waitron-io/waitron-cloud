@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {localHealthFetch} from '../deploy/local-stack/operations-health.mjs';
 
 const output=resolve(process.argv[2]??'/tmp/cloud-operations-collection-receipt.json');
 if(process.argv.length>3||!process.env.NODE_AUTH_TOKEN)throw Error('Set NODE_AUTH_TOKEN to a package-read token');
@@ -25,11 +26,23 @@ try{
  const initial=await until(value=>value.snapshot?.state==='degraded');
  fresh();const healthy=await until(value=>value.snapshot?.ready===true);assert.equal(healthy.http,200);
  const healthyMetrics=await metrics();assert.match(healthyMetrics,/waitron_cloud_operations_ready 1\n/);
+ assert.match(healthyMetrics,/waitron_cloud_account_requests_available 1\n/);
+ const requestSeries=/waitron_cloud_account_requests_total\{group="account",outcome="refused"\} (\d+)\n/;
+ const beforeRequests=Number(requestSeries.exec(healthyMetrics)?.[1]??0);assert(Number.isSafeInteger(beforeRequests));
+ const accountOrigin=`http://${capture('port','account','3000')}`;
+ const accountReply=await localHealthFetch(new URL(`${accountOrigin}/api/account/session`),{signal:AbortSignal.timeout(2000)});
+ assert.equal(accountReply.status,401);await accountReply.text();
+ let measuredIncrease=false;
+ for(let attempt=0;attempt<25;attempt++){
+  if(Number(requestSeries.exec(await metrics())?.[1])===beforeRequests+1){measuredIncrease=true;break;}
+  await delay(200);
+ }
+ assert(measuredIncrease,'a real account request must increase the collector request series');
  sql("UPDATE usage_reconciliation_sources SET caught_up_at=clock_timestamp()-interval '10 minutes'");
  const degraded=await until(value=>value.snapshot?.components.usage.code==='stale');assert.equal(degraded.snapshot.ready,false);assert.equal(degraded.http,200);
  const degradedMetrics=await metrics();assert.match(degradedMetrics,/waitron_cloud_operations_ready 0\n/);
  const labels=new Set([...healthyMetrics.matchAll(/\{([^}]+)\}/g),...degradedMetrics.matchAll(/\{([^}]+)\}/g)].map(match=>match[1]));
- assert(labels.size<80);for(const label of labels)assert.match(label,/^(component="[a-z_]+",state="(?:ready|degraded|unready|unknown)",code="[a-z_]+"|status="[a-z_]+")$/);
+ assert(labels.size<276);for(const label of labels)assert.match(label,/^(component="[a-z_]+",state="(?:ready|degraded|unready|unknown)",code="[a-z_]+"|status="[a-z_]+"|group="(?:health|account|installations|relay|portal|other|parser)",outcome="(?:success|refused|server_error|timed_out)"(?:,le="(?:0\.05|0\.1|0\.5|1|5|\+Inf)")?)$/);
  const migration=sql('SELECT name FROM schema_migrations ORDER BY name LIMIT 1');
  const digest=sql(`SELECT digest FROM schema_migrations WHERE name='${migration}'`);
  sql(`UPDATE schema_migrations SET digest=repeat('0',64) WHERE name='${migration}'`);
@@ -52,7 +65,7 @@ try{
  const restarted=await until(value=>value.snapshot?.ready&&Date.parse(value.collection.succeededAt)>beforeRestart);
  const node=capture('ps','-q','operations-collector');compose('stop','operations-collector');
  const stopped=JSON.parse(run(['inspect',node],true))[0].State;assert.equal(stopped.ExitCode,0);assert.equal(stopped.OOMKilled,false);
- receipt={version:1,head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',project,intervalMs:1000,initial,healthy,degraded,incompatible,databaseLost,recovered,restarted,metricLabelSets:labels.size,readonly,stopExitCode:stopped.ExitCode};
+ receipt={version:1,head:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',project,intervalMs:1000,initial,healthy,degraded,incompatible,databaseLost,recovered,restarted,metricLabelSets:labels.size,measuredIncrease,readonly,stopExitCode:stopped.ExitCode};
 }catch(cause){error=cause;try{compose('logs','--no-color','operations-collector','account');}catch{}}
 finally{
  try{compose('down','--volumes','--remove-orphans');}catch(cause){error??=cause;}

@@ -706,6 +706,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    phone adapters, supplier review, spending approval and outage/delivery/coverage
    drills remain open; the checklist
    creates no account or operational service.
+   The local collector now exposes account-service request counts and timing bands;
+   hosted-server measurements and trial-derived targets remain open. See the
+   [request measurements](operations-status.md#collect-status-in-the-local-deployment)
+   for scope and the cross-process rehearsal command.
 3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
    [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
    (registered, connected, hosted), trials, SumUp cards and Stripe direct debit, failed
