@@ -50,10 +50,11 @@ export class AuthenticatorController {
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
     const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
     const email='emailRequired' in this.challenge;
-    if(!validCode(code,email?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
+    const recovery='emailRequired' in this.challenge&&!this.challenge.rememberBrowserAllowed&&this.proofKind==='recovery';
+    if(!validCode(code,email&&!recovery?'totp':this.proofKind))return this.#required('factorCodeInvalid','proof');
     const generation=this.#start();if(generation===undefined)return false;
-    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
-    const result=await this.#request<{accountId:string}>(email?'/login/email':'/login/factor',body);
+    const body={challengeToken:this.challenge.challengeToken,...(email?{code,...(!recovery&&this.rememberBrowser?{rememberBrowser:true}:{})}:{proof:{kind:this.proofKind,code}})};this.#clearInput();
+    const result=await this.#request<{accountId:string}>(email?(recovery?'/login/recovery':'/login/email'):'/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
     this.#failure(result,false,'factorVerify');

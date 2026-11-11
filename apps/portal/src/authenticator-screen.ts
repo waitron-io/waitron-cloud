@@ -11,9 +11,9 @@ function clearRequired(app:PortalApp,field:'password'|'proof'|'confirmation',val
   }
 }
 function proof(app:PortalApp){const c=app.copy,f=app.authenticator;
-  return html`${f.challenge&&'emailRequired' in f.challenge?nothing:html`<label class="factor-proof-type">${c.factorProofType}<select aria-label=${c.factorProofType} .value=${f.proofKind} ?disabled=${f.pending}
+  return html`${f.challenge&&'emailRequired' in f.challenge&&f.challenge.rememberBrowserAllowed?nothing:html`<label class="factor-proof-type">${c.factorProofType}<select aria-label=${c.factorProofType} .value=${f.proofKind} ?disabled=${f.pending}
     @change=${(e:Event)=>{app.readFields();f.proofKind=(e.target as HTMLSelectElement).value as typeof f.proofKind;f.proofCode='';app.draw();}}>
-    <option value="totp">${c.factorTotp}</option><option value="recovery">${c.factorRecovery}</option></select></label>`}
+    <option value="totp">${f.challenge&&'emailRequired' in f.challenge?c.emailCode:c.factorTotp}</option><option value="recovery">${c.factorRecovery}</option></select></label>`}
     <wt-input name="factorProof" .error=${f.requiredField==='proof'&&(f.error==='factorCodeRequired'||f.error==='factorCodeInvalid')?c[f.error]:''} .label=${c.factorProof} .value=${f.proofCode} .autocomplete=${'one-time-code'} .disabled=${f.pending}
       @wt-change=${(e:CustomEvent<{value:string}>)=>{f.proofCode=e.detail.value;clearRequired(app,'proof',f.proofCode);}}></wt-input>`;}
 export function rememberBrowserChoice(app:PortalApp){const c=app.copy,f=app.authenticator;
@@ -21,7 +21,7 @@ export function rememberBrowserChoice(app:PortalApp){const c=app.copy,f=app.auth
     @change=${(event:Event)=>{f.rememberBrowser=(event.target as HTMLInputElement).checked;}}> ${c.rememberBrowser}</label><p class="help">${c.rememberBrowserHelp}</p>`;
 }
 export function authenticatorLoginScreen(app:PortalApp){const c=app.copy,f=app.authenticator;
-  return html`<p>${f.challenge&&'emailRequired' in f.challenge?c.emailCheckHelp:c.factorLoginHelp}</p>${proof(app)}${f.challenge&&'emailRequired' in f.challenge&&f.challenge.rememberBrowserAllowed?rememberBrowserChoice(app):nothing}<wt-form-actions>
+  return html`<p>${f.challenge&&'emailRequired' in f.challenge?(f.challenge.rememberBrowserAllowed?c.emailCheckHelp:c.emailOrRecoveryHelp):c.factorLoginHelp}</p>${proof(app)}${f.challenge&&'emailRequired' in f.challenge&&f.challenge.rememberBrowserAllowed?rememberBrowserChoice(app):nothing}<wt-form-actions>
     <wt-button id="submit" variant="primary" .disabled=${f.pending||!!f.waiting} .loading=${f.pending} @click=${()=>{void app.completeFactorLogin();}}>${c.factorVerify}</wt-button>
     <wt-button .disabled=${f.pending} @click=${()=>{app.navigate('/login');}}>${c.factorRestart}</wt-button></wt-form-actions>`;}
 export function authenticatorCodesScreen(app:PortalApp){const c=app.copy;

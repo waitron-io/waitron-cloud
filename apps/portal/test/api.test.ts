@@ -187,3 +187,20 @@ test('email recognition eligibility is optional and accepts only literal true',a
  assert.deepEqual(await accountRequest('/login',{}),{ok:true,value:challenge});
  for(const flag of [false,'true',1,null]){body={...challenge,rememberBrowserAllowed:flag};assert.equal((await accountRequest('/login',{})).ok,false);}
 });
+
+
+test('recovery-code replies distinguish creation, preserved codes and removal',async t=>{
+ const priorLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),priorDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+ Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:''}});
+ t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
+ const codes=Array.from({length:10},(_,i)=>i.toString(16).padStart(32,'0').toUpperCase());
+ let value:unknown={status:'changed',active:false,recoveryCodes:codes};
+ t.mock.method(globalThis,'fetch',async()=>Response.json(value));
+ assert.equal((await accountRequest('/authenticator/regenerate',{})).ok,true);
+ assert.equal((await accountRequest('/authenticator/remove',{})).ok,false);
+ value={status:'changed',active:true};assert.equal((await accountRequest('/authenticator/activate',{})).ok,true);
+ assert.equal((await accountRequest('/authenticator/regenerate',{})).ok,false);
+ value={status:'changed',active:false};assert.equal((await accountRequest('/authenticator/activate',{})).ok,false);
+ value={accountId:'owner'};assert.equal((await accountRequest('/login/recovery',{})).ok,true);
+ value={accountId:'owner',recoveryCodes:codes};assert.equal((await accountRequest('/login/recovery',{})).ok,false);
+});

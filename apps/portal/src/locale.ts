@@ -37,6 +37,7 @@ const enBase = {
   billingChanged:'The trial choice changed. Check the current plan below.',billingUncertain:'We could not confirm the change. Check the current plan before trying again.',billingRefresh:'Check current plan',
 
   rememberBrowser:'Remember this browser (30 days)', rememberBrowserHelp:'Only on a browser you control.',
+  emailCode:'Email code', emailOrRecoveryHelp:'Enter the email code, or choose a saved recovery code.', accountRecoveryHelp:'Save recovery codes in case you lose access to your passkeys. New codes replace the old ones and sign you out everywhere.', recoveryCodesChanged:'Your recovery codes changed. Sign in again.',
   emailCheckTitle:'Check your email', emailCheckHelp:'Enter the six-digit code we emailed you. It expires in five minutes.', emailCheckInvalid:'The code is incorrect or expired. Try again or start sign-in again.',
   factorTitle:'Authenticator', factorIntro:'Add a code to password sign-in. Passkeys still work.',
   factorOn:'Authenticator is on.', factorOff:'Authenticator is off.', factorEnable:'Set up authenticator', factorReplace:'Replace authenticator', factorRemove:'Remove authenticator', factorRegenerate:'New recovery codes',
@@ -311,6 +312,7 @@ const esBase: typeof enBase = {
   billingChanged:'La opción de prueba ha cambiado. Revisa el plan actual.',billingUncertain:'No hemos podido confirmar el cambio. Revisa el plan actual antes de volver a intentarlo.',billingRefresh:'Consultar plan actual',
 
   rememberBrowser:'Recordar este navegador (30 días)', rememberBrowserHelp:'Solo en un navegador que controles.',
+  emailCode:'Código del correo', emailOrRecoveryHelp:'Introduce el código del correo o elige un código de recuperación guardado.', accountRecoveryHelp:'Guarda códigos de recuperación por si pierdes tus llaves de acceso. Los nuevos sustituyen a los anteriores y cierran todas tus sesiones.', recoveryCodesChanged:'Tus códigos de recuperación han cambiado. Vuelve a iniciar sesión.',
   emailCheckTitle:'Revisa tu correo', emailCheckHelp:'Introduce el código de seis dígitos que te enviamos. Caduca en cinco minutos.', emailCheckInvalid:'El código es incorrecto o ha caducado. Inténtalo de nuevo o vuelve a iniciar sesión.',
   factorTitle:'Autenticador', factorIntro:'Añade un código al acceso con contraseña. Las llaves de acceso siguen funcionando.',
   factorOn:'El autenticador está activo.', factorOff:'El autenticador está desactivado.', factorEnable:'Configurar autenticador', factorReplace:'Cambiar autenticador', factorRemove:'Quitar autenticador', factorRegenerate:'Nuevos códigos de recuperación',

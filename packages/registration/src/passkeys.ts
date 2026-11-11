@@ -18,8 +18,9 @@ import type {
   VerifyAuthenticationResponseOpts,
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
-import { createSession, requireCurrentPassword, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
+import { createSession, IdentityError, requirePasswordAuthority, requireCurrentPassword, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import {retireRecoveryCodesWithoutMethod} from './account-recovery-codes.ts';
 
 // Offer and accept the same reviewed algorithms, independent of runtime defaults.
 const SUPPORTED_ALGORITHM_IDS = [-8, -7, -257];
@@ -193,9 +194,12 @@ export class PasskeyStore {
   async remove(token: string, csrfToken: string, id: string, password: string): Promise<boolean> {
     if (!UUID.test(id)) return false;
     return transaction(this.#pool, async client => {
+      const candidate=(await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[digest(token)])).rows[0];
+      if(!candidate)throw new IdentityError('credentials_invalid');
+      await requirePasswordAuthority(client,{accountId:candidate.account_id},password,'update');
       const session = await resolveSession(client, token, {csrfToken, touch: false});
-      await requireCurrentPassword(client, session.accountId, password);
       const removed = await client.query('DELETE FROM cloud_passkeys WHERE id = $1 AND account_id = $2', [id, session.accountId]);
+      if(removed.rowCount)await retireRecoveryCodesWithoutMethod(client,session.accountId);
       return removed.rowCount === 1;
     });
   }

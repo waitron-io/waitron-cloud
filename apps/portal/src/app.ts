@@ -310,16 +310,17 @@ export class PortalApp {
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
   async completeFactorLogin(){this.readFields();const route=this.#route;const previouslyAnonymous=this.session.state.kind==='anonymous';const result=await this.authenticator.completeLogin();if(route===this.#route)await this.#factorLoginResult(result,route,previouslyAnonymous);}
-  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh'){
+  async manageFactor(action:'begin'|'activate'|'regenerate'|'remove'|'cancel'|'refresh',passkeyRecovery=false){
     this.readFields();const route=this.#route;
+    if(passkeyRecovery){this.authenticator.password=this.passkeys.password;this.passkeys.password='';}
     if(action==='begin'||action==='cancel'||action==='refresh'){await this.authenticator[action]();if(route===this.#route){this.draw();this.focusHeading();}return;}
     const result=await this.authenticator[action]();if(route!==this.#route||!result)return;
-    const codes=typeof result==='object'&&result.active?[...result.recoveryCodes]:[];
+    const codes=typeof result==='object'&&result.recoveryCodes?[...result.recoveryCodes]:[];
     this.session.dispose();this.session=this.#session();
     // Clear ended account authority before the login view can start another sign-in.
     this.#sessionChanged(this.session.state);this.navigate('/login');
     // Keep the committed one-time reply in this view after navigation fences all earlier authority.
-    this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':result.active?'factorChanged':'factorRemoved';this.draw();this.focusHeading();
+    this.factorCodes=codes;this.notice=result==='reconcile'?'factorChangeUncertain':action==='remove'?'factorRemoved':action==='regenerate'?'recoveryCodesChanged':'factorChanged';this.draw();this.focusHeading();
     void this.session.check();
   }
   async signInWithPasskey(autofill = false) {

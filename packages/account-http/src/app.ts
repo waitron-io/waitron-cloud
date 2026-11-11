@@ -144,7 +144,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
-    if(c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
+    if(c.req.path==='/api/account/login/recovery'||c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});

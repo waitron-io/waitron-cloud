@@ -4,7 +4,7 @@ export type EmailChallenge={emailRequired:true;challengeToken:string;expiresAt:s
 export type PasswordLogin={accountId:string}|FactorChallenge|EmailChallenge;
 export type FactorStatus={active:boolean;version:number;recoveryCodesRemaining:number;available:boolean};
 export type FactorEnrolment={pendingToken:string;secret:string;uri:string;expiresAt:string};
-export type FactorChange={status:'changed';active:true;recoveryCodes:string[]}|{status:'changed';active:false};
+export type FactorChange={status:'changed';active:boolean;recoveryCodes?:string[]};
 const object=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==='object'&&!Array.isArray(value);
 const exact=(value:Record<string,unknown>,keys:string[])=>Object.keys(value).sort().join(',')===keys.sort().join(',');
 const token=(value:unknown)=>typeof value==='string'&&/^[A-Za-z0-9_-]{43}$/.test(value);
@@ -25,9 +25,11 @@ export function validFactorEnrolment(value:unknown):value is FactorEnrolment {
     ||typeof value.secret!=='string'||!/^[A-Z2-7]{16,128}$/.test(value.secret)||typeof value.uri!=='string'||value.uri.length>2048)return false;
   try{const uri=new URL(value.uri);return uri.protocol==='otpauth:'&&uri.hostname==='totp'&&!uri.username&&!uri.password&&!uri.hash&&uri.searchParams.get('secret')===value.secret;}catch{return false;}
 }
-export function validFactorChange(value:unknown,active:boolean):value is FactorChange {
-  if(!object(value)||value.status!=='changed'||value.active!==active)return false;
-  if(!active)return exact(value,['status','active']);
+export function validFactorChange(value:unknown,action:'activate'|'regenerate'|'remove'):value is FactorChange {
+  if(!object(value)||value.status!=='changed'||typeof value.active!=='boolean')return false;
+  if(action==='activate'&&!value.active||action==='remove'&&value.active)return false;
+  if(exact(value,['status','active']))return action!=='regenerate';
+  if(action==='remove')return false;
   return exact(value,['status','active','recoveryCodes'])&&Array.isArray(value.recoveryCodes)&&value.recoveryCodes.length===10
     &&value.recoveryCodes.every(code=>typeof code==='string'&&/^[A-F0-9]{32}$/.test(code))&&new Set(value.recoveryCodes).size===10;
 }

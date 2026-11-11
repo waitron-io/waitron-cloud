@@ -2,9 +2,10 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {decryptFactorSecret, encryptFactorSecret, IdentityError, requirePasswordAuthority, resolveSession,
   type FactorKeys} from '@waitron-cloud/identity';
-import {consumeFactorProof, factorDigest, factorNow, FactorError, recoveryCodeHash,
+import {consumeFactorProof, factorDigest, factorNow, FactorError,
   type ActiveFactor, type FactorProof} from './password-login.ts';
 import {transaction} from './transaction.ts';
+import {createAccountRecoveryCodes,retireRecoveryCodesWithoutMethod} from './account-recovery-codes.ts';
 
 export interface FactorAuthority {token: string; csrfToken: string; password: string; proof?: FactorProof}
 export interface FactorManagementPolicy {pendingLifetimeMs: number; enrolmentAttempts: number}
@@ -56,8 +57,8 @@ export class AuthenticatorFactorStore {
       const session=await resolveSession(client,token,{touch:false});
       const row=(await client.query('SELECT * FROM cloud_authenticator_factors WHERE account_id=$1',[session.accountId])).rows[0];
       const count=(await client.query(`SELECT count(*)::integer AS count FROM cloud_factor_recovery_codes
-        WHERE account_id=$1 AND factor_version=$2 AND secret_generation=$3 AND consumed_at IS NULL`,
-        [session.accountId,row?.version??0,row?.secret_generation??null])).rows[0].count;
+        WHERE account_id=$1 AND consumed_at IS NULL`,
+        [session.accountId])).rows[0].count;
       let available=true;
       try {
         this.#policyReady();
@@ -155,15 +156,7 @@ export class AuthenticatorFactorStore {
     await c.client.query('UPDATE cloud_factor_login_challenges SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
     await c.client.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1 AND ended_at IS NULL',[c.accountId]);
   }
-  async #codes(c:Context,generation:string,version:number):Promise<string[]> {
-    const codes=Array.from({length:10},()=>randomBytes(16).toString('hex').toUpperCase());
-    // Superseded codes become unusable, but their hashes remain until a retention policy permits deletion.
-    await c.client.query('UPDATE cloud_factor_recovery_codes SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
-    for(const code of codes) await c.client.query(`INSERT INTO cloud_factor_recovery_codes(account_id,secret_generation,factor_version,code_hash)
-      VALUES($1,$2,$3,$4)`,[c.accountId,generation,version,recoveryCodeHash(c.accountId,version,code)]);
-    return codes;
-  }
-  async activate(a:FactorAuthority,pendingToken:string,code:string):Promise<{status:'changed';active:true;recoveryCodes:string[]}> {
+  async activate(a:FactorAuthority,pendingToken:string,code:string):Promise<{status:'changed';active:true;recoveryCodes?:string[]}> {
     return this.#run(a,async c=>{
       const pending:Pending=(await c.client.query('SELECT * FROM cloud_factor_enrolments WHERE token_hash=$1',[factorDigest(pendingToken)])).rows[0];
       const version=c.factor.version+1;
@@ -175,19 +168,25 @@ export class AuthenticatorFactorStore {
       if(!deadline) throw new FactorManagementError(await factorNow(c.client)>=pending.expires_at?'setup_unavailable':'permission_denied');c.deadline=deadline;
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=$2,secret_generation=$3,secret_envelope=$4 WHERE account_id=$1',[c.accountId,version,pending.id,envelope]);
-      const recoveryCodes=await this.#codes(c,pending.id,version);
-      await this.#changed(c);return {status:'changed',active:true,recoveryCodes};
+      const previous=await c.client.query('SELECT 1 FROM cloud_factor_recovery_codes WHERE account_id=$1 LIMIT 1',[c.accountId]);
+      const recoveryCodes=previous.rowCount?undefined:await createAccountRecoveryCodes(c.client,c.accountId);
+      await this.#changed(c);return {status:'changed',active:true,...(recoveryCodes?{recoveryCodes}:{})};
     },pendingToken);
   }
-  async regenerate(a:FactorAuthority):Promise<{status:'changed';active:true;recoveryCodes:string[]}> {
+  async regenerate(a:FactorAuthority):Promise<{status:'changed';active:boolean;recoveryCodes:string[]}> {
     return this.#run(a,async c=>{
-      if(!c.factor.secret_envelope) throw new FactorManagementError('factor_not_active');
+      if(!c.factor.secret_envelope) {
+        if(!(await c.client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1 LIMIT 1',[c.accountId])).rowCount)throw new FactorManagementError('factor_not_active');
+        await this.#lockSessions(c,a);
+        const recoveryCodes=await createAccountRecoveryCodes(c.client,c.accountId);
+        await this.#changed(c);return {status:'changed',active:false,recoveryCodes};
+      }
       const secret=decryptFactorSecret(c.factor.secret_envelope,this.#keys!,{accountId:c.accountId,version:c.factor.version,purpose:'active'});
       if(!secret) throw new FactorManagementError('temporarily_unavailable');
       const version=c.factor.version+1,envelope=this.#encrypt(secret,c.accountId,version);
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=$2,secret_envelope=$3 WHERE account_id=$1',[c.accountId,version,envelope]);
-      const recoveryCodes=await this.#codes(c,c.factor.secret_generation,version);
+      const recoveryCodes=await createAccountRecoveryCodes(c.client,c.accountId);
       await this.#changed(c);return {status:'changed',active:true,recoveryCodes};
     });
   }
@@ -196,7 +195,7 @@ export class AuthenticatorFactorStore {
       if(!c.factor.secret_envelope) throw new FactorManagementError('factor_not_active');
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=version+1,secret_envelope=NULL,secret_generation=NULL WHERE account_id=$1',[c.accountId]);
-      await c.client.query('UPDATE cloud_factor_recovery_codes SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
+      await retireRecoveryCodesWithoutMethod(c.client,c.accountId);
       await this.#changed(c);return {status:'changed',active:false};
     });
   }
