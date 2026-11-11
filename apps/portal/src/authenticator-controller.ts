@@ -88,10 +88,14 @@ export class AuthenticatorController {
     if(action==='activate'&&!code)return this.#required('factorCodeRequired','confirmation');
     if(action==='activate'&&!validCode(code,'totp'))return this.#required('factorConfirmationInvalid','confirmation');
     const generation=this.#start();if(generation===undefined)return false;
+    const active=this.status?.active;
     const body={...authority,...(action==='activate'?{pendingToken:this.enrolment!.pendingToken,code}:{})};this.#clearInput();
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);
     if(generation!==this.#generation)return false;this.pending=false;
-    if(result.ok){this.fence();this.#changed();return result.value;}
+    if(result.ok){
+      if(action==='regenerate'&&active!==undefined&&result.value.active!==active){this.enrolment=undefined;this.challenge=undefined;this.error='factorChangeUncertain';this.#changed();return 'reconcile';}
+      this.fence();this.#changed();return result.value;
+    }
     this.#managementFailure(result,true);
     if(result.status===403&&result.code==='credentials_invalid'){
       this.pending=true;const session=await this.#request<{accountId:string}>('/session');
