@@ -21,7 +21,7 @@ export class AuthenticatorController {
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
   fence(){this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
-  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false,context?:'factor'|'factorSignIn'){
+  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false,context?:'factor'|'factorSignIn'|'factorVerify'){
     this.#retryUntil=performance.now()+result.retryAfterMs;
     const cause=context&&bodyRefusal(result);
     this.error=cause?`${context}Request${cause}`:result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
@@ -54,7 +54,7 @@ export class AuthenticatorController {
     const result=await this.#request<{accountId:string}>('/login/factor',body);
     if(generation!==this.#generation)return false;this.pending=false;
     if(result.ok){this.challenge=undefined;this.#changed();return 'authenticated';}
-    this.#failure(result,false,'factorSignIn');
+    this.#failure(result,false,'factorVerify');
     // An uncertain completion may have consumed its proof; only a session read can reconcile it.
     if(result.status===0||result.status>=500){this.challenge=undefined;this.error='factorLoginUncertain';this.#changed();return 'reconcile';}
     if(result.status===401){this.challenge=undefined;this.#changed();return 'reconcile';}this.#changed();return false;

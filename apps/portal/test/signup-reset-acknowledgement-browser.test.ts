@@ -72,7 +72,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           }
           for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const){
             refusalStatus=status;responseError='invalid_input';const before:number=calls.length;
-            await submit.click();await page.getByText(c[`accountRequest${cause}`],{exact:true}).waitFor();
+            await submit.click();const message=page.getByRole('alert').filter({hasText:c[`requestBody${cause}`]});await message.waitFor();
+            assert.equal(await message.getByText(cause==='Interrupted'?`${c.requestBodyInterrupted} ${c[flow.button]}.`:c[`requestBody${cause}`],{exact:true}).count(),1,'the message names the visible submission action only for an interruption');
             assert.equal(calls.length,before+1);assert.equal(await submit.isEnabled(),true);
             assert.equal(await page.getByText(c.signupReady,{exact:true}).count(),0);assert.equal(await page.getByText(c.resetReady,{exact:true}).count(),0);
             assert.equal(await page.getByRole('heading',{name:c.checkEmail,exact:true}).count(),0);

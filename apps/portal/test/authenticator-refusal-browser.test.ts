@@ -54,3 +54,22 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    }finally{await page.close();}
   });}finally{await browser.close();}
  });
+
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: a refused sign-in code names its verify button`,async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);const c=translations[locale];
+  await page.route('https://portal.test/login',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/login'))return route.fulfill({status:202,json:{factorRequired:true,challengeToken:token,expiresAt}});
+   if(path.endsWith('/login/factor'))return route.fulfill({status:408,json:{error:'invalid_input'}});
+   return route.fulfill({status:401,json:{error:'unauthenticated'}});
+  });
+  await page.goto('https://portal.test/login');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.locator('input[name=email]').fill('owner@example.test');await page.locator('input[name=password]').fill('current password');await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.locator('input[name=factorProof]').fill('123456');const verify=page.getByRole('button',{name:c.factorVerify,exact:true});await verify.click();
+  const message=page.getByRole('alert').filter({hasText:c.requestBodyInterrupted});await message.waitFor();assert.equal(await message.getByText(`${c.requestBodyInterrupted} ${c.factorVerify}.`,{exact:true}).count(),1);assert.equal(await verify.isEnabled(),true);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  if(process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR){await mkdir(process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.AUTHENTICATOR_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}-verify.png`});}
+ }finally{await browser.close();}
+});

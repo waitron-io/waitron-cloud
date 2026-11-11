@@ -82,14 +82,14 @@ export class AccountSecurityController {
       this.error = undefined; this.#sessionEnded(target.current && (result.ok || result.status === 0) ? 'signedOut' : undefined); this.#changed(); return;
     }
     if (listed.ok && !this.sessions.some(session => session.id === id)) this.notice = 'sessionRevoked';
-    else if (!result.ok) this.#failure(result, true);
+    else if (!result.ok) this.#failure(result, true, target.current);
     else this.error = 'sessionRevokeUncertain';
     this.#changed();
   }
 
-  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, write: boolean) {
+  #failure(result: Extract<ApiResult<unknown>, {ok: false}>, write: boolean, current=false) {
     const cause = write && bodyRefusal(result);
-    this.error = cause ? `sessionRevokeRequest${cause}` : result.status === 429 ? 'limited'
+    this.error = cause ? `${current?'sessionSignOut':'sessionRevoke'}Request${cause}` : result.status === 429 ? 'limited'
       : result.status === 403 ? 'forbidden'
       : write ? 'sessionRevokeUncertain' : 'unavailable';
   }

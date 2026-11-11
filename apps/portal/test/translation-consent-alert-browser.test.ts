@@ -22,7 +22,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
-  let installations=initial,readStatus=503;
+  let installations=initial,readStatus=503,writeStatus=503;
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
@@ -30,7 +30,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/installations'))return route.fulfill({json:{installations}});
    if(path.endsWith('/usage/read'))return route.fulfill({json:{version:1,organisationId:first,storage:{currentBytes:'0',addedBytes:'0',removedBytes:'0'},transfer:{uploadedBytes:'0',restoredBytes:'0'},operations:{installationCompleted:'0',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},latestEventAt:null,measuredThrough:null}});
    if(path.endsWith('/translation-consent')){
-    if(route.request().method()==='POST'||readStatus!==200)return route.fulfill({status:503,json:{error:'unavailable'}});
+    if(route.request().method()==='POST')return route.fulfill({status:writeStatus,json:{error:writeStatus===503?'unavailable':'invalid_input'}});
+    if(readStatus!==200)return route.fulfill({status:503,json:{error:'unavailable'}});
     return route.fulfill({json:{consents:[{venueId:first,consented:true,consentedAt:'2026-10-24T00:00:00.000Z'},{venueId:second,consented:false,consentedAt:null}]}});
    }
    return route.fulfill({status:503,json:{error:'unavailable'}});
@@ -74,6 +75,25 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.equal(await list.getByRole('alert').filter({hasText:c.translationConsentUncertain}).count(),1);
    }
    if(process.env.TRANSLATION_ALERT_RECEIPT_DIR)await page.screenshot({path:`${process.env.TRANSLATION_ALERT_RECEIPT_DIR}/${locale}-${theme}-${width}-write.png`,fullPage:true});
+  });
+  await t.test('a refused consent change offers a working status refresh only at the affected venue',async()=>{
+   for(const [status,message] of [[408,c.translationConsentRequestInterrupted],[413,c.translationConsentRequestSize],[415,c.translationConsentRequestFormat]] as const){
+    writeStatus=status;
+    for(const index of [1,0]){
+     await group(index).getByRole('button',{name:index?c.translationConsentAgree:c.translationConsentWithdraw,exact:true}).click();
+     await group(index).getByRole('alert').filter({hasText:message}).waitFor();
+     const refresh=group(index).getByRole('button',{name:c.translationConsentRefresh,exact:true});
+     assert.equal(await refresh.count(),1,'the refused choice must offer the refresh named in its message');
+     assert.equal(await group(1-index).getByRole('button',{name:c.translationConsentRefresh,exact:true}).count(),0);
+     if(process.env.TRANSLATION_ALERT_RECEIPT_DIR&&status===408&&index===1)await group(index).screenshot({path:`${process.env.TRANSLATION_ALERT_RECEIPT_DIR}/${locale}-${theme}-${width}-refused.png`});
+     const reply=page.waitForResponse(response=>response.url().endsWith('/translation-consent')&&response.request().method()==='GET'&&response.status()===200);
+     await Promise.all([reply,refresh.click()]);
+     await page.waitForFunction(()=>{const t=(window as any).app.translationConsent;return t.loaded&&!t.pending&&!t.error;});
+     assert.equal(await group(index).getByRole('alert').count(),0);
+     assert.equal(await refresh.count(),0);
+     assert.equal(await group(index).getByRole('button',{name:index?c.translationConsentAgree:c.translationConsentWithdraw,exact:true}).isEnabled(),true);
+    }
+   }
   });
   await t.test('a failed translation read adds no message when no translation controls are offered',async()=>{
    installations=initial.map(i=>({...i,canRevoke:false}));readStatus=503;

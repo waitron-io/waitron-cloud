@@ -8,24 +8,26 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const bodyRefusalActions = {
-  account:'retry', factorSignIn:'login', factor:'factorRefresh', sessionRevoke:'sessionRevoke', logout:'signout',
-  alerts:'alertsSave', snapshots:'retry', diagnostic:'diagnosticDownload', installations:'refreshStatus',
-  recovery:'recoveryCheckRequest', remote:'refreshStatus', translationConsent:'translationConsentRefresh', usage:'usageRefresh',
+  account:'continue', accountCreate:'create', accountReset:'sendReset', accountPassword:'savePassword',
+  factorSignIn:'login', factorVerify:'factorVerify', factor:'factorRefresh', sessionRevoke:'sessionRevoke', sessionSignOut:'sessionSignOut', logout:'signout',
+  alerts:'alertsSave', snapshots:'latestSnapshots', diagnostic:'diagnosticDownload', installations:'refreshStatus',
+  recovery:'recoveryCheckRequest', recoveryInspect:'pairInspect', remote:'refreshStatus', translationConsent:'translationConsentRefresh', usage:'usageRefresh',
 } as const;
 type BodyRefusalCopyKey = `${keyof typeof bodyRefusalActions}Request${'Interrupted'|'Size'|'Format'}`;
 function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string> {
   const messages = {} as Record<BodyRefusalCopyKey,string>;
   for (const context of Object.keys(bodyRefusalActions) as (keyof typeof bodyRefusalActions)[]) {
     for (const cause of ['Interrupted','Size','Format'] as const) {
-      messages[`${context}Request${cause}`] = `${copy[`requestBody${cause}`]} ${copy[bodyRefusalActions[context]]}.`;
+      const action = cause==='Interrupted'||context==='factor'||context==='installations'||context==='translationConsent';
+      messages[`${context}Request${cause}`] = copy[`requestBody${cause}`]+(action?` ${copy[bodyRefusalActions[context]]}.`:'');
     }
   }
   return messages;
 }
 const enBase = {
   requestBodyInterrupted:'This request was interrupted.',
-  requestBodySize:'This request’s size wasn’t accepted; retrying may not help.',
-  requestBodyFormat:'This request arrived in an unsupported format.',
+  requestBodySize:'This request’s size wasn’t accepted; sending it again won’t help.',
+  requestBodyFormat:'This request arrived in an unsupported format; sending it again won’t help.',
   billingMethodsTitle:'Test payment method',billingMethodsIntro:'Test accounts only. Use a sandbox card or test IBAN. Saving a card makes a €1 sandbox payment. No live payment or renewal is collected.',
   billingSelectedMethod:'Saved method:',billingMethodCard:'Card',billingMethodDebit:'Direct debit',billingMethodNone:'None',billingAddCard:'Add or switch test card',billingAddDebit:'Add or switch test direct debit',
   billingMethodPending:'Setup is not confirmed. Check the saved method before starting again. Your previous method stays selected.',billingMethodFailed:'Setup failed. Your previous method is unchanged. You can start again.',billingMethodVerified:'Payment method confirmed.',billingMethodRefresh:'Check saved method',
@@ -295,8 +297,8 @@ const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
   requestBodyInterrupted:'Esta solicitud se interrumpió.',
-  requestBodySize:'No se ha aceptado el tamaño de esta solicitud; puede que reintentarlo no sirva.',
-  requestBodyFormat:'Esta solicitud llegó en un formato no admitido.',
+  requestBodySize:'No se ha aceptado el tamaño de esta solicitud; volver a enviarla no sirve.',
+  requestBodyFormat:'Esta solicitud llegó en un formato no admitido; volver a enviarla no sirve.',
   billingMethodsTitle:'Método de pago de prueba',billingMethodsIntro:'Solo cuentas de prueba. Usa una tarjeta sandbox o un IBAN de prueba. Guardar una tarjeta hace un pago sandbox de 1 €. No se cobran pagos reales ni renovaciones.',
   billingSelectedMethod:'Método guardado:',billingMethodCard:'Tarjeta',billingMethodDebit:'Domiciliación',billingMethodNone:'Ninguno',billingAddCard:'Añadir o cambiar tarjeta de prueba',billingAddDebit:'Añadir o cambiar domiciliación de prueba',
   billingMethodPending:'La configuración no está confirmada. Consulta el método guardado antes de volver a empezar. El anterior sigue seleccionado.',billingMethodFailed:'La configuración ha fallado. El método anterior no cambia. Puedes volver a empezar.',billingMethodVerified:'Método de pago confirmado.',billingMethodRefresh:'Consultar método guardado',

@@ -55,8 +55,8 @@ test('retry-after blocks repeated reads and an ownership failure clears totals',
 
 for (const [status, expected, en, es] of [
  [408, 'usageRequestInterrupted', 'This request was interrupted. Refresh measured usage.', 'Esta solicitud se interrumpió. Actualizar uso medido.'],
- [413, 'usageRequestSize', 'This request’s size wasn’t accepted; retrying may not help. Refresh measured usage.', 'No se ha aceptado el tamaño de esta solicitud; puede que reintentarlo no sirva. Actualizar uso medido.'],
- [415, 'usageRequestFormat', 'This request arrived in an unsupported format. Refresh measured usage.', 'Esta solicitud llegó en un formato no admitido. Actualizar uso medido.'],
+ [413, 'usageRequestSize', 'This request’s size wasn’t accepted; sending it again won’t help.', 'No se ha aceptado el tamaño de esta solicitud; volver a enviarla no sirve.'],
+ [415, 'usageRequestFormat', 'This request arrived in an unsupported format; sending it again won’t help.', 'Esta solicitud llegó en un formato no admitido; volver a enviarla no sirve.'],
 ] as const) {
  test(`usage body refusal ${status} explains its cause without a successful load`, async()=>{
   const calls: {path:string;body?:Record<string,unknown>}[]=[];

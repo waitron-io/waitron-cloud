@@ -239,7 +239,7 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  c.account('owner');c.status={...statusFixture,active:true};c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
  c.password='current';c.proofCode='123456';c.confirmation='654321';
  if(action==='startLogin')await c.startLogin('owner@example.test','current');else await c[action]();
- assert.equal(c.error,`${action==='startLogin'||action==='completeLogin'?'factorSignIn':'factor'}Request${cause}`);
+ assert.equal(c.error,`${action==='startLogin'?'factorSignIn':action==='completeLogin'?'factorVerify':'factor'}Request${cause}`);
  assert.equal(c.pending,false);assert.equal(calls.length,1);assert.equal(c.password,'');assert.equal(c.proofCode,'');
  assert.equal(calls[0]?.path,action==='startLogin'?'/login':action==='completeLogin'?'/login/factor':`/authenticator/${action}`);
 });

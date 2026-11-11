@@ -278,7 +278,7 @@ export class PortalApp {
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
       const cause = bodyRefusal(result);
-      if (cause) this.error = `accountRequest${cause}`;
+      if (cause) this.error = `${path==='/signup/complete'?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
