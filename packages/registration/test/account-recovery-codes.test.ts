@@ -190,7 +190,7 @@ test('concurrent removal of the final two passkeys retires every unused recovery
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count,'0');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'0');
  }finally{
-  await blocker.query('SELECT pg_advisory_unlock_all()');blocker.release();await removal;
+  await blocker.query('SELECT pg_advisory_unlock_all()');blocker.release();await removal?.catch(()=>{});
   await pool.query('DROP TRIGGER IF EXISTS hold_passkey_removal ON cloud_passkeys');await pool.query('DROP FUNCTION IF EXISTS hold_passkey_removal()');
  }
 });

@@ -317,7 +317,7 @@ export class PortalApp {
     const result=await this.authenticator[action]();if(route!==this.#route)return;
     if(!result){
       if(passkeyRecovery&&this.authenticator.error){
-        this.passkeys.error=this.authenticator.error;this.authenticator.error=undefined;this.draw();
+        this.passkeys.error=this.authenticator.error==='credentials'?'passkeyPasswordInvalid':this.authenticator.error;this.authenticator.error=undefined;this.draw();
         const alert=this.root.querySelector<HTMLElement>('.passkeys [role=alert]');if(alert){alert.tabIndex=-1;alert.focus();}
       }
       return;

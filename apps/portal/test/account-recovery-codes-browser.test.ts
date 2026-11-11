@@ -13,7 +13,6 @@ test(`passkey recovery ${locale} ${colorScheme} ${width}`,async()=>{
  const context=await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}),page=await context.newPage();page.setDefaultTimeout(7000);
  const id=randomUUID(),email=`recovery-${id}@example.test`,password='A synthetic saved code password',c=translations[locale];
  const shots=process.env.ACCOUNT_RECOVERY_SHOTS;
- const outcomes:{path:string;status:number}[]=[];page.on('response',response=>{if(response.url().includes('/api/account/'))outcomes.push({path:new URL(response.url()).pathname,status:response.status()});});
  async function look(stage:string){assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));if(shots){await mkdir(shots,{recursive:true});const scroll=await page.evaluate(()=>({x:scrollX,y:scrollY}));await page.screenshot({path:`${shots}/${locale}-${colorScheme}-${width}-${stage}.png`,fullPage:true});await page.evaluate(({x,y})=>scrollTo(x,y),scroll);}}
  async function login(){await page.goto(`${f.origin}/login#lang=${locale}`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.locator('input[name=factorProof]').waitFor();}
  try{
@@ -25,11 +24,11 @@ test(`passkey recovery ${locale} ${colorScheme} ${width}`,async()=>{
   await login();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
   await page.locator('input[name=passkeyPassword]').fill('wrong synthetic password');
   await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();
-  const error=page.locator('section.passkeys [role=alert]');await error.getByText(c.credentials,{exact:true}).waitFor();
+  const error=page.locator('section.passkeys [role=alert]');await error.getByText(c.passkeyPasswordInvalid,{exact:true}).waitFor();
   assert.equal(await error.evaluate(element=>element===document.activeElement),true);await look('refused');
   await page.locator('input[name=passkeyPassword]').fill(password);await look('account');
   assert.equal(await page.locator('input[name=passkeyPassword]').inputValue(),password,'corrected password survives the account redraw');
-  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor().catch(async error=>{throw new Error(JSON.stringify({outcomes:outcomes.slice(-12),heading:await page.locator('h1').textContent(),alerts:await page.locator('[role=alert]').allTextContents()}),{cause:error});});
+  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
   const codes=await page.locator('.factor-codes code').allTextContents();assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);await look('codes');
   await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await login();
   await page.getByLabel(c.factorProofType,{exact:true}).selectOption('recovery');await page.getByRole('heading',{name:c.factorRecovery,exact:true}).waitFor();await look('challenge');
