@@ -58,10 +58,23 @@ export class GithubApp {
  async request(path,{method='GET',body,authorization,signal}={}){
   const comparison=method==='GET' && /^\/repos\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/compare\/[a-f0-9]{40}\.\.\.[a-f0-9]{40}(?:\?per_page=1&page=2)?$/.test(path);
   assert.ok(/^\/[a-zA-Z0-9_./?=&%-]+$/.test(path) && (!path.includes('..') || comparison),'Invalid GitHub API path');
+  const clear=()=>{this.responses=new Map();this.responseBytes=0;this.responseEpoch=(this.responseEpoch??0)+1;};
+  if(!this.responses || this.responseAuthorization!==authorization)clear();
+  this.responseAuthorization=authorization;const epoch=this.responseEpoch,cacheable=method==='GET' && !path.startsWith('/app/');
+  try{for(let attempt=0;attempt<2;attempt++){
+  const cached=cacheable && attempt===0?this.responses.get(path):undefined;
   const response=await githubFetch(this.apiBase+path,{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
    headers:{accept:'application/vnd.github+json','x-github-api-version':'2026-03-10','user-agent':'waitron-disposable-ci',
-    authorization:'Bearer '+authorization,...(body===undefined?{}:{'content-type':'application/json'})},
+    authorization:'Bearer '+authorization,...(cached?{'if-none-match':cached.etag}:{}),...(body===undefined?{}:{'content-type':'application/json'})},
    ...(body===undefined?{}:{body:JSON.stringify(body)})},path.startsWith('/app/installations/')?'token':'api');
+  if(response.status===304){
+   await response.body?.cancel();
+   if(cached && epoch===this.responseEpoch){
+    if(this.responses.get(path)===cached){this.responses.delete(path);this.responses.set(path,cached);}
+    return JSON.parse(cached.body.toString());
+   }
+   if(cacheable && attempt===0)continue;
+  }
   if(!response.ok){
    await response.body?.cancel();const error=new Error(`GitHub ${method} refused (${response.status})`);error.status=response.status;
    const after=response.headers.get('retry-after'),remaining=response.headers.get('x-ratelimit-remaining'),reset=response.headers.get('x-ratelimit-reset');
@@ -80,7 +93,19 @@ export class GithubApp {
    if(comparison && error.message==='GitHub response byte limit exceeded')throw Object.assign(new Error('GitHub ancestry response exceeded its byte limit',{cause:error}),{code:'GITHUB_RESPONSE_LIMIT'});
    throw error;
   }
-  return bytes.byteLength?JSON.parse(Buffer.from(bytes).toString()):null;
+  const parsed=bytes.byteLength?JSON.parse(Buffer.from(bytes).toString()):null;
+  const etag=response.headers.get('etag');
+  if(cacheable && epoch===this.responseEpoch){
+   const old=this.responses.get(path);if(old){this.responses.delete(path);this.responseBytes-=old.body.byteLength;}
+   if(response.status===200 && etag && bytes.byteLength){
+    this.responses.set(path,{etag,body:bytes});this.responseBytes+=bytes.byteLength;
+    while(this.responses.size>64 || this.responseBytes>4*1024*1024){
+     const oldest=this.responses.keys().next().value;this.responseBytes-=this.responses.get(oldest).body.byteLength;this.responses.delete(oldest);
+    }
+   }
+  }
+  return parsed;
+  }}finally{if(method!=='GET')clear();}
  }
  async token(){
   if(this.cached && this.cached.expires>Date.now()+60000)return this.cached.token;

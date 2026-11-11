@@ -1422,3 +1422,36 @@ test('shared capacity keeps the observation time from before worker waits',async
  await automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true},runWorker:async()=>{clock=start+30000;return {code:0};}});
  assert.equal(JSON.parse(capacity).observedAt,start);
 });
+
+for(const age of ['fresh','stale','aging','gone'])test(`workers use ${age} shared admission before taking a guest`,async t=>{
+ const {automaticJob}=await import('./control.mjs'),{CITransport}=await import('./transport.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ config.host='new.invalid';config.recipe='/opt/waitron-disposable-fixture';config.slotHosts=Array(6).fill('new.invalid');let permissions=0,elapsed=0;const now=Date.now();t.mock.method(Date,'now',()=>now+elapsed);
+ f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval'))permissions++;return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);};
+ for(const [name,method] of Object.entries({healthySlots:async()=>{if(age==='aging' || age==='gone')elapsed=2000;if(age==='gone')f.jobs.length=0;return [0];},healthy:async()=>true,transfer:async()=>{throw new Error('fixture transfer failed');},destroy:async()=>{},inspect:async({resourceId})=>({resourceId,absent:true})}))t.mock.method(CITransport.prototype,name,method);
+ const result=await automaticJob({config,api:f.api,runId:789,jobId:901,admission:{ci,checkedAt:now-(age==='stale'?61000:age==='aging' || age==='gone'?59000:0)}});
+ if(age==='gone'){assert.equal(result.code,75);assert.equal(result.reason,'job-no-longer-queued');}
+ else{assert.equal(result.code,125);assert.match(result.error,/fixture transfer failed/);assert.equal(result.cleanup,'absent');}
+ assert.equal(permissions,age==='fresh'?0:1,'fresh per-run permission evidence is shared; stale evidence is reread');
+});
+
+for(const mode of ['fresh','stale','expired-refresh'])test(`pickup sends bounded ${mode} admission to its workers`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ const now=Date.now();let elapsed=0,permissions=0;const admissions=[];t.mock.method(Date,'now',()=>now+elapsed);
+ f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval')){permissions++;if(mode==='expired-refresh' && permissions>1)elapsed+=61000;}return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>{if(mode!=='fresh')elapsed=61000;return true;}},
+  runWorker:async(ci,admission)=>{admissions.push({ci,admission});return {code:0};}});
+ assert.equal(admissions.length,mode==='expired-refresh'?0:5);
+ for(const {ci,admission} of admissions){assert.deepEqual(admission?.ci,ci);assert.ok(admission.checkedAt>=now+(mode==='fresh'?0:61000) && admission.checkedAt<=Date.now());}
+ assert.ok(mode==='fresh'?permissions===1:permissions>=2);
+});
+
+for(const fork of [true,false])test(`shared pickup rejects ${fork?'fork code even with contributor approval':'unapproved same-repository code'}`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,admissions=[],refusals=[];let permissionReads=0;
+ if(fork)f.run.head_repository.id=999;
+ t.mock.method(console,'error',line=>refusals.push(JSON.parse(line)));
+ f.api.get=async path=>{if(path.endsWith('fork-pr-contributor-approval')){permissionReads++;return {approval_policy:fork?'all_external_contributors':'first_time_contributors'};}return path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);};
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),transport:{healthy:async()=>true},runWorker:async ci=>{admissions.push(ci);return {code:0};}});
+ assert.deepEqual(admissions,[]);
+ if(!fork){assert.equal(permissionReads,1);assert.ok(refusals.some(row=>row.event==='automatic-ci-refused' && /External contributor approval/.test(row.error)));}
+});

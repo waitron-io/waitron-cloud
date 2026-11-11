@@ -158,3 +158,23 @@ test('all three CLI guards activate request logging and flush on refusal',t=>{
   assert.equal(result.status,125);assert.equal(JSON.parse(result.stderr.split('\n').find(line=>line.startsWith('{'))).role,role);
  }
 });
+
+test('the worker reads only explicit bounded shared admission input before using capacity',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const root=mkdtempSync(join(tmpdir(),'ci-shared-entry-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const state=join(root,'state');
+ await withKernelLock(state,async()=>{const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:2,bootstrap:true});for(let slot=0;slot<2;slot++)leases.reserveLocal({lane:'I',turn:'occupied-'+slot,snapshot:'a'.repeat(64),argv:['true']});},{bootstrap:true});
+ for(let slot=0;slot<2;slot++)await withKernelLock(state+'/slot-'+slot,async()=>{}, {bootstrap:true});
+ const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:'a'.repeat(64),appEnv:join(root,'missing.env'),appKey:join(root,'missing.pem')};
+ const path=join(root,'config.json');writeFileSync(path,JSON.stringify({version:2,mode:'manual-slots',slots:2,state,host:'fixture.invalid',hostGeneration:'test',recipe:'/opt/waitron-disposable-fixture',repository:root,ci:policy}));
+ const ci={repositoryId:123,workflowId:456,workflowPath:policy.workflowPath,workflowDigest:policy.workflowDigest,workflowSha:'1'.repeat(40),sourceSha:'1'.repeat(40),sourceTree:'2'.repeat(40),event:'push',runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
+ for(const [label,input,code,message] of [
+  ['fresh',JSON.stringify({ci,checkedAt:Date.now()}),75,null],
+  ['future',JSON.stringify({ci,checkedAt:Date.now()+3600000}),125,/admission timestamp/],
+  ['identity',JSON.stringify({ci:{...ci,jobId:902},checkedAt:Date.now()}),125,/admission identity/],
+  ['oversized',' '.repeat(4097),125,/admission input.*large/],
+ ]){
+  const result=spawnSync(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,path,'job','789','901','--admission'],{input,encoding:'utf8',timeout:10000});
+  assert.equal(result.status,code,label+': '+result.stderr);if(message)assert.match(result.stderr,message,label);
+  const counts=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));assert.equal(counts.at(-1).requests,0,label);
+ }
+});

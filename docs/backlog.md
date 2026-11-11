@@ -13,11 +13,15 @@ Mixed jobs, server restart, runtime exit and SSH cancellation have been exercise
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 remains separate from this admission retry. The publication fixture
 now supplies its own Git metadata. App quota exhaustion has paused admission; the published
-counters separate command roles, endpoint categories and raw quota headers. Future
-routing remains hosted while a reduction is chosen from the reset-window counts.
+counters separate command roles, endpoint categories and raw quota headers. Use hosted
+routing until a release is ready for its watched server-qualification hour.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
-Publication and live qualification remain open. No cache or cadence change is implemented. OLD's CI startup is disabled; it stays
+The controller revalidates JSON bodies and shares recent checked admission; see the
+[controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
+Before relying on a release for server routing, qualify a full busy hour below about 4,000
+used requests in each returned quota series; restore hosted if it crosses that threshold.
+OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).

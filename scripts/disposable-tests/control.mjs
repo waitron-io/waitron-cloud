@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import {readFileSync,realpathSync} from 'node:fs';
+import {readFileSync,readSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp,withRequestCounts} from './github-app.mjs';
 import {LocalLeases,configuredSlots,ciRetryReady} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
+import {ciIdentity} from './ci-identity.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,overflowInventory,hostedAttempts,publishCapacity,reconcileDeadRuns,readAutomaticPass} from './ci-canary.mjs';
 
@@ -105,16 +106,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    return {code:0,served,route:'hosted',reason:'host-unavailable'};
   }
  }
+ const selectionStarted=Date.now();
  const jobs=await read(()=>findAutomatic({api:pass?.api??api,policy,runs:pass?.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
- runWorker??=ci=>{
+ runWorker??=(ci,admission)=>{
   let remaining=4096,pending=Buffer.alloc(0);
   const marker=Buffer.from('{"event":"github-request-counts",');
   const withoutCount=data=>{const start=data.indexOf(marker);return start===-1?data:data.subarray(0,start);};
   const tag=data=>{const excerpt=data.subarray(0,remaining);remaining-=excerpt.length;
    if(excerpt.length)console.error(JSON.stringify({event:'automatic-ci-admission-stderr',at:new Date().toISOString(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,stderr:excerpt.toString()}));
   };
-  return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000,onStderr:data=>{
+  return runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId),'--admission'],{input:JSON.stringify(admission),signal,terminationGraceMs:500000,onStderr:data=>{
    if(!remaining)return;
    pending=Buffer.concat([pending,data]);let end;const excerpts=[];
    while((end=pending.indexOf(10))!==-1){excerpts.push(withoutCount(pending.subarray(0,end+1)));pending=pending.subarray(end+1);}
@@ -122,10 +124,19 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    tag(Buffer.concat(excerpts));
   }}).finally(()=>tag(withoutCount(pending)));
  };
- jobs.forEach(ci=>{
+ for(let ci of jobs){
+  let checkedAt=pass?.observedAt??selectionStarted;
+  if(Date.now()-checkedAt>60000){
+   checkedAt=Date.now();
+   try{ci=await read(()=>findOrdinary({api,policy,approvedHead:ci.workflowSha,runId:ci.runId,jobId:ci.jobId,automatic:true,signal}));}
+   catch(error){signal?.throwIfAborted();if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;
+    readFailed=false;console.error(JSON.stringify({event:'automatic-ci-refused',runId:ci.runId,error:error.message}));continue;}
+   if(!ci || Date.now()-checkedAt>60000)continue;
+  }
+  const admission={ci,checkedAt};
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
-  let result=await runWorker(ci);
+  let result=await runWorker(ci,admission);
   const recorded=()=>{
    const latest=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    return latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
@@ -142,7 +153,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    error=>console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,code:125,error:error.message})))
    .finally(()=>active.delete(worker));
   active.set(worker,ci);
- });
+ }
  if(active.size)await waitForWorker();
  await read(()=>publish(pass));
  signal?.throwIfAborted();
@@ -165,14 +176,29 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  }finally{await Promise.allSettled([...active.keys()]);}
  return {code:0,served};
 }
-export async function automaticJob({config,api,runId,jobId,signal}){
+export async function automaticJob({config,api,runId,jobId,signal,admission}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
- const policy=config.ci,run=await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal});
- const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId,jobId,automatic:true,signal});
+ const policy=config.ci;let ci,checkedAt=admission?.checkedAt??Date.now();
+ if(admission!==undefined){
+  assert.ok(admission && Object.keys(admission).sort().join(',')==='checkedAt,ci' &&
+   Number.isSafeInteger(checkedAt) && checkedAt>=0 && checkedAt<=Date.now(),'Invalid shared admission timestamp');
+  ci=ciIdentity(admission.ci);
+  assert.ok(ci.repositoryId===policy.repositoryId && ci.workflowId===policy.workflowId && ci.workflowPath===policy.workflowPath &&
+   ci.runId===runId && ci.jobId===jobId,'Shared admission identity differs');
+ }
+ const refresh=async()=>{
+  checkedAt=Date.now();const head=ci?.workflowSha??(await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal})).head_sha;
+  return findOrdinary({api,policy,approvedHead:head,runId,jobId,automatic:true,signal});
+ };
+ if(!ci)ci=await refresh();
  if(!ci)return {code:75,reason:'job-no-longer-queued'};
  const healthySlots=config.slotHosts===undefined?undefined:await new CITransport(config).healthySlots({signal});
- return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,()=>
-  executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true})),{signal,healthySlots});
+ return withAvailableSlot({...config,slots:configuredSlots(config)},context=>withTemporaryState(context.temporaryState,async()=>{
+  if(Date.now()-checkedAt>60000)ci=await refresh();
+  if(!ci)return {code:75,reason:'job-no-longer-queued'};
+  if(Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
+  return executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true});
+ }),{signal,healthySlots});
 }
 
 export async function main(args){
@@ -184,11 +210,18 @@ export async function main(args){
  assert.equal(config.ci.workflowPath,'.github/workflows/ci.yml','Ordinary CI needs its reviewed workflow configuration');
  const api=new GithubApp(config.ci),policy=config.ci;
  if(command==='job'){
-  assert.ok(values.length===2 && values.every(v=>/^[1-9][0-9]*$/.test(v)) && values.every(v=>Number.isSafeInteger(Number(v))),'Invalid automatic job identity');
+  const shared=values.length===3 && values[2]==='--admission';
+  assert.ok((values.length===2 || shared) && values.slice(0,2).every(v=>/^[1-9][0-9]*$/.test(v) && Number.isSafeInteger(Number(v))),'Invalid automatic job identity');
+  let admission;
+  if(shared){
+   const input=Buffer.alloc(4097);let size=0,count;
+   while(size<input.length && (count=readSync(0,input,size,input.length-size,null))>0)size+=count;
+   assert.ok(size<=4096,'Shared admission input is too large');admission=JSON.parse(input.subarray(0,size).toString());
+  }
   const cancellation=new AbortController(),cancel=()=>cancellation.abort();
   for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
   protectOutputStreams();
-  try{return await automaticJob({config,api,runId:Number(values[0]),jobId:Number(values[1]),signal:cancellation.signal});}
+  try{return await automaticJob({config,api,runId:Number(values[0]),jobId:Number(values[1]),signal:cancellation.signal,admission});}
   finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
  }
  if(command==='status'){
