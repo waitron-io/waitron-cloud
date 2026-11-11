@@ -1,5 +1,7 @@
 import {
   browserSupportsPasskeys,
+  browserSupportsWebAuthnAutofill,
+  WebAuthnAbortService,
   startAuthentication,
   startRegistration,
   type AuthenticationResponseJSON,
@@ -14,18 +16,28 @@ import type {AuthenticationOptions, PasskeySummary, RegistrationOptions} from '.
 export type PasskeyBrowser = {
   supported(): Promise<boolean>;
   register(options: PublicKeyCredentialCreationOptionsJSON): Promise<RegistrationResponseJSON>;
-  authenticate(options: PublicKeyCredentialRequestOptionsJSON): Promise<AuthenticationResponseJSON>;
+  authenticate(options: PublicKeyCredentialRequestOptionsJSON, autofill?: boolean): Promise<AuthenticationResponseJSON>;
+  autofill?(): Promise<boolean>;
+  cancel?(): void;
 };
 
 const defaultBrowser: PasskeyBrowser = {
   supported: browserSupportsPasskeys,
   register: optionsJSON => startRegistration({optionsJSON}),
-  authenticate: optionsJSON => startAuthentication({optionsJSON}),
+  // wt-input owns the eligible input inside its shadow root.
+  authenticate: (optionsJSON, useBrowserAutofill) => startAuthentication({optionsJSON, useBrowserAutofill, verifyBrowserAutofillInput: false}),
+  autofill: browserSupportsWebAuthnAutofill,
+  cancel: () => WebAuthnAbortService.cancelCeremony(),
 };
+type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 type Request = <T>(path: string, body?: Record<string, unknown>) => Promise<ApiResult<T>>;
 
 export class PasskeyController {
   supported: boolean | undefined;
+  preferred = false;
+  remember = false;
+  #autofill = false;
+  #storage: () => PreferenceStorage;
   passkeys: PasskeySummary[] = [];
   password = '';
   pending = false;
@@ -42,15 +54,25 @@ export class PasskeyController {
   #request: Request;
   #browser: PasskeyBrowser;
 
-  constructor(changed: () => void, request: Request = accountRequest, browser: PasskeyBrowser = defaultBrowser) {
+  constructor(changed: () => void, request: Request = accountRequest, browser: PasskeyBrowser = defaultBrowser, storage: () => PreferenceStorage = () => window.localStorage) {
     this.#changed = changed;
     this.#request = request;
     this.#browser = browser;
+    this.#storage = storage;
+    try { this.preferred = this.remember = storage().getItem('cloud.passkeyFirst') === 'true'; } catch { /* Storage is optional. */ }
+  }
+
+  setRemember(remember: boolean) {
+    this.remember = remember;
+    if (!remember) {
+      this.preferred = false;
+      try { this.#storage().removeItem('cloud.passkeyFirst'); } catch { /* Storage is optional. */ }
+    }
   }
 
   get waiting() { return Math.max(0, Math.ceil((this.#retryUntil - performance.now()) / 1000)); }
 
-  fence() { this.#generation++; this.pending = false; this.error = undefined; this.notice = undefined; }
+  fence() { this.#generation++; this.#browser.cancel?.(); this.#autofill = false; this.pending = false; this.error = undefined; this.notice = undefined; }
 
   account(id: string | undefined) {
     if (id === this.#account) return;
@@ -112,29 +134,44 @@ export class PasskeyController {
     await this.load();
   }
 
-  async signIn(): Promise<'authenticated' | 'reconcile' | false> {
-    if (this.pending || this.waiting) return false;
-    if (this.supported === undefined) await this.checkSupport();
-    if (!this.supported) { this.notice = 'passkeyUnsupported'; this.#changed(); return false; }
+  async signIn(autofill = false): Promise<'authenticated' | 'reconcile' | false> {
+    if (this.pending || this.waiting || (autofill && this.#autofill)) return false;
+    if (!autofill && this.#autofill) this.fence();
     const generation = this.#generation;
-    this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
+    if (autofill) {
+      this.#autofill = true;
+      let available = false;
+      try { available = this.preferred && !!await this.#browser.autofill?.(); } catch { /* Keep the explicit button available. */ }
+      if (generation === this.#generation && !available) this.#autofill = false;
+      if (!available) return false;
+    }
+    if (this.supported === undefined) await this.checkSupport();
+    if (generation !== this.#generation) return false;
+    if (!this.supported) { this.notice = 'passkeyUnsupported'; this.#changed(); return false; }
+    this.#autofill = autofill;
+    this.pending = !autofill; this.error = undefined; this.notice = undefined; this.#changed();
     const options = await this.#request<AuthenticationOptions>('/passkeys/authentication/options', {});
     if (generation !== this.#generation) return false;
-    if (!options.ok) { this.pending = false; this.#failure(options, false, 'signIn'); this.#changed(); return false; }
+    if (!options.ok) { this.#autofill = false; this.pending = false; this.#failure(options, false, 'signIn'); this.#changed(); return false; }
     let response: AuthenticationResponseJSON;
-    try { response = await this.#browser.authenticate(options.value.options); }
+    try { response = await this.#browser.authenticate(options.value.options, autofill); }
     catch (error) {
       if (generation !== this.#generation) return false;
-      this.pending = false;
+      this.#autofill = false; this.pending = false;
       if (error instanceof Error && error.cause instanceof DOMException) error = error.cause;
       if (this.#cancelled(error)) this.notice = 'passkeyCancelled'; else this.error = 'passkeyUnavailable';
       this.#changed(); return false;
     }
     if (generation !== this.#generation) return false;
+    this.#autofill = false; this.pending = true; this.#changed();
     const result = await this.#request<{accountId: string}>('/passkeys/authentication/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return false;
     this.pending = false;
-    if (result.ok) { this.#changed(); return 'authenticated'; }
+    if (result.ok) {
+      this.preferred = this.remember;
+      try { if (this.remember) this.#storage().setItem('cloud.passkeyFirst', 'true'); } catch { /* Sign-in does not depend on storage. */ }
+      this.#changed(); return 'authenticated';
+    }
     if (result.status === 0 || result.status >= 500) { this.error = 'passkeySignInUncertain'; this.#changed(); return 'reconcile'; }
     this.#failure(result, false, 'signIn'); this.#changed(); return false;
   }

@@ -49,7 +49,7 @@ WebAuthn responses are nested JSON, so the account request reader gains a bounde
 
 ## Portal
 
-The sign-in page keeps the current email and password form and adds a separate **Sign in with a passkey** action. It starts a deliberate browser ceremony on click; D9 does not enable conditional autofill.
+The sign-in page keeps the current email and password form and adds a separate **Sign in with a passkey** action. It starts a deliberate browser ceremony on click; D9 did not enable conditional autofill. The later [D608 build](../plans/2026-11-11-d631-owner-lifecycle-build.md) adds remembered passkey-first sign-in and supported browser autofill.
 
 The account page adds a small passkey section. It explains that passwords and recovery remain available, lists the enrolment dates for this account's passkeys, asks for the current password before adding or removing one, and reports cancellations without treating them as service failures. English and Spanish copy use the same controller states. Unsupported browsers leave password sign-in available and explain that passkeys are unavailable on that browser.
 

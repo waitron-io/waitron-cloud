@@ -224,3 +224,126 @@ test('switching accounts clears passkey list success and ignores the former acco
   assert.equal(controller.listLoaded, false);
   assert.deepEqual(controller.passkeys, []);
 });
+
+test('only verified sign-in saves a passkey preference, and unchecking clears it', async () => {
+  const saved = new Map<string, string>();
+  const storage = () => ({getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => {saved.set(key, value);}, removeItem: (key: string) => {saved.delete(key);}});
+  let accepted = false;
+  const request = async <T>(path: string): Promise<ApiResult<T>> => path.endsWith('/options')
+    ? {ok: true, value: authenticationOptions as T} : accepted ? {ok: true, value: {accountId: 'owner'} as T}
+    : {ok: false, status: 401, code: 'credentials_invalid', retryAfterMs: 0};
+  const controller = new PasskeyController(() => {}, request, browser(), storage);
+  controller.remember = true;
+  await controller.signIn();
+  assert.deepEqual([...saved], []);
+  accepted = true;
+  assert.equal(await controller.signIn(), 'authenticated');
+  assert.deepEqual([...saved], [['cloud.passkeyFirst', 'true']], 'store only an origin-local boolean after verification');
+  const returning = new PasskeyController(() => {}, request, browser(), storage);
+  assert.equal(returning.preferred, true);
+  assert.equal(returning.remember, true);
+  returning.setRemember(false);
+  assert.deepEqual([...saved], []);
+  assert.equal(returning.preferred, false);
+});
+
+test('refused preference storage still allows confirmed passkey sign-in', async () => {
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> =>
+    ({ok: true, value: (path.endsWith('/options') ? authenticationOptions : {accountId: 'owner'}) as T}), browser(),
+    () => {throw new DOMException('Storage refused', 'SecurityError');});
+  controller.remember = true;
+  assert.equal(await controller.signIn(), 'authenticated');
+  controller.setRemember(false);
+  assert.equal(controller.preferred, false);
+});
+
+test('remembered autofill leaves password usable and a superseded reply cannot save preference or verify', async () => {
+  const saved = new Map([['cloud.passkeyFirst', 'true']]);
+  let finish!: (value: typeof authenticationResponse) => void;
+  const modes: boolean[] = [], paths: string[] = [];
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+    paths.push(path); return {ok: true, value: authenticationOptions as T};
+  }, browser({autofill: async () => true, authenticate: async (_options, autofill) => {
+    modes.push(!!autofill); return new Promise(resolve => {finish = resolve;});
+  }}), () => ({getItem: key => saved.get(key) ?? null, setItem: (key, value) => {saved.set(key, value);}, removeItem: key => {saved.delete(key);}}));
+  const signingIn = controller.signIn(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(modes, [true]);
+  assert.equal(controller.pending, false, 'autofill must not block password sign-in');
+  const duplicate = controller.signIn(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(modes, [true], 'only one autofill request may wait for a choice');
+  assert.equal(await duplicate, false);
+  controller.fence();
+  controller.setRemember(false);
+  finish(authenticationResponse);
+  assert.equal(await signingIn, false);
+  assert.deepEqual(paths, ['/passkeys/authentication/options']);
+  assert.deepEqual([...saved], []);
+});
+
+test('unsupported autofill leaves the explicit passkey action available', async () => {
+  const paths: string[] = [];
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+    paths.push(path); return {ok: true, value: (path.endsWith('/options') ? authenticationOptions : {accountId: 'owner'}) as T};
+  }, browser({autofill: async () => false}), () => ({getItem: () => 'true', setItem() {}, removeItem() {}}));
+  assert.equal(await controller.signIn(true), false);
+  assert.deepEqual(paths, []);
+  assert.equal(await controller.signIn(), 'authenticated');
+});
+
+test('a late autofill capability reply cannot replace a deliberate sign-in', async () => {
+  let support!: (value: boolean) => void;
+  const modes: boolean[] = [], paths: string[] = [];
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => {
+    paths.push(path); return ({ok: true, value: (path.endsWith('/options') ? authenticationOptions : {accountId: 'owner'}) as T});},
+    browser({autofill: () => new Promise(resolve => {support = resolve;}), authenticate: async (_options, autofill) => {
+      modes.push(!!autofill); return authenticationResponse;
+    }}), () => ({getItem: () => 'true', setItem() {}, removeItem() {}}));
+  const automatic = controller.signIn(true);
+  assert.equal(await controller.signIn(), 'authenticated');
+  support(true);
+  assert.equal(await automatic, false);
+  assert.deepEqual(modes, [false]);
+  assert.deepEqual(paths, ['/passkeys/authentication/options', '/passkeys/authentication/verify']);
+});
+
+test('cancelled and obsolete verification replies never remember an unverified choice', async () => {
+  const saved = new Map<string, string>();
+  let verify!: (result: ApiResult<unknown>) => void;
+  let cancelled = true;
+  const controller = new PasskeyController(() => {}, async <T>(path: string): Promise<ApiResult<T>> => path.endsWith('/options')
+    ? {ok: true, value: authenticationOptions as T} : new Promise(resolve => {verify = resolve as (result: ApiResult<unknown>) => void;}),
+    browser({authenticate: async () => {if (cancelled) throw new DOMException('Cancelled', 'NotAllowedError'); return authenticationResponse;}}),
+    () => ({getItem: key => saved.get(key) ?? null, setItem: (key, value) => {saved.set(key, value);}, removeItem: key => {saved.delete(key);}}));
+  controller.remember = true;
+  assert.equal(await controller.signIn(), false);
+  assert.equal(controller.notice, 'passkeyCancelled');
+  assert.deepEqual([...saved], []);
+  cancelled = false;
+  const pending = controller.signIn();
+  await new Promise(resolve => setImmediate(resolve));
+  controller.fence();
+  verify({ok: true, value: {accountId: 'owner'}});
+  assert.equal(await pending, false);
+  assert.deepEqual([...saved], []);
+});
+
+test('an autofill choice redraws busy controls before its verification reply', async () => {
+  let choose!: (response: typeof authenticationResponse) => void;
+  let verify!: (result: ApiResult<unknown>) => void;
+  const notifications: boolean[] = [];
+  const controller = new PasskeyController(() => {notifications.push(controller.pending);},
+    async <T>(path: string): Promise<ApiResult<T>> => path.endsWith('/options') ? {ok: true, value: authenticationOptions as T}
+      : new Promise(resolve => {verify = resolve as (result: ApiResult<unknown>) => void;}),
+    browser({autofill: async () => true, authenticate: () => new Promise(resolve => {choose = resolve;})}),
+    () => ({getItem: () => 'true', setItem() {}, removeItem() {}}));
+  const signingIn = controller.signIn(true);
+  await new Promise(resolve => setImmediate(resolve));
+  notifications.length = 0;
+  choose(authenticationResponse);
+  await new Promise(resolve => setImmediate(resolve));
+  try { assert.deepEqual([...notifications], [true], 'redraw when a selected autofill passkey starts verification'); }
+  finally { verify({ok: true, value: {accountId: 'owner'}}); await signingIn; }
+});

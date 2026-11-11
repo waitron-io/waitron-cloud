@@ -26,7 +26,7 @@ export function screen(app: PortalApp) {
         @click=${() => {app.readFields(); app.reveal = !app.reveal; app.draw();}}>${app.reveal ? c.hide : c.show}</button>` : nothing}
     </wt-input>`;
   const password = () => field('password', app.completion ? 'newPassword' : 'password', app.reveal ? 'text' : 'password', app.completion ? 'new-password' : 'current-password');
-  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending}
+  const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending || (app.path === '/login' && app.passkeys.pending)}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
@@ -46,9 +46,9 @@ export function screen(app: PortalApp) {
     content = html`<p role="status">${c.emailSent}</p>${action(c.resend)}
       <button class="text-button" type="button" ?disabled=${app.pending} @click=${() => {app.requested = false; app.error = undefined; app.draw(); app.focusHeading();}}>${c.changeEmail}</button>`;
   } else if (app.path === '/login') {
-    content = html`${app.notice ? html`<p role="status">${c[app.notice]}</p>` : nothing}${field('email', 'email', 'email', 'username')}${password()}
+    content = html`${app.notice ? html`<p role="status">${c[app.notice]}</p>` : nothing}${app.passkeyFirst ? passkeySignInScreen(app) : nothing}${field('email', 'email', 'email', 'username webauthn')}${password()}
       ${app.passkeys.notice && app.passkeys.notice !== 'passkeyUnsupported' ? html`<p role="status">${c[app.passkeys.notice]}</p>` : nothing}
-      ${action(c.login)}${passkeySignInScreen(app)}<nav>${link('/forgot-password', c.forgot)}<span>${c.signupLink} ${link('/signup', c.signup)}</span></nav>`;
+      ${action(c.login)}${app.passkeyFirst ? nothing : passkeySignInScreen(app)}<nav>${link('/forgot-password', c.forgot)}<span>${c.signupLink} ${link('/signup', c.signup)}</span></nav>`;
   } else if (app.path === '/signup' && app.link.token) {
     content = html`${password()}<p class="help">${c.passwordHelp}</p>${field('legalBusinessName', 'legalName', 'text', 'organization')}
       <p class="help">${c.soleTrader}</p>
