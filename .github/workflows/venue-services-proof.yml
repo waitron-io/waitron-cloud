@@ -123,6 +123,9 @@ jobs:
       - run: node --test --test-reporter=tap '${{ matrix.file }}'
         env:
           CLOUD_SERVICE_PROOF_TIMINGS: '1'
+      - name: Diagnose recovery proof failure
+        if: failure() && matrix.receipt == 'venue'
+        run: node scripts/test-postgres.mjs exec node --test --test-reporter=tap packages/account-http/test/venue-service-recovery.test.ts packages/account-http/test/venue-service-replacement.test.ts
       # Keep optional saving last so final runner cleanup collects its child processes.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
