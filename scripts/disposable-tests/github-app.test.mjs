@@ -95,6 +95,7 @@ test('count logging owns one timer, UTC request buckets and a final flush even o
 });
 
 test('quota counts separate endpoint categories and keep each category raw headers',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:120000});
  const {GithubApp,withRequestCounts}=await import('./github-app.mjs'),rows=[];
  t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
  const server=createServer((req,res)=>{
@@ -118,6 +119,7 @@ test('quota counts separate endpoint categories and keep each category raw heade
 });
 
 test('category totals include token, writes, 304 and rejected fetches without retaining URLs',async t=>{
+ t.mock.timers.enable({apis:['Date'],now:120000});
  const {GithubApp,withRequestCounts}=await import('./github-app.mjs'),rows=[];
  t.mock.method(console,'error',line=>rows.push(JSON.parse(line)));
  const app=new GithubApp({});app.token=async()=>'private';
