@@ -194,7 +194,9 @@ SMS part's matching delivery event.
 An answered or completed call confirms delivery without identifying who answered;
 it does not prove that a person heard the message. Acknowledgement requires a
 known accepted call ID. If the creation reply is lost, the outcome stays unknown
-and its input cannot acknowledge; one backup attempt can still be requested.
+and its input cannot acknowledge; you can receive a backup call even after
+pressing 1. A future clock using this result would still see the incident as
+unacknowledged.
 Give each repeat a fresh notification ID and supply at most one attempt per
 provider for that notification. The future clock owns that admission rule.
 

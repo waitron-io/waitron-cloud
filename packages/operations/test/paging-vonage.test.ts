@@ -5,7 +5,7 @@ import {deliveryConfirmed,pageDecision,sendPage,type PageAttempt,type TrustedEve
 import {fakePaging,notification,common} from './fake-paging.ts';
 const options={...common,apiKey:'synthetic-key',apiSecret:'synthetic-secret'};
 const voiceId='33333333-3333-4333-8333-333333333333';
-test('Vonage sends Unicode multipart SMS and uses a fresh JWT for each inline NCCO call',async()=>{
+test('Vonage uses the message language for encoding and a fresh JWT for each inline NCCO call',async()=>{
  const fake=await fakePaging(r=>({json:r.url==='/sms/json'?{'message-count':'2',messages:[{status:'0','message-id':'part1'},{status:'0','message-id':'part2'}]}:{uuid:voiceId,status:'started'}}));
  try{
   let tokens=0;const p=createVonage({...options,fetcher:fake.fetcher,token:async()=>`synthetic-jwt-${++tokens}`});
