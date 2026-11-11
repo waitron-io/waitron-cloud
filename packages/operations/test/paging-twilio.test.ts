@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createTwilio} from '../src/paging-twilio.ts';
+import {sendPage} from '../src/paging.ts';
 import {fakePaging,notification,common,sid,message,call} from './fake-paging.ts';
 
 test('Twilio sends fixed text then inline bilingual Gather with bound callback paths',async()=>{
@@ -25,6 +26,23 @@ test('provider configuration requires injected transport, HTTPS origins and a bo
  for(const bad of [{...c,fetcher:undefined},{...c,timeoutMs:10001},{...c,timeoutMs:0},{...c,origin:'http://cloud.example.test'},{...c,origin:'https://cloud.example.test?token=private'},{...c,to:'private number'}]){
   assert.throws(()=>createTwilio(bad as typeof c),/paging.invalid_config/);
  }
+});
+test('the request deadline still releases the call when an injected fetch ignores its signal',async()=>{
+ const fake=await fakePaging(()=>({json:{sid:call,status:'queued'}}));try{
+  const fetcher:typeof fetch=async(url,init)=>{
+   if(String(url).endsWith('Messages.json')){await new Promise(r=>setTimeout(r,120));return Response.json({sid:message,status:'queued'});}
+   return fake.fetcher(url,init);
+  };
+  const result=await sendPage(createTwilio({...common,timeoutMs:20,accountSid:sid,token:'synthetic',fetcher}),notification);
+  assert.deepEqual(result.text,{state:'unknown'});assert.equal(result.call.state,'accepted');assert.equal(fake.requests.length,1);
+ }finally{await fake.close();}
+});
+test('Twilio checks returned IDs and explicit refusal statuses, and escapes callback XML',async()=>{
+ let reply:unknown={};const fake=await fakePaging(()=>({json:reply}));try{
+  const p=createTwilio({...common,origin:'https://a"b.test',accountSid:sid,token:'synthetic',fetcher:fake.fetcher});
+  for(const [kind,body,want] of [['text',{sid:'bad',status:'queued'},'unknown'],['call',{sid:message,status:'queued'},'unknown'],['text',{sid:message,status:'undelivered'},'failed'],['call',{sid:call,status:'busy'},'failed']] as const){reply=body;assert.equal((await p[kind](notification)).state,want);}
+  const twiml=new URLSearchParams(fake.requests[1]!.body).get('Twiml')!;assert.ok(twiml.includes('action="https://a&quot;b.test/paging/'));assert.ok(!twiml.includes('action="https://a"b.test'));
+ }finally{await fake.close();}
 });
 test('Twilio trusted readers bind account and resource kind without treating delivery as acknowledgement',()=>{
  const p=createTwilio({...common,accountSid:sid,token:'synthetic',fetcher:async()=>{throw Error('unused');}});

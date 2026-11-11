@@ -191,6 +191,13 @@ placed call acknowledges; delivery or an answered call does not. Either placed
 provider call can acknowledge after fallback. `deliveryConfirmed` requires every
 SMS part's matching delivery event.
 
+An answered or completed call confirms delivery without identifying who answered;
+it does not prove that a person heard the message. Acknowledgement requires a
+known accepted call ID. If the creation reply is lost, the outcome stays unknown
+and its input cannot acknowledge; one backup attempt can still be requested.
+Give each repeat a fresh notification ID and supply at most one attempt per
+provider for that notification. The future clock owns that admission rule.
+
 The decision function requests Vonage once after Twilio refusal or failed or
 unconfirmed delivery; your caller makes that attempt explicitly. It never waits
 for callbacks, retries or runs the 15/10/20-minute incident clock. That clock,

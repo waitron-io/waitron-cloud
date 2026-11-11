@@ -29,6 +29,7 @@ test('only a matching placed call press1 acknowledges, including the original ca
   assert.equal(pageDecision({notification,attempts:[attempt],events:[e]}).acknowledged,false);
  }
  assert.equal(pageDecision({notification,attempts:[{...attempt,call:{state:'failed'}}],events:[input]}).acknowledged,false);
+  assert.deepEqual(pageDecision({notification,attempts:[{...attempt,call:{state:'unknown'}}],events:[input]}),{backupNeeded:true,acknowledged:false});
 });
 test('text settles before the call even when an unexpected provider error becomes unknown',async()=>{
  const order:string[]=[];

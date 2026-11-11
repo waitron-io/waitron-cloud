@@ -3,7 +3,7 @@ const resource=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za
 export function createVonage(c:Configuration&{apiKey:string;apiSecret:string;token:()=>Promise<string>}):PagingProvider{
  configuration(c);if(typeof c.apiKey!=='string'||!c.apiKey.length||typeof c.apiSecret!=='string'||!c.apiSecret.length||typeof c.token!=='function')throw new Error('paging.invalid_config');
  async function text(n:Notification):Promise<Submission>{
-  const message=pagingMessage(n,c.origin),form=new URLSearchParams({to:c.to.slice(1),from:c.from.slice(1),text:message.text,type:'unicode','status-report-req':'true',callback:callback(c,n,'vonage','text')});
+  const message=pagingMessage(n,c.origin),form=new URLSearchParams({to:c.to.slice(1),from:c.from.slice(1),text:message.text,type:n.locale==='en'?'text':'unicode','status-report-req':'true',callback:callback(c,n,'vonage','text')});
   const result=await pagingRequest(c,'https://rest.nexmo.com/sms/json',{Authorization:'Basic '+Buffer.from(c.apiKey+':'+c.apiSecret).toString('base64'),'Content-Type':'application/x-www-form-urlencoded'},form.toString());
   if(result.state!=='ok')return result;
   const b=object(result.body);if(!Array.isArray(b.messages)||!b.messages.length||String(b['message-count'])!==String(b.messages.length))return {state:'unknown'};

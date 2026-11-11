@@ -21,6 +21,14 @@ test('Vonage sends Unicode multipart SMS and uses a fresh JWT for each inline NC
   assert.equal(call.ncco[0].language,'en-GB');assert.equal(JSON.parse(fake.requests[2]!.body).ncco[0].language,'es-ES');
   assert.equal(call.ncco[0].bargeIn,true,'press 1 must also be collected during the spoken prompt');assert.deepEqual(call.ncco[0].bargeInType,['dtmf']);
   assert.deepEqual(call.ncco[1],{action:'input',type:['dtmf'],dtmf:{maxDigits:1,timeOut:10},eventUrl:[`${common.origin}/paging/${notification.incidentId}/${notification.notificationId}/vonage/input`],eventMethod:'POST'});
+  await p.text(notification);assert.equal(new URLSearchParams(fake.requests[3]!.body).get('type'),'text','English fixed wording uses GSM text rather than Unicode segments');
+ }finally{await fake.close();}
+});
+test('Vonage checks returned call IDs, refusal statuses and JWT syntax',async()=>{
+ let reply:unknown={};const fake=await fakePaging(()=>({json:reply}));try{
+  const p=createVonage({...options,fetcher:fake.fetcher,token:async()=>'synthetic'});
+  for(const [body,want] of [[{uuid:'bad?id',status:'started'},'unknown'],[{uuid:voiceId,status:'failed'},'failed']] as const){reply=body;assert.equal((await p.call(notification)).state,want);}
+  const before=fake.requests.length;assert.deepEqual(await createVonage({...options,fetcher:fake.fetcher,token:async()=>'invalid JWT syntax'}).call(notification),{state:'unknown'});assert.equal(fake.requests.length,before);
  }finally{await fake.close();}
 });
 test('multipart acceptance requires every successful unique part; a refusal still gets its call',async()=>{
