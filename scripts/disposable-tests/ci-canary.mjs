@@ -211,7 +211,10 @@ export async function overflowOrdinary({api,policy,ci,signal,snapshot,local}){
   latest.workflow_id!==policy.workflowId || latest.path!==policy.workflowPath || !['queued','in_progress'].includes(latest.status) ||
   !pull || pull.state!=='open' || pull.number!==latest.pull_requests[0].number || pull.head?.sha!==ci.sourceSha ||
   pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId;
- }catch(error){await retire();throw error;}
+ }catch(error){
+  try{await retire();}catch(cleanup){console.error(JSON.stringify({event:'automatic-ci-overflow-pending',runId:ci.runId,error:error.message}));throw cleanup;}
+  throw error;
+ }
  if(refused){await retire();return;}
  await cancelCIJob({api,repository:policy.repository,ci,signal,waitForCompletion:false});
  console.log(JSON.stringify({event:'automatic-ci-overflow',at:new Date().toISOString(),runId:ci.runId,hostedAttempt:ci.attempt+1}));

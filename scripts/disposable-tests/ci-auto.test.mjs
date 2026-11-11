@@ -136,16 +136,21 @@ for(const action of ['overflow','fallback'])test(`${action} preserves a hosted a
  else await controller.fallbackOrdinary({api:observed,policy,ci,automatic:true,leases:{inspect:()=>({ciInvocation:{ordinaryStage:'admitted',runId:789,attempt:1,jobId:901}}),setInvocation:()=>{}}});
  assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
 });
-test('a handled final read failure retires provisional intent before a hosted sibling starts',async()=>{
+for(const cleanupFailure of [false,true])test(`a handled final read failure ${cleanupFailure?'reports both read and retirement failures':'retires provisional intent before a hosted sibling starts'}`,async t=>{
  const f=fixture(),get=f.api.get,api=routingVariables(f.api),ci=(await controller.findAutomatic({api,policy,limit:1}))[0],posts=[];
- let marked=false,failed=false;
+ let marked=false,failed=false;const errors=[];t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
  f.api.get=async path=>{
   if(path.endsWith('/pulls/12')&&marked&&!failed){failed=true;throw Object.assign(new Error('Final PR read HTTP 502'),{status:502});}
   return path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
  };
- const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{await target.patch(path,body);marked=Boolean(JSON.parse(body.value)['789']);};return Reflect.get(target,key);}});
+ const observed=new Proxy(api,{get(target,key){if(key==='patch')return async(path,body)=>{if(cleanupFailure&&marked)throw Object.assign(new Error('Retirement HTTP 502'),{status:502});await target.patch(path,body);marked=Boolean(JSON.parse(body.value)['789']);};return Reflect.get(target,key);}});
  f.api.post=async path=>posts.push(path);
- await assert.rejects(controller.overflowOrdinary({local:f.local,api:observed,policy,ci}),/Final PR read HTTP 502/);
+ const moving=controller.overflowOrdinary({local:f.local,api:observed,policy,ci});
+ if(cleanupFailure){
+  await assert.rejects(moving,/Retirement HTTP 502/);assert.deepEqual(await controller.hostedAttempts({api,policy}),{789:2});
+  assert.ok(errors.some(row=>row.runId===789&&row.error==='Final PR read HTTP 502'));return;
+ }
+ await assert.rejects(moving,/Final PR read HTTP 502/);
  assert.equal(failed,true);assert.deepEqual(await controller.hostedAttempts({api,policy}),{});
  f.jobs.push({...f.jobs[0],id:999,name:'bundle-smoke',status:'in_progress',runner_id:7,labels:['ubuntu-latest']});
  await controller.recoverHostedAttempts({api:observed,policy});
@@ -211,11 +216,12 @@ test('automatic pickup leaves a predecessor marked for its hosted retry unclaime
 });
 
 test('a controller tick leaves a marked predecessor unclaimed while cancellation waits',async t=>{
- const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[];
+ const {automaticTick}=await import('./control.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,served=[],posts=[];
  routingStores.set(f.api,{value:'{"789":2}'});const api=routingVariables(f.api);
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
- f.api.post=async()=>{throw Object.assign(new Error('Cancellation temporarily unavailable'),{status:503});};
+ f.api.post=async path=>{posts.push(path);throw Object.assign(new Error('Cancellation temporarily unavailable'),{status:503});};
  await automaticTick({configuration:'/fixture/config',config,api,transport:{healthy:async()=>true},runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
  assert.deepEqual(served,[]);assert.equal((await api.get('/DISPOSABLE_TESTS_HOSTED_ATTEMPTS')).value,'{"789":2}');
 });
 
@@ -1495,7 +1501,8 @@ test('shared capacity keeps the observation time from before worker waits',async
 
 for(const mode of ['move','assigned','free','owned','recover','short','released','local-late','head','permission','main'])test(`full-pool overflow wiring handles ${mode}`,async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
- const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[],served=[];
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,actions=[],served=[],errors=[];
+ t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
  const ci=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];if(mode==='main')f.run.event='push';
  if(mode!=='free')for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot})
   .reserveLocal(mode==='owned'&&slot===0?ciRequest('I',ci):{lane:'I',turn:'manual-'+slot,snapshot:'a'.repeat(64),argv:['true']});
@@ -1530,7 +1537,7 @@ for(const mode of ['move','assigned','free','owned','recover','short','released'
  assert.deepEqual(actions,mode==='move'?['cancel']:mode==='recover'?['force-cancel']:[]);
  assert.equal(value,['move','recover'].includes(mode)?'{"789":2}':'{}');
  assert.deepEqual(served,mode==='free'?[901,902,903,904,905]:[]);
- if(mode==='permission')assert.equal(jobReads,0);else assert.ok(jobReads>0);
+ if(mode==='permission'){assert.equal(jobReads,0);assert.ok(errors.some(row=>row.event==='automatic-ci-capacity-pending'));}else assert.ok(jobReads>0);
  if(['move','recover','owned'].includes(mode))t.diagnostic(`${mode}: ${requests} API requests in the controlled full-pool tick`);
 });
 
