@@ -135,8 +135,10 @@ If there is no usable key pair:
 AWS's [key-pair guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html)
 says “For Key pair type, choose either RSA or ED25519” for Linux instances.
 D618 passes the key name to EC2 and the private-key path to OpenSSH's `ssh` and
-`scp` (`scripts/amazon-run.mjs:116–118`); it has no RSA-only key parser.
+`scp` (`scripts/amazon-run.mjs:107–109`); it has no RSA-only key parser.
 Debian 13 is Linux. This is documented compatibility, not a live AMI connection test.
+SSH and SCP reuse a private connection for each machine. The launcher closes these
+connections when the run ends; a connection idle for ten minutes may close sooner.
 
 **Window: your Mac's terminal.** If you downloaded the key on the Mac, protect it
 and copy it over your existing SSH connection to the x86 test box. Replace

@@ -1058,6 +1058,9 @@ to that file. Its keys are `region` (explicitly `eu-north-1` for tonight; no def
 `stackRole`, `schedulerRole` (the two external role ARNs), and `waitronCheckout`
 (a Waitron checkout containing the revision in `deploy/backup-verifier/target.json`).
 No package token or AWS credential is copied to the three machines.
+The launcher saves only Linux/AMD64 images and checks that the selected image
+manifest, configuration and layer files are in the archive before creating machines.
+A missing file stops the run there (`node --test scripts/amazon-run.test.mjs`).
 The launcher prints the measured image-bundle bytes and minimum upload throughput.
 Each of the three SSH copies has a 300-second limit: a 4-GiB bundle needs at least
 115 Mbit/s sustained upload, plus headroom, per copy. The archive size is measured
