@@ -716,8 +716,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    supplier review, spending approval and outage/delivery/coverage
    drills remain open; the checklist
    creates no account or operational service.
-   The local collector now exposes account-service request counts and timing bands;
-   hosted-server measurements and trial-derived targets remain open. See the
+   The local collector now exposes account-service request counts, timing bands and
+   configurable fast/slow failure-rule breaches per request group. It pages nobody;
+   trial-derived targets, slowness rules and hosted-server measurements remain open. See the
    [request measurements](operations-status.md#collect-status-in-the-local-deployment)
    for scope and the cross-process rehearsal command.
 3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
