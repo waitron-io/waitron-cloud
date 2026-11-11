@@ -264,8 +264,10 @@ test('passkey fallback cannot remember a browser even when the client asks',asyn
 test('remembering again removes the account expired recognition hashes',async()=>{
   await pool.query('DELETE FROM cloud_passkeys');
   const store=new PasswordLoginStore(pool,null,policy,outbox),first=await queued(store);
-  await store.completeEmailCheck(first.challengeToken,first.code,true);
-  await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day'");
+  const expired=await store.completeEmailCheck(first.challengeToken,first.code,true);
+  const second=await queued(store),live=await store.completeEmailCheck(second.challengeToken,second.code,true);
+  await pool.query("UPDATE cloud_recognised_browsers SET created_at=statement_timestamp()-interval '31 days',expires_at=statement_timestamp()-interval '1 day' WHERE token_hash=$1",[createHash('sha256').update(expired.browserToken!).digest('hex')]);
   const next=await queued(store);await store.completeEmailCheck(next.challengeToken,next.code,true);
-  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'1');
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_recognised_browsers')).rows[0].count,'2');
+  assert.equal((await store.start({email,password,browserToken:live.browserToken})).kind,'session');
 });
