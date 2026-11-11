@@ -11,6 +11,8 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
 test(`required passkey enrollment ${locale} ${colorScheme} ${width}`, async () => {
   const f = await startPortalFixture(undefined, undefined, undefined, undefined, true);
   const context = await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}), page = await context.newPage(); page.setDefaultTimeout(5000);
+  const ordinaryRequests:string[]=[];const ordinaryPaths=new Set(['/api/account/sessions','/api/account/alerts','/api/account/translation-consent','/api/account/installations']);
+  page.on('request',request=>{if(ordinaryPaths.has(new URL(request.url()).pathname))ordinaryRequests.push(new URL(request.url()).pathname);});
   const authenticator = await addVirtualAuthenticator(context, page);
   const id = randomUUID(), email = `enrollment-${id}@example.test`, password = 'A synthetic enrollment password', c = translations[locale];
   try {
@@ -22,10 +24,17 @@ test(`required passkey enrollment ${locale} ${colorScheme} ${width}`, async () =
     await page.getByRole('heading', {name:c.enrollmentRequiredTitle,exact:true}).waitFor();
     assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
     await look(page,`${locale}-${colorScheme}-${width}-passkey`);
+    assert.deepEqual(ordinaryRequests,[],'restricted setup must not queue ordinary account reads');
     await page.locator('input[name=passkeyPassword]').fill(password);
     await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
     await page.getByText(c.accountIntro,{exact:true}).waitFor();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1',[id])).rows[0].count,'1');
+    assert.equal(await page.getByText(c.forbidden,{exact:true}).count(),0);
+    await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyRemove,exact:true}).click();
+    await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
+    assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
+    await look(page,`${locale}-${colorScheme}-${width}-restricted-again`);
+
   } finally {await authenticator.close();await context.close();await f.close();}
 });
 
@@ -69,3 +78,23 @@ async function look(page: import('playwright').Page,name: string){
  const scroll=await page.evaluate(()=>({x:scrollX,y:scrollY}));await page.screenshot({path:`${dir}/${name}.png`,fullPage:true});
  await page.evaluate(({x,y})=>scrollTo(x,y),scroll);
 }
+
+
+test('an enrollment refusal on an open account refreshes the current session into setup',async()=>{
+ const f=await startPortalFixture(undefined,undefined,undefined,undefined,true),context=await f.browser.newContext(),page=await context.newPage();page.setDefaultTimeout(5000);
+ const virtual=await addVirtualAuthenticator(context,page),id=randomUUID(),email=`changed-enrollment-${id}@example.test`,password='A synthetic changed enrollment password',c=translations.en;
+ try{
+  await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
+  await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[id,email,await hashSecret(password)]);
+  await page.goto(`${f.origin}/login`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await completeBrowserEmail(f,page,email,'en');await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
+  const accountReady=['/sessions','/alerts','/translation-consent','/installations'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
+  await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();await page.getByText(c.accountIntro,{exact:true}).waitFor();
+  await Promise.all(accountReady);await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
+  await f.db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[id]);
+  const refused=page.waitForResponse(response=>response.url().endsWith('/sessions/revoke'));
+  await page.getByRole('button',{name:c.sessionSignOut,exact:true}).click();assert.equal((await refused).status(),403);
+  await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
+  assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
+ }finally{await virtual.close();await context.close();await f.close();}
+});

@@ -357,6 +357,7 @@ export class PortalApp {
     this.readFields();
     if (!this.passkeys.password) { this.passkeys.error = 'requiredPassword'; this.draw(); return; }
     await this.passkeys.remove(id, this.passkeys.password);
+    if (this.passkeys.notice === 'passkeyRemoved') await this.session.check({fresh: true});
   }
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return this.session.waiting; }

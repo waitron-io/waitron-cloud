@@ -410,6 +410,7 @@ test('passkey-only recovery codes are returned once and complete the password-bo
 test('required enrollment permits app setup and cancellation but opens access only after activation and app sign-in',async()=>{
   app=application({keys,policy},db.pool,true);
   const owner=await account(),headers=await signIn(owner.email);
+  for(const action of ['remove','regenerate'])await refusal(await request('/authenticator/'+action,{password},{headers}),403,'enrollment_required');
   const first=await request('/authenticator/begin',{password},{headers});assert.equal(first.status,200);
   const pending=await first.json();
   await refusal(await request('/sessions',undefined,{headers}),403,'enrollment_required');

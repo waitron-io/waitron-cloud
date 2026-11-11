@@ -252,7 +252,8 @@ test('listing passkeys is passive and suspension invalidates it', async () => {
 
 // Without the current policy gate, an email-checked password session reaches ordinary account data.
 test('country enrollment policy restricts an existing session until a passkey is verified, even without app keys', async () => {
-  const owner = await account(), session = await signIn(owner.email);
+  const owner = await account();
+  const session = cookies(await completeEmailProof(db,await request('/login',{email:owner.email,password}),body=>request('/login/email',{...body,rememberBrowser:true})));
   const headers = {cookie: session.header, 'x-csrf-token': session.csrf};
   app = createAccountApp({pool: db.pool, outbox: db.outbox, factor: {keys: null, policy: emailLoginPolicy},
     config: {...config(), requireEnrollment: true}, passkeyAdapter: new FixtureAdapter()});
@@ -262,6 +263,13 @@ test('country enrollment policy restricts an existing session until a passkey is
   const blocked = await request('/sessions', undefined, {headers});
   assert.equal(blocked.status, 403); assert.deepEqual(await blocked.json(), {error: 'enrollment_required'});
   assert.equal((await request('/passkeys', undefined, {headers})).status, 200);
+  for(const body of [undefined,{enabled:true,locale:'en'}]){
+    const alert=await request('/alerts',body,{headers});assert.equal(alert.status,403);assert.deepEqual(await alert.json(),{error:'enrollment_required'});
+  }
+  const remembered=await request('/login',{email:owner.email,password},{headers:{cookie:session.header}});
+  assert.equal(remembered.status,200,'recognized-browser password login still uses the common session restriction');
+  assert.equal((await(await request('/session',undefined,{headers:{cookie:cookies(remembered).header}})).json()).enrollmentRequired,true);
+  assert.equal((await request('/sessions',undefined,{headers:{cookie:cookies(remembered).header}})).status,403);
   assert.equal((await request('/passkeys/registration/options', {password}, {headers: {cookie: session.header}})).status, 403);
   const pending = await request('/passkeys/registration/options', {password}, {headers});
   assert.equal(pending.status, 200); const ceremony = await pending.json();

@@ -40,7 +40,7 @@ export function factorConfigFromEnv(env: NodeJS.ProcessEnv): FactorConfig {
   let keys: FactorKeys | null = null, policy: FactorPolicy | null = null;
   try {keys = {activeKeyId: env.CLOUD_FACTOR_ACTIVE_KEY_ID!, keys: JSON.parse(env.CLOUD_FACTOR_KEYS!)};} catch {}
   try {policy = JSON.parse(env.CLOUD_FACTOR_POLICY!);} catch {}
-  // A factor configuration outage leaves recognised password-only browsers, passkeys and live account access available.
+  // An app configuration outage cannot disable passkey sign-in; country enrollment requirements still apply.
   return validateFactorConfig({keys,policy});
 }
 export interface AccountHttpConfig { portalOrigin: string; production: boolean; rateKey: string; trustedProxyIps: readonly string[]; requireEnrollment?: boolean; }

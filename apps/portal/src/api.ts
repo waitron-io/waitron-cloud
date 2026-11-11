@@ -9,6 +9,7 @@ import {validAccountSessions} from './account-security-types.ts';
 import {validUsageSummary} from './usage-types.ts';
 import {validDiagnosticExport} from './diagnostic-types.ts';
 import {validBillingView,validMethodPresentation,validMethodResult} from './billing-types.ts';
+export const enrollmentRequiredEvent = 'cloud-enrollment-required';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
@@ -76,6 +77,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     }
     const code = !response.ok && value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
+    if (response.status === 403 && code === 'enrollment_required' && !['/session','/session/activity'].includes(path)) globalThis.document?.dispatchEvent?.(new Event(enrollmentRequiredEvent));
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
 }

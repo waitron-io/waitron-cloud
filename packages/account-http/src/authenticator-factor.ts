@@ -79,7 +79,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     if(error instanceof FactorError||error instanceof SignInCheckError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
     if(error instanceof FactorManagementError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:error.code==='permission_denied'?403:400,
       error.code==='permission_denied'?'credentials_invalid':error.code,error.code==='temporarily_unavailable'?1:undefined);
-    if(!completion&&action!==''&&error instanceof IdentityError)throw new AccountHttpError(403,'credentials_invalid');
+    if(!completion&&action!==''&&error instanceof IdentityError&&error.code!=='enrollment_required')throw new AccountHttpError(403,'credentials_invalid');
     throw error;
   }
 }
