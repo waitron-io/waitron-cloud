@@ -9,7 +9,7 @@ import {RecoveryRequests} from '../../../packages/backups/src/recovery-request.t
 import {receipt} from '../../../packages/backups/src/storage.ts';
 import {machineTarget} from '../../../packages/backups/test/fixtures/recovery-v2.ts';
 import {admitPointFixture} from '../../../packages/backups/test/fixtures/verification.ts';
-import {startPortalFixture} from './fixtures.ts';
+import {startPortalFixture,completeBrowserEmail} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 // A historical success or inconclusive recheck must never expose recovery approval or a current timestamp.
 for(const locale of ['en','es'] as const)test(`${locale} current snapshot evidence controls recovery and explains separate activation`,async()=>{
@@ -27,7 +27,7 @@ for(const locale of ['en','es'] as const)test(`${locale} current snapshot eviden
   await f.db.pool.query("INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES(gen_random_uuid(),$1,$2,'historical-fixture','verified')",[point.id,point.digest]);
   const t=machineTarget();await new RecoveryRequests(f.db.pool,vault,f.origin).machine('start',t.envelope('start','',Date.now(),f.origin));
   const context=await f.browser.newContext({locale,viewport:{width:390,height:844}}),page=await context.newPage(),c=translations[locale];page.setDefaultTimeout(4000);
-  await page.goto(f.origin+'/recover#request='+t.id);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+  await page.goto(f.origin+'/recover#request='+t.id);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.getByLabel(c.pairCode).fill(t.code);await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(v.venueId);
   await page.getByText(c.snapshotPending,{exact:true}).waitFor();await page.getByText(c.snapshotFallback,{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);

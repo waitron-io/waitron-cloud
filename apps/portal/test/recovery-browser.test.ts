@@ -11,7 +11,7 @@ import {BackupRecovery,recoveryPayload,streamRecoveryDigest} from '../../../pack
 import {ManagedStreams} from '../../../packages/backups/src/managed-streams.ts';
 import {ReplacementStore,replacementPayload} from '../../../packages/backups/src/replacement.ts';
 import {receipt} from '../../../packages/backups/src/storage.ts';
-import {startPortalFixture} from './fixtures.ts';
+import {startPortalFixture,completeBrowserEmail} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)test(`${locale} owner confirms a restored server replacement and reconciles lost replies`,async()=>{
  const vault=new BackupKeyVault(randomBytes(32)),data=new Map<string,Buffer>(),objects=()=>({async read(k:string){return data.get(k)!;},async put(k:string,b:Uint8Array){data.set(k,Buffer.from(b));return receipt(b);},async remove(k:string){data.delete(k);}}),streamObjects=new Map<string,Buffer>();
@@ -29,7 +29,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner confirms a restor
   streamObjects.set(`reader:${venue.venueId}:${configured.bucket.bucket}:${configured.bucket.prefix}venues/${b.localVenueId}/current.json`,pointerBytes);await streams.observe(venue.installationId,configured.configurationRevision);
   const id=randomUUID(),key=generateKeyPairSync('ed25519'),code='12345678',payload=requestPayload(f.origin,id,'start',key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),code,Date.now());await new RecoveryRequests(f.db.pool,vault,f.origin).machine('start',{payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')});
   const context=await f.browser.newContext({locale,viewport:{width:390,height:812},colorScheme:locale==='en'?'light':'dark'}),page=await context.newPage();page.setDefaultTimeout(4000);const c=translations[locale];
-  assert.equal((await page.goto(f.origin+'/recover#request='+id))?.status(),200);await page.getByLabel(c.email).fill(email);assert(!page.url().includes(id));await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByRole('heading',{name:c.recoveryTitle}).waitFor();
+  assert.equal((await page.goto(f.origin+'/recover#request='+id))?.status(),200);await page.getByLabel(c.email).fill(email);assert(!page.url().includes(id));await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);await page.getByRole('heading',{name:c.recoveryTitle}).waitFor();
   await page.getByLabel(c.pairCode).fill(code);await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venue.venueId);await page.getByRole('radio',{name:c.recoveryContinuous,exact:true}).waitFor();
   assert.equal(await page.getByRole('radio',{name:c.recoveryContinuous,exact:true}).isChecked(),true);await page.getByRole('radio',{name:c.recoverySnapshotFallback,exact:true}).check();assert.equal(await page.getByLabel(c.chooseSnapshot,{exact:true}).inputValue(),point.id);await page.getByRole('radio',{name:c.recoveryContinuous,exact:true}).check();await page.getByRole('checkbox',{name:c.recoveryStopped,exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isEnabled(),false);

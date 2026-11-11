@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import axe from 'axe-core';
 import {PairingStore,SignupStore} from '@waitron-cloud/registration';
-import {startPortalFixture} from './fixtures.ts';
+import {startPortalFixture,completeBrowserEmail} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)test(`${locale} connection requires code, Cloud approval and a separate local completion`,async()=>{
   const f=await startPortalFixture();
@@ -18,7 +18,7 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()));
     await page.goto(`${f.origin}/connect#request=${requestId}`);await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     assert.ok(!page.url().includes(requestId));
-    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
+    await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
     await page.getByRole('heading',{name:c.connect,exact:true}).waitFor();
     await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('00000000');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByText(c.pairUnavailable).waitFor();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
