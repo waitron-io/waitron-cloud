@@ -3,7 +3,7 @@ import { once } from 'node:events';
 
 const fail = () => { throw Error('Invalid cloud cost mail measurement'); };
 const requireThat = value => { if (!value) fail(); };
-const actions = { sendSignInCheck:'sign_in_check', sendVerification: 'verification', sendPasswordReset: 'password_reset',
+const actions = {sendEmailChange:'email_change',sendEmailChanged:'email_changed', sendSignInCheck:'sign_in_check', sendVerification: 'verification', sendPasswordReset: 'password_reset',
   sendPasswordChanged: 'password_changed', sendServiceAlert: 'service_alert' };
 
 // Count the capture server's final SMTP replies independently of the mailer's promise.

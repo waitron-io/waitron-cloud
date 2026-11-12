@@ -12,6 +12,35 @@ const rule={limit:1000,windowSeconds:60};
 const policy={loginLifetimeMs:300000,pendingLifetimeMs:300000,challengeAttempts:5,enrolmentAttempts:5,
   loginAccount:rule,completeIp:rule,completeAccount:rule,completeChallenge:rule,manageIp:rule,manageAccount:rule};
 
+test('password and verified email changes work in both languages, themes and widths',async t=>{
+  const f=await startPortalFixture(undefined,undefined,{keys:null,policy});
+  try{for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
+    await f.db.pool.query('DELETE FROM account_rate_limits');
+    const email=`credentials-${randomUUID()}@example.test`,next=`changed-${randomUUID()}@example.test`,id=randomUUID(),c=translations[locale];
+    await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
+    await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',[id,email,await hashSecret(password)]);
+    const context=await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}});
+    try{
+      assert.equal((await contextSignIn(f,context,email,password)).status(),200);
+      const page=await context.newPage();page.setDefaultTimeout(5000);page.on('response',r=>{if(r.status()>=400)t.diagnostic(`${locale} ${colorScheme} ${width}: ${new URL(r.url()).pathname} ${r.status()}`);});await page.goto(`${f.origin}/account#lang=${locale}`);
+      await page.locator('wt-input[name=newAccountEmail]').waitFor();
+      await prepareBrowserActionWindow(f,page);
+      await page.getByLabel(c.newEmail,{exact:true}).fill(next);await page.getByLabel(c.newEmail,{exact:true}).press('Enter');
+      await page.getByText(c.emailChangeSent,{exact:true}).waitFor();await f.drainMail();
+      const mail=await mailFor(next,locale==='en'?'Verify your new Waitron Cloud email':'Verifica tu nuevo correo de Waitron Cloud',f.mailEvidence);
+      const link=mail.match(/https?:\/\/\S+\/account#change=[A-Za-z0-9_-]{43}&lang=\w+/)?.[0];assert.ok(link);
+      await page.goto(link);await page.getByRole('button',{name:c.emailChangeVerify,exact:true}).waitFor();
+      assert.equal(new URL(page.url()).hash,'');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await page.screenshot({path:new URL(`../dist/credential-change-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+      await page.getByRole('button',{name:c.emailChangeVerify,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
+      assert.equal((await contextSignIn(f,context,next,password)).status(),200);await page.goto(`${f.origin}/account#lang=${locale}`);await prepareBrowserActionWindow(f,page);
+      await page.getByLabel(c.newPassword,{exact:true}).fill('A changed synthetic password');
+      await page.getByLabel(c.newPassword,{exact:true}).press('Enter');await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
+      assert.equal((await contextSignIn(f,context,next,'A changed synthetic password')).status(),200);
+    }finally{await context.close();}
+  }}finally{await f.close();}
+});
+
 test('account security is clear in both languages at phone and desktop widths', async () => {
   const f = await startPortalFixture(undefined,undefined,{keys:null,policy});
   try {

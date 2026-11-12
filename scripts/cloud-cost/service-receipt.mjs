@@ -49,7 +49,7 @@ function mailSummary(mail) {
   const groups = new Set(); let attempts = 0, accepted = 0, refused = 0, retried = 0;
   for (const row of mail.operations) {
     exact(row, ['action', 'outcome', 'retryOrdinal', 'attempts']);
-    need(['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check'].includes(row.action)
+    need(['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed'].includes(row.action)
       && ['accepted', 'refused'].includes(row.outcome) && count(row.retryOrdinal) && row.retryOrdinal < 10000
       && count(row.attempts) && row.attempts > 0);
     const key = [row.action, row.outcome, row.retryOrdinal].join(':'); need(!groups.has(key)); groups.add(key);

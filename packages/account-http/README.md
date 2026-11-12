@@ -70,7 +70,7 @@ operation slots. Rebuild and restart after frontend changes.
 
 New email links carry their token and language in the URL fragment. The portal
 removes them before rendering and sends a token only in the completion POST body.
-Opening a link never completes signup or resets a password automatically. Previously
+Opening a link never completes signup, resets a password or changes your email automatically. Email-change links use a separate `change` fragment on `/account`, bound to the browser session that requested them. Previously
 issued query-token links still work on the two completion pages; their initial HTTP
 request contains the token, so do not log query strings at an ingress. Reloading a
 scrubbed completion page requires reopening the email or requesting another link.
@@ -119,6 +119,9 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | GET `/sessions` | No body; session cookie | 200 with this account's live session IDs, creation, last-use and expiry times, and current-session marker |
 | POST `/sessions/revoke` | `{"id":"<session uuid>"}`, session cookie and `X-CSRF-Token` | 204 after an account-scoped revocation attempt; clears cookies when you revoke the current session |
 | POST `/logout` | `{}`, session cookie and `X-CSRF-Token` | 204, clearing both cookies |
+| POST `/security/password` | Fresh proof window, live session, CSRF, `{"password":"a different long password","locale":"en"}` | 204; ends sessions and clears cookies |
+| POST `/security/email` | Fresh proof window, live session, CSRF, `{"email":"new@example.test","locale":"en"}` | 202 `{"status":"accepted"}`; queues verification when available |
+| POST `/security/email/verify` | Original live session and CSRF, `{"token":"<email change token>"}` | 204; replaces the verified email, ends sessions and clears cookies |
 | POST `/password-reset/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
 | POST `/password-reset/complete` | `{"token":"<emailed token>","password":"a different long password"}` | 200 `{"status":"completed"}` |
 | POST `/security-audit/read` | `{"organisationId":"<uuid>","limit":50,"cursor":"<optional next cursor>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 security event page |
@@ -286,6 +289,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | --- | --- |
 | API routes except liveness, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
+| Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |

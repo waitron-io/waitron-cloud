@@ -25,6 +25,11 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
+  credentialChanges:'Password and email',credentialChangesHelp:'Verify security before changing either. Changes sign you out everywhere and forget recognised browsers. Your enrolled methods and recovery codes stay.',
+  newEmail:'New email',saveEmail:'Change email',emailChangeVerify:'Confirm new email',emailChangeConfirm:'Confirm the new address in this browser. This signs you out everywhere.',
+  emailChangeSent:'If the new address is available, a verification link will arrive there. Open it in this browser within 30 minutes.',emailChangeInvalid:'This email change is unavailable. Request another link from your account.',
+  passwordChanged:'Your password changed. Sign in again.',emailChanged:'Your email changed. Sign in with the new address.',credentialChangeUncertain:'We could not confirm the change. Check your email and try signing in before requesting it again.',
+
   enrollmentRequiredTitle:'Set up sign-in protection', enrollmentRequiredHelp:'Add a passkey or authenticator app before using your account.',
   requestBodyInterrupted:'This request was interrupted.',
   requestBodySize:'This request’s size wasn’t accepted; sending it again won’t help.',
@@ -301,6 +306,11 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
+  credentialChanges:'Contraseña y correo',credentialChangesHelp:'Verifica tu seguridad antes de cambiar. Los cambios cierran todas tus sesiones y olvidan los navegadores reconocidos. Se conservan tus métodos y códigos de recuperación.',
+  newEmail:'Nuevo correo',saveEmail:'Cambiar correo',emailChangeVerify:'Confirmar nuevo correo',emailChangeConfirm:'Confirma el nuevo correo en este navegador. Se cerrarán todas tus sesiones.',
+  emailChangeSent:'Si el nuevo correo está disponible, recibirá un enlace. Ábrelo en este navegador en los próximos 30 minutos.',emailChangeInvalid:'Este cambio de correo no está disponible. Solicita otro enlace desde tu cuenta.',
+  passwordChanged:'Tu contraseña ha cambiado. Vuelve a iniciar sesión.',emailChanged:'Tu correo ha cambiado. Inicia sesión con el nuevo correo.',credentialChangeUncertain:'No hemos podido confirmar el cambio. Revisa tu correo e intenta iniciar sesión antes de solicitarlo de nuevo.',
+
   enrollmentRequiredTitle:'Configura la protección de acceso', enrollmentRequiredHelp:'Añade una llave de acceso o una app de autenticación antes de usar tu cuenta.',
   requestBodyInterrupted:'Esta solicitud se interrumpió.',
   requestBodySize:'No se ha aceptado el tamaño de esta solicitud; volver a enviarla no sirve.',

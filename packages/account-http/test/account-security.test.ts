@@ -6,6 +6,7 @@ import type {HttpBindings} from '@hono/node-server';
 import {hashSecret} from '@waitron-cloud/identity';
 import {createAccountApp} from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
+import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
 
 let db: Awaited<ReturnType<typeof database>>;
 let app: ReturnType<typeof createAccountApp>;
@@ -132,4 +133,29 @@ test('concurrent logout and revoke both return 204 and leave the target ended', 
   assert.equal(revoked.status, 204);
   assert.equal(loggedOut.status, 204);
   assert.equal((await request('/session', undefined, {headers: {cookie: target.header}})).status, 401);
+});
+
+test('password change requires session proof and exact CSRF body, then clears cookies',async()=>{
+  const owner=await account('change-password@example.test'),actor=await signIn(owner.email);
+  const body={password:'A synthetic replacement password',locale:'en'};
+  const headers={cookie:actor.header,'x-csrf-token':actor.csrf};
+  assert.equal((await request('/security/password',body,{headers:{cookie:actor.header}})).status,403);
+  assert.equal((await request('/security/password',body,{headers})).status,403);
+  await openProofWindow(db.pool,actor.header.match(/__Host-cloud_session=([^; ]+)/)![1]!);
+  assert.equal((await request('/security/password',{...body,extra:true},{headers})).status,400);
+  const response=await request('/security/password',body,{headers});assert.equal(response.status,204);
+  assert.equal(response.headers.getSetCookie().length,2);assert.ok(response.headers.getSetCookie().every(v=>/Max-Age=0/.test(v)));
+  assert.equal((await request('/session',undefined,{headers})).status,401);
+});
+
+test('email route queues verification, returns a generic accepted answer, verifies and clears cookies',async()=>{
+  const owner=await account('change-email@example.test'),actor=await signIn(owner.email),headers={cookie:actor.header,'x-csrf-token':actor.csrf};
+  await openProofWindow(db.pool,actor.header.match(/__Host-cloud_session=([^; ]+)/)![1]!);
+  const response=await request('/security/email',{email:'verified-new@example.test',locale:'es'},{headers});
+  assert.equal(response.status,202);assert.deepEqual(await response.json(),{status:'accepted'});
+  const row=(await db.pool.query("SELECT * FROM email_outbox WHERE kind='email_change'")).rows[0];
+  const message=db.outbox.open(row);assert.ok('token' in message);
+  const verified=await request('/security/email/verify',{token:message.token},{headers});
+  assert.equal(verified.status,204);assert.ok(verified.headers.getSetCookie().every(v=>/Max-Age=0/.test(v)));
+  assert.equal((await db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[owner.accountId])).rows[0].email,'verified-new@example.test');
 });

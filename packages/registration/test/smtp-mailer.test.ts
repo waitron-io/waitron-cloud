@@ -49,6 +49,17 @@ async function server(options: SMTPServerOptions = {}) {
 }
 const readable = (raw: string) => raw.replace(/=\r\n/g, '').replace(/=3D/g, '=');
 
+test('email changes use verified TLS and private verification links, and notices carry no token',async()=>{
+  const smtp=await server();
+  try{
+    const mailer=createSmtpAccountMailer({...base,port:smtp.port},{ca:cert}),content=message();
+    await mailer.sendEmailChange(content,context());await mailer.sendEmailChanged({email:content.email},context());
+    assert.equal(smtp.data.length,2);assert.ok(smtp.data.every(m=>m.secure));
+    assert.ok(readable(smtp.data[0]!.raw).includes(`/account#change=${content.token}`));
+    assert.ok(smtp.data[1]!.raw.includes('Your Waitron Cloud email changed'));assert.ok(!smtp.data[1]!.raw.includes(content.token));
+  }finally{await smtp.close();}
+});
+
 test('reminders render through verified local TLS with stable delivery IDs',async()=>{
  const smtp=await server();
  try{

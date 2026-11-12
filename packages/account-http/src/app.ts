@@ -1,4 +1,5 @@
-import {AccountActionProofStore,AccountActionProofError} from '@waitron-cloud/registration';
+import {AccountActionProofStore,AccountActionProofError,AccountSecurityStore,AccountSecurityError} from '@waitron-cloud/registration';
+import {accountSecurityResponse} from './account-security.ts';
 import {accountActionProofResponse} from './account-action-proof.ts';
 import {billingMethodsResponse,validateBillingMethodsOptions,type BillingMethodsOptions} from './billing-methods.ts';
 import {billingAccountPaths,billingAccountResponse} from './billing-account.ts';
@@ -62,6 +63,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
+  if(error instanceof AccountSecurityError)return new AccountHttpError(400,'link_unavailable');
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
     if (error.code === 'csrf_invalid') return new AccountHttpError(403, 'forbidden');
@@ -97,6 +99,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);
+  const accountSecurity=new AccountSecurityStore(pool,outbox,options.passwordScreening);
   const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy);
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
@@ -155,6 +158,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
+    if(c.req.path.startsWith('/api/account/security/'))return accountSecurityResponse(c,{pool,store:accountSecurity,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/action-proof'||c.req.path.startsWith('/api/account/action-proof/'))return accountActionProofResponse(c,{pool,store:actionProof,passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/login/recovery'||c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))

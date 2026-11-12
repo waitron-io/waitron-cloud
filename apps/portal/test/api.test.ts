@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { accountRequest } from '../src/api.ts';
+
+test('credential writes send CSRF and validate accepted and completed responses',async t=>{
+  const previousLocation=Object.getOwnPropertyDescriptor(globalThis,'location'),previousDocument=Object.getOwnPropertyDescriptor(globalThis,'document');
+  Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=synthetic-proof'}});
+  t.after(()=>{for(const [key,value] of [['location',previousLocation],['document',previousDocument]] as const){if(value)Object.defineProperty(globalThis,key,value);else Reflect.deleteProperty(globalThis,key);}});
+  let reply=Response.json({status:'accepted'},{status:202}),calls=0;
+  t.mock.method(globalThis,'fetch',async(_url:unknown,init?:RequestInit)=>{calls++;assert.equal((init?.headers as Record<string,string>)['X-CSRF-Token'],'synthetic-proof');return reply;});
+  assert.equal((await accountRequest('/security/email',{email:'new@example.test'})).ok,true);
+  reply=Response.json({status:'other'},{status:202});assert.equal((await accountRequest('/security/email',{email:'new@example.test'})).ok,false);
+  for(const path of ['/security/password','/security/email/verify']){reply=new Response(null,{status:204});assert.equal((await accountRequest(path,{})).ok,true);}
+  assert.equal(calls,4);
+});
 test('account requests never retry writes and distinguish transport failures', async t => {
   let calls = 0;
   t.mock.method(globalThis, 'fetch', async () => { calls++; throw new Error('private network detail'); });

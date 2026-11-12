@@ -93,6 +93,23 @@ gates. `email_verified_at` records proof for this flow; the older trusted provis
 path owns its verification policy. `is_owner` records the initial customer owner and
 does not imply platform permission or introduce a full organisation role catalogue.
 
+## Change account credentials
+
+Use `AccountSecurityStore(pool, outbox, screening)` to change your password or
+verified address after opening the shared ten-minute proof window. `password(token,
+csrf, newPassword, locale)` uses the signup screening policy, ends all sessions and
+forgets recognised browsers. `email(token, csrf, newEmail, locale)` queues a
+single-use 30-minute verification link; `completeEmail(token, csrf, emailToken)`
+requires the original live session and unchanged security authority, without
+requiring the ten-minute window to remain fresh. Both changes preserve enrolled
+methods and unused recovery codes. See the [account guide](../../docs/authenticator-app.md#change-your-password-or-email).
+
+The encrypted outbox adds `email_change` and `email_changed`. Implement
+`sendEmailChange({email,token,expiresAt,locale})` and `sendEmailChanged({email,locale})`
+on its mailer. The local and SMTP adapters supply both. Verification delivery
+rechecks pending authority before handoff; completion queues notices to both
+addresses in the same transaction as replacement and session ending.
+
 ## Password recovery
 
 Use `PasswordRecoveryStore(pool, outbox)` with the same queue. Supply the same optional

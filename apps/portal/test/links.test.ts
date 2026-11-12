@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { captureLink } from '../src/links.ts';
+
+test('email-change links are captured only on account and scrubbed immediately',()=>{
+  const value='b'.repeat(43);let clean='';
+  assert.deepEqual(captureLink(new URL(`https://cloud.example/account#change=${value}&lang=es`),v=>{clean=v;}),{invalid:false,emailChangeToken:value,locale:'es'});
+  assert.equal(clean,'/account');
+});
 const token = 'a'.repeat(43);
 test('captures fragment and legacy links, clearing the URL before returning secrets', () => {
   for (const suffix of [`#token=${token}&lang=es`, `?token=${token}&lang=es`]) {

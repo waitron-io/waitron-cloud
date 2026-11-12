@@ -45,6 +45,27 @@ in or reload account status. It does not automatically resend a consumed code or
 retrieve previously issued recovery codes. Regenerate codes with fresh authority
 if you need another set.
 
+## Change your password or email
+
+Open **Account**, verify under **Verify security changes**, then use **Password and
+email**. A password change ends every session and forgets recognised browsers, so
+your next password-only sign-in needs its normal email check. Your enrolled methods
+and unused recovery codes stay.
+
+For an email change, open the verification link at your new address in the same
+browser within 30 minutes, then choose **Confirm new email**. Your current address
+stays in use until that confirmation. You receive a notice at both addresses after
+replacement, and sign in again with the new one. Request a new link if you signed
+out or changed security settings meanwhile. An unavailable address gets the same
+accepted answer without replacing it. After an uncertain reply, check your mail
+and try signing in before requesting the change again.
+
+The focused real-database checks are `node scripts/test-postgres.mjs exec pnpm --dir
+packages/registration exec node --test test/account-security.test.ts` and the account
+HTTP file with the same name. The portal journey is
+`apps/portal/test/account-security-browser.test.ts`; build the portal first so it
+exercises your current source.
+
 ## Configure a local account worker
 
 To require an app or passkey for everyone using one country service, set

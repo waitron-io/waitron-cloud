@@ -3,6 +3,26 @@ import {test} from 'node:test';
 import {AccountSecurityController} from '../src/account-security-controller.ts';
 import type {ApiResult} from '../src/api.ts';
 
+test('credential changes clear secrets, publish accepted email guidance and end a changed-password session',async()=>{
+  const calls:{path:string;body?:Record<string,unknown>}[]=[],ended:string[]=[];
+  const request=async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});return {ok:true,value:{status:'accepted'} as T};};
+  const c=new AccountSecurityController(()=>{},reason=>{ended.push(reason??'expired');},request);c.account('owner');
+  c.newEmail='new@example.test';await c.change('email','es');
+  assert.deepEqual(calls[0],{path:'/security/email',body:{email:'new@example.test',locale:'es'}});
+  assert.equal(c.notice,'emailChangeSent');assert.equal(c.newEmail,'');assert.equal(ended.length,0);
+  c.newPassword='A synthetic replacement password';await c.change('password','en');
+  assert.equal(c.newPassword,'');assert.deepEqual(ended,['signedOut']);assert.equal(c.notice,'passwordChanged');
+});
+test('credential changes fence replies after navigation and never replay an uncertain write',async()=>{
+  let finish:(v:ApiResult<unknown>)=>void=()=>{};let calls=0;
+  const c=new AccountSecurityController(()=>{},()=>{throw new Error('stale reply ended the new account');},async<T>()=>{calls++;return new Promise<ApiResult<T>>(resolve=>{finish=resolve as typeof finish;});});
+  c.account('first');c.newPassword='A synthetic replacement password';const pending=c.change('password','en');c.account('second');finish({ok:true,value:undefined});await pending;
+  assert.equal(c.newPassword,'');assert.equal(c.notice,undefined);assert.equal(calls,1);
+  const uncertain=new AccountSecurityController(()=>{},()=>{},async()=>({ok:false,status:0,code:'network_error',retryAfterMs:0}));
+  uncertain.account('owner');uncertain.newEmail='new@example.test';await uncertain.change('email','en');
+  assert.equal(uncertain.error,'credentialChangeUncertain');assert.equal(uncertain.newEmail,'');
+});
+
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-09-26T00:00:00.000Z',
   lastUsedAt: '2026-09-26T00:20:00.000Z', expiresAt: '2026-09-26T00:50:00.000Z', current: true};
 const other = {id: '22345678-1234-4234-8234-123456789abc', createdAt: '2026-09-25T22:00:00.000Z',

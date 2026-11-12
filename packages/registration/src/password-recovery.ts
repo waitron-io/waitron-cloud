@@ -77,6 +77,7 @@ export class PasswordRecoveryStore {
       await client.query('UPDATE cloud_factor_enrolments SET consumed_at = clock_timestamp() WHERE account_id = $1 AND consumed_at IS NULL', [candidate.account_id]);
       await client.query('UPDATE cloud_factor_login_challenges SET consumed_at = clock_timestamp() WHERE account_id = $1 AND consumed_at IS NULL', [candidate.account_id]);
       await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[candidate.account_id]);
+      await client.query('UPDATE cloud_email_changes SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[candidate.account_id]);
       await client.query('DELETE FROM cloud_recognised_browsers WHERE account_id=$1',[candidate.account_id]);
       await client.query('UPDATE cloud_sessions SET ended_at = clock_timestamp() WHERE account_id = $1 AND ended_at IS NULL', [candidate.account_id]);
       await this.#outbox.enqueue(client, 'password_changed', { email: credential.email, locale });
