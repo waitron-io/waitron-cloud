@@ -82,6 +82,9 @@ HTTP, lifecycle, cancellation and diagnostic-excerpt checks. The busy-hour prere
 Controlled cases now exercise forward overflow from a full pool: oldest untouched current-head PR,
 shared pressure reads, fresh refusal checks and recorded cancellation/rerun recovery.
 Publish and capture a natural mark/cancel/hosted-rerun outcome and an owned stuck cancel.
+Empty queued runs older than an hour now have controlled once-only cancel/force-cancel
+and restart checks; the existing ledger keeps them out of subsequent automatic passes.
+Installed cleanup/readback remains part of the next quiet-window publication.
 The five-minute untaken-job rule and reverse movement remain for slice 3b.
 Main pushes, schedules and manual runs still require hand moves.
 
