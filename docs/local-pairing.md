@@ -13,9 +13,11 @@ or authenticator app in your Cloud account before connecting a box.
    legal business, then choose **Connect this venue**.
 
 Approval in Cloud waits for your final confirmation in Waitron. Signing out or
-changing your password or security methods cancels that pending authority. Keep
+changing your password or security methods withdraws that pending authority at
+local confirmation. Keep
 the same account’s permission and an enrolled method; the browser’s idle timeout and the
-ten-minute verification window do not cancel an already authorised local confirmation. Connecting registers
+ten-minute verification window do not cancel an already authorised local confirmation. Once connected, the box can retry its
+completed reply independently of the old browser session. Connecting registers
 the installation; remote access and backups still show **Not configured**. You can
 retry a failed check or confirmation. If Cloud reports the request unavailable,
 choose **Start again** in Waitron to obtain another code. This keeps the installation

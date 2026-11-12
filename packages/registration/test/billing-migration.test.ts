@@ -46,7 +46,7 @@ test('044 upgrades to billing without changing old rows or digests',async()=>{
   for(const name of f.old.names)assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),await readFile(f.old.root+'/packages/registration/migrations/'+name),name);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   const expected={...before};
-  for(const table of ['connection_requests','pairing_requests'])expected[table]=(before[table] as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,cloud_session_id:null,cloud_security_revision:null}}));
+  for(const table of ['pairing_requests'])expected[table]=(before[table] as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,cloud_session_id:null,cloud_security_revision:null}}));
   assert.deepEqual(await rows(f.pool,Object.keys(before)),expected);
   const current=(await rows(f.pool,['schema_migrations'])).schema_migrations as unknown[];
   assert.equal(current.length,migrationNames.length);assert.deepEqual(current.slice(0,44),ledger);

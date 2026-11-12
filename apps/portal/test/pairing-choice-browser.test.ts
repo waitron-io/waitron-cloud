@@ -80,20 +80,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       api.proof(null,false);await approve.click();
       await page.locator('p').filter({hasText:c.pairEnrollment}).waitFor();
       assert.equal(api.approvals(),0);
-      await mkdir('/tmp/d608-slice8-visual',{recursive:true});
-      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-enroll.png`,fullPage:true});
+      if(process.env.PAIRING_CHOICE_RECEIPT_DIR)await page.screenshot({path:`${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}-enroll.png`,fullPage:true});
       await page.getByRole('link',{name:c.accountSecurity,exact:true}).click();
       await page.getByRole('heading',{name:c.account,exact:true}).waitFor();
       await page.goBack();await page.locator('p').filter({hasText:c.pairEnrollment}).waitFor();
       api.proof(null);await approve.click();
       await page.getByRole('heading',{name:c.actionProofTitle}).waitFor();
       assert.equal(api.approvals(),0,'fresh proof precedes Cloud approval');
-      await mkdir('/tmp/d608-slice8-visual',{recursive:true});
-      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-proof.png`,fullPage:true});
+      if(process.env.PAIRING_CHOICE_RECEIPT_DIR)await page.screenshot({path:`${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}-proof.png`,fullPage:true});
       await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
       await page.getByRole('button',{name:c.factorRecovery,exact:true}).click();
       await page.getByText(c.actionProofReady,{exact:true}).waitFor();
-      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-ready.png`,fullPage:true});
+      if(process.env.PAIRING_CHOICE_RECEIPT_DIR)await page.screenshot({path:`${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}-ready.png`,fullPage:true});
       assert.equal(api.approvals(),0,'verification does not approve the box');
       for (const [status, error, expected] of [
         [403, 'permission_denied', c.pairPermission],

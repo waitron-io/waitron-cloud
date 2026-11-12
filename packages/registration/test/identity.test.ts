@@ -1,4 +1,3 @@
-import {prepareConnectionProof} from './fixtures/action-proof.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import crypto, { createHash, randomUUID } from 'node:crypto';
@@ -385,7 +384,6 @@ test('Cloud approval takes the account from the session and requires its CSRF to
     environment: 'test', organisationId, legalBusinessId };
   await store.start(input);
   const session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   await expectCode(store.approveCloudWithSession(input, session.token, 'incorrect'), 'csrf_invalid');
   await expectCode(store.approveCloudWithSession(input, session.token, undefined as unknown as string), 'csrf_invalid');
   assert.equal((await pool.query('SELECT cloud_account_id FROM connection_requests')).rows[0].cloud_account_id, null);
@@ -408,12 +406,10 @@ test('Cloud approval rejects ended and expired sessions and foreign organisation
     environment: 'test', organisationId: foreignOrg, legalBusinessId: foreignBusiness };
   await store.start(input);
   let session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   await expectCode(store.approveCloudWithSession(input, session.token, session.csrfToken), 'permission_denied');
   await run(client => endSession(client, session.token));
   await expectCode(store.approveCloudWithSession(input, session.token, session.csrfToken), 'session_unavailable');
   session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   await pool.query("UPDATE cloud_sessions SET last_seen_at = clock_timestamp() - interval '31 minutes'");
   await expectCode(store.approveCloudWithSession(input, session.token, session.csrfToken), 'session_expired');
   assert.equal((await pool.query('SELECT cloud_account_id FROM connection_requests')).rows[0].cloud_account_id, null);
@@ -426,7 +422,6 @@ test('session expiry during permission contention rolls back Cloud approval', as
     environment: 'test', organisationId, legalBusinessId };
   await store.start(input);
   const session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   await pool.query("UPDATE cloud_sessions SET absolute_expires_at = clock_timestamp() + interval '1 second'");
   const blocker = await pool.connect();
   let completion: Promise<void> | undefined;
@@ -455,7 +450,6 @@ test('session expiry during permission contention rolls back Cloud approval', as
 
 test('human activity cannot extend the absolute session deadline', async () => {
   const session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   const { rows } = await pool.query(`UPDATE cloud_sessions SET absolute_expires_at = clock_timestamp() + interval '5 minutes'
     RETURNING absolute_expires_at`);
   const deadline = rows[0].absolute_expires_at.toISOString();
@@ -467,7 +461,6 @@ test('human activity cannot extend the absolute session deadline', async () => {
 test('logout committed while a resolver waits cannot revive the session', async () => {
   const { setTimeout: delay } = await import('node:timers/promises');
   const session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   const blocker = await pool.connect();
   let resolution: Promise<void> | undefined;
   try {
@@ -494,7 +487,6 @@ test('logout committed while a resolver waits cannot revive the session', async 
 test('platform authorisation rejects a session that expires during a permission wait', async () => {
   const { setTimeout: delay } = await import('node:timers/promises');
   const session = await signIn();
-  await prepareConnectionProof(pool,accountId,session.token);
   await pool.query('INSERT INTO platform_permissions (account_id, permission) VALUES ($1, $2)', [accountId, 'platform.view_status']);
   await pool.query("UPDATE cloud_sessions SET absolute_expires_at = clock_timestamp() + interval '1 second'");
   const blocker = await pool.connect();

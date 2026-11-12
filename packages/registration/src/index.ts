@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
-import {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
 import { venueServiceAuthorityInstalled } from './venue-service-schema.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
@@ -57,8 +56,6 @@ export class RegistrationError extends Error {
   }
 }
 interface RequestRow {
-  cloud_session_id?: string | null;
-  cloud_security_revision?: number | null;
   local_venue_id: string;
   environment: string;
   organisation_id: string;
@@ -147,11 +144,10 @@ export class RegistrationStore {
     });
   }
 
-  async #request<T>(input: ConnectionBinding, action: (client: PoolClient, row: RequestRow, binding: ConnectionBinding) => Promise<T>, beforeLock?: (client:PoolClient,binding:ConnectionBinding)=>Promise<void>): Promise<T> {
+  async #request<T>(input: ConnectionBinding, action: (client: PoolClient, row: RequestRow, binding: ConnectionBinding) => Promise<T>): Promise<T> {
     const binding = { ...input };
     validate(binding);
     return this.#transaction(async (client) => {
-      await beforeLock?.(client,binding);
       const row = await lockRequest(client, binding);
       if (!row) throw new RegistrationError('request_not_found');
       return action(client, row, binding);
@@ -175,13 +171,11 @@ export class RegistrationStore {
 
   async approveCloudWithSession(input: ConnectionBinding, sessionToken: string, csrfToken: string): Promise<void> {
     await this.#request(input, async (client, row, binding) => {
-      const session = await requireConnectionProof(client, sessionToken, csrfToken);
+      const session = await resolveSession(client, sessionToken, { csrfToken, touch: false });
       await this.#approveCloud(client, row, binding, session.accountId);
-      await client.query('UPDATE connection_requests SET cloud_session_id=$3,cloud_security_revision=$4 WHERE installation_key=$1 AND operation_id=$2',[...key(binding),session.sessionId,session.securityRevision]);
-      await requireConnectionProof(client,sessionToken,csrfToken);
       // Permission contention can outlast the session; an expired session rolls back the approval.
       await resolveSession(client, sessionToken, { csrfToken });
-    },async client=>{await requireConnectionProof(client,sessionToken,csrfToken);});
+    });
   }
 
   /** Trusted adapter entry point. Browser callers must use approveCloudWithSession. */
@@ -202,7 +196,6 @@ export class RegistrationStore {
     try {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
-        if(row.cloud_session_id)await requirePermission(client,row.cloud_account_id,binding.organisationId);
         if (row.result) {
           const authority = await venueServiceAuthorityInstalled(client)
             ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]) : {rowCount: 0};
@@ -216,7 +209,6 @@ export class RegistrationStore {
           const active = await client.query('SELECT id FROM installations WHERE id = $1 AND revoked_at IS NULL FOR SHARE',
             [row.result.installationId]);
           if (!active.rowCount) throw new RegistrationError('installation_unavailable');
-          if(row.cloud_session_id)await requirePendingConnectionProof(client,row.cloud_account_id,row.cloud_session_id,row.cloud_security_revision!);
           return row.result;
         }
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
@@ -259,12 +251,7 @@ export class RegistrationStore {
         };
         await client.query(`UPDATE connection_requests SET result = $3, completed_at = clock_timestamp(), completed_installation_id = $4
           WHERE installation_key = $1 AND operation_id = $2`, [...key(binding), result, result.installationId]);
-        if(row.cloud_session_id)await requirePendingConnectionProof(client,row.cloud_account_id,row.cloud_session_id,row.cloud_security_revision!);
         return result;
-      },async (client,binding)=>{
-        const pending=(await client.query<RequestRow>('SELECT * FROM connection_requests WHERE installation_key=$1 AND operation_id=$2',key(binding))).rows[0];
-        // Trusted adapters still supply their own authority; browser requests retain a revocable session.
-        if(pending?.cloud_session_id&&pending.cloud_account_id)await requirePendingConnectionProof(client,pending.cloud_account_id,pending.cloud_session_id,pending.cloud_security_revision!);
       });
     } catch (error) {
       if (isUniqueViolation(error, ['installations_public_key_key', 'installations_current_venue_key'])) {

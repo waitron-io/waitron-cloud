@@ -25,11 +25,7 @@ Do not expose these methods directly as public endpoints.
 The surrounding service must supply the authenticated installation's canonical key
 identifier. The local approval adapter must verify local administrator authority and
 issue a unique receipt bound to the complete request. Browser-facing adapters must use `approveCloudWithSession` with its session and CSRF
-tokens, an enrolled app/passkey and a fresh ten-minute action-proof window.
-That browser approval retains its session id and security revision for completion
-and saved retries. A sign-out, security change, credential change or absolute session
-expiry withdraws it; idle and proof-window expiry do not. The account-ID approval
-method is reserved for trusted adapters, and historical schemas retain that boundary. This package also checks the
+tokens. The account-ID approval method is reserved for trusted adapters. This package also checks the
 account's current registration permission in PostgreSQL when approving and completing.
 
 The [identity package](../identity/README.md) now supplies password sessions and
@@ -314,6 +310,12 @@ The HTTP adapter applies host, origin, body, session and persistent rate checks.
 A signed machine request alone is not local administrator proof: the real Waitron
 adapter must guard start and completion with its local administrator session.
 The matching code plus local confirmation joins that session to the Cloud approval.
+
+Before Cloud approval, `PairingStore` requires an enrolled app/passkey and the shared
+ten-minute proof window. The first local completion retains that session’s security
+revision and rechecks its authority after waits. A completed registration belongs to
+the authenticated installation: later machine replies keep their installation/key
+checks, independently of the former browser session.
 
 PairingStore saves the selected account and business and wraps RegistrationStore in
 one transaction at completion. RegistrationStore may borrow that transaction's client;

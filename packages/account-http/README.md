@@ -389,10 +389,13 @@ the implemented Waitron adapter checks a real local administrator before startin
 before signing completion.
 
 Before approving in Cloud, enrol an app or passkey and open the shared ten-minute
-verification window. Local completion and its retries retain that session’s revocation
-and security revision and recheck ownership and enrollment, without a browser-idle
-or proof-freshness deadline. The independent local confirmation and machine messages
-stay the same. Historical schemas retain their trusted adapter behavior.
+verification window. Cloud saves the approving session and its security revision.
+The first local completion rechecks enrollment, permission, sign-out and security
+changes, keeping the existing absolute session and request expiry. Browser-idle
+and proof-window expiry do not block it. The independent local confirmation and machine messages
+stay the same. Completed replies keep their installation/key checks and no longer
+depend on the approving browser session. Historical schemas retain their trusted
+adapter behavior.
 
 Machine POSTs use `/api/pairing/start`, `/api/pairing/status` and
 `/api/pairing/complete`. Send only `payload` and `signature`, encoded as base64url,
@@ -418,8 +421,7 @@ installation. Waitron polls signed status, shows the selected names locally and 
 local administrator confirmation before signing complete with the selected IDs.
 Completion returns `registration` and state `complete`; services remain unconfigured.
 The same request returns that registration on retry, including after expiry, unless
-the installation or approving authority has been revoked or the session’s absolute
-expiry has passed. A different key or business cannot take it over.
+the installation has been revoked. A different key or business cannot take it over.
 
 Pairings expire after ten minutes. Five wrong codes close browser confirmation of
 that request, including completed requests. For unfinished pairing, start a new UUID/code.

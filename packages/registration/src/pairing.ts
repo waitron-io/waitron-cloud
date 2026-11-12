@@ -21,15 +21,9 @@ export interface PairingView {
 function machineBinding(row:Row,c:PairingClaims) {
   if(row.public_key!==c.publicKey||row.local_venue_id!==c.localVenueId||row.environment!==c.environment)throw new PairingError('binding_conflict');
 }
-async function lock(client:PoolClient,id:string,saved?:PairingClaims):Promise<Row> {
+async function lock(client:PoolClient,id:string):Promise<Row> {
   if(!isPairingUuid(id))throw new PairingError('pairing_unavailable');
-  const prior=saved?(await client.query<Row>('SELECT * FROM pairing_requests WHERE id=$1',[id])).rows[0]:undefined;
-  if(prior&&saved)machineBinding(prior,saved);
-  if(prior?.result&&'cloud_session_id' in prior){await pendingAuthority(client,prior);await permission(client,prior.cloud_account_id!,prior.organisation_id!,prior.legal_business_id!);}
   const row=(await client.query<Row>('SELECT * FROM pairing_requests WHERE id=$1 FOR UPDATE',[id])).rows[0];
-  // Retry a newly completed result so its account is always locked before the request.
-  if(saved&&row?.result&&!prior?.result)throw new PairingError('pairing_unavailable');
-  if(saved&&row?.result&&'cloud_session_id' in row)await pendingAuthority(client,row);
   if(!row)throw new PairingError('pairing_unavailable');return row;
 }
 async function available(client:PoolClient,row:Row,checkInstallation=true) {
@@ -67,13 +61,13 @@ export class PairingStore {
     return transaction(this.#pool,async client=>{
       await client.query(`INSERT INTO pairing_requests(id,public_key,local_venue_id,environment,code_hash) VALUES($1,$2,$3,$4,$5)
         ON CONFLICT(id) DO NOTHING`,[c.requestId,c.publicKey,c.localVenueId,c.environment,this.#codes.protect({id:c.requestId,public_key:c.publicKey,local_venue_id:c.localVenueId,environment:c.environment},c.code)]);
-      const row=await lock(client,c.requestId,c);machineBinding(row,c);
+      const row=await lock(client,c.requestId);machineBinding(row,c);
       if(!this.#codes.matches(row,row.code_hash,c.code))throw new PairingError('binding_conflict');
       await available(client,row);return view(client,row);
     });
   }
   async status(c:PairingClaims):Promise<PairingView> {
-    return transaction(this.#pool,async client=>{const row=await lock(client,c.requestId,c);machineBinding(row,c);await available(client,row);return view(client,row);});
+    return transaction(this.#pool,async client=>{const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row);return view(client,row);});
   }
   async businesses(token:string) {
     return transaction(this.#pool,async client=>{
@@ -88,7 +82,8 @@ export class PairingStore {
   }
   async #browser(id:string,code:string,token:string,csrf:string,choice?:{org:string;business:string}):Promise<PairingView> {
     const result=await transaction(this.#pool,async client=>{
-      const session=choice?await requireConnectionProof(client,token,csrf):await resolveSession(client,token,{csrfToken:csrf,touch:false});
+      const proof=choice?await requireConnectionProof(client,token,csrf):undefined;
+      const session=proof??await resolveSession(client,token,{csrfToken:csrf,touch:false});
       const row=await lock(client,id);
       if(row.failed_codes>=5)throw new PairingError('pairing_unavailable');
       await available(client,row);
@@ -102,8 +97,7 @@ export class PairingStore {
         if(row.organisation_id&&(row.organisation_id!==choice.org||row.legal_business_id!==choice.business))throw new PairingError('binding_conflict');
         await permission(client,session.accountId,choice.org,choice.business);
         await available(client,row);
-        const proof=await requireConnectionProof(client,token,csrf);
-        await client.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4,cloud_session_id=$5,cloud_security_revision=$6 WHERE id=$1',[id,session.accountId,choice.org,choice.business,proof.sessionId,proof.securityRevision]);
+        await client.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4,cloud_session_id=$5,cloud_security_revision=$6 WHERE id=$1',[id,session.accountId,choice.org,choice.business,proof!.sessionId,proof!.securityRevision]);
         row.cloud_account_id=session.accountId;row.organisation_id=choice.org;row.legal_business_id=choice.business;
         await recordSecurityAuditEvent(client,{organisationId:choice.org,venueId:null,type:'pairing.cloud_approved',actorKind:'account',actorId:session.accountId,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       }
@@ -120,14 +114,13 @@ export class PairingStore {
       if(!isPairingUuid(c.requestId))throw new PairingError('pairing_unavailable');
       const candidate=(await client.query<Row>('SELECT * FROM pairing_requests WHERE id=$1',[c.requestId])).rows[0];
       if(!candidate)throw new PairingError('pairing_unavailable');
-      machineBinding(candidate,c);
+      machineBinding(candidate,c);await available(client,candidate,false);
       if(!candidate.cloud_account_id)throw new PairingError('approval_required');
       // Historical schemas keep their trusted adapter behavior; current browser approvals retain their session.
-      if('cloud_session_id' in candidate)await pendingAuthority(client,candidate);
+      if(!candidate.result&&'cloud_session_id' in candidate)await pendingAuthority(client,candidate);
       const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row,false);
       if(!row.cloud_account_id)throw new PairingError('approval_required');
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
-      if(!row.result||'cloud_session_id' in row)await permission(client,row.cloud_account_id,c.organisationId,c.legalBusinessId);
       if(row.result){
         // Completion never holds an installation while waiting for its policy parents.
         const authority=await venueServiceAuthorityInstalled(client)
@@ -139,9 +132,9 @@ export class PairingStore {
           AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
         [row.result.venueId,row.organisation_id,row.legal_business_id,row.local_venue_id,row.environment]);
         if(!venue.rowCount)throw new PairingError('pairing_unavailable');
-        if('cloud_session_id' in row)await pendingAuthority(client,row);
         await available(client,row);return view(client,row);
       }
+      await permission(client,row.cloud_account_id,c.organisationId,c.legalBusinessId);
       await available(client,row);
       const binding:ConnectionBinding={operationId:row.id,installationKey:row.public_key,localVenueId:row.local_venue_id,environment:row.environment,organisationId:c.organisationId,legalBusinessId:c.legalBusinessId};
       const registration=new RegistrationStore(this.#pool,client);

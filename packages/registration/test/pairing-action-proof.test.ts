@@ -3,7 +3,7 @@ import {createHash,generateKeyPairSync,randomUUID,randomBytes} from 'node:crypto
 import {after,before,beforeEach,test} from 'node:test';
 import {login} from '@waitron-cloud/identity';
 import {database} from '../../account-http/test/fixtures.ts';
-import {SignupStore,RegistrationStore,transaction} from '../src/index.ts';
+import {SignupStore,transaction} from '../src/index.ts';
 import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims} from '../src/pairing-proof.ts';
 import {openProofWindow} from './fixtures/action-proof.ts';
@@ -43,8 +43,8 @@ for(const proved of [null,'11 minutes'])test(`pairing approval refuses ${proved?
  assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1',[claims.requestId])).rows[0].cloud_account_id,null);
 });
 
-for(const replay of [false,true])for(const change of ['enrollment','session','absolute expiry','security','password','permission'] as const)test(`${replay?'saved':'new'} pairing completion refuses withdrawn ${change} authority`,async()=>{
- await approve();if(replay)await complete();
+for(const change of ['enrollment','session','absolute expiry','security','password','permission'] as const)test(`first completion refuses withdrawn ${change} authority`,async()=>{
+ await approve();
  const before=(await db.pool.query('SELECT count(*) FROM installations')).rows[0].count;
  if(change==='enrollment')await db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[owner.accountId]);
  if(change==='session')await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
@@ -55,34 +55,43 @@ for(const replay of [false,true])for(const change of ['enrollment','session','ab
  await assert.rejects(complete(),/pairing_unavailable|permission_denied/);
  assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,before);
 });
-test('local confirmation and saved retry need current authority but not browser idle or proof freshness',async()=>{
+for(const change of ['enrollment','session','absolute expiry','security','password','permission'] as const)test(`completed machine replies retain their registration after withdrawn ${change} authority`,async()=>{
+ await approve();const done=await complete();
+ if(change==='enrollment')await db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[owner.accountId]);
+ if(change==='session')await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
+ if(change==='absolute expiry')await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()-interval '1 second' WHERE account_id=$1",[owner.accountId]);
+ if(change==='security')await db.pool.query('UPDATE cloud_sessions SET action_security_revision=action_security_revision+1 WHERE account_id=$1',[owner.accountId]);
+ if(change==='password')await db.pool.query("UPDATE cloud_credentials SET password_hash=password_hash||'changed' WHERE account_id=$1",[owner.accountId]);
+ if(change==='permission')await db.pool.query('UPDATE organisation_memberships SET can_register_venues=false WHERE account_id=$1',[owner.accountId]);
+ for(const reply of [await complete(),await store.start(claims),await store.status({...claims,action:'status',code:''})])assert.deepEqual(reply.registration,done.registration);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installations WHERE id=$1',[done.registration!.installationId])).rows[0].count,'1');
+});
+test('local confirmation ignores browser idle and proof-window expiry',async()=>{
  await approve();
  await db.pool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '31 minutes',action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[owner.accountId]);
  const done=await complete();assert.equal(done.state,'complete');
  assert.deepEqual((await complete()).registration,done.registration);
 });
-test('the session-based registration adapter also refuses missing fresh proof',async()=>{
- const registration=new RegistrationStore(db.pool),binding={operationId:claims.requestId,installationKey:claims.publicKey,localVenueId:claims.localVenueId,environment:claims.environment,...owner};
- await registration.start(binding);await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL WHERE account_id=$1',[owner.accountId]);
- await assert.rejects(registration.approveCloudWithSession(binding,session.token,session.csrfToken),/proof_required/);
- assert.equal((await db.pool.query('SELECT cloud_account_id FROM connection_requests WHERE operation_id=$1',[claims.requestId])).rows[0].cloud_account_id,null);
-});
-
-test('session-authorised registration retries recheck the retained session',async()=>{
- const registration=new RegistrationStore(db.pool),binding={operationId:claims.requestId,installationKey:claims.publicKey,localVenueId:claims.localVenueId,environment:claims.environment,...owner};
- await registration.start(binding);await registration.approveLocal(binding,randomUUID());
- await registration.approveCloudWithSession(binding,session.token,session.csrfToken);
- const first=await registration.complete(binding);assert.ok(first.installationId);
- await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
- await assert.rejects(registration.complete(binding),/proof_required/);
-});
-
-for(const action of ['start','status'] as const)test(`saved ${action} reply also refuses withdrawn browser authority`,async()=>{
- await approve();await complete();await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
- await assert.rejects(action==='start'?store.start(claims):store.status({...claims,action:'status',code:''}),/pairing_unavailable/);
-});
-
-test('saved replies authenticate the machine binding before reading retained account authority',async()=>{
+test('completed replies still authenticate the machine binding after browser sign-out',async()=>{
  await approve();await complete();await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[owner.accountId]);
  await assert.rejects(store.status({...claims,action:'status',code:'',publicKey:'another-machine'}),/binding_conflict/);
+});
+
+test('first completion rechecks absolute session expiry after waiting for the venue insert',async()=>{
+ await approve();const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
+ await blocker.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[randomUUID(),owner.organisationId,owner.legalBusinessId,claims.localVenueId]);
+ await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '300 milliseconds' WHERE account_id=$1",[owner.accountId]);
+ const pending=assert.rejects(complete(),/pairing_unavailable/);let waiting=false,accountLocked=false;
+ try{
+  for(let n=0;n<100;n++){
+   if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){waiting=true;break;}
+   await new Promise(r=>setTimeout(r,10));
+  }
+  try{await db.secondPool.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE NOWAIT',[owner.accountId]);}
+  catch(error){if((error as {code?:string}).code!=='55P03')throw error;accountLocked=true;}
+  await new Promise(r=>setTimeout(r,350));
+ }finally{await blocker.query('COMMIT');blocker.release();}
+ await pending;assert.equal(waiting,true);assert.equal(accountLocked,true,'completion must lock the account before its request');
+ assert.equal((await db.pool.query('SELECT count(*) FROM installations WHERE public_key=$1',[claims.publicKey])).rows[0].count,'0');
+ assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests WHERE operation_id=$1',[claims.requestId])).rows[0].count,'0');
 });

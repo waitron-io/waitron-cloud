@@ -31,7 +31,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const request = route.request(), path = new URL(request.url()).pathname;
         if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
         if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00Z'}});
-   if (path.endsWith('/pairing/businesses')) return route.fulfill({json: {businesses: [business]}});
+        if (path.endsWith('/pairing/businesses')) return route.fulfill({json: {businesses: [business]}});
         if (path.endsWith('/pairing/inspect')) return route.fulfill({json: view});
         if (path.endsWith('/pairing/approve')) {
           writes.push(request.postDataJSON());

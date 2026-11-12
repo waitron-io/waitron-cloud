@@ -103,7 +103,7 @@ test('populated release37 upgrades concurrently without changing any old row or 
       action_proved_at:null,action_proof_method:null,action_credential_fingerprint:null,action_security_revision:0}}));
     const connectionDefaults=(rows:typeof expectedSessions)=>rows.map(({value})=>({value:{...value,cloud_session_id:null,cloud_security_revision:null}}));
     assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, {...before,cloud_sessions:expectedSessions,
-      connection_requests:connectionDefaults(before.connection_requests as typeof expectedSessions),pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions)});
+      pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions)});
     assert.deepEqual(backup_verification_attempts, []);
     assert.deepEqual(remote_forward_observations, []);
     assert.deepEqual(remote_forward_reporters, []);
