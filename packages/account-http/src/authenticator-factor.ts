@@ -64,7 +64,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     const session=await transaction(options.pool,client=>resolveSession(client,sessionToken,{csrfToken,touch:false}));
     if(p)await options.consume([{scope:'factor-manage-account',subject:session.accountId,...p.manageAccount}]);
     if(action==='/cancel'){await options.store.cancel(sessionToken,csrfToken,pendingToken!);return c.body(null,204);}
-    const authority={token:sessionToken,csrfToken,password:''};
+    const authority={token:sessionToken,csrfToken};
     if(action==='/begin')return c.json(await options.store.begin(authority));
     const changed=action==='/activate'?await options.store.activate(authority,pendingToken!,confirmation!):
       action==='/remove'?await options.store.remove(authority):await options.store.regenerate(authority);

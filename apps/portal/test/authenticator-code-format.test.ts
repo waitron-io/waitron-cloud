@@ -49,7 +49,6 @@ test('password-only setup keeps general feedback for an unclassified input refus
 for(const [code,want,actions] of [
  ['setup_unavailable','factorSetupUnavailable',['activate','cancel']],
  ['factor_not_active','factorNotActive',['remove','regenerate']],
- ['password_too_long','factorPasswordTooLong',['begin','activate','remove','regenerate']],
 ] as const)for(const action of actions)test(`${action}: ${code} gives its own next step without replaying the write`,async()=>{
  const {c,calls}=fixture({ok:false,status:400,code,retryAfterMs:0});
  await c[action]();assert.equal(c.error,want);assert.equal(c.pending,false);

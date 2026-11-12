@@ -90,18 +90,18 @@ for(const change of ['expiry','password','email','logout'] as const)test(`a pend
 test('security controls share the acting window while a passkey change revokes other sessions and pending work',async()=>{
   const passkeys=new registration.PasskeyStore(pool,{rpName:'Waitron Cloud',rpId:'cloud.example.test',origin:'https://cloud.example.test'});
   const factors=new registration.AuthenticatorFactorStore(pool,{activeKeyId:'test',keys:{test:'07'.repeat(32)}},{pendingLifetimeMs:300000,enrolmentAttempts:3});
-  await refused(passkeys.registrationOptions(actor.token,actor.csrfToken,'Synthetic owner password'));
-  await refused(factors.begin({...actor,password:'Synthetic owner password'}));
+  await refused(passkeys.registrationOptions(actor.token,actor.csrfToken));
+  await refused(factors.begin({...actor}));
   const s=store(),challenge=await queued(s);await s.completeEmail(actor.token,actor.csrfToken,challenge.challengeToken,challenge.code);
   const peer=await transaction(pool,c=>createSession(c,accountId));await openProofWindow(pool,peer.token);
   const before=(await s.status(actor.token)).freshUntil;
-  const first=await passkeys.registrationOptions(actor.token,actor.csrfToken,'');
-  const pending=await factors.begin({...actor,password:''});assert.ok(pending.pendingToken);
+  const first=await passkeys.registrationOptions(actor.token,actor.csrfToken);
+  const pending=await factors.begin({...actor});assert.ok(pending.pendingToken);
   const id=randomUUID();await pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
     VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[id,accountId,Buffer.from([1,2,3])]);
   // The raw fixture insert stands in for a pre-existing key, so retain the email window to exercise removal itself.
-  assert.equal(await passkeys.remove(actor.token,actor.csrfToken,id,''),true);
-  await assert.rejects(factors.activate({...actor,password:''},pending.pendingToken,'123456'),e=>e instanceof Error&&'code' in e&&e.code==='setup_unavailable');
+  assert.equal(await passkeys.remove(actor.token,actor.csrfToken,id),true);
+  await assert.rejects(factors.activate({...actor},pending.pendingToken,'123456'),e=>e instanceof Error&&'code' in e&&e.code==='setup_unavailable');
   assert.equal((await s.status(actor.token)).freshUntil,before);
   assert.equal((await transaction(pool,c=>registration.requireAccountActionProof(c,actor.token,actor.csrfToken))).accountId,accountId);
   await refused(transaction(pool,c=>registration.requireAccountActionProof(c,peer.token,peer.csrfToken)));
@@ -162,8 +162,8 @@ test('authorised app setup can complete after its proof window expires',async()=
  const s=store(),challenge=await queued(s);await s.completeEmail(actor.token,actor.csrfToken,challenge.challengeToken,challenge.code);
  const factors=new registration.AuthenticatorFactorStore(pool,{activeKeyId:'test',keys:{test:'07'.repeat(32)}},{pendingLifetimeMs:300000,enrolmentAttempts:3});
  await pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '9 minutes 59 seconds'");
- const pending=await factors.begin({...actor,password:''});await pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '10 minutes 1 second'");
+ const pending=await factors.begin({...actor});await pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '10 minutes 1 second'");
  const bits=[...pending.secret].map(c=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5,'0')).join(''),key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)));
  const mac=createHmac('sha1',key).update(counter).digest(),offset=mac[19]!&15,code=((mac.readUInt32BE(offset)&0x7fffffff)%1000000).toString().padStart(6,'0');
- const changed=await factors.activate({...actor,password:''},pending.pendingToken,code);assert.equal(changed.active,true);assert.equal(changed.recoveryCodes?.length,10);
+ const changed=await factors.activate({...actor},pending.pendingToken,code);assert.equal(changed.active,true);assert.equal(changed.recoveryCodes?.length,10);
 });

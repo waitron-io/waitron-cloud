@@ -114,8 +114,8 @@ beforeEach(async () => {
 
 test('registration options use one opaque stable handle and persist a five-minute session-bound ceremony', async () => {
   const session = await signIn();
-  const first = await store.registrationOptions(session.token, session.csrfToken, password);
-  const second = await store.registrationOptions(session.token, session.csrfToken, password);
+  const first = await store.registrationOptions(session.token, session.csrfToken);
+  const second = await store.registrationOptions(session.token, session.csrfToken);
   assert.equal(first.options.user.id, second.options.user.id);
   assert.notEqual(first.options.user.id, Buffer.from(accountId).toString('base64url'));
   assert.equal(Buffer.from(first.options.user.id, 'base64url').byteLength, 32);
@@ -131,12 +131,12 @@ test('registration options use one opaque stable handle and persist a five-minut
 
 test('registration consumes its ceremony once and refuses duplicate credential IDs', async () => {
   const session = await signIn();
-  let options = await store.registrationOptions(session.token, session.csrfToken, password);
+  let options = await store.registrationOptions(session.token, session.csrfToken);
   const response = registrationResponse();
   const created = await store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response);
   assert.match(created.id, /^[0-9a-f-]{36}$/);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response));
-  await openProofWindow(pool,session.token);options = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);options = await store.registrationOptions(session.token, session.csrfToken);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '1');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_webauthn_ceremonies WHERE consumed_at IS NOT NULL')).rows[0].count, '2');
@@ -145,13 +145,13 @@ test('registration consumes its ceremony once and refuses duplicate credential I
 test('registration is bound to the initiating live session and rechecks suspension', async () => {
   const first = await signIn();
   const second = await signIn();
-  let options = await store.registrationOptions(first.token, first.csrfToken, password);
+  let options = await store.registrationOptions(first.token, first.csrfToken);
   await expectPasskeyInvalid(store.verifyRegistration(second.token, second.csrfToken, options.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [options.ceremonyId])).rows[0].consumed_at, null);
   await run(client => endSession(client, first.token));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_webauthn_ceremonies WHERE id = $1', [options.ceremonyId])).rows[0].count, '1');
   await assert.rejects(store.verifyRegistration(first.token, first.csrfToken, options.ceremonyId, registrationResponse()));
-  await openProofWindow(pool,second.token);options = await store.registrationOptions(second.token, second.csrfToken, password);
+  await openProofWindow(pool,second.token);options = await store.registrationOptions(second.token, second.csrfToken);
   await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
   await assert.rejects(store.verifyRegistration(second.token, second.csrfToken, options.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
@@ -159,7 +159,7 @@ test('registration is bound to the initiating live session and rechecks suspensi
 
 test('authentication options reveal no account and a verified discoverable credential creates a session once', async () => {
   const enrolled = await signIn();
-  const registration = await store.registrationOptions(enrolled.token, enrolled.csrfToken, password);
+  const registration = await store.registrationOptions(enrolled.token, enrolled.csrfToken);
   const response = registrationResponse();
   await store.verifyRegistration(enrolled.token, enrolled.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -175,7 +175,7 @@ test('authentication options reveal no account and a verified discoverable crede
 });
 
 test('an enrolled authenticator with unavailable keys leaves passkey login and live account access independent',async()=>{
-  const session=await signIn(),registration=await store.registrationOptions(session.token,session.csrfToken,password);
+  const session=await signIn(),registration=await store.registrationOptions(session.token,session.csrfToken);
   const response=registrationResponse();await store.verifyRegistration(session.token,session.csrfToken,registration.ceremonyId,response);
   const keys={activeKeyId:'fixture',keys:{fixture:'07'.repeat(32)}};
   await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope)
@@ -187,14 +187,14 @@ test('an enrolled authenticator with unavailable keys leaves passkey login and l
   const factor=new AuthenticatorFactorStore(pool,null,{pendingLifetimeMs:300_000,enrolmentAttempts:3});
   assert.deepEqual(await factor.status(authenticated.token),{active:true,version:1,recoveryCodesRemaining:0,available:false});
   await openProofWindow(pool,authenticated.token);
-  await assert.rejects(factor.remove({...authenticated,password}),
+  await assert.rejects(factor.remove({...authenticated}),
     (e:unknown)=>!!e && typeof e==='object' && 'code' in e && e.code==='temporarily_unavailable');
   assert.equal((await pool.query('SELECT version FROM cloud_authenticator_factors')).rows[0].version,1);
 });
 
 test('authentication rejects absent or cross-account user handles and consumes failed verification', async () => {
   const session = await signIn();
-  const registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  const registration = await store.registrationOptions(session.token, session.csrfToken);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   for (const userHandle of [undefined, randomBytes(32).toString('base64url')]) {
@@ -212,14 +212,14 @@ test('authentication rejects absent or cross-account user handles and consumes f
 
 test('registration and authentication reject results without device user verification', async () => {
   const session = await signIn();
-  let registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  let registration = await store.registrationOptions(session.token, session.csrfToken);
   adapter.userVerified = false;
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken,
     registration.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
 
   adapter.userVerified = true;
-  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -231,7 +231,7 @@ test('registration and authentication reject results without device user verific
 
 test('credential locking serialises concurrent counters and refuses a stale counter', async () => {
   const session = await signIn();
-  const registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  const registration = await store.registrationOptions(session.token, session.csrfToken);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -247,13 +247,13 @@ test('credential locking serialises concurrent counters and refuses a stale coun
   assert.equal((await pool.query('SELECT counter FROM cloud_passkeys')).rows[0].counter, '2');
 });
 
-test('list and password-confirmed removal stay account-scoped', async () => {
+test('list and proof-confirmed removal stay account-scoped', async () => {
   const owner = await signIn();
-  const registration = await store.registrationOptions(owner.token, owner.csrfToken, password);
+  const registration = await store.registrationOptions(owner.token, owner.csrfToken);
   const response = registrationResponse();
   const created = await store.verifyRegistration(owner.token, owner.csrfToken, registration.ceremonyId, response);
   assert.deepEqual((await store.list(owner.token)).map(item => item.id), [created.id]);
-  await assert.rejects(store.remove(owner.token, 'A'.repeat(43), created.id, 'wrong'));
+  await assert.rejects(store.remove(owner.token, 'A'.repeat(43), created.id));
   await openProofWindow(pool,owner.token);
 
   const otherAccount = randomUUID();
@@ -262,20 +262,20 @@ test('list and password-confirmed removal stay account-scoped', async () => {
     [otherAccount, 'other@example.test', await hashSecret(password)]);
   const other = await run(client => login(client, { email: 'other@example.test', password }));await openProofWindow(pool,other.token);
   assert.deepEqual(await store.list(other.token), []);
-  assert.equal(await store.remove(other.token, other.csrfToken, created.id, password), false);
+  assert.equal(await store.remove(other.token, other.csrfToken, created.id), false);
   await openProofWindow(pool,owner.token);
-  assert.equal(await store.remove(owner.token, owner.csrfToken, created.id, password), true);
+  assert.equal(await store.remove(owner.token, owner.csrfToken, created.id), true);
   assert.deepEqual(await store.list(owner.token), []);
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkey_users')).rows[0].count, '1');
 });
 
 test('expired and wrong-kind ceremonies cannot be completed or revived', async () => {
   const session = await signIn();
-  let registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  let registration = await store.registrationOptions(session.token, session.csrfToken);
   await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = statement_timestamp() - interval '1 second', created_at = statement_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [registration.ceremonyId]);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, registrationResponse()));
 
-  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -288,7 +288,7 @@ test('expired and wrong-kind ceremonies cannot be completed or revived', async (
     wrongAuthentication.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongAuthentication.ceremonyId])).rows[0].consumed_at, null);
   await openProofWindow(pool,session.token);
-  const wrongRegistration = await store.registrationOptions(session.token, session.csrfToken, password);
+  const wrongRegistration = await store.registrationOptions(session.token, session.csrfToken);
   await expectPasskeyInvalid(store.authenticate(wrongRegistration.ceremonyId, authenticationResponse(response.id, handle)));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongRegistration.ceremonyId])).rows[0].consumed_at, null);
 });
@@ -323,7 +323,7 @@ function attestedRegistration(challenge: string, algorithm: -7 | -48): Registrat
 test('real registration offers the reviewed algorithms regardless of runtime capabilities', async () => {
   const realStore = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: 'cloud.example.test', origin});
   const session = await signIn();
-  const ceremony = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  const ceremony = await realStore.registrationOptions(session.token, session.csrfToken);
   assert.deepEqual(ceremony.options.pubKeyCredParams.map(key => key.alg), [-8, -7, -257]);
   assert.equal(ceremony.options.user.name, 'owner@example.test');
   assert.equal(ceremony.options.user.displayName, 'owner@example.test');
@@ -332,13 +332,13 @@ test('real registration offers the reviewed algorithms regardless of runtime cap
 test('real registration refuses an unoffered algorithm but still enrols an offered key', async () => {
   const realStore = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: 'cloud.example.test', origin});
   const session = await signIn();
-  const unexpected = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  const unexpected = await realStore.registrationOptions(session.token, session.csrfToken);
   await expectPasskeyInvalid(realStore.verifyRegistration(session.token, session.csrfToken, unexpected.ceremonyId,
     attestedRegistration(unexpected.options.challenge, -48)));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
   await expectPasskeyInvalid(realStore.verifyRegistration(session.token, session.csrfToken, unexpected.ceremonyId,
     attestedRegistration(unexpected.options.challenge, -7)));
-  const offered = await realStore.registrationOptions(session.token, session.csrfToken, password);
+  const offered = await realStore.registrationOptions(session.token, session.csrfToken);
   const registered = await realStore.verifyRegistration(session.token, session.csrfToken, offered.ceremonyId,
     attestedRegistration(offered.options.challenge, -7));
   assert.equal((await realStore.list(session.token))[0]?.id, registered.id);
@@ -347,7 +347,7 @@ test('real registration refuses an unoffered algorithm but still enrols an offer
 test('real authentication still accepts an existing ML-DSA credential after registration is narrowed', async () => {
   const realStore = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: 'cloud.example.test', origin});
   const session = await signIn();
-  await realStore.registrationOptions(session.token, session.csrfToken, password);
+  await realStore.registrationOptions(session.token, session.csrfToken);
   const {publicKey, privateKey} = generateKeyPairSync('ml-dsa-44');
   const credentialId = randomBytes(32).toString('base64url');
   const key = isoCBOR.encode(new Map<number, number | Uint8Array>([[1, 7], [3, -48],
@@ -376,7 +376,7 @@ test('real authentication still accepts an existing ML-DSA credential after regi
 test('fresh passkey proof is bound to the current session and never signs another session in',async()=>{
   const {requireAccountActionProof}=await import('../src/account-action-proof.ts');
   const actor=await signIn(),other=await signIn();
-  const options=await store.registrationOptions(actor.token,actor.csrfToken,password);
+  const options=await store.registrationOptions(actor.token,actor.csrfToken);
   const response=registrationResponse();
   await store.verifyRegistration(actor.token,actor.csrfToken,options.ceremonyId,response);
   const user=(await pool.query('SELECT user_handle FROM cloud_passkey_users WHERE account_id=$1',[accountId])).rows[0].user_handle.toString('base64url');

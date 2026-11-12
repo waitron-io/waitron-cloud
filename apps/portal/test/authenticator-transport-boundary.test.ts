@@ -160,7 +160,6 @@ for (const operation of ['load', 'begin', 'cancel'] as const) for (const format 
 for(const [code,want,actions] of [
  ['setup_unavailable','factorSetupUnavailable',['activate','cancel']],
  ['factor_not_active','factorNotActive',['remove','regenerate']],
- ['password_too_long','factorPasswordTooLong',['begin','activate','remove','regenerate']],
 ] as const)for(const action of actions)test(`real HTTP client preserves ${code} for ${action} guidance`,async t=>{
  const {controller:c,replies,requests}=fixture(t);c.status=active;c.enrolment=enrolment;authority(c);
  replies.push({status:400,body:{error:code}});

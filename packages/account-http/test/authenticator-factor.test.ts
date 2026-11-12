@@ -146,7 +146,6 @@ test('regeneration and cancellation enforce fresh authority without exposing cod
   const credentials=await direct.complete(await challenge(owner.email),recovery(owner.codes[0]!));
   const headers={cookie:`__Host-cloud_session=${credentials.token}`,'x-csrf-token':credentials.csrfToken};
   await refusal(await request('/authenticator/regenerate',{},{headers}),403,'proof_required');
-  await refusal(await request('/authenticator/regenerate',{},{headers}),403,'proof_required');
   await refusal(await request('/authenticator/regenerate',{},{headers:{...headers,'x-csrf-token':'wrong'}}),403,'credentials_invalid');
   assert.equal((await request('/action-proof/factor',recovery(owner.codes[1]!),{headers})).status,204);
   const begun=await request('/authenticator/begin',{},{headers});assert.equal(begun.status,200);

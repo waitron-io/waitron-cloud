@@ -69,7 +69,7 @@ export class PasskeyStore {
     this.#adapter = adapter;
   }
 
-  async registrationOptions(token: string, csrfToken: string, _password?: string): Promise<PasskeyRegistrationOptions> {
+  async registrationOptions(token: string, csrfToken: string): Promise<PasskeyRegistrationOptions> {
     return transaction(this.#pool, async client => {
       const session = await requireAccountActionProof(client,token,csrfToken);
       await client.query(`INSERT INTO cloud_passkey_users (account_id, user_handle) VALUES ($1, $2)
@@ -204,7 +204,7 @@ export class PasskeyStore {
     });
   }
 
-  async remove(token: string, csrfToken: string, id: string, _password?: string): Promise<boolean> {
+  async remove(token: string, csrfToken: string, id: string): Promise<boolean> {
     if (!UUID.test(id)) return false;
     return transaction(this.#pool, async client => {
       const session=await requireAccountActionProof(client,token,csrfToken);

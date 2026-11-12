@@ -40,7 +40,7 @@ function store(config: typeof keys | null = keys, rules: typeof policy | null = 
 async function refused(action: Promise<unknown>, code = 'permission_denied') {
   await assert.rejects(action, (e: unknown) => e instanceof Error && 'code' in e && e.code === code);
 }
-async function authority() {const actor=await transaction(pool,c=>createSession(c,accountId));await openProofWindow(pool,actor.token);return {...actor,password};}
+async function authority() {const actor=await transaction(pool,c=>createSession(c,accountId));await openProofWindow(pool,actor.token);return actor;}
 async function active() {
   await pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope)
     VALUES($1,1,$2,$3)`, [accountId,generation,encryptFactorSecret(oldSecret, keys, {accountId,version:1,purpose:'active'})]);
@@ -135,17 +135,17 @@ test('replacement shares the proof window and invalid confirmation spends an att
   await new registration.AccountActionProofStore(pool,keys,loginPolicy).factor(a.token,a.csrfToken,recovery(codes[0]!));
   const s=store(),pending=await s.begin(a);
   assert.equal((await factor()).version,1);assert.ok((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes WHERE code_hash=$1',[digest(JSON.stringify(['cloud-factor-recovery-v1',accountId,1,codes[0]]))])).rows[0].consumed_at);
-  await refused(s.activate({...a,proof:recovery(codes[1]!)},pending.pendingToken,'invalid'));
+  await refused(s.activate({...a},pending.pendingToken,'invalid'));
   let row=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];
   assert.equal(row.attempts,1);assert.equal(row.consumed_at,null);
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes WHERE code_hash=$1',[digest(JSON.stringify(['cloud-factor-recovery-v1',accountId,1,codes[1]]))])).rows[0].consumed_at,null);
-  const changed=await s.activate({...a,proof:recovery(codes[1]!)},pending.pendingToken,totp(pending.secret));
+  const changed=await s.activate({...a},pending.pendingToken,totp(pending.secret));
   assert.equal(changed.recoveryCodes,undefined);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=1 AND consumed_at IS NOT NULL')).rows[0].count,'1');assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'2');assert.equal((await factor()).version,2);assert.notEqual((await factor()).secret_generation,generation);await assertEnded();
   row=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];assert.equal(row.attempts,2);assert.ok(row.consumed_at);
 });
 test('starting replacement keeps the old factor available for password sign-in and does not repeat proof at confirmation',async()=>{
   await active();const a=await authority();for(const code of ['1'.repeat(32),'2'.repeat(32),'3'.repeat(32)]) await seedCode(code);
-  const pending=await store().begin({...a,proof:recovery('1'.repeat(32))});
+  const pending=await store().begin({...a});
   const credentials=await new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(await loginChallenge(),recovery('2'.repeat(32)));
   assert.equal((await transaction(pool,c=>resolveSession(c,credentials.token))).accountId,accountId);
   assert.equal((await factor()).version,1);
@@ -184,18 +184,18 @@ test('regeneration changes the authority version and recovery codes but preserve
 test('regeneration and removal invalidate old recovery hashes while retaining their history without a deletion policy',async()=>{
   await active();const a=await authority();await seedCode('4'.repeat(32));await seedCode('5'.repeat(32));
   const before=(await pool.query('SELECT code_hash FROM cloud_factor_recovery_codes ORDER BY code_hash')).rows;
-  const changed=await store().regenerate({...a,proof:recovery('4'.repeat(32))});
+  await store().regenerate({...a});
   const previous=(await pool.query('SELECT code_hash,consumed_at FROM cloud_factor_recovery_codes WHERE factor_version=1 ORDER BY code_hash')).rows;
   assert.deepEqual(previous.map(r=>({code_hash:r.code_hash})),before);assert.ok(previous.every(r=>r.consumed_at));
-  const fresh=await authority();await store().remove({...fresh,proof:recovery(changed.recoveryCodes[0]!)});
+  const fresh=await authority();await store().remove({...fresh});
   assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'12');
   assert.ok((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows.every(r=>r.consumed_at));
   assert.equal((await factor()).secret_envelope,null);await assertEnded();
 });
 test('removal ends every session, invalidates pending challenges and retains the monotonic factor version', async () => {
   await active();await seedCode('4'.repeat(32));await seedCode('5'.repeat(32));const a=await authority();await authority();const challenge=await loginChallenge();
-  await store().begin({...a,proof:recovery('4'.repeat(32))});
-  assert.deepEqual(await store().remove({...a,proof:recovery('5'.repeat(32))}),{status:'changed',active:false});
+  await store().begin({...a});
+  assert.deepEqual(await store().remove({...a}),{status:'changed',active:false});
   assert.equal((await factor()).version,2);assert.equal((await factor()).secret_envelope,null);await assertEnded();
   assert.ok((await pool.query('SELECT consumed_at FROM cloud_factor_enrolments')).rows.every(r=>r.consumed_at));
   assert.ok((await pool.query('SELECT consumed_at FROM cloud_factor_login_challenges')).rows.every(r=>r.consumed_at));
@@ -207,15 +207,15 @@ test('missing keys and policy leave status accessible but refuse management and 
   await active();const a=await authority();
   for(const s of [store(null),store(keys,null),store({activeKeyId:'test',keys:{test:'08'.repeat(32)}})]) {
     assert.deepEqual(await s.status(a.token),{active:true,version:1,recoveryCodesRemaining:0,available:false});
-    await refused(s.begin({...a,proof:proof(totp(oldSecret))}),'temporarily_unavailable');
-    await refused(s.regenerate({...a,proof:proof(totp(oldSecret))}),'temporarily_unavailable');
-    await refused(s.remove({...a,proof:proof(totp(oldSecret))}),'temporarily_unavailable');
+    await refused(s.begin({...a}),'temporarily_unavailable');
+    await refused(s.regenerate({...a}),'temporarily_unavailable');
+    await refused(s.remove({...a}),'temporarily_unavailable');
   }
   assert.equal((await factor()).version,1);assert.equal((await transaction(pool,c=>resolveSession(c,a.token))).accountId,accountId);
 });
 test('email reset keeps active secret, recovery codes and replay history but consumes pending factor state and ends sessions', async () => {
   await active();const a=await authority();await seedCode('6'.repeat(32));await seedCode('7'.repeat(32));
-  await store().begin({...a,proof:recovery('6'.repeat(32))});await loginChallenge();
+  await store().begin({...a});await loginChallenge();
   await pool.query(`INSERT INTO cloud_factor_replays(account_id,secret_generation,time_step,code_hash,valid_until)
     VALUES($1,$2,1,$3,clock_timestamp()+interval '1 minute')`,[accountId,generation,'f'.repeat(64)]);
   const replays=(await pool.query('SELECT * FROM cloud_factor_replays')).rows;
@@ -259,7 +259,7 @@ for(const operation of ['begin','activate','regenerate','login'] as const) {
     test(`${change} committed during the ${operation} account wait prevents stale authority and leaves factor effects unchanged`,async()=>{
       await active();const a=await authority(),peer=await authority();
       await seedCode('8'.repeat(32));await seedCode('9'.repeat(32));
-      const s=store();const pending=operation==='activate'?await s.begin({...a,proof:recovery('8'.repeat(32))}):undefined;
+      const s=store();const pending=operation==='activate'?await s.begin({...a}):undefined;
       const challenge=operation==='login'?await loginChallenge():undefined;
       const before=await factor(),codes=(await pool.query('SELECT * FROM cloud_factor_recovery_codes ORDER BY code_hash')).rows;
       const blocker=await pool.connect(),other=await otherDatabase();let work:Promise<void>|undefined;
@@ -291,7 +291,7 @@ test('session expiry while begin waits on its pending-state write rolls back the
   const blocker=await pool.connect();let work:Promise<void>|undefined;
   try {
     await blocker.query('BEGIN');await blocker.query('LOCK TABLE cloud_factor_enrolments IN SHARE MODE');
-    work=refused(store().begin({...a,proof:recovery('A'.repeat(32))}));await blocked('UPDATE cloud_factor_enrolments');
+    work=refused(store().begin({...a}));await blocked('UPDATE cloud_factor_enrolments');
     const {setTimeout:delay}=await import('node:timers/promises');await delay(650);await blocker.query('COMMIT');await work;
     assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_enrolments')).rows[0].count,'0');
     assert.equal((await pool.query('SELECT consumed_at FROM cloud_factor_recovery_codes')).rows[0].consumed_at,null);assert.equal((await factor()).version,1);
@@ -308,13 +308,13 @@ test('expiry behind a pending-row lock refuses activation before spending its bu
 });
 test('activation expiry after factor and recovery writes rolls back every effect while keeping the spent attempt',async()=>{
   await active();const a=await authority();await seedCode('B'.repeat(32));await seedCode('C'.repeat(32));
-  const pending=await store().begin({...a,proof:recovery('B'.repeat(32))});await loginChallenge();
+  const pending=await store().begin({...a});await loginChallenge();
   const before=await factor(),codes=(await pool.query('SELECT * FROM cloud_factor_recovery_codes ORDER BY code_hash')).rows;
   await pool.query("UPDATE cloud_factor_enrolments SET expires_at=clock_timestamp()+interval '600 milliseconds'");
   const blocker=await pool.connect();let work:Promise<void>|undefined;
   try {
     await blocker.query('BEGIN');await blocker.query('LOCK TABLE cloud_factor_login_challenges IN SHARE MODE');
-    work=refused(store().activate({...a,proof:recovery('C'.repeat(32))},pending.pendingToken,totp(pending.secret)),'setup_unavailable');
+    work=refused(store().activate({...a},pending.pendingToken,totp(pending.secret)),'setup_unavailable');
     await blocked('UPDATE cloud_factor_login_challenges');
     const {setTimeout:delay}=await import('node:timers/promises');await delay(650);await blocker.query('COMMIT');await work;
     assert.deepEqual(await factor(),before);assert.deepEqual((await pool.query('SELECT * FROM cloud_factor_recovery_codes ORDER BY code_hash')).rows,codes);
@@ -359,7 +359,7 @@ test('concurrent confirmations from independent pools publish exactly one factor
 test('concurrent regenerations from independent pools cannot publish two recovery sets',async()=>{
   await active();const a=await authority(),b=await authority(),other=await otherDatabase();await seedCode('D'.repeat(32));await seedCode('E'.repeat(32));
   try {
-    const results=await Promise.allSettled([store().regenerate({...a,proof:recovery('D'.repeat(32))}),store(keys,policy,other).regenerate({...b,proof:recovery('E'.repeat(32))})]);
+    const results=await Promise.allSettled([store().regenerate({...a}),store(keys,policy,other).regenerate({...b})]);
     assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected' && r.reason.code==='permission_denied').length,1);
     assert.equal((await factor()).version,2);assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version IS NULL AND consumed_at IS NULL')).rows[0].count,'10');
     assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE factor_version=1')).rows[0].count,'2');await assertEnded();
@@ -404,7 +404,7 @@ test('cross-account pending tokens cannot spend the other account attempt or pub
   const a=await authority(),pending=await store().begin(a),foreign=randomUUID();
   await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[foreign]);
   await pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[foreign,'other@example.test',await hashSecret(password)]);
-  const b={...await transaction(pool,c=>createSession(c,foreign)),password};await openProofWindow(pool,b.token);await openProofWindow(pool,b.token);
+  const b=await transaction(pool,c=>createSession(c,foreign));await openProofWindow(pool,b.token);await openProofWindow(pool,b.token);
   await refused(store().activate(b,pending.pendingToken,totp(pending.secret)),'invalid_input');
   await refused(store().cancel(b.token,b.csrfToken,pending.pendingToken),'invalid_input');
   assert.equal((await pool.query('SELECT attempts FROM cloud_factor_enrolments')).rows[0].attempts,0);
@@ -425,7 +425,7 @@ for(const reason of ['expired','consumed','superseded'] as const)test(`${reason}
 });
 test('a removed factor is distinct from invalid input and leaves the fresh session intact',async()=>{
   await active();await seedCode('B'.repeat(32));
-  await store().remove({...await authority(),proof:recovery('B'.repeat(32))});
+  await store().remove({...await authority()});
   const a=await authority(),before=await factor();
   await refused(store().remove(a),'factor_not_active');
   await refused(store().regenerate(a),'factor_not_active');
@@ -466,7 +466,7 @@ for(const reason of ['expired','consumed','superseded'] as const)for(const actor
   if(actor==='another account'){
     const foreign=randomUUID();await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[foreign]);
     await pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[foreign,'foreign@example.test',await hashSecret(password)]);
-    b={...await transaction(pool,c=>createSession(c,foreign)),password};await openProofWindow(pool,b.token);
+    b=await transaction(pool,c=>createSession(c,foreign));await openProofWindow(pool,b.token);
   }else b=await authority();
   if(reason==='expired')await pool.query("UPDATE cloud_factor_enrolments SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second'");
   else if(reason==='consumed')await s.cancel(a.token,a.csrfToken,pending.pendingToken);else await s.begin(a);
@@ -478,7 +478,7 @@ for(const reason of ['expired','consumed','superseded'] as const)for(const actor
  });
 test('setup expiry during the current proof wait gives restart guidance without consuming proof',async()=>{
   await active();await seedCode('C'.repeat(32));await seedCode('D'.repeat(32));
-  const a=await authority(),pending=await store().begin({...a,proof:recovery('C'.repeat(32))}),moment=new Date(),expires=new Date(moment.getTime()+10_000);
+  const a=await authority(),pending=await store().begin({...a}),moment=new Date(),expires=new Date(moment.getTime()+10_000);
   await pool.query('UPDATE cloud_factor_enrolments SET expires_at=$1',[expires]);
   await pool.query('CREATE TABLE factor_test_clock(moment timestamptz NOT NULL)');await pool.query('INSERT INTO factor_test_clock VALUES($1)',[moment]);
   await pool.query(`CREATE FUNCTION ${schema}.clock_timestamp() RETURNS timestamptz LANGUAGE SQL VOLATILE AS 'SELECT moment FROM ${schema}.factor_test_clock'`);
@@ -486,7 +486,7 @@ test('setup expiry during the current proof wait gives restart guidance without 
   const blocker=await pool.connect();let work:Promise<void>|undefined;
   try{
     await blocker.query('BEGIN');await blocker.query('LOCK TABLE cloud_factor_replays IN ACCESS EXCLUSIVE MODE');
-    work=refused(store(keys,policy,timedPool).activate({...a,proof:recovery('D'.repeat(32))},pending.pendingToken,totp(pending.secret,moment.getTime())),'setup_unavailable');
+    work=refused(store(keys,policy,timedPool).activate({...a},pending.pendingToken,totp(pending.secret,moment.getTime())),'setup_unavailable');
     await blocked('cloud_factor_replays');await pool.query('UPDATE factor_test_clock SET moment=$1',[new Date(expires.getTime()+1)]);await blocker.query('COMMIT');await work;
     assert.equal((await factor()).version,1);
     const row=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];assert.equal(row.attempts,1);assert.equal(row.consumed_at,null);
