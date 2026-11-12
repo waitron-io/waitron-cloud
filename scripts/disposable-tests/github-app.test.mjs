@@ -229,15 +229,16 @@ for(const persistent of [false,true])test(`a bodyless 304 ${persistent?'refuses 
  assert.equal(reads,2);
 });
 
-test('an in-flight conditional response cannot restore a body invalidated by a write',async t=>{
+for(const refused of [false,true])test(`an in-flight 304 crossing a ${refused?'failed':'successful'} write is fetched again`,async t=>{
  const {GithubApp}=await import('./github-app.mjs');let revision=1,release,started;const ready=new Promise(resolve=>{started=resolve;});
  const server=createServer(async(req,res)=>{
-  if(req.method==='POST'){revision=2;res.end('{}');return;}
+  if(req.method==='POST'){revision=2;res.writeHead(refused?500:200);res.end('{}');return;}
   if(req.headers['if-none-match']==='"one"'){started();await new Promise(resolve=>{release=resolve;});res.writeHead(304);res.end();return;}
   res.setHeader('etag',revision===1?'"one"':'"two"');res.end(JSON.stringify({revision}));
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- await app.get('/current');const pending=app.get('/current');await ready;await app.post('/change',{});release();
+ await app.get('/current');const pending=app.get('/current');await ready;
+ if(refused)await assert.rejects(app.post('/change',{}),{status:500});else await app.post('/change',{});release();
  assert.deepEqual(await pending,{revision:2});
 });
 

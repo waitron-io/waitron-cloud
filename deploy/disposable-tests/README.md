@@ -387,9 +387,9 @@ method/endpoint `categories` with requests, failed fetches, 304 (`notModified`) 
 and their own latest raw quota snapshot. Categories retain no URL, repository, job
 id, body or credential. Top-level `notModified` counts all 304 replies. The App client revalidates JSON GETs
 with ETags. Its cache holds at most 64 bodies and 4 MiB of encoded JSON per client; it clears
-those bodies after token changes. Writes retain their validators; every later GET
-still revalidates with GitHub. A conditional response crossing a completed write,
-or a 304 without its matching body, gets one unconditional GET; writes are never replayed. Response counts belong to their completion
+those bodies after token changes. Writes leave the saved validators in place; every
+later GET still revalidates with GitHub. An in-flight 304 crossing a write’s completion
+or failure, or a 304 without its matching body, gets one unconditional GET; writes are never replayed. Response counts belong to their completion
 minute, which can differ from the request's start minute. Compare quota observations
 only within the same reset/resource and endpoint category: live job and run replies
 have returned different used/reset values with the same installation token.

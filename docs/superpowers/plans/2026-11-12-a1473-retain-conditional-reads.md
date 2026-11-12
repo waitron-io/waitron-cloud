@@ -2,6 +2,8 @@
 
 **Request and authority:** Lane I `questions.md`, watcher 2026-11-12 02:24: “Yes, the smallest alternative: keep each GET's ETag after writes that do not change that resource, keep the authorization boundary and the protection against an in-flight response crossing a write, with a test that a 409 cancel and the minute's capacity PATCH leave the job-inventory read conditional.” The watcher cleared this correction's scope, not this implementation. A separate Sol/high author drafted the broader quota plan; the driver narrowed it here. Claude reviewed the initial plan on 12 November; the driver adopted its cuts below. The watcher must clear this reviewed result before build.
 
+**Status, 12 November:** the watcher cleared this reviewed plan at 02:40 in Lane I `questions.md`; implementation followed that clearance.
+
 **Smallest usable result:** the existing controller keeps asking GitHub to validate cached job inventories after unrelated writes, allowing unchanged replies to use 304 instead of throwing away their validators. This addresses a reproduced mechanism, not a promise that busy-hour quota use stays below 5,000.
 
 **Evidence:** Lane I `receipts/firing-20261112-0207/cache-invalidation-probe.log` reproduces unchanged inventory GET200, GET304, cancel POST409, then unconditional GET200. The retained hour has 7,003 HTTP requests, including 905 304s; controller job reads are 1,797 with only five 304s. These HTTP counts are not quota charges. One hour of charged requests, excluding 304s, with category shares is required after publication and before planning the automatic 4,000 switch.
