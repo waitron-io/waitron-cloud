@@ -1,3 +1,4 @@
+import {openProofWindow} from './fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
 import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
@@ -26,7 +27,7 @@ beforeEach(async()=>{
 
 // Requiring an app secret or saving raw codes would break passkey-only recovery.
 test('a passkey-only owner obtains ten account recovery codes without an app secret',async()=>{
- const session=await transaction(pool,client=>createSession(client,accountId));
+ const session=await transaction(pool,client=>createSession(client,accountId));await openProofWindow(pool,session.token);
  const store=new registration.AuthenticatorFactorStore(pool,null,{pendingLifetimeMs:300_000,enrolmentAttempts:5});
  const {recoveryCodes:codes}=await store.regenerate({...session,password});
  assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);
@@ -40,7 +41,7 @@ const outbox=new registration.EmailOutbox({activeKeyId:'test',keys:{test:'07'.re
 const policy={loginLifetimeMs:300_000,challengeAttempts:5};
 const login=()=>new registration.PasswordLoginStore(pool,null,policy,outbox);
 async function codes(){
- const session=await transaction(pool,client=>createSession(client,accountId));
+ const session=await transaction(pool,client=>createSession(client,accountId));await openProofWindow(pool,session.token);
  const result=await new registration.AuthenticatorFactorStore(pool,null,{pendingLifetimeMs:300_000,enrolmentAttempts:5}).regenerate({...session,password});
  return result.recoveryCodes;
 }
@@ -81,7 +82,7 @@ test('legacy codes retain their original version hash without an app secret',asy
 
 const keys={activeKeyId:'test',keys:{test:'07'.repeat(32)}};
 const management=()=>new registration.AuthenticatorFactorStore(pool,keys,{pendingLifetimeMs:300_000,enrolmentAttempts:5});
-async function authority(){return {...await transaction(pool,client=>createSession(client,accountId)),password};}
+async function authority(){const actor=await transaction(pool,client=>createSession(client,accountId));await openProofWindow(pool,actor.token);return {...actor,password};}
 function totp(secret:string,offset=0){
  const bits=[...secret].map(c=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5,'0')).join('');
  const key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30_000)+offset));
@@ -94,7 +95,8 @@ async function activeApp(){await pool.query(`INSERT INTO cloud_authenticator_fac
 // Removing one method must not destroy the other method's unused recovery codes.
 test('removing an app keeps unused account codes while a passkey remains',async()=>{
  const saved=await codes();await activeApp();const store=management();
- await store.remove({...await authority(),proof:{kind:'recovery',code:saved[0]!}});
+ const actor=await authority();await new registration.AccountActionProofStore(pool,keys,policy).factor(actor.token,actor.csrfToken,{kind:'recovery',code:saved[0]!});
+ await store.remove(actor);
  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'9');
  const session=await login().completeRecoveryCheck(await challenge(),saved[1]!);assert.equal(session.accountId,accountId);
  assert.equal((await store.status(session.token)).recoveryCodesRemaining,8);
@@ -170,7 +172,7 @@ test('an app added after a passkey fallback challenge still requires the current
 
 
 test('concurrent removal of the final two passkeys retires every unused recovery code',async t=>{
- await codes();const a=await authority(),b=await authority(),blocker=await pool.connect();let removal:Promise<boolean[]>|undefined;
+ await codes();const a=await authority(),b=await authority(),blocker=await pool.connect();let removal:Promise<PromiseSettledResult<boolean>[]>|undefined;
  const second=randomUUID();await pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
  VALUES($1,$2,'c2Vjb25k',$3,0,'multiDevice',true)`,[second,accountId,Buffer.from([3,2,1])]);
  const ids=(await pool.query('SELECT id FROM cloud_passkeys ORDER BY id')).rows.map(row=>row.id);
@@ -180,13 +182,16 @@ test('concurrent removal of the final two passkeys retires every unused recovery
   await pool.query(`CREATE FUNCTION hold_passkey_removal() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
    PERFORM pg_advisory_xact_lock(hashtext(current_schema())); RETURN OLD; END $$`);
   await pool.query('CREATE TRIGGER hold_passkey_removal AFTER DELETE ON cloud_passkeys FOR EACH ROW EXECUTE FUNCTION hold_passkey_removal()');
-  removal=Promise.all([store.remove(a.token,a.csrfToken,ids[0],password),store.remove(b.token,b.csrfToken,ids[1],password)]);
+  removal=Promise.allSettled([store.remove(a.token,a.csrfToken,ids[0],password),store.remove(b.token,b.csrfToken,ids[1],password)]);
   await t.waitFor(async()=>assert.equal((await pool.query(`SELECT count(*) FROM pg_stat_activity
    WHERE application_name=$1 AND wait_event_type='Lock'`,[schema])).rows[0].count,'2'),{timeout:5000});
   assert.equal((await pool.query(`SELECT count(*) FROM pg_stat_activity WHERE application_name=$1
    AND wait_event_type='Lock' AND query LIKE 'DELETE FROM cloud_passkeys%'`,[schema])).rows[0].count,'1','one removal must wait before deleting its method');
   await blocker.query('SELECT pg_advisory_unlock(hashtext($1))',[schema]);
-  assert.deepEqual(await removal,[true,true]);
+  const results=await removal;assert.equal(results.filter(r=>r.status==='fulfilled'&&r.value===true).length,1);assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.code==='proof_required').length,1);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count,'1');
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'10');
+  await openProofWindow(pool,a.token);const last=(await pool.query('SELECT id FROM cloud_passkeys')).rows[0].id;assert.equal(await store.remove(a.token,a.csrfToken,last),true);
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count,'0');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'0');
  }finally{

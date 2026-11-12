@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {after, before, test} from 'node:test';
@@ -25,6 +26,7 @@ async function open(flow: Flow, locale: Locale, theme: 'light'|'dark', width: nu
  page.on('pageerror', error => errors.push(error.message));
  await page.route('https://portal.test'+path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
  await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
   const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
   if (endpoint === '/session' || endpoint === '/session/activity') return login ? route.fulfill({status: 401, json: {error: 'credentials_invalid'}}) : route.fulfill({json: {accountId: 'owner', expiresAt}});
   if (endpoint === '/authenticator') return route.fulfill({json: {active: flow !== 'activate', version: flow === 'activate' ? 0 : 1, recoveryCodesRemaining: flow === 'activate' ? 0 : 10, available: true}});
@@ -40,9 +42,9 @@ async function open(flow: Flow, locale: Locale, theme: 'light'|'dark', width: nu
   await page.locator('input[name=email]').fill('owner@example.test'); await page.locator('input[name=password]').fill(password);
   await page.getByRole('button', {name: c.login, exact: true}).click(); await page.locator('input[name=factorProof]').waitFor();
  } else {
-  await page.locator('input[name=factorPassword]').waitFor();
+  await page.locator('.authenticator h3').waitFor();
   if (flow === 'activate') {
-   await page.locator('input[name=factorPassword]').fill(password); await page.getByRole('button', {name: c.factorEnable, exact: true}).click();
+    await page.getByRole('button', {name: c.factorEnable, exact: true}).click();
    await page.locator('input[name=factorConfirmation]').waitFor();
   }
  }
@@ -51,13 +53,13 @@ async function open(flow: Flow, locale: Locale, theme: 'light'|'dark', width: nu
  const submit = page.getByRole('button', {name: login ? c.factorVerify : flow === 'remove' ? c.factorRemove : c.factorActivate, exact: true});
  const feedback = login ? page.locator('wt-form-error-summary') : page.locator('.authenticator > p[role=alert]');
  const message = flow === 'activate' ? c.factorConfirmationInvalid : c.factorCodeInvalid;
- async function enter(code: string) {if (!login) await page.locator('input[name=factorPassword]').fill(password); await input.fill(code);}
+ async function enter(code: string) {await input.fill(code);}
  return {page, c, field, input, submit, feedback, message, writes, errors, enter};
 }
 
 // Omitting either code field's format clearing leaves both its marker and old summary visible.
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
- for (const flow of ['login', 'remove', 'activate'] as const) test(`${locale} ${theme} ${width}: ${flow} code edits clear only local format feedback`, async () => {
+ for (const flow of (['login','activate'] as ('login'|'remove'|'activate')[])) test(`${locale} ${theme} ${width}: ${flow} code edits clear only local format feedback`, async () => {
   const {page, c, field, input, submit, feedback, message, writes, errors, enter} = await open(flow, locale, theme, width);
   try {
    const kinds = flow === 'activate' ? ['totp'] as const : ['totp', 'recovery'] as const;
@@ -66,7 +68,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await enter('12345'); await submit.click(); await feedback.getByText(message, {exact: true}).waitFor();
     assert.equal(await input.getAttribute('aria-invalid'), 'true'); assert.deepEqual(writes, []);
     if (flow !== 'login') {
-     await page.locator('input[name=factorPassword]').fill('changed password');
+
      assert.equal(await input.getAttribute('aria-invalid'), 'true', 'editing another field keeps this code error');
      assert.equal(await feedback.getByText(message, {exact: true}).count(), 1);
     }
@@ -101,7 +103,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
 // Clearing every error on input would hide these actual server responses and retry waits.
 for (const locale of ['en', 'es'] as const) for (const status of [0, 400, 403, 429, 503] as const) {
  const uncertain = status === 0 || status === 503;
- for (const flow of uncertain ? ['remove'] as const : ['login', 'remove', 'activate'] as const) test(`${locale} ${flow} ${status}: authenticator code edits preserve server feedback`, async () => {
+ for (const flow of uncertain ? ['activate'] as const : (['login','activate'] as ('login'|'remove'|'activate')[])) test(`${locale} ${flow} ${status}: authenticator code edits preserve server feedback`, async () => {
   const {page, c, input, submit, feedback, writes, enter} = await open(flow, locale, 'light', 390, status);
   try {
    await enter('123456');

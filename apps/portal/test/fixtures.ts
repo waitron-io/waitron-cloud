@@ -145,3 +145,11 @@ export async function contextSignIn(f:Awaited<ReturnType<typeof startPortalFixtu
   const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
   return context.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:check.challengeToken,code}});
 }
+
+// Other journeys begin after the shared proof; account-action-proof-browser owns the real prompt.
+export async function prepareBrowserActionWindow(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page|BrowserContext){
+ const cookie=(await ('context' in page?page.context():page).cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');
+ assert.ok(cookie,'the security journey needs a signed-in session');
+ const {openProofWindow}=await import('../../../packages/registration/test/fixtures/action-proof.ts');
+ await openProofWindow(f.db.pool,cookie.value);
+}

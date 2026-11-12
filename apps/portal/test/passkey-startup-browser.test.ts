@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {build} from 'esbuild';
@@ -30,6 +31,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           }});
           await page.route('https://portal.test' + path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><div id="portal"></div>'}));
           await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
             const endpoint = new URL(route.request().url()).pathname;
             if (endpoint.endsWith('/session/activity')) {
               await activityReply;
@@ -39,7 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             if (endpoint.endsWith('/passkeys')) { lists++; return route.fulfill({json: {passkeys: []}}); }
             if (endpoint.endsWith('/passkeys/registration/options')) {
               additions++;
-              assert.deepEqual(route.request().postDataJSON(), {password: 'An incorrect account password'});
+              assert.deepEqual(route.request().postDataJSON(), {});
               return route.fulfill({status: 403, json: {error: 'credentials_invalid'}});
             }
             if (endpoint.endsWith('/installations')) return route.fulfill({json: {installations: []}});
@@ -48,11 +50,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.goto('https://portal.test' + path);
           await page.addScriptTag({content: bundle.outputFiles[0]!.text});
           const c = translations[locale];
-          await page.locator('input[name=passkeyPassword]').fill('An incorrect account password');
+
           const activity = page.waitForRequest('**/api/account/session/activity');
           await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
           await activity;
-          const alert = page.locator('.passkeys').getByRole('alert').filter({hasText: c.passkeyPasswordInvalid});
+          const alert = page.locator('.passkeys').getByRole('alert').filter({hasText: c.actionProofUnavailable});
           await alert.waitFor();
           releaseActivity();
           await page.waitForFunction(expiry => {
@@ -60,7 +62,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             return app.session.state.expiresAt === expiry && !app.passkeys.pending;
           }, renewedExpiry);
           await alert.waitFor();
-          assert.equal(await page.getByRole('alert').filter({hasText: c.passkeyPasswordInvalid}).count(), 1);
+          assert.equal(await page.getByRole('alert').filter({hasText: c.actionProofUnavailable}).count(), 1);
           assert.equal(lists, 1, 'a completed startup list is not restarted by session activity');
           assert.equal(additions, 1, 'the wrong-password attempt is not repeated');
           assert.equal(new URL(page.url()).pathname, '/account');

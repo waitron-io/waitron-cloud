@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -137,9 +138,9 @@ test('sign out remains available while a passkey prompt is open', async t => {
         const signOut = page.getByRole('button', {name: c.signout, exact: true});
         // Startup work has its own sign-out guards; isolate the browser prompt after it settles.
         await signOut.and(page.locator(':enabled')).waitFor();
-        await page.locator('input[name=passkeyPassword]').fill(password);
+
         const options = page.waitForResponse('**/passkeys/registration/options');
-        await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+        await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
         assert.equal((await options).status(), 200);
         await page.waitForFunction(() => (window as unknown as {accountSecurityPromptOpen: boolean}).accountSecurityPromptOpen);
         const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});

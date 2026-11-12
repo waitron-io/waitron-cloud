@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -9,8 +10,8 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 const id = '12345678-1234-4234-8234-123456789abc', addedId = '22345678-1234-4234-8234-123456789abc';
 const key = {id, createdAt: '2026-09-26T00:00:00.000Z', lastUsedAt: null};
 const labels = {
-  en: {check: 'Check passkeys', registration: 'Check your passkeys. To add one, enter your password and start a new prompt. Choose another passkey if it is already registered. Password sign-in remains available.', removal: 'Check your passkeys. If this key is still listed, enter your password and remove it again. Password sign-in remains available.'},
-  es: {check: 'Comprobar llaves de acceso', registration: 'Comprueba tus llaves de acceso. Para añadir una, introduce tu contraseña e inicia una nueva solicitud. Elige otra llave si ya está registrada. Puedes seguir entrando con tu contraseña.', removal: 'Comprueba tus llaves de acceso. Si esta llave sigue en la lista, introduce tu contraseña y elimínala de nuevo. Puedes seguir entrando con tu contraseña.'},
+  en: {check: 'Check passkeys', registration: 'Check your passkeys. To add one, verify security and start a new prompt. Choose another passkey if it is already registered. Password sign-in remains available.', removal: 'Check your passkeys. If this key is still listed, verify security and remove it again. Password sign-in remains available.'},
+  es: {check: 'Comprobar llaves de acceso', registration: 'Comprueba tus llaves de acceso. Para añadir una, verifica tu seguridad e inicia una nueva solicitud. Elige otra llave si ya está registrada. Puedes seguir entrando con tu contraseña.', removal: 'Comprueba tus llaves de acceso. Si esta llave sigue en la lista, verifica tu seguridad y elimínala de nuevo. Puedes seguir entrando con tu contraseña.'},
 };
 const bodyGuidance = {
   en: {408: 'This passkey request was interrupted.', 413: 'This passkey request’s size wasn’t accepted. Retrying may not help.', 415: 'This passkey request arrived in an unsupported format.'},
@@ -44,6 +45,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         });
         await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
         await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
           const req = route.request(), path = new URL(req.url()).pathname.replace('/api/account', '');
           if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
           if (path === '/passkeys') {reads++; if (checking) await checked; if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
@@ -64,7 +66,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const section = page.locator('.passkeys'), password = section.locator('input[name=passkeyPassword]');
         const action = section.getByRole('button', {name: flow === 'remove' ? c.passkeyRemove : c.passkeyAdd, exact: true}).first();
         await section.locator('.passkey-list li').waitFor();
-        await password.fill('Old password'); await action.click();
+         await action.click();
         await section.getByRole('alert').getByText(expected, {exact: true}).waitFor();
         assert.equal(await section.getByText(c.passkeyUnavailable, {exact: true}).count(), 0);
         assert.equal(await section.getByRole('alert').count(), 1);
@@ -98,7 +100,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         await waitForHandler();
         assert.equal(writes.length, before, 'checking never repeats registration or removal'); assert.equal(reads, beforeReads + 1);
-        assert.equal(await password.inputValue(), ''); assert.equal(await password.isDisabled(), true, 'the check keeps password entry disabled while pending');
+        assert.equal(await password.count(),0); assert.equal(await password.count(),0);
         if (flow === 'navigation') {
           await page.evaluate(() => (window as unknown as {passkeyRefusalApp: {navigate(path: string): void}}).passkeyRefusalApp.navigate('/login'));
           const email = page.locator('input[name=email]'); await email.focus(); release();
@@ -109,22 +111,19 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         release();
         await page.waitForFunction(() => document.querySelector('h1') === document.activeElement);
         assert.equal(await section.getByRole('alert').count(), 0); assert.equal(await refresh.count(), 0);
-        if (flow === 'remove') {
-          await action.click(); await section.getByRole('alert').getByText(c.requiredPassword, {exact: true}).waitFor();
-          assert.equal(writes.length, before, 'removal needs a fresh password');
-        } else assert.equal(await action.isDisabled(), true, 'another registration needs a fresh password');
-        await password.fill('Fresh password'); await action.click();
+        assert.equal(await action.isEnabled(),true,'the existing proof window permits an explicit retry');
+         await action.click();
         await section.getByRole('status').getByText(flow === 'remove' ? c.passkeyRemoved : c.passkeyAdded, {exact: true}).waitFor();
         const change = writes.slice(before);
-        if (flow === 'remove') assert.deepEqual(change, [{path: '/passkeys/remove', body: {id, password: 'Fresh password'}}]);
+        if (flow === 'remove') assert.deepEqual(change, [{path: '/passkeys/remove', body: {id}}]);
         else {
           assert.deepEqual(change.map(x => x.path), ['/passkeys/registration/options', '/passkeys/registration/verify']);
-          assert.deepEqual(change[0]!.body, {password: 'Fresh password'});
+          assert.deepEqual(change[0]!.body, {});
           assert.equal(change[1]!.body.ceremonyId, flow === 'verify' || flow === 'browser-duplicate' || flow === 'failed-list' ? addedId : id, 'restart uses a new server-issued prompt');
         }
-        assert.equal(await password.inputValue(), '');
+        assert.equal(await password.count(),0);
         if (flow === 'options') {
-          refusingAgain = true; await password.fill('Fresh password'); await action.click();
+          refusingAgain = true;  await action.click();
           await section.getByRole('alert').getByText(expected, {exact: true}).waitFor();
           const beforeWaitReads = reads, beforeWaitWrites = writes.length;
           assert.equal(await refresh.isDisabled(), true, 'the check button honors the response retry delay');

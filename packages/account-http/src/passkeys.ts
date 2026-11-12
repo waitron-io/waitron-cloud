@@ -48,8 +48,8 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
       return c.json({accountId: session.accountId});
     }
     exact(body, path === '/registration/verify' ? ['ceremonyId', 'response']
-      : path === '/remove' ? ['id', 'password'] : ['password']);
-    const parsedPassword = path === '/registration/verify' ? undefined : password(body.password);
+      : path === '/remove' ? ['id'] : [],path==='/registration/verify'?[]:['password']);
+    const parsedPassword = Object.hasOwn(body,'password')?password(body.password):'';
     const registrationCeremony = path === '/registration/verify' ? uuid(body.ceremonyId) : undefined;
     const registrationResponse = path === '/registration/verify' ? registration(body.response) : undefined;
     const removalId = path === '/remove' ? uuid(body.id) : undefined;
@@ -127,6 +127,6 @@ function credential(value: unknown, kind: 'registration' | 'authentication'): Re
 function registration(value: unknown): RegistrationResponseJSON {
   return credential(value, 'registration') as unknown as RegistrationResponseJSON;
 }
-function authentication(value: unknown): AuthenticationResponseJSON {
+export function authentication(value: unknown): AuthenticationResponseJSON {
   return credential(value, 'authentication') as unknown as AuthenticationResponseJSON;
 }

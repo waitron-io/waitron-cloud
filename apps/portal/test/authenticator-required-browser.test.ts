@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -13,20 +14,11 @@ const bundle=await build({stdin:{contents:`
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const token='A'.repeat(43),expiresAt='2030-01-01T00:00:00.000Z',password=' current password ';
-const flows=[
+const flows:{action:'login'|'begin'|'remove'|'regenerate'|'activate';active:boolean;missing:'password'|'proof'|'confirmation'}[]=[
  {action:'login',active:true,missing:'proof'},
- {action:'begin',active:false,missing:'password'},
- {action:'begin',active:true,missing:'password'},
- {action:'begin',active:true,missing:'proof'},
- {action:'remove',active:true,missing:'password'},
- {action:'remove',active:true,missing:'proof'},
- {action:'regenerate',active:true,missing:'password'},
- {action:'regenerate',active:true,missing:'proof'},
- {action:'activate',active:false,missing:'password'},
  {action:'activate',active:false,missing:'confirmation'},
- {action:'activate',active:true,missing:'proof'},
  {action:'activate',active:true,missing:'confirmation'},
-] as const;
+];
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
  test(`${locale} ${theme} ${width}: blank authenticator input gives feedback and can be corrected`,async t=>{
   const browser=await chromium.launch({headless:true});
@@ -37,6 +29,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    try{
     await page.route('https://portal.test'+path,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
      const request=route.request(),endpoint=new URL(request.url()).pathname.replace('/api/account','');
      if(endpoint==='/session'||endpoint==='/session/activity')return login?route.fulfill({status:401,json:{error:'credentials_invalid'}}):route.fulfill({json:{accountId:'owner',expiresAt}});
      if(endpoint==='/authenticator')return route.fulfill({json:{active:flow.active,version:flow.active?1:0,recoveryCodesRemaining:flow.active?10:0,available:true}});
@@ -51,17 +44,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      await page.locator('input[name=email]').fill('owner@example.test');await page.locator('input[name=password]').fill(password);
      await page.getByRole('button',{name:c.login,exact:true}).click();await page.locator('input[name=factorProof]').waitFor();
     }else{
-     await page.locator('input[name=factorPassword]').waitFor();
+     await page.locator('.authenticator h3').waitFor();
      if(flow.action==='activate'){
-      await page.locator('input[name=factorPassword]').fill(password);
-      if(flow.active)await page.locator('input[name=factorProof]').fill('123456');
+
+      if(login)await page.locator('input[name=factorProof]').fill('123456');
       await page.getByRole('button',{name:flow.active?c.factorReplace:c.factorEnable,exact:true}).click();
       await page.locator('input[name=factorConfirmation]').waitFor();
      }
-     await page.locator('input[name=factorPassword]').fill(flow.missing==='password'?'':password);
+
      if(flow.action==='activate')await page.locator('input[name=factorConfirmation]').fill(flow.missing==='confirmation'?' \t ':'654 321');
     }
-    if(flow.active)await page.locator('input[name=factorProof]').fill(flow.missing==='proof'?' \t ':'123 456');
+    if(login)await page.locator('input[name=factorProof]').fill(flow.missing==='proof'?' \t ':'123 456');
     writes.length=0;
     const label=login?c.factorVerify:flow.action==='begin'?(flow.active?c.factorReplace:c.factorEnable):flow.action==='remove'?c.factorRemove:flow.action==='regenerate'?c.factorRegenerate:c.factorActivate;
     await page.getByRole('button',{name:label,exact:true}).click();
@@ -86,7 +79,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.locator(`input[name=${field}]`).fill(flow.missing==='password'?password:flow.missing==='confirmation'?'654 321':'123 456');
     const endpoint=login?'/login/factor':`/authenticator/${flow.action}`;
     const reply=page.waitForResponse('**/api/account'+endpoint);await page.getByRole('button',{name:label,exact:true}).click();await reply;
-    assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:{password,...(flow.active?{proof:{kind:'totp',code:'123456'}}:{}),...(flow.action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
+    assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:{...(flow.action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
     await feedback.getByText(c.credentials,{exact:true}).waitFor();assert.equal(await feedback.getByText(message,{exact:true}).count(),0);
     for(const input of await page.locator('.authenticator wt-input, wt-input[name=factorProof]').all()){
      assert.equal(await input.evaluate(element=>(element as HTMLElement & {error:string}).error),'');

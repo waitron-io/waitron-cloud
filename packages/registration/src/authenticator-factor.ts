@@ -1,10 +1,11 @@
 import {randomBytes, randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
-import {decryptFactorSecret, encryptFactorSecret, IdentityError, requirePasswordAuthority, resolveSession,
+import {decryptFactorSecret, encryptFactorSecret, IdentityError, resolveSession,
   type FactorKeys} from '@waitron-cloud/identity';
 import {consumeFactorProof, factorDigest, factorNow, FactorError,
   type ActiveFactor, type FactorProof} from './password-login.ts';
 import {transaction} from './transaction.ts';
+import {requireAccountActionProof,invalidateAccountActionProof} from './account-action-proof.ts';
 import {createAccountRecoveryCodes,retireRecoveryCodesWithoutMethod} from './account-recovery-codes.ts';
 
 export interface FactorAuthority {token: string; csrfToken: string; password: string; proof?: FactorProof}
@@ -80,24 +81,24 @@ export class AuthenticatorFactorStore {
     const id=(await client.query('SELECT id FROM cloud_sessions WHERE token_hash=$1 AND account_id=$2',[factorDigest(token),session.accountId])).rows[0].id;
     return {accountId:session.accountId,sessionId:id,deadline:new Date(session.expiresAt)};
   }
-  async #authority(client: PoolClient, a: FactorAuthority): Promise<Context> {
+  async #authority(client: PoolClient, a: FactorAuthority,completion:boolean): Promise<Context> {
     if(typeof a.token!=='string' || !TOKEN.test(a.token)) throw new FactorManagementError();
     const candidate=(await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[factorDigest(a.token)])).rows[0];
     if(!candidate) throw new FactorManagementError();
-    // Derive before locks, then take account UPDATE before credentials, actor session and factor children.
-    const password=await requirePasswordAuthority(client,{accountId:candidate.account_id},a.password,'update');
-    const session=await this.#session(client,a.token,a.csrfToken);
-    if(session.accountId!==password.accountId) throw new FactorManagementError();
-    const email=(await client.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[session.accountId])).rows[0].email;
+    const session=await requireAccountActionProof(client,a.token,a.csrfToken,!completion);
+    const password=(await client.query('SELECT password_hash,email FROM cloud_credentials WHERE account_id=$1',[session.accountId])).rows[0];
+    const id=(await client.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[factorDigest(a.token)])).rows[0].id;
+    const email=password.email;
     await client.query('INSERT INTO cloud_authenticator_factors(account_id) VALUES($1) ON CONFLICT DO NOTHING',[session.accountId]);
     const factor=(await client.query('SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE',[session.accountId])).rows[0];
+    if(factor.secret_envelope&&!decryptFactorSecret(factor.secret_envelope,this.#keys!,{accountId:session.accountId,version:factor.version,purpose:'active'}))throw new FactorManagementError('temporarily_unavailable');
     await resolveSession(client,a.token,{csrfToken:a.csrfToken,touch:false});
-    return {client,...session,email,fingerprint:password.passwordFingerprint,factor};
+    return {client,...session,sessionId:id,deadline:new Date(session.expiresAt),email,fingerprint:factorDigest(password.password_hash),factor};
   }
   async #run<T>(a: FactorAuthority, action:(context:Context)=>Promise<T>, pendingToken?:string):Promise<T> {
     const result=await transaction(this.#pool,async client=>{
       let context:Context;
-      try {context=await this.#authority(client,a);this.#policyReady();}
+      try {context=await this.#authority(client,a,pendingToken!==undefined);this.#policyReady();}
       catch(error) {const refusal=expected(error);if(refusal) return refusal;throw error;}
       let pending:Pending|undefined;
       if(pendingToken!==undefined) {
@@ -115,11 +116,6 @@ export class AuthenticatorFactorStore {
       await client.query('SAVEPOINT management_effects');
       try {
         await resolveSession(client,a.token,{csrfToken:a.csrfToken,touch:false});
-        if(context.factor.secret_envelope) {
-          const deadline=await consumeFactorProof(client,context.factor,this.#keys,a.proof!,context.deadline);
-          if(!deadline) throw new FactorManagementError(pending&&await factorNow(client)>=pending.expires_at?'setup_unavailable':'permission_denied');
-          context.deadline=deadline;
-        }
         const value=await action(context);
         const now=await factorNow(client);
         if(now>=context.deadline) throw new FactorManagementError(pending&&now>=pending.expires_at?'setup_unavailable':'permission_denied');
@@ -152,6 +148,7 @@ export class AuthenticatorFactorStore {
     await resolveSession(c.client,a.token,{csrfToken:a.csrfToken,touch:false});
   }
   async #changed(c:Context):Promise<void> {
+    await invalidateAccountActionProof(c.client,c.accountId);
     await c.client.query('UPDATE cloud_factor_enrolments SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
     await c.client.query('UPDATE cloud_factor_login_challenges SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
     await c.client.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1 AND ended_at IS NULL',[c.accountId]);

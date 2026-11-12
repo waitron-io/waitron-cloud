@@ -1,3 +1,4 @@
+import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createHmac, generateKeyPairSync, randomBytes, randomUUID} from 'node:crypto';
@@ -65,7 +66,7 @@ async function challenge(email:string,target=app,peer?:string) {
   assert.ok(Date.parse(body.expiresAt)>Date.now());return body.challengeToken;
 }
 async function signIn(email:string) {
-  const response=await completeEmailProof(db,await request('/login',{email,password}),body=>request('/login/email',body));assert.equal(response.status,200);return cookies(response);
+  const response=await completeEmailProof(db,await request('/login',{email,password}),body=>request('/login/email',body));assert.equal(response.status,200);const result=cookies(response);await openProofWindow(db.pool,result.cookie.match(/__Host-cloud_session=([^;]+)/)![1]!);return result;
 }
 function recovery(code:string) {return {kind:'recovery' as const,code};}
 async function refusal(response:Response,status:number,error:string) {
@@ -134,7 +135,8 @@ for(const activationOffset of [0,-1])test('management activates once, returns co
   const live=cookies(signed),liveStatus=await request('/authenticator',undefined,{headers:live});
   assert.deepEqual(await liveStatus.json(),{active:true,version:1,recoveryCodesRemaining:9,available:true});
   const grouped=body.recoveryCodes[1]!.toLowerCase().match(/.{8}/g)!.join('-');
-  const removed=await request('/authenticator/remove',{password,proof:recovery(grouped)},{headers:live});assert.equal(removed.status,200);
+  assert.equal((await request('/action-proof/factor',recovery(grouped),{headers:live})).status,204);
+  const removed=await request('/authenticator/remove',{},{headers:live});assert.equal(removed.status,200);
   assert.deepEqual(await removed.json(),{status:'changed',active:false});assert.equal(await count(),0);
   assert.equal((await completeEmailProof(db,await request('/login',{email:owner.email,password}),body=>request('/login/email',body))).status,200);
 });
@@ -143,9 +145,10 @@ test('regeneration and cancellation enforce fresh authority without exposing cod
   const owner=await activeAccount(),direct=new PasswordLoginStore(db.pool,keys,policy);
   const credentials=await direct.complete(await challenge(owner.email),recovery(owner.codes[0]!));
   const headers={cookie:`__Host-cloud_session=${credentials.token}`,'x-csrf-token':credentials.csrfToken};
-  await refusal(await request('/authenticator/regenerate',{password},{headers}),403,'credentials_invalid');
-  await refusal(await request('/authenticator/regenerate',{password:'wrong',proof:recovery(owner.codes[1]!)},{headers}),403,'credentials_invalid');
+  await refusal(await request('/authenticator/regenerate',{password},{headers}),403,'proof_required');
+  await refusal(await request('/authenticator/regenerate',{password:'wrong',proof:recovery(owner.codes[1]!)},{headers}),403,'proof_required');
   await refusal(await request('/authenticator/regenerate',{password,proof:recovery(owner.codes[1]!)},{headers:{...headers,'x-csrf-token':'wrong'}}),403,'credentials_invalid');
+  assert.equal((await request('/action-proof/factor',recovery(owner.codes[1]!),{headers})).status,204);
   const begun=await request('/authenticator/begin',{password,proof:recovery(owner.codes[1]!)},{headers});assert.equal(begun.status,200);
   const pending=await begun.json() as {pendingToken:string};
   await refusal(await request('/authenticator/activate',{password,proof:recovery(owner.codes[2]!),pendingToken:randomBytes(32).toString('base64url'),code:'123456'},{headers}),400,'invalid_input');
@@ -168,7 +171,7 @@ test('nested proofs and management bodies reject extra keys, malformed types and
     await refusal(await request('/login/factor',{challengeToken,proof:recovery(owner.codes[0]!)}),400,'invalid_input');
   const plain=await account(),headers=await signIn(plain.email);
   for(const body of [{password,token},{password,csrfToken:token},{password,proof:{kind:'totp',code:'123456',extra:1}},
-    {password:[]},{}])await refusal(await request('/authenticator/begin',body,{headers}),400,'invalid_input');
+    {password:[]}])await refusal(await request('/authenticator/begin',body,{headers}),400,'invalid_input');
   await refusal(await request('/authenticator/begin',{password:'é'.repeat(513)},{headers}),400,'password_too_long');
   assert.equal((await request('/authenticator/begin',{password},{headers:{...headers,origin:'https://evil.test'}})).status,403);
   assert.equal((await request('/authenticator?secret=oops',undefined,{headers})).status,400);
@@ -251,9 +254,10 @@ test('IP-blocked completion and management requests never spend account or chall
   assert.equal(await attempts('factor-manage-account',plain.accountId),0);
 });
 
-test('management account limits survive new IPs and instances and refused passwords',async()=>{
+test('management account limits survive new IPs and instances and refused proof windows',async()=>{
   const owner=await account(),headers=await signIn(owner.email),bounded={...policy,manageAccount:{limit:1,windowSeconds:300}};
-  await refusal(await request('/authenticator/begin',{password:'wrong'},{headers,app:application({keys,policy:bounded})}),403,'credentials_invalid');
+  await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL');
+  await refusal(await request('/authenticator/begin',{},{headers,app:application({keys,policy:bounded})}),403,'proof_required');
   await refusal(await request('/authenticator/begin',{password},{headers,app:application({keys,policy:bounded},db.secondPool),peer:'192.0.2.5'}),429,'rate_limited');
   assert.equal((await db.pool.query('SELECT count(*)::integer AS count FROM cloud_factor_enrolments')).rows[0].count,0);
 });
@@ -345,7 +349,7 @@ test('HTTP overlong passwords use a byte-length refusal while malformed input ke
   const owner=await account(),headers=await signIn(owner.email);
   for(const value of ['x'.repeat(1025),'é'.repeat(513)])for(const action of ['begin','activate','remove','regenerate'])
     await refusal(await request(`/authenticator/${action}`,{password:value,...(action==='activate'?{pendingToken:'A'.repeat(43),code:'123456'}:{})},{headers}),400,'password_too_long');
-  await refusal(await request('/authenticator/begin',{password:'é'.repeat(512)},{headers}),403,'credentials_invalid');
+  assert.equal((await request('/authenticator/begin',{password:'é'.repeat(512)},{headers})).status,200,'a bounded legacy field does not replace or repeat the fresh session proof');
   assert.equal((await request('/session',undefined,{headers})).status,200);
 });
 

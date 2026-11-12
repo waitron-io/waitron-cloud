@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -19,7 +20,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   test(`${locale} ${theme} ${width}: typing into a refused field clears its message`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
-      for (const flow of ['passkey', 'password', 'proof', 'confirmation'] as const) await t.test(flow, async () => {
+      for (const flow of (['confirmation'] as ('passkey'|'password'|'proof'|'confirmation')[])) await t.test(flow, async () => {
         const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
         page.setDefaultTimeout(4000);
         const c = translations[locale], active = flow === 'proof' || flow === 'confirmation';
@@ -28,6 +29,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         try {
           await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
           await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
             const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
             if (endpoint === '/session' || endpoint === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-01T00:00:00Z'}});
             if (endpoint === '/passkeys') return route.fulfill({json: {passkeys: [{id, createdAt: '2026-10-24T12:00:00Z', lastUsedAt: null}]}});
@@ -39,17 +41,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           });
           await page.goto('https://portal.test/account');
           await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
-          await page.locator('input[name=factorPassword]').waitFor();
+          await page.locator('.authenticator h3').waitFor();
           const section = page.locator(flow === 'passkey' ? '.passkeys' : '.authenticator');
           const fieldName = flow === 'passkey' ? 'passkeyPassword' : flow === 'password' ? 'factorPassword' : flow === 'proof' ? 'factorProof' : 'factorConfirmation';
           if (flow === 'confirmation') {
-            await page.locator('input[name=factorPassword]').fill(password);
-            await page.locator('input[name=factorProof]').fill('123 456');
+
             await section.getByRole('button', {name: c.factorReplace, exact: true}).click();
             await page.locator('input[name=factorConfirmation]').waitFor();
-            await page.locator('input[name=factorProof]').fill('123 456');
           }
-          if (flow === 'proof' || flow === 'confirmation') await page.locator('input[name=factorPassword]').fill(password);
           const field = page.locator(`wt-input[name=${fieldName}]`), input = field.locator('input');
           const submit = section.getByRole('button', {name: flow === 'passkey' ? c.passkeyRemove : flow === 'password' ? c.factorEnable : flow === 'proof' ? c.factorRemove : c.factorActivate, exact: true});
           const message = flow === 'passkey' || flow === 'password' ? c.requiredPassword : c.factorCodeRequired;
@@ -62,9 +61,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(await input.getAttribute('aria-invalid'), 'true');
           assert.equal(await field.getByText(message, {exact: true}).count(), 1);
 
-          const otherName = flow === 'passkey' ? 'factorPassword' : flow === 'password' ? 'passkeyPassword' : flow === 'confirmation' ? 'factorProof' : 'factorPassword';
-          await page.locator(`input[name=${otherName}]`).fill(password + 'other'); await settled();
-          assert.equal(await alert.getByText(message, {exact: true}).count(), 1, 'editing another field keeps the refusal');
           await input.fill(flow === 'proof' || flow === 'confirmation' ? ' \t ' : '');
           await input.dispatchEvent('input'); await settled();
           assert.equal(await input.getAttribute('aria-invalid'), 'true', 'an empty field still needs input');
@@ -87,8 +83,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           assert.equal(await input.inputValue(), value, 'language changes keep the typed input');
           await page.getByRole('combobox', {name: translations[alternate].language, exact: true}).selectOption(locale); await settled();
           assert.equal(await input.inputValue(), value);
-          if (flow === 'proof' || flow === 'confirmation') await page.locator('input[name=factorPassword]').fill(password);
-          if (flow === 'confirmation') await page.locator('input[name=factorProof]').fill('123 456');
           if (flow === 'proof' || flow === 'confirmation') {
             await input.fill('12345'); await submit.click();
             const malformed = flow === 'proof' ? c.factorCodeInvalid : c.factorConfirmationInvalid;
@@ -99,10 +93,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             assert.deepEqual(writes, [], 'malformed input is still refused locally');
           }
           const endpoint = flow === 'passkey' ? '/passkeys/remove' : flow === 'password' ? '/authenticator/begin' : flow === 'proof' ? '/authenticator/remove' : '/authenticator/activate';
-          const body = flow === 'passkey' ? {id, password} : flow === 'password' ? {password} : flow === 'proof' ? {password, proof: {kind: 'totp', code: '123456'}} : {password, proof: {kind: 'totp', code: '123456'}, pendingToken: token, code: '123456'};
+          const body = flow === 'passkey' ? {id, password} : flow === 'password' ? {password} : flow === 'proof' ? {password, proof: {kind: 'totp', code: '123456'}} : {pendingToken: token, code: '123456'};
           for (status of [403, flow === 'proof' || flow === 'confirmation' ? 400 : 503]) {
-            if (flow === 'proof' || flow === 'confirmation') await page.locator('input[name=factorPassword]').fill(password);
-            if (flow === 'confirmation') await page.locator('input[name=factorProof]').fill('123 456');
             await input.fill(value); await submit.click();
             const refusal = status === 403 ? (flow === 'passkey' ? c.passkeyPasswordInvalid : c.credentials) : status === 400 ? c.factorUnavailable : (flow === 'passkey' ? c.passkeyChangeUncertain : c.factorChangeUncertain);
             await alert.getByText(refusal, {exact: true}).waitFor();

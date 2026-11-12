@@ -1,3 +1,4 @@
+import {openProofWindow} from './fixtures/action-proof.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
@@ -31,7 +32,7 @@ const accountId = randomUUID();
 const password = 'a current account password';
 const origin = 'https://cloud.example.test';
 const run = <T>(fn: (client: import('pg').PoolClient) => Promise<T>) => transaction(pool, fn);
-const signIn = () => run(client => login(client, { email: 'owner@example.test', password }));
+const signIn = async () => {const actor=await run(client => login(client, { email: 'owner@example.test', password }));await openProofWindow(pool,actor.token);return actor;};
 const registrationResponse = (id = randomBytes(32).toString('base64url')): RegistrationResponseJSON => ({
   id, rawId: id, response: { clientDataJSON: 'Y2xpZW50', attestationObject: 'YXR0ZXN0YXRpb24' },
   clientExtensionResults: {}, type: 'public-key',
@@ -135,7 +136,7 @@ test('registration consumes its ceremony once and refuses duplicate credential I
   const created = await store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response);
   assert.match(created.id, /^[0-9a-f-]{36}$/);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response));
-  options = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);options = await store.registrationOptions(session.token, session.csrfToken, password);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, options.ceremonyId, response));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '1');
   assert.equal((await pool.query('SELECT count(*) FROM cloud_webauthn_ceremonies WHERE consumed_at IS NOT NULL')).rows[0].count, '2');
@@ -150,7 +151,7 @@ test('registration is bound to the initiating live session and rechecks suspensi
   await run(client => endSession(client, first.token));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_webauthn_ceremonies WHERE id = $1', [options.ceremonyId])).rows[0].count, '1');
   await assert.rejects(store.verifyRegistration(first.token, first.csrfToken, options.ceremonyId, registrationResponse()));
-  options = await store.registrationOptions(second.token, second.csrfToken, password);
+  await openProofWindow(pool,second.token);options = await store.registrationOptions(second.token, second.csrfToken, password);
   await pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp()');
   await assert.rejects(store.verifyRegistration(second.token, second.csrfToken, options.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
@@ -185,6 +186,7 @@ test('an enrolled authenticator with unavailable keys leaves passkey login and l
   assert.equal((await run(c=>resolveSession(c,authenticated.token))).accountId,accountId);
   const factor=new AuthenticatorFactorStore(pool,null,{pendingLifetimeMs:300_000,enrolmentAttempts:3});
   assert.deepEqual(await factor.status(authenticated.token),{active:true,version:1,recoveryCodesRemaining:0,available:false});
+  await openProofWindow(pool,authenticated.token);
   await assert.rejects(factor.remove({...authenticated,password}),
     (e:unknown)=>!!e && typeof e==='object' && 'code' in e && e.code==='temporarily_unavailable');
   assert.equal((await pool.query('SELECT version FROM cloud_authenticator_factors')).rows[0].version,1);
@@ -217,7 +219,7 @@ test('registration and authentication reject results without device user verific
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '0');
 
   adapter.userVerified = true;
-  registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken, password);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -251,15 +253,17 @@ test('list and password-confirmed removal stay account-scoped', async () => {
   const response = registrationResponse();
   const created = await store.verifyRegistration(owner.token, owner.csrfToken, registration.ceremonyId, response);
   assert.deepEqual((await store.list(owner.token)).map(item => item.id), [created.id]);
-  await assert.rejects(store.remove(owner.token, owner.csrfToken, created.id, 'wrong'));
+  await assert.rejects(store.remove(owner.token, 'A'.repeat(43), created.id, 'wrong'));
+  await openProofWindow(pool,owner.token);
 
   const otherAccount = randomUUID();
   await pool.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [otherAccount]);
   await pool.query('INSERT INTO cloud_credentials (account_id, email, password_hash) VALUES ($1, $2, $3)',
     [otherAccount, 'other@example.test', await hashSecret(password)]);
-  const other = await run(client => login(client, { email: 'other@example.test', password }));
+  const other = await run(client => login(client, { email: 'other@example.test', password }));await openProofWindow(pool,other.token);
   assert.deepEqual(await store.list(other.token), []);
   assert.equal(await store.remove(other.token, other.csrfToken, created.id, password), false);
+  await openProofWindow(pool,owner.token);
   assert.equal(await store.remove(owner.token, owner.csrfToken, created.id, password), true);
   assert.deepEqual(await store.list(owner.token), []);
   assert.equal((await pool.query('SELECT count(*) FROM cloud_passkey_users')).rows[0].count, '1');
@@ -271,7 +275,7 @@ test('expired and wrong-kind ceremonies cannot be completed or revived', async (
   await pool.query("UPDATE cloud_webauthn_ceremonies SET expires_at = statement_timestamp() - interval '1 second', created_at = statement_timestamp() - interval '5 minutes 1 second' WHERE id = $1", [registration.ceremonyId]);
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, registrationResponse()));
 
-  registration = await store.registrationOptions(session.token, session.csrfToken, password);
+  await openProofWindow(pool,session.token);registration = await store.registrationOptions(session.token, session.csrfToken, password);
   const response = registrationResponse();
   await store.verifyRegistration(session.token, session.csrfToken, registration.ceremonyId, response);
   const handle = (await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url');
@@ -283,6 +287,7 @@ test('expired and wrong-kind ceremonies cannot be completed or revived', async (
   await expectPasskeyInvalid(store.verifyRegistration(session.token, session.csrfToken,
     wrongAuthentication.ceremonyId, registrationResponse()));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongAuthentication.ceremonyId])).rows[0].consumed_at, null);
+  await openProofWindow(pool,session.token);
   const wrongRegistration = await store.registrationOptions(session.token, session.csrfToken, password);
   await expectPasskeyInvalid(store.authenticate(wrongRegistration.ceremonyId, authenticationResponse(response.id, handle)));
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_webauthn_ceremonies WHERE id = $1', [wrongRegistration.ceremonyId])).rows[0].consumed_at, null);
@@ -366,4 +371,35 @@ test('real authentication still accepts an existing ML-DSA credential after regi
   });
   assert.equal(credentials.accountId, accountId);
   assert.equal((await pool.query('SELECT counter FROM cloud_passkeys WHERE credential_id = $1', [credentialId])).rows[0].counter, '1');
+});
+
+test('fresh passkey proof is bound to the current session and never signs another session in',async()=>{
+  const {requireAccountActionProof}=await import('../src/account-action-proof.ts');
+  const actor=await signIn(),other=await signIn();
+  const options=await store.registrationOptions(actor.token,actor.csrfToken,password);
+  const response=registrationResponse();
+  await store.verifyRegistration(actor.token,actor.csrfToken,options.ceremonyId,response);
+  const user=(await pool.query('SELECT user_handle FROM cloud_passkey_users WHERE account_id=$1',[accountId])).rows[0].user_handle.toString('base64url');
+  const proof=await store.authenticationOptions(actor.token,actor.csrfToken);
+  await expectPasskeyInvalid(store.authenticate(proof.ceremonyId,authenticationResponse(response.id,user)));
+  assert.equal(typeof store.reprove,'function','passkey action proof is missing');
+  await expectPasskeyInvalid(store.reprove(other.token,other.csrfToken,proof.ceremonyId,authenticationResponse(response.id,user)));
+  const fresh=await store.authenticationOptions(actor.token,actor.csrfToken);
+  await store.reprove(actor.token,actor.csrfToken,fresh.ceremonyId,authenticationResponse(response.id,user));
+  assert.equal((await run(c=>requireAccountActionProof(c,actor.token,actor.csrfToken))).accountId,accountId);
+  await assert.rejects(run(c=>requireAccountActionProof(c,other.token,other.csrfToken)));
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'2');
+  await expectPasskeyInvalid(store.reprove(actor.token,actor.csrfToken,fresh.ceremonyId,authenticationResponse(response.id,user)));
+});
+
+test('a security change while browser registration verifies cannot publish the earlier pending passkey',async()=>{
+ const actor=await signIn(),first=await store.registrationOptions(actor.token,actor.csrfToken);
+ const saved=await store.verifyRegistration(actor.token,actor.csrfToken,first.ceremonyId,registrationResponse());await openProofWindow(pool,actor.token);
+ const pending=await store.registrationOptions(actor.token,actor.csrfToken),response=registrationResponse();
+ let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{entered=r;}),wait=new Promise<void>(r=>{release=r;});
+ const verify=adapter.verifyRegistration.bind(adapter);adapter.verifyRegistration=async input=>{entered();await wait;return verify(input);};
+ const work=expectPasskeyInvalid(store.verifyRegistration(actor.token,actor.csrfToken,pending.ceremonyId,response));
+ try{await started;assert.equal(await store.remove(actor.token,actor.csrfToken,saved.id),true);release();await work;
+  assert.deepEqual(await store.list(actor.token),[]);assert.equal((await run(c=>resolveSession(c,actor.token))).accountId,accountId);
+ }finally{release();await work.catch(()=>{});}
 });

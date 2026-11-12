@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -14,7 +15,6 @@ const bundle = await build({stdin: {contents: `
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const retained = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-10-24T12:00:00Z', lastUsedAt: null};
 const removed = {id: '22345678-1234-4234-8234-123456789abc', createdAt: '2026-10-25T12:00:00Z', lastUsedAt: null};
-const password = '  Current account password  ';
 const dates = {en: ['Oct 24, 2026', 'Oct 25, 2026'], es: ['24 oct 2026', '25 oct 2026']};
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -29,6 +29,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       let reads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
         if (path === '/installations') return route.fulfill({json: {installations: []}});
@@ -51,13 +52,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await rows.count(), 2);
       assert.equal(await rows.nth(0).getByText(dates[locale][0]!, {exact: false}).count(), 1);
       assert.equal(await rows.nth(1).getByText(dates[locale][1]!, {exact: false}).count(), 1);
-      await field.fill(password);
+
       await rows.nth(1).getByRole('button', {name: c.passkeyRemove, exact: true}).click();
       await t.waitFor(() => {assert.equal(reads, 2);}, {timeout: 4000});
-      assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id: removed.id, password}}], 'the second row must remove its own key');
+      assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id: removed.id}}], 'the second row must remove its own key');
       assert.equal(await rows.count(), 2, 'a lost reply cannot establish which key remains');
       assert.equal(await section.getByText(c.passkeyRemoved, {exact: true}).count(), 0, 'confirmation waits for the follow-up list');
-      assert.equal(await field.isDisabled(), true);
+      assert.equal(await field.count(),0);
       for (const button of await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).all()) assert.equal(await button.isDisabled(), true);
       release();
       await section.getByRole('status').getByText(c.passkeyRemoved, {exact: true}).waitFor();
@@ -67,10 +68,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await section.getByText(c.passkeyNone, {exact: true}).count(), 0);
       assert.equal(await section.getByRole('alert').count(), 0);
       assert.equal(await section.getByRole('button', {name: c.retry, exact: true}).count(), 0);
-      assert.equal(await field.inputValue(), '');
+      assert.equal(await field.count(),0);
       assert.equal(await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).isEnabled(), true);
       assert.equal(reads, 2);
-      assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id: removed.id, password}}], 'reconciliation reads without repeating the removal');
+      assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id: removed.id}}], 'reconciliation reads without repeating the removal');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.PASSKEY_RECONCILIATION_RECEIPT_DIR) {
         await mkdir(process.env.PASSKEY_RECONCILIATION_RECEIPT_DIR, {recursive: true});

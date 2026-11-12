@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
@@ -21,19 +22,15 @@ test(`passkey recovery ${locale} ${colorScheme} ${width}`,async()=>{
   await f.db.pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[id,randomBytes(32)]);
   await f.db.pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
    VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[randomUUID(),id,Buffer.from([1,2,3])]);
-  await login();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();
-  await page.locator('input[name=passkeyPassword]').fill('wrong synthetic password');
-  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();
-  const error=page.locator('section.passkeys [role=alert]');await error.getByText(c.passkeyPasswordInvalid,{exact:true}).waitFor();
-  assert.equal(await error.evaluate(element=>element===document.activeElement),true);await look('refused');
-  await page.locator('input[name=passkeyPassword]').fill(password);await look('account');
-  assert.equal(await page.locator('input[name=passkeyPassword]').inputValue(),password,'corrected password survives the account redraw');
-  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
+  await login();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+
+  await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();
+await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
   const codes=await page.locator('.factor-codes code').allTextContents();assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);await look('codes');
   await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await login();
   await page.getByLabel(c.factorProofType,{exact:true}).selectOption('recovery');await page.getByRole('heading',{name:c.factorRecovery,exact:true}).waitFor();await look('challenge');
   assert.equal(await page.getByRole('checkbox',{name:c.rememberBrowser}).count(),0);
-  await page.locator('input[name=factorProof]').fill(codes[0]!);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
+  await page.locator('input[name=factorProof]').fill(codes[0]!);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
   assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),true);
   assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_browser'),false);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_factor_recovery_codes WHERE consumed_at IS NULL')).rows[0].count,'9');

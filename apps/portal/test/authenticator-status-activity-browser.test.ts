@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -34,6 +35,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const writes: string[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (request.method() === 'POST') writes.push(path);
         if (path === '/session/activity') { await activityReply; return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}}); }
@@ -98,6 +100,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup'] as const) 
       const c = translations.en; let reads = 0, sessionReads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
         if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
         if (path === '/session/activity') return route.fulfill({json: {accountId: scenario === 'new account' ? 'other' : 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}});

@@ -1,3 +1,4 @@
+import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {billingScreen} from './billing-screen.ts';
 import {rememberBrowserChoice,authenticatorAccountScreen,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
@@ -30,7 +31,7 @@ export function screen(app: PortalApp) {
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
-  if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
+  if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
   else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);

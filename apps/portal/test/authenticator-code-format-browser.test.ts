@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -14,7 +15,7 @@ const token='A'.repeat(43),expiresAt='2030-01-01T00:00:00.000Z',password=' curre
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
  test(`${locale} ${theme} ${width}: a malformed code is explained beside the field, not as an outage`,async t=>{
   const browser=await chromium.launch({headless:true});
-  try{for(const flow of ['login','remove','activate'] as const)await t.test(flow,async()=>{
+  try{for(const flow of (['login','activate'] as ('login'|'remove'|'activate')[]))await t.test(flow,async()=>{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
    const c=translations[locale],login=flow==='login',path=login?'/login':'/account';
    const message=flow==='activate'?(locale==='en'?'Enter the 6-digit code from your new app.':'Introduce el código de 6 dígitos de tu nueva aplicación.'):(locale==='en'?'Enter the 6-digit code from your app, or a recovery code.':'Introduce el código de 6 dígitos de tu aplicación o un código de recuperación.');
@@ -22,6 +23,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    try{
     await page.route('https://portal.test'+path,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
      const request=route.request(),endpoint=new URL(request.url()).pathname.replace('/api/account','');
      if(endpoint==='/session'||endpoint==='/session/activity')return login?route.fulfill({status:401,json:{error:'credentials_invalid'}}):route.fulfill({json:{accountId:'owner',expiresAt}});
      if(endpoint==='/authenticator')return route.fulfill({json:{active:flow!=='activate',version:flow==='activate'?0:1,recoveryCodesRemaining:flow==='activate'?0:10,available:true}});
@@ -33,11 +35,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     });
     await page.goto('https://portal.test'+path);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
     if(login){await page.locator('input[name=email]').fill('owner@example.test');await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.locator('input[name=factorProof]').waitFor();}
-    else{await page.locator('input[name=factorPassword]').waitFor();if(flow==='activate'){await page.locator('input[name=factorPassword]').fill(password);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();await page.locator('input[name=factorConfirmation]').waitFor();}}
+    else{await page.locator('.authenticator h3').waitFor();if(flow==='activate'){await page.getByRole('button',{name:c.factorEnable,exact:true}).click();await page.locator('input[name=factorConfirmation]').waitFor();}}
     const field=page.locator(`wt-input[name=${flow==='activate'?'factorConfirmation':'factorProof'}]`),input=field.locator('input');
     const submit=page.getByRole('button',{name:login?c.factorVerify:flow==='remove'?c.factorRemove:c.factorActivate,exact:true});
     const feedback=login?page.locator('wt-form-error-summary'):page.locator('.authenticator > p[role=alert]');
-    async function enter(code:string){if(!login)await page.locator('input[name=factorPassword]').fill(password);await input.fill(code);}
+    async function enter(code:string){await input.fill(code);}
     writes.length=0;
     for(const code of ['12345','1234567','12345a']){
      await enter(code);await submit.click();assert.deepEqual(writes,[],'malformed input never reaches the server');
@@ -52,7 +54,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await enter(' \t ');await submit.click();await feedback.getByText(c.factorCodeRequired,{exact:true}).waitFor();assert.deepEqual(writes,[]);
     await enter('123 456');await submit.click();await feedback.getByText(login?c.factorUnavailable:c.factorCheckSettings,{exact:true}).waitFor();assert.equal(await field.getByText(message,{exact:true}).count(),0);assert.equal(await input.getAttribute('aria-invalid'),'false');
     const endpoint=login?'/login/factor':`/authenticator/${flow}`;
-    assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:flow==='remove'?{password,proof:{kind:'totp',code:'123456'}}:{password,pendingToken:token,code:'123456'}}]);
+    assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:flow==='remove'?{password,proof:{kind:'totp',code:'123456'}}:{pendingToken:token,code:'123456'}}]);
     responseStatus=403;await enter('654321');await submit.click();await feedback.getByText(c.credentials,{exact:true}).waitFor();assert.equal(await input.getAttribute('aria-invalid'),'false');assert.equal(await field.getByText(message,{exact:true}).count(),0);
    }finally{await page.close();}
   });}finally{await browser.close();}

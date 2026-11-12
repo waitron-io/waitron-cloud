@@ -1,3 +1,5 @@
+import {AccountActionProofStore,AccountActionProofError} from '@waitron-cloud/registration';
+import {accountActionProofResponse} from './account-action-proof.ts';
 import {billingMethodsResponse,validateBillingMethodsOptions,type BillingMethodsOptions} from './billing-methods.ts';
 import {billingAccountPaths,billingAccountResponse} from './billing-account.ts';
 import {validateBillingAccountOptions,type BillingAccountOptions} from './config.ts';
@@ -59,6 +61,7 @@ function protect(c: Context) {
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
+  if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
     if (error.code === 'csrf_invalid') return new AccountHttpError(403, 'forbidden');
@@ -93,6 +96,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const {pool, outbox} = options;
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
+  const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);
   const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy);
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
@@ -120,11 +124,11 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (!decision.allowed) throw new AccountHttpError(429, 'rate_limited', decision.retryAfterSeconds);
   };
   app.use('*', async (c, next) => {
-    const read = c.req.method === 'GET' && ['/api/account/session', '/api/account/passkeys', '/api/account/authenticator'].includes(c.req.path);
+    const read = c.req.method === 'GET' && ['/api/account/action-proof','/api/account/session', '/api/account/passkeys', '/api/account/authenticator'].includes(c.req.path);
     const write = c.req.method === 'POST' && ['/api/account/session/activity', '/api/account/logout',
       '/api/account/passkeys/registration/options', '/api/account/passkeys/registration/verify',
       '/api/account/authenticator/begin', '/api/account/authenticator/activate', '/api/account/authenticator/cancel'].includes(c.req.path);
-    return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write}, next);
+    return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write || c.req.path.startsWith('/api/account/action-proof/')}, next);
   });
   app.all('*', async c => {
     protect(c);
@@ -151,6 +155,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
+    if(c.req.path==='/api/account/action-proof'||c.req.path.startsWith('/api/account/action-proof/'))return accountActionProofResponse(c,{pool,store:actionProof,passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/login/recovery'||c.req.path==='/api/account/login/factor'||c.req.path==='/api/account/login/email'||c.req.path==='/api/account/authenticator'||c.req.path.startsWith('/api/account/authenticator/'))
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});

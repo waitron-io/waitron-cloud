@@ -15,6 +15,9 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
   if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
   if(path==='/billing/read'||path==='/billing/start-trial')return status===200&&validBillingView(value);
+  if(path==='/action-proof')return status===200&&!!value&&typeof value==='object'&&Array.isArray((value as any).methods)&&(value as any).methods.length>0&&(value as any).methods.every((m:unknown)=>['email','app','passkey','recovery'].includes(String(m)))&&((value as any).freshUntil===null||typeof (value as any).freshUntil==='string'&&Number.isFinite(Date.parse((value as any).freshUntil)));
+  if(path==='/action-proof/email')return status===200&&!!value&&typeof value==='object'&&typeof (value as any).challengeToken==='string'&&/^[A-Za-z0-9_-]{43}$/.test((value as any).challengeToken)&&typeof (value as any).expiresAt==='string'&&Number.isFinite(Date.parse((value as any).expiresAt));
+  if(path==='/action-proof/passkey/options')return status===200&&validAuthenticationOptions(value);
   if(path==='/login')return validPasswordLogin(value,status);
   if((path==='/login/factor'||path==='/login/email'||path==='/login/recovery'))return validPasswordLogin(value,status)&&status===200;
   if(path==='/authenticator')return status===200&&validFactorStatus(value);
@@ -51,7 +54,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if (path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
@@ -59,14 +62,14 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;
-    if (response.ok && (path === '/logout' || path === '/sessions/revoke' || path === '/passkeys/remove' || path === '/authenticator/cancel') && response.status === 204) return {ok: true, value: undefined as T};
+    if (response.ok && (path==='/action-proof/email/verify'||path==='/action-proof/factor'||path==='/action-proof/passkey/verify'||path === '/logout' || path === '/sessions/revoke' || path === '/passkeys/remove' || path === '/authenticator/cancel') && response.status === 204) return {ok: true, value: undefined as T};
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
-    const codes = ['enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active','password_too_long');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');

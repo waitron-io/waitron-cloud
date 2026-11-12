@@ -58,8 +58,8 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
       const credentials=await (recovery?options.login.completeRecoveryCheck(challengeToken,parsed as string):email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
     }
-    exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['password','pendingToken','code']:['password'],action==='/cancel'?[]:['proof']);
-    const parsedPassword=action==='/cancel'?undefined:password(body.password);
+    exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['pendingToken','code']:[],action==='/cancel'?[]:['password','proof']);
+    const parsedPassword=Object.hasOwn(body,'password')?password(body.password):'';
     const parsedProof=Object.hasOwn(body,'proof')?proof(body.proof):undefined;
     const pendingToken=['/activate','/cancel'].includes(action)?token(body.pendingToken):undefined;
     const confirmation=action==='/activate'?code(body.code):undefined;

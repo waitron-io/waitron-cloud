@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {createHmac, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -36,16 +37,16 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
     try {
       await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [owner.id]);
       await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())', [owner.id, owner.email, await hashSecret(password)]);
-      await page.goto(`${f.origin}/login`); await login(); await completeBrowserEmail(f,page,owner.email); await page.getByText(c.accountIntro).waitFor();
-      await page.locator('input[name=passkeyPassword]').fill(password); await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click(); await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
-      await page.locator('input[name=factorPassword]').fill(password); await page.getByRole('button', {name: c.factorEnable, exact: true}).click();
+      await page.goto(`${f.origin}/login`); await login(); await completeBrowserEmail(f,page,owner.email); await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+       await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click(); await page.getByText(c.passkeyAdded, {exact: true}).waitFor();
+       await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.factorEnable, exact: true}).click();
       const secret = await page.locator('.factor-secret').textContent(); assert.ok(secret);
-      await page.locator('input[name=factorPassword]').fill(password); await page.locator('input[name=factorConfirmation]').fill(totp(secret));
+       await page.locator('input[name=factorConfirmation]').fill(totp(secret));
       await page.getByRole('button', {name: c.factorActivate, exact: true}).click(); await page.locator('.factor-codes').waitFor();
       const codes = await page.locator('.factor-codes code').allTextContents(); assert.equal(codes.length, 10);
       await page.getByRole('button', {name: c.factorCodesSaved, exact: true}).click(); await login(); await page.getByText(c.factorLoginHelp, {exact: true}).waitFor();
       await page.getByLabel(c.factorProofType).selectOption('recovery'); await page.locator('input[name=factorProof]').fill(codes[0]!);
-      await page.getByRole('button', {name: c.factorVerify, exact: true}).click(); await page.getByText(c.accountIntro).waitFor(); await page.getByText(c.factorOn, {exact: true}).waitFor();
+      await page.getByRole('button', {name: c.factorVerify, exact: true}).click(); await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page); await page.getByText(c.factorOn, {exact: true}).waitFor();
       const lost = mode === 'passkey after lost regeneration'; let reads = 0;
       await page.route('**/api/account/session', async route => {
         reads++;
@@ -54,7 +55,7 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
         sessionEntered.resolve(); await sessionRelease.promise; await route.fulfill({response});
       });
       if (lost) f.loseAccountReply('/authenticator/regenerate');
-      await page.locator('input[name=factorPassword]').fill(password); await page.getByLabel(c.factorProofType).selectOption('recovery'); await page.locator('input[name=factorProof]').fill(codes[1]!);
+
       await page.getByRole('button', {name: lost ? c.factorRegenerate : c.factorRemove, exact: true}).click();
       await page.getByText(lost ? c.factorChangeUncertain : c.factorRemoved, {exact: true}).waitFor(); await sessionEntered.promise;
       assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL', [owner.id])).rows[0].count, '0');
@@ -76,7 +77,7 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
         const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
         await page.locator('input[name=factorProof]').fill(code);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
       }
-      await page.getByText(c.accountIntro).waitFor();
+      await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
       assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL', [owner.id])).rows[0].count, '1');
       assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL', [owner.id])).rows[0].count, lost ? '1' : '0');
     } finally {
