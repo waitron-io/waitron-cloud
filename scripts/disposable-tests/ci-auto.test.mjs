@@ -1464,12 +1464,13 @@ test('a full pool still cancels an obsolete run before returning',async t=>{
  await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
  assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
 });
-test('old empty queued runs are cancelled once, then omitted across controller restarts',async t=>{
- const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[],logs=[];
+for(const source of ['scheduled','fork'])test(`old empty queued ${source} runs are cancelled once, then omitted across controller restarts`,async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[],logs=[];let jobReads=0;
  const ghost={...f.run,id:790,event:'schedule',workflow_id:999,path:'.github/workflows/server-health.yml',status:'queued',pull_requests:[],created_at:new Date(Date.now()-7200000).toISOString()};
+ if(source==='fork')Object.assign(ghost,{event:'pull_request',head_repository:{id:999}});
  f.api.get=async(path,options)=>{
   if(path.includes('/runs?')&&path.includes('status=queued'))return {total_count:1,workflow_runs:[ghost]};
-  if(path.includes('/runs/790/attempts/'))return {total_count:0,jobs:[]};
+  if(path.includes('/runs/790/attempts/')){jobReads++;return {total_count:0,jobs:[]};}
   return get(path,options);
  };
  f.api.post=async path=>{posts.push(path);throw Object.assign(new Error('GitHub refused (409)'),{status:409});};
@@ -1482,6 +1483,7 @@ test('old empty queued runs are cancelled once, then omitted across controller r
  }}finally{console.log=log;}
  assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/790/cancel','/repos/fixture/waitron/actions/runs/790/force-cancel']);
  assert.equal(logs.filter(row=>row.event==='automatic-ci-empty-run-ignored'&&row.runId===790).length,1);
+ assert.equal(jobReads,1,'A remembered attempt must not be read again');
  ghost.run_attempt=2;
  await controller.readAutomaticPass({api:f.api,policy,leases:new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6})});
  assert.equal(posts.length,4,'A new attempt must not inherit the ignored attempt');
@@ -1497,16 +1499,43 @@ test('automatic pickup cleans empty scheduled runs even with a full pool',async 
  await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),runWorker:async()=>assert.fail('Pool is full')});
  assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/cancel','/repos/fixture/waitron/actions/runs/789/force-cancel']);
 });
-for(const state of ['young','running','has-jobs','foreign','invalid-time'])test(`empty-run cleanup preserves ${state} runs`,async t=>{
+for(const state of ['young','fresh-retry','running','has-jobs','foreign','invalid-time'])test(`empty-run cleanup preserves ${state} runs`,async t=>{
  const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[];
  f.run.status=state==='running'?'in_progress':'queued';
  f.run.created_at=state==='invalid-time'?'invalid':new Date(Date.now()-(state==='young'?3599000:7200000)).toISOString();
  if(state==='foreign')f.run.repository={id:999};
+ if(state==='fresh-retry')Object.assign(f.run,{run_attempt:2,run_started_at:new Date().toISOString()});
  f.api.get=async(path,options)=>path.includes('/jobs?')&&state!=='has-jobs'?{total_count:0,jobs:[]}:get(path,options);
  f.api.post=async path=>posts.push(path);
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
  assert.deepEqual([...(await controller.readAutomaticPass({api:f.api,policy,leases})).runs.keys()],[789]);
  assert.deepEqual(posts,[]);
+});
+test('old queued work shares its job inventory with later capacity reads',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;let reads=0;
+ Object.assign(f.run,{status:'queued',created_at:new Date(Date.now()-7200000).toISOString()});
+ f.api.get=async(path,options)=>{if(path.includes('/jobs?'))reads++;return get(path,options);};
+ const pass=await controller.readAutomaticPass({api:f.api,policy,leases:new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6})});
+ await controller.overflowInventory({api:pass.api,policy,runs:pass.runs});
+ assert.equal(reads,1);
+});
+test('known ignored attempts do not consume the repository run allowance',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
+ const ghosts=Array.from({length:11},(_,i)=>({...f.run,id:1000+i,status:'queued',created_at:new Date(Date.now()-7200000).toISOString()}));
+ for(const run of ghosts)leases.ignoreEmptyRun(run.id+':1');
+ const runs=[...ghosts,...Array.from({length:90},(_,i)=>({...f.run,id:2000+i,status:'queued'}))];
+ const pages=[];
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?')){
+   if(path.includes('status=in_progress'))return {total_count:0,workflow_runs:[]};
+   const page=Number(new URL('https://fixture.test'+path).searchParams.get('page')??1);pages.push(page);
+   return {total_count:101,workflow_runs:runs.slice((page-1)*100,page*100)};
+  }
+  return get(path,options);
+ };
+ const pass=await controller.readAutomaticPass({api:f.api,policy,leases});
+ assert.equal(pass.runs.size,90);assert.deepEqual(pages,[1,2]);
 });
 
 test('one automatic pass shares run, PR and job observations across its readers',async()=>{

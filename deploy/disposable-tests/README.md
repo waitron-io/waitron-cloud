@@ -459,11 +459,13 @@ Automatic pickup trusts `ci.yml` revisions from the configured repository after 
 
 If a worker ends with the busy-runner refusal after verified guest removal, its existing turn records the refusal time. Pickup may admit that same job once more after 60 seconds, provided GitHub still reports it queued and unassigned and its previous runner has been removed. Reservation records the retry before starting another guest; another failure cannot grant a third guest. A rate-limited GET before registration can also grant that one retry after the API client’s recorded retry time, with the same guest and runner absence checks. A registration request that was sent never grants a quota retry. Other completed turns remain retired. Older turns with no recorded failure remain retired too; their branch owner must recover the workflow. This job retry does not rerun or move the workflow.
 
-Queued runs with no jobs after an hour get one cancel request and one force-cancel
+Queued attempts with no jobs after an hour get one cancel request and one force-cancel
 request. The controller remembers each run/attempt in its existing ledger, logs the
 result once and omits it from later automatic passes, including capacity and
-stall inputs. This also covers scheduled and main workflows. A later attempt is
-checked separately. This does not delete a run from GitHub.
+stall inputs. This covers scheduled, main and fork-PR workflows in the repository.
+Age uses the attempt's start, falling back to run creation. Known ignored attempts
+do not consume the existing 100-run allowance; listings can read their extra pages.
+A later attempt is checked separately. This does not delete a run from GitHub.
 
 The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable slots, occupied/manual/preparing slots and distinct server/hosted queues. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a full pool retains the existing ledger-only health behavior. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
 

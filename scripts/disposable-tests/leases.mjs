@@ -273,8 +273,7 @@ export class LocalLeases {
     assert.match(key,/^[1-9][0-9]*:[1-9][0-9]*$/);
     return this.transaction(state=>{
       state.ignoredEmptyRuns??=[];
-      if(state.ignoredEmptyRuns.includes(key))return false;
-      state.ignoredEmptyRuns.push(key);return true;
+      state.ignoredEmptyRuns.push(key);
     });
   }
   inspect() { return this.transaction(state => {
