@@ -3,6 +3,7 @@ import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import {build} from 'esbuild';
 import {chromium, type Page} from 'playwright';
+import axe from 'axe-core';
 import {translations} from '../src/locale.ts';
 
 const requestId = '10000000-0000-4000-8000-000000000001';
@@ -86,6 +87,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.goBack();await page.locator('p').filter({hasText:c.pairEnrollment}).waitFor();
       api.proof(null);await approve.click();
       await page.getByRole('heading',{name:c.actionProofTitle}).waitFor();
+      await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);
       assert.equal(api.approvals(),0,'fresh proof precedes Cloud approval');
       if(process.env.PAIRING_CHOICE_RECEIPT_DIR)await page.screenshot({path:`${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}-proof.png`,fullPage:true});
       await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
