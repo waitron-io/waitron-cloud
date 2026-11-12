@@ -167,3 +167,11 @@ test('authorised app setup can complete after its proof window expires',async()=
  const mac=createHmac('sha1',key).update(counter).digest(),offset=mac[19]!&15,code=((mac.readUInt32BE(offset)&0x7fffffff)%1000000).toString().padStart(6,'0');
  const changed=await factors.activate({...actor},pending.pendingToken,code);assert.equal(changed.active,true);assert.equal(changed.recoveryCodes?.length,10);
 });
+
+
+test('the schema-upgrade fixture can enrol an app through the current release authority gate',async()=>{
+ const {enrolFactor}=await import(new URL('../../../scripts/schema-upgrade-fixture.mjs',import.meta.url).href);
+ const root=new URL('../../../',import.meta.url).pathname;
+ const result=await enrolFactor(root,pool,{owners:[{accountId,email,password:'Synthetic owner password',credentials:actor}]},{activeKeyId:'test',keys:{test:'07'.repeat(32)}});
+ assert.equal(result.codes.length,10);assert.equal((await pool.query('SELECT count(*) FROM cloud_authenticator_factors WHERE secret_envelope IS NOT NULL')).rows[0].count,'1');
+});

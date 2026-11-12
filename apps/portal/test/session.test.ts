@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { startPortalFixture } from './fixtures.ts';
@@ -10,6 +11,7 @@ test('passive reads do not renew; real activity is throttled and late activity c
     let entered!:()=>void; const activityEntered=new Promise<void>(resolve=>{entered=resolve;});
     let reads=0, activities=0; let release: (() => void) | undefined;
     await page.route('**/api/account/**', async route => {
+      const proof=mockActionProof(route);if(proof)return proof;
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/authenticator')) { await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}}); return; }
       if (path.endsWith('/translation-consent')) { await route.fulfill({json:{consents:[]}}); return; }
@@ -49,6 +51,7 @@ test('expiry and visibility rechecks do not renew, and 401 fences a delayed acti
     const page=await f.browser.newPage();page.setDefaultTimeout(3000);await page.clock.install({time:new Date('2030-01-01T12:00:00Z')});
     let reads=0,activity=0;let release:(()=>void)|undefined;
     await page.route('**/api/account/**',async route=>{
+      const proof=mockActionProof(route);if(proof)return proof;
       if(route.request().url().endsWith('/authenticator')) {await route.fulfill({json:{active:false,version:0,recoveryCodesRemaining:0,available:false}});return;}
       if(route.request().url().endsWith('/translation-consent')) {await route.fulfill({json:{consents:[]}});return;}
       if(route.request().url().endsWith('/alerts')) {await route.fulfill({json:{enabled:false,locale:'en'}});return;}

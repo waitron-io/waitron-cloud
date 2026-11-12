@@ -13,7 +13,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const token = 'A'.repeat(43), expiresAt = '2099-01-01T00:00:00.000Z', password = 'current password';
-type Flow = 'login'|'remove'|'activate';
+type Flow = 'login'|'remove'|'activate'|'proof';
 let browser: Browser;
 before(async () => {browser = await chromium.launch({headless: true});});
 after(async () => {await browser?.close();});
@@ -26,14 +26,15 @@ async function open(flow: Flow, locale: Locale, theme: 'light'|'dark', width: nu
  page.on('pageerror', error => errors.push(error.message));
  await page.route('https://portal.test'+path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
  await page.route('**/api/account/**', route => {
-        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
   const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
+  if(flow==='proof'&&endpoint==='/action-proof')return route.fulfill({json:{methods:['app','recovery'],freshUntil:null}});
+  const actionProof=mockActionProof(route);if(actionProof)return actionProof;
   if (endpoint === '/session' || endpoint === '/session/activity') return login ? route.fulfill({status: 401, json: {error: 'credentials_invalid'}}) : route.fulfill({json: {accountId: 'owner', expiresAt}});
   if (endpoint === '/authenticator') return route.fulfill({json: {active: flow !== 'activate', version: flow === 'activate' ? 0 : 1, recoveryCodesRemaining: flow === 'activate' ? 0 : 10, available: true}});
   if (request.method() === 'POST') writes.push({path: endpoint, body: request.postDataJSON()});
   if (endpoint === '/login') return route.fulfill({status: 202, json: {factorRequired: true, challengeToken: token, expiresAt}});
   if (endpoint === '/authenticator/begin' && flow === 'activate') return route.fulfill({json: {pendingToken: token, secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP', expiresAt}});
-  if (endpoint === '/login/factor' || endpoint.startsWith('/authenticator/')) return status === 0 ? route.abort('connectionreset') : route.fulfill({status, headers: status === 429 ? {'Retry-After': '60'} : {}, json: {error: status === 400 ? 'invalid_input' : status === 429 ? 'rate_limited' : status === 403 ? 'credentials_invalid' : 'temporarily_unavailable'}});
+  if (endpoint === '/action-proof/factor' || endpoint === '/login/factor' || endpoint.startsWith('/authenticator/')) return status === 0 ? route.abort('connectionreset') : route.fulfill({status, headers: status === 429 ? {'Retry-After': '60'} : {}, json: {error: status === 400 ? 'invalid_input' : status === 429 ? 'rate_limited' : status === 403 ? 'credentials_invalid' : 'temporarily_unavailable'}});
   return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
  });
  await page.goto('https://portal.test'+path);
@@ -49,9 +50,9 @@ async function open(flow: Flow, locale: Locale, theme: 'light'|'dark', width: nu
   }
  }
  writes.length = 0;
- const field = page.locator(`wt-input[name=${flow === 'activate' ? 'factorConfirmation' : 'factorProof'}]`), input = field.locator('input');
- const submit = page.getByRole('button', {name: login ? c.factorVerify : flow === 'remove' ? c.factorRemove : c.factorActivate, exact: true});
- const feedback = login ? page.locator('wt-form-error-summary') : page.locator('.authenticator > p[role=alert]');
+ const field = page.locator(`wt-input[name=${flow === 'proof'?'actionProofCode':flow === 'activate' ? 'factorConfirmation' : 'factorProof'}]`), input = field.locator('input');
+ const submit = page.getByRole('button', {name: flow==='proof'?c.factorTotp:login ? c.factorVerify : flow === 'remove' ? c.factorRemove : c.factorActivate, exact: true});
+ const feedback = flow==='proof'?page.locator('.action-proof > p[role=alert]'):login ? page.locator('wt-form-error-summary') : page.locator('.authenticator > p[role=alert]');
  const message = flow === 'activate' ? c.factorConfirmationInvalid : c.factorCodeInvalid;
  async function enter(code: string) {await input.fill(code);}
  return {page, c, field, input, submit, feedback, message, writes, errors, enter};
@@ -103,12 +104,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
 // Clearing every error on input would hide these actual server responses and retry waits.
 for (const locale of ['en', 'es'] as const) for (const status of [0, 400, 403, 429, 503] as const) {
  const uncertain = status === 0 || status === 503;
- for (const flow of uncertain ? ['activate'] as const : (['login','activate'] as ('login'|'remove'|'activate')[])) test(`${locale} ${flow} ${status}: authenticator code edits preserve server feedback`, async () => {
+ for (const flow of uncertain ? ['proof'] as const : (['login','activate'] as ('login'|'remove'|'activate')[])) test(`${locale} ${flow} ${status}: authenticator code edits preserve server feedback`, async () => {
   const {page, c, input, submit, feedback, writes, enter} = await open(flow, locale, 'light', 390, status);
   try {
    await enter('123456');
-   await (uncertain ? page.getByRole('button', {name: c.factorReplace, exact: true}) : submit).click();
-   const message = uncertain ? c.factorChangeUncertain : status === 400 ? (flow === 'login' ? c.factorUnavailable : c.factorCheckSettings) : status === 403 ? c.credentials : c.limited;
+   await submit.click();
+   const message = uncertain ? c.actionProofUnavailable : status === 400 ? (flow === 'login' ? c.factorUnavailable : c.factorCheckSettings) : status === 403 ? c.credentials : c.limited;
    await feedback.getByText(message, {exact: true}).waitFor();
    await input.fill('654321');
    assert.equal(await feedback.getByText(message, {exact: true}).count(), 1);

@@ -1,3 +1,4 @@
+import {addVirtualAuthenticator} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -9,7 +10,7 @@ const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8')
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: Remove requires the shared window and retains refusal and cooldown feedback`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
-  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}}),c=translations[locale];page.setDefaultTimeout(4000);
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}}),c=translations[locale];page.setDefaultTimeout(4000);await addVirtualAuthenticator(page.context(),page);
   const writes:{path:string;body:unknown}[]=[];let fresh=false,limited=false;
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{

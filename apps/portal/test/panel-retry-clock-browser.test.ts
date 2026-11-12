@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -32,6 +33,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const unexpected: string[] = [], pageErrors: string[] = [];
       page.on('pageerror', error => pageErrors.push(error.message));
       await page.route('https://portal.test/**', route => {
+      const proof=mockActionProof(route);if(proof)return proof;
         const path = new URL(route.request().url()).pathname;
         if (!path.startsWith('/api/')) return route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
         const target = panel === 'installations' ? '/installations' : panel === 'diagnostics' ? '/diagnostics/read'

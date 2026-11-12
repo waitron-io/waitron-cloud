@@ -3,6 +3,7 @@ import {createHash,createHmac,generateKeyPairSync,randomUUID,randomBytes} from '
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
 import {constants} from 'node:os';
+import {existsSync} from 'node:fs';
 export const source=(root,path)=>import(pathToFileURL(join(root,path)).href);
 function canonical(value){
  if(Array.isArray(value))return value.map(canonical);
@@ -117,7 +118,13 @@ export async function factorState(pool){
 export async function enrolFactor(root,pool,state,keys){
  const {AuthenticatorFactorStore}=await source(root,'packages/registration/src/authenticator-factor.ts');
  const owner=state.owners[0],store=new AuthenticatorFactorStore(pool,keys,{pendingLifetimeMs:300000,enrolmentAttempts:10});
- const authority={...owner.credentials,password:owner.password},pending=await store.begin(authority);
+ // One fixture runs pinned password-authority releases and releases with the shared session window.
+ const authority={...owner.credentials,password:owner.password};
+ if(existsSync(join(root,'packages/registration/src/account-action-proof.ts'))){
+  const {openProofWindow}=await source(root,'packages/registration/test/fixtures/action-proof.ts');
+  await openProofWindow(pool,authority.token);
+ }
+ const pending=await store.begin(authority);
  const changed=await store.activate(authority,pending.pendingToken,factorCode(pending.secret));
  assert.equal(changed.active,true);assert.equal(changed.recoveryCodes.length,10);
  assert.equal((await pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[owner.accountId])).rows[0].count,'0');

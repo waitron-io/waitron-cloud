@@ -56,11 +56,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const button = section.getByRole('button', {name: c.passkeyAdd, exact: true});
       for (let attempt = 1; attempt <= 2; attempt++) {
         await button.click();
+        await t.waitFor(()=>assert.equal(calls.filter(path => path.endsWith('/passkeys/registration/options')).length, attempt),{timeout:4000});
         await section.getByRole('status').filter({hasText: c.passkeyCancelled}).waitFor();
         assert.equal(await section.getByText(c.passkeyCancelled, {exact: true}).count(), 1);
         assert.equal(await section.getByRole('alert').count(), 0);
         assert.equal(await button.isEnabled(), true);
-        await t.waitFor(()=>assert.equal(calls.filter(path => path.endsWith('/passkeys/registration/options')).length, attempt),{timeout:4000});
         assert.equal(calls.some(path => path.endsWith('/passkeys/registration/verify')), false);
       }
       assert.equal(new URL(page.url()).pathname, '/account');
