@@ -470,10 +470,12 @@ process tests exercise the fixed permission and resource policy with real childr
 database suite covers object-size refusal, while the two-venue runner exercises the loader
 policy around Waitron's real restore hooks.
 
-The process-only `createWaitronVerifier` adapter remains available to local development
-proofs. Its heap and per-file limits do not bound native memory or total scratch. The
-backup worker CLI now requires `CLOUD_VERIFIER_IMAGE` and `CLOUD_VERIFIER_OWNER` and runs
-this adapter inside a disposable container. There is no process-only fallback. Follow
+The legacy process-only `createWaitronVerifier` adapter cannot restore the current durable
+Waitron flow: Node's permission mode refuses directory sync with `ERR_ACCESS_DENIED`.
+The local rehearsal keeps that refusal as a control, then uses the container data verifier
+and an independent native restore. The backup worker CLI requires `CLOUD_VERIFIER_IMAGE`
+and `CLOUD_VERIFIER_OWNER` and uses `createBoundContainerWaitronVerifier` to run the data
+verifier inside a disposable container. There is no process-only fallback. Follow
 [the container setup and executed proof](backup-verifier-containment.md) for total memory,
 scratch, restart cleanup and deployment limits. `WAITRON_CHECKOUT` still selects the
 checkout for development proofs and image builds; the deployed worker uses the image.

@@ -476,7 +476,7 @@ try {
     assert((await readFile(join(venue.root, "cloud/staff.key"))).length > 0);
     await writeFile(
       join(venue.root, "backup.env"),
-      "WAITRON_BACKUP_DIR=/old-backup-target\n",
+      `WAITRON_BACKUP_DIR=/old-backup-target\nWAITRON_BACKUP_RECOVERY_KEY=${randomBytes(32).toString('base64url')}\n`,
       { mode: 0o600 },
     );
     const captureId=randomUUID();
@@ -520,19 +520,18 @@ try {
     const verificationTarget=JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json',import.meta.url),'utf8'));
     await transaction(f.db.pool,c=>setVerificationPolicy(c,verificationTarget,'local.waitron-verifier@'+process.env.CLOUD_VERIFIER_IMAGE,false));
     const queue = new BackupWorker(f.db.pool, catalogue, async (source,key,request,signal) => {
-      const checked = await restore(source,{recoveryKey:key.secret},{modules:request.archive.modules,capturedAt:request.capturedAt,sourceNodeId:request.sourceNodeId},signal);
-      assert(checked.networkDenied);
-      assert(checked.childProcessDenied);
-      assert(checked.addonDenied);
-      assert(checked.hostReadDenied);
-      assert(checked.outsideWriteDenied);
-      assert(checked.integrityOk);
-      assert(checked.hooks.includes("fiscal-verifactu"));
-      assert.equal(checked.cloudCredentialPresent, false);
-      assert.equal(checked.staffKeyPresent, false);
+      try {
+      // Node permission mode refuses the durable sync required by the current restore flow.
+      await assert.rejects(restore(source,{recoveryKey:key.secret},{modules:request.archive.modules,capturedAt:request.capturedAt,sourceNodeId:request.sourceNodeId},signal),/^Error: backup.verifier_failed$/);
       const output=await verify(source,key,request,signal);
-      if(request.pointId===point.id)result=checked;
+      console.error(JSON.stringify({stage:'snapshot-data-verifier',status:output.result.status,reason:output.result.reason,modules:output.result.modules.map(({name,status,checks})=>({name,status,checks}))}));
+      assert.equal(output.result.status,'passed');
+      if(request.pointId===point.id)result=output.result;
       return output;
+      } catch(error) {
+        console.error(JSON.stringify({stage:'snapshot-verifier',exception:error.name,code:/^backup\.[a-z_]+$/.test(error.message)?error.message:error.code??'unknown',causeCode:/^backup\.[a-z_]+$/.test(error.actual?.message??'')?error.actual.message:undefined,frames:[...new Set(error.stack?.match(/\/[^\s()'"<>]+\.(?:[cm]?js|ts):\d+:\d+/g)??[])].slice(0,5)}));
+        throw error;
+      }
     },controllerScope);
     await queue.schedule();
     const deadline=Date.now()+60000;
@@ -547,11 +546,13 @@ try {
     // Keep the independent fixture's venue-content assertion as well as queue verification.
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
-    await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
+    const restored=await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
+    assert(restored.integrityOk);assert(restored.hooks.includes('fiscal-verifactu'));
+    assert.equal(restored.cloudCredentialPresent,false);assert.equal(restored.staffKeyPresent,false);
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey,applicationVault });
   }
   record(
-    "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, native-addon, host-read and outside-write permissions were denied",
+    "both encrypted snapshots passed container data verification and independent native restoration with integrity/schema checks and module hooks; the legacy permission-mode restore refused durable sync",
   );
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {

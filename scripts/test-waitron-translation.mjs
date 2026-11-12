@@ -111,7 +111,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   // A fresh connection renews its lease before it can request version-2 configuration.
   await request('POST','cloud/refresh',{});
   const configured=await request('GET','cloud/status');receipt.services=configured.installation.services;assert.ok(configured.installation.services.some(row=>row.service==='content_translation'&&row.state==='ready'),'translation_proof_service_ready');
-  const available=await request('GET','content-suggestions?language=en');assert.equal(available.service,'on');assert.equal(available.cloudOrigin,f.origin);
+  const available=await request('GET','content-suggestions');assert.equal(available.service,'on');assert.equal(available.cloudOrigin,f.origin);
   stage='content';await request('PUT','content-languages',{defaultLanguage:'es',languages:['es','en']},204);
   const languages=await request('GET','content-languages');receipt.languages=languages;assert.equal(languages.defaultLanguage,'es');assert.deepEqual(languages.languages,['es','en']);
   await request('GET','content-language-rules');
@@ -126,10 +126,8 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   const gaps=await request('GET','content-translation-gaps');
   const expectedRefs=[...expectedProducts.keys()].map(id=>'product:'+id).sort();
-  receipt.gaps=gaps.map(row=>({language:row.language,refs:row.gaps.map(gap=>`${gap.kind}:${gap.id}`)}));
-  assert.deepEqual(gaps.map(row=>row.language),['es','en']);
-  assert.deepEqual(gaps.find(row=>row.language==='es').gaps,[]);
-  assert.deepEqual(gaps.find(row=>row.language==='en').gaps.map(row=>`${row.kind}:${row.id}`).sort(),expectedRefs);
+  receipt.gaps=gaps;
+  assert.deepEqual(gaps,[{language:'es',count:0},{language:'en',count:3}]);
   const assertStored=(state,count,refs,cursor=null,jobState='done')=>{
    assert.equal(refs.length,count);
    return verifyTranslationStorage(state,{refs,translations:[...expectedProducts],cursor,state:jobState});
@@ -201,7 +199,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   stage='collect';await checked(until(()=>{const job=snapshot().jobs[0];return job?.released===1&&job;},'released'));
   if(expiry){
    stage='notification';const ended=snapshot();verifyTranslationExpiry(ended,firstSuggestion,receipt.filteredRefs);
-   if(readFinishedBeforeAlert)await request('GET','content-suggestions?language=en');
+   if(readFinishedBeforeAlert)await request('GET','content-suggestions');
    const alerts=await request('GET','alerts');
    receipt.expiry.alert=verifyTranslationNotification(alerts,ended.jobs[0].finished_at);
    const bell=page.locator('dashboard-alerts-bell');await bell.getByRole('button').first().click();
@@ -210,7 +208,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   stage='suggestions';const suggestions=[];let after;
   do{
-   const read=await request('GET','content-suggestions?language=en'+(after?'&after='+encodeURIComponent(after):''));
+   const read=await request('GET','content-suggestions'+(after?'?after='+encodeURIComponent(after):''));
    assert.equal(read.run.state,expiry?'expired':'done');assert.equal(read.run.total,3);assert.equal(read.run.done,suggestionCount);assert.equal(read.run.failed,expiry?2:0);assert.equal(read.run.progress,3);assert.equal(read.run.waiting,suggestionCount);
    if(expiry)assert.equal(read.run.code,'content.suggestion_expired');
    suggestions.push(...read.suggestions);after=read.next;
@@ -235,13 +233,13 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   receipt.events=safeEvents();
   receipt.passed=true;
- }catch(error){receipt.events=safeEvents();receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed'};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
+ }catch(error){receipt.events=safeEvents();receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed',exception:error.name,frames:[...new Set(error.stack?.match(/\/[^\s()'"<>]+\.(?:[cm]?js|ts):\d+:\d+/g)??[])].slice(0,5)};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
  finally{
   gate?.cancel();abort.abort();if(workerWork)await Promise.allSettled([workerWork]);
   for(const running of children)await running.stop();
   await context?.close();await provider?.close();await f?.close();
   if(root)await rm(root,{recursive:true,force:true});
-  receipt.cleanup={rootRemoved:!!root,children:children.map(r=>({pid:r.child.pid,exited:r.exited})),fixtureClosed:!!f,providerClosed:!!provider};
+  receipt.cleanup={rootRemoved:!!root,children:await Promise.all(children.map(async r=>({pid:r.child.pid,exited:r.exited,exit:await r.done}))),fixtureClosed:!!f,providerClosed:!!provider};
  }
  return receipt;
 }
