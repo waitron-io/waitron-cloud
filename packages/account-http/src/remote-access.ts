@@ -2,7 +2,7 @@ import {Resolver} from 'node:dns/promises';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {transaction,readVenuePlan,readVenuePermissions,type PlanMode} from '@waitron-cloud/registration';
+import {transaction,readVenuePlan,readVenuePermissions,requireConnectionProof,requirePendingConnectionProof,type PlanMode} from '@waitron-cloud/registration';
 import {ForwardObservationStore} from '@waitron-cloud/remote-access/forward-observations';
 import {RemoteAccessStore} from '@waitron-cloud/remote-access/placement';
 import {isUuid,isHostname} from '@waitron-cloud/remote-access/manifest';
@@ -25,14 +25,26 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
  const body=await readAccountBody(c.req.raw,fields),id=body.installationId!;
  if(!isUuid(id)||(action!=='status'&&(!['staff','public'].includes(body.kind!)||!isHostname(body.hostname)))||(action==='apply'&&(!/^\d+$/.test(body.expectedRevision!)||!Number.isSafeInteger(Number(body.expectedRevision)))))throw new AccountHttpError(400,'invalid_input');
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrfToken=c.req.header('x-csrf-token')??'';
- const authorize=async(client:PoolClient)=>{
-  const session=await resolveSession(client,token,{csrfToken,touch:false});
+ const ownership=async(client:PoolClient,accountId:string)=>{
   // Match revocation's account/session/membership/installation order; hold ownership through commit.
-  const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,session.accountId]);
-  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return session.accountId;
+  const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,accountId]);
+  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return accountId;
  };
- const account=await transaction(pool,authorize);
+ const admitted=await transaction(pool,async client=>{
+  const session=await resolveSession(client,token,{csrfToken,touch:false});
+  await ownership(client,session.accountId);
+  return session;
+ });
+ const account=admitted.accountId;
  await consume([{scope:'remote-account',subject:account,limit:30,windowSeconds:60}]);
+ const proof=action==='apply'?await transaction(pool,async client=>{
+  const proof=await requireConnectionProof(client,token,csrfToken);await ownership(client,proof.accountId);return proof;
+ }):undefined;
+ const authorize=async(client:PoolClient)=>{
+  // Accepted hostname work retains its session authority through DNS, without a new idle or prompt deadline.
+  if(proof){await requirePendingConnectionProof(client,proof.accountId,proof.sessionId,proof.securityRevision);return ownership(client,proof.accountId);}
+  const session=await resolveSession(client,token,{csrfToken,touch:false});return ownership(client,session.accountId);
+ };
  const status=()=>transaction(pool,async client=>{
   await authorize(client);
   const binding=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];

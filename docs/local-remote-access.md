@@ -585,6 +585,16 @@ current status; it does not restore access. Plan changes and gateway provisionin
 still use the operator commands below. Account has no customer control for those
 changes or for restoring stopped access.
 
+Before saving a hostname in Account, enroll a passkey or authenticator app and use
+“Verify it’s you” to open the shared ten-minute proof window. Status and DNS
+instructions remain readable without that proof. The save rechecks your enrollment,
+ownership and session authority after DNS finishes; a sign-out, security change or
+absolute session expiry refuses the write. An accepted save can finish after the
+ordinary browser-idle or proof window expires. Check this boundary with
+`node scripts/test-postgres.mjs exec node --test packages/account-http/test/remote-access.test.ts`.
+The signed test-only tunnel adapter and existing machine certificate renewal retain
+their own checks; this browser gate does not qualify a production setup path.
+
 For a disposable organisation, set its plan with the
 [organisation plan command](local-deployment.md#inspect-the-test-organisation-plan).
 Run the permission and race checks with two test-file workers:

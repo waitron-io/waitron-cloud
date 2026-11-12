@@ -11,24 +11,30 @@ const id='20000000-0000-4000-8000-000000000001',origin='https://cloud.example.te
 type Condition='free'|'unconfigured'|'revoked'|'production'|'foreign'|'missing-venue'|'late-foreign';
 // Only SQL is controlled here. Session checks, plan checks, store and HTTP serialization run normally.
 function database(condition:Condition,loss?:'owner'|'session'){
- const queries:string[]=[],now=new Date();let ownershipReads=0,sessionReads=0;
+ const queries:string[]=[],now=new Date();let refusalRead=false,placementRead=false;
  const client={on(){},removeListener(){},release(){},async query(sql:string){
   queries.push(sql);
   const result=(rows:unknown[])=>({rows,rowCount:rows.length});
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return result([]);
-  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1')return result(loss==='session'&&++sessionReads>1?[]:[{account_id:id}]);
+  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1'||sql==='SELECT account_id FROM cloud_sessions WHERE token_hash=$1')return result(loss==='session'&&refusalRead?[]:[{account_id:id}]);
+  if(sql.startsWith('SELECT a.id FROM cloud_accounts a JOIN cloud_sessions'))return result([{id}]);
+  if(sql==='SELECT action_security_revision FROM cloud_sessions WHERE token_hash=$1')return result([{action_security_revision:0}]);
+  if(sql==='SELECT id FROM cloud_sessions WHERE token_hash=$1')return result([{id}]);
+  if(sql.startsWith('SELECT EXISTS(SELECT 1 FROM cloud_passkeys'))return result([{enrolled:true}]);
+  if(sql.startsWith('SELECT s.action_security_revision'))return result(loss==='session'&&refusalRead?[]:[{action_security_revision:0,absolute_expires_at:new Date(+now+3600000),password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
+  if(sql.includes('AS fresh,action_credential_fingerprint'))return result([{fresh:true,password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
   if(sql.startsWith('SELECT id FROM cloud_accounts'))return result([{id}]);
   if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return result([{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}]);
   if(sql==='SELECT clock_timestamp() AS now')return result([{now}]);
-  if(sql.includes('organisation_memberships'))return result(condition==='foreign'||(condition==='late-foreign'||loss==='owner')&&++ownershipReads>1?[]:[{account_id:id}]);
+  if(sql.includes('organisation_memberships'))return result(condition==='foreign'||condition==='late-foreign'&&placementRead||loss==='owner'&&refusalRead?[]:[{account_id:id}]);
   if(sql==='SELECT venue_id FROM installations WHERE id=$1')return result([{venue_id:id}]);
-  if(sql==='SELECT organisation_id,environment FROM venues WHERE id=$1')return result(condition==='missing-venue'?[]:[{organisation_id:id,environment:condition==='production'?'production':'test'}]);
+  if(sql==='SELECT organisation_id,environment FROM venues WHERE id=$1'){if(condition==='production')refusalRead=true;return result(condition==='missing-venue'?[]:[{organisation_id:id,environment:condition==='production'?'production':'test'}]);}
   if(sql==="SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND environment='test' FOR SHARE")return result([{id}]);
   if(sql.startsWith("SELECT to_regclass('billing_service_authority') IS NOT NULL"))return result([{installed:true}]);
   if(sql==='SELECT 1 FROM billing_service_authority WHERE venue_id=$1')return result([]);
-  if(sql.startsWith('SELECT id,service_plan,service_plan_revision FROM organisations'))return result([{id,service_plan:condition==='free'?'free':'paid',service_plan_revision:0}]);
-  if(sql.startsWith('SELECT 1 FROM installation_services'))return result(condition==='unconfigured'?[]:[{}]);
-  if(sql.startsWith('SELECT p.venue_id,c.suffix,i.revoked_at'))return result([{venue_id:id,suffix:'cell.example.test',revoked_at:condition==='revoked'?now:null}]);
+  if(sql.startsWith('SELECT id,service_plan,service_plan_revision FROM organisations')){if(condition==='free')refusalRead=true;return result([{id,service_plan:condition==='free'?'free':'paid',service_plan_revision:0}]);}
+  if(sql.startsWith('SELECT 1 FROM installation_services')){if(condition==='unconfigured')refusalRead=true;return result(condition==='unconfigured'?[]:[{}]);}
+  if(sql.startsWith('SELECT p.venue_id,c.suffix,i.revoked_at')){placementRead=true;if(condition==='revoked')refusalRead=true;return result([{venue_id:id,suffix:'cell.example.test',revoked_at:condition==='revoked'?now:null}]);}
   throw Error('Unexpected SQL: '+sql);
  }};
  return {queries,client:client as unknown as PoolClient,pool:{connect:async()=>client} as unknown as Pool};

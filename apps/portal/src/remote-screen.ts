@@ -9,7 +9,8 @@ export function remoteScreen(app:PortalApp,id:string){
  if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
-  ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
+  ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
+  ${r.error==='pairEnrollment'?html`<a href="#account-security-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#account-security-heading')?.focus();}}>${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'||r.error==='remoteProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
   ${r.error&&['remotePlanRequired','remoteSetupRequired','remoteTestOnly','remoteRevoked'].includes(r.error)?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.permissionBack}</a>`:nothing}
   ${r.error==='remoteRevoked'?html`<wt-button .disabled=${disabled||!!app.installations.waiting} @click=${()=>{void app.installations.load();}}>${c.remoteRefreshInstallations}</wt-button>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
@@ -27,7 +28,7 @@ export function remoteScreen(app:PortalApp,id:string){
     <div class="snapshot-actions"><wt-button id="remote-review" .disabled=${disabled||!r.hostnameChanged} @click=${()=>{void r.preview();}}>${c.remoteReview}</wt-button><wt-button .disabled=${disabled} @click=${()=>r.edit(v.names![r.kind].assigned)}>${c.remoteUseAssigned}</wt-button></div>
     ${r.confirmation?html`<div role="group" aria-label=${c.remoteConfirmTitle}><h5>${c.remoteConfirmTitle}</h5><p>${c.remoteInterruption}</p><p><strong>${r.confirmation.hostname}</strong></p>
      ${r.confirmation.records.length?html`<p>${c.remoteDnsHelp}</p>${r.confirmation.records.map(record=>html`<dl><dt>${c.remoteRecord}</dt><dd>CNAME</dd><dt>${c.remoteRecordName}</dt><dd>${record.name}</dd><dt>${c.remoteRecordValue}</dt><dd>${record.value}</dd></dl>`)}<p class="help">${c.remoteDnsApex}</p>`:html`<p>${c.remoteAssignedHelp}</p>`}
-     <wt-button .disabled=${disabled} @click=${()=>{void r.apply();}}>${c.remoteConfirm}</wt-button></div>`:nothing}`:nothing}`:nothing}
+     <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.applyRemote();}}>${c.remoteConfirm}</wt-button></div>`:nothing}`:nothing}`:nothing}
   <p class="help">${c.remoteLocalTrial}</p>
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void r.load();}}>${c.refreshStatus}</wt-button><wt-button @click=${()=>{r.close();app.draw();}}>${c.remoteClose}</wt-button></div>
  </section>`;

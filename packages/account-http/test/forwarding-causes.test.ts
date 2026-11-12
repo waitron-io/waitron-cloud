@@ -3,6 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createSession} from '@waitron-cloud/identity';
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {transaction,createLeaseIssuer} from '@waitron-cloud/registration';
 import {forwardFixture} from '../../remote-access/test/fixtures/forward-observations.ts';
 import {createAccountApp} from '../src/app.ts';
@@ -26,6 +27,7 @@ test('owner status returns exactly the recorded outcome with no caching or sessi
   for(const value of [f.cellId,f.gatewayId,f.publicKey,report.observations[0]!.routeBinding,'10.77.','peerPublicKey','manifestSequence'])assert(!JSON.stringify(result).includes(value),value);
   assert.deepEqual((await f.db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows,before);
   await f.budget();assert.equal(await f.send(f.report(2,null)),'accepted');assert.equal((await (await f.call()).json()).publicForward.category,null);
+  await prepareConnectionProof(f.db.pool,f.owner.accountId,f.session.token);
   const applied=await f.call('remote-access/apply',{installationId:f.installed.installationId,kind:'public',hostname:f.manifest.routes[0]!.publicHostname,expectedRevision:'1'});
   assert.equal(applied.status,200);assert.equal(Object.hasOwn(await applied.json(),'publicForward'),false);
  }finally{await f.db.close();}

@@ -163,3 +163,13 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  assert.equal(c.error,`remoteRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.notice,undefined);
  assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/remote-access/${action==='load'?'status':action==='preview'?'dns':'apply'}`);
 });
+
+for(const code of ['proof_required','enrollment_required'])test(`remote ${code} keeps the reviewed name so proof can be retried`,async()=>{
+ const calls:string[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);return path.endsWith('/apply')?{ok:false,status:403,code,retryAfterMs:0}:{ok:true,value:(path.endsWith('/dns')?dns:view) as T};
+ });
+ c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();const reviewed=c.confirmation;
+ await c.apply();assert.equal(c.error,code==='proof_required'?'actionProofUnavailable':'pairEnrollment');
+ assert.deepEqual(c.confirmation,reviewed);assert(c.view?.names);assert.equal(calls.filter(p=>p.endsWith('/apply')).length,1);
+});

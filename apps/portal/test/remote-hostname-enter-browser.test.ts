@@ -34,6 +34,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
+        if(endpoint==='/action-proof')return route.fulfill({json:{methods:['passkey','recovery'],freshUntil:'2099-01-01T00:00:00Z'}});
         if (endpoint === '/session' || endpoint === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
         if (endpoint === '/installations') return route.fulfill({json: {installations: [{installationId: id, venueId: id, organisationId: id, legalBusinessId: id, environment: 'test', revision: 1, revokedAt: null, lastContactAt: null, leaseExpiresAt: null, canRevoke: true,
           services: ['continuous_backup', 'remote_access', 'retained_snapshots'].map(service => ({service, state: 'unconfigured', health: 'unknown', failure: null, observedAt: null}))}]}});

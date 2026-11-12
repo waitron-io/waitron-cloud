@@ -11,7 +11,7 @@ export function accountSecurityScreen(app: PortalApp) {
   const message = app.security.error ?? app.security.notice;
   const dateTime = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium', timeStyle: 'short'});
   return html`<section class="account-security" aria-labelledby="account-security-heading">
-    <h2 id="account-security-heading">${c.accountSecurity}</h2>
+    <h2 id="account-security-heading" tabindex="-1">${c.accountSecurity}</h2>
     <p>${c.accountSecurityIntro}</p>
     <section class="sessions" aria-labelledby="sessions-heading">
       <h3 id="sessions-heading">${c.activeSessions}</h3>

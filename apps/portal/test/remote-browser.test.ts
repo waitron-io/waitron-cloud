@@ -8,6 +8,7 @@ import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from '../../../packages/remote-access/src/placement.ts';
 import {completeBrowserEmail,startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',replyDelayMs:0},{locale:'en',replyDelayMs:4500}] as const)test(`${locale} owner changes remote DNS at phone width and reconciles a lost reply${replyDelayMs?' after delayed fault injection':''}`,async t=>{
  let page:Page|undefined;const started=Date.now();const events:unknown[]=[];
  const record=(event:unknown)=>{if(events.length<60)events.push({afterMs:Date.now()-started,event});};
@@ -21,6 +22,8 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   page.on('requestfailed',request=>{const path=new URL(request.url()).pathname;if(path.startsWith('/api/account/remote-access/'))record({failed:path,error:request.failure()?.errorText});});
   page.on('pageerror',error=>record({pageError:error.name}));
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
+  await page.getByText(c.accountIntro,{exact:true}).waitFor();
+  const sessionCookie=(await context.cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');assert.ok(sessionCookie);await prepareConnectionProof(f.db.pool,owner.accountId,sessionCookie.value);
   await page.getByRole('button',{name:locale==='en'?'Set up remote access':'Configurar acceso remoto',exact:true}).click();
   const section=page.getByRole('region',{name:locale==='en'?'Remote access setup':'Configuración de acceso remoto',exact:true});await section.waitFor();
   const input=page.getByRole('textbox',{name:locale==='en'?'Hostname':'Nombre de dominio',exact:true});await input.fill('staff.cafe.example');
