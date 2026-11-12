@@ -61,7 +61,7 @@ test('five wrong codes persist across workers and block even a subsequent correc
   const a=machine();await store.start(a);
   for(let i=0;i<5;i++)await unavailable((i%2?other:store).inspect(a.requestId,'87654321',session.token,session.csrfToken));
   assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests')).rows[0].failed_codes,5);
-  await unavailable(approve(a));assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
+  await unavailable(approve(a));await unavailable(store.complete(completion(a)));assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
 });
 test('invalid session and CSRF cannot inspect or approve; business choices follow memberships',async()=>{
   const a=machine();await store.start(a);

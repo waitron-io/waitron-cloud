@@ -24,8 +24,9 @@ Do not expose these methods directly as public endpoints.
 
 The surrounding service must supply the authenticated installation's canonical key
 identifier. The local approval adapter must verify local administrator authority and
-issue a unique receipt bound to the complete request. Browser-facing adapters must use `approveCloudWithSession` with its session and CSRF
-tokens. The account-ID approval method is reserved for trusted adapters. This package also checks the
+issue a unique receipt bound to the complete request. Trusted adapters can use `approveCloudWithSession` to check session and CSRF
+tokens. It does not enforce service enrollment or fresh proof; the public browser
+connection uses `PairingStore.approve` for those checks. The account-ID approval method is reserved for trusted adapters. This package also checks the
 account's current registration permission in PostgreSQL when approving and completing.
 
 The [identity package](../identity/README.md) now supplies password sessions and
