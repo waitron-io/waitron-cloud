@@ -5,8 +5,9 @@
 Run `node --test apps/portal/test/remote-transport-boundary.test.ts` to check refused,
 unreadable and lost save replies, failed read-back and explicit status retries.
 One status read checks whether the requested hostname was saved without replaying
-the write; another save requires a fresh review. Permission refusals still clear
-the setup. A server wait permits the immediate read-back but blocks later requests
+the write; another save requires a fresh review. Ownership refusals still clear
+the setup. A missing enrollment or action proof keeps the reviewed name so you can
+prove again and explicitly retry. A server wait permits the immediate read-back but blocks later requests
 until its deadline. These native HTTP/client/controller checks leave live DNS,
 certificate issuance, browser integration and deployment unqualified.
 

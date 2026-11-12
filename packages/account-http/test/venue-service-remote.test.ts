@@ -6,6 +6,7 @@ import {BillingStore,RegistrationStore,SignupStore,transaction,type BillingLevel
 import {event} from '../../registration/test/fixtures/venue-service.ts';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import {database} from './fixtures.ts';
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {createAccountApp} from '../src/app.ts';
 
 const origin='https://cloud.example.test',mode='test-venue-levels' as const;
@@ -15,6 +16,7 @@ async function fixture(){
   const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   const session=await transaction(db.pool,c=>login(c,{email,password}));
+  await prepareConnectionProof(db.pool,owner.accountId,session.token);
   const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const installed=await registration.complete(binding);
   const billing=new BillingStore(db.pool),scope={organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await billing.execute(scope,event(),{type:'ensure_business'});

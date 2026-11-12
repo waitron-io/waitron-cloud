@@ -21,6 +21,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     const request=route.request(),path=new URL(request.url()).pathname;
     if(!path.startsWith('/api/account/'))return route.fulfill({contentType:'text/html',body:`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}</style><div id="portal" class="portal"></div><script>${bundle.outputFiles[0]!.text}</script>`});
     const endpoint=path.slice('/api/account/'.length);
+    if(endpoint==='action-proof')return route.fulfill({json:{methods:['passkey','recovery'],freshUntil:'2099-01-01T00:00:00Z'}});
     if(endpoint==='session'||endpoint==='session/activity')return route.fulfill({json:{accountId:id,expiresAt:'2099-01-01T00:00:00Z'}});
     if(endpoint==='installations'){installationReads++;return route.fulfill({json:{installations:[{...installation,revokedAt:revoked?'2026-01-01T00:00:00Z':null}]}});}
     if(endpoint===denied){writes.push(endpoint);return route.fulfill({status:403,json:{error:code}});}

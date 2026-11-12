@@ -20,6 +20,9 @@ export class RemoteController {
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#clearForward();
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+  if(result.code==='enrollment_required'||result.code==='proof_required'){
+   this.error=result.code==='enrollment_required'?'pairEnrollment':'actionProofUnavailable';return;
+  }
   const cause=bodyRefusal(result);
   this.error=cause?`remoteRequest${cause}`:result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
   if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
@@ -56,6 +59,7 @@ export class RemoteController {
   if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id&&result.value.names?.[change.kind].current===change.hostname){this.#accept(result.value);this.notice='remoteSaved';}
   else if(!result.ok){
    this.#failure(result);
+   if(result.code==='proof_required'||result.code==='enrollment_required')this.confirmation=change;
    if(result.status===0||result.status>=500||result.status===409){
     this.view=undefined;const refreshed=await this.#load(true);if(generation!==this.#generation)return;
     if(refreshed?.names?.[change.kind].current===change.hostname)this.notice='remoteSaved';

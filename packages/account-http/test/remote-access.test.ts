@@ -7,6 +7,7 @@ import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from '../../remote-access/src/placement.ts';
 import {createAccountApp} from '../src/app.ts';
 import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 const origin='https://cloud.example.test',password='A sufficiently long test password';
 const bindings={incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings;
 let db:Awaited<ReturnType<typeof database>>,app:ReturnType<typeof createAccountApp>,store:RemoteAccessStore,cookie:string,csrf:string;
@@ -23,6 +24,31 @@ beforeEach(async()=>{
  store=new RemoteAccessStore(db.pool);const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'cell.example.test',subnet:7,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'};await store.createCell(cell);const p=await store.provision(venue.installationId,cell.id,randomBytes(32).toString('base64'));assigned=p.staffHostname;
  resolve=async name=>[name.startsWith('_acme-challenge.')?'_acme-challenge.'+assigned:assigned];app=createAccountApp(options());
  const login=await completeEmailProof(db,await app.request(origin+'/api/account/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'owner@example.test',password})},bindings),body=>app.request(origin+'/api/account/login/email',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)},bindings));assert.equal(login.status,200);cookie=login.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+ await prepareConnectionProof(db.pool,owner.accountId,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!);
+});
+for(const condition of ['unenrolled','unproved','stale'] as const)test(`remote apply refuses ${condition} authority before DNS while status and instructions stay readable`,async()=>{
+ if(condition==='unenrolled')await db.pool.query('DELETE FROM cloud_passkeys');
+ if(condition==='unproved')await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL');
+ if(condition==='stale')await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes'");
+ assert.equal((await request('status')).status,200);
+ assert.equal((await request('dns',{kind:'staff',hostname:'staff.cafe.example'})).status,200);
+ let lookups=0;resolve=async()=>{lookups++;return [];};
+ const reply=await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'});
+ assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:condition==='unenrolled'?'enrollment_required':'proof_required'});
+ assert.equal(lookups,0);assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+});
+for(const condition of ['unenrolled','security','password'] as const)test(`remote apply rechecks ${condition} after DNS before committing`,async()=>{
+ resolve=async name=>{
+  if(condition==='unenrolled')await db.secondPool.query('DELETE FROM cloud_passkeys');
+  if(condition==='security')await db.secondPool.query('UPDATE cloud_sessions SET action_security_revision=action_security_revision+1');
+  if(condition==='password')await db.secondPool.query("UPDATE cloud_credentials SET password_hash=password_hash||'changed'");
+  return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];
+ };
+ const reply=await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'});
+ assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:condition==='unenrolled'?'enrollment_required':'proof_required'});
+ assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+ assert.equal((await db.pool.query('SELECT configuration_revision FROM installations')).rows[0].configuration_revision,1);
+ assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
 });
 test('owner sees only public setup metadata with passive session, exact origin and CSRF',async()=>{
  const before=(await db.pool.query('SELECT last_seen_at FROM cloud_sessions')).rows;
@@ -50,12 +76,14 @@ test('owner loss during DNS verification prevents committing a hostname change',
  assert.equal((await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'})).status,403);
  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
 });
-test('revocation and session expiry during DNS verification are rechecked',async()=>{
+test('revocation during DNS refuses, while accepted setup outlasts the browser idle and proof windows',async()=>{
  resolve=async name=>{await db.secondPool.query('UPDATE installations SET revoked_at=clock_timestamp()');return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];};
  assert.equal((await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'})).status,403);
  await db.pool.query('UPDATE installations SET revoked_at=NULL');
- resolve=async name=>{await db.secondPool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '31 minutes'");return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];};
- assert.equal((await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'})).status,401);
+ resolve=async name=>{await db.secondPool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '31 minutes',action_proved_at=clock_timestamp()-interval '11 minutes'");return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];};
+ assert.equal((await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'})).status,200);
+ assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,'staff.cafe.example');
+ assert.equal((await db.pool.query('SELECT configuration_revision FROM installations')).rows[0].configuration_revision,2);
 });
 test('reserved names, malformed inputs and DNS failures cannot change configuration',async()=>{
  for(const hostname of ['https://cafe.example','127.0.0.1','cafe','staff-v-'+randomUUID()+'.cell.example.test'])assert.equal((await request('apply',{kind:'staff',hostname,expectedRevision:'1'})).status,400);
@@ -178,4 +206,15 @@ for(const condition of ['free','revoked'] as const)test(`real database: late own
   assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
   assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
  }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
+});
+
+for(const withdrawal of ['sign-out','deletion'] as const)test(`remote ${withdrawal} during DNS asks for sign-in again without a write`,async()=>{
+ resolve=async name=>{
+  await db.secondPool.query(withdrawal==='sign-out'?'UPDATE cloud_sessions SET ended_at=clock_timestamp()':'DELETE FROM cloud_sessions');
+  return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];
+ };
+ const reply=await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'});
+ assert.equal(reply.status,401);assert.deepEqual(await reply.json(),{error:'unauthenticated'});
+ assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+ assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
 });

@@ -64,7 +64,10 @@ export class PortalApp {
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
-    this.actionProof=new AccountActionProofController(()=>this.draw());
+    this.actionProof=new AccountActionProofController(()=>{
+      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&this.remote?.error==='actionProofUnavailable')this.remote.error=undefined;
+      this.draw();
+    });
     this.authenticator = new AuthenticatorController(() => this.draw());
     this.passkeys = new PasskeyController(() => this.draw());
     this.passkeyFirst = this.passkeys.preferred;
@@ -268,6 +271,16 @@ export class PortalApp {
     }
     if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
+  }
+  async applyRemote() {
+    const remote=this.remote,change=remote.confirmation,id=remote.installationId;
+    if(!change||remote.pending||remote.waiting)return;
+    const proved=await this.#requireActionProof();
+    if(remote.installationId!==id||remote.confirmation!==change)return;
+    if(this.actionProof.status?.methods.every(m=>m==='email'))remote.error='pairEnrollment';
+    else if(!proved)remote.error='actionProofUnavailable';
+    else {await remote.apply();return;}
+    this.draw();
   }
   async submit() {
     if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}

@@ -21,10 +21,12 @@ export async function requirePendingConnectionProof(client:PoolClient,accountId:
  const account=await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR UPDATE',[accountId]);
  if(!account.rowCount)throw new IdentityError('session_unavailable');
  if(!sessionId||revision===null)throw new AccountActionProofError();
- const row=(await client.query(`SELECT s.action_security_revision,s.action_credential_fingerprint,c.password_hash
+ const row=(await client.query(`SELECT s.action_security_revision,s.action_credential_fingerprint,s.absolute_expires_at,c.password_hash
   FROM cloud_sessions s JOIN cloud_credentials c ON c.account_id=s.account_id
-  WHERE s.id=$1 AND s.account_id=$2 AND s.ended_at IS NULL AND s.absolute_expires_at>clock_timestamp() FOR UPDATE OF s FOR SHARE OF c`,[sessionId,accountId])).rows[0];
- // Local confirmation retains authority, not the browser's idle deadline or ten-minute prompt window.
- if(!row||row.action_security_revision!==revision||!row.password_hash||row.action_credential_fingerprint!==digest(row.password_hash))throw new AccountActionProofError();
+  WHERE s.id=$1 AND s.account_id=$2 AND s.ended_at IS NULL FOR UPDATE OF s FOR SHARE OF c`,[sessionId,accountId])).rows[0];
+ if(!row)throw new IdentityError('session_unavailable');
+ if(row.absolute_expires_at<=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now)throw new IdentityError('session_expired');
+ // Accepted work retains authority, not the browser's idle deadline or ten-minute prompt window.
+ if(row.action_security_revision!==revision||!row.password_hash||row.action_credential_fingerprint!==digest(row.password_hash))throw new AccountActionProofError();
  await enrolled(client,accountId);
 }

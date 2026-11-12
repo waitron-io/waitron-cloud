@@ -16,7 +16,13 @@ function database(condition:Condition,loss?:'owner'|'session'){
   queries.push(sql);
   const result=(rows:unknown[])=>({rows,rowCount:rows.length});
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return result([]);
-  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1')return result(loss==='session'&&++sessionReads>1?[]:[{account_id:id}]);
+  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1'||sql==='SELECT account_id FROM cloud_sessions WHERE token_hash=$1')return result(loss==='session'&&++sessionReads>1?[]:[{account_id:id}]);
+  if(sql.startsWith('SELECT a.id FROM cloud_accounts a JOIN cloud_sessions'))return result([{id}]);
+  if(sql==='SELECT action_security_revision FROM cloud_sessions WHERE token_hash=$1')return result([{action_security_revision:0}]);
+  if(sql==='SELECT id FROM cloud_sessions WHERE token_hash=$1')return result([{id}]);
+  if(sql.startsWith('SELECT EXISTS(SELECT 1 FROM cloud_passkeys'))return result([{enrolled:true}]);
+  if(sql.startsWith('SELECT s.action_security_revision'))return result([{action_security_revision:0,absolute_expires_at:new Date(+now+3600000),password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
+  if(sql.includes('AS fresh,action_credential_fingerprint'))return result([{fresh:true,password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
   if(sql.startsWith('SELECT id FROM cloud_accounts'))return result([{id}]);
   if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return result([{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}]);
   if(sql==='SELECT clock_timestamp() AS now')return result([{now}]);
