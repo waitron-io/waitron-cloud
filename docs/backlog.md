@@ -3247,7 +3247,7 @@ implementation or production evidence.
   [D621 first-cut plan](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md)
   adds `node scripts/amazon-run.mjs observe` for an owner-started continuous
   same-client C-loss check. Its focused observer and adapter checks run with
-  `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs`.
+  `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`

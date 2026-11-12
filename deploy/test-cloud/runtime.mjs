@@ -11,7 +11,7 @@ export function testRuntimeEnvironment(role,config,environment={}){
  let mode;try{mode=parsePlanMode(flag,venueFlag);}catch{throw new Error('test_cloud.plan_mode');}
  let allowances;try{allowances=allowanceOptionsFromEnv(environment,mode);}catch{throw new Error('test_cloud.allowance_mode');}
  const enabled=mode!=='existing';
- const result=runtimeEnvironment(role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,{},'https://waitron.local:3000');result.CLOUD_TEST_SERVICE_PLANS=flag;
+ const result=runtimeEnvironment(role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY}:{},'https://waitron.local:3000');result.CLOUD_TEST_SERVICE_PLANS=flag;
  if(venueFlag!==undefined)result.CLOUD_VENUE_SERVICE_LEVELS=venueFlag;
  if(allowances&&['account','translation'].includes(role)){result.CLOUD_TEST_ALLOWANCES='1';result.CLOUD_ALLOWANCE_CALENDAR=allowances.calendar;}
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';

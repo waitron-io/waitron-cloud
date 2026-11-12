@@ -124,3 +124,16 @@ test('observer password sign-in completes its real email challenge and retains i
   assert.deepEqual(await login(), {status: 200});
   assert.deepEqual(requests, ['/api/account/login', '/api/account/login/email']);
 });
+
+test('a lost email-code submission reply starts a fresh sign-in instead of replaying the used code', async () => {
+  const {createObserverLogin} = await load(); let starts = 0, submissions = 0;
+  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic', cookie: 'recognised',
+    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    api: async (path, body) => {
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
+      assert.equal(body.challengeToken, 'challenge-' + starts);
+      if (++submissions === 1) throw Error('reply lost'); return {status: starts === 2 ? 200 : 400};
+    }});
+  await assert.rejects(login(), /reply lost/);
+  assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
+});

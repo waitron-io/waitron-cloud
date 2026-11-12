@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['observer ready expiry', /amazon.observer_expiry/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -199,6 +199,8 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       assert.equal(binary, 'ssh'); assert.equal(timeout, 3600000);
       assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault before observer ready');
       assert.equal(target.observer, true); assert.ok(args.at(-1).includes('kubernetes-check.mjs'));
+      if (scenario === 'observer ready expiry') time += 3000001;
+      if (scenario === 'observer late baseline') time += 1200001;
       const messages = []; await onReady(value => messages.push(value));
       assert.deepEqual(messages, ['P1_STOPPED', 'P1_REPLACEMENT_READY']);
       time += 900000; return {continuous: true};
@@ -292,6 +294,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
   if (expectedError) {
+    if (scenario.startsWith('observer')) assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault with insufficient expiry');
     const created = calls.find(row => row[1] === 'create-stack'), name = created[created.indexOf('--stack-name') + 1];
     assert.match(name, /^d618-[a-f0-9-]{36}$/);
     assert.equal(calls.find(row => row[1] === 'delete-stack')?.at(-1), name);

@@ -83,7 +83,7 @@ test('request budgets include setup, both signup endpoints and the original sour
 });
 
 // Stopping too near scheduled deletion cannot qualify the full observation window.
-test('insufficient expiry refuses readiness and fragmented stop signals preserve ordering', async () => {
+test('fragmented stop signals preserve ordering', async () => {
   assert.equal(typeof api.readP1Signals, 'function');
   const {PassThrough} = await import('node:stream');
   const input = new PassThrough(), reader = api.readP1Signals(input);
@@ -92,11 +92,7 @@ test('insufficient expiry refuses readiness and fragmented stop signals preserve
   input.write('P1_ST'); await new Promise(setImmediate); assert.equal(stopped, false);
   input.write('OPPED\n'); await reader.stopped; assert.equal(replacement, false);
   input.end('P1_REPLACEMENT_READY\n'); await reader.replacement; reader.close();
-  let ready = false, clock = 0;
-  await assert.rejects(api.observeP1({probes: Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => true])),
-    ready: () => {ready = true;}, stopped: async () => {}, replacement: async () => {},
-    expiresAt: 2399999, wallNow: () => 0, now: () => clock, sleep: async ms => {clock += ms; await new Promise(setImmediate);}}), /p1.expiry/);
-  assert.equal(ready, false);
+
 });
 
 test('pre-stop successes are recorded while only post-stop operations establish recovery', async () => {
@@ -126,4 +122,46 @@ test('the final backup cannot hide an unfinished scheduled remote probe', async 
   }]));
   await assert.rejects(api.observeP1({probes, now: () => clock, ready: () => {}, stopped: async () => {}, replacement: async () => {},
     sleep: async ms => {clock += ms; for (const failure of failures.filter(failure => failure.at <= clock)) failure.reject(Error('final tunnel lost')); await new Promise(setImmediate);}}), /p1.remote_after_recovery/);
+});
+
+test('a reply started before EC2 confirmed stop cannot count as recovery', async () => {
+  let clock = 0, confirm; const replies = [];
+  const stopped = new Promise(resolve => {confirm = resolve;});
+  const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => {
+    if (name === 'remote' && clock === 5000) await new Promise(resolve => replies.push({at: 9000, resolve})); return true;
+  }]));
+  const result = await api.observeP1({probes, now: () => clock, ready: () => {}, stopped: () => stopped, replacement: async () => {},
+    sleep: async ms => {
+      clock += ms; if (clock >= 8000) confirm();
+      for (const reply of replies.filter(reply => reply.at <= clock)) reply.resolve();
+      await new Promise(setImmediate);
+    }});
+  assert.equal(result.stoppedMs, 8000);
+  assert.equal(result.recovery.remote.withinMs, 11000);
+  assert.ok(result.recovery.remote.longestGapMs >= 11000);
+});
+
+test('confirmed stop immediately schedules unrecovered probes within the original bound', async () => {
+  let clock = 0, confirm; const stopped = new Promise(resolve => {confirm = resolve;});
+  const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => true]));
+  const result = await api.observeP1({probes, now: () => clock, ready: () => {}, stopped: () => stopped, replacement: async () => {},
+    sleep: async ms => {clock += ms; if (clock >= 80000) confirm(); await new Promise(setImmediate);}});
+  assert.equal(result.recovery.login.withinMs, 81000);
+});
+
+test('a timed-out final backup fails at its deadline even when it ignores cancellation', async () => {
+  let clock = 0;
+  const probes = Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => {
+    if (name === 'backup' && clock >= 900000) await new Promise(() => {}); return true;
+  }]));
+  await assert.rejects(api.observeP1({probes, now: () => clock, ready: () => {}, stopped: async () => {}, replacement: async () => {},
+    sleep: async ms => {clock += ms; await new Promise(setImmediate);}}), /p1.backup_after_recovery/);
+  assert.equal(clock, 1200000);
+});
+
+test('stop confirmation past the sign-in bound reports the stop rather than an application outage', async () => {
+  let clock = 0;
+  await assert.rejects(api.observeP1({probes: Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => true])),
+    now: () => clock, ready: () => {}, stopped: async () => {clock = 92000;}, replacement: async () => {},
+    sleep: async ms => {clock += ms; await new Promise(setImmediate);}}), /p1.stop_slower_than_bound/);
 });

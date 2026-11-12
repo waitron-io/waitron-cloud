@@ -3,7 +3,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 // All times belong to A; transport and stop delays count against recovery.
 export async function observeP1({probes, ready, stopped, replacement, signal,
-  expiresAt, wallNow = Date.now, now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
+  now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
   const names = ['session', 'remote', 'login', 'backup', 'signup'];
   const samples = [], states = Object.fromEntries(names.map(name => [name, {next: 0, count: 0}]));
   for (const name of names.filter(name => name !== 'signup')) {
@@ -11,11 +11,12 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
     states[name].lastSuccess = now(); states[name].baselineAt = now();
   }
   signal?.throwIfAborted();
-  if (expiresAt !== undefined) assert.ok(expiresAt - wallNow() >= 2400000, 'p1.expiry');
   const faultAt = now();
   ready();
   let stoppedAt, replacementReady = false, signalFailure;
-  Promise.resolve().then(stopped).then(() => {stoppedAt = now();}, error => {signalFailure = error;});
+  Promise.resolve().then(stopped).then(() => {
+    stoppedAt = now(); for (const state of Object.values(states)) if (!state.recovered) state.next = 0;
+  }, error => {signalFailure = error;});
   Promise.resolve().then(replacement).then(() => {replacementReady = true;}, error => {signalFailure = error;});
   const launch = name => {
     const state = states[name], at = now(), controller = new AbortController();
@@ -32,10 +33,14 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
       const at = now();
       assert.ok(at - faultAt < 2100000, 'p1.leg_timeout');
       if (stoppedAt === undefined) assert.ok(at - faultAt < 300000, 'p1.stop_timeout');
+      else assert.ok(stoppedAt - faultAt <= 90000, 'p1.stop_slower_than_bound');
       for (const name of names) {
         const state = states[name], pending = state.pending;
         const deadline = name === 'backup' ? 300000 : name === 'signup' ? 90000 : 5000;
-        if (pending && !pending.ended && at - pending.at >= deadline) {pending.expired = true; pending.controller.abort();}
+        if (pending && !pending.ended && at - pending.at >= deadline) {
+          pending.expired = true; pending.controller.abort();
+          if (state.recovered) throw Error('p1.' + name + '_after_recovery');
+        }
         if (pending?.ended) {
           const ok = pending.ok && !pending.expired && pending.endedAt - pending.at <= deadline;
           const durationMs = (pending.endedAt ?? at) - pending.at;

@@ -24,7 +24,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     image, 'node', 'packages/remote-access/src/peer-cli.ts'], '', 'remote-peer-create');
   own(peerId); await docker(['start', peerId]);
   const probe = (hostname, path, {trust = ca, verificationHostname, method = 'GET', body, cookie, signal} = {}) => new Promise((resolve, reject) => {
-    const req = request({signal: AbortSignal.any([signal, ...(observe ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), host: '127.0.0.1', port, servername: hostname, ca: trust, path, method, agent: false,
+    const req = request({signal: AbortSignal.any([signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), host: '127.0.0.1', port, servername: hostname, ca: trust, path, method, agent: false,
       ...(verificationHostname ? {checkServerIdentity: (_hostname, certificate) => checkServerIdentity(verificationHostname, certificate)} : {}),
       headers: {host: hostname, ...(cookie ? {cookie} : {}), ...(body ? {'content-type': 'application/json'} : {})}}, res => {
       const certificateSha256 = createHash('sha256').update(res.socket.getPeerCertificate().raw).digest('hex');

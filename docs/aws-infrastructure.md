@@ -1141,7 +1141,7 @@ same private configuration and prerequisites above. It keeps the signed-in
 session, venue process, staff certificate and routed peer through C's existing
 graceful stop and assisted replacement. The public-page browser check renews
 its five-minute cookie before expiry. Local behavior checks run with
-`node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs`;
+`node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`;
 this command has not yet qualified an Amazon observation.
 
 The observer starts only with an hour remaining before scheduled deletion,
@@ -1151,6 +1151,15 @@ request failures, recovery times and longest gaps on A's clock, confirms at leas
 verification before the existing withdrawal checks and cleanup. Stop and replacement
 durations are separate launcher measurements. Keep the private JSON result and
 bounded diagnostics; failure still requests deletion and confirms it.
+
+Before an Amazon run, you can exercise the observer against three owned local
+Kind nodes with `node scripts/kubernetes-check.mjs --observer-worker-loss`.
+Use the same pinned Cloud and Waitron image variables as the other local checks,
+Kind 0.31.0 and kubectl 1.34.3. Allow 10 GiB of Docker memory and 30 GiB of disk.
+The corresponding opt-in assertion is
+`TEST_KUBERNETES_OBSERVER_LOSS=1 node --test --test-name-pattern='same signed-in clients' scripts/kubernetes-worker-loss.test.mjs`.
+This local check kills worker2 and retains the same clients. Amazon still uses
+its existing graceful C stop. A local result does not qualify Amazon timing.
 
 Repository repair is reported as unavailable. Abrupt loss of each original node,
 including database host A, and production-mode services remain open under

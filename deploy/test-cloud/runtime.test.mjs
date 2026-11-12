@@ -84,3 +84,15 @@ test('backup runtime supplies a private controller directory independently of re
  for(const role of ['account','storage','email','migrate'])assert.equal(testRuntimeEnvironment(role,config,{CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_VERIFIER_STATE_DIR,undefined);
  assert.equal(testRuntimeEnvironment('backup',config,{}).CLOUD_VERIFIER_STATE_DIR,undefined);
 });
+
+test('observer sign-in policy reaches only the explicit test account process', async t => {
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const {factorConfigFromEnv}=await import('../../packages/account-http/src/config.ts');
+ const {emailLoginPolicy}=await import('../../packages/account-http/test/fixtures.ts');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-observer-signin-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir),supplied={CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_FACTOR_POLICY:JSON.stringify(emailLoginPolicy)};
+ assert.deepEqual(factorConfigFromEnv(testRuntimeEnvironment('account',config,supplied)).policy,emailLoginPolicy);
+ assert.equal(testRuntimeEnvironment('account',config,{}).CLOUD_FACTOR_POLICY,undefined);
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation'])
+  assert.equal(testRuntimeEnvironment(role,config,supplied).CLOUD_FACTOR_POLICY,undefined,role);
+});

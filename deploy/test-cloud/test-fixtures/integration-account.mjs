@@ -70,10 +70,12 @@ try {
       assert.ok(row);
       console.log(JSON.stringify(inspectIntegrationContinuousState(row, {requestId, venueId: rows[0].venue_id,
         organisationId, sourceNodeId, generation, recoverableAt}, desiredStatus)));
-    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback') {
+    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback' || phase === 'inspect-retained-snapshot') {
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const venueId = rows[0].venue_id, prefix = 'streams/' + venueId + '/';
-      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      // Observation reads must not reconcile IAM while captures are running.
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
+        ...(phase === 'inspect-retained-snapshot' ? {openStorage: async () => undefined} : {})});
       const location = {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + venueId, region: 'local'};
       const storage = new S3Client({...location, forcePathStyle: true, maxAttempts: 1,
         credentials: {accessKeyId: config.storage.accessKeyId, secretAccessKey: config.storage.secretAccessKey},

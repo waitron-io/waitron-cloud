@@ -462,15 +462,84 @@ test('manifest worker stays behind the actual image-transfer gate', {timeout: 50
   await writeFile(ready, ''); assert.equal(await closed, 0); assert.ok(output.endsWith('started\n'));
 });
 
-// A retained observation needs the backup restore adapter and must reject a short expiry.
+// A retained observation needs the real backup restore and remote adapters.
 test('observer target refuses missing retained-client work before commands', async () => {
   const cluster = 'd618-12345678-1234-4234-8234-123456789abc';
   const target = {type: 'amazon', cluster, context: cluster, phase: 'before', address: '10.77.0.1', observer: true,
     instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
     nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
   const {assertAmazonBinding} = await import('./test-cloud-integration.mjs');
-  assert.throws(() => assertAmazonBinding(target), /kubernetes.observer_expiry/);
+  assertAmazonBinding(target);
   await assert.rejects(runTestCloudClients({image: 'sha256:' + 'a'.repeat(64), waitronImage: 'sha256:' + 'b'.repeat(64),
-    kubernetes: {...target, amazon: {...target, expiresAt: Date.now() + 3600000}, namespace: 'default', account: 'kube-account', network: cluster,
+    kubernetes: {...target, amazon: target, namespace: 'default', account: 'kube-account', network: cluster,
       proxyIp: '10.77.0.1', ca: 'test-ca', port: 3000, mailPort: 8025, exec: async () => {}, remote: {worker: async () => {}}}}), /integration.observer_binding/);
+});
+
+test('local observer confirms worker stop before signalling or moving its manifest', async () => {
+  const {loseKubernetesWorker} = await import('./kubernetes-check.mjs');
+  for (const running of ['false', 'true']) {
+    const calls = [];
+    const loss = loseKubernetesWorker({cluster: 'owned', manifest: 'old',
+      run: async (binary, args) => {calls.push(args[0]); return args[0] === 'inspect' ? running : '';},
+      onStopped: () => calls.push('confirmed'), kube: async args => {calls.push(args[0]);}});
+    if (running === 'true') {await assert.rejects(loss, /worker_still_running/); assert.deepEqual(calls, ['kill', 'inspect']);}
+    else {await loss; assert.deepEqual(calls, ['kill', 'inspect', 'confirmed', 'taint', 'wait', 'rollout']);}
+  }
+});
+
+// This drives the Amazon adapter's actual stdout/stdin and strict post-replacement placement.
+for (const failProbe of [false, true]) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics' : ''), async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'p1-wire-')), ownedPids = join(directory, 'owned-pids');
+  t.after(async () => {
+    const pids = await readFile(ownedPids, 'utf8').catch(error => {if (error.code !== 'ENOENT') throw error; return '';});
+    for (const pid of pids.trim().split(/\s+/).filter(Boolean)) {try {process.kill(Number(pid), 'SIGKILL');} catch (error) {if (error.code !== 'ESRCH') throw error;}}
+    await rm(directory, {recursive: true, force: true});
+  });
+  await writeFile(join(directory, 'package.json'), JSON.stringify({type: 'commonjs'}));
+  const cluster = 'd618-12345678-1234-4234-8234-123456789abc', moved = join(directory, 'moved');
+  const target = {type: 'amazon', cluster, context: cluster, address: '10.77.0.1', phase: 'before', observer: true,
+    instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
+  const fake = `#!${process.execPath}
+const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]),cluster=${JSON.stringify(cluster)};
+if(name==='kubectl'){
+ const b=a[0]==='--context'?a.slice(4):a;
+ if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
+ if(b[0]==='get'){
+  const role=b[b.indexOf('-l')+1]?.split('=')[1];
+  const suffix=role==='manifest'?(fs.existsSync(${JSON.stringify(moved)})?'-worker':'-worker2'):'-control-plane';
+  console.log(JSON.stringify({items:role==='verifier'?[]:[{metadata:{name:role},spec:{nodeName:cluster+suffix,containers:[{name:'account',image:cluster+':cloud'}]},status:{containerStatuses:[{state:{running:{startedAt:'2026-11-12T10:00:00Z'}}}]}}]}));
+ }
+ if(b[0]==='exec')console.log('synthetic-ca');
+ if(b[0]==='port-forward'){
+  fs.appendFileSync(${JSON.stringify(ownedPids)},process.pid+'\\n');
+  for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
+  setInterval(()=>{},1000);
+ }
+}
+`;
+  for (const name of ['docker', 'kubectl']) await writeFile(join(directory, name), fake, {mode: 0o700});
+  const code = `import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
+const result=await runKubernetesCheck(${JSON.stringify(target)},{
+ clients:async ({kubernetes:k})=>({observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')}),
+ observer:async ({ready,stopped,replacement})=>{if(${failProbe})throw Error('p1.remote_after_recovery');ready();await stopped();await replacement();return {done:true};}
+});process.stdout.write(JSON.stringify(result)+'\\n');`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
+    TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}, stdio: ['pipe', 'pipe', 'pipe']});
+  let stdout = '', stderr = '', sent = false;
+  const closed = new Promise(resolve => child.once('close', resolve));
+  const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+  t.after(() => {clearTimeout(timer); child.kill('SIGKILL');});
+  child.stdout.on('data', part => {
+    stdout += part;
+    if (!sent && stdout.startsWith('P1_READY\n')) {
+      sent = true; void writeFile(moved, '').then(() => child.stdin.write('P1_STOPPED\nP1_REPLACEMENT_READY\n'));
+    }
+  }); child.stderr.on('data', part => {stderr += part;});
+  const exit = await closed;
+  if (failProbe) {assert.equal(exit, 1, stderr); assert.match(stderr, /Kubernetes failure pods/); assert.match(stderr, /Kubernetes failure events/); return;}
+  assert.equal(exit, 0, stderr);
+  assert.equal(sent, true);
+  assert.deepEqual(stdout.trim().split('\n').map((line, index) => index ? JSON.parse(line) : line),
+    ['P1_READY', {observed: {done: true}, worker: '2026-11-12T10:00:00Z'}]);
 });
