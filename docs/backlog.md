@@ -3250,7 +3250,7 @@ implementation or production evidence.
   region explicitly, update the existing roles, compare the saved image policy
   with the run config and check the account's Paid Plan before running there. The
   launcher refuses a standard vCPU quota below 12 before building the images.
-  launcher has no region default. The bounded plan records run 7 passing;
+  The launcher has no region default. The bounded plan records run 7 passing;
   the owner completes these checks before each new run;
   live permission enforcement remains unqualified.
   Production provider identity, capacity and fixed quantity/cost assumptions
