@@ -120,7 +120,8 @@ jobs:
           node -e "const os=require('node:os'),fs=require('node:fs');const read=p=>fs.existsSync(p)?fs.readFileSync(p,'utf8').trim():null;console.log(JSON.stringify({node:process.version,architecture:process.arch,parallelism:os.availableParallelism(),cpus:os.cpus().length,cpuModel:os.cpus()[0]?.model,totalMemory:os.totalmem(),freeMemory:os.freemem(),cpuQuota:read('/sys/fs/cgroup/cpu.max'),memoryLimit:read('/sys/fs/cgroup/memory.max')}));"
       - if: matrix.receipt == 'venue'
         run: node --test --test-reporter=tap scripts/test-cloud-venue-services.test.mjs
-      - run: node --test --test-reporter=tap '${{ matrix.file }}'
+      - name: Raw synthetic venue matrix diagnostic (not release evidence)
+        run: node scripts/test-postgres.mjs exec node scripts/recovery-raw-diagnostic.mjs
         env:
           CLOUD_SERVICE_PROOF_TIMINGS: '1'
       # Keep optional saving last so final runner cleanup collects its child processes.
