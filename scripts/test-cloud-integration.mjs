@@ -855,7 +855,7 @@ export async function observeRetainedClients({observe, paid, browser, api, login
   });
   assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]), started, 'p1.venue_restarted');
   const after = await control(paid.id, 'evidence');
-  for (const key of ['registration', 'identitySha256', 'stateSha256', 'localVenueId']) assert.deepEqual(after[key], before[key], 'p1.venue_state:' + key);
+  for (const key of ['registration', 'identitySha256', 'localVenueId']) assert.deepEqual(after[key], before[key], 'p1.venue_state:' + key);
   return result;
 }
 

@@ -92,7 +92,7 @@ test('two demo Waitron venues pair free and paid signup accounts through trusted
 // Observation must preserve the original cookie and process through the final probe.
 test('retained-client adapter checks sign-in responses, identity and process without replacing the client', async () => {
   const {observeRetainedClients} = await load(); assert.equal(typeof observeRetainedClients, 'function');
-  for (const scenario of ['healthy', 'session lost', 'restarted']) {
+  for (const scenario of ['healthy', 'cache refreshed', 'session lost', 'restarted', 'identity changed']) {
     let reads = 0, observed = false;
     const evidence = {registration: {venueId: 'synthetic'}, identitySha256: 'a', stateSha256: 'b', localVenueId: 'venue'};
     const run = observeRetainedClients({paid: {id: 'original-client'}, browser: {cookie: 'original-session'},
@@ -102,10 +102,10 @@ test('retained-client adapter checks sign-in responses, identity and process wit
       }, login: async () => ({status: 200}), signup: async () => ({status: 201}),
       backup: async () => ({restored: true}), remote: async () => {},
       docker: async args => {assert.equal(args.at(-1), 'original-client'); return scenario === 'restarted' && observed ? 'later' : 'initial';},
-      control: async (id, action) => {assert.equal(id, 'original-client'); assert.equal(action, 'evidence'); reads++; return evidence;},
+      control: async (id, action) => {assert.equal(id, 'original-client'); assert.equal(action, 'evidence'); reads++; return {...evidence, ...(observed && scenario === 'cache refreshed' ? {stateSha256: 'later-cache'} : {}), ...(observed && scenario === 'identity changed' ? {identitySha256: 'changed'} : {})};},
       observe: async probes => {await probes.session(); await probes.login(); await probes.signup(); await probes.backup(); await probes.remote(); observed = true; return {offMs: 900000};}});
-    if (scenario === 'healthy') {assert.deepEqual(await run, {offMs: 900000}); assert.equal(reads, 2);}
-    else await assert.rejects(run, scenario === 'session lost' ? /p1.session/ : /p1.venue_restarted/);
+    if (scenario === 'healthy' || scenario === 'cache refreshed') {assert.deepEqual(await run, {offMs: 900000}); assert.equal(reads, 2);}
+    else await assert.rejects(run, scenario === 'session lost' ? /p1.session/ : scenario === 'restarted' ? /p1.venue_restarted/ : /p1.venue_state:identitySha256/);
   }
 });
 
