@@ -65,7 +65,7 @@ export class PortalApp {
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
-      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&this.remote?.error==='actionProofUnavailable')this.remote.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
       this.draw();
     });
     this.authenticator = new AuthenticatorController(() => this.draw());
@@ -278,7 +278,7 @@ export class PortalApp {
     const proved=await this.#requireActionProof();
     if(remote.installationId!==id||remote.confirmation!==change)return;
     if(this.actionProof.status?.methods.every(m=>m==='email'))remote.error='pairEnrollment';
-    else if(!proved)remote.error='actionProofUnavailable';
+    else if(!proved)remote.error=this.actionProof.error?'actionProofUnavailable':'remoteProofRequired';
     else {await remote.apply();return;}
     this.draw();
   }

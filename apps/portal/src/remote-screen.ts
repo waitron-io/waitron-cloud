@@ -9,8 +9,8 @@ export function remoteScreen(app:PortalApp,id:string){
  if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
-  ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
-  ${r.error==='pairEnrollment'?html`<a href="#account-security-heading">${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'?html`<a href="#action-proof-heading" @click=${()=>app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus()}>${c.actionProofTitle}</a>`:nothing}
+  ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
+  ${r.error==='pairEnrollment'?html`<a href="#account-security-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#account-security-heading')?.focus();}}>${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'||r.error==='remoteProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
   ${r.error&&['remotePlanRequired','remoteSetupRequired','remoteTestOnly','remoteRevoked'].includes(r.error)?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.permissionBack}</a>`:nothing}
   ${r.error==='remoteRevoked'?html`<wt-button .disabled=${disabled||!!app.installations.waiting} @click=${()=>{void app.installations.load();}}>${c.remoteRefreshInstallations}</wt-button>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
