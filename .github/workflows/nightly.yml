@@ -124,7 +124,7 @@ jobs:
               assert re.search(r'^# tests 1$', output, re.MULTILINE), label + ': expected one executed case'
               return result.returncode, output
           code, output = run('baseline', Path.cwd())
-          assert code == 0 and re.search(r'^# pass 1$', output, re.MULTILINE), 'baseline failed'
+          assert code == 0 and re.search(r'^# pass 1$', output, re.MULTILINE) and re.search(r'^ok \d+ - ' + re.escape(name) + '$', output, re.MULTILINE), 'baseline failed'
           with tempfile.TemporaryDirectory(prefix='password-lock-') as scratch:
               candidate = Path(scratch) / 'candidate'
               subprocess.run(['git', 'clone', '--quiet', '--shared', '.', str(candidate)], check=True)
@@ -138,11 +138,11 @@ jobs:
                   path.write_text(original.replace(derive, '', 1).replace(target, derive + target, 1))
                   code, output = run('lock-before-derivation', candidate)
                   assert code != 0 and re.search(r'^not ok \d+ - ' + re.escape(name) + '$', output, re.MULTILINE), 'expected live case failure missing'
-                  assert 'canceling statement due to statement timeout' in output, 'expected account-lock refusal missing'
+                  assert "failureType: 'testCodeFailure'" in output and 'canceling statement due to statement timeout' in output, 'expected test-body account-lock refusal missing'
               finally:
                   path.write_text(original)
               code, output = run('restored', candidate)
-              assert code == 0 and re.search(r'^# pass 1$', output, re.MULTILINE), 'restored case failed'
+              assert code == 0 and re.search(r'^# pass 1$', output, re.MULTILINE) and re.search(r'^ok \d+ - ' + re.escape(name) + '$', output, re.MULTILINE), 'restored case failed'
           print('Live password lock-order fault caught; restored PostgreSQL case passes.', flush=True)
           PYTHON
         env:
