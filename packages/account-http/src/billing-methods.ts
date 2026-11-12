@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
-import {resolveSession} from '@waitron-cloud/identity';
+import {resolveSession,IdentityError} from '@waitron-cloud/identity';
 import {BillingError,transaction,requireConnectionProof,requirePendingConnectionProof,type PlanMode} from '@waitron-cloud/registration';
 import {BillingMethodSetups,type MethodSetup} from './billing-method-binding.ts';
 import {createTestBillingMethodClient} from './billing-method-providers.ts';
@@ -44,8 +44,8 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',proof={touch:false,csrfToken:c.req.header('x-csrf-token')??''};
  const initial=await transaction(pool,async client=>{
   const session=await resolveSession(client,token,proof);
-  const row=(await client.query('SELECT id,action_security_revision FROM cloud_sessions WHERE token_hash=$1',[createHash('sha256').update(token).digest('hex')])).rows[0];
-  return {...session,sessionId:row.id as string,securityRevision:row.action_security_revision as number};
+  const row=(await client.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[createHash('sha256').update(token).digest('hex')])).rows[0];
+  return {...session,sessionId:row.id as string};
  });
  if(!billing.accountIds.includes(initial.accountId))denied();
  await consume([{scope:'billing-account',subject:initial.accountId,limit:30,windowSeconds:60}]);
@@ -54,9 +54,17 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
   ||start&&!['card','direct_debit'].includes(body.kind!))throw new AccountHttpError(400,'invalid_input');
  const admitted=start?await transaction(pool,client=>requireConnectionProof(client,token,proof.csrfToken)):undefined;
  const setups=new BillingMethodSetups(pool);
- async function guard(client:PoolClient,expected?:MethodSetup){
+ async function acting(client:PoolClient){
+  if(admitted)return requirePendingConnectionProof(client,admitted.accountId,admitted.sessionId,admitted.securityRevision);
+  // Admission checked the ordinary session and CSRF; accepted provider work keeps no idle deadline.
+  if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR UPDATE',[initial.accountId])).rowCount)throw new IdentityError('session_unavailable');
+  const saved=(await client.query('SELECT absolute_expires_at FROM cloud_sessions WHERE id=$1 AND account_id=$2 AND ended_at IS NULL FOR UPDATE',[initial.sessionId,initial.accountId])).rows[0];
+  if(!saved)throw new IdentityError('session_unavailable');
+  if(saved.absolute_expires_at<=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now)throw new IdentityError('session_expired');
+ }
+ async function guard(client:PoolClient,expected?:MethodSetup,pending=false){
   const session=admitted??initial;
-  await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
+  await acting(client);
   if(session.accountId!==initial.accountId)denied();
   if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[session.accountId])).rowCount)denied();
   const venue=(await client.query<Venue>('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1',[body.venueId])).rows[0];
@@ -68,9 +76,15 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
   if(!final||final.environment!=='test'||final.organisation_id!==venue.organisation_id||final.legal_business_id!==venue.legal_business_id)denied();
   if(saved&&(!start||expected)&&(saved.ownerId!==session.accountId
    ||saved.providerAccountId!==(saved.kind==='card'?methods!.sumupAccount:methods!.stripeAccount)))denied();
-  if(!start&&saved)await requirePendingConnectionProof(client,saved.ownerId,saved.sessionId,saved.securityRevision);
+  if(!start&&saved&&pending){
+   try{await requirePendingConnectionProof(client,saved.ownerId,saved.sessionId,saved.securityRevision);}
+   catch(error){
+    if(error instanceof IdentityError&&(error.code==='session_unavailable'||error.code==='session_expired'))throw new AccountHttpError(409,'billing_setup_unavailable');
+    throw error;
+   }
+  }
   if(expected)same(saved,expected);
-  await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
+  await acting(client);
   return {scope,saved};
  }
  try{
@@ -81,7 +95,7 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
    await guard(client,created);return created;
   });
   if(!setup||!start&&(!setup.customerId||!setup.providerReference))return c.json({state:'failed'});
-  const authorize=()=>transaction(pool,async client=>{await guard(client,setup);});
+  const authorize=()=>transaction(pool,async client=>{await guard(client,setup,true);});
   if(start){
    const result=await methods.client.start(setup,authorize);
    await transaction(pool,async client=>{await guard(client,setup);const bound=await setups.bindOn(client,setup,result);await guard(client,bound);});
@@ -92,11 +106,12 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
    return !!(await client.query('SELECT id FROM billing_payment_methods WHERE organisation_id=$1 AND legal_business_id=$2 AND id=$3',[setup.organisationId,setup.legalBusinessId,setup.methodId])).rowCount;
   });
   if(complete)return c.json({state:'verified'});
+  await authorize();
   const result=await methods.client.verify(setup,authorize);
   await transaction(pool,async client=>{
-   await guard(client,setup);
+   await guard(client,setup,true);
    if(result.state==='verified')await setups.completeOn(client,setup,result);
-   await guard(client,setup);
+   await guard(client,setup,true);
   });
   return c.json({state:result.state});
  }catch(error){

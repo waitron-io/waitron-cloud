@@ -147,7 +147,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   };
   await capture('enroll');await panel.getByRole('link',{name:c.accountSecurity,exact:true}).click();await page.waitForLoadState('networkidle');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading');
-  server.enrolled=true;await start.click();
+  server.enrolled=true;await page.evaluate(async()=>(window as any).app.actionProof.load());
+  await panel.getByText(c.pairEnrollment,{exact:true}).waitFor({state:'hidden'});await start.click();
   await panel.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();await page.waitForLoadState('networkidle');assert.equal(server.starts,0);
   assert.equal(await panel.getByRole('alert').count(),0,'an initial proof prompt is not a verification failure');await capture('prompt');
   await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
@@ -156,5 +157,39 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
   await page.locator('.action-proof').getByText(c.actionProofReady,{exact:true}).waitFor();assert.equal(server.starts,0);
   await capture('ready');await start.click();await panel.locator('iframe').waitFor();assert.equal(server.starts,1);
+ }finally{await browser.close();}
+});
+
+
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: saved-setup refusals keep the payment panel and explain how to continue`,async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
+  const server=await fixture(page),c=translations[locale];await page.goto('https://portal.test/account');
+  const panel=page.getByRole('region',{name:c.billingMethodsTitle,exact:true});
+  for(const code of ['proof_required','enrollment_required','billing_setup_unavailable']){
+   await panel.getByRole('button',{name:c.billingAddCard,exact:true}).click();await panel.locator('iframe').waitFor();
+   await page.route('**/api/account/billing/method/verify',route=>route.fulfill({status:code==='billing_setup_unavailable'?409:403,json:{error:code}}));
+   await panel.getByRole('button',{name:c.billingMethodRefresh,exact:true}).click();
+   await panel.getByText(code==='enrollment_required'?c.pairEnrollment:locale==='en'?'This setup can’t continue. Start again. Your previous method stays selected.':'Esta configuración no puede continuar. Empieza de nuevo. Se mantiene el método anterior.',{exact:true}).waitFor();
+   await page.waitForLoadState('networkidle');
+   assert.equal(server.starts,['proof_required','enrollment_required','billing_setup_unavailable'].indexOf(code)+1,'no automatic new setup');
+   assert.equal(await page.evaluate(()=>(window as any).app.billing.venue.paymentMethods.selected),'direct_debit');
+   assert.equal(await panel.locator('iframe').count(),0);
+   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   if(process.env.BILLING_METHOD_RECEIPT_DIR){await mkdir(process.env.BILLING_METHOD_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.BILLING_METHOD_RECEIPT_DIR}/refused-${locale}-${theme}-${width}-${code}.png`,fullPage:true});}
+   await page.unroute('**/api/account/billing/method/verify');
+  }
+ }finally{await browser.close();}
+});
+
+test('trial feedback stays above payment-method controls',async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage();page.setDefaultTimeout(3000);await fixture(page);
+  await page.route('**/api/account/billing/read',route=>route.fulfill({json:{venues:[{venueId:first,level:'registered',trial:null,canStartTrial:true,paymentMethods:{selected:null,setup:null}}]}}));
+  await page.route('**/api/account/billing/start-trial',route=>route.fulfill({status:429,headers:{'retry-after':'1'},json:{error:'rate_limited'}}));
+  await page.goto('https://portal.test/account');await page.getByRole('button',{name:translations.en.billingStart,exact:true}).click();
+  await page.getByRole('alert').filter({hasText:translations.en.limited}).waitFor();
+  assert.equal(await page.getByRole('region',{name:translations.en.billingMethodsTitle,exact:true}).getByRole('alert').count(),0);
  }finally{await browser.close();}
 });

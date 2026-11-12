@@ -66,6 +66,7 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
       this.draw();
     });

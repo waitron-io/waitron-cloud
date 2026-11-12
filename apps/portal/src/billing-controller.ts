@@ -49,7 +49,7 @@ export class BillingController{
    this.methodState='pending';
    if('checkoutId' in result.value)this.methodCheckout=result.value.checkoutId;
    else this.#redirect(result.value.url);
-  }else if(!result.ok)this.#methodFailure(result);
+  }else if(!result.ok)this.#methodFailure(result,true);
   else this.error='billingMethodUncertain';
   this.#changed();
  }
@@ -70,9 +70,11 @@ export class BillingController{
   this.#changed();
  }
  #clearMethod(){this.methodCheckout=undefined;this.methodState=undefined;}
- #methodFailure(result:Extract<ApiResult<unknown>,{ok:false}>){
+ #methodFailure(result:Extract<ApiResult<unknown>,{ok:false}>,starting=false){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-  if(result.status===401||result.status===403){this.#clearMethod();this.#failure(result);}
+  if(result.status===403&&(result.code==='enrollment_required'||result.code==='proof_required')||result.status===409&&result.code==='billing_setup_unavailable'){
+   this.#clearMethod();this.error=result.code==='enrollment_required'?'pairEnrollment':starting?'billingProofRequired':'billingMethodRestart';
+  }else if(result.status===401||result.status===403){this.#clearMethod();this.#failure(result);}
   else this.error=result.status===429?'limited':result.status===409?'billingMethodChanged':'billingMethodUncertain';
  }
  #apply(view:BillingView){this.venues=view.venues;this.loaded=true;if(!this.venues.some(venue=>venue.venueId===this.selected))this.selected=this.venues[0]?.venueId;}

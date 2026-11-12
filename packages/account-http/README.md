@@ -722,9 +722,12 @@ check the saved method before starting again.
 
 Your saved setup retains the session that authorised it. A provider wait or return
 after the ten-minute window does not require another proof. During accepted work,
-browser idle expiry does not cancel that authority; sign-out, absolute expiry,
+browser idle expiry does not cancel that authority. A new browser request still
+needs a currently signed-in session; sign-out, absolute expiry,
 changed credentials or security, removed enrollment and lost ownership still
-refuse it. An older setup without its saved session needs a new start. These
+refuse it. An unfinished setup without its saved session needs a new start; the portal keeps
+the controls visible and tells you to start again. A completed result stays readable
+by the current owner without re-authorising the old setup. These
 checks use the same shared helper as box connection and remote setup.
 
 POST `/api/account/billing/method/verify` with only the venue ID. The server reads

@@ -4,7 +4,7 @@ import {before,after,test} from 'node:test';
 import type {Pool} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
-import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
+import {createSession,resolveSession,type SessionCredentials} from '@waitron-cloud/identity';
 import {AllowanceConfigStore,reserveAllowance,BillingStore,transaction} from '@waitron-cloud/registration';
 import {database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
@@ -291,7 +291,8 @@ test('a newly proved session cannot revive a setup whose authorising session was
  await db.pool.query("UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1",[f.accountId]);
  const replacement=await transaction(db.pool,c=>createSession(c,f.accountId));await prepareConnectionProof(db.pool,f.accountId,replacement.token);
  const calls=p.calls.length,response=await request(target,replacement,verify,{venueId:f.venueId});
- assert.equal(response.status,401);assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+ assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'billing_setup_unavailable'});assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+ assert.equal((await transaction(db.pool,c=>resolveSession(c,replacement.token,{touch:false}))).accountId,f.accountId);
 });
 
 
@@ -302,4 +303,30 @@ test('an older setup without retained authority requires a new start and never v
  const calls=p.calls.length,response=await request(target,f.session,verify,{venueId:f.venueId});
  assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});
  assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+});
+
+
+test('an ordinary signed-in session checks saved setup authority without its own action proof',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId));
+ const absent=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(absent.status,200);assert.deepEqual(await absent.json(),{state:'failed'});
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ const checked=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(checked.status,200);assert.deepEqual(await checked.json(),{state:'verified'});
+ assert.equal((await current(f)).paymentMethod?.kind,'card');
+ const calls=p.calls.length,replay=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(replay.status,200);assert.deepEqual(await replay.json(),{state:'verified'});assert.equal(p.calls.length,calls);
+});
+
+
+test('checking a completed setup needs current ownership but not the original authorising session',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ assert.equal((await request(target,f.session,verify,{venueId:f.venueId})).status,200);
+ await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[f.accountId]);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId)),calls=p.calls.length;
+ const response=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{state:'verified'});assert.equal(p.calls.length,calls);
+ assert.equal((await current(f)).paymentMethod?.kind,'card');
 });
