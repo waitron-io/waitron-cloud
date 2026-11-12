@@ -1536,6 +1536,20 @@ test('known ignored attempts do not consume the repository run allowance',async 
  };
  const pass=await controller.readAutomaticPass({api:f.api,policy,leases});
  assert.equal(pass.runs.size,90);assert.deepEqual(pages,[1,2]);
+ runs.splice(0,runs.length,...Array.from({length:101},(_,i)=>({...f.run,id:3000+i,status:'queued'})));pages.length=0;
+ await assert.rejects(controller.readAutomaticPass({api:f.api,policy,leases}),{code:'CI_REPOSITORY_RUN_LIMIT'});
+ assert.deepEqual(pages,[1,2]);
+});
+test('overlapping automatic passes send one cancellation pair for an empty run',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),posts=[],logs=[];
+ Object.assign(f.run,{event:'schedule',status:'queued',created_at:new Date(Date.now()-7200000).toISOString()});f.jobs.length=0;
+ f.api.post=async path=>posts.push(path);
+ const log=console.log;console.log=line=>logs.push(JSON.parse(line));
+ try{await Promise.all([1,2].map(()=>controller.readAutomaticPass({api:f.api,policy,
+  leases:new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6})})));}
+ finally{console.log=log;}
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/cancel','/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.equal(logs.length,1);
 });
 
 test('one automatic pass shares run, PR and job observations across its readers',async()=>{

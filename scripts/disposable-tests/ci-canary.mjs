@@ -115,11 +115,12 @@ export async function readAutomaticPass({api,policy,signal,leases}){
    if(ignored.includes(key)){runs.delete(id);continue;}
    const {jobs}=await jobInventory(shared,`${base}/actions/runs/${id}/attempts/${run.run_attempt}/jobs`,signal);
    if(jobs.length)continue;
-   leases.ignoreEmptyRun(key);
+   if(leases.ignoreEmptyRun(key)){
    const refusals=[];
    for(const action of ['cancel','force-cancel'])try{await api.post(`${base}/actions/runs/${id}/${action}`,undefined,{signal});}
    catch(error){signal?.throwIfAborted();refusals.push({action,error:error.message});}
    console.log(JSON.stringify({event:'automatic-ci-empty-run-ignored',runId:id,attempt:run.run_attempt,refusals}));
+   }
    runs.delete(id);
   }
  }
