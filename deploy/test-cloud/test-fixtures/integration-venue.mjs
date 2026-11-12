@@ -128,7 +128,7 @@ const control = createServer(async (req, res) => {
       try {
         const written = await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: bytes}), {abortSignal: AbortSignal.timeout(10000)});
         assert.equal(written.$metadata.httpStatusCode, 200);
-        const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+        const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
         await writeFile(root + '/snapshot-access.json', JSON.stringify({id: grant.id, venueId: grant.venueId, installationId: grant.installationId,
           identitySha256: createHash('sha256').update(state.publicKey).digest('hex'), archiveSha256: digest,
           location: grant.location, incomingKey: grant.incomingKey, credentials: grant.credentials,

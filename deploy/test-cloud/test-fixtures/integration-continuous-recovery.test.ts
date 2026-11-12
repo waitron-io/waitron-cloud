@@ -103,13 +103,13 @@ it('restores the native paired stream using its owner-approved kit and separate 
     console.log('CLOUD_CONTINUOUS_REFUSAL_STATE=' + JSON.stringify({
       sourceRecordsPreserved: isDeepStrictEqual(records(join(venueDir, 'venue.db')), originalRecords),
       tradingIdentityAbsent: await absent('trading.env'), rebuildMarkerAbsent: await absent(REBUILD_MARKER),
-      cloudConnectionAbsent: await absent('cloud-connection.json'), readyAbsent: await absent('ready.json'),
+      cloudConnectionAbsent: await absent('cloud/connection.json') && await absent('cloud-connection.json'), readyAbsent: await absent('ready.json'),
     }));
     expect((await stat(join(venueDir, 'venue.db'))).isFile()).toBe(true);
     expect(records(join(venueDir, 'venue.db'))).toEqual(originalRecords);
     await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({code: 'ENOENT'});
     await expect(stat(join(stateDir, 'trading.env'))).rejects.toMatchObject({code: 'ENOENT'});
-    for (const name of ['cloud-connection.json', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
+    for (const name of ['cloud/connection.json','cloud-connection.json','ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     const kitPath = join(root, 'kit.txt'), operationPath = join(root, 'operation.json');
     await writeFile(kitPath, input.kit, {mode: 0o600});
     await writeFile(operationPath, JSON.stringify(operation), {mode: 0o600});
@@ -122,7 +122,7 @@ it('restores the native paired stream using its owner-approved kit and separate 
     expect(wrongOutput.includes('promotion.break_glass_invalid')).toBe(true);
     expect(records(join(venueDir, 'venue.db'))).toEqual(originalRecords);
     await expect(stat(join(stateDir, 'trading.env'))).rejects.toMatchObject({code: 'ENOENT'});
-    for (const name of [REBUILD_MARKER, 'cloud-connection.json', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
+    for (const name of [REBUILD_MARKER,'cloud/connection.json','cloud-connection.json','ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     let output = '';
     const exit = await runRestore({argv, env, out: line => {output += line + '\n';}});
     const safe = [input.kit, input.authority.secret, kit.recoveryKey, kit.bucket.secretAccessKey].reduce((text, secret) => text.replaceAll(secret, '[redacted]'), output);
@@ -148,7 +148,7 @@ it('restores the native paired stream using its owner-approved kit and separate 
     }
     expect(restoredNodeId).toBe(input.selected.sourceNodeId);
     expect(restoredVenueId).toBe(input.selected.streamId);
-    for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
+    for (const name of ['cloud/connection.json','cloud/staff.key','cloud-connection.json','cloud-staff.key','ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     console.log('CLOUD_PAIRED_CONTINUOUS_RECOVERY=' + JSON.stringify({exit, sourceNodeId: restoredNodeId,
       streamId: restoredVenueId, generation: input.selected.generation, nativeRestore: true,
       sourceAuthorityVerified: true, preparationBoundToStream: true, sourceRecordsPreserved: true,

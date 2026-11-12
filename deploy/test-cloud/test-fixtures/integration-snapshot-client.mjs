@@ -7,7 +7,7 @@ import {observeSnapshotExposure} from './integration-snapshot-exposure.mjs';
 
 export async function probeIntegrationSnapshotExposure(root, {downgradedAt}) {
   const saved = JSON.parse(await readFile(root + '/snapshot-access.json', 'utf8'));
-  const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+  const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
   const bytes = await readFile(root + '/captured.backup.enc');
   const selected = {venueId: state.view.registration.venueId, installationId: state.view.registration.installationId,
     identitySha256: createHash('sha256').update(state.publicKey).digest('hex'), archiveSha256: createHash('sha256').update(bytes).digest('hex')};

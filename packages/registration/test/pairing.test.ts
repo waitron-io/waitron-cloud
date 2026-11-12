@@ -150,7 +150,7 @@ test('migrations upgrade a seven-migration schema without changing its existing 
     await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[account]);
     await pool.query('INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id) VALUES($1,$2,$3)',['a'.repeat(64),'b'.repeat(64),account]);
     await pool.query('INSERT INTO organisations(id) VALUES($1)',[org]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[biz,org]);
-    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,biz]);
+    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
     const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
     assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String(migrationNames.length));

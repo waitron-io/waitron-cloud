@@ -187,7 +187,7 @@ function databaseHead(path) {
 }
 async function machine(dir, action, body) {
   const state = JSON.parse(
-      await readFile(join(dir, "cloud-connection.json"), "utf8"),
+      await readFile(join(dir, "cloud/connection.json"), "utf8"),
     ),
     pending = {
       action,
@@ -387,7 +387,7 @@ try {
       server = await launch(dir),
       ca = await readFile(join(dir, "tls", "ca.crt"));
     let cookie = "";
-    const local = (method,path, data) =>
+    const local = (method,path,data,expectedStatus=200) =>
       new Promise((done, fail) => {
         const body = data===undefined?'':JSON.stringify(data),
           url = new URL(server.origin + path);
@@ -408,12 +408,12 @@ try {
             res.on("data", (v) => (text += v));
             res.on("end", () => {
               try {
-                assert.equal(res.statusCode, 200, `${text}\n${server.logs()}`);
+                assert.equal(res.statusCode, expectedStatus, `${text}\n${server.logs()}`);
                 if (res.headers["set-cookie"])
                   cookie = res.headers["set-cookie"]
                     .map((c) => c.split(";")[0])
                     .join("; ");
-                done(JSON.parse(text));
+                done(text?JSON.parse(text):null);
               } catch (e) {
                 fail(e);
               }
@@ -431,6 +431,7 @@ try {
       email: "owner@example.test",
       password: "Local integration password",
     });
+    await local('POST','/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},204);
     const pairing = await post("/management-api/cloud/start");
     await new PairingStore(f.db.pool).approve(
       pairing.requestId,
@@ -472,7 +473,7 @@ try {
         csrHostname: "backup-" + randomUUID() + ".example.test",
       });
     });
-    assert((await readFile(join(venue.root, "cloud-staff.key"))).length > 0);
+    assert((await readFile(join(venue.root, "cloud/staff.key"))).length > 0);
     await writeFile(
       join(venue.root, "backup.env"),
       "WAITRON_BACKUP_DIR=/old-backup-target\n",
@@ -607,7 +608,7 @@ try {
     source.close();
     assert(signer);
     const cloudState = JSON.parse(
-        await readFile(join(snapshot.venue.root, "cloud-connection.json"), "utf8"),
+        await readFile(join(snapshot.venue.root, "cloud/connection.json"), "utf8"),
       ),
       configured = await machine(snapshot.venue.root, "backup-stream-configure", {
         revision: cloudState.lifecycle.view.revision,
@@ -1089,9 +1090,9 @@ try {
       (await readFile(join(guided, "state", "secrets.env"), "utf8")) ===
       item.applicationVault,
     backupDestinationInherited: await exists(join(guided, "state", "backup.env")),
-    cloudAuthorityInherited: await exists(join(guided, "state", "cloud-connection.json")),
+    cloudAuthorityInherited: (await exists(join(guided,"state","cloud/connection.json"))) || (await exists(join(guided,"state","cloud-connection.json"))),
     staffTlsInherited:
-      (await exists(join(guided, "state", "cloud-staff.key"))) ||
+      (await exists(join(guided,"state","cloud/staff.key"))) || (await exists(join(guided,"state","cloud-staff.key"))) ||
       (await exists(join(guided, "state", "cloud-staff.crt"))),
   };
   assert.deepEqual(restoredArchive, {
@@ -1109,7 +1110,7 @@ try {
   const replacementStarted=performance.now(),proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
   assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.oldInstallationId,item.venue.registration.installationId);
   const sourceCloudAuthority = JSON.parse(
-    await readFile(join(item.venue.root, "cloud-connection.json"), "utf8"),
+    await readFile(join(item.venue.root, "cloud/connection.json"), "utf8"),
   );
   assert.notEqual(proposal.publicKey, sourceCloudAuthority.publicKey);
   assert.equal((await ownerPost('inspect')).replacement.publicKey,proposal.publicKey);

@@ -26,7 +26,7 @@ import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride
 export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const origin = 'https://waitron.local:3000', defaultWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const origin = 'https://waitron.local:3000', defaultWaitronRevision = '515c12dc1644b6516fe6e45a7243a448acd51b0c', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
@@ -270,7 +270,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
-      if ((paidVerification || paidRecovery) && revision !== defaultWaitronRevision) {
+      if ((paidVerification || paidRecovery) && revision !== historicalWaitronRevision) {
         const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
           '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
           '--user', '1000:1000', '--memory', '256m', '--memory-swap', '256m', '--pids-limit', '32',
@@ -370,7 +370,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
-        ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
+        ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
         ...(paidStream && plan === 'paid' ? ['--env', 'CLOUD_TEST_STREAM=1', '--env', 'SSL_CERT_FILE=/proof/ca.pem'] : []),
         '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem', clientImage], '', 'client-create');
@@ -517,7 +517,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
-            ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
+            ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
             ...(paidContinuousRecovery ? ['--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem'] : []),
             ...(paidAuthorisedRecovery ? ['--tmpfs', '/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777',
               '--tmpfs', '/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777'] : []),

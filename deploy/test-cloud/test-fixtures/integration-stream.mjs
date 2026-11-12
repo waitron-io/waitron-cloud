@@ -29,7 +29,7 @@ export async function startIntegrationStream(root) {
   finally {db.close();}
   assert.ok(signer);
   const machine=async(action,body)=>{
-    const state=JSON.parse(await readFile(root+'/cloud-connection.json','utf8'));
+    const state=JSON.parse(await readFile(root+'/cloud/connection.json','utf8'));
     const payload=Buffer.from(JSON.stringify(['waitron-cloud-machine-v1',state.origin,action,state.view.registration.installationId,
       randomUUID(),Date.now(),JSON.stringify(state.lifecycle.lease),JSON.stringify(body)]));
     const key=createPrivateKey({key:Buffer.from(state.privateKey,'base64url'),format:'der',type:'pkcs8'});
@@ -38,7 +38,7 @@ export async function startIntegrationStream(root) {
     assert.equal(response.status,200,'integration.stream_machine_'+action+':'+response.status);
     return response.json();
   };
-  const state=JSON.parse(await readFile(root+'/cloud-connection.json','utf8'));
+  const state=JSON.parse(await readFile(root+'/cloud/connection.json','utf8'));
   await phase('cloud-configuration');
   const configured=await machine('backup-stream-configure',{revision:state.lifecycle.view.revision,
     sourceNodeId:sourceIdentity.nodeId,pointerSignerPublicKey:signer});
@@ -48,13 +48,15 @@ export async function startIntegrationStream(root) {
   const local=(method,path,body,cookie='')=>new Promise((resolve,reject)=>{
     const req=request(new URL(path,ready.origin),{method,ca,headers:{origin:ready.origin,cookie,'content-type':'application/json'}},res=>{
       let text='';res.on('data',part=>{text+=part;if(text.length>65536)req.destroy(Error('integration.stream_reply_large'));});
-      res.once('error',reject);res.once('end',()=>{try{resolve({status:res.statusCode,headers:res.headers,body:JSON.parse(text)});}catch(error){reject(error);}});
+      res.once('error',reject);res.once('end',()=>{try{resolve({status:res.statusCode,headers:res.headers,body:text?JSON.parse(text):null});}catch(error){reject(error);}});
     });
     req.setTimeout(15000,()=>req.destroy(Error('integration.stream_local_timeout')));req.once('error',reject);req.end(body===undefined?undefined:JSON.stringify(body));
   });
   const login=await local('POST','/management-api/session',{email:'owner@example.test',password:'Local integration password'});
   assert.equal(login.status,200);
   const cookie=login.headers['set-cookie'].map(value=>value.split(';')[0]).join('; ');
+  const fresh=await local('POST','/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},cookie);
+  assert.equal(fresh.status,204);
   await phase('native-stream-attach');
   const attached=await local('PUT','/api/backup/stream',configured.bucket,cookie);
   assert.equal(attached.status,200,'integration.stream_attach:'+attached.body.error);

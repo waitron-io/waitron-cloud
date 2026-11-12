@@ -20,6 +20,8 @@ const post = (path, body, cookie = '') => fetch(ready.origin + path, {method: 'P
 const login = await post('/management-api/session', {email: 'owner@example.test', password: 'Local integration password'});
 assert.equal(login.status, 200, 'integration.local_login');
 const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+const fresh=await post('/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},cookie);
+assert.equal(fresh.status,204,'integration.local_fresh_sign_in');
 if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'rollback-refresh') {
   const result = await new Promise((resolve, reject) => {
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
@@ -41,7 +43,7 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   const response = await fetch(ready.origin + '/management-api/cloud/status', {headers: {cookie}, signal: AbortSignal.timeout(5000)});
   assert.equal(response.status, 200);
   const status = await response.json();
-  const bytes = await readFile(root + '/cloud-connection.json');
+  const bytes = await readFile(root + '/cloud/connection.json');
   const saved = JSON.parse(bytes);
   assert.equal(saved.origin, 'https://waitron.local:3000');
   assert.equal(saved.environment, 'test');

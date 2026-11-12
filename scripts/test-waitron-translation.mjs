@@ -46,7 +46,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
  const bundles=await Promise.all(bundleFiles.map(name=>readFile(join(waitron,'apps/dashboard/dist/assets',name),'utf8')));
  assert.ok(bundles.some(text=>text.includes('content.suggestions_ready_partly')&&text.includes("couldn't be done this time")),'translation_proof_current_dashboard_required');
  const require=createRequire(join(waitron,'apps/server/package.json')),tsx=require.resolve('tsx');
- const [{startPortalFixture},{SignupStore},{TranslationWorker,createLoopbackOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
+ const [{startPortalFixture,completeBrowserEmail,prepareBrowserActionWindow},{SignupStore},{TranslationWorker,createLoopbackOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
   import('../apps/portal/test/fixtures.ts'),import('../packages/registration/src/index.ts'),import('../packages/translation/src/index.ts'),import('../packages/translation/test/fake-openai.ts'),import('node:sqlite'),
  ]);
  let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion,releaseSnapshot;
@@ -74,7 +74,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   return {...ready,running};
  };
  try{
-  f=await startPortalFixture(undefined,undefined,undefined,undefined,{pageBytes:512});
+  f=await startPortalFixture(undefined,undefined,undefined,{pageBytes:512});
   f.translation.events.push=(...events)=>Array.prototype.push.apply(f.translation.events,events.map(event=>({...event,generation})));
   root=await mkdtemp(join(tmpdir(),'cloud-integration-translation-'));receipt.root=root;
   stage='launch';const server=await launch();
@@ -82,7 +82,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   stage='account';const signup=new SignupStore(f.db.pool,f.db.outbox),email=`translation-${randomUUID()}@example.test`,password='Cloud translation proof password';
   await signup.request(email);
   const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);assert.ok('token' in mail);
-  await signup.complete(mail.token,{password,organisationName:'Translation Proof',legalBusinessName:'Translation Proof SL',countryCode:'ES'});
+  const owner=await signup.complete(mail.token,{password,organisationName:'Translation Proof',legalBusinessName:'Translation Proof SL',countryCode:'ES'});
   context=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900}});
   const page=await context.newPage();page.setDefaultTimeout(15000);
   const request=async(method,path,data,status=200)=>{
@@ -91,13 +91,14 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
    return status===204?null:response.json();
   };
   stage='pairing';await request('POST','session',{email:'owner@example.test',password:'Local integration password'});
+  await request('POST','session/me/fresh-sign-in',{method:'password',password:'Local integration password'},204);
   await page.goto(server.origin+'/manage/cloud');await page.getByRole('button',{name:'Connect to Cloud',exact:true}).click();
   const localScreen=page.locator('dashboard-cloud-services-screen');await localScreen.locator('.code').waitFor();
   const code=(await localScreen.locator('.code').innerText()).trim();assert.match(code,/^\d{8}$/);
   const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const portal=await popupPromise;portal.setDefaultTimeout(15000);
-  await portal.getByLabel('Email').fill(email);await portal.locator('input[name=password]').fill(password);await portal.getByRole('button',{name:'Sign in',exact:true}).click();
+  await portal.getByLabel('Email').fill(email);await portal.locator('input[name=password]').fill(password);await portal.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,portal,email);
   await portal.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await portal.getByRole('button',{name:'Check code',exact:true}).click();
-  await portal.getByText('New venue',{exact:true}).waitFor();await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
+  await portal.getByText('New venue',{exact:true}).waitFor();await prepareBrowserActionWindow(f,portal,owner.accountId);await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Translation Proof SL',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Connect this venue',exact:true}).click();await page.getByText('Connected',{exact:true}).waitFor();
   const connected=await request('GET','cloud/status');receipt.installationId=connected.registration.installationId;
