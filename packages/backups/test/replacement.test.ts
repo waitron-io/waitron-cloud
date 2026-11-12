@@ -42,9 +42,37 @@ async function ready(){
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey=randomBytes(32).toString('base64');
  const localVenueId=(await db.pool.query('SELECT local_venue_id FROM venues WHERE id=$1',[f.installed.venueId])).rows[0].local_venue_id;
  const proposed={id:t.id,localVenueId,nodeId:f.point.sourceNodeId,publicKey,peerPublicKey};
- const envelope=(action:'prepare'|'status')=>{const bytes=replacementPayload(origin,action,proposed,Date.now());return {id:t.id,payload:bytes.toString('base64url'),signature:t.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};};
+ const envelope=(action:'prepare'|'status'|'reissue')=>{const bytes=replacementPayload(origin,action,proposed,Date.now());return {id:t.id,payload:bytes.toString('base64url'),signature:t.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};};
  return {...f,t,key,proposed,envelope,store:new ReplacementStore(db.pool,f.vault,origin)};
 }
+for(const pending of [false,true])test(`reissue ${pending?'replaces a pending':'creates an absent'} proposal with fresh keys and replays completion`,async()=>{
+ const f=await ready();
+ if(pending)await f.store.machine('prepare',f.envelope('prepare'));
+ const before=(await db.pool.query('SELECT * FROM installation_replacements WHERE id=$1',[f.t.id])).rows[0];
+ const key=generateKeyPairSync('ed25519'),candidate={...f.proposed,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
+ const envelope=()=>{const b=replacementPayload(origin,'reissue',candidate,Date.now());return {id:f.t.id,payload:b.toString('base64url'),signature:f.t.sign(b),keySignature:sign(null,b,key.privateKey).toString('base64url')};};
+ const proposal=await f.store.machine('reissue',envelope());
+ assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.publicKey,candidate.publicKey);assert.equal(proposal.peerPublicKey,candidate.peerPublicKey);
+ assert.equal(proposal.localVenueId,f.proposed.localVenueId);assert.equal(proposal.nodeId,f.proposed.nodeId);
+ assert.deepEqual(await f.store.machine('reissue',envelope()),proposal);
+ const saved=(await db.pool.query('SELECT * FROM installation_replacements WHERE id=$1',[f.t.id])).rows[0];
+ assert.equal(saved.id,f.t.id);assert.equal(saved.old_installation_id,f.installed.installationId);
+ if(before)assert.deepEqual(saved.created_at,before.created_at);
+ assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
+ assert.equal((await db.pool.query('SELECT active_key_version FROM backup_locations WHERE venue_id=$1',[f.installed.venueId])).rows[0].active_key_version,1);
+ const result=await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));
+ assert.equal(result.publicKey,candidate.publicKey);
+ await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 day',status='closed' WHERE id=$1",[f.t.id]);
+ assert.deepEqual(await f.store.machine('reissue',envelope()),result);
+ await assert.rejects(f.store.machine('reissue',f.envelope('reissue')),/conflict/);
+});
+test('reissue refuses expired recovery without replacing its saved candidate',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
+ const before=(await db.pool.query('SELECT * FROM installation_replacements WHERE id=$1',[f.t.id])).rows;
+ await db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[f.t.id]);
+ await assert.rejects(f.store.machine('reissue',f.envelope('reissue')),/unavailable/);
+ assert.deepEqual((await db.pool.query('SELECT * FROM installation_replacements WHERE id=$1',[f.t.id])).rows,before);
+});
 test('restored replacement preserves venue and history, retires old authority, and replays one result',async()=>{
  const f=await ready();
  const proposal=await f.store.machine('prepare',f.envelope('prepare'));

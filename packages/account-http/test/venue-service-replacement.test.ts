@@ -45,20 +45,20 @@ async function fixture(source:'snapshot'|'continuous',initial:BillingLevel='conn
   await recovery.target(target.id,'restored',target.envelope('restored',source==='snapshot'?f.point.digest:streamRecoveryDigest(`gen-2-${nodeId}-20261030T090000Z`),Date.now(),origin,version));
   const key=generateKeyPairSync('ed25519'),localVenueId=(await db.pool.query('SELECT local_venue_id FROM venues WHERE id=$1',[venueId])).rows[0].local_venue_id;
   const proposed={id:target.id,localVenueId,nodeId,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
-  function proof(action:'prepare'|'status',issuedAt=Date.now()){
+  function proof(action:'prepare'|'status'|'reissue',issuedAt=Date.now()){
    const bytes=replacementPayload(origin,action,proposed,issuedAt);
    return {id:target.id,payload:bytes.toString('base64url'),signature:target.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};
   }
   const app=createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},planMode:'test-venue-levels',leaseIssuer:createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),captures:{vault:f.vault,objects:()=>f.store,async grant(){throw new Error('replacement must not issue data credentials');}}});
   const confirmation={oldInstallationId:f.installed.installationId,oldServerUnavailable:'true',confirmReplacement:'true'};
-  async function machine(action:'prepare'|'status',envelope=proof(action)){
+  async function machine(action:'prepare'|'status'|'reissue',envelope=proof(action)){
    return app.request(origin+'/api/replacement/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(envelope)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}});
   }
   async function account(action:'inspect'|'replace'|'close',extra:Record<string,string>={},headers:Record<string,string>={}){
    return app.request(origin+'/api/account/recovery/'+action,{method:'POST',headers:{'content-type':'application/json',origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken,...headers},body:JSON.stringify({requestId:target.id,code:target.code,...(action==='replace'?confirmation:{}),...extra})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}});
   }
   async function state(){const value:Record<string,unknown>={};for(const table of ['installations','backup_locations','backup_key_versions','backup_points','backup_recoveries','backup_managed_streams','installation_replacements','security_audit_events'])value[table]=(await db.pool.query(`SELECT to_jsonb(t) AS row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;return value;}
-  return {...f,db,venueId,target,proposed,proof,level,machine,account,state,close:()=>db.close()};
+  return {...f,db,app,venueId,target,proposed,proof,level,machine,account,state,close:()=>db.close()};
  }catch(error){await db.close();throw error;}
 }
 async function json(response:Response,status:number){assert.equal(response.status,status,await response.clone().text());return response.json();}
@@ -138,5 +138,28 @@ for(const source of ['snapshot','continuous'] as const)test(`venue ${source} rep
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);
   await refused(await f.account('replace'),403,'permission_denied');await refused(await f.account('inspect'),403,'permission_denied');
   assert.deepEqual(await f.state(),before);
+ }finally{await f.close();}
+});
+
+test('reissue HTTP keeps the machine response and refuses malformed or unsigned requests',async()=>{
+ const f=await fixture('snapshot');try{
+  const response=await json(await f.machine('reissue'),200);
+  assert.equal(response.state,'awaiting_owner');assert.equal(response.publicKey,f.proposed.publicKey);
+  assert.equal('source' in response,false);assert.equal('recoveryKey' in response,false);
+  await refused(await f.machine('reissue',{...f.proof('reissue'),signature:machineTarget().sign(Buffer.from('forged'))}),401,'invalid_proof');
+  await refused(await f.machine('reissue',{...f.proof('reissue'),extra:'unexpected'} as ReturnType<typeof f.proof>),400,'invalid_input');
+  await f.db.pool.query("UPDATE backup_recoveries SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[f.target.id]);
+  await refused(await f.machine('reissue'),410,'unavailable');
+ }finally{await f.close();}
+});
+test('reissue HTTP limits one recovery even when candidate keys and caller IP change',async()=>{
+ const f=await fixture('snapshot');try{
+  for(let n=0;n<31;n++){
+   const candidate=machineTarget(),claims={...f.proposed,publicKey:candidate.publicKey,peerPublicKey:randomBytes(32).toString('base64')};
+   const bytes=replacementPayload(origin,'reissue',claims,Date.now());
+   const response=await f.app.request(origin+'/api/replacement/reissue',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:f.target.id,payload:bytes.toString('base64url'),signature:f.target.sign(bytes),keySignature:candidate.sign(bytes)})},{incoming:{socket:{remoteAddress:'192.0.2.'+(n+1)}}});
+   if(n<30)assert.equal((await json(response,200)).publicKey,candidate.publicKey);
+   else assert.equal(response.status,429,await response.text());
+  }
  }finally{await f.close();}
 });

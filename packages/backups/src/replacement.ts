@@ -9,10 +9,10 @@ import {backupPlan,backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.
 import type {BackupKeyVault} from './keys.ts';
 export interface ReplacementClaims {id:string;localVenueId:string;nodeId:string;publicKey:string;peerPublicKey:string;issuedAt?:number;}
 export interface ReplacementEnvelope extends Proof {id:string;keySignature:string;}
-export function replacementPayload(origin:string,action:'prepare'|'status',c:ReplacementClaims,issuedAt:number){return Buffer.from(JSON.stringify(['waitron-cloud-replacement-v1',origin,c.id,action,c.localVenueId,c.nodeId,'test',c.publicKey,c.peerPublicKey,issuedAt]));}
-function claims(origin:string,action:'prepare'|'status',envelope:ReplacementEnvelope):ReplacementClaims {
+export function replacementPayload(origin:string,action:'prepare'|'status'|'reissue',c:ReplacementClaims,issuedAt:number){return Buffer.from(JSON.stringify(['waitron-cloud-replacement-v1',origin,c.id,action,c.localVenueId,c.nodeId,'test',c.publicKey,c.peerPublicKey,issuedAt]));}
+function claims(origin:string,action:'prepare'|'status'|'reissue',envelope:ReplacementEnvelope):ReplacementClaims {
  try{
-  if(!envelope||!uuid(envelope.id)||!['prepare','status'].includes(action))throw Error();
+  if(!envelope||!uuid(envelope.id)||!['prepare','status','reissue'].includes(action))throw Error();
   const bytes=decode(envelope.payload,4096),v:unknown=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes));
   if(!Array.isArray(v)||v.length!==10||!uuid(v[4])||!uuid(v[5])||typeof v[7]!=='string'||typeof v[8]!=='string'||!Number.isSafeInteger(v[9])||Math.abs(Date.now()-v[9])>60000)throw Error();
   const c={id:envelope.id,localVenueId:v[4],nodeId:v[5],publicKey:v[7],peerPublicKey:v[8],issuedAt:v[9]};
@@ -40,7 +40,7 @@ function view(r:Record<string,any>,p:Record<string,any>){return p.result??{reque
 export class ReplacementStore {
  readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
  constructor(pool:Pool,vault:BackupKeyVault,origin:string,planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;}
- async authenticate(action:'prepare'|'status',envelope:ReplacementEnvelope){
+ async authenticate(action:'prepare'|'status'|'reissue',envelope:ReplacementEnvelope){
   const c=claims(this.origin,action,envelope),r=(await this.pool.query('SELECT target_public_key FROM backup_recoveries WHERE id=$1',[c.id])).rows[0];
   if(!r||!verify(null,decode(envelope.payload,4096),publicKey(r.target_public_key),decode(envelope.signature,86)))backupFail('invalid_proof');return c;
  }
@@ -68,7 +68,7 @@ export class ReplacementStore {
   await snapshotBinding(client,await recovery(client,p.id),'unavailable');
   return p.result;
  }
- async machine(action:'prepare'|'status',envelope:ReplacementEnvelope){
+ async machine(action:'prepare'|'status'|'reissue',envelope:ReplacementEnvelope){
   const c=await this.authenticate(action,envelope);
   return transaction(this.pool,async client=>{
    await client.query('SELECT id FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[c.id]);
@@ -89,12 +89,14 @@ export class ReplacementStore {
    await current(client,c.id);
    if(r.kind==='snapshot'&&(r.verification!=='verified'||r.deleting||r.deleted_at))backupFail('unavailable');
    if(l.installation_id!==old.id)backupFail('conflict');
-   if(p){bound(p,c);claims(this.origin,action,envelope);return view(r,p);}
-   if(action!=='prepare')backupFail('unavailable');
+   if(p&&(action!=='reissue'||(p.public_key===c.publicKey&&p.peer_public_key===c.peerPublicKey))){bound(p,c);claims(this.origin,action,envelope);return view(r,p);}
+   if(action==='status')backupFail('unavailable');
    if(c.publicKey===r.target_public_key||(await client.query('SELECT 1 FROM installations WHERE public_key=$1 UNION ALL SELECT 1 FROM backup_recoveries WHERE target_public_key=$1 UNION ALL SELECT 1 FROM backup_recovery_requests WHERE public_key=$1',[c.publicKey])).rowCount)backupFail('target_not_fresh');
    if((await client.query('SELECT 1 FROM remote_placements WHERE peer_public_key=$1 UNION ALL SELECT 1 FROM installation_replacements WHERE peer_public_key=$1 OR old_peer_public_key=$1',[c.peerPublicKey])).rowCount)backupFail('target_not_fresh');
    const remote=(await client.query('SELECT peer_public_key FROM remote_placements WHERE venue_id=$1',[r.venue_id])).rows[0];
-   const saved=(await client.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,old_peer_public_key,local_venue_id,node_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[c.id,r.venue_id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null,c.localVenueId,c.nodeId])).rows[0];
+   const saved=p
+    ?(await client.query(`UPDATE installation_replacements SET old_installation_id=$2,public_key=$3,peer_public_key=$4,old_peer_public_key=$5 WHERE id=$1 RETURNING *`,[c.id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null])).rows[0]
+    :(await client.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,old_peer_public_key,local_venue_id,node_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[c.id,r.venue_id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null,c.localVenueId,c.nodeId])).rows[0];
    await current(client,c.id);claims(this.origin,action,envelope);return view(r,saved);
   }).catch(error=>{if(error?.code==='23505')backupFail('conflict');throw error;});
  }

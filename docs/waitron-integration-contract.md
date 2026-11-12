@@ -47,6 +47,21 @@ used fresh recovery authority and restored a snapshot published by the replaceme
 Its measured gateway, cell-movement, continuous-restore, snapshot-restore and managed-
 replacement times are recorded in [the executable proof](local-backups.md#run-the-proof).
 
+For an unreadable saved replacement request, Cloud also accepts
+`POST /api/replacement/reissue`. Use the existing `waitron-cloud-replacement-v1`
+ten-field payload with action `reissue`, signed by the retained recovery key and
+fresh installation key. Generate a new tunnel key as well; the pending proposal’s
+tunnel key cannot be reused. Its machine response has the same fields as prepare/status.
+An absent proposal is created; a pending proposal can receive fresh keys without
+changing the recovery ID, venue/source bindings, creation time or original expiry.
+The box must set the unreadable replacement file aside and durably save new keys
+before sending; retry a lost reply with those keys. Identical keys replay a saved
+proposal or completed result; different keys after completion conflict. The existing
+owner confirmation still controls activation. Admission stays test-only and requires
+an open restored recovery; missing recovery authority cannot use it. Reissue uses
+30 requests per minute per authenticated recovery ID as well as the existing IP
+limit. The matching Waitron button and file handling remain separate work.
+
 This is local evidence. Live provider storage and DNS, production deployment and secret
 custody, automatic tunnel/certificate installation, management-database recovery and
 trading activation remain outside this exchange. Cloud's recovery grant is not

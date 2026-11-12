@@ -4264,8 +4264,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   failures retain read-after-uncertain-write reconciliation. Native API/controller
   and stubbed-browser checks cover these paths; real database authority, locking
   and compatibility checks run in CI. Finding another request without its original
-  link, displaying source compatibility before approval, and fresh replacement
-  setup remain follow-ups in their owning Cloud/Waitron surfaces. No recovery,
+  link, displaying source compatibility before approval, and the box button to set
+  aside an unreadable reconnection request remain follow-ups in their owning
+  Cloud/Waitron surfaces. No recovery,
   permission, proof or single-writer rule changes.
 - R4: recovery now explains a refused test-only action in English and Spanish.
   Open a new recovery link from the replacement server’s setup, then choose a test venue;
