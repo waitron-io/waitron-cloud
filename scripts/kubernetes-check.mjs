@@ -193,7 +193,10 @@ try {
     }};
   }
   if (observerLoss || amazon?.observer) {
-    const {emailLoginPolicy} = await import('../packages/account-http/test/fixtures.ts');
+    // The remote source archive runs without installed package dependencies.
+    const emailLimit = {limit: 1000, windowSeconds: 300};
+    const emailLoginPolicy = {loginLifetimeMs: 300000, pendingLifetimeMs: 300000, challengeAttempts: 10, enrolmentAttempts: 10,
+      loginAccount: emailLimit, completeIp: emailLimit, completeAccount: emailLimit, completeChallenge: emailLimit, manageIp: emailLimit, manageAccount: emailLimit};
     const account = manifest.items.find(item => item.metadata.name === 'cloud').spec.containers.find(container => container.name === 'account');
     account.env.push({name: 'CLOUD_FACTOR_POLICY', value: JSON.stringify(emailLoginPolicy)});
   }

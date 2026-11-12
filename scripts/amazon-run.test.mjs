@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['observer ready expiry', /amazon.observer_expiry/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -199,7 +199,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       assert.equal(binary, 'ssh'); assert.equal(timeout, 3600000);
       assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault before observer ready');
       assert.equal(target.observer, true); assert.ok(args.at(-1).includes('kubernetes-check.mjs'));
-      if (scenario === 'observer ready expiry') time += 3000001;
+      if (scenario === 'observer copy baseline') time += 1200000;
       if (scenario === 'observer late baseline') time += 1200001;
       const messages = []; await onReady(value => messages.push(value));
       assert.deepEqual(messages, ['P1_STOPPED', 'P1_REPLACEMENT_READY']);
@@ -235,7 +235,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
       if (binary === 'docker' && args[0] === 'image' && args[1] === 'inspect') return JSON.stringify([{Id: 'sha256:' + 'c'.repeat(64), Architecture: 'amd64', Os: 'linux'}]);
-      if (binary === 'scp' && args.at(-2).endsWith('target.json')) target = JSON.parse(await readFile(args.at(-2), 'utf8'));
+      if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
         if(scenario==='complete'&&!releaseStage&&script==="'sudo' 'cp' '/tmp/d618-images.tar' '/var/local/d620-config/d618-images.tar'"){

@@ -239,15 +239,16 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       deleteStack: () => aws('cloudformation', ['delete-stack', '--stack-name', name], true),
     };
     if (config.observer) operations.observe = async () => {
-      assert.ok(expiry - now() >= 3600000, 'amazon.observer_expiry');
+      // Include target transfer in baseline so the one-hour budget leaves forty minutes.
+      const baselineStarted = now();
+      assert.ok(expiry - baselineStarted >= 3600000, 'amazon.observer_expiry');
       target.observer = true;
       await writeFile(join(directory, 'target.json'), JSON.stringify(target), {mode: 0o600});
       await copy(0, 'target.json', '/tmp/d618-target.json');
-      let stopMs, replacementMs; const baselineStarted = now();
+      let stopMs, replacementMs;
       const result = await observe('ssh', [...sshOptions, 'admin@' + hosts[0],
         ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(ids[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(ids[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'].map(quote).join(' ')], {
         signal, timeout: 3600000, onReady: async send => {
-          assert.ok(expiry - now() >= 2400000, 'amazon.observer_expiry');
           assert.ok(now() - baselineStarted <= 1200000, 'amazon.observer_baseline_late');
           const before = now();
           await operations.stopWorker(); await operations.waitStopped();

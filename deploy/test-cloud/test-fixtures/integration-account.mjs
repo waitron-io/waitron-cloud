@@ -103,6 +103,8 @@ try {
       };
       try {
         await retained();
+        if (phase === 'inspect-retained-snapshot') console.log(JSON.stringify({retainedSnapshotUnchanged: true}));
+        else {
         if (phase === 'remove-test-stream') {
           assert.equal(Number((await pool.query("SELECT count(*) FROM backup_recoveries WHERE venue_id=$1 AND source_kind='continuous' AND status<>'closed'", [venueId])).rows[0].count), 0);
           const objects = await list(); assert.ok(objects.length > 0, 'integration.real_stream_required');
@@ -118,6 +120,7 @@ try {
         assert.equal(streamObjects, 0); assert.equal(pointerRows, 0);
         await retained();
         console.log(JSON.stringify({streamObjects, pointerRows, retainedSnapshotUnchanged: true}));
+        }
       } finally {storage.destroy(); runtime.close();}
     } else if (phase === 'inspect-stream') {
       const runtime=await openTestCaptureRuntime({pool,directory:'/run/local-stack',mode:'test-free-paid'});
@@ -181,7 +184,8 @@ try {
         console.log(JSON.stringify({...evidence, noSupersession: true}));
       }
     } else if (phase === 'provision-snapshot' || phase === 'inspect-snapshot') {
-      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
+        ...(phase === 'inspect-snapshot' ? {openStorage: async () => undefined} : {})});
       const location = {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + rows[0].venue_id, region: 'local'};
       try {
         if (phase === 'provision-snapshot') {

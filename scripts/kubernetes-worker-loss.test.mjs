@@ -55,6 +55,10 @@ test('same signed-in clients observe a stopped worker through two genuine backup
   for (const name of ['session', 'remote', 'login', 'signup']) assert.ok(result.p1.recovery[name].withinMs <= 90000, name);
   assert.ok(result.p1.recovery.backup.withinMs <= 300000);
   assert.equal(result.paidSnapshot.verification, 'verified');
+  const verification = result.paidSnapshot.workerVerification;
+  for (const key of ['pointId', 'sha256', 'bytes']) assert.equal(verification[key], result.paidSnapshot[key]);
+  assert.equal(verification.modules, 15); assert.equal(verification.status, 'passed');
+  assert.equal(verification.noSupersession, true);
   assert.equal(result.paidSnapshot.workerVerification.activation, 'not_attempted');
   assert.equal(result.paidSnapshot.workerVerification.cleanupConfirmed, true);
   assert.equal(result.paidSnapshot.workerVerification.childAbsent, true);

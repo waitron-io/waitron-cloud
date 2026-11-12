@@ -496,6 +496,9 @@ for (const failProbe of [false, true]) test('Amazon observer emits ready first, 
     await rm(directory, {recursive: true, force: true});
   });
   await writeFile(join(directory, 'package.json'), JSON.stringify({type: 'commonjs'}));
+  const standalone = join(directory, 'standalone.mjs');
+  await writeFile(standalone, `import {registerHooks} from 'node:module'; registerHooks({resolve(specifier,context,next){if(!/^(node:|file:|\\.)/.test(specifier))throw Error('standalone.package_dependency:'+specifier);return next(specifier,context);}});`);
+  const {emailLoginPolicy} = await import('../packages/account-http/test/fixtures.ts');
   const cluster = 'd618-12345678-1234-4234-8234-123456789abc', moved = join(directory, 'moved');
   const target = {type: 'amazon', cluster, context: cluster, address: '10.77.0.1', phase: 'before', observer: true,
     instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
@@ -505,6 +508,7 @@ const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').ba
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
+ if(b[0]==='apply'){const manifest=JSON.parse(fs.readFileSync(0,'utf8')),account=manifest.items.find(item=>item.metadata.name==='cloud').spec.containers.find(c=>c.name==='account');require('node:assert/strict').deepEqual(JSON.parse(account.env.find(e=>e.name==='CLOUD_FACTOR_POLICY').value),${JSON.stringify(emailLoginPolicy)});}
  if(b[0]==='get'){
   const role=b[b.indexOf('-l')+1]?.split('=')[1];
   const suffix=role==='manifest'?(fs.existsSync(${JSON.stringify(moved)})?'-worker':'-worker2'):'-control-plane';
@@ -524,7 +528,7 @@ const result=await runKubernetesCheck(${JSON.stringify(target)},{
  clients:async ({kubernetes:k})=>({observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')}),
  observer:async ({ready,stopped,replacement})=>{if(${failProbe})throw Error('p1.remote_after_recovery');ready();await stopped();await replacement();return {done:true};}
 });process.stdout.write(JSON.stringify(result)+'\\n');`;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
+  const child = spawn(process.execPath, ['--import', standalone, '--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
     TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}, stdio: ['pipe', 'pipe', 'pipe']});
   let stdout = '', stderr = '', sent = false;
   const closed = new Promise(resolve => child.once('close', resolve));
@@ -537,7 +541,7 @@ const result=await runKubernetesCheck(${JSON.stringify(target)},{
     }
   }); child.stderr.on('data', part => {stderr += part;});
   const exit = await closed;
-  if (failProbe) {assert.equal(exit, 1, stderr); assert.match(stderr, /Kubernetes failure pods/); assert.match(stderr, /Kubernetes failure events/); return;}
+  if (failProbe) {assert.equal(exit, 1, stderr); assert.match(stderr, /Kubernetes failure pods/); assert.match(stderr, /Kubernetes failure events/); assert.match(stderr, /Error: p1.remote_after_recovery/); return;}
   assert.equal(exit, 0, stderr);
   assert.equal(sent, true);
   assert.deepEqual(stdout.trim().split('\n').map((line, index) => index ? JSON.parse(line) : line),

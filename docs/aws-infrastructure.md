@@ -1145,7 +1145,8 @@ its five-minute cookie before expiry. Local behavior checks run with
 this command has not yet qualified an Amazon observation.
 
 The observer starts only with an hour remaining before scheduled deletion,
-and refuses the fault unless 40 minutes remain after baseline work. It records
+and limits baseline work, including target transfer, to 20 minutes so at least
+40 minutes remain before the fault. It records
 request failures, recovery times and longest gaps on A's clock, confirms at least
 900 seconds after EC2 reports C stopped, and completes another genuine backup
 verification before the existing withdrawal checks and cleanup. Stop and replacement

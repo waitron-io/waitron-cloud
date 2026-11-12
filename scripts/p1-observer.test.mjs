@@ -82,7 +82,6 @@ test('request budgets include setup, both signup endpoints and the original sour
   assert.throws(() => budget.attempt('login', 'owner@example.test'), /p1.email_budget/);
 });
 
-// Stopping too near scheduled deletion cannot qualify the full observation window.
 test('fragmented stop signals preserve ordering', async () => {
   assert.equal(typeof api.readP1Signals, 'function');
   const {PassThrough} = await import('node:stream');
