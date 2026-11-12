@@ -7,12 +7,12 @@ import axe from 'axe-core';
 import {translations} from '../src/locale.ts';
 
 const requestId = '10000000-0000-4000-8000-000000000001';
-const localVenueId = '10000000-0000-4000-8000-000000000002';
+const venueId = '';
 const businesses = [
   {organisationId: '20000000-0000-4000-8000-000000000001', legalBusinessId: '30000000-0000-4000-8000-000000000001', organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'},
   {organisationId: '20000000-0000-4000-8000-000000000002', legalBusinessId: '30000000-0000-4000-8000-000000000002', organisationName: 'Bar Luna', legalBusinessName: 'Luna SL', countryCode: 'ES'},
 ];
-const view = {requestId, localVenueId, environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'};
+const view = {requestId, venueId, environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'};
 const bundle = await build({stdin: {contents: `
  import {applyTokens} from '@waitron-io/ui-core/tokens';
  import {PortalApp} from './src/app.ts';
@@ -61,6 +61,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await code.fill('12345678'); await page.getByRole('button', {name: c.pairInspect, exact: true}).click();
       const choice = page.locator('select[name=legalBusinessId]'), approve = page.getByRole('button', {name: c.pairApprove, exact: true});
       await choice.waitFor(); assert.equal(await choice.inputValue(), '');
+      assert.equal(await page.locator('.venue-id').textContent(),locale==='en'?'New venue':'Nuevo local');
       await approve.click(); await page.getByRole('alert').filter({hasText: c.pairChoice}).waitFor();
       assert.equal(api.writes.length, 1, 'approval without a business sends no request');
       assert.equal(await choice.getAttribute('aria-invalid'), 'true');

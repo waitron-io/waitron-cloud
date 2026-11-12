@@ -4,7 +4,7 @@ import {PairingController} from '../src/pairing-controller.ts';
 import type {ApiResult} from '../src/api.ts';
 const requestId='12345678-1234-4234-8234-123456789abc';
 const business={organisationId:requestId,legalBusinessId:'22345678-1234-4234-8234-123456789abc',organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'};
-const view={requestId,localVenueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:new Date(Date.now()+600000).toISOString(),state:'awaiting_cloud'};
+const view={requestId,venueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:new Date(Date.now()+600000).toISOString(),state:'awaiting_cloud'};
 test('inspection never approves; approval uses only an offered business and stays recoverable after a lost reply',async()=>{
   const calls:{path:string;body?:Record<string,unknown>}[]=[];let lose=false;
   const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
@@ -13,7 +13,7 @@ test('inspection never approves; approval uses only an offered business and stay
   });
   controller.open(requestId);controller.account('account');await controller.load();
   assert.equal(controller.selected,business.legalBusinessId);controller.code='12345678';
-  await controller.inspect();assert.equal(controller.view?.localVenueId,view.localVenueId);assert.equal(calls.filter(c=>c.path.endsWith('approve')).length,0);
+  await controller.inspect();assert.equal(controller.view?.venueId,view.venueId);assert.equal(calls.filter(c=>c.path.endsWith('approve')).length,0);
   controller.selected='not-offered';await controller.approve();assert.equal(calls.filter(c=>c.path.endsWith('approve')).length,0);
   controller.selected=business.legalBusinessId;lose=true;await controller.approve();assert.equal(controller.error,'pairUncertain');assert.equal(controller.code,'12345678');
   lose=false;await controller.approve();assert.equal(controller.view?.state,'awaiting_local');
@@ -57,12 +57,12 @@ test('multiple businesses require an explicit choice from the permitted list',as
   controller.selected=second.legalBusinessId;await controller.approve();assert.equal(approvals.at(-1)?.organisationId,second.organisationId);
 });
 for(const mismatch of [
-  {organisationId:view.localVenueId}, {legalBusinessId:view.localVenueId},
-  {localVenueId:business.legalBusinessId}, {state:'awaiting_cloud'},
+  {organisationId:view.venueId}, {legalBusinessId:view.venueId},
+  {venueId:business.legalBusinessId}, {state:'awaiting_cloud'},
 ])test(`approval rejects changed binding ${JSON.stringify(mismatch)} and retains the choice for retry`,async()=>{
   const controller=new PairingController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>({ok:true,value:(path.endsWith('businesses')?{businesses:[business]}:path.endsWith('inspect')?view:{...view,...business,state:'awaiting_local',...mismatch}) as T}));
   controller.open(requestId);controller.account('owner');await controller.load();controller.code='12345678';await controller.inspect();await controller.approve();
-  assert.equal(controller.error,'unavailable');assert.equal(controller.view?.state,'awaiting_cloud');assert.equal(controller.view?.localVenueId,view.localVenueId);assert.equal(controller.selected,business.legalBusinessId);
+  assert.equal(controller.error,'unavailable');assert.equal(controller.view?.state,'awaiting_cloud');assert.equal(controller.view?.venueId,view.venueId);assert.equal(controller.selected,business.legalBusinessId);
 });
 
 for(const [code,expected] of [[' 12345678','12345678'],['12345678 ','12345678'],[' 12345678 ','12345678'],['\t01234567\n','01234567']] as const)for(const approve of [false,true])

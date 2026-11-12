@@ -18,7 +18,7 @@ export function pairingScreen(app:PortalApp){
     <wt-input name="pairingCode" .label=${c.pairCode} .value=${p.code} .required=${true} .disabled=${p.pending||!!p.view}
       .error=${p.codeError?c.pairCodeError:''} autocomplete="off"
       @wt-change=${(event:CustomEvent<{value:string}>)=>{p.code=event.detail.value;p.codeError=false;if(p.error==='pairCodeError')p.error=undefined;app.draw();}}></wt-input>
-    ${p.view?html`<p>${c.pairConfirm}</p><dl><dt>${c.pairVenue}</dt><dd class="venue-id">${p.view.localVenueId}</dd></dl>
+    ${p.view?html`<p>${c.pairConfirm}</p><dl><dt>${c.pairVenue}</dt><dd class="venue-id">${p.view.venueId||c.pairNewVenue}</dd></dl>
       <p>${p.view.environment==='test'?c.pairTest:c.pairProduction}</p>
       ${p.businesses.length===1?html`<p>${choice?.organisationName}</p><p>${choice?.legalBusinessName}</p>`:
         html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}

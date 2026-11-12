@@ -42,7 +42,7 @@ export class PairingController {
     if(generation!==this.#generation)return;this.pending=false;
     if(result.ok){
       const v=result.value;
-      if(v.requestId!==this.requestId||(prior&&v.localVenueId!==prior.localVenueId)
+      if(v.requestId!==this.requestId||(prior&&v.venueId!==prior.venueId)
         ||(approve&&(v.organisationId!==chosen!.organisationId||v.legalBusinessId!==chosen!.legalBusinessId||v.state==='awaiting_cloud')))this.error='unavailable';
       else this.view=v;
     }else this.#failure(result,approve);
