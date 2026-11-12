@@ -38,27 +38,34 @@ test('verified VM absence frees manual capacity while retaining orphan runner cl
  assert.equal(leases.reserveLocal({lane:'H',turn:'manual-2',snapshot:'b'.repeat(64),argv:['true']}).code,0);
 });
 
-test('a cleaned busy-runner failure permits one durable retry after the tolerance',t=>{
+for(const reason of ['busy-runner','quota','registration-5xx'])test(`a cleaned ${reason} failure permits one durable retry after the tolerance`,t=>{
+ const field=reason==='busy-runner'?'busyRunnerRefusedAt':reason==='quota'?'admissionQuotaRetryAt':'registration5xxFailedAt';
+ const retried=reason==='busy-runner'?'busyRunnerRetried':reason==='quota'?'admissionQuotaRetried':'registration5xxRetried';
+ const record=(leases,failure,now)=>reason==='busy-runner'?leases.recordBusyRunnerFailure(failure):
+  leases.recordCIRetryFailure(failure,reason==='quota'?now+60000:'registration-5xx');
  const leases=setup(t);let now=Date.now();leases.now=()=>now;
  const request=canonical({...ci,workflowPath:'.github/workflows/ci.yml'});
  const lease=leases.reserveLocal(request).lease;
  leases.release(lease,{resourceId:lease.resourceId,absent:true});
- const failure={code:125,cleanup:'absent',lease,error:'CI runner assignment is busy elsewhere'};
- assert.equal(leases.recordBusyRunnerFailure(failure),true);
+ const failure={code:125,cleanup:'absent',lease,error:reason==='busy-runner'?'CI runner assignment is busy elsewhere':reason==='quota'?'GitHub GET refused (403)':'GitHub POST refused (500)'};
+ assert.equal(record(leases,failure,now),true);
  assert.equal(leases.reserveLocal(request).code,75);
  now+=60000;
  assert.equal(leases.reserveLocal(request).code,75,'the old runner must be removed first');
  leases.forgetRunner(leases.inspect().orphanRunners[0]);
+ leases.now=()=>now-1;
+ assert.equal(leases.reserveLocal(request).code,75,'runner removal cannot shorten the full retry delay');
+ leases.now=()=>now;
  const retry=leases.reserveLocal(request);
  assert.equal(retry.code,0);assert.equal(retry.created,true);assert.equal(retry.lease.generation,2);
  const turn=leases.inspect().turns['I:ci-789-1-901'];
- assert.equal(turn.busyRunnerRetried,true);assert.equal(turn.busyRunnerRefusedAt,now-60000);
+ assert.equal(turn[retried],true);assert.equal(turn[field],reason==='quota'?now:now-60000);
  assert.equal(leases.release(lease,{resourceId:lease.resourceId,absent:true}),false);
  leases.release(retry.lease,{resourceId:retry.lease.resourceId,absent:true});
  leases.forgetRunner(leases.inspect().orphanRunners[0]);
- leases.recordBusyRunnerFailure({...failure,lease:retry.lease});now+=60000;
+ assert.equal(record(leases,{...failure,lease:retry.lease},now),false);now+=60000;
  assert.equal(leases.reserveLocal(request).code,75,'a second failure must not gain a third guest');
- assert.equal(leases.inspect().turns['I:ci-789-1-901'].busyRunnerRetried,true);
+ assert.equal(leases.inspect().turns['I:ci-789-1-901'][retried],true);
 });
 
 for(const change of [
