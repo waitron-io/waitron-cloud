@@ -461,12 +461,13 @@ If a worker ends with the busy-runner refusal after verified guest removal, its 
 
 The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable slots, occupied/manual/preparing slots and distinct server/hosted queues. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a full pool retains the existing ledger-only health behavior. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
 
-Controller and worker responses reporting core use of at least 4,000 retain the returned reset
+Multi-slot controller and worker responses reporting core use of at least 4,000 retain the returned reset
 in the existing durable ledger. New placements use GitHub when the next due capacity pass
 publishes zero slots; existing server labels still drain, and active reservations stay owned.
 The hold skips forward overflow, without changing the global mode or selected head. At the
-normal minute publication cadence after reset, computed capacity returns. An existing zero-slot
-snapshot is not rewritten during the hold. Only integer future resets within 61 minutes count;
+normal minute publication cadence after reset, computed capacity returns. Zero-slot snapshots
+are refreshed at that cadence during the hold. Single-slot ledgers do not record holds.
+Only integer future resets within 61 minutes count;
 token replies and malformed headers do not create a hold. Recording failures are logged as
 `github-quota-hold-pending` and leave the HTTP result intact. This headroom cannot guarantee
 against exhaustion or secondary throttling. Threshold/reset and entry-point checks use controlled

@@ -39,7 +39,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   try{await Promise.race([...active.keys(),delay(30000,undefined,{signal:signal?AbortSignal.any([signal,wake.signal]):wake.signal})]);}
   finally{wake.abort();}
  };
- let served=0,healthy,lastCapacity=-Infinity,lastPublishedSlots;
+ let served=0,healthy,lastCapacity=-Infinity;
  const local=()=>{
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   const usable=state.slots.filter(slot=>slot.state!=='quarantined'&&!slot.orphanRunners?.length&&(!Array.isArray(healthy)||healthy.includes(slot.id)));
@@ -59,24 +59,17 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
    const previous=await api.get(`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_CAPACITY`,{signal});
    try{
     const value=previous.value?JSON.parse(previous.value):{},at=value.observedAt,updated=Date.parse(previous.updated_at);
-    lastPublishedSlots=value.slots;
     if(Number.isSafeInteger(at)&&at>=0)lastCapacity=Math.max(at,Number.isFinite(updated)?updated:0);
    }catch(error){console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   }catch(error){if(error.status!==404){pending(error,undefined,'automatic-ci-capacity-pending');return;}}
   if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
-  let state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-  let held=(state.quotaHoldUntil??0)>Date.now();
-  if(held && lastPublishedSlots===0)return;
-  let snapshot;
+  let snapshot,held;
   try{
    snapshot=await overflowInventory({api:pass.api,policy,signal,runs:pass.runs});
-   state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
    held=(state.quotaHoldUntil??0)>Date.now();
-   if(!held || lastPublishedSlots!==0){
-    const value=await publishCapacity({api,policy,state,snapshot,healthy:held?false:healthy??true,signal,now:pass.observedAt});
-    lastPublishedSlots=value.slots;
-   }
+   await publishCapacity({api,policy,state,snapshot,healthy:held?false:healthy??true,signal,now:pass.observedAt});
    lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));
    if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;

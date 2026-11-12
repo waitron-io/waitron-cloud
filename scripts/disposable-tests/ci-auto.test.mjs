@@ -1654,22 +1654,31 @@ for(const entry of ['manual','control'])test(`the ${entry} entry records loopbac
 });
 
 
-for(const phase of ['during inventory','already published zero'])test(`a quota hold ${phase} prevents extra publication and forward movement`,async t=>{
+test('a quota hold first observed during inventory prevents forward movement',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
  for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'held-'+slot,snapshot:'a'.repeat(64),argv:['true']});
  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),now=Date.now();
- let capacity=phase==='during inventory'?'':JSON.stringify({observedAt:now-120000,slots:0}),capacityRead=false,discardedReads=0;const writes=[];
- if(capacity)leases.holdQuota(now+600000);
+ let capacity='';const writes=[];
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
-  if(path.endsWith('DISPOSABLE_TESTS_CAPACITY')){capacityRead=true;return {value:capacity};}
-  if(path.includes('/jobs?') && phase==='during inventory')leases.holdQuota(now+600000);
-  if(capacityRead && path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))discardedReads++;
+  if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))return {value:capacity};
+  if(path.includes('/jobs?'))leases.holdQuota(now+600000);
   if(path.endsWith('/actions/jobs/901'))return f.jobs[0];return get(path);
  };
  f.api.patch=async(path,body)=>{writes.push(path);if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;};f.api.post=async path=>writes.push(path);
  await automaticTick({configuration:'/fixture/config',config,api:f.api});
  assert.equal(JSON.parse(capacity).slots,0);
- assert.deepEqual(writes,phase==='during inventory'?['/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY']:[]);
- if(phase==='already published zero')assert.equal(discardedReads,0);
+ assert.deepEqual(writes,['/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY']);
+});
+
+test('a held zero-capacity snapshot gets a fresh timestamp each publishing minute',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ let now=120000,writes=0,capacity=JSON.stringify({observedAt:0,slots:0});t.mock.method(Date,'now',()=>now);f.jobs.length=0;
+ new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).holdQuota(900000);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('DISPOSABLE_TESTS_CAPACITY')?{value:capacity}:get(path);
+ f.api.patch=async(path,body)=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_CAPACITY'));capacity=body.value;writes++;};
+ const tick=()=>automaticTick({configuration:'/fixture/config',config,api:f.api,transport:{healthy:async()=>true}});
+ await tick();assert.equal(writes,1);assert.equal(JSON.parse(capacity).observedAt,120000);assert.equal(JSON.parse(capacity).slots,0);
+ now=150000;await tick();assert.equal(writes,1);
+ now=181000;await tick();assert.equal(writes,2);assert.equal(JSON.parse(capacity).observedAt,181000);assert.equal(JSON.parse(capacity).slots,0);
 });
