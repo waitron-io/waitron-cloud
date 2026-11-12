@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
+import {createSession} from '@waitron-cloud/identity';
 import {BillingStore,transaction} from '@waitron-cloud/registration';
 import {database} from './fixtures.ts';
 import * as binding from '../src/billing-method-binding.ts';
@@ -139,4 +140,18 @@ for(const kind of ['card','direct_debit'] as const)test(`a pending ${kind} switc
  assert.equal(after.paymentMethod?.id,intent.methodId);assert.equal(after.paymentMethod?.kind,kind);
  assert.equal(after.anchorDate,'2026-11-01');assert.equal(after.anchorDay,1);
  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM billing_payment_methods WHERE organisation_id=$1',[f.scope.organisationId])).rows[0].n,2);
+});
+
+
+test('a setup retains its authorising session and revision across store restarts and provider binding',async()=>{
+ const f=await business(),session=await transaction(db.pool,c=>createSession(c,f.ownerId));
+ const sessionId=(await db.pool.query('SELECT id FROM cloud_sessions WHERE account_id=$1',[f.ownerId])).rows[0].id;
+ const setups=new binding.BillingMethodSetups(db.pool),authority={sessionId,securityRevision:3};
+ const intent=await transaction(db.pool,c=>setups.createOn(c,f.scope,f.ownerId,'card','sumup-sandbox:MSYNTHETIC',authority));
+ const saved=await transaction(db.pool,c=>new binding.BillingMethodSetups(db.pool).bindOn(c,intent,{customerId:'saved_customer',providerReference:'saved_checkout'}));
+ assert.equal(saved.sessionId,sessionId);assert.equal(saved.securityRevision,3);
+ await assert.rejects(transaction(db.pool,c=>setups.completeOn(c,{...saved,sessionId:randomUUID()},{methodId:'token_synthetic',mandateId:null})),/billing_state_conflict/);
+ assert.equal((await new BillingStore(db.pool).business(f.scope)).paymentMethod,null);
+ await db.pool.query('DELETE FROM cloud_sessions WHERE account_id=$1',[session.accountId]);
+ assert.equal((await transaction(db.pool,c=>setups.readOn(c,f.scope)))?.sessionId,sessionId,'session history cleanup retains the invalidated reference');
 });

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
 import type {Pool} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
-import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
+import {createSession,resolveSession,type SessionCredentials} from '@waitron-cloud/identity';
 import {AllowanceConfigStore,reserveAllowance,BillingStore,transaction} from '@waitron-cloud/registration';
 import {database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
@@ -17,13 +18,14 @@ async function owner(){
  const accountId=randomUUID(),organisationId=randomUUID(),legalBusinessId=randomUUID(),venueId=randomUUID();
  const session=await transaction(db.pool,async client=>{
   await client.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
-  await client.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[accountId,`methods-${accountId}@example.invalid`]);
+  await client.query("INSERT INTO cloud_credentials(account_id,email,email_verified_at,password_hash) VALUES($1,$2,clock_timestamp(),'synthetic-password-hash')",[accountId,`methods-${accountId}@example.invalid`]);
   await client.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);
   await client.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[legalBusinessId,organisationId]);
   await client.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)',[accountId,organisationId]);
   await client.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[venueId,organisationId,legalBusinessId]);
   return createSession(client,accountId);
  });
+ await prepareConnectionProof(db.pool,accountId,session.token);
  return {accountId,organisationId,legalBusinessId,venueId,session};
 }
 function provider(){
@@ -241,4 +243,102 @@ test('an already verified shortcut rechecks a session that expired after reading
  });
  const response=await request(app(f,p,true,pool),f.session,verify,{venueId:f.venueId});
  assert.equal(expired,true);assert.equal(response.status,401);assert.equal(p.calls.length,calls);
+});
+
+
+for(const condition of ['unenrolled','unproved','stale'] as const)test(`method start refuses ${condition} authority without creating a setup or calling the provider`,async()=>{
+ const f=await owner(),p=provider();
+ if(condition==='unenrolled')await db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[f.accountId]);
+ else await db.pool.query(`UPDATE cloud_sessions SET action_proved_at=${condition==='unproved'?'NULL':"clock_timestamp()-interval '11 minutes'"} WHERE account_id=$1`,[f.accountId]);
+ const response=await request(app(f,p),f.session,start,{venueId:f.venueId,kind:'card'});
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:condition==='unenrolled'?'enrollment_required':'proof_required'});
+ assert.equal(p.calls.length,0);
+ assert.equal((await db.pool.query('SELECT id FROM billing_method_setups WHERE organisation_id=$1',[f.organisationId])).rowCount,0);
+});
+
+for(const action of ['start','verify'] as const)for(const change of ['enrollment','security','password','session'] as const)test(`method ${action} refuses withdrawn ${change} after the provider wait`,async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ if(action==='verify')assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ const g=gate();p.setPause(g.pause);
+ const pending=request(target,f.session,action==='start'?start:verify,{venueId:f.venueId,...action==='start'?{kind:'card'}:{}});
+ try{
+  await g.waiting;
+  if(change==='enrollment')await db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[f.accountId]);
+  if(change==='security')await db.pool.query('UPDATE cloud_sessions SET action_security_revision=action_security_revision+1 WHERE account_id=$1',[f.accountId]);
+  if(change==='password')await db.pool.query("UPDATE cloud_credentials SET password_hash='changed-hash' WHERE account_id=$1",[f.accountId]);
+  if(change==='session')await db.pool.query("UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1",[f.accountId]);
+ }finally{g.release();}
+ const response=await pending;
+ assert.equal(response.status,change==='session'?401:403);
+ assert.equal((await current(f)).paymentMethod,null);
+ if(action==='start')assert.deepEqual((await db.pool.query('SELECT customer_id,provider_reference FROM billing_method_setups WHERE organisation_id=$1',[f.organisationId])).rows,[{customer_id:null,provider_reference:null}]);
+});
+
+test('a saved setup keeps its authorising session after a return and outlasts idle and proof windows during verification',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'direct_debit'})).status,200);
+ await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[f.accountId]);
+ const g=gate();p.setPause(g.pause);const pending=request(target,f.session,verify,{venueId:f.venueId});
+ try{await g.waiting;await db.pool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '2 hours' WHERE account_id=$1",[f.accountId]);}
+ finally{g.release();}
+ const response=await pending;assert.equal(response.status,200);assert.deepEqual(await response.json(),{state:'verified'});
+ assert.equal((await current(f)).paymentMethod?.kind,'direct_debit');
+});
+
+test('a newly proved session cannot revive a setup whose authorising session was signed out',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ await db.pool.query("UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1",[f.accountId]);
+ const replacement=await transaction(db.pool,c=>createSession(c,f.accountId));await prepareConnectionProof(db.pool,f.accountId,replacement.token);
+ const calls=p.calls.length,response=await request(target,replacement,verify,{venueId:f.venueId});
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+ assert.equal((await transaction(db.pool,c=>resolveSession(c,replacement.token,{touch:false}))).accountId,f.accountId);
+});
+
+
+test('an older setup without retained authority requires a new start and never verifies a provider result',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ await db.pool.query('UPDATE billing_method_setups SET cloud_session_id=NULL,cloud_security_revision=NULL WHERE organisation_id=$1',[f.organisationId]);
+ const calls=p.calls.length,response=await request(target,f.session,verify,{venueId:f.venueId});
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});
+ assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+});
+
+
+test('an ordinary signed-in session checks saved setup authority without its own action proof',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId));
+ const absent=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(absent.status,200);assert.deepEqual(await absent.json(),{state:'failed'});
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ const checked=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(checked.status,200);assert.deepEqual(await checked.json(),{state:'verified'});
+ assert.equal((await current(f)).paymentMethod?.kind,'card');
+ const calls=p.calls.length,replay=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(replay.status,200);assert.deepEqual(await replay.json(),{state:'verified'});assert.equal(p.calls.length,calls);
+});
+
+
+test('checking a completed setup needs current ownership but not the original authorising session',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ assert.equal((await request(target,f.session,verify,{venueId:f.venueId})).status,200);
+ await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1',[f.accountId]);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId)),calls=p.calls.length;
+ const response=await request(target,reader,verify,{venueId:f.venueId});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{state:'verified'});assert.equal(p.calls.length,calls);
+ assert.equal((await current(f)).paymentMethod?.kind,'card');
+});
+
+
+for(const change of ['sign-out','absolute expiry'] as const)test(`an ordinary verifying caller loses authority on ${change} while the setup session remains valid`,async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId)),hash=createHash('sha256').update(reader.token).digest('hex');
+ const g=gate();p.setPause(g.pause);const pending=request(target,reader,verify,{venueId:f.venueId});
+ try{await g.waiting;await db.pool.query(`UPDATE cloud_sessions SET ${change==='sign-out'?'ended_at=clock_timestamp()':"absolute_expires_at=clock_timestamp()-interval '1 second'"} WHERE token_hash=$1`,[hash]);}
+ finally{g.release();}
+ const response=await pending;assert.equal((await current(f)).paymentMethod,null);assert.equal(response.status,401);
+ assert.equal((await transaction(db.pool,c=>resolveSession(c,f.session.token,{touch:false}))).accountId,f.accountId);
 });

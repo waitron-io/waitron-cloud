@@ -3,10 +3,11 @@ import type {Pool,PoolClient} from 'pg';
 import {BillingStore,BillingError,assertBillingTransaction,type BillingScope,type BusinessBillingView,type PaymentMethodKind} from '@waitron-cloud/registration';
 import {parseTestBillingProviderAccount} from './config.ts';
 
-export type MethodSetup=BillingScope&{id:string;ownerId:string;kind:PaymentMethodKind;providerAccountId:string;methodId:string;createdAt:string;customerId:string|null;providerReference:string|null};
+export type MethodSetup=BillingScope&{id:string;ownerId:string;kind:PaymentMethodKind;providerAccountId:string;methodId:string;createdAt:string;customerId:string|null;providerReference:string|null;sessionId:string|null;securityRevision:number|null};
 function conflict():never{throw new BillingError('billing_state_conflict');}
 function row(value:Record<string,unknown>):MethodSetup{
  return {organisationId:value.organisation_id as string,legalBusinessId:value.legal_business_id as string,
+  sessionId:value.cloud_session_id as string|null,securityRevision:value.cloud_security_revision as number|null,
   id:value.id as string,ownerId:value.owner_id as string,kind:value.kind as PaymentMethodKind,
   providerAccountId:value.provider_account_id as string,methodId:value.method_id as string,
   createdAt:(value.created_at as Date).toISOString(),customerId:value.customer_id as string|null,providerReference:value.provider_reference as string|null};
@@ -24,16 +25,17 @@ export class BillingMethodSetups{
   const found=(await client.query('SELECT * FROM billing_method_setups WHERE organisation_id=$1 AND legal_business_id=$2 FOR UPDATE',[scope.organisationId,scope.legalBusinessId])).rows[0];
   return found?row(found):null;
  }
- async createOn(client:PoolClient,scope:BillingScope,ownerId:string,kind:PaymentMethodKind,providerAccountId:string):Promise<MethodSetup>{
+ async createOn(client:PoolClient,scope:BillingScope,ownerId:string,kind:PaymentMethodKind,providerAccountId:string,authority?:{sessionId:string;securityRevision:number}):Promise<MethodSetup>{
   const provider=parseTestBillingProviderAccount(providerAccountId).provider;
   if((kind==='card'?provider!=='sumup':kind!=='direct_debit'||provider!=='stripe'))throw new BillingError('invalid_billing_input');
   await this.lock(client,scope);
   await this.store.executeOn(client,scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
-  await client.query(`INSERT INTO billing_method_setups(organisation_id,legal_business_id,id,owner_id,kind,provider_account_id,method_id)
-   VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(organisation_id,legal_business_id) DO UPDATE SET
+  await client.query(`INSERT INTO billing_method_setups(organisation_id,legal_business_id,id,owner_id,kind,provider_account_id,method_id,cloud_session_id,cloud_security_revision)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(organisation_id,legal_business_id) DO UPDATE SET
    id=EXCLUDED.id,owner_id=EXCLUDED.owner_id,kind=EXCLUDED.kind,provider_account_id=EXCLUDED.provider_account_id,
+   cloud_session_id=EXCLUDED.cloud_session_id,cloud_security_revision=EXCLUDED.cloud_security_revision,
    method_id=EXCLUDED.method_id,created_at=EXCLUDED.created_at,customer_id=NULL,provider_reference=NULL`,
-   [scope.organisationId,scope.legalBusinessId,randomUUID(),ownerId,kind,providerAccountId,randomUUID()]);
+   [scope.organisationId,scope.legalBusinessId,randomUUID(),ownerId,kind,providerAccountId,randomUUID(),authority?.sessionId??null,authority?.securityRevision??null]);
   return (await this.readOn(client,scope))!;
  }
  async bindOn(client:PoolClient,expected:MethodSetup,value:{customerId:string;providerReference:string}):Promise<MethodSetup>{

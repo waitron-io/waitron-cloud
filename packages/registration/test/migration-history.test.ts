@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { migrationNames } from '../src/migrate.ts';
 
-test('connection proof appends migration 061 without replacing earlier security migrations',()=>{
-  assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(-1),'061_connection_action_proof.sql');
+test('payment setup proof appends migration 062 without replacing earlier security migrations',()=>{
+  assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(-1),'062_billing_method_action_proof.sql');
 });
 
 test('retained fiscal registry migration keeps its ledger position and original digest', async () => {

@@ -5,7 +5,7 @@ import * as clients from '../src/billing-method-providers.ts';
 
 const intent={id:'11111111-1111-4111-8111-111111111111',ownerId:'22222222-2222-4222-8222-222222222222',
  organisationId:'33333333-3333-4333-8333-333333333333',legalBusinessId:'44444444-4444-4444-8444-444444444444',
- methodId:'55555555-5555-4555-8555-555555555555',createdAt:'2026-11-07T00:00:00.000Z',customerId:null,providerReference:null};
+ methodId:'55555555-5555-4555-8555-555555555555',createdAt:'2026-11-07T00:00:00.000Z',customerId:null,providerReference:null,sessionId:null,securityRevision:null};
 const stripe={...intent,kind:'direct_debit' as const,providerAccountId:'stripe-test:acct_synthetic'};
 const sumup={...intent,kind:'card' as const,providerAccountId:'sumup-sandbox:MSYNTHETIC'};
 
