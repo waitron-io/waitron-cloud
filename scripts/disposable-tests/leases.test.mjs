@@ -265,3 +265,21 @@ test('multi-slot housekeeping waits for the writer before removing its interrupt
   leases.inspect();assert.equal((await closed)[0],0,error);assert.equal(existsSync(temporary),false);
  }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');await closed;}
 });
+
+
+test('a quota hold survives reopening without changing reservations or turn history',async t=>{
+ const {leases,dir}=await setup(t,{slots:2,now:()=>120000});leases.reserveLocal(request());
+ const before=leases.inspect();leases.holdQuota(240000);leases.holdQuota(180000);
+ const {LocalLeases}=await import(module),after=new LocalLeases(dir,{...config,slots:2,now:()=>250000}).inspect();
+ assert.equal(after.quotaHoldUntil,240000);delete after.quotaHoldUntil;assert.deepEqual(after,before);
+ for(const until of [-1,NaN,'300000',1.5])assert.throws(()=>leases.holdQuota(until),/quota/i);
+ const path=join(dir,'state.json'),state=JSON.parse(readFileSync(path,'utf8'));state.quotaHoldUntil='bad';
+ writeFileSync(path,JSON.stringify(state));assert.throws(()=>leases.inspect(),/quota/i);
+});
+
+
+test('single-slot quota observations do not write the ledger outside its caller lock',async t=>{
+ const {leases,dir}=await setup(t);leases.reserveLocal(request());const path=join(dir,'state.json'),before=readFileSync(path,'utf8');
+ utimesSync(path,new Date(0),new Date(0));leases.holdQuota(Date.now()+600000);
+ assert.equal(readFileSync(path,'utf8'),before);assert.equal(statSync(path).mtimeMs,0);
+});

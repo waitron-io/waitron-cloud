@@ -1,4 +1,4 @@
-import {withRequestCounts} from './github-app.mjs';
+import {withRequestCounts,withQuotaObserver} from './github-app.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync, statSync} from 'node:fs';
 import {join, resolve, isAbsolute} from 'node:path';
@@ -158,6 +158,7 @@ export async function main(args) {
   if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
   else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
   const slots=configuredSlots(config);
+  return withQuotaObserver(async()=>{
   assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
   const cancellation=new AbortController();
   const cancel=()=>cancellation.abort();
@@ -273,6 +274,7 @@ export async function main(args) {
     if(bundled)process.stdin.pause();
     for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.off(signal,cancel);
   }
+  },until=>new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots}).holdQuota(until));
 }
 
 if (process.argv[1] && process.argv[1]!=='-' && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href) {

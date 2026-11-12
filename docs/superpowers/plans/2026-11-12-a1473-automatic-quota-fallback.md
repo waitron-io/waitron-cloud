@@ -21,3 +21,8 @@
 - [ ] Run `node --test scripts/disposable-tests/{github-app,leases,ci-auto}.test.mjs`, read counts; update `deploy/disposable-tests/README.md` and `docs/backlog.md`.
 
 **Qualification:** Controlled loopback returned-header/state test, then existing immutable quiet-window publication/readback: hashes, timer, capacity, active-work preservation. Never force real-App exhaustion, cancel shared work or drain a busy pool. Local controls are not live threshold evidence. Staged overflow remains separate. Expected code+60–100/-10–20, tests+90–130/-0, docs+15–25/-5–10. No new service/schedule/collector/protocol. The watcher cleared that policy; land this plan before implementation.
+
+
+2026-11-12 11:06 watcher amendment after built-work review: drop the skip-rewrite rule above.
+Publish a fresh zero-capacity snapshot at each normal publishing minute during the hold.
+Single-slot ledgers do not record holds; only multi-slot automatic pickup consumes them.
