@@ -55,6 +55,9 @@ export async function freshBackupEvidence(root,pool,state,proof){
  const bytesToSign=Buffer.from(JSON.stringify(['waitron-cloud-recovery-request-v2',origin,id,'start',publicKey,code,fixtureTarget.digest,Date.now()]));
  const requests=new RecoveryRequests(pool,proof.vault,origin,{activeKeyId:'upgrade-recovery',keys:{'upgrade-recovery':randomBytes(32).toString('hex')}});
  await requests.machine('start',{version:2,target:fixtureTarget,payload:bytesToSign.toString('base64url'),signature:sign(null,bytesToSign,key.privateKey).toString('base64url')});
+ if((await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='cloud_sessions' AND column_name='action_proved_at'")).rowCount){
+  const {openProofWindow}=await source(root,'packages/registration/test/fixtures/action-proof.ts');await openProofWindow(pool,owner.credentials.token);
+ }
  await requests.approve(id,code,owner.credentials.token,owner.credentials.csrfToken,{pointId:point.id,oldServerUnavailable:true,acceptDataLoss:true});
  const operation=(await pool.query('SELECT verification_attempt_id,verification_target FROM backup_recoveries WHERE id=$1',[id])).rows[0];
  assert.equal(operation.verification_attempt_id,attempt.id);assert.deepEqual(operation.verification_target,fixtureTarget);
