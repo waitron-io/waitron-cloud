@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -42,6 +43,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.route('https://portal.test/recover',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
      const path=new URL(route.request().url()).pathname;
+     const proof=mockActionProof(route,true);if(proof)return proof;
      if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt}});
      if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
      if(path.endsWith('/backups/list')){snapshotReads++;return route.fulfill({json:{venueId,points:[pointId,second].map((id,index)=>({id,capturedAt:`2026-10-2${index+3}T10:00:00.000Z`,verification:'verified',retention:'daily',expiresAt,protection:null})),nextCursor:null,defaultPointId:pointId,continuousRecovery:null}});}

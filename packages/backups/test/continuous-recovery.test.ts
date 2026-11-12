@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from "node:assert/strict";
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from "node:crypto";
@@ -20,6 +21,7 @@ test("continuous approval freezes fresh verified evidence and target metadata co
  await resetSchema(db.pool);
  const email=`continuous-${randomUUID()}@example.test`,password="A long enough continuous password",signup=new SignupStore(db.pool,db.outbox);await signup.request(email);const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox")).rows[0]);assert("token" in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:"Continuous",legalBusinessName:"Continuous SL",countryCode:"ES"}),session=await transaction(db.pool,client=>login(client,{email,password})),registration=new RegistrationStore(db.pool),installationKey=generateKeyPairSync("ed25519"),localVenueId=randomUUID();
+ await prepareConnectionProof(db.pool,owner.accountId,session.token);
  const binding={operationId:randomUUID(),installationKey:installationKey.publicKey.export({type:"spki",format:"der"}).toString("base64url"),localVenueId,environment:"test",organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId} as const;await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const installed=await registration.complete(binding);
  const vault=new BackupKeyVault(randomBytes(32)),catalogue=new BackupCatalogue(db.pool,vault,()=>({async read(){throw Error("unused");},async put(){throw Error("unused");},async remove(){}}));await catalogue.provision(installed.installationId,{endpoint:"https://store.test",bucket:"continuous-test",region:"local"});
  const signer=generateKeyPairSync("ed25519"),nodeId=randomUUID(),stored=new Map<string,Buffer>(),authority:ManagedStreamAuthority={async provision(){return {writerReference:"writer",readerReference:"reader",writerCredentials:{accessKeyId:"write",secretAccessKey:"secret"}};},async read(_reference,_location,key){const value=stored.get(key);if(!value)throw Error("missing");return value;}};

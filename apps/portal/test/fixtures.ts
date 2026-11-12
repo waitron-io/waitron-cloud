@@ -147,9 +147,9 @@ export async function contextSignIn(f:Awaited<ReturnType<typeof startPortalFixtu
 }
 
 // Other journeys begin after the shared proof; account-action-proof-browser owns the real prompt.
-export async function prepareBrowserActionWindow(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page|BrowserContext){
+export async function prepareBrowserActionWindow(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page|BrowserContext,accountId?:string){
  const cookie=(await ('context' in page?page.context():page).cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');
  assert.ok(cookie,'the security journey needs a signed-in session');
- const {openProofWindow}=await import('../../../packages/registration/test/fixtures/action-proof.ts');
- await openProofWindow(f.db.pool,cookie.value);
+ const {openProofWindow,prepareConnectionProof}=await import('../../../packages/registration/test/fixtures/action-proof.ts');
+ if(accountId)await prepareConnectionProof(f.db.pool,accountId,cookie.value);else await openProofWindow(f.db.pool,cookie.value);
 }

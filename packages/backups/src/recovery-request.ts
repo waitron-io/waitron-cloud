@@ -2,7 +2,7 @@ import {RecoveryCodes,recoveryCodeKeysFromEnv,type RecoveryCodeKeys} from './rec
 import {verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent,transaction,type PlanMode} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,requireConnectionProof,transaction,type PlanMode} from '@waitron-cloud/registration';
 import {BackupRecovery,decode,publicKey,type RecoveryApprovalInput} from './recovery.ts';
 import {backupFail,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
@@ -43,7 +43,7 @@ export class RecoveryRequests {
  }
  async #browser(id:string,code:string,token:string,csrf:string,input?:RecoveryApprovalInput){
   const result=await transaction(this.pool,async client=>{
-   const row=await lock(client,id),session=await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);
+   const row=await lock(client,id),session=input?await requireConnectionProof(client,token,csrf):await resolveSession(client,token,{csrfToken:csrf,touch:false});await available(client,row);
    if(row.account_id&&row.account_id!==session.accountId)backupFail('permission_denied');
    // Check key availability even for malformed guesses, so an outage cannot spend attempts.
    const matches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');

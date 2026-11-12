@@ -1,5 +1,6 @@
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {login} from '@waitron-cloud/identity';
+import {prepareConnectionProof} from '../../../registration/test/fixtures/action-proof.ts';
 import {SignupStore,RegistrationStore,transaction} from '@waitron-cloud/registration';
 import type {database} from '../../../account-http/test/fixtures.ts';
 import {BackupKeyVault} from '../../src/keys.ts';
@@ -35,6 +36,7 @@ export async function recoveryFixture(db:Awaited<ReturnType<typeof database>>,qu
  const catalogue=new BackupCatalogue(db.pool,vault,()=>store),email=randomUUID()+'@example.test',password='a long enough recovery password',signup=new SignupStore(db.pool,db.outbox);
  await signup.request(email);const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);if(!('token' in mail))throw Error('missing signup token');
  const owner=await signup.complete(mail.token,{password,organisationName:email,legalBusinessName:'Recovery SL',countryCode:'ES'}),session=await transaction(db.pool,c=>login(c,{email,password}));
+ await prepareConnectionProof(db.pool,owner.accountId,session.token);
  const reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:machineTarget().publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await reg.start(binding);await reg.approveCloud(binding,owner.accountId);await reg.approveLocal(binding,randomUUID());const installed=await reg.complete(binding);
  await catalogue.provision(installed.installationId,{endpoint:'https://store.test',bucket:'recovery-'+randomUUID(),region:'local'});

@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -29,6 +30,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   let verification='verified';const approvals:unknown[]=[];
   await page.route('https://portal.test/**',route=>{
    const path=new URL(route.request().url()).pathname;
+   const proof=mockActionProof(route,true);if(proof)return proof;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:expiry}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
    if(path.endsWith('/recovery/inspect'))return route.fulfill({json:pending});

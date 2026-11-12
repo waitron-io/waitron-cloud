@@ -2,7 +2,7 @@ export {readRecoveryMachineEnvelope} from './recovery-v2.ts';
 import { createHash, createPublicKey, verify } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { resolveSession } from "@waitron-cloud/identity";
-import { type PlanMode, transaction } from "@waitron-cloud/registration";
+import { type PlanMode, transaction, requireConnectionProof, requirePendingConnectionProof } from "@waitron-cloud/registration";
 import { BackupKeyVault } from "./keys.ts";
 import {
   backupPlan,
@@ -202,7 +202,7 @@ export class BackupRecovery {
       backupFail("confirmation_required");
     return this.#transaction(async (client) => {
       const request=(await client.query('SELECT * FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[input.id])).rows[0];
-      const session = await resolveSession(client, token, {csrfToken,touch:false});
+      const session = await requireConnectionProof(client,token,csrfToken);
       let venueId:string,p:Awaited<ReturnType<typeof point>>|undefined,stream:StreamRow|undefined;
       if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
       else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVerificationPolicy(client);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
@@ -228,7 +228,8 @@ export class BackupRecovery {
           await snapshotBinding(client,prior,'conflict');
         }
         if(continuous&&request?.protocol_version===2)backupFail('unverified');
-        await resolveSession(client, token, { csrfToken, touch: false });
+        await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
+        await client.query('UPDATE backup_recoveries SET cloud_session_id=$2,cloud_security_revision=$3 WHERE id=$1',[input.id,session.sessionId,session.securityRevision]);
         return view(prior);
       }
       if (
@@ -257,12 +258,12 @@ export class BackupRecovery {
         if(q?.current_verification!=='verified'||q.qualified_target_digest!==target.digest)backupFail('unverified');
         verificationId=q.verification_id;verificationTarget=target;
       }else if(request?.protocol_version===2)backupFail('unverified');
-      await resolveSession(client, token, { csrfToken });
+      await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
       const row = (
         await client.query(
           `INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode,source_kind,
-            stream_configuration_revision,stream_generation,stream_recoverable_at,stream_source_node_id,verification_attempt_id,verification_target)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+            stream_configuration_revision,stream_generation,stream_recoverable_at,stream_source_node_id,verification_attempt_id,verification_target,cloud_session_id,cloud_security_revision)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
           [
             input.id,
             venueId,
@@ -275,12 +276,12 @@ export class BackupRecovery {
             continuous?stream!.generation:null,
             continuous?stream!.recoverable_at:null,
             continuous?stream!.source_node_id:null,
-            verificationId,verificationTarget,
+            verificationId,verificationTarget,session.sessionId,session.securityRevision,
           ],
         )
       ).rows[0];
       if(!continuous){await snapshotBinding(client,row);if(!request.operation_id&&!await requestCurrent(client,input.id))backupFail('unavailable');}
-      await resolveSession(client, token, { csrfToken, touch: false });
+      await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
       return view(row);
     }).catch((error) => {
       if (uniqueViolation(error, "backup_recoveries_target_public_key_key"))
@@ -309,7 +310,10 @@ export class BackupRecovery {
         const firstPoint=first.source_kind==='snapshot'?await pointMetadata(client,first.point_id):undefined;
         validateProof(this.#origin,id,action,action==='info'?'':first.source_kind==='continuous'?streamRecoveryDigest(first.stream_generation):firstPoint?.digest??'',first.target_public_key,proof,first.verification_target);
       }
+      // Take the account before membership reads so the saved-session check never upgrades its shared lock.
+      if(action!=='info')await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[first.account_id]);
       await permission(client, first.account_id, first.venue_id);
+      if(action!=='info')await requirePendingConnectionProof(client,first.account_id,first.cloud_session_id??null,first.cloud_security_revision??null);
       await backupPlan(client,first.venue_id,this.#planMode);
       if(first.source_kind==='snapshot')await lockVerificationPolicy(client);
       // Approval outlives observation freshness; the comparison below still binds delivery to the exact frozen generation.
@@ -356,6 +360,7 @@ export class BackupRecovery {
         proof,
         row.verification_target,
       );
+      await requirePendingConnectionProof(client,row.account_id,row.cloud_session_id??null,row.cloud_security_revision??null);
       const operationExpiresAt=row.expires_at.toISOString() as string;
       if(continuous)return {source:continuousSource(row,digest),stream:{venueId:row.venue_id,location:location(l),prefix:stream!.object_prefix,readerReference:stream!.reader_reference,pointerSignerPublicKey:stream!.pointer_signer_public_key,recoveryKey:keys.recoveryKey,localVenueId:stream!.local_venue_id,generation:stream!.generation!},operationExpiresAt};
       return {...binding,source:snapshotSource(row),point:{...p!,verification:"verified" as const},location:location(l),keys,operationExpiresAt};

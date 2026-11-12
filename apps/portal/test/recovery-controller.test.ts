@@ -135,3 +135,13 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  assert.equal(c.error,`recoveryRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.uncertain,false);
  assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/recovery/${action}`);assert.equal(calls[0]?.body?.requestId,id);
 });
+
+for(const code of ['enrollment_required','proof_required'] as const)test(`recovery ${code} keeps the selected request for an explicit proof retry`,async()=>{
+ const calls:string[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return {ok:false,status:403,code,retryAfterMs:0};});
+ c.open(id);c.account('owner');c.code='12345678';c.view=pending as typeof c.view;c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;
+ await c.approve();
+ assert.equal(c.error,code==='enrollment_required'?'pairEnrollment':'recoveryProofRequired');
+ assert.equal(c.view,pending);assert.equal(c.pointId,pointId);assert.equal(c.stopped,true);assert.equal(c.acceptLoss,true);
+ assert.deepEqual(calls,['/recovery/approve']);assert.equal(c.uncertain,false);
+});

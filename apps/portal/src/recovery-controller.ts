@@ -47,8 +47,9 @@ export class RecoveryController {
     };
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     const cause=bodyRefusal(result);
-    this.error=cause?`${this.view?'recovery':'recoveryInspect'}Request${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
-    if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
+    const proofRefusal=result.status===403&&(result.code==='proof_required'||result.code==='enrollment_required');
+    this.error=proofRefusal?(result.code==='enrollment_required'?'pairEnrollment':'recoveryProofRequired'):cause?`${this.view?'recovery':'recoveryInspect'}Request${cause}`:result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
+    if(result.status===401||result.status===403&&!proofRefusal){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
    }
    else this.error='unavailable';
    if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}

@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import assert from 'node:assert/strict';
 import {after,before,beforeEach,test} from 'node:test';
@@ -41,6 +42,7 @@ async function installed(label:string){
  const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:label,legalBusinessName:label+' SL',countryCode:'ES'});
  const session=await transaction(db.pool,c=>login(c,{email,password}));
+ await prepareConnectionProof(db.pool,owner.accountId,session.token);
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
  const binding={operationId:randomUUID(),installationKey:publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registration=new RegistrationStore(db.pool);await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
