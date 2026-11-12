@@ -630,6 +630,9 @@ and `restored` carry operation proof. New requests allow ten calls per fifteen m
 per IP and proven key. Other machine calls share thirty per minute per IP and proven
 key; owner calls allow thirty per minute per account. The global IP allowance also applies.
 Execution rechecks authority after any provider wait. Expiry uses the database clock.
+If the approving sign-in has ended or expired, machine `read` and `restored`
+return `403 {"error":"proof_required"}`. Authorise the same pending recovery
+again on `/recover` with fresh proof and both confirmations before retrying.
 
 Recovery has the same measured shared-address and known-ID trade-offs as pairing.
 Twelve concurrent fresh-key starts behind one address admit 10 and refuse two. Random

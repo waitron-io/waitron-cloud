@@ -39,6 +39,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();await page.locator('.action-proof').getByText(c.actionProofReady,{exact:true}).waitFor();await page.waitForLoadState('networkidle');
   assert.equal(approvals,0,'verification needs an explicit recovery click afterwards');await capture('ready');
   await approve.click();await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();assert.equal(approvals,1);
+  const reauthoriseHelp=locale==='en'?'If the server asks, authorise this recovery again.':'Si el servidor lo pide, vuelve a autorizar esta recuperación.';
+  assert.equal(await page.getByText(reauthoriseHelp,{exact:true}).count(),1);await capture('approved');
   freshUntil=null;await page.goto('about:blank');await page.goto('https://portal.test/recover#request='+id);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('12345678');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
   await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();

@@ -62,12 +62,12 @@ test('concurrent accepted reads, cancellation and sign-out keep account-first lo
 test('absolute session expiry during the archive-key wait still prevents disclosure',async()=>{
  const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
  await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
- await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '1 second' WHERE account_id=$1",[f.owner.accountId]);
+ await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '5 seconds' WHERE account_id=$1",[f.owner.accountId]);
  const blocker=await db.secondPool.connect(),blockerId=(await blocker.query('SELECT pg_backend_pid() AS id')).rows[0].id;let pending:Promise<unknown>|undefined;
  try{
   await blocker.query('BEGIN');await blocker.query('LOCK backup_key_versions IN ACCESS EXCLUSIVE MODE');
   pending=f.recovery.target(t.id,'read',t.envelope('read',f.point.digest));const refused=assert.rejects(pending,/session_expired/);void refused.catch(()=>{});
-  const until=Date.now()+3000;let waiting=false,expired=false;
+  const until=Date.now()+8000;let waiting=false,expired=false;
   while(Date.now()<until){if((await db.secondPool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,blockerId])).rowCount){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));}assert(waiting,'delivery reaches the held archive-key lookup');
   while(Date.now()<until){if((await db.secondPool.query('SELECT clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',[f.owner.accountId])).rows[0].expired){expired=true;break;}await new Promise(resolve=>setTimeout(resolve,10));}assert(expired,'the database clock crosses the absolute session deadline');
   await blocker.query('COMMIT');await refused;

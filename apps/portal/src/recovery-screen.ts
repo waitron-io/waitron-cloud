@@ -26,7 +26,7 @@ export function recoveryScreen(app:PortalApp){
   ${r.view&&(!op||op.status==='pending')&&!expired&&proofRequested?html`${r.error==='pairEnrollment'||app.actionProof.status?.methods.every(m=>m==='email')?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.accountSecurity}</a>`:accountActionProofScreen(app,2)}`:nothing}
   ${op?html`${!complete?html`<p role="status">${op.status==='closed'?c.recoveryClosed:op.status==='restored'?c.recoveryRestored:op.source.kind==='continuous'?c.recoveryApprovedContinuous:c.recoveryApprovedSnapshot}</p>`:nothing}
     <dl>${op.source.kind==='continuous'?html`<dt>${c.recoveryRecoverable}</dt><dd><time datetime=${op.source.recoverableAt}>${formatDateTime(op.source.recoverableAt,app.locale)}</time></dd>`:html`<dt>${c.snapshotIdentifier}</dt><dd>${op.source.pointId}</dd>`}<dt>${c.pairVenue}</dt><dd>${op.venueId}</dd></dl>
-    ${op.status==='pending'&&!expired?approval:nothing}
+    ${op.status==='pending'&&!expired?html`<p>${c.recoveryReauthoriseHelp}</p>${approval}`:nothing}
     ${op.status!=='closed'&&!expired?html`<p>${c.recoveryCancelHelp}</p><wt-button .disabled=${disabled} @click=${()=>{void r.close();}}>${c.recoveryCancel}</wt-button>`:nothing}`:nothing}
   ${op&&!replacement&&op.status==='restored'&&!expired?html`<p role="status">${c.recoveryReplacementWaiting}</p>`:nothing}
   ${replacement?html`<section aria-label=${c.recoveryReplacementTitle}>
