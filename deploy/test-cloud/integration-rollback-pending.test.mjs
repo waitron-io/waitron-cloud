@@ -1,3 +1,4 @@
+import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
@@ -9,17 +10,17 @@ test('rollback drains the saved native request before queuing a fresh renewal', 
   assert.equal(typeof renewIntegrationAfterRollback, 'function', 'Pending rollback work is not drained');
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-pending-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json');
+  const path = join(root, 'cloud/connection.json');
   const pending = {action: 'configuration', operationId: 'original-operation', body: 'original-body'};
   const state = {environment: 'test', publicKey: 'original-key', lifecycle: {revoked: false, lease: {unchanged: true}, pending}};
-  await writeFile(path, JSON.stringify(state), {mode: 0o600});
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, JSON.stringify(state), {mode: 0o600});
   const actions = [];
   // Only the native client's external exchange is substituted; preparation and saved state are real.
   const refresh = async () => {
     const current = JSON.parse(await readFile(path, 'utf8'));
     actions.push(current.lifecycle.pending);
     delete current.lifecycle.pending;
-    await writeFile(path, JSON.stringify(current));
+    await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, JSON.stringify(current));
   };
   const renewal = {action: 'renew', operationId: 'fresh-operation', body: '{}'};
   assert.deepEqual(await renewIntegrationAfterRollback(root, () => renewal, refresh), {renewed: true});
@@ -33,8 +34,8 @@ test('a refused saved request leaves its identity intact and prevents a forced r
   assert.equal(typeof renewIntegrationAfterRollback, 'function', 'Pending rollback work is not drained');
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-refusal-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
-  await writeFile(path, saved, {mode: 0o600});
+  const path = join(root, 'cloud/connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, saved, {mode: 0o600});
   let queued = false;
   await assert.rejects(renewIntegrationAfterRollback(root, () => {queued = true;}, async () => {throw Error('offline');}), /offline/);
   assert.equal(queued, false);

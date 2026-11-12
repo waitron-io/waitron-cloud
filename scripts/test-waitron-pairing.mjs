@@ -6,7 +6,9 @@ import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {randomUUID,createPrivateKey,sign} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {startPortalFixture} from '../apps/portal/test/fixtures.ts';
+import {pathToFileURL} from 'node:url';
+import {prepareIntegrationRenewal} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
+import {startPortalFixture,completeBrowserEmail,prepareBrowserActionWindow} from '../apps/portal/test/fixtures.ts';
 import {InstallationStore,SignupStore} from '../packages/registration/src/index.ts';
 
 const checkout=process.env.WAITRON_CHECKOUT;
@@ -37,13 +39,15 @@ async function stop(running){
 try{
   const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
   const row=(await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];const payload=f.db.outbox.open(row);assert.ok('token' in payload);
-  await signup.complete(payload.token,{password,organisationName:'Cloud Integration',legalBusinessName:'Two Cafés SL',countryCode:'ES'});
+  const owner=await signup.complete(payload.token,{password,organisationName:'Cloud Integration',legalBusinessName:'Two Cafés SL',countryCode:'ES'});
   const registrations=[];const locals=[];
   for(let index=0;index<2;index++){
     const root=await mkdtemp(join(tmpdir(),'cloud-integration-'));roots.push(root);let server=await launch(root);
     const context=await f.browser.newContext({locale:'en'});const page=await context.newPage();page.setDefaultTimeout(10000);
     const login=await context.request.post(`${server.origin}/management-api/session`,{headers:{origin:server.origin},data:{email:'owner@example.test',password:'Local integration password'}});
     assert.equal(login.status(),200,await login.text());
+    const fresh=await context.request.post(`${server.origin}/management-api/session/me/fresh-sign-in`,{headers:{origin:server.origin},data:{method:'password',password:'Local integration password'}});
+    assert.equal(fresh.status(),204,await fresh.text());
     await page.goto(`${server.origin}/manage/cloud`);
     const [startReply]=await Promise.all([page.waitForResponse(response=>response.url()===server.origin+'/management-api/cloud/start'),page.getByRole('button',{name:'Connect to Cloud',exact:true}).click()]);
     assert.equal(startReply.status(),200,await startReply.text());
@@ -52,9 +56,9 @@ try{
     const status=await (await context.request.get(`${server.origin}/management-api/cloud/status`)).json();assert.equal(status.venueId,'');assert.equal(server.venueId,null);assert.equal(status.environment,'test');
     locals.push({root,server,status,context});
     const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const cloud=await popupPromise;cloud.setDefaultTimeout(10000);
-    await cloud.getByLabel('Email').fill(email);await cloud.locator('input[name=password]').fill(password);await cloud.getByRole('button',{name:'Sign in',exact:true}).click();
+    await cloud.getByLabel('Email').fill(email);await cloud.locator('input[name=password]').fill(password);await cloud.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,cloud,email);
     await cloud.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await cloud.getByRole('button',{name:'Check code',exact:true}).click();
-    await cloud.getByText('New venue',{exact:true}).waitFor();await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
+    await cloud.getByText('New venue',{exact:true}).waitFor();await prepareBrowserActionWindow(f,cloud,owner.accountId);await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Two Cafés SL',{exact:true}).waitFor();
     if(index===0){await stop(server);server=await launch(root);await page.reload();await page.getByRole('button',{name:'Connect this venue',exact:true}).waitFor();}
     let completions=0,completionStatus;
@@ -65,8 +69,8 @@ try{
     registrations.push(result.registration);locals[index].server=server;assert.equal(result.code,'');await cloud.close();
   }
   assert.notEqual(registrations[0].installationId,registrations[1].installationId);assert.notEqual(registrations[0].venueId,registrations[1].venueId);
-  const first=JSON.parse(await readFile(join(locals[0].root,'cloud-connection.json'),'utf8'));
-  const second=JSON.parse(await readFile(join(locals[1].root,'cloud-connection.json'),'utf8'));
+  const first=JSON.parse(await readFile(join(locals[0].root,'cloud/connection.json'),'utf8'));
+  const second=JSON.parse(await readFile(join(locals[1].root,'cloud/connection.json'),'utf8'));
   const bytes=Buffer.from(JSON.stringify(['waitron-cloud-pair-v2',f.origin,'status',second.requestId,first.publicKey,'',first.environment,'','','',Date.now()]));
   const signature=sign(null,bytes,createPrivateKey({key:Buffer.from(first.privateKey,'base64url'),format:'der',type:'pkcs8'})).toString('base64url');
   const swapped=await locals[0].context.request.post(`${f.origin}/api/pairing/status`,{data:{payload:bytes.toString('base64url'),signature}});assert.equal(swapped.status(),400);
@@ -74,8 +78,11 @@ try{
   const localPost=async(index,action)=>{
     const {server,context}=locals[index];return context.request.post(`${server.origin}/management-api/cloud/${action}`,{headers:{origin:server.origin},data:{}});
   };
-  f.loseMachineReply('renew');assert.equal((await localPost(0,'refresh')).status(),503);
-  const intent=JSON.parse(await readFile(join(locals[0].root,'cloud-connection.json'),'utf8')).lifecycle.pending;
+  const pending=JSON.parse(execFileSync(process.execPath,['--import',require.resolve('tsx'),'--input-type=module','-e',
+    'import {pendingRequest} from '+JSON.stringify(pathToFileURL(join(waitron,'apps/server/src/cloud-installation.ts')).href)+';console.log(JSON.stringify(pendingRequest("renew")));'],{encoding:'utf8'}));
+  f.loseMachineReply('renew');await prepareIntegrationRenewal(locals[0].root,()=>pending);
+  assert.equal((await localPost(0,'refresh')).status(),503);
+  const intent=JSON.parse(await readFile(join(locals[0].root,'cloud/connection.json'),'utf8')).lifecycle.pending;
   assert.equal(intent.action,'renew');
   await stop(locals[0].server);locals[0].server=await launch(locals[0].root);
   for(let attempt=0;attempt<100;attempt++){
@@ -83,7 +90,7 @@ try{
     if(status.installation?.state==='active')break;
     if(attempt===99)throw new Error('Background renewal did not recover');await delay(50);
   }
-  const recovered=JSON.parse(await readFile(join(locals[0].root,'cloud-connection.json'),'utf8'));
+  const recovered=JSON.parse(await readFile(join(locals[0].root,'cloud/connection.json'),'utf8'));
   const recorded=(await f.db.pool.query('SELECT result FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[registrations[0].installationId,intent.operationId])).rows[0];
   assert.deepEqual(recovered.lifecycle.lease,recorded.result.lease);
   assert.equal((await localPost(1,'refresh')).status(),200);

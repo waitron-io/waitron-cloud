@@ -11,7 +11,7 @@ export function rollbackRefusalDiagnostic(text) {
 
 // Queue the native request in an idle disposable venue; the native client still signs, exchanges and saves it.
 export async function prepareIntegrationRenewal(root, pendingRequest) {
-  const path = join(root, 'cloud-connection.json');
+  const path = join(root, 'cloud/connection.json');
   const state = JSON.parse(await readFile(path, 'utf8'));
   assert.equal(state.environment, 'test');
   assert.equal(state.lifecycle.revoked, false);

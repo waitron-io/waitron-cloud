@@ -1,3 +1,4 @@
+import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -10,6 +11,6 @@ for(const [name,saved,ready,want] of [
  ['current names prevail',{WAITRON_NODE_ID:'current-node',WAITRON_TILL_NODE_ID:'stale-node'},{venueId:'current-venue'},{nodeId:'current-node',streamId:'current-venue'}],
 ])test(`reads the actual ${name} fixture identity`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-source-identity-'));
- try{await writeFile(join(root,'ready.json'),JSON.stringify({venueId:null}));await writeFile(join(root,'fixture-env.json'),JSON.stringify(saved));await writeFile(join(root,'cloud-connection.json'),JSON.stringify(ready));const {readIntegrationSourceIdentity}=await load();assert.equal(typeof readIntegrationSourceIdentity,'function','paired source identity reader is missing');assert.deepEqual(await readIntegrationSourceIdentity(root),want);}
+ try{await mkdir(join(root,'cloud'),{recursive:true});await writeFile(join(root,'ready.json'),JSON.stringify({venueId:null}));await mkdir(join(root,'cloud'),{recursive:true});await writeFile(join(root,'fixture-env.json'),JSON.stringify(saved));await mkdir(join(root,'cloud'),{recursive:true});await writeFile(join(root,'cloud/connection.json'),JSON.stringify(ready));const {readIntegrationSourceIdentity}=await load();assert.equal(typeof readIntegrationSourceIdentity,'function','paired source identity reader is missing');assert.deepEqual(await readIntegrationSourceIdentity(root),want);}
  finally{await rm(root,{recursive:true,force:true});}
 });

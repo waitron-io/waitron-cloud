@@ -100,7 +100,7 @@ an empty venue id. Cloud allocates its id when both approvals complete, and Wait
 records that same id in its venue database. Preproduction/development maps to Cloud's
 test installation environment.
 
-The node keeps `cloud-connection.json` in its protected state directory, separate
+The node keeps `cloud/connection.json` in its protected state directory, separate
 from the venue database. Run one server process per node state directory. The file
 contains the installation's private key; keep it out of customer exports and managed
 replacement restores. Current Waitron recovery capture selects its own named secret
