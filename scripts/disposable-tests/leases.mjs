@@ -264,6 +264,7 @@ export class LocalLeases {
   }
   holdQuota(until) {
     assert.ok(Number.isSafeInteger(until) && until>=0,'Invalid quota hold');
+    if(this.capacity===1)return;
     return this.transaction(state=>{state.quotaHoldUntil=Math.max(state.quotaHoldUntil??0,until);});
   }
   inspect() { return this.transaction(state => {

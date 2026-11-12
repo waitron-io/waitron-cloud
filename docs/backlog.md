@@ -20,7 +20,7 @@ hour contains 2,472 non-token completed non-304 fetches, 135 token requests sepa
 and zero failed fetches across 139 scopes. Job inventories account for 23.7% of the
 non-token count and 51.4% of their replies are 304. Peak sampled core use is 1,845/5,000;
 returned reset series stay separate. Different workloads prevent a causal savings claim.
-The [automatic 4,000/reset plan](superpowers/plans/2026-11-12-a1473-automatic-quota-fallback.md)
+The [automatic quota plan](superpowers/plans/2026-11-12-a1473-automatic-quota-fallback.md)
 has a Claude plan read and watcher clearance (12 November 10:34). Controlled threshold/reset
 checks cover zero available capacity for new placements, durable holds across entry points,
 continued existing-label pickup, retained active reservations and suppressed forward overflow.

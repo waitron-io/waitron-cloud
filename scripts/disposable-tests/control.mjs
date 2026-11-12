@@ -65,11 +65,14 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }catch(error){if(error.status!==404){pending(error,undefined,'automatic-ci-capacity-pending');return;}}
   if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
-  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-  const held=(state.quotaHoldUntil??0)>Date.now();
+  let state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+  let held=(state.quotaHoldUntil??0)>Date.now();
+  if(held && lastPublishedSlots===0)return;
   let snapshot;
   try{
    snapshot=await overflowInventory({api:pass.api,policy,signal,runs:pass.runs});
+   state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   held=(state.quotaHoldUntil??0)>Date.now();
    if(!held || lastPublishedSlots!==0){
     const value=await publishCapacity({api,policy,state,snapshot,healthy:held?false:healthy??true,signal,now:pass.observedAt});
     lastPublishedSlots=value.slots;

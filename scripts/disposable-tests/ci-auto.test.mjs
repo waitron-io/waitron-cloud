@@ -1652,3 +1652,24 @@ for(const entry of ['manual','control'])test(`the ${entry} entry records loopbac
  const result=await main([file,entry==='manual'?'--once':'status']);assert.equal(entry==='manual'?result:result.code,0);
  assert.equal(new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}).inspect().quotaHoldUntil,reset*1000);
 });
+
+
+for(const phase of ['during inventory','already published zero'])test(`a quota hold ${phase} prevents extra publication and forward movement`,async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get;
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'held-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6}),now=Date.now();
+ let capacity=phase==='during inventory'?'':JSON.stringify({observedAt:now-120000,slots:0}),capacityRead=false,discardedReads=0;const writes=[];
+ if(capacity)leases.holdQuota(now+600000);
+ f.api.get=async path=>{
+  if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
+  if(path.endsWith('DISPOSABLE_TESTS_CAPACITY')){capacityRead=true;return {value:capacity};}
+  if(path.includes('/jobs?') && phase==='during inventory')leases.holdQuota(now+600000);
+  if(capacityRead && path.endsWith('DISPOSABLE_TESTS_HOSTED_ATTEMPTS'))discardedReads++;
+  if(path.endsWith('/actions/jobs/901'))return f.jobs[0];return get(path);
+ };
+ f.api.patch=async(path,body)=>{writes.push(path);if(path.endsWith('DISPOSABLE_TESTS_CAPACITY'))capacity=body.value;};f.api.post=async path=>writes.push(path);
+ await automaticTick({configuration:'/fixture/config',config,api:f.api});
+ assert.equal(JSON.parse(capacity).slots,0);
+ assert.deepEqual(writes,phase==='during inventory'?['/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY']:[]);
+ if(phase==='already published zero')assert.equal(discardedReads,0);
+});

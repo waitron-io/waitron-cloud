@@ -276,3 +276,10 @@ test('a quota hold survives reopening without changing reservations or turn hist
  const path=join(dir,'state.json'),state=JSON.parse(readFileSync(path,'utf8'));state.quotaHoldUntil='bad';
  writeFileSync(path,JSON.stringify(state));assert.throws(()=>leases.inspect(),/quota/i);
 });
+
+
+test('single-slot quota observations do not write the ledger outside its caller lock',async t=>{
+ const {leases,dir}=await setup(t);leases.reserveLocal(request());const path=join(dir,'state.json'),before=readFileSync(path,'utf8');
+ utimesSync(path,new Date(0),new Date(0));leases.holdQuota(Date.now()+600000);
+ assert.equal(readFileSync(path,'utf8'),before);assert.equal(statSync(path).mtimeMs,0);
+});
