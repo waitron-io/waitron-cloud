@@ -6,7 +6,7 @@
 
 **Smallest usable result:** the existing controller keeps asking GitHub to validate cached job inventories after unrelated writes, allowing unchanged replies to use 304 instead of throwing away their validators. This addresses a reproduced mechanism, not a promise that busy-hour quota use stays below 5,000.
 
-**Evidence:** Lane I `receipts/firing-20261112-0207/cache-invalidation-probe.log` reproduces unchanged inventory GET200, GET304, cancel POST409, then unconditional GET200. The retained hour has 7,003 HTTP requests, including 905 304s; controller job reads are 1,797 with only five 304s. These HTTP counts are not quota charges. One hour of charged requests, excluding 304s, with category shares is required after publication and before planning the automatic 4,000 switch.
+**Evidence:** Lane I `receipts/firing-20261112-0207/cache-invalidation-probe.log` reproduces unchanged inventory GET200, GET304, cancel POST409, then unconditional GET200. The retained hour has 7,003 HTTP requests, including 905 304s; controller job reads are 1,797 with only five 304s. These HTTP counts are not quota charges. One complete hour of non-304 completed-fetch proxies (`requests − notModified − failedFetches`), with token traffic separate and category shares, is required after publication and before planning the automatic 4,000 switch. Raw quota observations stay in their own reset/resource/category series.
 
 ## Files and work
 
