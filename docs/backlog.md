@@ -21,7 +21,7 @@ and zero failed fetches across 139 scopes. Job inventories account for 23.7% of 
 non-token count and 51.4% of their replies are 304. Peak sampled core use is 1,845/5,000;
 returned reset series stay separate. Different workloads prevent a causal savings claim.
 The [automatic 4,000/reset plan](superpowers/plans/2026-11-12-a1473-automatic-quota-fallback.md)
-is awaiting Claude review and watcher clearance; the switch and bounded staged overflow
+has a Claude plan read; watcher clearance is pending. The switch and bounded staged overflow
 qualification remain open. The counters separate command roles, endpoint categories
 and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
