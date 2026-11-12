@@ -123,7 +123,7 @@ export class PortalApp {
     // Redirect before starting reads so navigation cannot discard their replies.
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
     this.actionProof.account(state.kind==='authenticated'?state.accountId:undefined);
-    if(state.kind==='authenticated'&&(['/', '/account'].includes(this.path)||state.enrollmentRequired)&&!this.actionProof.loaded&&!this.actionProof.pending)void this.actionProof.load();
+    if(state.kind==='authenticated'&&(['/', '/account','/connect'].includes(this.path)||state.enrollmentRequired)&&!this.actionProof.loaded&&!this.actionProof.pending)void this.actionProof.load();
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (state.kind === 'authenticated' && (['/account','/'].includes(this.path) || state.enrollmentRequired) && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.diagnostics.account(ordinary ? state.accountId : undefined);
@@ -260,6 +260,12 @@ export class PortalApp {
   }
   async submitPairing() {
     this.readFields();
+    if(this.pairing.view?.state==='awaiting_cloud'&&this.pairing.businesses.some(b=>b.legalBusinessId===this.pairing.selected)){
+      if(this.pairing.error==='pairEnrollment')this.pairing.error=undefined;
+      const proved=await this.#requireActionProof();
+      if(this.actionProof.status?.methods.every(m=>m==='email')){this.pairing.error='pairEnrollment';this.draw();return;}
+      if(!proved)return;
+    }
     if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
   }

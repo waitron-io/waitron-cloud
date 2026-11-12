@@ -23,10 +23,14 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 async function start(page: Page, single = false) {
   const writes: {path: string; body: unknown}[] = [];
   let failure: {status: number; error: string} | undefined;
+  let freshUntil:string|null='2099-01-01T00:00:00Z';
+  let methods=['passkey','recovery'];
   await page.route('https://portal.test/connect', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**', route => {
     const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
     if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
+    if(path==='/action-proof')return route.fulfill({json:{methods,freshUntil}});
+    if(path==='/action-proof/factor'){freshUntil='2099-01-01T00:00:00Z';return route.fulfill({json:{}});}
     if (path === '/pairing/businesses') return route.fulfill({json: {businesses: single ? [businesses[0]] : businesses}});
     if (request.method() === 'POST') writes.push({path, body: request.postDataJSON()});
     if (path === '/pairing/inspect') return route.fulfill({json: view});
@@ -40,7 +44,7 @@ async function start(page: Page, single = false) {
   await page.goto(`https://portal.test/connect#request=${requestId}`);
   await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
   await page.locator('wt-input[name=pairingCode] input').waitFor();
-  return {writes, fail: (value: typeof failure) => {failure = value;}};
+  return {writes, approvals:()=>writes.filter(w=>w.path==='/pairing/approve').length, proof:(fresh:string|null,enrolled=true)=>{freshUntil=fresh;methods=enrolled?['passkey','recovery']:['email'];}, fail: (value: typeof failure) => {failure = value;}};
 }
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -73,6 +77,24 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await mkdir(process.env.PAIRING_CHOICE_RECEIPT_DIR, {recursive: true});
         await page.screenshot({path: `${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`, fullPage: true});
       }
+      api.proof(null,false);await approve.click();
+      await page.locator('p').filter({hasText:c.pairEnrollment}).waitFor();
+      assert.equal(api.approvals(),0);
+      await mkdir('/tmp/d608-slice8-visual',{recursive:true});
+      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-enroll.png`,fullPage:true});
+      await page.getByRole('link',{name:c.accountSecurity,exact:true}).click();
+      await page.getByRole('heading',{name:c.account,exact:true}).waitFor();
+      await page.goBack();await page.locator('p').filter({hasText:c.pairEnrollment}).waitFor();
+      api.proof(null);await approve.click();
+      await page.getByRole('heading',{name:c.actionProofTitle}).waitFor();
+      assert.equal(api.approvals(),0,'fresh proof precedes Cloud approval');
+      await mkdir('/tmp/d608-slice8-visual',{recursive:true});
+      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-proof.png`,fullPage:true});
+      await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
+      await page.getByRole('button',{name:c.factorRecovery,exact:true}).click();
+      await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+      await page.screenshot({path:`/tmp/d608-slice8-visual/${locale}-${theme}-${width}-ready.png`,fullPage:true});
+      assert.equal(api.approvals(),0,'verification does not approve the box');
       for (const [status, error, expected] of [
         [403, 'permission_denied', c.pairPermission],
         [404, 'pairing_unavailable', c.pairUnavailable],

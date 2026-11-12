@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -32,6 +33,8 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await page.screenshot({path:new URL(`../dist/pairing-${locale}.png`,import.meta.url).pathname,fullPage:true});
+    const token=(await context.cookies()).find(cookie=>cookie.name==='cloud_session')!.value;
+    await prepareConnectionProof(f.db.pool,owner.accountId,token);
     let approvals=0;await page.route('**/pairing/approve',async route=>{approvals++;const reply=await route.fetch();if(approvals===1)await route.abort('failed');else await route.fulfill({response:reply});});
     await page.getByRole('button',{name:c.pairApprove,exact:true}).click();await page.getByText(c.pairUncertain).waitFor();
     await page.getByRole('button',{name:c.pairApprove,exact:true}).click();await page.getByText(c.pairApproved).waitFor();

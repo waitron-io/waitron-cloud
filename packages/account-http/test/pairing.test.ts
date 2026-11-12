@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {request as httpRequest} from 'node:http';
@@ -29,6 +30,7 @@ beforeEach(async()=>{
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
   const logged=await completeEmailProof(db,await request('/api/account/login',{email:'owner@example.test',password},{origin}),body=>request('/api/account/login/email',body,{origin}));assert.equal(logged.status,200);
   cookie=logged.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');csrf=/__Host-cloud_csrf=([^;]+)/.exec(cookie)![1]!;
+  await prepareConnectionProof(db.pool,owner.accountId,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!);
 });
 test('signed machines and browser approval link two distinct venues with durable retry',async()=>{
   const a=machine(),b=machine();assert.equal((await browser('businesses')).status,200);
@@ -126,4 +128,20 @@ test('HTTP code checks keep request separation, concurrent attempt limits and ex
  assert.equal((await b.call('complete')).status,400);assert.equal((await b.call('start')).status,400);
  assert.equal((await browser('approve',choice(b))).status,400);
  assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
+});
+
+test('pairing HTTP distinguishes required enrollment and fresh proof without changing machine messages',async()=>{
+ const m=machine();await m.call('start');
+ await db.pool.query('DELETE FROM cloud_passkeys');
+ const enrollment=await browser('approve',choice(m));assert.equal(enrollment.status,403);assert.deepEqual(await enrollment.json(),{error:'enrollment_required'});
+ await prepareConnectionProof(db.pool,owner.accountId,/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!);
+ await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL');
+ const proof=await browser('approve',choice(m));assert.equal(proof.status,403);assert.deepEqual(await proof.json(),{error:'proof_required'});
+ assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
+});
+
+test('withdrawn browser authority uses the existing unavailable-request machine reply',async()=>{
+ const m=machine();await m.call('start');assert.equal((await browser('approve',choice(m))).status,200);
+ await db.pool.query('UPDATE cloud_sessions SET ended_at=clock_timestamp()');
+ const reply=await m.call('complete');assert.equal(reply.status,400);assert.deepEqual(await reply.json(),{error:'pairing_unavailable'});
 });

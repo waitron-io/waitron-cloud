@@ -11,8 +11,8 @@ export async function requireAllowanceSchema(){
  try{
   await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);
   const ledger=(await pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(ledger.length,60,'allowance proof requires the actual candidate through migration60');
-  assert.equal(ledger[57].name,'058_account_recovery_codes.sql');assert.equal(ledger[58].name,'059_account_action_proof.sql');assert.equal(ledger[59].name,'060_account_email_changes.sql');
+  assert.equal(ledger.length,61,'allowance proof requires the actual candidate through migration61');
+  assert.equal(ledger[57].name,'058_account_recovery_codes.sql');assert.equal(ledger[58].name,'059_account_action_proof.sql');assert.equal(ledger[59].name,'060_account_email_changes.sql');assert.equal(ledger[60].name,'061_connection_action_proof.sql');
   assert.equal(ledger[47].name,'048_billing_allowances_traffic.sql');assert.equal(ledger[48].name,'049_ses_feedback.sql');
   assert.equal(ledger[49].name,'050_mail_legacy_suppression_scopes.sql');assert.equal(ledger[50].name,'051_mail_suppression_reconciliation.sql');assert.equal(ledger[51].name,'052_box_error_reports.sql');assert.equal(ledger[52].name,'053_country_flow_authority.sql');assert.equal(ledger[53].name,'054_staff_problem_reports.sql');assert.equal(ledger[54].name,'055_billing_method_setups.sql');
   for(const name of ['country_policy_versions','country_policy_heads','venue_country_bindings','venue_country_binding_heads','billing_allowance_versions','billing_allowance_reservations','remote_traffic_processes','remote_traffic_samples','remote_traffic_coverage','remote_traffic_reports','mail_legacy_suppression_scopes','mail_legacy_suppression_lifetimes','mail_unblock_requests','mail_unblock_outcomes','mail_suppression_revisions','mail_unblock_provider_attempts','mail_unblock_provider_results','installation_error_reports']){

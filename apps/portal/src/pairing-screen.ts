@@ -1,3 +1,4 @@
+import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
 export function pairingScreen(app:PortalApp){
@@ -22,6 +23,7 @@ export function pairingScreen(app:PortalApp){
         html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}
           @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;if(p.selected&&p.error==='pairChoice')p.error=undefined;app.draw();}}>
           <option value="" .selected=${!p.selected}>${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId} .selected=${b.legalBusinessId===p.selected}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
+    ${p.view?html`${p.error==='pairEnrollment'||app.actionProof.status?.methods.every(m=>m==='email')?html`<p>${c.pairEnrollment}</p><a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.accountSecurity}</a>`:accountActionProofScreen(app)}`:nothing}
     <wt-form-actions>${logout}<wt-button id="submit" variant="primary" .disabled=${p.pending||!!p.waiting} .loading=${p.pending}
       @click=${()=>{void app.submitPairing();}}>${p.view?c.pairApprove:c.pairInspect}</wt-button></wt-form-actions>
     ${p.error==='pairSession'?html`<a href="/login" @click=${(event:MouseEvent)=>app.follow(event,'/login')}>${c.login}</a>`:nothing}`;
