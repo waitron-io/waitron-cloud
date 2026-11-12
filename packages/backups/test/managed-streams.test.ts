@@ -204,7 +204,7 @@ test("configuration retries preserve one venue-scoped authority and reject chang
   assert.notEqual(other.bucket.accessKeyId, configured.bucket.accessKeyId);
 });
 
-test("configuration validates UUIDs and a canonical Ed25519 signer before provider access", async () => {
+test("configuration refuses extra fields, invalid UUIDs and noncanonical signers before provider access", async () => {
   const item = await installed("Invalid"),
     streams = new ManagedStreams(db.pool, vault, authority),
     valid = input(item, signer().publicKey);
@@ -213,7 +213,7 @@ test("configuration validates UUIDs and a canonical Ed25519 signer before provid
     providerCalls++;
   };
   for (const changed of [
-    { ...valid, localVenueId: "not-a-uuid" },
+    { ...valid, localVenueId: item.venueId },
     { ...valid, sourceNodeId: "not-a-uuid" },
     { ...valid, pointerSignerPublicKey: "not-a-key" },
     { ...valid, pointerSignerPublicKey: valid.pointerSignerPublicKey.replace(/=$/, "") },

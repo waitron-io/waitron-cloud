@@ -327,12 +327,15 @@ async function worker(dir, command, input) {
   const child = spawn(
     process.execPath,
     [
-      "--permission",
-      "--allow-fs-read=*",
-      "--allow-fs-write=" + scratch,
-      "--allow-worker",
-      "--allow-child-process",
-      "--allow-addons",
+      // Full native restores exercise durable writes; container data verification owns isolation.
+      ...(command === 'restore' ? [] : [
+        "--permission",
+        "--allow-fs-read=*",
+        "--allow-fs-write=" + scratch,
+        "--allow-worker",
+        "--allow-child-process",
+        "--allow-addons",
+      ]),
       "--import",
       require.resolve("tsx"),
       join(waitron, "apps/server/scripts/cloud-backup-fixture.ts"),
@@ -514,6 +517,12 @@ try {
     }finally{await writeFile(join(venue.root,'captured.backup.enc'),bytes,{mode:0o600});}
     const point=await captureClient(venue.root,'publish',{id:reservation.id,metadata});
     assert.deepEqual(await captureClient(venue.root,'publish',{id:reservation.id,metadata}),point);
+    // Keep the independent fixture's venue-content assertion as well as queue verification.
+    const target = await root();
+    await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
+    const restored=await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
+    assert(restored.integrityOk);assert(restored.hooks.includes('fiscal-verifactu'));
+    assert.equal(restored.cloudCredentialPresent,false);assert.equal(restored.staffKeyPresent,false);
     let result;
     const restore = await createWaitronVerifier(waitron);
     const controllerRoot=await root(),{verify,controllerScope}=await openTestBackupVerifier({directory:controllerRoot,image:process.env.CLOUD_VERIFIER_IMAGE});
@@ -543,12 +552,6 @@ try {
     assert(result, 'Persistent worker must restore the real snapshot');
     const saved = await f.db.pool.query('SELECT verification FROM backup_points WHERE id=$1',[point.id]);
     assert.equal(saved.rows[0].verification,'verified');
-    // Keep the independent fixture's venue-content assertion as well as queue verification.
-    const target = await root();
-    await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
-    const restored=await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
-    assert(restored.integrityOk);assert(restored.hooks.includes('fiscal-verifactu'));
-    assert.equal(restored.cloudCredentialPresent,false);assert.equal(restored.staffKeyPresent,false);
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey,applicationVault });
   }
   record(

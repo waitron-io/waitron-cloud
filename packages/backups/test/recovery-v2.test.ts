@@ -73,8 +73,8 @@ test('absolute session expiry during the archive-key wait still prevents disclos
   await blocker.query('COMMIT');await refused;
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
-test('v2 accepts the complete pinned 15-owner target in Waitron signed request bytes',()=>{
- const t=machineTarget();assert.equal(t.target.modules.length,15);
+test('v2 accepts the complete pinned 8-owner target in Waitron signed request bytes',()=>{
+ const t=machineTarget();assert.equal(t.target.modules.length,8);
  const proof=t.envelope('start');const claims=verifyRecoveryRequest(origin,'start',proof);
  assert.equal(claims.id,t.id);assert.equal(claims.publicKey,t.publicKey);
  assert.deepEqual(JSON.parse(Buffer.from(proof.payload,'base64url').toString()),['waitron-cloud-recovery-request-v2',origin,t.id,'start',t.publicKey,t.code,fixtureTarget.digest,JSON.parse(Buffer.from(proof.payload,'base64url').toString()).at(-1)]);

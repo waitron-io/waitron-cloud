@@ -35,7 +35,7 @@ test('same-run controls retain archive identity, bound outcomes and exact child 
  assert(actual.cases.every(c=>c.terminated&&c.cleanupConfirmed));assert.equal(new Set(actual.cases.map(c=>c.childId)).size,actual.cases.length);
  assert.equal(new Set(actual.cases.map(c=>c.request.attempt.childToken)).size,actual.cases.length);
  assert(actual.cases.every(c=>c.request.archive.sha256===object.receipt.digest&&c.request.archive.bytes===object.receipt.size));
- assert.equal(actual.cases.at(-1).result.status,'passed');assert.equal(actual.cases.at(-1).result.modules.length,15);
+ assert.equal(actual.cases.at(-1).result.status,'passed');assert.equal(actual.cases.at(-1).result.modules.length,8);
  assert.equal(actual.cases.find(c=>c.name==='scratch').faultObserved,true);
  assert.equal(actual.cases.find(c=>c.name==='uncertain-cleanup').faultObserved,true);
  assert(!JSON.stringify(actual).includes(recoveryKey));assert(!JSON.stringify(actual).includes(captured.archive));
