@@ -84,7 +84,7 @@ for(const source of ['snapshot','continuous'] as const)for(const level of ['conn
 });
 
 // A repeated permission check alone misses a downgrade/upgrade or a changed grant destination during provider work.
-for(const source of ['snapshot','continuous'] as const)for(const repeat of source==='continuous'?[1,2,3,4,5]:[1])for(const change of ['round-trip','trial-extension','endpoint','bucket','region','membership','operation-expiry','owner-close','proof-expiry'] as const)test(`venue ${source} recovery provider wait rejects ${change} without credentials (diagnostic ${repeat})`,async(t)=>{
+for(const source of ['snapshot','continuous'] as const)for(const repeat of source==='continuous'?[1,2,3,4,5]:[1])for(const change of ['round-trip','trial-extension','endpoint','bucket','region','membership','operation-expiry','owner-close','proof-expiry'] as const)test(`venue ${source} recovery provider wait rejects ${change} without credentials${repeat===1?'':` (diagnostic ${repeat})`}`,async(t)=>{
  const f=await fixture(source,change==='trial-extension');try{
   const before=await f.state(),now=Date.now(),envelope=f.proof(change==='proof-expiry'?now-59000:now);let clock:ReturnType<typeof t.mock.method>|undefined;
   f.block(async()=>{

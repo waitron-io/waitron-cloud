@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {run} from 'node:test';
+import {inspect} from 'node:util';
 import {resolve} from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -203,6 +204,8 @@ export async function summariseServiceMatrix(events,selected){
       lastType=event.type;lastSuccess=data?.success;
       if(event.type==='test:fail'&&position){
         const error=data.details?.error;
+        if(process.env.CLOUD_RECOVERY_DIAGNOSTIC==='1'&&position.suite==='recovery')
+          process.stderr.write('RAW_RECOVERY_DIAGNOSTIC '+inspect(data,{depth:12,colors:false})+'\n');
         report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
         // Only this assertion's finite worker messages can cross the privacy boundary.
         if(resolve(data.file)===resolve(root,'packages/translation/test/worker-cli.test.ts')&&data.name===disconnectTitle){
