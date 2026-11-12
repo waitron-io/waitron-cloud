@@ -87,7 +87,7 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
-export async function readAutomaticPass({api,policy,signal}){
+export async function readAutomaticPass({api,policy,signal,leases}){
  const base=`/repos/${policy.repository}`,observedAt=Date.now(),runs=new Map(),reads=new Map();
  for(const status of ['queued','in_progress']){
   const data=await runInventory(api,`${base}/actions/runs?status=${status}&per_page=100`,signal);
@@ -95,6 +95,25 @@ export async function readAutomaticPass({api,policy,signal}){
   assert.ok(Number.isSafeInteger(data.total_count) && data.total_count<=100 && Array.isArray(data.workflow_runs) &&
    data.workflow_runs.length===data.total_count && new Set(data.workflow_runs.map(run=>run.id)).size===data.total_count,'Incomplete automatic run inventory');
   for(const run of data.workflow_runs)runs.set(run.id,run);
+ }
+ if(leases){
+  const ignored=leases.inspect().ignoredEmptyRuns??[];
+  for(const [id,run] of runs){
+   const age=observedAt-Date.parse(run.created_at),key=id+':'+run.run_attempt;
+   if(run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
+    !Number.isSafeInteger(id) || id<=0 || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<=0 ||
+    run.status!=='queued' || !(age>3600000))continue;
+   if(ignored.includes(key)){runs.delete(id);continue;}
+   const {jobs}=await jobInventory(api,`${base}/actions/runs/${id}/attempts/${run.run_attempt}/jobs`,signal);
+   if(jobs.length)continue;
+   if(leases.ignoreEmptyRun(key)){
+    const refusals=[];
+    for(const action of ['cancel','force-cancel'])try{await api.post(`${base}/actions/runs/${id}/${action}`,undefined,{signal});}
+    catch(error){signal?.throwIfAborted();refusals.push({action,error:error.message});}
+    console.log(JSON.stringify({event:'automatic-ci-empty-run-ignored',runId:id,attempt:run.run_attempt,refusals}));
+   }
+   runs.delete(id);
+  }
  }
  const pulls=[...runs.values()].some(run=>run.event==='pull_request')?await api.get(`${base}/pulls?state=open&per_page=100`,{signal}):[];
  assert.ok(Array.isArray(pulls) && pulls.length<100,'Incomplete open PR inventory');

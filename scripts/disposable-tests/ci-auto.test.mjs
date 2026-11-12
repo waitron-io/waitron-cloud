@@ -1464,6 +1464,51 @@ test('a full pool still cancels an obsolete run before returning',async t=>{
  await automaticTick({configuration:'/fixture/config',config,api:f.api,runWorker:async()=>assert.fail('Pool is full')});
  assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/force-cancel']);
 });
+test('old empty queued runs are cancelled once, then omitted across controller restarts',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[],logs=[];
+ const ghost={...f.run,id:790,event:'schedule',workflow_id:999,path:'.github/workflows/server-health.yml',status:'queued',pull_requests:[],created_at:new Date(Date.now()-7200000).toISOString()};
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?')&&path.includes('status=queued'))return {total_count:1,workflow_runs:[ghost]};
+  if(path.includes('/runs/790/attempts/'))return {total_count:0,jobs:[]};
+  return get(path,options);
+ };
+ f.api.post=async path=>{posts.push(path);throw Object.assign(new Error('GitHub refused (409)'),{status:409});};
+ const log=console.log;console.log=line=>logs.push(JSON.parse(line));
+ try{for(let restart=0;restart<2;restart++){
+  const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
+  const pass=await controller.readAutomaticPass({api:f.api,policy,leases});
+  assert.deepEqual([...pass.runs.keys()],[789]);
+  assert.deepEqual([...(await controller.overflowInventory({api:pass.api,policy,runs:pass.runs})).keys()],[789]);
+ }}finally{console.log=log;}
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/790/cancel','/repos/fixture/waitron/actions/runs/790/force-cancel']);
+ assert.equal(logs.filter(row=>row.event==='automatic-ci-empty-run-ignored'&&row.runId===790).length,1);
+ ghost.run_attempt=2;
+ await controller.readAutomaticPass({api:f.api,policy,leases:new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6})});
+ assert.equal(posts.length,4,'A new attempt must not inherit the ignored attempt');
+});
+test('automatic pickup cleans empty scheduled runs even with a full pool',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[];
+ for(let slot=0;slot<6;slot++)new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot}).reserveLocal({lane:'I',turn:'full-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ Object.assign(f.run,{event:'schedule',path:'.github/workflows/server-health.yml',workflow_id:999,status:'queued',pull_requests:[],created_at:new Date(Date.now()-7200000).toISOString()});
+ f.jobs.length=0;
+ f.api.get=async(path,options)=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path,options);
+ f.api.post=async path=>{posts.push(path);throw Object.assign(new Error('Cannot cancel'),{status:409});};
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),runWorker:async()=>assert.fail('Pool is full')});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/cancel','/repos/fixture/waitron/actions/runs/789/force-cancel']);
+});
+for(const state of ['young','running','has-jobs','foreign','invalid-time'])test(`empty-run cleanup preserves ${state} runs`,async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[];
+ f.run.status=state==='running'?'in_progress':'queued';
+ f.run.created_at=state==='invalid-time'?'invalid':new Date(Date.now()-(state==='young'?3599000:7200000)).toISOString();
+ if(state==='foreign')f.run.repository={id:999};
+ f.api.get=async(path,options)=>path.includes('/jobs?')&&state!=='has-jobs'?{total_count:0,jobs:[]}:get(path,options);
+ f.api.post=async path=>posts.push(path);
+ const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6});
+ assert.deepEqual([...(await controller.readAutomaticPass({api:f.api,policy,leases})).runs.keys()],[789]);
+ assert.deepEqual(posts,[]);
+});
+
 test('one automatic pass shares run, PR and job observations across its readers',async()=>{
  const f=fixture(),get=f.api.get,reads=[];
  f.api.get=async(path,options)=>{reads.push(path);if(path.includes('/pulls?state=open'))return [{number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];return get(path,options);};

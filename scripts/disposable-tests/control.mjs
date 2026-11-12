@@ -105,7 +105,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  const starting=[...active.values()].filter(ci=>!recorded.has(ci.jobId)).length;
  let free=Math.max(0,state.slots.filter(slot=>slot.state==='free' && !slot.ciInvocation).length-starting);
  let pass;
- try{pass=await read(()=>readAutomaticPass({api,policy,signal}));}
+ try{pass=await read(()=>readAutomaticPass({api,policy,signal,leases:new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots})}));}
  catch(error){
   if(error.code!=='CI_REPOSITORY_RUN_LIMIT')throw error;
   readFailed=false;console.error(JSON.stringify({event:'automatic-ci-wide-inventory-pending',error:error.message}));

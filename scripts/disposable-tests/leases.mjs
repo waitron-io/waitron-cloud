@@ -89,6 +89,8 @@ export class LocalLeases {
     }
     assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
     assert.ok(state.quotaHoldUntil===undefined || Number.isSafeInteger(state.quotaHoldUntil) && state.quotaHoldUntil>=0,'Invalid quota hold');
+    assert.ok(state.ignoredEmptyRuns===undefined || Array.isArray(state.ignoredEmptyRuns) &&
+      state.ignoredEmptyRuns.every(key=>typeof key==='string' && /^[1-9][0-9]*:[1-9][0-9]*$/.test(key)),'Invalid ignored empty runs');
     assert.ok(state.turns && typeof state.turns==='object' && !Array.isArray(state.turns) &&
       Object.getPrototypeOf(state.turns)===Object.prototype,'Invalid ledger turn history');
     assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
@@ -266,6 +268,14 @@ export class LocalLeases {
     assert.ok(Number.isSafeInteger(until) && until>=0,'Invalid quota hold');
     if(this.capacity===1)return;
     return this.transaction(state=>{state.quotaHoldUntil=Math.max(state.quotaHoldUntil??0,until);});
+  }
+  ignoreEmptyRun(key) {
+    assert.match(key,/^[1-9][0-9]*:[1-9][0-9]*$/);
+    return this.transaction(state=>{
+      state.ignoredEmptyRuns??=[];
+      if(state.ignoredEmptyRuns.includes(key))return false;
+      state.ignoredEmptyRuns.push(key);return true;
+    });
   }
   inspect() { return this.transaction(state => {
     if(this.slot===undefined)return state;
