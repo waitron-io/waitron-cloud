@@ -10,7 +10,7 @@
 **Red evidence already captured:** diagnostic run `43146130590`, job `130944337338`, scratch `bddd0c4852892e83a0e816e41b6b9324a8d8dbcb`.
 `/Users/clintongormley/waitron-campaign-g/receipts/d-flake/github-wrapper-diagnostic.log:1091-1117` records PostgreSQL `53200` (shared lock-table exhaustion), `max_locks_per_transaction`, and `LockAcquireExtended`.
 The stack reaches `packages/account-http/test/fixtures.ts:26`, whose `close()` runs `DROP SCHEMA CASCADE`, from `venue-service-recovery.test.ts:106` in `finally`.
-This identifies cleanup failure, not a provider or assertion failure. Passing Linux pair 39/39, raw matrices 360/360 on Node 26.11.1 and 26.13.0, and GitHub raw 360/360 and expanded 396/396 did not explain it; the original wrapper with full diagnostics did.
+This identifies the cleanup error; `finally` can mask an earlier error, so no provider or authority result is inferred. Passing Linux pair 39/39, raw matrices 360/360 on Node 26.11.1 and 26.13.0, and GitHub raw 360/360 and expanded 396/396 did not explain it; the original wrapper with full diagnostics did.
 
 **Only implementation files:**
 
@@ -26,7 +26,7 @@ Use `createVenueServiceTemplate()` from `packages/registration/test/fixtures/ven
 
 - [ ] Use the captured real failure as the red baseline; add no artificial lock-pressure probe or permanent stress test. The repair evidence is that these six files no longer execute the failing `DROP SCHEMA CASCADE` path. Passing checks below are regression evidence, not proof that every historical lock failure is gone.
 - [ ] In each of the six files, import `before`, `after` and the existing template creator. Create one template in `before`, call `database(template.name)` in the local fixture, and close it with `await template?.close()` in `after`, so failed setup adds no cleanup error. This uses explicit hooks rather than the precedent’s lazy template creation. Keep every case's existing `finally` cleanup and every behavioural assertion unchanged. Add no shared abstraction.
-- [ ] Run the focused real-PostgreSQL six files on Linux, expecting 102 passed, zero failed/cancelled/skipped:
+- [ ] Run these six files against real PostgreSQL on Linux, expecting 102 passed, zero failed/cancelled/skipped:
 
   `node scripts/test-postgres.mjs exec node --test packages/account-http/test/venue-service-recovery.test.ts packages/account-http/test/venue-service-replacement.test.ts packages/backups/test/venue-service-replacement.test.ts packages/translation/test/venue-service-translation.test.ts packages/translation/test/venue-service-queue.test.ts packages/translation/test/worker-cli.test.ts`
 
