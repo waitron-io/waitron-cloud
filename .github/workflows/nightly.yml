@@ -128,7 +128,7 @@ jobs:
           with tempfile.TemporaryDirectory(prefix='password-lock-') as scratch:
               candidate = Path(scratch) / 'candidate'
               subprocess.run(['git', 'clone', '--quiet', '--shared', '.', str(candidate)], check=True)
-              subprocess.run(['pnpm', 'install', '--frozen-lockfile'], cwd=candidate, check=True)
+              subprocess.run(['pnpm', 'install', '--frozen-lockfile', '--offline'], cwd=candidate, check=True)
               path = candidate / 'packages/identity/src/sessions.ts'
               original = path.read_text()
               derive = "  const correct = await verifySecret(password, usable ? passwordHash! : DUMMY_PASSWORD_HASH);\n" + "  if (!accountId || !usable || !correct) throw new IdentityError('credentials_invalid');\n"
@@ -138,15 +138,14 @@ jobs:
                   path.write_text(original.replace(derive, '', 1).replace(target, derive + target, 1))
                   code, output = run('lock-before-derivation', candidate)
                   assert code != 0 and re.search(r'^not ok \d+ - ' + re.escape(name) + '$', output, re.MULTILINE), 'expected live case failure missing'
-                  assert "failureType: 'testCodeFailure'" in output and 'canceling statement due to statement timeout' in output, 'expected test-body account-lock refusal missing'
+                  assert "failureType: 'testCodeFailure'" in output, 'expected test-body failure missing'
+                  assert 'canceling statement due to statement timeout' in output, 'expected account-lock refusal missing'
               finally:
                   path.write_text(original)
               code, output = run('restored', candidate)
               assert code == 0 and re.search(r'^# pass 1$', output, re.MULTILINE) and re.search(r'^ok \d+ - ' + re.escape(name) + '$', output, re.MULTILINE), 'restored case failed'
           print('Live password lock-order fault caught; restored PostgreSQL case passes.', flush=True)
           PYTHON
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Prove counter rollback, retry and deleted-guard refusal
         run: |
           mkdir -p diagnostics
