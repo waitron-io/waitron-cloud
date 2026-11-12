@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
-import {test} from 'node:test';
+import {after,before,test} from 'node:test';
 import {BillingStore,createLeaseIssuer,type BillingLevel} from '@waitron-cloud/registration';
 import {TranslationMachine,TranslationWorker,createLoopbackOpenAiClient,createJob,jobFingerprint} from '../src/index.ts';
 import {transaction} from '@waitron-cloud/registration';
 import {connectedVenue,database,giveConsent,readyForTranslation} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,responsesBody,startFakeOpenAi} from './fake-openai.ts';
+import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
+
+let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>;
+before(async()=>{template=await createVenueServiceTemplate();});
+after(async()=>{await template?.close();});
 const origin='https://cloud.example.test';
 const text=JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es']},
  items:[{ref:'product:1',kind:'product',family:'product:1',category:'BAR',staffName:'Cafe',existing:{},missing:['ca','es']}],houseStyle:[]});
@@ -14,7 +19,7 @@ const mode='test-venue-levels' as const;
 const code=(name:string)=>(error:any)=>error.code===name||error.message===name;
 const issuer=()=>createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 async function fixture(){
- const db=await database(),signer=issuer(),store=new BillingStore(db.pool);
+ const db=await database(template.name),signer=issuer(),store=new BillingStore(db.pool);
  const v=await connectedVenue(db,signer,origin),scope={organisationId:v.organisationId,legalBusinessId:v.legalBusinessId};
  await store.execute(scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
  await readyForTranslation(db,v);await giveConsent(db,v);

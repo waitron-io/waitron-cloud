@@ -8,18 +8,22 @@ import {BillingStore,createLeaseIssuer,transaction} from '@waitron-cloud/registr
 import {createJob,jobFingerprint,lockVenue,parseJob,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
+import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
 let db:Awaited<ReturnType<typeof database>>;
+let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>,databaseName:string;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 const failed='Translation worker failed; check database, migrations and provider configuration\n';
 // beforeExit observes natural drain; a forced successful exit bypasses it.
 const drainArgs=['--import','data:text/javascript,'+encodeURIComponent("process.once('beforeExit',code=>console.log(JSON.stringify({drained:true,code})));")];
 
-before(async()=>{db=await database();});after(async()=>db?.close());
+before(async()=>{template=await createVenueServiceTemplate();db=await database(template.name);
+ databaseName=(await db.pool.query('SELECT current_database() AS name')).rows[0].name;});
+after(async()=>{try{await db?.close();}finally{await template?.close();}});
 const children=new Set<()=>Promise<void>>();
 afterEach(async()=>{await Promise.all([...children].map(dispose=>dispose()));children.clear();});
 beforeEach(async()=>{await db.pool.query('DELETE FROM translation_job_bodies');await db.pool.query('DELETE FROM translation_jobs');});
 function command(args:string[],overrides:NodeJS.ProcessEnv={},nodeArgs:string[]=[]){
- const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);const applicationName=randomUUID();url.searchParams.set('application_name',applicationName);
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.pathname='/'+databaseName;url.searchParams.set('options',`-c search_path=${db.schema}`);const applicationName=randomUUID();url.searchParams.set('application_name',applicationName);
  const child=spawn(process.execPath,[...nodeArgs,new URL('../src/worker-cli.ts',import.meta.url).pathname,...args],{env:{...process.env,
   DATABASE_URL:url.href,CLOUD_TRANSLATION_LOCAL_PROOF:'',CLOUD_OPENAI_API_KEY:'sk-private-cli-key',CLOUD_OPENAI_BASE_URL:'',...overrides},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>{stdout+=chunk;});child.stderr.on('data',chunk=>{stderr+=chunk;});
@@ -176,6 +180,7 @@ test('an unknown migration cannot replace a missing expected migration',async()=
 
 test('DATABASE_URL is required even when PostgreSQL fallback settings can connect',async()=>{
  const url=new URL(process.env.TEST_DATABASE_URL!);
+ url.pathname='/'+databaseName;
  const out=await command(['--once'],{DATABASE_URL:'',PGHOST:url.hostname,PGPORT:url.port,
   PGUSER:decodeURIComponent(url.username),PGPASSWORD:decodeURIComponent(url.password),PGDATABASE:url.pathname.slice(1),
   PGOPTIONS:`-c search_path=${db.schema}`}).exited;

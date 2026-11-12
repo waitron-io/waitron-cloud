@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
-import {test} from 'node:test';
+import {after,before,test} from 'node:test';
 import {BillingStore,createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {TranslationWorker,createLoopbackOpenAiClient,createJob,jobFingerprint} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
+import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
+
+let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>;
+before(async()=>{template=await createVenueServiceTemplate();});
+after(async()=>{await template?.close();});
 
 const origin='https://cloud.example.test';
 const text=JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:['ca','es']},
@@ -12,7 +17,7 @@ const text=JSON.stringify({version:1,country:'ES',languages:{default:'ca',enable
 const mode='test-venue-levels' as const;
 
 async function fixture(){
- const db=await database(),signer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const db=await database(template.name),signer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  const production=await connectedVenue(db,signer,origin);
  await giveConsent(db,production);
  const queue=(v:{venueId:string;installationId:string})=>transaction(db.pool,c=>createJob(c,{
