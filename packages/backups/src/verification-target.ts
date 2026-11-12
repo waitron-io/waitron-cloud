@@ -5,9 +5,9 @@ import {
 } from "./verification-protocol.ts";
 
 export const BACKUP_VERIFICATION_REVISION =
-  "515c12dc1644b6516fe6e45a7243a448acd51b0c";
+  "741c77a05806bf11367e93ef165c57e4de92eda3";
 export const BACKUP_VERIFICATION_TARGET_DIGEST =
-  "f05bfa87cb6153f76945bfd8d7b9ca62943e08e2991505360463b3994bbcab77";
+  "47641bc8edc4909fe7dcf427c36675a3656878bc3c0ff759b8c3222dadc549fe";
 
 export function readVerificationTarget(raw: string): BackupVerificationTarget {
   try {

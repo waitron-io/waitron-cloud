@@ -23,7 +23,7 @@ else if(args[0]==='info') process.stdout.write('/');
 else if(args[0]==='image'&&args[1]==='inspect') {
  const prior=fs.readFileSync(process.env.MONITORING_CALLS,'utf8').trim().split('\n').map(JSON.parse);
  const build=prior.find(a=>a[0]==='build'),owner=build?.find(a=>a.startsWith('cloud.integration.owner='))?.split('=')[1];
- process.stdout.write(JSON.stringify([{Config:{Labels:{'cloud.waitron-revision':'515c12dc1644b6516fe6e45a7243a448acd51b0c','cloud.integration.owner':owner}},RepoTags:['pin:local'],Id:'sha256:'+'c'.repeat(64)}]));
+ process.stdout.write(JSON.stringify([{Config:{Labels:{'cloud.waitron-revision':'741c77a05806bf11367e93ef165c57e4de92eda3','cloud.integration.owner':owner}},RepoTags:['pin:local'],Id:'sha256:'+'c'.repeat(64)}]));
 }
 else if(args[0]==='build') {}
 else if(args[0]==='compose'&&args.includes('config')) process.stdout.write(JSON.stringify({services:{account:{}},networks:{},volumes:{}}));

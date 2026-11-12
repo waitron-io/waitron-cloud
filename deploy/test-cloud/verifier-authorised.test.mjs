@@ -12,7 +12,7 @@ test('authorised fixture recaptures verified data and prepares its exact ordinar
  const docker=async args=>(await execute('docker',args,{timeout:100000,maxBuffer:2*1024*1024})).stdout.trim();
  assert.match(image,/^sha256:[a-f0-9]{64}$/);
  const [info]=JSON.parse(await docker(['image','inspect',image]));
- assert.equal(info.Id,image);assert.equal(info.Config.Labels['cloud.waitron-revision'],'515c12dc1644b6516fe6e45a7243a448acd51b0c');
+ assert.equal(info.Id,image);assert.equal(info.Config.Labels['cloud.waitron-revision'],'741c77a05806bf11367e93ef165c57e4de92eda3');
  const id=await docker(['create','--network','none','--memory','4096m','--memory-swap','4096m','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--pids-limit','128',
   '--tmpfs','/tmp:rw,nosuid,nodev,size=512m,mode=1777','--tmpfs','/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777','--tmpfs','/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777',
   '--mount',`type=bind,src=${source},dst=/waitron/apps/server/src/cloud-authorised-archive.test.ts,readonly`,'--workdir','/waitron/apps/server','--entrypoint','pnpm',image,'exec','vitest','run','src/cloud-authorised-archive.test.ts','--maxWorkers=1']);

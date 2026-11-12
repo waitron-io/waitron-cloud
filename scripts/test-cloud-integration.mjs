@@ -26,7 +26,7 @@ import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride
 export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const origin = 'https://waitron.local:3000', defaultWaitronRevision = '515c12dc1644b6516fe6e45a7243a448acd51b0c', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const origin = 'https://waitron.local:3000', defaultWaitronRevision = '741c77a05806bf11367e93ef165c57e4de92eda3', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;

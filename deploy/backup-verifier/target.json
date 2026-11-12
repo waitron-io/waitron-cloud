@@ -1,9 +1,9 @@
 {
   "version": 1,
   "runtime": {
-    "release": "waitron-515c12dc1644b6516fe6e45a7243a448acd51b0c",
-    "revision": "515c12dc1644b6516fe6e45a7243a448acd51b0c",
-    "fingerprint": "626cd45a9f35a01914d8ffd3c51bb2e35191572488812584bda7d96c4fd8736f"
+    "release": "waitron-741c77a05806bf11367e93ef165c57e4de92eda3",
+    "revision": "741c77a05806bf11367e93ef165c57e4de92eda3",
+    "fingerprint": "fdd2e1044e675d0142f79204388404ddf20ad85ccf8b20cac0e057b7688c789f"
   },
   "modules": [
     {
@@ -102,5 +102,5 @@
   "compositionDigest": "0f6e849edc1d33ade4479326a2754b72e4171b378553f64c8220d778b4d423c6",
   "migrationDigest": "b0bb37ca8b29d4af817dc80223483133b3a7e512da956671c209b4c05482ce79",
   "policyDigest": "7e48dcaa394a3fd36201102dfca3f632b82d3a26c9e1eb4cfade508047082940",
-  "digest": "f05bfa87cb6153f76945bfd8d7b9ca62943e08e2991505360463b3994bbcab77"
+  "digest": "47641bc8edc4909fe7dcf427c36675a3656878bc3c0ff759b8c3222dadc549fe"
 }
