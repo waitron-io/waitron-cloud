@@ -56,6 +56,7 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
  const setups=new BillingMethodSetups(pool);
  async function acting(client:PoolClient){
   if(admitted)return requirePendingConnectionProof(client,admitted.accountId,admitted.sessionId,admitted.securityRevision);
+  // Keep enabled-account, live-session and absolute-expiry checks aligned with resolveSession and requirePendingConnectionProof.
   // Admission checked the ordinary session and CSRF; accepted provider work keeps no idle deadline.
   if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR UPDATE',[initial.accountId])).rowCount)throw new IdentityError('session_unavailable');
   const saved=(await client.query('SELECT absolute_expires_at FROM cloud_sessions WHERE id=$1 AND account_id=$2 AND ended_at IS NULL FOR UPDATE',[initial.sessionId,initial.accountId])).rows[0];
