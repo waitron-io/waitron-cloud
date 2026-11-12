@@ -155,3 +155,10 @@ test('two accounts requesting the same outside address share one resend wait',as
   assert.equal((await pool.query('SELECT count(*) FROM cloud_email_changes')).rows[0].count,'1');
   assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'1');
 });
+
+test('a request inside the destination wait still cancels the account link for a different address',async()=>{
+  const {s,message}=await pendingEmail();await s.email(actor.token,actor.csrfToken,'second-target@example.test');
+  assert.deepEqual(await s.email(actor.token,actor.csrfToken,message.email),{status:'accepted'});
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_email_changes WHERE consumed_at IS NULL')).rows[0].count,'0');
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'2');
+});

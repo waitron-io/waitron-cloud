@@ -1,7 +1,7 @@
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {AccountSecurityStore,transaction} from '@waitron-cloud/registration';
+import {AccountSecurityStore,PasswordRecoveryError,transaction} from '@waitron-cloud/registration';
 import {AccountHttpError} from './errors.ts';
 import {readSessionCookie,writeSessionCookies} from './cookies.ts';
 import {readBoundedJsonObject} from './request.ts';
@@ -20,6 +20,10 @@ export async function accountSecurityResponse(c:Context,o:{pool:Pool;store:Accou
   await o.consume([{scope:'credential-change-ip',subject:o.ip,limit:10,windowSeconds:60},{scope:'credential-change-account',subject:session.accountId,limit:20,windowSeconds:300}]);
   if(path==='/email')return c.json(await o.store.email(token,csrf,body.email as string,body.locale as 'en'|'es'|undefined),202);
   if(verify)await o.store.completeEmail(token,csrf,body.token as string);
-  else await o.store.password(token,csrf,body.password as string,body.locale as 'en'|'es'|undefined);
+  else try{await o.store.password(token,csrf,body.password as string,body.locale as 'en'|'es'|undefined);}
+  catch(error){
+    if(error instanceof PasswordRecoveryError&&error.code==='password_screening_unavailable')throw new AccountHttpError(503,'password_screening_unavailable',1);
+    throw error;
+  }
   writeSessionCookies(c,o.secure);return c.body(null,204);
 }

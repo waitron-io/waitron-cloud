@@ -56,8 +56,8 @@ For an email change, open the verification link at your new address in the same
 browser within 30 minutes, then choose **Confirm new email**. Your current address
 stays in use until that confirmation. You receive a notice at both addresses after
 replacement, and sign in again with the new one. Requests to the same new address
-share a one-minute wait; repeating a request during that minute keeps its first
-link. Request a new link if you signed
+share a one-minute wait. Wait a minute before requesting another link to the same
+address, including after a link becomes unusable. Request a new link if you signed
 out or changed security settings meanwhile. An unavailable address gets the same
 accepted answer without replacing it. After an uncertain reply, check your mail
 and try signing in before requesting the change again.

@@ -11,7 +11,9 @@ test('credential writes send CSRF and validate accepted and completed responses'
   assert.equal((await accountRequest('/security/email',{email:'new@example.test'})).ok,true);
   reply=Response.json({status:'other'},{status:202});assert.equal((await accountRequest('/security/email',{email:'new@example.test'})).ok,false);
   for(const path of ['/security/password','/security/email/verify']){reply=new Response(null,{status:204});assert.equal((await accountRequest(path,{})).ok,true);}
-  assert.equal(calls,4);
+  reply=Response.json({error:'password_screening_unavailable'},{status:503});
+  assert.deepEqual(await accountRequest('/security/password',{}),{ok:false,status:503,code:'password_screening_unavailable',retryAfterMs:0});
+  assert.equal(calls,5);
 });
 test('account requests never retry writes and distinguish transport failures', async t => {
   let calls = 0;

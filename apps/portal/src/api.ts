@@ -71,6 +71,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    if(path==='/security/password'&&response.status===503)codes.push('password_screening_unavailable');
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');

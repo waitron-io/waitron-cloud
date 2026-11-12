@@ -275,7 +275,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |
-| 503 | `temporarily_unavailable` | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
+| 503 | `temporarily_unavailable`, `password_screening_unavailable` (credential password change only) | Database or password-screening failure, admission limit or shutdown; retry after the advertised delay |
 
 Bodies are limited to 16 KiB, including streamed bodies, except for translation
 submit below. Headers remain limited to 8 KiB and five seconds. Ordinary body
@@ -290,7 +290,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | API routes except liveness, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
-| Email-change delivery, per destination address | One per minute; keeps the first link during the wait |
+| Email-change delivery, per destination address | One per minute; wait before requesting another link to the same address |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |

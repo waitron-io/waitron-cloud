@@ -159,3 +159,12 @@ test('email route queues verification, returns a generic accepted answer, verifi
   assert.equal(verified.status,204);assert.ok(verified.headers.getSetCookie().every(v=>/Max-Age=0/.test(v)));
   assert.equal((await db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[owner.accountId])).rows[0].email,'verified-new@example.test');
 });
+
+test('password screening refusal has a distinct retryable answer before any credential write',async()=>{
+  const owner=await account('screening@example.test'),actor=await signIn(owner.email),headers={cookie:actor.header,'x-csrf-token':actor.csrf};
+  await openProofWindow(db.pool,actor.header.match(/__Host-cloud_session=([^; ]+)/)![1]!);
+  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config(),passwordScreening:{async check(){throw new Error('synthetic unavailable screening');}}});
+  const response=await request('/security/password',{password:'A synthetic replacement password'},{headers});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'password_screening_unavailable'});
+  assert.equal(response.headers.get('retry-after'),'1');assert.equal((await request('/session',undefined,{headers})).status,200);
+});

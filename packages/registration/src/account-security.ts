@@ -42,6 +42,7 @@ export class AccountSecurityStore {
     if(!email||!validLocale(locale))throw new PasswordRecoveryError('recovery_invalid');
     await transaction(this.#pool,async client=>{
       const session=await requireAccountActionProof(client,token,csrfToken);
+      await client.query('UPDATE cloud_email_changes SET consumed_at=clock_timestamp() WHERE account_id=$1 AND email<>$2 AND consumed_at IS NULL',[session.accountId,email]);
       await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema() || ':email-change'),hashtext($1))",[email]);
       const recent=await client.query("SELECT 1 FROM cloud_email_changes WHERE email=$1 AND created_at>clock_timestamp()-interval '1 minute' LIMIT 1",[email]);
       if(recent.rowCount)return;

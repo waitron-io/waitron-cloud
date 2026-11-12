@@ -103,7 +103,9 @@ single-use 30-minute verification link; `completeEmail(token, csrf, emailToken)`
 requires the original live session and unchanged security authority, without
 requiring the ten-minute window to remain fresh. Both changes preserve enrolled
 methods and unused recovery codes. Email requests share a one-minute wait per
-new address; a repeat within that minute keeps the first link. See the [account guide](../../docs/authenticator-app.md#change-your-password-or-email).
+new address. Wait a minute before requesting another link, including after
+invalidation. A request for a different address cancels your earlier pending link
+even when delivery to that address must wait. See the [account guide](../../docs/authenticator-app.md#change-your-password-or-email).
 
 The encrypted outbox adds `email_change` and `email_changed`. Implement
 `sendEmailChange({email,token,expiresAt,locale})` and `sendEmailChanged({email,locale})`

@@ -23,7 +23,7 @@ test('credential changes fence replies after navigation and never replay an unce
   assert.equal(uncertain.error,'credentialChangeUncertain');assert.equal(uncertain.newEmail,'');
 });
 
-for(const [kind,status,code,want] of [['password',503,'temporarily_unavailable','unavailable'],['verify',403,'proof_required','emailChangeInvalid']] as const)
+for(const [kind,status,code,want] of [['password',503,'password_screening_unavailable','unavailable'],['password',503,'temporarily_unavailable','credentialChangeUncertain'],['verify',403,'proof_required','emailChangeInvalid']] as const)
   test(`credential ${kind} ${code} gives its own guidance`,async()=>{
     const controller=new AccountSecurityController(()=>{},()=>{},async()=>({ok:false,status,code,retryAfterMs:1000}));
     controller.account('owner');controller.newPassword='A synthetic replacement password';await controller.change(kind,'en','a'.repeat(43));
