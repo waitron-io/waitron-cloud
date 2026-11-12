@@ -50,7 +50,8 @@ replacement times are recorded in [the executable proof](local-backups.md#run-th
 For an unreadable saved replacement request, Cloud also accepts
 `POST /api/replacement/reissue`. Use the existing `waitron-cloud-replacement-v1`
 ten-field payload with action `reissue`, signed by the retained recovery key and
-fresh installation key. Its machine response has the same fields as prepare/status.
+fresh installation key. Generate a new tunnel key as well; the pending proposal’s
+tunnel key cannot be reused. Its machine response has the same fields as prepare/status.
 An absent proposal is created; a pending proposal can receive fresh keys without
 changing the recovery ID, venue/source bindings, creation time or original expiry.
 The box must set the unreadable replacement file aside and durably save new keys

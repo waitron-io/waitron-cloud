@@ -503,7 +503,8 @@ If Waitron cannot read its saved reconnection request, the matching box action i
 still separate work. Cloud accepts `POST /api/replacement/reissue` when the separate
 recovery key remains usable and the restored recovery is still open within its
 original hour. Sign the ordinary ten-field replacement payload with action
-`reissue`, using that recovery key and the fresh installation key. Cloud returns
+`reissue`, using that recovery key and a fresh installation key. Generate a fresh
+tunnel key too; retaining the pending proposal’s tunnel key is refused. Cloud returns
 `state: "awaiting_owner"` with the new public keys; it keeps the recovery ID,
 venue, source node and deadline. It does not activate the keys or retire the old
 installation until you confirm replacement through the existing recovery page.
