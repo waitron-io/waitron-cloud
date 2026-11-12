@@ -107,12 +107,11 @@ test('leaving the account fences late method presentations without clearing the 
 test('payment refusals keep controls and distinguish proof enrollment and a setup that needs restarting',async()=>{
  for(const [phase,code,error] of [
   ['start','proof_required','billingProofRequired'],['start','enrollment_required','pairEnrollment'],
-  ['verify','proof_required','billingMethodRestart'],['verify','enrollment_required','pairEnrollment'],
-  ['verify','billing_setup_unavailable','billingMethodRestart'],
+  ['verify','proof_required','billingMethodRestart'],['verify','enrollment_required','billingMethodRestart'],
  ] as const){
   const h=harness();await ready(h);
   if(phase==='verify'){h.replies.push({ok:true,value:{checkoutId:'synthetic-checkout'}});await h.c.startMethod('card');}
-  h.replies.push({ok:false,status:code==='billing_setup_unavailable'?409:403,code,retryAfterMs:0});
+  h.replies.push({ok:false,status:403,code,retryAfterMs:0});
   if(phase==='start')await h.c.startMethod('card');else await h.c.verifyMethod();
   assert.equal(h.c.error,error);assert.equal(h.c.venue?.venueId,first);assert.equal(h.c.methodCheckout,undefined);
  }

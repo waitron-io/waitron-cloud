@@ -72,8 +72,8 @@ export class BillingController{
  #clearMethod(){this.methodCheckout=undefined;this.methodState=undefined;}
  #methodFailure(result:Extract<ApiResult<unknown>,{ok:false}>,starting=false){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-  if(result.status===403&&(result.code==='enrollment_required'||result.code==='proof_required')||result.status===409&&result.code==='billing_setup_unavailable'){
-   this.#clearMethod();this.error=result.code==='enrollment_required'?'pairEnrollment':starting?'billingProofRequired':'billingMethodRestart';
+  if(result.status===403&&(result.code==='enrollment_required'||result.code==='proof_required')){
+   this.#clearMethod();this.error=starting?(result.code==='enrollment_required'?'pairEnrollment':'billingProofRequired'):'billingMethodRestart';
   }else if(result.status===401||result.status===403){this.#clearMethod();this.#failure(result);}
   else this.error=result.status===429?'limited':result.status===409?'billingMethodChanged':'billingMethodUncertain';
  }

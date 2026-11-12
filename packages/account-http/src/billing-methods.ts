@@ -79,7 +79,7 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
   if(!start&&saved&&pending){
    try{await requirePendingConnectionProof(client,saved.ownerId,saved.sessionId,saved.securityRevision);}
    catch(error){
-    if(error instanceof IdentityError&&(error.code==='session_unavailable'||error.code==='session_expired'))throw new AccountHttpError(409,'billing_setup_unavailable');
+    if(error instanceof IdentityError&&(error.code==='session_unavailable'||error.code==='session_expired'))throw new AccountHttpError(403,'proof_required');
     throw error;
    }
   }
@@ -106,7 +106,6 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
    return !!(await client.query('SELECT id FROM billing_payment_methods WHERE organisation_id=$1 AND legal_business_id=$2 AND id=$3',[setup.organisationId,setup.legalBusinessId,setup.methodId])).rowCount;
   });
   if(complete)return c.json({state:'verified'});
-  await authorize();
   const result=await methods.client.verify(setup,authorize);
   await transaction(pool,async client=>{
    await guard(client,setup,true);

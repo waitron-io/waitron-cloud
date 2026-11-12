@@ -166,13 +166,15 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
   const server=await fixture(page),c=translations[locale];await page.goto('https://portal.test/account');
   const panel=page.getByRole('region',{name:c.billingMethodsTitle,exact:true});
-  for(const code of ['proof_required','enrollment_required','billing_setup_unavailable']){
+  for(const code of ['proof_required','enrollment_required']){
    await panel.getByRole('button',{name:c.billingAddCard,exact:true}).click();await panel.locator('iframe').waitFor();
-   await page.route('**/api/account/billing/method/verify',route=>route.fulfill({status:code==='billing_setup_unavailable'?409:403,json:{error:code}}));
+   await page.route('**/api/account/billing/method/verify',route=>route.fulfill({status:403,json:{error:code}}));
    await panel.getByRole('button',{name:c.billingMethodRefresh,exact:true}).click();
-   await panel.getByText(code==='enrollment_required'?c.pairEnrollment:locale==='en'?'This setup can’t continue. Start again. Your previous method stays selected.':'Esta configuración no puede continuar. Empieza de nuevo. Se mantiene el método anterior.',{exact:true}).waitFor();
+   await panel.getByText(locale==='en'?'This setup can’t continue. Start again. Your previous method stays selected.':'Esta configuración no puede continuar. Empieza de nuevo. Se mantiene el método anterior.',{exact:true}).waitFor();
+   if(code==='enrollment_required')await page.evaluate(async()=>(window as any).app.actionProof.load());
+   await panel.getByText(locale==='en'?'This setup can’t continue. Start again. Your previous method stays selected.':'Esta configuración no puede continuar. Empieza de nuevo. Se mantiene el método anterior.',{exact:true}).waitFor();
    await page.waitForLoadState('networkidle');
-   assert.equal(server.starts,['proof_required','enrollment_required','billing_setup_unavailable'].indexOf(code)+1,'no automatic new setup');
+   assert.equal(server.starts,['proof_required','enrollment_required'].indexOf(code)+1,'no automatic new setup');
    assert.equal(await page.evaluate(()=>(window as any).app.billing.venue.paymentMethods.selected),'direct_debit');
    assert.equal(await panel.locator('iframe').count(),0);
    await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);

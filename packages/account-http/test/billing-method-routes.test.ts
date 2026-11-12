@@ -291,7 +291,7 @@ test('a newly proved session cannot revive a setup whose authorising session was
  await db.pool.query("UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1",[f.accountId]);
  const replacement=await transaction(db.pool,c=>createSession(c,f.accountId));await prepareConnectionProof(db.pool,f.accountId,replacement.token);
  const calls=p.calls.length,response=await request(target,replacement,verify,{venueId:f.venueId});
- assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'billing_setup_unavailable'});assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});assert.equal(p.calls.length,calls);assert.equal((await current(f)).paymentMethod,null);
  assert.equal((await transaction(db.pool,c=>resolveSession(c,replacement.token,{touch:false}))).accountId,f.accountId);
 });
 
