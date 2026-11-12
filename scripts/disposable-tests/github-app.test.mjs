@@ -250,3 +250,40 @@ test('a mutation receiving 304 is refused without replaying the write',async t=>
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
  await assert.rejects(app.post('/change',{}),{status:304});assert.equal(writes,1);
 });
+
+
+test('quota observation filters headers, includes 304/errors/logs, and preserves HTTP results',async t=>{
+ const {GithubApp,withQuotaObserver}=await import('./github-app.mjs');
+ let now=120000,headers,status=200;t.mock.method(Date,'now',()=>now);
+ const errors=[];t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ t.mock.method(globalThis,'fetch',async()=>new Response(status===304?null:'{}',{status,headers}));
+ const app=new GithubApp({});app.token=async()=>'synthetic';const holds=[];
+ const quota=(used='4000',reset='180',resource='core')=>({'x-ratelimit-resource':resource,'x-ratelimit-used':used,'x-ratelimit-reset':reset});
+ await withQuotaObserver(async()=>{
+  for(const h of [quota('3999'),quota('4000','180','search'),quota('bad'),quota('4000','120'),quota('4000','4000'),{},quota('4000','bad')]){
+   headers=h;assert.deepEqual(await app.get('/fixture'),{});
+  }
+  headers=quota();await app.request('/app/installations/456/access_tokens',{method:'POST',authorization:'synthetic'});
+  assert.deepEqual(holds,[]);
+  status=304;await assert.rejects(app.get('/fixture'),{status:304});assert.deepEqual(holds,[180000]);
+  status=403;headers=quota('5000','240');headers['x-ratelimit-remaining']='0';
+  await assert.rejects(app.get('/fixture'),{status:403,retryAt:240000});assert.deepEqual(holds,[180000,240000]);
+  status=200;headers=quota('4001','180');await app.get('/fixture');assert.deepEqual(holds,[180000,240000]);
+  headers=quota('4000','300');assert.equal(await app.jobLog('/repos/fixture/waitron/actions/jobs/12/logs'),'{}');
+ },until=>holds.push(until));
+ assert.deepEqual(holds,[180000,240000,300000]);assert.deepEqual(errors,[]);
+ // A fresh quota window may report the same reset value only once it is still future.
+ now=301000;headers=quota('4000','360');
+ await withQuotaObserver(()=>app.get('/fixture'),()=>{throw new Error('ledger refused');});
+ assert.deepEqual(errors.map(row=>row.event),['github-quota-hold-pending']);
+ headers=quota('5000','420');await app.get('/fixture');assert.equal(errors.length,1);
+});
+
+
+test('concurrent threshold replies share one recording attempt even when the ledger refuses',async t=>{
+ const {GithubApp,withQuotaObserver}=await import('./github-app.mjs');const errors=[];t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ t.mock.method(globalThis,'fetch',async()=>new Response('{}',{headers:{'x-ratelimit-resource':'core','x-ratelimit-used':'4000','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+60)}}));
+ const app=new GithubApp({});let writes=0;
+ await withQuotaObserver(()=>Promise.all([app.request('/one'),app.request('/two')]),async()=>{writes++;await Promise.resolve();throw new Error('ledger refused');});
+ assert.equal(writes,1);assert.equal(errors.length,1);
+});

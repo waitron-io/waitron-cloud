@@ -9,6 +9,12 @@ async function boundedBody(response,limit){
  catch(error){await response.body?.cancel().catch(()=>{});throw error;}
  return Buffer.concat(buffers);
 }
+let quotaObserver;
+export async function withQuotaObserver(work,observe){
+ assert.equal(quotaObserver,undefined,'Quota observation scope already active');
+ const scope={observe,until:0};quotaObserver=scope;
+ try{return await work();}finally{quotaObserver=undefined;}
+}
 let requestCounts;
 export async function withRequestCounts(work,role='other'){
  assert.equal(requestCounts,undefined,'Request count scope already active');
@@ -49,6 +55,16 @@ async function githubFetch(url,options,kind='api'){
   remaining:response.headers.get('x-ratelimit-remaining'),reset:response.headers.get('x-ratelimit-reset')};
   entry().latestResponse=scope.latestResponse;
   if(response.status===304){bucket().notModified++;entry().notModified++;}
+ }
+ if(quotaObserver && kind!=='token' && response.headers.get('x-ratelimit-resource')==='core'){
+  const used=response.headers.get('x-ratelimit-used'),reset=response.headers.get('x-ratelimit-reset'),now=Date.now();
+  const until=Number(reset)*1000,scope=quotaObserver;
+  if(/^[0-9]+$/.test(used) && Number.isSafeInteger(Number(used)) && Number(used)>=4000 &&
+    /^[0-9]+$/.test(reset) && Number.isSafeInteger(until) && until>now && until<=now+3660000 && until>scope.until){
+   scope.until=until;
+   try{await scope.observe(until);}
+   catch(error){console.error(JSON.stringify({event:'github-quota-hold-pending',error:error.message}));}
+  }
  }
  return response;
 }

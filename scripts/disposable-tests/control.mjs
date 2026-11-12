@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync,readSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
-import {GithubApp,withRequestCounts} from './github-app.mjs';
+import {GithubApp,withRequestCounts,withQuotaObserver} from './github-app.mjs';
 import {LocalLeases,configuredSlots,ciRetryReady} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {ciIdentity} from './ci-identity.mjs';
@@ -39,7 +39,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   try{await Promise.race([...active.keys(),delay(30000,undefined,{signal:signal?AbortSignal.any([signal,wake.signal]):wake.signal})]);}
   finally{wake.abort();}
  };
- let served=0,healthy,lastCapacity=-Infinity;
+ let served=0,healthy,lastCapacity=-Infinity,lastPublishedSlots;
  const local=()=>{
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   const usable=state.slots.filter(slot=>slot.state!=='quarantined'&&!slot.orphanRunners?.length&&(!Array.isArray(healthy)||healthy.includes(slot.id)));
@@ -58,22 +58,28 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   if(lastCapacity===-Infinity)try{
    const previous=await api.get(`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_CAPACITY`,{signal});
    try{
-    const at=previous.value?JSON.parse(previous.value).observedAt:undefined,updated=Date.parse(previous.updated_at);
+    const value=previous.value?JSON.parse(previous.value):{},at=value.observedAt,updated=Date.parse(previous.updated_at);
+    lastPublishedSlots=value.slots;
     if(Number.isSafeInteger(at)&&at>=0)lastCapacity=Math.max(at,Number.isFinite(updated)?updated:0);
    }catch(error){console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));}
   }catch(error){if(error.status!==404){pending(error,undefined,'automatic-ci-capacity-pending');return;}}
   if(Date.now()-lastCapacity<60000)return;
   lastCapacity=Date.now();
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+  const held=(state.quotaHoldUntil??0)>Date.now();
   let snapshot;
   try{
    snapshot=await overflowInventory({api:pass.api,policy,signal,runs:pass.runs});
-   await publishCapacity({api,policy,state,snapshot,healthy:healthy??true,signal,now:pass.observedAt});lastCapacity=Date.now();
+   if(!held || lastPublishedSlots!==0){
+    const value=await publishCapacity({api,policy,state,snapshot,healthy:held?false:healthy??true,signal,now:pass.observedAt});
+    lastPublishedSlots=value.slots;
+   }
+   lastCapacity=Date.now();
   }catch(error){signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-capacity-pending',error:error.message}));
    if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
   }
   const capacity=local();
-  if(snapshot && capacity.busy>=capacity.slots && capacity.slots){
+  if(!held && snapshot && capacity.busy>=capacity.slots && capacity.slots){
    try{
     const runs=new Map([...pass.runs].filter(([,run])=>run.event==='pull_request'&&run.run_attempt===1));
     const [ci]=await findAutomatic({api:pass.api,policy,signal,runs,limit:1,hosted:await hostedAttempts({api,policy,signal}),excludeRuns:local().owned,onePerRun:true,untouched:true});
@@ -240,6 +246,7 @@ export async function main(args){
   'Usage: control.mjs CONFIG status | mode hosted --reason REASON | mode server --reason REASON --head SHA | run LANE APPROVED_HEAD RUN_ID');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);const slots=configuredSlots(config);
  assert.equal(config.ci.workflowPath,'.github/workflows/ci.yml','Ordinary CI needs its reviewed workflow configuration');
+ return withQuotaObserver(async()=>{
  const api=new GithubApp(config.ci),policy=config.ci;
  if(command==='job'){
   const shared=values.length===3 && values[2]==='--admission';
@@ -282,6 +289,7 @@ export async function main(args){
  try{return await withOrdinaryController({state:config.state,hostGeneration:config.hostGeneration,api,policy,approvedHead,runId,lane,
   transport:new CITransport(config),signal:cancellation.signal});}
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
+ },until=>new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).holdQuota(until));
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
  try{const result=await withRequestCounts(()=>main(process.argv.slice(2)),process.argv[3]==='job'?'worker':process.argv[3]==='run'?'lane':'operator');console.log(JSON.stringify(result));process.exitCode=result.code;}

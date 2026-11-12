@@ -88,6 +88,7 @@ export class LocalLeases {
       state = {version: 1, hostGeneration: this.hostGeneration, slots: Array.from({length: this.capacity}, (_, id) => ({id, generation: 0, state: 'free', lease: null})), turns: {}};
     }
     assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
+    assert.ok(state.quotaHoldUntil===undefined || Number.isSafeInteger(state.quotaHoldUntil) && state.quotaHoldUntil>=0,'Invalid quota hold');
     assert.ok(state.turns && typeof state.turns==='object' && !Array.isArray(state.turns) &&
       Object.getPrototypeOf(state.turns)===Object.prototype,'Invalid ledger turn history');
     assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
@@ -260,6 +261,10 @@ export class LocalLeases {
       if(index<0) return false;
       record.orphanRunners.splice(index,1);return true;
     });
+  }
+  holdQuota(until) {
+    assert.ok(Number.isSafeInteger(until) && until>=0,'Invalid quota hold');
+    return this.transaction(state=>{state.quotaHoldUntil=Math.max(state.quotaHoldUntil??0,until);});
   }
   inspect() { return this.transaction(state => {
     if(this.slot===undefined)return state;
