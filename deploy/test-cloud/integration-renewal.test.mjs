@@ -11,7 +11,7 @@ test('the private rollback fixture queues a native renewal without changing its 
   });
   assert.equal(typeof prepareIntegrationRenewal, 'function', 'Explicit native renewal preparation is missing');
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-renewal-'));
-  const state = {origin: 'https://waitron.local:3000', environment: 'test', localVenueId: 'venue', publicKey: 'same-key',
+  const state = {origin: 'https://waitron.local:3000', environment: 'test', streamId: 'venue', publicKey: 'same-key',
     view: {registration: {installationId: 'same-installation'}}, lifecycle: {revoked: false, lease: {payload: 'untouched', signature: 'untouched'}}};
   const pending = {action: 'renew', operationId: '12345678-1234-4234-8234-123456789012', lease: '', body: '{}'};
   try {

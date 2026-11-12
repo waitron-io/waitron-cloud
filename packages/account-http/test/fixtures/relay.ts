@@ -21,7 +21,7 @@ export async function relayFixture(){
   const accountId=owner?.accountId??randomUUID(),organisationId=owner?.organisationId??randomUUID(),venueId=randomUUID(),installationId=randomUUID(),business=randomUUID();
   if(!owner){await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[accountId,`${accountId}@example.test`]);await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[accountId,organisationId]);}
   await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);
-  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venueId,organisationId,business,randomUUID()]);
+  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,organisationId,business]);
   const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
   await db.pool.query("INSERT INTO installations(id,venue_id,public_key,lease_expires_at) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour')",[installationId,venueId,publicKey]);
   const session=await transaction(db.pool,c=>createSession(c,accountId));

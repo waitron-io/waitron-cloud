@@ -21,7 +21,7 @@ async function fixture(){
   for(const s of [scope,other,foreign])await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[s.legalBusinessId,s.organisationId]);
   const venues=[randomUUID(),randomUUID()].sort(),otherVenue=randomUUID(),foreignVenue=randomUUID();
   for(const [s,id] of [[scope,venues[0]],[scope,venues[1]],[other,otherVenue],[foreign,foreignVenue]] as const)
-   await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[id,s.organisationId,s.legalBusinessId]);
+   await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[id,s.organisationId,s.legalBusinessId]);
   const api=await import(new URL('../src/index.ts',import.meta.url).href);
   const store=new api.BillingStore(pool);
   for(const s of [scope,other,foreign])await store.execute(s,event(),{type:'ensure_business'});

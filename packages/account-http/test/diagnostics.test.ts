@@ -21,7 +21,7 @@ beforeEach(async()=>{
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,member]);
  await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Private Sol'),($2,'Private Foreign')",[organisation,foreignOrganisation]);
  await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Private Sol SL','ES'),($3,$4,'Private Foreign SL','ES')",[business,organisation,foreignBusiness,foreignOrganisation]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test'),($5,$6,$7,$8,'test')",[venue,organisation,business,id(),foreignVenue,foreignOrganisation,foreignBusiness,id()]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test'),($4,$5,$6,'test')",[venue,organisation,business,foreignVenue,foreignOrganisation,foreignBusiness]);
  await db.pool.query("INSERT INTO installations(id,venue_id,public_key,last_contact_at,lease_expires_at) VALUES($1,$2,'private-owner-key','2026-09-26T20:00:00Z','2026-09-26T22:00:00Z'),($3,$4,'private-foreign-key',NULL,NULL)",[installation,venue,foreignInstallation,foreignVenue]);
  await db.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'continuous_backup','ready'),($1,'remote_access','ready'),($1,'retained_snapshots','ready'),($2,'continuous_backup','ready'),($2,'remote_access','ready'),($2,'retained_snapshots','ready')",[installation,foreignInstallation]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true),($3,$2,true,false)',[owner,organisation,member]);

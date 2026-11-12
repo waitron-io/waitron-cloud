@@ -34,7 +34,7 @@ vi.mock('@waitron/fiscal-verifactu/src/hour-clock-internet.js', () => ({
 it('restores the native paired stream using its owner-approved kit and separate source authority', async () => {
   const input = JSON.parse(await readFile('/tmp/cloud-integration-stream-input.json', 'utf8'));
   const kit = parseRecoveryKit(input.kit);
-  expect(kit.venueId).toBe(input.selected.localVenueId);
+  expect(kit.streamId).toBe(input.selected.streamId);
   const root = await mkdtemp('/tmp/cloud-integration-stream-restore-');
   try {
     const stateDir = join(root, 'state'), venueDir = join(root, 'venue');
@@ -48,7 +48,7 @@ it('restores the native paired stream using its owner-approved kit and separate 
     expect(prepared.generation).toBe(input.selected.generation);
     expect(prepared.venue.taxId).not.toBe('');
     const taxId = prepared.venue.taxId;
-    const sourceId = 'stream:' + kit.venueId + ':' + prepared.generation;
+    const sourceId = 'stream:' + kit.streamId + ':' + prepared.generation;
     const tables = ['sales', 'sale_lines', 'tenders', 'sale_settlements', 'registros_facturacion', 'envios'];
     const records = (path: string) => {
       const db = new DatabaseSync(path, {readOnly: true});
@@ -147,10 +147,10 @@ it('restores the native paired stream using its owner-approved kit and separate 
       } finally {await restoredQuery.close();}
     }
     expect(restoredNodeId).toBe(input.selected.sourceNodeId);
-    expect(restoredVenueId).toBe(input.selected.localVenueId);
+    expect(restoredVenueId).toBe(input.selected.streamId);
     for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     console.log('CLOUD_PAIRED_CONTINUOUS_RECOVERY=' + JSON.stringify({exit, sourceNodeId: restoredNodeId,
-      localVenueId: restoredVenueId, generation: input.selected.generation, nativeRestore: true,
+      streamId: restoredVenueId, generation: input.selected.generation, nativeRestore: true,
       sourceAuthorityVerified: true, preparationBoundToStream: true, sourceRecordsPreserved: true,
       wrongAuthorityRefused: true, missingPreparationRefused: true, noServerStarted: true, integrity: 'ok', cloudReportedRestored: false}));
   } finally {await rm(root, {recursive: true, force: true});}

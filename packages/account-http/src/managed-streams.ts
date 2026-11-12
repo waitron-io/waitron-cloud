@@ -14,9 +14,9 @@ function body(action:StreamAction,text:string):{revision:number;input:ManagedStr
  let value:unknown;try{value=JSON.parse(text);}catch{return invalid();}
  if(JSON.stringify(value)!==text)return invalid();
  if(action==='backup-stream-observe'){if(text!=='{}')invalid();return;}
- if(!object(value,['revision','localVenueId','sourceNodeId','pointerSignerPublicKey'])||!Number.isSafeInteger(value.revision)||Number(value.revision)<0
-  ||typeof value.localVenueId!=='string'||typeof value.sourceNodeId!=='string'||typeof value.pointerSignerPublicKey!=='string')invalid();
- return {revision:value.revision as number,input:{localVenueId:value.localVenueId,sourceNodeId:value.sourceNodeId,pointerSignerPublicKey:value.pointerSignerPublicKey}};
+ if(!object(value,['revision','sourceNodeId','pointerSignerPublicKey'])||!Number.isSafeInteger(value.revision)||Number(value.revision)<0
+  ||typeof value.sourceNodeId!=='string'||typeof value.pointerSignerPublicKey!=='string')invalid();
+ return {revision:value.revision as number,input:{sourceNodeId:value.sourceNodeId,pointerSignerPublicKey:value.pointerSignerPublicKey}};
 }
 async function revision(pool:Pool,installationId:string){const row=(await pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installationId])).rows[0];if(!row)throw new InstallationError('unavailable');return Number(row.configuration_revision);}
 export class ManagedStreamMachines{
@@ -38,7 +38,7 @@ export class ManagedStreamMachines{
   };
   if(action==='backup-stream-configure')return this.#streams.configure(routing.installationId,parsed!.revision,parsed!.input,fence);
   const observed=await this.#streams.observe(routing.installationId,await revision(this.#pool,routing.installationId),fence);
-  return {venueId:observed.venueId,installationId:observed.installationId,configurationRevision:observed.configurationRevision,localVenueId:observed.localVenueId,sourceNodeId:observed.sourceNodeId,recoverableAt:observed.recoverableAt,checkedAt:observed.checkedAt};
+  return {venueId:observed.venueId,installationId:observed.installationId,configurationRevision:observed.configurationRevision,streamId:observed.streamId,sourceNodeId:observed.sourceNodeId,recoverableAt:observed.recoverableAt,checkedAt:observed.checkedAt};
  }
 }
 export async function managedStreamResponse(c:Context,options:{streams?:ManagedStreamMachines;ip:string;consume:(rules:RateRule[])=>Promise<void>}){

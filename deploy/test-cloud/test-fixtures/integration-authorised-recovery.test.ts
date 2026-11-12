@@ -140,10 +140,10 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
       } finally {await restoredQuery.close(); await identityArchive.discard();}
     }
     expect(restoredNodeId).toBe(input.authority.sourceNodeId);
-    expect(restoredVenueId).toBe(input.authority.localVenueId);
+    expect(restoredVenueId).toBe(input.authority.streamId);
     for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     console.log('CLOUD_PAIRED_AUTHORISED_RECOVERY=' + JSON.stringify({exit, sha256, bytes: artifact.length,
-      sourceNodeId: restoredNodeId, localVenueId: restoredVenueId,
+      sourceNodeId: restoredNodeId, streamId: restoredVenueId,
       preparationBoundToDeliveredArchive: binding.sourceId === selected.sourceId, sourceAuthorityVerified: true,
       wrongAuthorityRefused: true, missingPreparationRefused: true, integrity: 'ok', sourceRecordsPreserved: true,
       noServerStarted: true, noCloudCredentials: true, cloudReportedRestored: false}));

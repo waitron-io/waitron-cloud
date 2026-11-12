@@ -44,12 +44,12 @@ async function installed(label:string){
  const session=await transaction(db.pool,c=>login(c,{email,password}));
  await prepareConnectionProof(db.pool,owner.accountId,session.token);
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
- const binding={operationId:randomUUID(),installationKey:publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const binding={operationId:randomUUID(),installationKey:publicKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registration=new RegistrationStore(db.pool);await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
- return {...owner,...session,...await registration.complete(binding),key,publicKey,localVenueId:binding.localVenueId};
+ return {...owner,...session,...await registration.complete(binding),key,publicKey};
 }
 const location=(item=a)=>({endpoint:'https://store.test',bucket:'venue-'+item.venueId,region:'local'});
-const streamInput=()=>({localVenueId:a.localVenueId,sourceNodeId:randomUUID(),pointerSignerPublicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64')});
+const streamInput=()=>({sourceNodeId:randomUUID(),pointerSignerPublicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64')});
 function proof(action:MachineAction,lease?:SignedEnvelope,body:unknown={},id=randomUUID()){
  const bytes=encodeMachine({origin,action,installationId:a.installationId,operationId:id,issuedAt:Date.now(),lease:lease?JSON.stringify(lease):'',body:JSON.stringify(body)});
  return {payload:bytes.toString('base64url'),signature:sign(null,bytes,a.key.privateKey).toString('base64url')};
@@ -188,7 +188,7 @@ test('plan_lock_order_survives_pairing_replacement_and_two_installations',async(
  finally {await reader.query('ROLLBACK');reader.release();}
  await upgrade;assert.equal((await plans.show(a.organisationId)).plan,'paid');
 });
-function binding(){return {operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:a.organisationId,legalBusinessId:a.legalBusinessId};}
+function binding(){return {operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:a.organisationId,legalBusinessId:a.legalBusinessId};}
 async function pairAnother(){const r=new RegistrationStore(db.pool),b=binding();await r.start(b);await r.approveCloud(b,a.accountId);await r.approveLocal(b,randomUUID());return r.complete(b);}
 async function waitForQuery(pattern:string){
  for(let n=0;n<200;n++){if((await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE $2",[db.schema,pattern])).rowCount)return;await new Promise(r=>setTimeout(r,5));}
@@ -200,7 +200,7 @@ test('replacement_replay_rechecks_policy_and_concurrent_downgrade_cannot_deadloc
  await paid();const {point}=await snapshot(),target=generateKeyPairSync('ed25519'),targetKey=target.publicKey.export({type:'spki',format:'der'}).toString('base64url'),id=randomUUID();
  const recovery=new BackupRecovery(db.pool,vault,origin,undefined,mode);await requestSnapshot(id,target);await recovery.start(a.token,a.csrfToken,{id,pointId:point.id,mode:'failure',targetPublicKey:targetKey,oldServerUnavailable:true,acceptDataLoss:true});
  const restored=recoveryPayloadV2(origin,id,'restored',point.digest,fixtureTarget.digest,Date.now());await recovery.target(id,'restored',{version:2,target:fixtureTarget,payload:restored.toString('base64url'),signature:sign(null,restored,target.privateKey).toString('base64url')});
- const fresh=generateKeyPairSync('ed25519'),proposed={id,localVenueId:a.localVenueId,nodeId:point.sourceNodeId,publicKey:fresh.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
+ const fresh=generateKeyPairSync('ed25519'),proposed={id,nodeId:point.sourceNodeId,publicKey:fresh.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
  const envelope=(action:'prepare'|'status')=>{const bytes=replacementPayload(origin,action,proposed,Date.now());return {id,payload:bytes.toString('base64url'),signature:sign(null,bytes,target.privateKey).toString('base64url'),keySignature:sign(null,bytes,fresh.privateKey).toString('base64url')};};
  const replacement=new ReplacementStore(db.pool,vault,origin,mode);await replacement.machine('prepare',envelope('prepare'));
  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[a.venueId]);

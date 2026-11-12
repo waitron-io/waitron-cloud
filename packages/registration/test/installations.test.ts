@@ -15,7 +15,7 @@ let owner:{accountId:string;organisationId:string;legalBusinessId:string},sessio
 let a:Awaited<ReturnType<typeof installation>>,b:Awaited<ReturnType<typeof installation>>;
 async function installation(){
   const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
-  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:publicKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());const registered=await r.complete(binding);
   return {...registered,key,publicKey};
 }

@@ -25,7 +25,7 @@ beforeEach(async()=>{
  await pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,other]);
  await pool.query('INSERT INTO organisations(id,name) VALUES($1,$2),($3,$4)',[organisation,'Owner Org',foreignOrganisation,'Foreign Org']);
  const business=randomUUID();await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Owner SL','ES')",[business,organisation]);
- await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,organisation,business,randomUUID()]);
+ await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
  await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true),($3,$2,true,false)',[owner,organisation,other]);
  token=(await transaction(pool,client=>createSession(client,owner))).token;
 });

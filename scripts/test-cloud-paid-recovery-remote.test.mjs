@@ -21,15 +21,15 @@ test('one paired source restores its stream and independent snapshot before remo
     for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(value[key], paid[key], key);
   }
   for (const key of ['venueId', 'installationId']) assert.equal(stream[key], paid[key], key);
-  assert.equal(snapshot.localVenueId, paid.localVenueId);
+  assert.equal(snapshot.streamId, paid.streamId);
   assert.equal(stream.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(stream.localVenueId, paid.localVenueId);
+  assert.equal(stream.streamId, paid.streamId);
   assert.equal(snapshot.verification, 'verified');
   assert.equal(snapshot.workerVerification.childAbsent, true);
   assert.equal(snapshot.workerVerification.workerStoppedNaturally, true);
   assert.equal(restored.exit, 0);
   assert.equal(restored.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(restored.localVenueId, paid.localVenueId);
+  assert.equal(restored.streamId, paid.streamId);
   assert.equal(restored.generation, stream.generation);
   for (const key of ['nativeRestore', 'ownerApprovedKit', 'sourceStoppedDuringRead', 'sourceAuthorityVerified',
     'preparationBoundToStream', 'sourceRecordsPreserved', 'wrongAuthorityRefused', 'missingPreparationRefused',

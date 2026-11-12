@@ -23,7 +23,7 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
       await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
       async function venue(id:string){
         const installation=randomUUID();
-        await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[id,organisation,business,randomUUID()]);
+        await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[id,organisation,business]);
         await db.pool.query("INSERT INTO installations(id,venue_id,public_key,last_contact_at) VALUES($1,$2,$3,clock_timestamp()-interval '20 minutes')",[installation,id,randomUUID()]);
         await db.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','ready')",[installation]);
         await db.pool.query('INSERT INTO venue_monitors(venue_id) VALUES($1)',[id]);

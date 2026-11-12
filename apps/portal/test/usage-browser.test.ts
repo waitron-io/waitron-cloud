@@ -14,7 +14,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner sees isolated mea
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   const registrations=new RegistrationStore(f.db.pool);
   const install=async(organisationId:string,legalBusinessId:string)=>{
-   const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId,legalBusinessId};
+   const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId,legalBusinessId};
    await registrations.start(binding);await registrations.approveCloud(binding,owner.accountId);await registrations.approveLocal(binding,randomUUID());return registrations.complete(binding);
   };
   const sol=await install(owner.organisationId,owner.legalBusinessId),otherOrganisation=randomUUID(),otherBusiness=randomUUID();

@@ -181,13 +181,13 @@ test('owner replay cannot substitute a newer verification attempt for the approv
  assert.deepEqual((await db.pool.query('SELECT verification_attempt_id FROM backup_recoveries WHERE id=$1',[t.id])).rows[0],saved);
 });
 test('v2 snapshot negotiation cannot silently select the continuous protocol',async()=>{
- const f=await recoveryFixture(db),t=machineTarget(),signer=generateKeyPairSync('ed25519'),nodeId=randomUUID(),stored=new Map<string,Buffer>(),localVenueId=f.binding.localVenueId;
+ const f=await recoveryFixture(db),t=machineTarget(),signer=generateKeyPairSync('ed25519'),nodeId=randomUUID(),stored=new Map<string,Buffer>(),streamId=f.installed.venueId;
  const streams=new ManagedStreams(db.pool,f.vault,{async provision(){return {writerReference:'writer',readerReference:'reader',writerCredentials:{accessKeyId:'write',secretAccessKey:'secret'}};},async read(_r,_l,key){const bytes=stored.get(key);if(!bytes)throw Error('missing');return bytes;}});
  const revision=(await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].configuration_revision;
- const configured=await streams.configure(f.installed.installationId,revision,{localVenueId,sourceNodeId:nodeId,pointerSignerPublicKey:signer.publicKey.export({type:'spki',format:'der'}).toString('base64')});
- const writtenAt=new Date().toISOString(),generation=`gen-2-${nodeId}-${writtenAt.replace(/[-:.]/g,'').replace(/\d{3}Z$/,'Z')}`,body={venueId:localVenueId,term:2,nodeId,generation,writtenAt};
- const signed=Buffer.from(JSON.stringify({pointer:{generation,nodeId,term:2,venueId:localVenueId,writtenAt},purpose:'waitron.stream.pointer.v1'}));
- stored.set(`${configured.bucket.prefix}venues/${localVenueId}/current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,signed,signer.privateKey).toString('base64')})));
+ const configured=await streams.configure(f.installed.installationId,revision,{sourceNodeId:nodeId,pointerSignerPublicKey:signer.publicKey.export({type:'spki',format:'der'}).toString('base64')});
+ const writtenAt=new Date().toISOString(),generation=`gen-2-${nodeId}-${writtenAt.replace(/[-:.]/g,'').replace(/\d{3}Z$/,'Z')}`,body={streamId,term:2,nodeId,generation,writtenAt};
+ const signed=Buffer.from(JSON.stringify({pointer:{generation,nodeId,streamId,term:2,writtenAt},purpose:'waitron.stream.pointer.v1'}));
+ stored.set(`${configured.bucket.prefix}current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,signed,signer.privateKey).toString('base64')})));
  await streams.observe(f.installed.installationId,configured.configurationRevision);
  assert((await f.recovery.catalogue(f.session.token,f.installed.venueId)).continuousRecovery);
  await f.requests.machine('start',t.envelope('start'));

@@ -10,7 +10,7 @@ try{
  if(process.argv[2]==='seed'){
   const seeded=await pool.query(`WITH organisation AS(INSERT INTO organisations(id) VALUES(gen_random_uuid()) RETURNING id),
    business AS(INSERT INTO legal_businesses(id,organisation_id) SELECT gen_random_uuid(),id FROM organisation RETURNING id,organisation_id),
-   venue AS(INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) SELECT gen_random_uuid(),organisation_id,id,gen_random_uuid(),'test' FROM business RETURNING id),
+   venue AS(INSERT INTO venues(id,organisation_id,legal_business_id,environment) SELECT gen_random_uuid(),organisation_id,id,'test' FROM business RETURNING id),
    installation AS(INSERT INTO installations(id,venue_id,public_key) SELECT gen_random_uuid(),id,gen_random_uuid()::text FROM venue RETURNING id)
    INSERT INTO installation_operations(installation_id,operation_id,digest,result) SELECT id,gen_random_uuid(),'usage-proof','{}' FROM installation RETURNING installation_id`);
   const installationId=seeded.rows[0].installation_id;

@@ -17,7 +17,7 @@ test('current plans fence direct writers, missed downgrade revisions, production
  const plans=new OrganisationPlanStore(db.pool);
  async function venue(environment='test'){
   const organisationId=randomUUID(),business=randomUUID(),venueId=randomUUID();
-  await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);await db.pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,$5)',[venueId,organisationId,business,randomUUID(),environment]);
+  await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);await db.pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,$4)',[venueId,organisationId,business,environment]);
   return {organisationId,venueId,location:await storage.bucket('venue-'+venueId),prefix:`streams/${venueId}/`};
  }
  const a=await venue(),b=await venue(),production=await venue('production');let pause;
@@ -62,14 +62,14 @@ test('ManagedStreams persists the adapter references and reprovisions a fresh wr
  const {BackupObjects}=await import('../../packages/backups/src/storage.ts');
  const {openPlanStorage}=await import('./service-runtime.mjs');
  const db=await database();t.after(()=>db.close());const storage=await startBackupStorage();t.after(()=>storage.stop());
- const organisationId=randomUUID(),business=randomUUID(),venueId=randomUUID(),localVenueId=randomUUID(),installationId=randomUUID(),publicKey=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url');
- await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venueId,organisationId,business,localVenueId]);await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installationId,venueId,publicKey]);await db.pool.query("INSERT INTO installation_services(installation_id,service) SELECT $1,unnest(ARRAY['retained_snapshots','continuous_backup','remote_access'])",[installationId]);
+ const organisationId=randomUUID(),business=randomUUID(),venueId=randomUUID(),installationId=randomUUID(),publicKey=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url');
+ await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,organisationId,business]);await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installationId,venueId,publicKey]);await db.pool.query("INSERT INTO installation_services(installation_id,service) SELECT $1,unnest(ARRAY['retained_snapshots','continuous_backup','remote_access'])",[installationId]);
  const plans=new OrganisationPlanStore(db.pool);await plans.set(organisationId,'paid');
  const location=await storage.bucket('real-stream-'+venueId),vault=new BackupKeyVault(randomBytes(32)),objects=new BackupObjects(location,storage.admin,storage.ca);t.after(()=>objects.close());
  const catalogue=new BackupCatalogue(db.pool,vault,()=>objects,'test-free-paid');await catalogue.provision(installationId,location);
  const authority=await openPlanStorage({pool:db.pool,mode:'test-free-paid',directory:join(storage.root,'managed'),iamPath:join(storage.root,'iam.json'),admin:storage.admin,endpoint:storage.endpoint,region:'local',ca:storage.ca,reload:()=>storage.reloadIdentityFile()}),streams=new ManagedStreams(db.pool,vault,authority,'test-free-paid');
  const revision=async()=>Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installationId])).rows[0].configuration_revision);
- const input={localVenueId,sourceNodeId:randomUUID(),pointerSignerPublicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64')};
+ const input={sourceNodeId:randomUUID(),pointerSignerPublicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64')};
  const first=await streams.configure(installationId,await revision(),input),client=new S3Client({endpoint:storage.endpoint,region:'local',credentials:{accessKeyId:first.bucket.accessKeyId,secretAccessKey:first.bucket.secretAccessKey},forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});t.after(()=>client.destroy());
  const write=key=>client.send(new PutObjectCommand({Bucket:location.bucket,Key:first.bucket.prefix+key,Body:'retained stream data'}));await write('before');
  const initial=(await db.pool.query('SELECT reader_reference,writer_reference FROM backup_managed_streams WHERE venue_id=$1',[venueId])).rows[0];

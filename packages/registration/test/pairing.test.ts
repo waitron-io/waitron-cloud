@@ -16,7 +16,7 @@ import type {PairingClaims} from '../src/pairing-proof.ts';
 let db:Awaited<ReturnType<typeof database>>;let store:PairingStore;let other:PairingStore;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string};let session:{token:string;csrfToken:string};
 const password='a long enough local test password';
-function machine():PairingClaims {return {origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};}
+function machine():PairingClaims {return {origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};}
 const status=(c:PairingClaims):PairingClaims=>({...c,action:'status',code:''});
 const completion=(c:PairingClaims):PairingClaims=>({...c,action:'complete',code:'',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
 const approve=(c:PairingClaims,target=store)=>target.approve(c.requestId,c.code,owner.organisationId,owner.legalBusinessId,session.token,session.csrfToken);
@@ -31,11 +31,40 @@ beforeEach(async()=>{
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));
   await prepareConnectionProof(db.pool,owner.accountId,session.token);
 });
+test('an empty request creates one Cloud venue and keeps its empty binding across concurrent retries',async()=>{
+  const a={...machine(),venueId:''};
+  const started=await store.start(a);assert.equal(started.venueId,'');await approve(a);
+  const [one,two]=await Promise.all([store.complete(completion(a)),other.complete(completion(a))]);
+  assert.deepEqual(one,two);assert.equal(one.venueId,'');assert.ok(one.registration?.venueId);
+  assert.equal((await db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'1');
+  assert.deepEqual(await other.start(a),one);
+  await assert.rejects(store.status({...status(a),venueId:one.registration!.venueId}),/binding_conflict/);
+  const duplicate={...a,requestId:randomUUID()};await store.start(duplicate);await approve(duplicate);
+  await assert.rejects(store.complete(completion(duplicate)),/registration_conflict/);
+  assert.equal((await db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'1');
+});
+test('unknown and foreign requested Cloud venues refuse before account approval or local completion',async()=>{
+  for(const foreign of [false,true]){
+    const venueId=randomUUID();
+    if(foreign){
+      const org=randomUUID(),business=randomUUID();
+      await db.pool.query('INSERT INTO organisations(id,name) VALUES($1,$2)',[org,'Other']);
+      await db.pool.query('INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,$3,$4)',[business,org,'Other SL','ES']);
+      await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,org,business]);
+    }
+    const a={...machine(),venueId};
+    await store.start(a);await assert.rejects(approve(a),/permission_denied/);
+    const row=(await db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1',[a.requestId])).rows[0];
+    assert.equal(row.cloud_account_id,null);
+    await db.pool.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',[a.requestId,owner.accountId,owner.organisationId,owner.legalBusinessId]);
+    await assert.rejects(store.complete(completion(a)),/permission_denied/);
+  }
+});
 test('two approvals create one installation; independent workers recover lost replies',async()=>{
   const a=machine(),b=machine();const start=await store.start(a);assert.equal(start.state,'awaiting_cloud');
   assert.deepEqual(await other.start(a),start);await store.start(b);
   await assert.rejects(store.complete(completion(a)),/approval_required/);
-  assert.equal((await store.inspect(a.requestId,a.code,session.token,session.csrfToken)).localVenueId,a.localVenueId);
+  assert.equal((await store.inspect(a.requestId,a.code,session.token,session.csrfToken)).venueId,a.venueId);
   assert.equal((await approve(a)).state,'awaiting_local');
   const cloudEvent=(await db.pool.query("SELECT id,actor_kind,actor_id,subject_id,source_id FROM security_audit_events WHERE event_type='pairing.cloud_approved'")).rows[0];
   assert.equal(cloudEvent.actor_kind,'account');assert.equal(cloudEvent.actor_id,owner.accountId);assert.equal(cloudEvent.subject_id,a.requestId);assert.equal(cloudEvent.source_id,a.requestId);
@@ -52,9 +81,9 @@ test('two approvals create one installation; independent workers recover lost re
 });
 test('binding cannot change key, venue, environment, code or selected business',async()=>{
   const a=machine();await store.start(a);
-  for(const change of [{publicKey:machine().publicKey},{localVenueId:randomUUID()},{environment:'production' as const},{code:'87654321'}]) await assert.rejects(other.start({...a,...change}),/binding_conflict/);
+  for(const change of [{publicKey:machine().publicKey},{venueId:randomUUID()},{environment:'production' as const},{code:'87654321'}]) await assert.rejects(other.start({...a,...change}),/binding_conflict/);
   await approve(a);
-  for(const change of [{publicKey:machine().publicKey},{localVenueId:randomUUID()},{environment:'production' as const},{organisationId:randomUUID()},{legalBusinessId:randomUUID()}]) await assert.rejects(store.complete({...completion(a),...change}),/binding_conflict/);
+  for(const change of [{publicKey:machine().publicKey},{venueId:randomUUID()},{environment:'production' as const},{organisationId:randomUUID()},{legalBusinessId:randomUUID()}]) await assert.rejects(store.complete({...completion(a),...change}),/binding_conflict/);
   await assert.rejects(store.status({...status(a),publicKey:machine().publicKey}),/binding_conflict/);
 });
 test('five wrong codes persist across workers and block even a subsequent correct code',async()=>{
@@ -85,8 +114,9 @@ test('expired unfinished requests refuse all changes, while completed retries ne
   await unavailable(store.complete(completion(b)));await unavailable(store.start(b));await unavailable(approve(b));
   await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');await unavailable(store.complete(completion(a)));await unavailable(store.status(status(a)));
 });
-test('a competing pairing cannot transfer the same local venue to another installation',async()=>{
-  const a=machine(),b={...machine(),localVenueId:a.localVenueId};await store.start(a);await store.start(b);await approve(a);await approve(b);
+test('a competing pairing cannot transfer the same Cloud venue to another installation',async()=>{
+  const venue=randomUUID();await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,owner.organisationId,owner.legalBusinessId]);
+  const a={...machine(),venueId:venue},b={...machine(),venueId:venue};await store.start(a);await store.start(b);await approve(a);await approve(b);
   const results=await Promise.allSettled([store.complete(completion(a)),other.complete(completion(b))]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'1');
 });
@@ -120,7 +150,7 @@ test('migrations upgrade a seven-migration schema without changing its existing 
     await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[account]);
     await pool.query('INSERT INTO cloud_sessions(token_hash,csrf_hash,account_id) VALUES($1,$2,$3)',['a'.repeat(64),'b'.repeat(64),account]);
     await pool.query('INSERT INTO organisations(id) VALUES($1)',[org]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[biz,org]);
-    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,biz,randomUUID()]);
+    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,biz]);
     await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'existing-key')",[installation,venue]);
     const previous=(await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows;await migrate(pool);await migrate(pool);
     assert.deepEqual((await pool.query('SELECT id,venue_id,public_key,revoked_at FROM installations')).rows,previous);assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,String(migrationNames.length));
@@ -151,7 +181,7 @@ test('session expiry while Cloud approval waits on permission leaves no approval
 });
 
 test('a borrowed registration transaction reads its own new configuration and rolls it back together',async()=>{
-  const a=machine();const binding={operationId:a.requestId,installationKey:a.publicKey,localVenueId:a.localVenueId,environment:a.environment,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const a=machine();const binding={operationId:a.requestId,installationKey:a.publicKey,venueId:a.venueId,environment:a.environment,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await assert.rejects(transaction(db.pool,async client=>{
     const nested=new RegistrationStore(db.pool,client);await nested.start(binding);await nested.approveLocal(binding,a.requestId);await nested.approveCloud(binding,owner.accountId);
     const registration=await nested.complete(binding);const config=await nested.configuration(a.publicKey);assert.equal(config.installationId,registration.installationId);assert.equal(config.services.length,3);
@@ -177,7 +207,7 @@ async function waitForLock(){
 test('pairing expiry during venue insertion rolls back the registration and both approvals',async()=>{
   const a=machine();await store.start(a);await approve(a);
   const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
-  await blocker.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[randomUUID(),owner.organisationId,owner.legalBusinessId,a.localVenueId]);
+  await blocker.query("LOCK TABLE venues IN SHARE MODE");
   await db.pool.query("UPDATE pairing_requests SET expires_at=clock_timestamp()+interval '300 milliseconds'");
   const pending=unavailable(store.complete(completion(a)));
   try{await waitForLock();await new Promise(r=>setTimeout(r,350));}finally{await blocker.query('COMMIT');blocker.release();}

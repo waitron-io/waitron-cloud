@@ -71,7 +71,7 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(snapshot.workerVerification.workerStoppedNaturally, true);
   const recovered = receipt.paidContinuousRecovery;
   assert.equal(recovered?.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(recovered?.localVenueId, paid.localVenueId);
+  assert.equal(recovered?.streamId, paid.streamId);
   assert.equal(recovered?.generation, stream.generation);
   assert.equal(recovered?.exit, 0); assert.equal(recovered.integrity, 'ok');
   for (const key of ['nativeRestore', 'ownerApprovedKit', 'sourceStoppedDuringRead', 'sourceAuthorityVerified',
@@ -83,7 +83,7 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(snapshot.authorisedRecovery.exit, 0);
   for (const key of ['preparationBoundToDeliveredArchive', 'sourceAuthorityVerified', 'wrongAuthorityRefused',
     'missingPreparationRefused', 'sourceRecordsPreserved', 'noServerStarted', 'noCloudCredentials']) assert.equal(snapshot.authorisedRecovery[key], true, key);
-  for (const key of ['sha256', 'bytes', 'sourceNodeId', 'localVenueId']) assert.equal(snapshot.authorisedRecovery[key], snapshot[key], key);
+  for (const key of ['sha256', 'bytes', 'sourceNodeId', 'streamId']) assert.equal(snapshot.authorisedRecovery[key], snapshot[key], key);
   assert.equal(snapshot.authorisedRecovery.integrity, 'ok');
   assert.equal(snapshot.authorisedRecovery.cloudReportedRestored, false);
   for (const key of ['sourceIdentityPreserved', 'sourceStoppedDuringRead', 'requestClosed']) assert.equal(snapshot.ownerRecovery[key], true, key);

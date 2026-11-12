@@ -69,7 +69,7 @@ test('two demo Waitron venues pair free and paid signup accounts through trusted
   assert.deepEqual(receipt.tls, {untrustedRefused: true, wrongHostnameRefused: true});
   assert.deepEqual(receipt.freeSnapshot, {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
   assert.deepEqual(receipt.organisations.map(value => value.plan), ['free', 'paid']);
-  for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(receipt.organisations.map(value => value[key])).size, 2, key);
+  for (const key of ['organisationId', 'venueId', 'installationId', 'streamId', 'stateSha256']) assert.equal(new Set(receipt.organisations.map(value => value[key])).size, 2, key);
   for (const value of receipt.organisations) {
     assert.match(value.stateSha256, /^[a-f0-9]{64}$/);
     assert.equal(value.installationState, 'active');

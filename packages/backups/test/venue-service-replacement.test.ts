@@ -29,15 +29,15 @@ async function fixture(source:'snapshot'|'continuous',initial:BillingLevel='conn
   let nodeId=f.point.sourceNodeId;
   if(source==='continuous'){
    nodeId=randomUUID();const pointerKey=generateKeyPairSync('ed25519');
-   const pointer={venueId,term:2,nodeId,generation:`gen-2-${nodeId}-20261030T090000Z`,writtenAt:'2026-10-30T09:00:00.000Z'};
-   const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${nodeId}","term":2,"venueId":"${venueId}","writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+   const pointer={streamId:venueId,term:2,nodeId,generation:`gen-2-${nodeId}-20261030T090000Z`,writtenAt:'2026-10-30T09:00:00.000Z'};
+   const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${nodeId}","streamId":"${venueId}","term":2,"writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
    const authority:ManagedStreamAuthority={
     async provision(){return {writerReference:'replacement-writer',readerReference:'replacement-reader',writerCredentials:{accessKeyId:'synthetic-writer',secretAccessKey:'synthetic-secret'}};},
     async read(){return Buffer.from(JSON.stringify({body:pointer,signature:sign(null,Buffer.from(message),pointerKey.privateKey).toString('base64')}));},
    };
    const streams=new ManagedStreams(db.pool,f.vault,authority,'test-venue-levels');
    const revision=Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].configuration_revision);
-   const configured=await streams.configure(f.installed.installationId,revision,{localVenueId:venueId,sourceNodeId:nodeId,pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')});
+   const configured=await streams.configure(f.installed.installationId,revision,{sourceNodeId:nodeId,pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')});
    await streams.observe(f.installed.installationId,configured.configurationRevision);
   }
   const target=machineTarget(),requests=new RecoveryRequests(db.pool,f.vault,origin,undefined,'test-venue-levels'),recovery=new BackupRecovery(db.pool,f.vault,origin,undefined,'test-venue-levels');
@@ -46,8 +46,8 @@ async function fixture(source:'snapshot'|'continuous',initial:BillingLevel='conn
   await requests.approve(target.id,target.code,f.session.token,f.session.csrfToken,source==='snapshot'?f.input:{source:'continuous',venueId,oldServerUnavailable:true,acceptDataLoss:true});
   const digest=source==='snapshot'?f.point.digest:streamRecoveryDigest(`gen-2-${nodeId}-20261030T090000Z`);
   await recovery.target(target.id,'restored',target.envelope('restored',digest,Date.now(),origin,version));
-  const key=generateKeyPairSync('ed25519'),localVenueId=(await db.pool.query('SELECT local_venue_id FROM venues WHERE id=$1',[venueId])).rows[0].local_venue_id;
-  const proposed={id:target.id,localVenueId,nodeId,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
+  const key=generateKeyPairSync('ed25519');
+  const proposed={id:target.id,nodeId,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
   function proof(action:'prepare'|'status',issuedAt=Date.now()){
    const bytes=replacementPayload(origin,action,proposed,issuedAt);
    return {id:target.id,payload:bytes.toString('base64url'),signature:target.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};

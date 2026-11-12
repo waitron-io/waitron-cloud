@@ -8,7 +8,7 @@ const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234
 const expiresAt=new Date(Date.now()+3600000).toISOString();
 const ready:RecoveryView={requestId:id,state:'approved',expiresAt,operationId:id,
  operation:{id,pointId,venueId,source:{kind:'snapshot',pointId},mode:'failure',status:'restored',expiresAt},
- replacement:{requestId:id,pointId,venueId,source:{kind:'snapshot',pointId},oldInstallationId:'42345678-1234-4234-8234-123456789abc',localVenueId:'52345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt,organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null}};
+ replacement:{requestId:id,pointId,venueId,source:{kind:'snapshot',pointId},oldInstallationId:'42345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt,organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null}};
 
 for(const action of ['inspect','approve','close','replace'] as const)for(const code of ['local_integration_only','permission_denied','forbidden'])test(`recovery ${action} distinguishes ${code} without retaining authority or repeating a write`,async()=>{
  const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];

@@ -40,7 +40,7 @@ export async function startIntegrationStream(root) {
   };
   const state=JSON.parse(await readFile(root+'/cloud-connection.json','utf8'));
   await phase('cloud-configuration');
-  const configured=await machine('backup-stream-configure',{revision:state.lifecycle.view.revision,localVenueId:ready.localVenueId,
+  const configured=await machine('backup-stream-configure',{revision:state.lifecycle.view.revision,
     sourceNodeId:sourceIdentity.nodeId,pointerSignerPublicKey:signer});
   await writeFile(root+'/backup.env','WAITRON_BACKUP_RECOVERY_KEY='+configured.recoveryKey+'\n',{mode:0o600});
   await writeFile(root+'/direct-storage.json',JSON.stringify(configured.bucket),{mode:0o600});
@@ -70,11 +70,11 @@ export async function startIntegrationStream(root) {
   assert.equal(status?.state,'streaming','integration.stream_not_streaming');assert.ok(status.lastConfirmedUploadAt,'integration.stream_not_uploaded');
   await phase('cloud-observation');
   const observed=await machine('backup-stream-observe',{});
-  const pointer=await readPointer(createS3ObjectStore(configured.bucket),ready.localVenueId);
+  const pointer=await readPointer(createS3ObjectStore(configured.bucket),sourceIdentity.streamId);
   assert.ok(pointer);assert.equal(verifyPointer(pointer.pointer,signer),true);
   assert.equal(pointer.pointer.body.nodeId,sourceIdentity.nodeId);
   assert.equal(observed.recoverableAt,pointer.pointer.body.writtenAt);
   await phase('signed-pointer-confirmed');
   return {venueId:configured.venueId,installationId:configured.installationId,sourceNodeId:sourceIdentity.nodeId,
-    localVenueId:ready.localVenueId,generation:pointer.pointer.body.generation,recoverableAt:observed.recoverableAt,nativeStreaming:true};
+    streamId:sourceIdentity.streamId,generation:pointer.pointer.body.generation,recoverableAt:observed.recoverableAt,nativeStreaming:true};
 }

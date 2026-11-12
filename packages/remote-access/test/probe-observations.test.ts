@@ -21,7 +21,7 @@ async function placed(){
  const signup=new SignupStore(db.pool,db.outbox),email=`evidence-${randomUUID()}@example.test`;
  await signup.request(email);const message=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in message);
  const owner=await signup.complete(message.token,{password:'a long enough evidence password',organisationName:'Evidence',legalBusinessName:'Evidence SL',countryCode:'ES'});
- const input={operationId:randomUUID(),installationKey:installationKey(),localVenueId:randomUUID(),environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const input={operationId:randomUUID(),installationKey:installationKey(),venueId:'',environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registrations=new RegistrationStore(db.pool);await registrations.start(input);await registrations.approveCloud(input,owner.accountId);await registrations.approveLocal(input,randomUUID());const installation=await registrations.complete(input);
  const remote=new RemoteAccessStore(db.pool),cell=randomUUID(),suffix=`evidence-${randomUUID()}.example.test`,subnet=nextSubnet++;await remote.createCell({id:cell,country:'ES',provider:'aws',environment:'test',suffix,subnet,publicKey:peerKey(),endpoint:'gateway.example.test:51820'});
  const placement=await remote.provision(installation.installationId,cell,peerKey());

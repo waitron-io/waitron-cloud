@@ -33,7 +33,7 @@ async function fixture(){
  const organisation=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),id=randomUUID(),job=randomUUID(),claimId=randomUUID();
  await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);
  await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,organisation,business,randomUUID()]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
  await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,venue,randomUUID()]);
  await db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://storage.test',$3,'local')",[venue,installation,venue]);
  const sealed=vault.create(venue,1);

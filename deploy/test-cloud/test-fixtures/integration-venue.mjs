@@ -33,7 +33,10 @@ globalThis.fetch = async (url, options) => {
 await import('/waitron/apps/server/scripts/cloud-integration-fixture.ts');
 const root = process.env.CLOUD_TEST_ROOT;
 const ready = JSON.parse(await readFile(root + '/ready.json', 'utf8'));
-const cloud = createCloudConnection({stateDir: root, origin: 'https://waitron.local:3000', localVenueId: ready.localVenueId, environment: 'test'});
+const {openVenueDatabase,readCloudVenueId}=require('@waitron/db');
+const cloud = createCloudConnection({stateDir: root, origin: 'https://waitron.local:3000', environment: 'test',
+  async readVenueId(){const store=await openVenueDatabase(root+'/venue',{exclusive:false});try{return await readCloudVenueId(store.venue);}finally{await store.close();}},
+  async recordVenueId(){throw new Error('Pair through the running server management API');}});
 // The private socket calls the same module in the owning server process, preserving its state lock.
 const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {

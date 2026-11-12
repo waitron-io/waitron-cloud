@@ -63,3 +63,26 @@ test('upgrade command metadata omits unknown labels and private exit values',()=
  const facts=Object.defineProperties({release:'old',operation:'clone'},{status:{get:getter},signal:{get:getter},code:{get:getter}});
  assert.deepEqual(record(facts).command,{release:'old',operation:'clone',status:null,signal:null,code:null});
 });
+
+test('the v1 upgrade rehearsal refuses a pairing-v2 target before starting databases',async()=>{
+ const scratch=await mkdtemp(join(tmpdir(),'upgrade-v2-boundary-')),output=join(scratch,'receipt.json'),calls=join(scratch,'docker-calls');
+ try{
+  const command=`#!${process.execPath}
+import {mkdirSync,writeFileSync,appendFileSync} from 'node:fs';
+import {basename,join} from 'node:path';
+const name=basename(process.argv[1]),args=process.argv.slice(2);
+if(name==='git'&&args[0]==='clone'){
+ const root=args.at(-1);mkdirSync(join(root,'packages/registration/migrations'),{recursive:true});
+ if(basename(root)==='new')writeFileSync(join(root,'packages/registration/migrations/064_cloud_pairing_v2.sql'),'-- synthetic cutover');
+}
+if(name==='docker'){appendFileSync(process.env.DOCKER_CALLS,JSON.stringify(args)+'\\n');process.exit(args[0]==='run'?73:0);}
+`;
+  for(const name of ['git','pnpm','docker'])await writeFile(join(scratch,name),command,{mode:0o700});
+  const failure=await exec(process.execPath,['scripts/schema-upgrade-receipt.mjs',output],{cwd:root,env:{...process.env,PATH:scratch+':'+process.env.PATH,DOCKER_CALLS:calls},timeout:15000}).then(()=>assert.fail('v1 rehearsal accepted a v2 target'),error=>error);
+  assert.match(failure.stderr,/schema upgrade v1 proof does not support pairing v2/);
+  const {readFile}=await import('node:fs/promises');
+  const attempted=await readFile(calls,'utf8').catch(error=>{if(error.code==='ENOENT')return '';throw error;});
+  assert.equal(attempted.split('\n').filter(Boolean).some(line=>JSON.parse(line)[0]==='run'),false);
+  await assert.rejects(access(output),{code:'ENOENT'});
+ }finally{await rm(scratch,{recursive:true,force:true});}
+});

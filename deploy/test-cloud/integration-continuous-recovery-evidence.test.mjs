@@ -4,7 +4,7 @@ const load = () => import('./test-fixtures/integration-continuous-recovery-evide
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url?.endsWith('/integration-continuous-recovery-evidence.mjs')) return {};
   throw error;
 });
-const selected = {sourceNodeId: 'node', localVenueId: 'venue', generation: 'gen-0-node-20261101T050000Z'};
+const selected = {sourceNodeId: 'node', streamId: 'venue', generation: 'gen-0-node-20261101T050000Z'};
 const report = () => ({...selected, exit: 0, nativeRestore: true, ownerApprovedKit: true, sourceStoppedDuringRead: true,
   sourceAuthorityVerified: true, preparationBoundToStream: true, sourceRecordsPreserved: true,
   wrongAuthorityRefused: true, missingPreparationRefused: true, noServerStarted: true,

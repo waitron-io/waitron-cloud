@@ -15,7 +15,7 @@ test('the same paired source restores from its Cloud-approved continuous copy be
   const restored = receipt.paidContinuousRecovery, snapshot = receipt.paidSnapshot;
   assert.equal(restored?.exit, 0, 'A real native continuous restore must complete with separate source authority');
   assert.equal(restored.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(restored.localVenueId, snapshot.localVenueId);
+  assert.equal(restored.streamId, snapshot.streamId);
   assert.equal(restored.generation, receipt.paidStream.generation);
   for (const key of ['nativeRestore', 'ownerApprovedKit', 'sourceStoppedDuringRead', 'sourceAuthorityVerified',
     'preparationBoundToStream', 'sourceRecordsPreserved', 'wrongAuthorityRefused', 'missingPreparationRefused',

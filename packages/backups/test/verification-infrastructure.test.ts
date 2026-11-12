@@ -71,7 +71,7 @@ async function fixture(){
  for(let n=0;n<2;n++){
   await signup.request(`outage-${n}@example.test`);const row=(await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0],mail=db.outbox.open(row);assert('token' in mail);
   const account=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol '+n,legalBusinessName:'Sol SL '+n,countryCode:'ES'});
-  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
+  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
   await registration.start(binding);await registration.approveCloud(binding,account.accountId);await registration.approveLocal(binding,randomUUID());const venue=await registration.complete(binding);
   await catalogue.provision(venue.installationId,{endpoint:'https://storage.test',bucket:'outage-fixture-'+n,region:'local'});
   const capture=await catalogue.reserveCapture(venue.installationId,randomUUID()),body=Buffer.concat([Buffer.from([n===0?0:4]),bytes]);objects.set(capture.incomingKey,body);

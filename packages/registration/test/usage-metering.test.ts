@@ -43,8 +43,8 @@ beforeEach(async()=>{
  await pool.query('INSERT INTO organisations(id) VALUES($1),($2)',[organisationId,secondOrganisationId]);
  await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2),($3,$4)',[businessId,organisationId,secondBusinessId,secondOrganisationId]);
  await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true),($3,$4,true,true)',[accountId,organisationId,secondAccountId,secondOrganisationId]);
- await pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment)
-  VALUES($1,$2,$3,$4,'test'),($5,$6,$7,$8,'test')`,[venueId,organisationId,businessId,randomUUID(),secondVenueId,secondOrganisationId,secondBusinessId,randomUUID()]);
+ await pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,environment)
+  VALUES($1,$2,$3,'test'),($4,$5,$6,'test')`,[venueId,organisationId,businessId,secondVenueId,secondOrganisationId,secondBusinessId]);
  await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3),($4,$5,$6)',[installationId,venueId,`key:${installationId}`,secondInstallationId,secondVenueId,`key:${secondInstallationId}`]);
  await pool.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'remote_access'),($1,'continuous_backup'),($1,'retained_snapshots'),($2,'remote_access'),($2,'continuous_backup'),($2,'retained_snapshots')",[installationId,secondInstallationId]);
 });

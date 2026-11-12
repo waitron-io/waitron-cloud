@@ -49,6 +49,6 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   assert.ok(saved.lifecycle.lease);
   const exchanges = (await readFile(root + '/exchanges.jsonl', 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   for (const path of ['/api/pairing/complete', '/api/installations/renew', '/api/installations/configuration']) assert.ok(exchanges.some(value => value.path === path && value.status === 200), 'integration.exchange_missing:' + path);
-  console.log(JSON.stringify({registration: status.registration, localVenueId: ready.localVenueId, installationState: status.installation.state,
+  console.log(JSON.stringify({registration: status.registration, streamId: status.venueId, installationState: status.installation.state,
     stateSha256: createHash('sha256').update(bytes).digest('hex'), identitySha256: createHash('sha256').update(saved.publicKey).digest('hex')}));
 }

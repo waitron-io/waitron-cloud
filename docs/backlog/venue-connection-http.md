@@ -17,5 +17,6 @@ to check that refused, unreadable or uncertain replies retain your code, offered
 business and inspected venue for an explicit retry. Pending requests cannot
 dispatch again. Server waits survive account, request and clock changes through
 their exact expiry; reading the body consumes that same wait. Retrying keeps your
-existing request proof and binding. These native checks leave server permissions,
+existing request proof and binding, including an empty requested venue id in v2.
+Cloud returns the allocated id separately in the completed registration. These native checks leave server permissions,
 local confirmation and live delivery against the selected deployment unqualified.

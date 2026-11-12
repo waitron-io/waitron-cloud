@@ -94,7 +94,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     binding = {
       operationId: randomUUID(),
       installationKey: keyPair().publicKey,
-      localVenueId: randomUUID(),
+      venueId:'',
       environment: "test",
       organisationId: owner.organisationId,
       legalBusinessId: owner.legalBusinessId,
@@ -171,7 +171,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     ...binding,
     operationId: randomUUID(),
     installationKey: keyPair().publicKey,
-    localVenueId: randomUUID(),
+    venueId:'',
   };
   await reg.start(secondBinding);
   await reg.approveCloud(secondBinding, owner.accountId);

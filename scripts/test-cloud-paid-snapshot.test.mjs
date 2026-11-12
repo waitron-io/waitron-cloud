@@ -20,7 +20,7 @@ test('the paired paid venue publishes its own genuine encrypted snapshot', {
   assert.equal(snapshot.verification, 'pending');
   assert.equal(snapshot.recovery, 'not-run');
   const paid = receipt.organisations.find(value => value.plan === 'paid');
-  for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId']) assert.equal(snapshot[key], paid[key], key);
+  for (const key of ['organisationId', 'venueId', 'installationId', 'streamId']) assert.equal(snapshot[key], paid[key], key);
   assert.match(snapshot.pointId, /^[a-f0-9-]{36}$/);
   assert.match(snapshot.sourceNodeId, /^[a-f0-9-]{36}$/);
   assert.match(snapshot.sha256, /^[a-f0-9]{64}$/);

@@ -1,0 +1,14 @@
+DELETE FROM pairing_requests;
+DELETE FROM connection_requests;
+ALTER TABLE pairing_requests DROP COLUMN local_venue_id;
+ALTER TABLE pairing_requests ADD COLUMN requested_venue_id uuid;
+ALTER TABLE connection_requests DROP COLUMN local_venue_id;
+ALTER TABLE connection_requests ADD COLUMN requested_venue_id uuid;
+ALTER TABLE venues DROP COLUMN local_venue_id;
+DELETE FROM installation_replacements WHERE result IS NULL;
+UPDATE installation_replacements SET result=result-'localVenueId' WHERE result IS NOT NULL;
+ALTER TABLE installation_replacements DROP COLUMN local_venue_id;
+ALTER TABLE backup_managed_streams DROP COLUMN local_venue_id;
+UPDATE backup_managed_streams SET generation=NULL,recoverable_at=NULL,observed_at=NULL;
+UPDATE backup_recoveries SET status='closed' WHERE source_kind='continuous' AND status IN ('pending','restored');
+UPDATE backup_recovery_requests SET expires_at=LEAST(expires_at,clock_timestamp()) WHERE operation_id IS NULL;

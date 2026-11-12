@@ -84,7 +84,7 @@ test('a non-owner cannot list, agree or withdraw and another owner cannot cross 
 });
 test('all owned venues are returned, including those without installations',async()=>{
  const {v,session}=await owner(),extra=randomUUID();
- await db.pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,$5)',[extra,v.organisationId,v.legalBusinessId,randomUUID(),'test']);
+ await db.pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,$4)',[extra,v.organisationId,v.legalBusinessId,'test']);
  const expected=[v.venueId,extra].sort().map(venueId=>({venueId,consented:false,consentedAt:null}));
  assert.deepEqual(await (await consent(session)).json(),{consents:expected});
  await status(await consent(session,agree(extra)),200);assert.equal((await rows(extra)).length,1);

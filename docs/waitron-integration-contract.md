@@ -92,13 +92,13 @@ the proposed hourly stream snapshots with 30-day retention.
 
 Cloud owns organisation, legal-business, venue, installation and cell identifiers.
 An installation is a registered machine with its own credentials; replacing one
-does not create a new venue. Map these identifiers explicitly to Waitron's local
-venue and node identifiers. Never derive permission from matching email addresses,
+does not create a new venue. Waitron records Cloud's venue id in its venue database;
+its node id remains a separate server identity. Never derive permission from matching email addresses,
 tax identifiers, hostnames or a caller-supplied venue id.
 
 Linking requires both Cloud permission to add the venue and local administrator
 approval. Bind both approvals to one expiring operation, the selected organisation,
-the local venue and the installation's public identity. The normal owner completes
+the requested Cloud venue id and the installation's public identity. The normal owner completes
 both in one guided action. Machine secrets stay outside the browser and logs.
 
 Waitron owns the local approval check. Cloud verifies the Cloud permission and the
@@ -110,6 +110,26 @@ protection and recovery from lost replies as part of the registration slice.
 Cloud owns permission to use its services. Waitron owns permission to become the
 active primary. A Cloud login, restore grant or fresh machine credential alone
 must not activate trading or change fiscal identity.
+
+### Pairing and managed-stream version 2
+
+Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs
+`venueId: ""`; its view keeps that requested value and `registration.venueId` returns
+Cloud's allocated UUID. Retries retain the original request binding. An existing id
+must belong to the permitted organisation, business and environment. Pairing does not
+replace a box with a different installation key.
+
+For a managed stream, `streamId` is that same authenticated Cloud venue id. Configure
+with exactly `{revision,sourceNodeId,pointerSignerPublicKey}`. Use the full returned
+`streams/<Cloud venue id>/` folder and read `current.json` directly inside it. The signed
+pointer body uses `streamId`, retaining signature purpose `waitron.stream.pointer.v1`.
+A managed recovery kit is `WAITRON-RECOVERY-KIT-2:` followed by base64url JSON
+`{version:2,streamId,bucket,recoveryKey,pointerSignerPublicKey}`.
+
+Replacement signs compact UTF-8 JSON
+`["waitron-cloud-replacement-v2",origin,id,action,nodeId,"test",publicKey,peerPublicKey,issuedAt]`.
+Its two signatures, owner approval, source node, installation and activation checks
+remain required. No separate local venue identifier appears in its proposal or reply.
 
 ## Hosted lifecycle and promotion (proposed)
 

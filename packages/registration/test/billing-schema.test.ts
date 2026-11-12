@@ -13,7 +13,7 @@ async function fixture(){
   const org=randomUUID(),business=randomUUID(),otherBusiness=randomUUID(),foreignOrg=randomUUID(),foreignBusiness=randomUUID(),venue=randomUUID(),otherVenue=randomUUID();
   await pool.query('INSERT INTO organisations(id) VALUES($1),($2)',[org,foreignOrg]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2),($3,$2),($4,$5)',[business,org,otherBusiness,foreignBusiness,foreignOrg]);
-  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test'),($4,$2,$5,$4,'test')",[venue,org,business,otherVenue,otherBusiness]);
+  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test'),($4,$2,$5,'test')",[venue,org,business,otherVenue,otherBusiness]);
   const close=async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();};
   return {pool,schema,org,business,otherBusiness,foreignOrg,foreignBusiness,venue,otherVenue,close};
  }catch(error){await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();throw error;}

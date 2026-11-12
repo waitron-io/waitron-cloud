@@ -29,9 +29,9 @@ async function seed(db){
   await db.pool.query("INSERT INTO cloud_credentials(account_id,email,email_verified_at) SELECT id,'worker-'||n||'@example.test',clock_timestamp() FROM worker_fixture_accounts");
   await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) SELECT id,$1,true FROM worker_fixture_accounts',[organisationId]);
   await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) SELECT id,true,CASE WHEN n%2=0 THEN 'es' ELSE 'en' END FROM worker_fixture_accounts");
-  await db.pool.query('CREATE TABLE worker_fixture_venues(n integer PRIMARY KEY,venue_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),installation_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),local_venue_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid())');
+  await db.pool.query('CREATE TABLE worker_fixture_venues(n integer PRIMARY KEY,venue_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),installation_id uuid NOT NULL UNIQUE DEFAULT gen_random_uuid())');
   await db.pool.query('INSERT INTO worker_fixture_venues(n) SELECT generate_series(1,$1)',[fixture.venues]);
-  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) SELECT venue_id,$1,$2,local_venue_id,'test' FROM worker_fixture_venues",[organisationId,businessId]);
+  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) SELECT venue_id,$1,$2,'test' FROM worker_fixture_venues",[organisationId,businessId]);
   await db.pool.query("INSERT INTO installations(id,venue_id,public_key,last_contact_at) SELECT installation_id,venue_id,'worker-fixture-'||installation_id,clock_timestamp() FROM worker_fixture_venues");
   await db.pool.query("INSERT INTO installation_services(installation_id,service,state) SELECT installation_id,'remote_access','ready' FROM worker_fixture_venues");
   await db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) SELECT venue_id,installation_id,'https://storage.example.test','worker-'||n,'local' FROM worker_fixture_venues");

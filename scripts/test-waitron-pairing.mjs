@@ -44,14 +44,17 @@ try{
     const context=await f.browser.newContext({locale:'en'});const page=await context.newPage();page.setDefaultTimeout(10000);
     const login=await context.request.post(`${server.origin}/management-api/session`,{headers:{origin:server.origin},data:{email:'owner@example.test',password:'Local integration password'}});
     assert.equal(login.status(),200,await login.text());
-    await page.goto(`${server.origin}/manage/cloud`);await page.getByRole('button',{name:'Connect to Cloud',exact:true}).click();
+    await page.goto(`${server.origin}/manage/cloud`);
+    const [startReply]=await Promise.all([page.waitForResponse(response=>response.url()===server.origin+'/management-api/cloud/start'),page.getByRole('button',{name:'Connect to Cloud',exact:true}).click()]);
+    assert.equal(startReply.status(),200,await startReply.text());
+    const started=await startReply.json();assert.equal(started.state,'awaiting_cloud',JSON.stringify(started));
     const localScreen=page.locator('dashboard-cloud-services-screen');await localScreen.locator('.code').waitFor();const code=(await localScreen.locator('.code').innerText()).trim();assert.match(code,/^\d{8}$/);
-    const status=await (await context.request.get(`${server.origin}/management-api/cloud/status`)).json();assert.equal(status.localVenueId,server.localVenueId);assert.equal(status.environment,'test');
+    const status=await (await context.request.get(`${server.origin}/management-api/cloud/status`)).json();assert.equal(status.venueId,'');assert.equal(server.venueId,null);assert.equal(status.environment,'test');
     locals.push({root,server,status,context});
     const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const cloud=await popupPromise;cloud.setDefaultTimeout(10000);
     await cloud.getByLabel('Email').fill(email);await cloud.locator('input[name=password]').fill(password);await cloud.getByRole('button',{name:'Sign in',exact:true}).click();
     await cloud.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await cloud.getByRole('button',{name:'Check code',exact:true}).click();
-    await cloud.getByText(server.localVenueId,{exact:true}).waitFor();await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
+    await cloud.getByText('New venue',{exact:true}).waitFor();await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
     await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Two Cafés SL',{exact:true}).waitFor();
     if(index===0){await stop(server);server=await launch(root);await page.reload();await page.getByRole('button',{name:'Connect this venue',exact:true}).waitFor();}
     let completions=0,completionStatus;
@@ -64,7 +67,7 @@ try{
   assert.notEqual(registrations[0].installationId,registrations[1].installationId);assert.notEqual(registrations[0].venueId,registrations[1].venueId);
   const first=JSON.parse(await readFile(join(locals[0].root,'cloud-connection.json'),'utf8'));
   const second=JSON.parse(await readFile(join(locals[1].root,'cloud-connection.json'),'utf8'));
-  const bytes=Buffer.from(JSON.stringify(['waitron-cloud-pair-v1',f.origin,'status',second.requestId,first.publicKey,first.localVenueId,first.environment,'','','',Date.now()]));
+  const bytes=Buffer.from(JSON.stringify(['waitron-cloud-pair-v2',f.origin,'status',second.requestId,first.publicKey,'',first.environment,'','','',Date.now()]));
   const signature=sign(null,bytes,createPrivateKey({key:Buffer.from(first.privateKey,'base64url'),format:'der',type:'pkcs8'})).toString('base64url');
   const swapped=await locals[0].context.request.post(`${f.origin}/api/pairing/status`,{data:{payload:bytes.toString('base64url'),signature}});assert.equal(swapped.status(),400);
   assert.equal((await swapped.json()).error,'binding_conflict');

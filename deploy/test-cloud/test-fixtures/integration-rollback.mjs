@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export function checkRollbackClient(before, after, previous, current) {
   assert.deepEqual(after.registration, before.registration);
   assert.equal(after.identitySha256, before.identitySha256);
-  assert.equal(after.localVenueId, before.localVenueId);
+  assert.equal(after.streamId, before.streamId);
   for (const key of ['renewals', 'configurations']) assert.ok(current[key] > previous[key], 'integration.rollback_exchange_missing:' + key);
   return true;
 }

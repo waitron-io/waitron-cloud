@@ -32,7 +32,7 @@ try{
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('outage-owner@example.test');
   const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password:'A long enough outage proof password',organisationName:'Outage proof',legalBusinessName:'Outage Proof SL',countryCode:'ES'});
-  const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:installationKey.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:installationKey.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
   const connected=await registration.complete(binding);
 

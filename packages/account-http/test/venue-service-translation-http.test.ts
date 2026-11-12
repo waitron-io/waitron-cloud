@@ -99,7 +99,7 @@ test('venue HTTP translation ignores paid sibling selectors and isolates same or
   await f.set('registered');
   const {generateKeyPairSync,sign}=await import('node:crypto'),{RegistrationStore,InstallationStore,encodeMachine}=await import('@waitron-cloud/registration');
   const key=generateKeyPairSync('ed25519'),installationKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
-  const binding={operationId:randomUUID(),installationKey,localVenueId:randomUUID(),environment:'test',organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId};
+  const binding={operationId:randomUUID(),installationKey,venueId:'',environment:'test',organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId};
   const registrations=new RegistrationStore(f.db.pool);await registrations.start(binding);await registrations.approveCloud(binding,f.v.accountId);await registrations.approveLocal(binding,randomUUID());
   const sibling=await registrations.complete(binding),store=new BillingStore(f.db.pool),scope={organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId};
   const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});

@@ -28,7 +28,7 @@ beforeEach(async()=>{
  for(const [id,organisation] of [[installation,org],[secondInstallation,org],[foreignInstallation,otherOrg]]){
   const business=randomUUID(),venue=randomUUID();
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
-  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,organisation,business,randomUUID()]);
+  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
   await pool.query("INSERT INTO installations(id,venue_id,public_key,lease_expires_at) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour')",[id,venue,`key-${id}`]);
  }
  session=await transaction(pool,c=>createSession(c,account));otherSession=await transaction(pool,c=>createSession(c,otherAccount));

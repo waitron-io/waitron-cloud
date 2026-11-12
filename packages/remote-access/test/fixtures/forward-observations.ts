@@ -12,7 +12,7 @@ export async function forwardFixture(){
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert('token'in mail);
  const owner=await signup.complete(mail.token,{password:'a long private forwarding password',organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
  await new OrganisationPlanStore(db.pool).set(owner.organisationId,'paid');
- const registration=new RegistrationStore(db.pool),input={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const registration=new RegistrationStore(db.pool),input={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await registration.start(input);await registration.approveCloud(input,owner.accountId);await registration.approveLocal(input,randomUUID());const installed=await registration.complete(input);
  const cellId=randomUUID(),gatewayId=randomUUID(),keys=generateKeyPairSync('ed25519'),publicKey=keys.publicKey.export({type:'spki',format:'pem'}).toString();
  await remote.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'forward.example.test',subnet:19,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'});

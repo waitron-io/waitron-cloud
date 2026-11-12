@@ -453,7 +453,7 @@ try {
       server,
       registration: paired.registration,
       location,
-      localVenueId:server.localVenueId,
+      streamId:paired.registration.venueId,
       post,put,get,
     });
   }
@@ -611,7 +611,6 @@ try {
       ),
       configured = await machine(snapshot.venue.root, "backup-stream-configure", {
         revision: cloudState.lifecycle.view.revision,
-        localVenueId: snapshot.venue.localVenueId,
         sourceNodeId: snapshot.point.sourceNodeId,
         pointerSignerPublicKey: signer,
       });
@@ -683,7 +682,7 @@ try {
           [snapshot.venue.registration.venueId],
         )
       ).rows[0],
-      pointerKey = `${configured.bucket.prefix}venues/${snapshot.venue.localVenueId}/current.json`,
+      pointerKey = `${configured.bucket.prefix}current.json`,
       pointer = JSON.parse(
         (
           await s3.managedStreams.read(
@@ -731,7 +730,7 @@ try {
       requestHandler: { httpsAgent: s3.agent() },
     }),
     other = streamViews[1],
-    otherKey = `${other.configured.bucket.prefix}venues/${other.snapshot.venue.localVenueId}/current.json`,
+    otherKey = `${other.configured.bucket.prefix}current.json`,
     otherGeneration = other.pointer.body.generation;
   const isolation = {
     crossVenueReadDenied: await denied(() =>
@@ -830,7 +829,7 @@ try {
   assert.equal(info.source.generation, undefined);
   assert.equal(info.source.sourceDigest, continuousDigest);
   const continuousAccess = await targetPost("read");
-  assert.match(continuousAccess.recoveryKit, /^WAITRON-RECOVERY-KIT-1:/);
+  assert.match(continuousAccess.recoveryKit, /^WAITRON-RECOVERY-KIT-2:/);
 
   const continuousTarget = await root(),
     interrupted = await restoreFromKit(

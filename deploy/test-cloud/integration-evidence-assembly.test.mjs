@@ -199,10 +199,10 @@ const changes = [
   ['additional foreign mount', v => {
     for (const state of [v.journey.schemaRollback.before, v.journey.schemaRollback.after]) state.bindings[0].mounts.push({name: 'waitron_private', destination: '/run/foreign'});
   }],
-  ['duplicate local venue identity', v => v.journey.organisations[0].localVenueId = v.journey.organisations[1].localVenueId],
+  ['duplicate stream identity', v => v.journey.organisations[0].streamId = v.journey.organisations[1].streamId],
   ['false client restart evidence', v => v.journey.clients.restartIdentity = 'not-run'],
-  ['malformed free local identity', v => v.journey.organisations[0].localVenueId = 'invalid'],
-  ['snapshot local identity differs from pairing', v => v.journey.organisations[1].localVenueId = v.journey.runId],
+  ['malformed free stream identity', v => v.journey.organisations[0].streamId = 'invalid'],
+  ['snapshot stream identity differs from pairing', v => v.journey.organisations[1].streamId = v.journey.runId],
   ['matching zero archive sizes', v => {
     for (const section of [v.journey.paidSnapshot, v.journey.paidSnapshot.workerVerification,
       v.journey.paidSnapshot.ownerRecovery, v.journey.paidSnapshot.authorisedRecovery]) section.bytes = 0;

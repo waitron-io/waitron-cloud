@@ -6,7 +6,7 @@ Cloud account permitted to register venues for the chosen business. Enrol a pass
 or authenticator app in your Cloud account before connecting a box.
 
 1. In Waitron, choose **Connect to Cloud**. Keep the eight-digit code on screen.
-2. Choose **Open Cloud**, sign in and enter that code. Check the venue identifier and
+2. Choose **Open Cloud**, sign in and enter that code. Check **New venue** (or the existing Cloud venue identifier) and
    choose the business that owns it. Verify your identity, then choose **Approve this venue**.
    One verification covers sensitive actions in that session for ten minutes.
 3. Return to Waitron and choose **Check connection**. Check the organisation and
@@ -95,9 +95,10 @@ separate [release gates](waitron-integration-contract.md#translate-all-version-1
 
 Set `WAITRON_CLOUD_ORIGIN` on Waitron to the Cloud portal's exact origin, without a
 trailing slash. HTTPS is required; `WAITRON_ENV=dev` also permits HTTP on loopback.
-The browser cannot supply a Cloud destination or local venue identifier. Waitron
-uses its provisioned location and maps preproduction/development to Cloud's test
-installation environment.
+The browser cannot supply a Cloud destination or venue identifier. A new box requests
+an empty venue id. Cloud allocates its id when both approvals complete, and Waitron
+records that same id in its venue database. Preproduction/development maps to Cloud's
+test installation environment.
 
 The node keeps `cloud-connection.json` in its protected state directory, separate
 from the venue database. Run one server process per node state directory. The file
@@ -121,6 +122,13 @@ Before public deployment, complete ingress controls and
 operation/pairing audit retention work in the backlog. This local proof does not establish an
 AWS deployment or a working remote-access/backup service.
 
-Pairing-code storage uses a separately held key. Configure it and upgrade existing
-requests with the [pairing key instructions](pairing-code-keys.md) before starting
-account workers against an older database. The pairing wire protocol is unchanged.
+Pairing accepts only version 2. Each retry signs the id its request started with, so
+an empty request stays empty even after its reply contains the allocated Cloud id.
+An unknown or foreign supplied id is refused before approval. A different installation
+key cannot take over an existing venue through pairing.
+
+Migration 064 discards old pairing and connection requests without removing venues,
+installations, keys or backups. Start again for a fresh code after this cutover.
+Configure the separately held [pairing-code key](pairing-code-keys.md) before starting
+account workers. The stored code verifier keeps its version-1 domain; the signed
+pairing protocol is version 2.

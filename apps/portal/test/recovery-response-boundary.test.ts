@@ -15,7 +15,7 @@ const pending: RecoveryView = {requestId, state: 'awaiting_owner', expiresAt, op
 const approved: RecoveryView = {requestId, state: 'approved', expiresAt, operationId: requestId,
   operation: {id: requestId, venueId, pointId, source, mode: 'failure', status: 'restored', expiresAt}};
 const ready: RecoveryView = {...approved, replacement: {requestId, pointId, source, venueId,
-  oldInstallationId, localVenueId: otherId, nodeId: otherId, environment: 'test',
+  oldInstallationId, nodeId: otherId, environment: 'test',
   publicKey: 'MCowBQYDK2VwAyEA' + 'A'.repeat(43), peerPublicKey: Buffer.alloc(32).toString('base64'),
   state: 'awaiting_owner', expiresAt, organisationName: 'Harbour Kitchen', legalBusinessName: 'Harbour Kitchen SL',
   registration: null}};
@@ -149,7 +149,7 @@ for (const entry of [
     source: {kind: 'continuous', recoverableAt: '2026-10-28T11:59:00.000Z', sourceNodeId: otherId}}}},
   {name: 'another old installation', action: 'replace', body: {...completed,
     replacement: {...completed.replacement!, oldInstallationId: otherId}}},
-  {name: 'another local venue', action: 'replace', body: {...completed,
+  {name: 'obsolete local venue field', action: 'replace', body: {...completed,
     replacement: {...completed.replacement!, localVenueId: venueId}}},
   {name: 'another signing key', action: 'replace', body: {...completed, replacement: {...completed.replacement!,
     publicKey: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.alloc(32, 1)]).toString('base64url')}}},

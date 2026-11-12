@@ -23,7 +23,7 @@ async function owner(){
  await new OrganisationPlanStore(db.pool).set(result.organisationId,'paid');return result;
 }
 async function venue(account:Awaited<ReturnType<typeof owner>>,home:Awaited<ReturnType<typeof cell>>,port=443){
- const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
+ const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
  await registration.start(binding);await registration.approveCloud(binding,account.accountId);await registration.approveLocal(binding,randomUUID());
  const installed=await registration.complete(binding),key=peer();await store.provision(installed.installationId,home.id,key,port);
  return {...installed,key};

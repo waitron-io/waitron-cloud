@@ -38,7 +38,7 @@ export function parseIntegrationJson(text) {
 
 
 export function streamCommandDiagnostic(text) {
-  const names=['shape','venueId','installationId','sourceNodeId','localVenueId','generation','recoverableAt','observation','identity',
+  const names=['shape','venueId','installationId','sourceNodeId','streamId','generation','recoverableAt','observation','identity',
     'nativeStreaming','signedPointerVerified','retainedSnapshotUnchanged','noSupersession','noActivation','observer','snapshot'];
   const found=/integration\.stream_([A-Za-z0-9_]+)/.exec(text)?.[1];
   return names.includes(found) ? ':integration.stream_'+found : '';
@@ -397,7 +397,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       const choice = {requestId: startedClient.requestId, organisationId, legalBusinessId};
       const inspected = await api('/api/account/pairing/inspect', {requestId: choice.requestId, code: startedClient.code}, browser);
       assert.equal(inspected.status, 200);
-      assert.equal(inspected.body.localVenueId, startedClient.localVenueId);
+      assert.equal(inspected.body.venueId, startedClient.venueId);
       assert.equal((await api('/api/account/pairing/approve', {...choice, code: startedClient.code}, browser)).status, 200);
       const checked = await control(id, 'check'); assert.equal(checked.organisationId, organisationId);
       const completed = await control(id, 'complete', choice); assert.equal(completed.state, 'complete');
@@ -415,7 +415,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const persisted = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
         JSON.stringify({organisationId, installationId: evidence.registration.installationId}), 'persisted-binding'));
-      assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.localVenueId, evidence.localVenueId);
+      assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.streamId, evidence.streamId);
       if (captureSnapshot) {
         const accountPhase = (phase, extra = {}) => docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
@@ -432,7 +432,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         const independent = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
         assert.equal(independent.independentStoredDigest, true);
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
-          installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
+          installationId: evidence.registration.installationId, streamId: evidence.streamId, recovery: 'not-run'};
         if (paidVerification || paidRecovery) {
           journeyStage = 'verification';
           const verify = async () => {
@@ -500,7 +500,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           journeyStage = 'stream';
           const streamed = await control(id, 'stream-start');
           assert.equal(streamed.sourceNodeId, captured.sourceNodeId);
-          assert.equal(streamed.localVenueId, evidence.localVenueId);
+          assert.equal(streamed.streamId, evidence.streamId);
           assert.equal(streamed.nativeStreaming, true);
           const inspect = extra => accountPhase('inspect-stream', {...captured, ...streamed, attemptId: publishedSnapshot.workerVerification.attemptId, ...extra});
           for (const extra of [{sourceNodeId: randomUUID()}, {generation: 'another-generation'}, {recoverableAt: '2026-01-01T00:00:00.000Z'}]) await assert.rejects(inspect(extra));
@@ -605,7 +605,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           assert.deepEqual(refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
           if (paidAuthorisedRecovery) {
             assert.equal(recoveryAuthority.sourceNodeId, captured.sourceNodeId);
-            assert.equal(recoveryAuthority.localVenueId, evidence.localVenueId);
+            assert.equal(recoveryAuthority.streamId, evidence.streamId);
             // Archive bytes and the archive key stay in the target; the host forwards the separate recovery authority privately.
             const delivery = parseIntegrationJson(await docker(['exec', '-i', target, 'node', '--input-type=module', '-e', `
               import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
@@ -638,7 +638,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
               `], '', 'authorised-ordinary-restore'));
             assert.equal(checked.exit, 0, 'integration.authorised_restore_failed:' + checked.diagnostic);
             publishedSnapshot.authorisedRecovery = inspectIntegrationAuthorisedRecovery(checked.report,
-              {sha256: captured.sha256, bytes: captured.bytes, sourceNodeId: captured.sourceNodeId, localVenueId: evidence.localVenueId});
+              {sha256: captured.sha256, bytes: captured.bytes, sourceNodeId: captured.sourceNodeId, streamId: evidence.streamId});
             assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
           }
           const independent = extra => accountPhase('inspect-recovery', {...captured, requestId: request.requestId,
@@ -660,11 +660,11 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       assert.ok(Date.parse(afterRestart) > Date.parse(beforeRestart), 'integration.restart_not_observed');
       const restarted = await control(id, 'evidence');
       assert.deepEqual(restarted.registration, evidence.registration); assert.equal(restarted.identitySha256, evidence.identitySha256);
-      assert.equal(restarted.localVenueId, evidence.localVenueId);
+      assert.equal(restarted.streamId, evidence.streamId);
       if (plan === 'paid' && paidRecovery) publishedSnapshot.ownerRecovery.sourceIdentityPreserved = true;
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
-        localVenueId: evidence.localVenueId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
+        streamId: evidence.streamId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
       remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1)});
     }
     if (paidRemote) {
@@ -722,7 +722,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       evidence.pairedClientsPreserved = clients.length;
       if (schemaRollback) schemaRollbackEvidence = evidence; else cloudRollbackEvidence = evidence;
     }
-    for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
+    for (const key of ['organisationId', 'venueId', 'installationId', 'streamId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, ...(fixedProject ? {project} : {}), completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       ...(cloudSource ? {cloudSource} : {}),
       ...(waitronBaseSource && waitronClientSource ? {waitronSource: {base: waitronBaseSource, client: waitronClientSource}} : {}),

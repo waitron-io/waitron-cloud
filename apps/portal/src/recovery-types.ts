@@ -1,5 +1,5 @@
 export interface ReplacementView {
- requestId:string;pointId:string|null;source:RecoverySource;venueId:string;oldInstallationId:string;localVenueId:string;nodeId:string;
+ requestId:string;pointId:string|null;source:RecoverySource;venueId:string;oldInstallationId:string;nodeId:string;
  environment:'test';publicKey:string;peerPublicKey:string;state:'awaiting_owner'|'complete';expiresAt:string;
  organisationName:string;legalBusinessName:string;
  registration:null|{venueId:string;installationId:string;organisationId:string;legalBusinessId:string};
@@ -12,7 +12,7 @@ export interface RecoveryView {
 }
 const uuid=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 const date=(v:unknown)=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
-const keys=['requestId','pointId','source','venueId','oldInstallationId','localVenueId','nodeId','environment','publicKey','peerPublicKey','state','expiresAt','organisationName','legalBusinessName','registration'];
+const keys=['requestId','pointId','source','venueId','oldInstallationId','nodeId','environment','publicKey','peerPublicKey','state','expiresAt','organisationName','legalBusinessName','registration'];
 const exact=(v:Record<string,unknown>,keys:string[])=>Object.keys(v).length===keys.length&&keys.every(k=>k in v);
 function validSource(value:unknown):value is RecoverySource{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;const v=value as Record<string,unknown>;
@@ -31,7 +31,7 @@ function validReplacement(value:unknown,requestId:string,op:NonNullable<Recovery
  if(!value||typeof value!=='object')return false;
  const v=value as Record<string,unknown>;
  if(!exact(v,keys))return false;
- if(v.requestId!==requestId||v.pointId!==op.pointId||!validSource(v.source)||!sameSource(v.source,op.source)||v.venueId!==op.venueId||!uuid(v.oldInstallationId)||!uuid(v.localVenueId)||!uuid(v.nodeId)||v.environment!=='test'||!date(v.expiresAt)||typeof v.organisationName!=='string'||!v.organisationName.trim()||typeof v.legalBusinessName!=='string'||!v.legalBusinessName.trim())return false;
+ if(v.requestId!==requestId||v.pointId!==op.pointId||!validSource(v.source)||!sameSource(v.source,op.source)||v.venueId!==op.venueId||!uuid(v.oldInstallationId)||!uuid(v.nodeId)||v.environment!=='test'||!date(v.expiresAt)||typeof v.organisationName!=='string'||!v.organisationName.trim()||typeof v.legalBusinessName!=='string'||!v.legalBusinessName.trim())return false;
  if(!canonicalBase64(v.publicKey,44,true)||!canonicalBase64(v.peerPublicKey,32,false))return false;
  const der=atob((v.publicKey as string).replace(/-/g,'+').replace(/_/g,'/'));
  if(der.slice(0,12)!=='0*\x30\x05\x06\x03+ep\x03!\x00')return false;

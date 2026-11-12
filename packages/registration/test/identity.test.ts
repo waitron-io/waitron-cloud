@@ -380,7 +380,7 @@ test('platform mutation permission checks require the supplied session CSRF toke
 
 test('Cloud approval takes the account from the session and requires its CSRF token', async () => {
   const store = new RegistrationStore(pool);
-  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, localVenueId: randomUUID(),
+  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, venueId:'',
     environment: 'test', organisationId, legalBusinessId };
   await store.start(input);
   const session = await signIn();
@@ -402,7 +402,7 @@ test('Cloud approval rejects ended and expired sessions and foreign organisation
   const foreignBusiness = randomUUID();
   await pool.query('INSERT INTO organisations (id) VALUES ($1)', [foreignOrg]);
   await pool.query('INSERT INTO legal_businesses (id, organisation_id) VALUES ($1, $2)', [foreignBusiness, foreignOrg]);
-  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, localVenueId: randomUUID(),
+  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, venueId:'',
     environment: 'test', organisationId: foreignOrg, legalBusinessId: foreignBusiness };
   await store.start(input);
   let session = await signIn();
@@ -418,7 +418,7 @@ test('Cloud approval rejects ended and expired sessions and foreign organisation
 test('session expiry during permission contention rolls back Cloud approval', async () => {
   const { setTimeout: delay } = await import('node:timers/promises');
   const store = new RegistrationStore(pool);
-  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, localVenueId: randomUUID(),
+  const input = { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, venueId:'',
     environment: 'test', organisationId, legalBusinessId };
   await store.start(input);
   const session = await signIn();

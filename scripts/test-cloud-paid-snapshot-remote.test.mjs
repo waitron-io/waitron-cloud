@@ -18,7 +18,7 @@ test('one paid HTTPS venue publishes its snapshot and serves isolated remote rou
   for (const key of ['organisationId', 'venueId', 'installationId']) {
     assert.equal(snapshot[key], paid[key], key); assert.equal(remote[key], paid[key], key);
   }
-  assert.equal(snapshot.localVenueId, paid.localVenueId);
+  assert.equal(snapshot.streamId, paid.streamId);
   assert.equal(snapshot.status, 'published'); assert.equal(snapshot.verification, 'pending'); assert.equal(snapshot.recovery, 'not-run');
   assert.match(snapshot.sha256, /^[a-f0-9]{64}$/); assert.ok(Number.isSafeInteger(snapshot.bytes) && snapshot.bytes > 0);
   assert.equal(snapshot.independentStoredDigest, true); assert.equal(snapshot.networkDeniedDuringCapture, true);

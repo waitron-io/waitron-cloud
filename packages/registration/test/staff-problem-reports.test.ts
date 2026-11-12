@@ -19,7 +19,7 @@ test('staff migration preserves populated automatic reports and applied digests 
   const org=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),operation=randomUUID();
   await pool.query("INSERT INTO organisations(id,name) VALUES($1,'Synthetic preserved organisation')",[org]);
   await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Synthetic business','ES')",[business,org]);
-  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,business,randomUUID()]);
+  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,business]);
   await pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'synthetic-key')",[installation,venue]);
   await pool.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,code,source,version_major,version_minor,version_patch,reported_at,occurrences,logs)
    VALUES($1,$2,'test',$3,'storage.disk_full','packages/storage/src/archive.ts#write',1,2,3,'2026-11-01T12:00:00Z',5,'[]')`,[installation,operation,'a'.repeat(64)]);

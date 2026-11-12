@@ -502,7 +502,7 @@ but an exact completed result remains retrievable while its installation is acti
 If Waitron cannot read its saved reconnection request, the matching box action is
 still separate work. Cloud accepts `POST /api/replacement/reissue` when the separate
 recovery key remains usable and the restored recovery is still open within its
-original hour. Sign the ordinary ten-field replacement payload with action
+original hour. Sign the ordinary nine-field v2 replacement payload with action
 `reissue`, using that recovery key and a fresh installation key. Generate a fresh
 tunnel key too; retaining the pending proposal’s tunnel key is refused. Cloud returns
 `state: "awaiting_owner"` with the new public keys; it keeps the recovery ID,
@@ -516,3 +516,19 @@ different keys after completion return `409 conflict`. Requesting new keys while
 the recovery page is open means your confirmation applies to its latest proposal.
 Missing recovery authority, expired or closed recovery and lost keys after
 completion cannot use this repair. No production recovery is enabled.
+
+## Managed-stream identity
+
+Use the same Cloud venue id for pairing, streaming and recovery. The stream configure
+request carries its configuration revision, source node id and pointer signer; Cloud
+derives `streamId` from the authenticated installation. The returned bucket prefix is
+the full `streams/<Cloud venue id>/` folder. Read `current.json` directly in that folder.
+Managed recovery emits only `WAITRON-RECOVERY-KIT-2` with `version:2` and `streamId`;
+old kits cannot be used with the v2 Waitron reader.
+
+Migration 064 clears old pointer observations and closes unfinished continuous
+recoveries, so observe a new signed pointer and authorise recovery again after the
+cutover. It expires unclaimed recovery codes and deletes pending replacement
+proposals. It retains completed replacement results, venues, installations, stored
+backup objects and keys. The PostgreSQL checks are in
+`packages/registration/test/pairing-v2-migration.test.ts`.

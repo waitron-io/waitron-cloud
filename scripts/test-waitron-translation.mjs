@@ -97,7 +97,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const portal=await popupPromise;portal.setDefaultTimeout(15000);
   await portal.getByLabel('Email').fill(email);await portal.locator('input[name=password]').fill(password);await portal.getByRole('button',{name:'Sign in',exact:true}).click();
   await portal.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await portal.getByRole('button',{name:'Check code',exact:true}).click();
-  await portal.getByText(server.localVenueId,{exact:true}).waitFor();await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
+  await portal.getByText('New venue',{exact:true}).waitFor();await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Translation Proof SL',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Connect this venue',exact:true}).click();await page.getByText('Connected',{exact:true}).waitFor();
   const connected=await request('GET','cloud/status');receipt.installationId=connected.registration.installationId;
@@ -188,7 +188,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
    gate.cancel();
    await checked(until(()=>f.translation.events.find(event=>event.kind==='reply'&&event.cursor===1&&event.status===503&&event.generation===1),'cancelled_collect'));
    receipt.restart={signal:restartSignal,exit,boundary:{cursor:state.jobs[0].collect_cursor,refs:JSON.parse(state.jobs[0].collected_refs),count:state.suggestions.length,dropped:state.jobs[0].dropped}};
-   const resumed=await launch();assert.equal(resumed.origin,server.origin);assert.equal(resumed.localVenueId,server.localVenueId);
+   const resumed=await launch();assert.equal(resumed.origin,server.origin);assert.equal(resumed.venueId,connected.registration.venueId);
    await checked(until(()=>f.translation.events.find(event=>event.kind==='request'&&event.action==='translation-collect'&&event.generation===2),'resumed_collect'));
    receipt.restart.firstCursor=verifyTranslationResume(f.translation.events);
    }

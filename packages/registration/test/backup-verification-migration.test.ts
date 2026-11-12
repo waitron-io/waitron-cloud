@@ -28,14 +28,15 @@ async function legacyMigrate(p: Pool) {
   } finally {await client.query('ROLLBACK'); client.release();}
 }
 
-async function seed(client: PoolClient) {
+async function seed(client: PoolClient, historical=false) {
   const organisation = randomUUID(), business = randomUUID(), venue = randomUUID(), installation = randomUUID();
   const account = randomUUID(), node = randomUUID(), point = randomUUID(), job = randomUUID();
   const capturedAt = '2026-10-20T08:00:00.000Z', digest = '1'.repeat(64), modules = {core: 3};
   await client.query('INSERT INTO cloud_accounts(id) VALUES($1)', [account]);
   await client.query('INSERT INTO organisations(id) VALUES($1)', [organisation]);
   await client.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)', [business, organisation]);
-  await client.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')", [venue, organisation, business, randomUUID()]);
+  if(historical)await client.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')", [venue, organisation, business, randomUUID()]);
+  else await client.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
   await client.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)', [installation, venue, randomUUID()]);
   await client.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://storage.test',$3,'test')", [venue, installation, venue]);
   await client.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'sealed-archive-key')", [venue]);
@@ -105,7 +106,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
   const p = new Pool({connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${name}`});
   await admin.query(`CREATE SCHEMA ${name}`);
   try {
-    await legacyMigrate(p); const c = await p.connect(); const f = await seed(c);
+    await legacyMigrate(p); const c = await p.connect(); const f = await seed(c,true);
     await c.query("INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode) VALUES($1,$2,$3,$4,$5,'failure')", [randomUUID(), f.venue, f.point, f.account, randomUUID()]);
     await c.query('INSERT INTO backup_recovery_requests(id,public_key,code_hash) VALUES($1,$2,$3)', [randomUUID(), randomUUID(), '5'.repeat(64)]);
     const oldTables = (await c.query('SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename')).rows.map(row => row.tablename as string);
@@ -119,7 +120,10 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     await c.query("INSERT INTO backup_verifications(id,point_id,digest,verifier,outcome) VALUES($1,$2,$3,'legacy','verified')", [randomUUID(), f.point, f.digest]);
     const before = (await c.query(`SELECT to_jsonb(p) AS point,(SELECT jsonb_agg(to_jsonb(v)) FROM backup_verifications v) AS history,
       (SELECT jsonb_agg(to_jsonb(k)) FROM backup_key_versions k) AS keys FROM backup_points p`)).rows;
-    c.release(); const allBefore = await allOldRows(); await migrate(p);
+    c.release(); const allBefore = await allOldRows();
+    const cutoverStart=(await p.query('SELECT clock_timestamp()::text AS at')).rows[0].at;
+    await migrate(p);
+    const cutoverEnd=(await p.query('SELECT clock_timestamp()::text AS at')).rows[0].at;
     assert.notEqual((await p.query("SELECT to_regclass('backup_point_qualification') AS relation")).rows[0].relation, null, '043 supplies a fail-closed current view');
     assert.deepEqual((await p.query(`SELECT to_jsonb(p)-'current_evidence_id'-'last_attempt_id' AS point,
       (SELECT jsonb_agg(to_jsonb(v)) FROM backup_verifications v) AS history,
@@ -128,7 +132,16 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     assert.equal((await p.query('SELECT current_verification FROM backup_point_qualification')).rows[0].current_verification, 'pending');
     assert.equal((await p.query("SELECT EXISTS(SELECT 1 FROM backup_verifications WHERE point_id=$1 AND outcome='verified') AS protected", [f.point])).rows[0].protected, true);
     for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null});
-    assert.deepEqual(await allOldRows(), allBefore, 'the additive migration preserves every pre-existing stored row and ciphertext');
+    for(const entry of allBefore.venues as {row:Record<string,unknown>}[])delete entry.row.local_venue_id;
+    const allAfter=await allOldRows();
+    for(const entry of allBefore.backup_recovery_requests as {row:Record<string,unknown>}[]){
+      if(entry.row.operation_id!==null)continue;
+      assert.equal((await p.query(`SELECT expires_at BETWEEN $2::timestamptz AND $3::timestamptz
+        AND expires_at<=$4::timestamptz AS bounded FROM backup_recovery_requests WHERE id=$1`,
+      [entry.row.id,cutoverStart,cutoverEnd,entry.row.expires_at])).rows[0].bounded,true);
+      entry.row.expires_at=(allAfter.backup_recovery_requests as {row:Record<string,unknown>}[]).find(v=>v.row.id===entry.row.id)!.row.expires_at;
+    }
+    assert.deepEqual(allAfter,allBefore,'the cutover preserves every other stored row and ciphertext');
     assert.deepEqual((await p.query('SELECT protocol_version,verification_target FROM backup_recovery_requests')).rows, [{protocol_version: null, verification_target: null}]);
     assert.deepEqual((await p.query('SELECT verification_attempt_id,verification_target FROM backup_recoveries')).rows, [{verification_attempt_id: null, verification_target: null}]);
   } finally {await p.end(); await admin.query(`DROP SCHEMA ${name} CASCADE`);}
@@ -421,7 +434,7 @@ test('old_recovery_has_no_v2_identity', async () => {
 
 test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
   assert.equal(migrationNames.at(45), '046_venue_service_authority.sql', 'the release includes venue service authority');
-  assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrationNames.at(54),'055_billing_method_setups.sql');assert.equal(migrationNames.at(55),'056_sign_in_checks.sql');assert.equal(migrationNames.at(56),'057_recognised_browsers.sql');assert.equal(migrationNames.at(57),'058_account_recovery_codes.sql');assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(61),'062_billing_method_action_proof.sql');assert.equal(migrationNames.at(62),'063_recovery_action_proof.sql');assert.equal(migrationNames.at(63),'065_guest_menus.sql');assert.equal(migrationNames.at(-1),'066_guest_menu_languages.sql');
+  assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrationNames.at(54),'055_billing_method_setups.sql');assert.equal(migrationNames.at(55),'056_sign_in_checks.sql');assert.equal(migrationNames.at(56),'057_recognised_browsers.sql');assert.equal(migrationNames.at(57),'058_account_recovery_codes.sql');assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(61),'062_billing_method_action_proof.sql');assert.equal(migrationNames.at(62),'063_recovery_action_proof.sql');assert.equal(migrationNames.at(63),'064_cloud_pairing_v2.sql');assert.equal(migrationNames.at(64),'065_guest_menus.sql');assert.equal(migrationNames.at(-1),'066_guest_menu_languages.sql');
   assert.equal(migrationNames[44],'045_billing_store.sql');assert.equal(migrationNames[43], '044_remote_forward_observations.sql');
   assert.equal(migrationNames[42], '043_backup_target_verification.sql', 'the historical additive migration is retained');
   const name = `concurrent_verification_${randomUUID().replaceAll('-', '')}`;

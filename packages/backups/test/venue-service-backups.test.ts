@@ -136,7 +136,7 @@ test('venue snapshot policy wait leaves installation and location unlocked',asyn
 test('venue snapshot policy wait refuses a changed installation venue',async()=>{
  const f=await fixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  const changedVenue=randomUUID();await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[changedVenue,f.scope.organisationId,f.scope.legalBusinessId]);
+  const changedVenue=randomUUID();await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[changedVenue,f.scope.organisationId,f.scope.legalBusinessId]);
   await set(f);await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[0]]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
   pending=new BackupCatalogue(f.peer,f.vault,()=>{throw Error('no object work expected');},mode).provision(f.installation,f.location).finally(()=>{settled=true;});void pending.catch(()=>{});

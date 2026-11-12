@@ -23,13 +23,13 @@ adapter, rotation and revocation before launch. The local adapter is not an AWS 
 
 Add an authenticated machine exchange with two actions:
 
-- `backup-stream-configure` accepts the Waitron local venue UUID, source node UUID and
+- `backup-stream-configure` accepts the source node UUID and
   pointer-signing Ed25519 public key. Cloud selects the existing backup location,
   prefix and provider credentials. It returns a Waitron `BucketConfig`-shaped object
   and the active Cloud-managed recovery key. Exact retries return the same binding;
   changed source identity or signer refuses with conflict.
 - `backup-stream-observe` accepts no caller-supplied result. Cloud reads
-  `<prefix>/venues/<localVenueId>/current.json` itself, checks the pointer shape and
+  `<full returned prefix>current.json` itself, checks the pointer shape and
   signature with the registered signer, and records its generation, source node,
   `writtenAt` recovery time and Cloud receive time. A caller cannot invent freshness.
 

@@ -50,7 +50,7 @@ if (input.phase === 'start') {
   const access = await target('read', digest);
   assert.deepEqual(access.source, info.source);
   const kit = parseRecoveryKit(access.recoveryKit);
-  assert.equal(kit.venueId, input.selected.localVenueId);
+  assert.equal(kit.streamId, input.selected.streamId);
   assert.equal(kit.bucket.prefix, 'streams/' + input.selected.venueId + '/');
   assert.equal(kit.bucket.bucket, 'venue-' + input.selected.venueId);
   await writeFile('/tmp/cloud-integration-stream-input.json', JSON.stringify({kit: access.recoveryKit,

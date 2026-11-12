@@ -154,7 +154,7 @@ test('venue account list rechecks installation scope after its policy wait',asyn
  const f=await fixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
   await set(f);const foreignVenue=randomUUID();
-  await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[foreignVenue,f.foreign.organisationId,f.foreign.legalBusinessId]);
+  await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[foreignVenue,f.foreign.organisationId,f.foreign.legalBusinessId]);
   await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,reader=new InstallationStore(f.peer,f.issuer,origin,undefined,'test-venue-levels');
   let settled=false;pending=reader.listWithSession(f.session.token).finally(()=>{settled=true;});void pending.catch(()=>{});

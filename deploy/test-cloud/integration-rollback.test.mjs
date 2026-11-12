@@ -51,10 +51,10 @@ for (const fault of ['foreign-container', 'wrong-image', 'still-running', 'chang
 test('rollback requires new successful exchanges and unchanged local pairing identity', async () => {
   const {checkRollbackClient} = await import('./test-fixtures/integration-rollback.mjs');
   assert.equal(typeof checkRollbackClient, 'function', 'Post-rollback client evidence is missing');
-  const before = {registration: {organisationId: 'one', installationId: 'two'}, identitySha256: 'a'.repeat(64), localVenueId: 'three'};
+  const before = {registration: {organisationId: 'one', installationId: 'two'}, identitySha256: 'a'.repeat(64), streamId: 'three'};
   const counts = {renewals: 3, configurations: 4}, fresh = {renewals: 5, configurations: 6};
   assert.equal(checkRollbackClient(before, structuredClone(before), counts, fresh), true);
-  for (const key of ['registration', 'identitySha256', 'localVenueId']) {
+  for (const key of ['registration', 'identitySha256', 'streamId']) {
     const after = structuredClone(before); after[key] = key === 'registration' ? {...before.registration, installationId: 'replacement'} : 'changed';
     assert.throws(() => checkRollbackClient(before, after, counts, fresh));
   }

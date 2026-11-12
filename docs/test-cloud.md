@@ -1823,3 +1823,10 @@ Linux free-service proof at the same commit and tree: all seven groups pass,
 containers retain their IDs, start times and health. Its 533 resource readings
 pass unchanged. This qualifies those recorded inputs; keep deployed plan
 enforcement off.
+
+Pairing v2 and the managed-stream cutover require matching Waitron and Cloud builds.
+Before pairing, the native fixture's `ready.venueId` is null. Use the completed
+registration id after pairing; a restarted fixture reads it from the venue database.
+The rehearsal's `streamId` is the same Cloud venue id observed by the native client.
+Historical verifier targets remain separate controls; they do not qualify this
+paired-client cutover.

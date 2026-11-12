@@ -14,7 +14,7 @@ test('two venues share one cell with distinct stable routes, independent configu
  const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Cafés',legalBusinessName:'Cafés SL',countryCode:'ES'});
  const registration=new RegistrationStore(db.pool);const installations=[];
  for(let n=0;n<3;n++){
-  const key=generateKeyPairSync('ed25519'),input={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const key=generateKeyPairSync('ed25519'),input={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(input);await registration.approveCloud(input,owner.accountId);await registration.approveLocal(input,randomUUID());installations.push(await registration.complete(input));
  }
  const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'local.example.test',subnet:7,publicKey:publicKey(),endpoint:'gateway.example.test:51820'};
