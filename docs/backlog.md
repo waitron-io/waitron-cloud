@@ -3221,7 +3221,11 @@ implementation or production evidence.
   passed locally on Linux, including the captured point, digest and byte count, restoration
   across 15 modules, child removal and natural worker exit. These checks use
   test-service mode and the test backup worker. Full service/fault proof, the strict
-  common verifier and P1's production-mode acceptance remain open. The three-node
+  common verifier and P1's production-mode acceptance remain open. The
+  [D621 first-cut plan](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md)
+  starts with continuous observation of the same clients during C's loss; it is
+  published only, not built. Original A/all-node loss, real-service and repository
+  repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
   across 15 modules, with the manifest worker replaced after its host stopped,
@@ -3246,10 +3250,10 @@ implementation or production evidence.
   region explicitly, update the existing roles, compare the saved image policy
   with the run config and check the account's Paid Plan before running there. The
   launcher refuses a standard vCPU quota below 12 before building the images.
-  launcher has no region default; the actual run remains open. The owner
-  completes the checks before starting it;
+  launcher has no region default. The bounded plan records run 7 passing;
+  the owner completes these checks before each new run;
   live permission enforcement remains unqualified.
-  Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
+  Production provider identity, capacity and fixed quantity/cost assumptions
   remain unqualified. The independent expiry drill, offline ARM inputs, full P1
   service/fault proof and measured build/steady/fault/verifier/healing peaks remain
   open. The observed 6.10 GiB owned-memory sample is only a lower bound; no capacity

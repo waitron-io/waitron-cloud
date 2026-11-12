@@ -1,6 +1,6 @@
 # D621: first continuous C-loss check on Amazon
 
-**Plan only; no build or provider access.** Source assessment at `d79d05c3fb8e`. Owner 12 November 02:11: “Go: Amazon directly”; watcher 04:46 cleared this smaller rewrite after Claude challenged the draft. This revised plan/build awaits clearance. D618/D110 are closed on accepted run 7; every D621 criterion stays open. Both decisions are recorded in `~/waitron-campaign-g/questions.md` under 02:11 and 04:46. Next: PLAN FOR APPROVAL to the watcher.
+**Plan only; no build or provider access.** Source assessment at `d79d05c3fb8e`. Owner 12 November 02:11: “Go: Amazon directly”; watcher 04:46 cleared this smaller rewrite after Claude challenged the draft. The watcher cleared publication on 12 November at 05:05; building remains separately unapproved. D618/D110 are closed on accepted run 7; every D621 criterion stays open. Both decisions are recorded in `~/waitron-campaign-g/questions.md` under 02:11 and 04:46. Claude read the approach and corrections; this records watcher clearance, not owner design approval.
 
 **Finish:** a reviewed first-cut plan and owner-session brief. After its build/CI land, you can observe the same signed-in clients throughout C’s loss. That first result does not complete D621’s original speed, database-host-loss or real-service checks.
 
