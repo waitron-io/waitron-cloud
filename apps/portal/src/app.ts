@@ -68,6 +68,8 @@ export class PortalApp {
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.billing?.error==='pairEnrollment')this.billing.error=undefined;
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.methods.some(m=>m==='app'||m==='passkey')&&this.recovery?.error==='pairEnrollment')this.recovery.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.recovery?.error==='actionProofUnavailable'||this.recovery?.error==='recoveryProofRequired'))this.recovery.error=undefined;
       this.draw();
     });
     this.authenticator = new AuthenticatorController(() => this.draw());
@@ -273,6 +275,16 @@ export class PortalApp {
     }
     if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
+  }
+  async approveRecovery(){
+    const recovery=this.recovery,view=recovery.view;
+    if(!view||(view.state!=='awaiting_owner'&&view.operation?.status!=='pending')||recovery.pending||recovery.waiting)return;
+    const proved=await this.#requireActionProof();
+    if(recovery.view!==view)return;
+    if(this.actionProof.status?.methods.every(m=>m==='email'))recovery.error='pairEnrollment';
+    else if(!proved)recovery.error=this.actionProof.error?'actionProofUnavailable':'recoveryProofRequired';
+    else {await recovery.approve();return;}
+    this.draw();
   }
   async startPaymentMethod(kind:'card'|'direct_debit'){
     const billing=this.billing,venue=billing.venue;

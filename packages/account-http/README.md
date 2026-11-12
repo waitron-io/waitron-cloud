@@ -613,7 +613,16 @@ The configured capture adapter also supplies temporary recovery read authority. 
 POST routes under `/api/account/recovery/` require the same live session, exact Origin
 and CSRF proof as other account changes. `inspect` and `close` accept `requestId` and
 `code`; `approve` also accepts `pointId`, `oldServerUnavailable:"true"` and
-`acceptDataLoss:"true"`. The browser receives status and snapshot identifiers only.
+`acceptDataLoss:"true"`. The browser receives status and snapshot identifiers only. Before
+`approve`, enrol an app or passkey and open the shared ten-minute proof window.
+On `/recover`, verification asks for a separate approval click and keeps your
+selected source. Passive inspection and cancellation need no fresh proof.
+The recovery operation retains the approving session. Credential delivery
+rechecks that session, enrollment, security revision and venue permission before
+and after provider work. Its browser idle deadline and short proof window do not
+cancel accepted work; sign-out, absolute session expiry or a security change can.
+An older operation without a saved session cannot release credentials until you
+authorise it again.
 
 Replacement POST routes under `/api/recovery/` require signed fresh-key proof and reject
 browser Origin headers. `start` and `status` carry matching request proof; `info`, `read`
@@ -621,6 +630,9 @@ and `restored` carry operation proof. New requests allow ten calls per fifteen m
 per IP and proven key. Other machine calls share thirty per minute per IP and proven
 key; owner calls allow thirty per minute per account. The global IP allowance also applies.
 Execution rechecks authority after any provider wait. Expiry uses the database clock.
+If the approving sign-in has ended or expired, machine `read` and `restored`
+return `403 {"error":"proof_required"}`. Authorise the same pending recovery
+again on `/recover` with fresh proof and both confirmations before retrying.
 
 Recovery has the same measured shared-address and known-ID trade-offs as pairing.
 Twelve concurrent fresh-key starts behind one address admit 10 and refuse two. Random

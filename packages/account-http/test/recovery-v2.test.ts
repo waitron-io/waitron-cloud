@@ -1,7 +1,8 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync} from 'node:crypto';
-import {createLeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
+import {endSession} from '@waitron-cloud/identity';
 import {database} from './fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {machineTarget,otherTarget,recoveryFixture,origin} from '../../backups/test/fixtures/recovery-v2.ts';
@@ -15,6 +16,26 @@ async function fixture(){
  const post=(action:string,body:unknown,owner=false)=>app.request(origin+(owner?'/api/account/recovery/':'/api/recovery/')+action,{method:'POST',headers:{'content-type':'application/json',...(owner?{origin,cookie:'__Host-cloud_session='+f.session.token,'x-csrf-token':f.session.csrfToken}:{})},body:typeof body==='string'?body:JSON.stringify(body)},bindings);
  return {...f,post,app,bindings,grants:()=>grants,setCredentialBytes:(bytes:number)=>{credentialBytes=bytes;}};
 }
+for(const action of ['read','restored'] as const)test(`a lapsed approving session asks for fresh proof on machine ${action}`,async()=>{
+ const f=await fixture(),t=machineTarget();await f.post('start',t.envelope('start'));
+ await f.post('approve',{requestId:t.id,code:t.code,pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'},true);
+ await transaction(db.pool,client=>endSession(client,f.session.token));
+ const response=await f.post(action,t.envelope(action,f.point.digest));
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});assert.equal(f.grants(),0);
+ assert.equal((await db.pool.query('SELECT status FROM backup_recoveries WHERE id=$1',[t.id])).rows[0].status,'pending');
+});
+for(const admission of ['enrollment','proof'] as const)test(`backup recovery approval requires ${admission} before creating an operation`,async()=>{
+ const f=await fixture(),t=machineTarget();
+ if(admission==='enrollment')await db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[f.owner.accountId]);
+ else await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL WHERE account_id=$1',[f.owner.accountId]);
+ assert.equal((await f.post('start',t.envelope('start'))).status,200);
+ const response=await f.post('approve',{requestId:t.id,code:t.code,pointId:f.point.id,oldServerUnavailable:'true',acceptDataLoss:'true'},true);
+ assert.equal(response.status,403);
+ assert.deepEqual(await response.json(),{error:admission==='enrollment'?'enrollment_required':'proof_required'});
+ assert.equal((await db.pool.query('SELECT count(*) FROM backup_recoveries WHERE id=$1',[t.id])).rows[0].count,'0');
+ assert.equal((await db.pool.query('SELECT operation_id FROM backup_recovery_requests WHERE id=$1',[t.id])).rows[0].operation_id,null);
+ assert.equal(f.grants(),0);
+});
 test('machine HTTP negotiates v2 and returns the same approved verification on metadata and download',async()=>{
  const f=await fixture(),t=machineTarget();
  const start=await f.post('start',t.envelope('start'));assert.equal(start.status,200);assert.equal((await start.json()).version,2);

@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -84,6 +85,7 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     const session = await transaction(db.pool, (c) =>
       login(c, { email, password }),
     );
+    await prepareConnectionProof(db.pool,owner.accountId,session.token);
     owners.push({ ...owner, ...session });
   }
   const owner = owners[0]!,

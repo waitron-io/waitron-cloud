@@ -47,6 +47,17 @@ test('lost approval replies reconcile by inspection without another grant; confi
  await c.approve();assert.equal(calls.length,3);
  c.choose(venueId,id);assert.equal(c.stopped,false);assert.equal(c.acceptLoss,false);
 });
+test('pending reauthorisation freezes its source and consumes both confirmations again',async()=>{
+ for(const original of [approved,continuousApproved])for(const [status,expired,want] of [['pending',false,1],['restored',false,0],['closed',false,0],['pending',true,0]] as const){
+  const writes:Record<string,unknown>[]=[];const view={...original,expiresAt:'2000-01-01T00:00:00.000Z',operation:{...original.operation,status,expiresAt:expired?'2000-01-01T00:00:00.000Z':original.operation.expiresAt}};
+  const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{if(path.endsWith('/approve'))writes.push(body!);return {ok:true,value:view as T};});
+  c.open(id);c.account('owner');c.code='12345678';await c.inspect();c.choose(id,id);
+  await c.approve();assert.equal(writes.length,0);c.stopped=true;await c.approve();assert.equal(writes.length,0);
+  c.acceptLoss=true;await c.approve();assert.equal(writes.length,want);
+  if(want){assert.deepEqual(writes[0],original===approved?{requestId:id,code:'12345678',source:'snapshot',pointId,oldServerUnavailable:'true',acceptDataLoss:'true'}:{requestId:id,code:'12345678',source:'continuous',venueId,oldServerUnavailable:'true',acceptDataLoss:'true'});assert.equal(c.uncertain,false);assert.deepEqual(c.view?.operation?.source,original.operation.source);}
+  await c.approve();assert.equal(writes.length,want,'accepted approval consumes the confirmations');
+ }
+});
 test('continuous approval is the default source shape and reconciles an uncertain write',async()=>{
  const calls:{path:string;body:Record<string,unknown>|undefined}[]=[];let granted=false;
  const c=new RecoveryController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{calls.push({path,body});if(path.endsWith('/approve')){granted=true;return {ok:false,status:0,code:'network_error',retryAfterMs:0};}return {ok:true,value:(granted?continuousApproved:pending) as T};});
@@ -134,4 +145,14 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;await c[action]();
  assert.equal(c.error,`recoveryRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.uncertain,false);
  assert.equal(calls.length,1);assert.equal(calls[0]?.path,`/recovery/${action}`);assert.equal(calls[0]?.body?.requestId,id);
+});
+
+for(const code of ['enrollment_required','proof_required'] as const)test(`recovery ${code} keeps the selected request for an explicit proof retry`,async()=>{
+ const calls:string[]=[];
+ const c=new RecoveryController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return {ok:false,status:403,code,retryAfterMs:0};});
+ c.open(id);c.account('owner');c.code='12345678';c.view=pending as typeof c.view;c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;
+ await c.approve();
+ assert.equal(c.error,code==='enrollment_required'?'pairEnrollment':'recoveryProofRequired');
+ assert.equal(c.view,pending);assert.equal(c.pointId,pointId);assert.equal(c.stopped,true);assert.equal(c.acceptLoss,true);
+ assert.deepEqual(calls,['/recovery/approve']);assert.equal(c.uncertain,false);
 });

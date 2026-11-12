@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -42,6 +43,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.route('https://portal.test/recover',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
      const path=new URL(route.request().url()).pathname;
+     const proof=mockActionProof(route,true);if(proof)return proof;
      if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt}});
      if(path.endsWith('/installations'))return route.fulfill({json:{installations:[installation]}});
      if(path.endsWith('/backups/list')){snapshotReads++;return route.fulfill({json:{venueId,points:[pointId,second].map((id,index)=>({id,capturedAt:`2026-10-2${index+3}T10:00:00.000Z`,verification:'verified',retention:'daily',expiresAt,protection:null})),nextCursor:null,defaultPointId:pointId,continuousRecovery:null}});}
@@ -82,7 +84,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.getByRole('button',{name:locale==='en'?'Check request status':'Comprobar estado de la solicitud',exact:true}).click();
     await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action,'/api/account/recovery/inspect']);
-    assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),1);assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).count(),0);
    }catch(error){await failPortalWait(page,trace,stage,error,details=>t.diagnostic(details));}finally{await page.close();}
   });
  }finally{await browser.close();}

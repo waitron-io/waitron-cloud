@@ -117,3 +117,14 @@ test('venue continuous recovery provider wait rejects a changed reader reference
   const response=await f.read();assert.equal(response.status,409,await response.clone().text());const text=await response.text();assert.equal(text.includes('recoveryKit'),false);assert.equal(text.includes('synthetic-reader-secret'),false);assert.deepEqual(f.calls,{grant:0,reader:1});
  }finally{await f.close();}
 });
+
+for(const source of ['snapshot','continuous'] as const)test(`venue ${source} recovery rechecks saved security authority after provider work`,async()=>{
+ const f=await fixture(source);try{
+  const before=await f.state();
+  f.block(async()=>{await f.db.secondPool.query('UPDATE cloud_sessions SET action_security_revision=action_security_revision+1,action_proved_at=NULL WHERE account_id=$1',[f.owner.accountId]);});
+  const response=await f.read();
+  assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'proof_required'});
+  assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});
+  assert.deepEqual(await f.state(),before);
+ }finally{await f.close();}
+});

@@ -1,3 +1,4 @@
+import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {formatDateTime} from './dates.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
@@ -11,14 +12,21 @@ export function recoveryScreen(app:PortalApp){
  const selectionDisabled=disabled||installations.pending;
  const available=venues.some(i=>i.venueId===b.venueId);
  const selected=b.page?.points.find(p=>p.id===b.selected&&p.verification==='verified'),continuous=b.page?.continuousRecovery,selectionTime=b.selectedSource==='continuous'?continuous?.recoverableAt:selected?.capturedAt,ready=available&&(b.selectedSource==='continuous'?!!continuous:!!selected);
+ const proofRequested=app.actionProof.loaded||app.actionProof.pending||['pairEnrollment','actionProofUnavailable','recoveryProofRequired'].includes(r.error??'');
+ const approvalDisabled=op?disabled:selectionDisabled,approval=html`
+      <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${approvalDisabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
+      <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${approvalDisabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${op?c.recoveryAcceptExistingLoss:c.recoveryAcceptLoss}</label>
+      <wt-button variant="primary" .disabled=${approvalDisabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void app.approveRecovery();}}>${c.recoveryApprove}</wt-button>`;
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
-  ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}
+  ${r.error?html`<p role=${r.error==='recoveryProofRequired'||r.error==='pairEnrollment'?'status':'alert'}>${c[r.error]}</p>`:nothing}
   <wt-input name="recoveryCode" .label=${c.pairCode} .value=${r.code} .error=${r.error==='pairCodeError'?c.pairCodeError:''} .required=${true} .disabled=${disabled||!!r.view} autocomplete="off" @wt-change=${(e:CustomEvent<{value:string}>)=>{r.code=e.detail.value;if(r.error==='pairCodeError')r.error=undefined;app.draw();}}></wt-input>
   <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?(r.error?c.recoveryCheckRequest:c.retry):c.pairInspect}</wt-button>
   ${r.view?html`<p>${c.recoveryExpires} <time datetime=${op?.expiresAt??r.view.expiresAt}>${formatDateTime(op?.expiresAt??r.view.expiresAt,app.locale)}</time></p>`:nothing}
   ${expired?html`<p role="status">${c.recoveryExpired}</p>`:nothing}
+  ${r.view&&(!op||op.status==='pending')&&!expired&&proofRequested?html`${r.error==='pairEnrollment'||app.actionProof.status?.methods.every(m=>m==='email')?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.accountSecurity}</a>`:accountActionProofScreen(app,2)}`:nothing}
   ${op?html`${!complete?html`<p role="status">${op.status==='closed'?c.recoveryClosed:op.status==='restored'?c.recoveryRestored:op.source.kind==='continuous'?c.recoveryApprovedContinuous:c.recoveryApprovedSnapshot}</p>`:nothing}
     <dl>${op.source.kind==='continuous'?html`<dt>${c.recoveryRecoverable}</dt><dd><time datetime=${op.source.recoverableAt}>${formatDateTime(op.source.recoverableAt,app.locale)}</time></dd>`:html`<dt>${c.snapshotIdentifier}</dt><dd>${op.source.pointId}</dd>`}<dt>${c.pairVenue}</dt><dd>${op.venueId}</dd></dl>
+    ${op.status==='pending'&&!expired?html`<p>${c.recoveryReauthoriseHelp}</p>${approval}`:nothing}
     ${op.status!=='closed'&&!expired?html`<p>${c.recoveryCancelHelp}</p><wt-button .disabled=${disabled} @click=${()=>{void r.close();}}>${c.recoveryCancel}</wt-button>`:nothing}`:nothing}
   ${op&&!replacement&&op.status==='restored'&&!expired?html`<p role="status">${c.recoveryReplacementWaiting}</p>`:nothing}
   ${replacement?html`<section aria-label=${c.recoveryReplacementTitle}>
@@ -36,8 +44,6 @@ export function recoveryScreen(app:PortalApp){
     <label class="business-choice">${c.recoveryVenue}<select aria-label=${c.recoveryVenue} ?disabled=${selectionDisabled} @change=${(e:Event)=>{const value=(e.target as HTMLSelectElement).value;if(value)void b.open(value);else{b.close();r.choose(undefined,undefined);app.draw();}}}><option value="" .selected=${!b.venueId}>${c.recoveryChooseVenue}</option>${venues.map(i=>html`<option value=${i.venueId} .selected=${i.venueId===b.venueId}>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId}</option>`)}</select></label>
     ${available&&b.venueId?backupScreen(app,b.venueId):nothing}
     ${ready&&selectionTime?html`<p><strong>${c.recoveryLoss} ${formatDateTime(selectionTime,app.locale)}</strong></p>
-      <label class="disclosure"><input type="checkbox" .checked=${r.stopped} ?disabled=${selectionDisabled||r.uncertain} @change=${(e:Event)=>{r.stopped=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryStopped}</label>
-      <label class="disclosure"><input type="checkbox" .checked=${r.acceptLoss} ?disabled=${selectionDisabled||r.uncertain} @change=${(e:Event)=>{r.acceptLoss=(e.target as HTMLInputElement).checked;app.draw();}}> ${c.recoveryAcceptLoss}</label>
-      <wt-button variant="primary" .disabled=${selectionDisabled||r.uncertain||!r.stopped||!r.acceptLoss} @click=${()=>{void r.approve();}}>${c.recoveryApprove}</wt-button>`:nothing}`:nothing}
+      ${approval}`:nothing}`:nothing}
   <wt-form-actions><wt-button .disabled=${disabled||app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button><a href="/account" @click=${(e:MouseEvent)=>app.follow(e,'/account')}>${c.account}</a></wt-form-actions>`;
 }

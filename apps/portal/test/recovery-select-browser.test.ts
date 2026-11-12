@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile, mkdir} from 'node:fs/promises';
@@ -34,6 +35,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.route('https://portal.test/recover', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
+   const proof=mockActionProof(route,true);if(proof)return proof;
       if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString()}});
       if (path.endsWith('/installations')) {
         if (installationGate && handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
@@ -131,7 +133,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
     if (process.env.RECOVERY_PORTAL_RECEIPT_DIR) {await mkdir(process.env.RECOVERY_PORTAL_RECEIPT_DIR, {recursive: true}); await page.screenshot({path: `${process.env.RECOVERY_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-recovery${handler === 'ordinary' ? '' : `-${handler}`}.png`, fullPage: true});}
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.getByRole('button', {name: c.recoveryApprove, exact: true}).click(); await page.waitForFunction(() => !(window as any).app.recovery.pending);
+    await page.getByRole('button', {name: c.recoveryApprove, exact: true}).click(); await page.waitForFunction(() => !(window as any).app.recovery.pending&&!(window as any).app.actionProof.pending);
     assert.deepEqual(approvals, [{requestId: request, code: '12345678', source: 'snapshot', pointId: point, oldServerUnavailable: 'true', acceptDataLoss: 'true'}]);
     });
     await t.test('pairing keeps a supplied second business selected, including redraw and edits', async () => {

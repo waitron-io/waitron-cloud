@@ -1,4 +1,7 @@
 import {test,before,after} from 'node:test';
+import {endSession,login} from '@waitron-cloud/identity';
+import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
+import {transaction} from '@waitron-cloud/registration';
 import assert from 'node:assert/strict';
 import {createPublicKey,verify,generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {ManagedStreams} from '../src/managed-streams.ts';
@@ -10,6 +13,66 @@ import {fixtureTarget} from './fixtures/verification.ts';
 import {machineTarget,otherTarget,recoveryFixture,origin} from './fixtures/recovery-v2.ts';
 let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});after(async()=>db?.close());
+test('accepted recovery retains its authorising session beyond prompt and browser idle deadlines',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const saved=(await db.pool.query('SELECT * FROM backup_recoveries WHERE id=$1',[t.id])).rows[0];
+ const session=(await db.pool.query('SELECT id,action_security_revision FROM cloud_sessions WHERE account_id=$1',[f.owner.accountId])).rows[0];
+ assert.equal(saved.cloud_session_id,session.id);assert.equal(saved.cloud_security_revision,session.action_security_revision);
+ await db.pool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '31 minutes',action_proved_at=clock_timestamp()-interval '11 minutes' WHERE id=$1",[session.id]);
+ const access=await f.recovery.target(t.id,'read',t.envelope('read',f.point.digest));
+ assert('keys' in access);assert.equal(access.keys.recoveryKey,f.capture.keys.recoveryKey);
+});
+test('recovery credential release rechecks the saved authorising session after sign-out',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ await transaction(db.pool,client=>endSession(client,f.session.token));
+ await assert.rejects(f.recovery.target(t.id,'read',t.envelope('read',f.point.digest)),/session_unavailable/);
+ assert.equal((await f.requests.machine('status',t.envelope('status'))).state,'approved');
+});
+test('a fresh proved session reauthorises the same accepted recovery after sign-out',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const prior=(await db.pool.query('SELECT cloud_session_id FROM backup_recoveries WHERE id=$1',[t.id])).rows[0];
+ await transaction(db.pool,client=>endSession(client,f.session.token));
+ const {email}=(await db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[f.owner.accountId])).rows[0];
+ const session=await transaction(db.pool,client=>login(client,{email,password:'a long enough recovery password'}));
+ await prepareConnectionProof(db.pool,f.owner.accountId,session.token);
+ assert.equal((await f.requests.approve(t.id,t.code,session.token,session.csrfToken,f.input)).operationId,t.id);
+ const saved=(await db.pool.query('SELECT cloud_session_id FROM backup_recoveries WHERE id=$1',[t.id])).rows[0];
+ assert.notEqual(saved.cloud_session_id,prior.cloud_session_id);
+ const access=await f.recovery.target(t.id,'read',t.envelope('read',f.point.digest));assert('keys' in access);
+ assert.equal(access.point.id,f.point.id);assert.equal(access.keys.recoveryKey,f.capture.keys.recoveryKey);
+});
+test('concurrent accepted reads, cancellation and sign-out keep account-first lock order',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ const blocker=await db.secondPool.connect();let operations:Promise<unknown>[]=[];
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[f.owner.accountId]);
+  operations=Array.from({length:6},()=>f.recovery.target(t.id,'read',t.envelope('read',f.point.digest)));for(const pending of operations)void pending.catch(()=>{});
+  const until=Date.now()+3000;let waiting=0;
+  while(Date.now()<until){waiting=(await db.secondPool.query("SELECT count(*) AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rows[0].count*1;if(waiting===6)break;await new Promise(resolve=>setTimeout(resolve,10));}
+  assert.equal(waiting,6,'all reads must reach the held account before cancellation and sign-out');
+  operations.push(f.recovery.close(f.session.token,f.session.csrfToken,t.id),transaction(db.pool,client=>endSession(client,f.session.token)));for(const pending of operations)void pending.catch(()=>{});
+  await blocker.query('COMMIT');
+  for(const result of await Promise.allSettled(operations))if(result.status==='rejected')assert.match(result.reason.message,/^(session_unavailable|backup\.unavailable)$/);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await Promise.allSettled(operations);}
+});
+test('absolute session expiry during the archive-key wait still prevents disclosure',async()=>{
+ const f=await recoveryFixture(db),t=machineTarget();await f.requests.machine('start',t.envelope('start'));
+ await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,f.input);
+ await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '5 seconds' WHERE account_id=$1",[f.owner.accountId]);
+ const blocker=await db.secondPool.connect(),blockerId=(await blocker.query('SELECT pg_backend_pid() AS id')).rows[0].id;let pending:Promise<unknown>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('LOCK backup_key_versions IN ACCESS EXCLUSIVE MODE');
+  pending=f.recovery.target(t.id,'read',t.envelope('read',f.point.digest));const refused=assert.rejects(pending,/session_expired/);void refused.catch(()=>{});
+  const until=Date.now()+8000;let waiting=false,expired=false;
+  while(Date.now()<until){if((await db.secondPool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,blockerId])).rowCount){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));}assert(waiting,'delivery reaches the held archive-key lookup');
+  while(Date.now()<until){if((await db.secondPool.query('SELECT clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',[f.owner.accountId])).rows[0].expired){expired=true;break;}await new Promise(resolve=>setTimeout(resolve,10));}assert(expired,'the database clock crosses the absolute session deadline');
+  await blocker.query('COMMIT');await refused;
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
 test('v2 accepts the complete pinned 15-owner target in Waitron signed request bytes',()=>{
  const t=machineTarget();assert.equal(t.target.modules.length,15);
  const proof=t.envelope('start');const claims=verifyRecoveryRequest(origin,'start',proof);

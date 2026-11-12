@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync, sign, randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -45,6 +46,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
     if (journey !== 'test-venue') await f.db.pool.query("UPDATE venues SET environment='production' WHERE id=$1", [venue.venueId]);
     const target = machineTarget(); await new RecoveryRequests(f.db.pool, vault, f.origin).machine('start', target.envelope('start', '', Date.now(), f.origin, source === 'snapshot' ? 2 : 1));
     const session = await transaction(f.db.pool, c => createSession(c, owner.accountId));
+    await prepareConnectionProof(f.db.pool,owner.accountId,session.token);
     const context = await f.browser.newContext({locale, viewport: {width: 390, height: 900}}), page = await context.newPage(), c = translations[locale]; page.setDefaultTimeout(6000);
     await context.addCookies([{name: 'cloud_session', value: session.token, url: f.origin, httpOnly: true}, {name: 'cloud_csrf', value: session.csrfToken, url: f.origin}]);
     const approvals: {sent: unknown; status: number}[] = [];

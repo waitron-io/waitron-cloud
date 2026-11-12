@@ -11,7 +11,7 @@ export async function requireAllowanceSchema(){
  try{
   await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);
   const ledger=(await pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(ledger.length,62,'allowance proof requires the actual candidate through migration62');
+  assert.equal(ledger.length,63,'allowance proof requires the actual candidate through migration63');
   assert.equal(ledger[57].name,'058_account_recovery_codes.sql');assert.equal(ledger[58].name,'059_account_action_proof.sql');assert.equal(ledger[59].name,'060_account_email_changes.sql');assert.equal(ledger[60].name,'061_connection_action_proof.sql');
   assert.equal(ledger[47].name,'048_billing_allowances_traffic.sql');assert.equal(ledger[48].name,'049_ses_feedback.sql');
   assert.equal(ledger[49].name,'050_mail_legacy_suppression_scopes.sql');assert.equal(ledger[50].name,'051_mail_suppression_reconciliation.sql');assert.equal(ledger[51].name,'052_box_error_reports.sql');assert.equal(ledger[52].name,'053_country_flow_authority.sql');assert.equal(ledger[53].name,'054_staff_problem_reports.sql');assert.equal(ledger[54].name,'055_billing_method_setups.sql');

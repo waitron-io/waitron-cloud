@@ -2,7 +2,7 @@ import type {RecoveryCodeKeys} from '@waitron-cloud/backups/recovery-codes';
 import {ReplacementStore} from '@waitron-cloud/backups/replacement';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
-import {resolveSession} from '@waitron-cloud/identity';
+import {resolveSession,IdentityError} from '@waitron-cloud/identity';
 import {readVenuePermissions,transaction,type VenuePermission} from '@waitron-cloud/registration';
 import {RecoveryRequests,verifyRecoveryRequest} from '@waitron-cloud/backups/recovery-request';
 import {BackupRecovery,type RecoveryAccess} from '@waitron-cloud/backups/recovery';
@@ -98,6 +98,7 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
   if(!('point' in current))throw new AccountHttpError(503,'temporarily_unavailable');
   return machineJson({...('version' in current&&current.version===2?{version:2 as const,verification:current.verification}:{}),point:current.point,location:current.location,recoveryKey:current.keys.recoveryKey,operationExpiresAt:current.operationExpiresAt,...grant});
  }catch(error){
+  if(!owner&&(action==='read'||action==='restored')&&error instanceof IdentityError&&(error.code==='session_unavailable'||error.code==='session_expired'))throw new AccountHttpError(403,'proof_required');
   const code=error instanceof Error?error.message:'';
   const statuses:Record<string,400|401|403|409|410>={'backup.invalid_proof':401,'backup.revoked':403,'backup.permission_denied':403,'backup.local_integration_only':403,'backup.unavailable':410,'backup.conflict':409,'backup.target_not_fresh':409,'backup.recovery_active':409,'backup.confirmation_required':400,'backup.invalid_input':400,'backup.unverified':400};
   if(statuses[code])throw new AccountHttpError(statuses[code],code.slice(7));throw error;
