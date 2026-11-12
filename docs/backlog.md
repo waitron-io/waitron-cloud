@@ -71,7 +71,7 @@ no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
 
-Controlled cases cover one retry after a received registration HTTP 5xx, following a 60-second delay and verified guest and exact-name runner removal; publication and live assignment/cleanup qualification remain open.
+Controlled cases cover one retry after a received HTTP 5xx during the registration operation (including an access-token refresh), following a 60-second delay and verified guest and exact-name runner removal; publication and live assignment/cleanup qualification remain open.
 
 A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; publication and natural recovery remain to be read.
 

@@ -88,13 +88,14 @@ test('a quota refusal from registration remains retired after reset',async t=>{
 });
 test('only a received registration 5xx records a retry, after exact-name runner removal',async t=>{
  const {runCI}=await import('./ci-canary.mjs');
- for(const status of [500,422,'invalid-success']){
+ for(const [status,retry] of [[500,true],[503,true],[599,true],[422,false],[499,false],[600,false],['invalid-success',false],['lost',false]]){
   const identity={...ci,workflowPath:'.github/workflows/ci.yml'},f=fixture(t,{identity,lost:true}),post=f.api.post,remove=f.api.delete;
   let refused=true;
   f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,
    route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
   f.api.post=async(...args)=>{try{return await post(...args);}catch(error){
    if(!refused)return {runner:{id:1001,name:'dt-123-789-1-901'},encoded_jit_config:'synthetic-jit'};
+   if(status==='lost')throw error;
    if(status==='invalid-success')return {runner:{id:1001,name:'dt-123-789-1-901'}};
    throw Object.assign(error,{status});
   }};
@@ -103,10 +104,10 @@ test('only a received registration 5xx records a retry, after exact-name runner 
   assert.equal(failed.code,125);assert.equal(failed.cleanup,'absent');
   assert.deepEqual(f.events,['transfer','prepare','register','destroy','inspect','deregister']);
   const turn=f.leases.inspect().turns['I:ci-789-1-901'];
-  assert.equal(Number.isSafeInteger(turn.registration5xxFailedAt),status===500);
+  assert.equal(Number.isSafeInteger(turn.registration5xxFailedAt),retry);
   f.leases.now=()=>Date.now()+60000;refused=false;
-  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,status===500?0:75);
-  assert.equal(f.events.filter(event=>event==='register').length,status===500?2:1);
+  assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,retry?0:75);
+  assert.equal(f.events.filter(event=>event==='register').length,retry?2:1);
  }
 });
 test('uncertain guest cleanup leaves capacity closed and never removes the runner',async t=>{
