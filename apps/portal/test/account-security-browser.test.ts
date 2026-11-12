@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -37,7 +38,7 @@ test('account security is clear in both languages at phone and desktop widths', 
             {headers: {origin: f.origin}, data: {email: account.email, password,locale}});
           assert.equal(login.status(),202);assert.equal((await target.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
           const challenge=await login.json() as {emailRequired:boolean;challengeToken:string};assert.equal(challenge.emailRequired,true);
-          await f.drainMail();const message=await mailFor(account.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+          await f.drainMail();const message=await mailFor(account.email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
           const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
           assert.equal((await target.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:challenge.challengeToken,code}})).status(),200);
         }
@@ -137,9 +138,9 @@ test('sign out remains available while a passkey prompt is open', async t => {
         const signOut = page.getByRole('button', {name: c.signout, exact: true});
         // Startup work has its own sign-out guards; isolate the browser prompt after it settles.
         await signOut.and(page.locator(':enabled')).waitFor();
-        await page.locator('input[name=passkeyPassword]').fill(password);
+
         const options = page.waitForResponse('**/passkeys/registration/options');
-        await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+        await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
         assert.equal((await options).status(), 200);
         await page.waitForFunction(() => (window as unknown as {accountSecurityPromptOpen: boolean}).accountSecurityPromptOpen);
         const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});

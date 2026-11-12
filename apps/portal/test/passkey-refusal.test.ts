@@ -24,7 +24,7 @@ function fixture(stage: 'options' | 'verify' | 'remove' | 'signin-options' | 'si
 }
 for (const stage of ['options', 'verify', 'remove'] as const) {
   // Mapping these shared refusals to an outage hides the existing fresh-prompt/list path.
-  test(`${stage}: a refused passkey change offers list and fresh-password guidance`, async () => {
+  test(`${stage}: a refused passkey change offers list and fresh-proof guidance`, async () => {
     const {c, calls} = fixture(stage);
     if (stage === 'remove') await c.remove(id, c.password); else await c.enroll(c.password);
     assert.equal(c.error, stage === 'remove' ? 'passkeyRemovalRefused' : 'passkeyRegistrationRefused');
@@ -36,8 +36,8 @@ for (const stage of ['options', 'verify', 'remove'] as const) {
   });
   for (const [status, code, expected] of [
     [400, 'conflict', 'passkeyUnavailable'], [422, 'invalid_input', 'passkeyUnavailable'], [403, 'invalid_input', 'forbidden'],
-    [403, 'credentials_invalid', stage === 'verify' ? 'forbidden' : 'passkeyPasswordInvalid'],
-    [401, 'credentials_invalid', stage === 'verify' ? 'pairSession' : 'passkeyPasswordInvalid'], [429, 'rate_limited', 'limited'],
+    [403, 'credentials_invalid', stage === 'verify' ? 'forbidden' : 'actionProofUnavailable'],
+    [401, 'credentials_invalid', stage === 'verify' ? 'pairSession' : 'actionProofUnavailable'], [429, 'rate_limited', 'limited'],
     [503, 'unavailable', stage === 'options' ? 'passkeyUnavailable' : 'passkeyChangeUncertain'],
     [0, 'network_error', stage === 'options' ? 'passkeyUnavailable' : 'passkeyChangeUncertain'],
   ] as const) test(`${stage}: ${status} ${code} keeps its own passkey handling`, async () => {
@@ -62,7 +62,7 @@ test('checking passkeys clears the old password and reads the current list witho
   await c.refresh();
   assert.deepEqual(calls, [{path: '/passkeys', body: undefined}]);
   assert.equal(c.password, ''); assert.equal(c.listLoaded, true); assert.deepEqual(c.passkeys, [key]);
-  await c.enroll(c.password); await c.remove(id, c.password); assert.equal(calls.length, 1, 'another change needs a fresh password');
+  assert.equal(calls.length,1,'checking the list never sends another change');
 });
 for (const gate of ['anonymous', 'pending', 'cooldown'] as const) test(`checking passkeys respects ${gate}`, async () => {
   const {c, calls} = fixture('options', {ok:false,status:429,code:'rate_limited',retryAfterMs:60000});
@@ -127,7 +127,7 @@ for (const status of [400, 408, 413, 415, 431]) test(`list ${status} is a read r
   const c = new PasskeyController(() => {}, async <T>(): Promise<ApiResult<T>> => ({ok: false, status, code: 'invalid_input', retryAfterMs: 0}), browser);
   c.account('owner'); await c.load(); assert.equal(c.error, 'passkeyUnavailable'); assert.equal(c.listLoaded, false);
 });
-for (const [status, code, expected] of [[408, 'unavailable', 'passkeyUnavailable'], [415, 'other', 'passkeyUnavailable'], [431, 'invalid_input', 'passkeyUnavailable'], [413, 'credentials_invalid', 'passkeyPasswordInvalid']] as const) test(`body guidance keeps ${status} ${code} handling`, async () => {
+for (const [status, code, expected] of [[408, 'unavailable', 'passkeyUnavailable'], [415, 'other', 'passkeyUnavailable'], [431, 'invalid_input', 'passkeyUnavailable'], [413, 'credentials_invalid', 'actionProofUnavailable']] as const) test(`body guidance keeps ${status} ${code} handling`, async () => {
   const {c} = fixture('options', {ok: false, status, code, retryAfterMs: 0}); await c.enroll(c.password); assert.equal(c.error, expected);
 });
 for (const stage of ['verify', 'remove'] as const) for (const status of [408, 413, 415]) test(`${stage}: ${status} keeps reconciled success`, async () => {

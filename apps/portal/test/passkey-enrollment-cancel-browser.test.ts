@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -13,7 +14,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: cancelling passkey enrollment shows one status and permits retry`, async () => {
+  test(`${locale} ${theme} ${width}: cancelling passkey enrollment shows one status and permits retry`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
@@ -30,6 +31,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       });
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const endpoint = new URL(route.request().url()).pathname;
         calls.push(endpoint);
         if (endpoint.endsWith('/session') || endpoint.endsWith('/session/activity')) return route.fulfill({json: {
@@ -50,15 +52,15 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const section = page.locator('.passkeys');
       await section.getByText(c.passkeyNone, {exact: true}).waitFor();
-      await section.locator('input[name=passkeyPassword]').fill('Current account password');
+
       const button = section.getByRole('button', {name: c.passkeyAdd, exact: true});
       for (let attempt = 1; attempt <= 2; attempt++) {
         await button.click();
+        await t.waitFor(()=>assert.equal(calls.filter(path => path.endsWith('/passkeys/registration/options')).length, attempt),{timeout:4000});
         await section.getByRole('status').filter({hasText: c.passkeyCancelled}).waitFor();
         assert.equal(await section.getByText(c.passkeyCancelled, {exact: true}).count(), 1);
         assert.equal(await section.getByRole('alert').count(), 0);
         assert.equal(await button.isEnabled(), true);
-        assert.equal(calls.filter(path => path.endsWith('/passkeys/registration/options')).length, attempt);
         assert.equal(calls.some(path => path.endsWith('/passkeys/registration/verify')), false);
       }
       assert.equal(new URL(page.url()).pathname, '/account');

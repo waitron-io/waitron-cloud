@@ -19,10 +19,6 @@ function exact(body:Record<string,unknown>,fields:string[],optional:string[]=[])
 function token(value:unknown):string {
   if(typeof value!=='string'||!TOKEN.test(value))throw new AccountHttpError(400,'invalid_input');return value;
 }
-function password(value:unknown):string {
-  if(typeof value!=='string'||!value)throw new AccountHttpError(400,'invalid_input');
-  if(Buffer.byteLength(value)>1024)throw new AccountHttpError(400,'password_too_long');return value;
-}
 function code(value:unknown):string {
   if(typeof value!=='string'||!/^\d{6}$/.test(value))throw new AccountHttpError(400,'invalid_input');return value;
 }
@@ -58,9 +54,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
         {scope:'factor-complete-account',subject:candidate?.account_id??`unknown:${digest(challengeToken)}`,...p.completeAccount}]);
       const credentials=await (recovery?options.login.completeRecoveryCheck(challengeToken,parsed as string):email?options.login.completeEmailCheck(challengeToken,parsed as string,body.rememberBrowser===true):options.login.complete(challengeToken,parsed as FactorProof));writeSessionCookies(c,options.secure,credentials);if('browserToken' in credentials)writeBrowserCookie(c,options.secure,credentials.browserToken as string);return c.json({accountId:credentials.accountId});
     }
-    exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['password','pendingToken','code']:['password'],action==='/cancel'?[]:['proof']);
-    const parsedPassword=action==='/cancel'?undefined:password(body.password);
-    const parsedProof=Object.hasOwn(body,'proof')?proof(body.proof):undefined;
+    exact(body,action==='/cancel'?['pendingToken']:action==='/activate'?['pendingToken','code']:[]);
     const pendingToken=['/activate','/cancel'].includes(action)?token(body.pendingToken):undefined;
     const confirmation=action==='/activate'?code(body.code):undefined;
     const p=options.policy;
@@ -70,7 +64,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     const session=await transaction(options.pool,client=>resolveSession(client,sessionToken,{csrfToken,touch:false}));
     if(p)await options.consume([{scope:'factor-manage-account',subject:session.accountId,...p.manageAccount}]);
     if(action==='/cancel'){await options.store.cancel(sessionToken,csrfToken,pendingToken!);return c.body(null,204);}
-    const authority={token:sessionToken,csrfToken,password:parsedPassword!,...(parsedProof?{proof:parsedProof}:{})};
+    const authority={token:sessionToken,csrfToken};
     if(action==='/begin')return c.json(await options.store.begin(authority));
     const changed=action==='/activate'?await options.store.activate(authority,pendingToken!,confirmation!):
       action==='/remove'?await options.store.remove(authority):await options.store.regenerate(authority);

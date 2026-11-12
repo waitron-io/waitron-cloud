@@ -22,10 +22,10 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if (kind==='sign_in_check') {
     if (!('code' in message) || typeof message.code!=='string' || !/^[0-9]{6}$/.test(message.code)
       || !('expiresAt' in message) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid account email');
-    const subject=locale==='es'?'Tu código de acceso a Waitron Cloud':'Your Waitron Cloud sign-in code';
+    const subject=locale==='es'?'Tu código de verificación de Waitron Cloud':'Your Waitron Cloud verification code';
     const expiry=new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(message.expiresAt));
     const reset=new URL('/forgot-password',origin);reset.hash=new URLSearchParams({lang:locale}).toString();
-    return {subject,text:[subject,'',message.code,'',`${locale==='es'?'Este código de un solo uso caduca el':'This single-use code expires at'} ${expiry}.`,locale==='es'?'Si no has intentado acceder, restablece tu contraseña.':'If you did not try to sign in, reset your password.',reset.href].join('\n')};
+    return {subject,text:[subject,'',message.code,'',`${locale==='es'?'Este código de un solo uso caduca el':'This single-use code expires at'} ${expiry}.`,locale==='es'?'Si no has solicitado este código, restablece tu contraseña.':'If you did not request this code, reset your password.',reset.href].join('\n')};
   }
   if(kind==='service_alert'){
     if(!validServiceAlert(message))throw new Error('Invalid account email');

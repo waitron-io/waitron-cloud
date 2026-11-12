@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -52,10 +53,10 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         await page.locator('input[name=password]').fill(password);
         await page.getByRole('button', {name: c.login, exact: true}).click();
         await completeBrowserEmail(f,page,owner.email,locale);
-        await page.getByText(c.accountIntro).waitFor();
-        await page.locator('input[name=passkeyPassword]').fill(password);
+        await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+
         const registrationReply = page.waitForResponse('**/passkeys/registration/verify').then(response => ({response}));
-        await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
+        await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
         const registrationResult = await Promise.race([registrationReply,
           page.getByRole('alert').filter({hasText: c.passkeyUnavailable}).first().waitFor().then(() => ({response: undefined}))]);
         assert.ok(registrationResult.response,
@@ -69,7 +70,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         await page.getByRole('button', {name: c.signout, exact: true}).click();
         await page.getByText(c.signedOut, {exact: true}).waitFor();
         await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
-        await page.getByText(c.accountIntro).waitFor();
+        await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
         assert.equal((options.at(-1) as {options: {rpId: string}}).options.rpId, new URL(f.origin).hostname);
         assert.ok(authenticationCompletion);
         const replay = await context.request.post(authenticationCompletion.url, {headers: {origin: f.origin}, data: authenticationCompletion.body});
@@ -83,8 +84,9 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
           assert.equal(login.status(), 200);
           assert.deepEqual(await (await otherContext.request.get(`${f.origin}/api/account/passkeys`)).json(), {passkeys: []});
           const csrf = (await otherContext.cookies()).find(cookie => cookie.name === 'cloud_csrf')?.value; assert.ok(csrf);
+          await prepareBrowserActionWindow(f,otherContext);
           const removal = await otherContext.request.post(`${f.origin}/api/account/passkeys/remove`,
-            {headers: {origin: f.origin, 'x-csrf-token': csrf}, data: {id: created, password}});
+            {headers: {origin: f.origin, 'x-csrf-token': csrf}, data: {id: created}});
           assert.equal(removal.status(), 204);
           assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE id = $1', [created])).rows[0].count, '1');
         } finally { await otherContext.close(); }
@@ -99,18 +101,18 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
           assert.equal(login.status(),202);
           assert.equal((await unsupportedContext.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
           const challenge=await login.json() as {emailRequired:boolean;challengeToken:string};assert.equal(challenge.emailRequired,true);
-          await f.drainMail();const mail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+          await f.drainMail();const mail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
           const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
           assert.equal((await unsupportedContext.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:challenge.challengeToken,code}})).status(),200);
           const unsupportedPage = await unsupportedContext.newPage(); unsupportedPage.setDefaultTimeout(5000);
           await unsupportedPage.goto(`${f.origin}/account#lang=${locale}`);
           await unsupportedPage.getByText(c.passkeyUnsupported, {exact: true}).waitFor();
-          await unsupportedPage.locator('input[name=passkeyPassword]').waitFor();
+          await unsupportedPage.locator('.passkeys h3').waitFor();
           await unsupportedPage.getByRole('button', {name: c.passkeyRemove, exact: true}).waitFor();
         } finally { await unsupportedContext.close(); }
 
-        await page.locator('input[name=passkeyPassword]').fill(password);
-        await page.getByRole('button', {name: c.passkeyRemove, exact: true}).click();
+
+        await prepareBrowserActionWindow(f,page);await page.getByRole('button', {name: c.passkeyRemove, exact: true}).click();
         await page.getByText(c.passkeyRemoved, {exact: true}).waitFor();
         assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id = $1', [owner.id])).rows[0].count, '0');
         await page.getByRole('button', {name: c.signout, exact: true}).click();
@@ -119,7 +121,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
         await page.locator('input[name=password]').fill(password);
         await page.getByRole('button', {name: c.login, exact: true}).click();
         await completeBrowserEmail(f,page,owner.email,locale);
-        await page.getByText(c.accountIntro).waitFor();
+        await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
         assert.deepEqual(errors, []);
       } finally {
         await authenticator.close();

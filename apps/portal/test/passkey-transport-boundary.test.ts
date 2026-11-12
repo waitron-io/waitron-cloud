@@ -147,8 +147,8 @@ for (const mode of ['load', 'sign-in', 'enroll', 'remove'] as const) {
       const proof = path.startsWith('/passkeys/registration/') || path === '/passkeys/remove';
       assert.equal(new Headers(init?.headers).get('X-CSRF-Token'), proof ? 'passkey-proof' : null);
       if (path !== '/passkeys') assert.deepEqual(JSON.parse(String(init?.body)),
-        path.endsWith('/options') ? mode === 'enroll' ? {password: 'current password'} : {}
-          : mode === 'remove' ? {id, password: 'current password'}
+        path.endsWith('/options') ? mode === 'enroll' ? {} : {}
+          : mode === 'remove' ? {id}
           : {ceremonyId: id, response: mode === 'enroll' ? registrationReply : authenticationReply});
     }
   });

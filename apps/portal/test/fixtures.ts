@@ -111,7 +111,7 @@ export async function mailFor(email: string, subject: string, evidence?: () => P
   if (!found) {
     let boundaries: object;
     try { boundaries = await evidence?.() ?? {}; } catch { boundaries = {boundaries: 'unavailable'}; }
-    const knownSubjects = new Set(['Your Waitron Cloud sign-in code', 'Tu código de acceso a Waitron Cloud', 'Verify your Waitron Cloud email', 'Verifica tu correo de Waitron Cloud',
+    const knownSubjects = new Set(['Your Waitron Cloud verification code', 'Tu código de verificación de Waitron Cloud', 'Verify your Waitron Cloud email', 'Verifica tu correo de Waitron Cloud',
       'Reset your Waitron Cloud password', 'Restablece tu contraseña de Waitron Cloud',
       'Your Waitron Cloud password changed', 'Tu contraseña de Waitron Cloud ha cambiado',
       'Waitron Cloud: a venue needs attention', 'Waitron Cloud: un local necesita atención',
@@ -132,7 +132,7 @@ export async function mailFor(email: string, subject: string, evidence?: () => P
 
 export async function completeBrowserEmail(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page,email:string,locale:'en'|'es'='en') {
   await page.getByRole('heading',{name:locale==='en'?'Check your email':'Revisa tu correo',exact:true}).waitFor();
-  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
   const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
   await page.locator('input[name=factorProof]').fill(code);
   await page.locator('#submit').click();
@@ -141,7 +141,15 @@ export async function completeBrowserEmail(f:Awaited<ReturnType<typeof startPort
 export async function contextSignIn(f:Awaited<ReturnType<typeof startPortalFixture>>,context:BrowserContext,email:string,password:string,locale:'en'|'es'='en') {
   const started=await context.request.post(`${f.origin}/api/account/login`,{headers:{origin:f.origin},data:{email,password,locale}});
   assert.equal(started.status(),202);const check=await started.json() as {emailRequired:boolean;challengeToken:string};assert.equal(check.emailRequired,true);
-  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+  await f.drainMail();const mail=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
   const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
   return context.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:check.challengeToken,code}});
+}
+
+// Other journeys begin after the shared proof; account-action-proof-browser owns the real prompt.
+export async function prepareBrowserActionWindow(f:Awaited<ReturnType<typeof startPortalFixture>>,page:Page|BrowserContext){
+ const cookie=(await ('context' in page?page.context():page).cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');
+ assert.ok(cookie,'the security journey needs a signed-in session');
+ const {openProofWindow}=await import('../../../packages/registration/test/fixtures/action-proof.ts');
+ await openProofWindow(f.db.pool,cookie.value);
 }

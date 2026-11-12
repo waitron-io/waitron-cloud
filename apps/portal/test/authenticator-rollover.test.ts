@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {createHmac,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -21,10 +22,10 @@ test('first authenticator sign-in uses an unused adjacent code after enrolment r
   try{
     await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner.id]);
     await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',[owner.id,owner.email,await hashSecret(password)]);
-    await page.goto(`${f.origin}/login`);await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,owner.email,'en');await page.getByText(c.accountIntro).waitFor();
-    await page.locator('input[name=factorPassword]').fill(password);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
+    await page.goto(`${f.origin}/login`);await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,owner.email,'en');await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+    await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
     const secret=await page.locator('.factor-secret').textContent();assert.ok(secret);
-    await page.locator('input[name=factorPassword]').fill(password);await page.locator('input[name=factorConfirmation]').fill(totp(secret));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();
+    await page.locator('input[name=factorConfirmation]').fill(totp(secret));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();
     await page.locator('.factor-codes').waitFor();await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     const activationStep=Number((await f.db.pool.query('SELECT max(time_step) AS step FROM cloud_factor_replays WHERE account_id=$1',[owner.id])).rows[0].step);
     await new Promise(resolve=>setTimeout(resolve,Math.max(0,(activationStep+1)*30000+1000-Date.now())));
@@ -35,7 +36,7 @@ test('first authenticator sign-in uses an unused adjacent code after enrolment r
     assert.equal((await page.context().cookies()).filter(cookie=>cookie.name==='cloud_session').length,0);
     const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/account/login/factor');
     await page.locator('input[name=factorProof]').fill(signInCode(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
-    assert.equal((await response).status(),200,'a fresh adjacent proof must sign in after the enrolment step rolls over');await page.getByText(c.accountIntro).waitFor();
+    assert.equal((await response).status(),200,'a fresh adjacent proof must sign in after the enrolment step rolls over');await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
     await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();
     const replay=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/account/login/factor');
@@ -48,6 +49,6 @@ test('first authenticator sign-in uses an unused adjacent code after enrolment r
     await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();
     const previous=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/account/login/factor');
     await page.locator('input[name=factorProof]').fill(totp(secret,-1));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
-    assert.equal((await previous).status(),200,'a fresh previous adjacent proof remains accepted');await page.getByText(c.accountIntro).waitFor();
+    assert.equal((await previous).status(),200,'a fresh previous adjacent proof remains accepted');await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
   }finally{await f.close();}
 });

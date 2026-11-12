@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -14,7 +15,6 @@ const bundle = await build({stdin: {contents: `
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const existing = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-10-24T12:00:00Z', lastUsedAt: null};
 const added = {id: '22345678-1234-4234-8234-123456789abc', createdAt: '2026-10-25T12:00:00Z', lastUsedAt: null};
-const password = '  Current account password  ';
 const dates = {en: ['Oct 24, 2026', 'Oct 25, 2026'], es: ['24 oct 2026', '25 oct 2026']};
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -35,6 +35,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       let reads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
         if (path === '/installations') return route.fulfill({json: {installations: []}});
@@ -58,7 +59,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const section = page.locator('.passkeys'), rows = section.locator('.passkey-list li');
       const field = section.locator('wt-input[name=passkeyPassword] input');
       await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).waitFor();
-      await field.fill(password);
+
       await section.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
       await section.getByRole('alert').getByText(c.passkeyChangeUncertain, {exact: true}).waitFor();
       assert.equal(reads, 2);
@@ -66,10 +67,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await rows.getByText(dates[locale][0]!, {exact: false}).count(), 1);
       assert.equal(await section.getByText(c.passkeyAdded, {exact: true}).count(), 0, 'a lost reply and failed list cannot confirm enrollment');
       assert.equal(await section.getByText(c.passkeyNone, {exact: true}).count(), 0);
-      assert.equal(await field.inputValue(), '', 'the failed follow-up clears the submitted password');
-      assert.equal(await section.getByRole('button', {name: c.passkeyAdd, exact: true}).isDisabled(), true);
+      assert.equal(await field.count(),0);
+      assert.equal(await section.getByRole('button', {name: c.passkeyAdd, exact: true}).isEnabled(), true);
       assert.deepEqual(writes.map(write => write.path), ['/passkeys/registration/options', '/passkeys/registration/verify']);
-      assert.deepEqual(writes[0]!.body, {password}, 'the original enrollment keeps the exact password');
+      assert.deepEqual(writes[0]!.body, {}, 'enrollment uses the shared session proof');
       assert.equal(writes[1]!.body.ceremonyId, added.id);
       assert.equal((writes[1]!.body.response as {type: string}).type, 'public-key');
       const originalWrites = structuredClone(writes);
@@ -78,7 +79,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await retry.click();
       await t.waitFor(() => {assert.equal(reads, 3);}, {timeout: 4000});
       assert.equal(await retry.isDisabled(), true);
-      assert.equal(await field.isDisabled(), true);
+      assert.equal(await field.count(),0);
       assert.equal(await rows.count(), 1, 'the pending retry retains the old key');
       assert.equal(await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).isDisabled(), true);
       assert.equal(await section.getByRole('button', {name: c.wait, exact: true}).isDisabled(), true);
@@ -91,9 +92,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await rows.nth(1).getByText(dates[locale][1]!, {exact: false}).count(), 1);
       assert.equal(await retry.count(), 0);
       assert.equal(await section.getByRole('alert').count(), 0);
-      assert.equal(await field.inputValue(), '');
-      assert.equal(await field.isEnabled(), true);
-      assert.equal(await section.getByRole('button', {name: c.passkeyAdd, exact: true}).isDisabled(), true);
+      assert.equal(await field.count(),0);
+      assert.equal(await section.getByRole('button', {name: c.passkeyAdd, exact: true}).isEnabled(), true);
       assert.equal(reads, 3, 'pending Retry cannot duplicate the list read');
       assert.deepEqual(writes, originalWrites, 'a successful read never repeats enrollment');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

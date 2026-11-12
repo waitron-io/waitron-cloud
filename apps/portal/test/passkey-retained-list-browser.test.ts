@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -14,7 +15,6 @@ const bundle = await build({stdin: {contents: `
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const id = '12345678-1234-4234-8234-123456789abc';
 const key = {id, createdAt: '2026-10-24T12:00:00Z', lastUsedAt: null};
-const password = '  Current account password  ';
 
 // Clearing cached rows on a failed refresh or hiding them without a successful list must fail.
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -30,6 +30,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         let reads = 0;
         await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
         await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
           const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
           if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
           if (path === '/installations') return route.fulfill({json: {installations: []}});
@@ -51,7 +52,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const field = section.locator('wt-input[name=passkeyPassword] input');
         await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).waitFor();
         assert.equal(reads, 1); assert.equal(await rows.count(), 1);
-        await field.fill(password);
+
         await rows.getByRole('button', {name: c.passkeyRemove, exact: true}).click();
         await section.getByRole('alert').getByText(c.passkeyChangeUncertain, {exact: true}).waitFor();
         assert.equal(reads, 2);
@@ -59,10 +60,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(await rows.getByText(c.passkeyNeverUsed, {exact: false}).count(), 1);
         assert.equal(await section.getByText(c.passkeyNone, {exact: true}).count(), 0, 'a failed refresh cannot establish an empty list');
         assert.equal(await section.getByRole('alert').count(), 1);
-        assert.equal(await field.inputValue(), '', 'an uncertain change clears the submitted password');
+        assert.equal(await field.count(),0);
         const retry = section.getByRole('button', {name: c.retry, exact: true});
         assert.equal(await retry.isEnabled(), true);
-        assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id, password}}]);
+        assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id}}]);
         await retry.click();
         await t.waitFor(() => {assert.equal(reads, 3);}, {timeout: 4000});
         assert.equal(await retry.isDisabled(), true);
@@ -73,7 +74,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.equal(reads, 3, 'pending retry cannot duplicate the list read');
         assert.equal(await rows.count(), 0, 'only the successful empty list removes the retained key');
         assert.equal(await retry.count(), 0); assert.equal(await section.getByRole('alert').count(), 0);
-        assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id, password}}], 'retry reads current keys without repeating removal');
+        assert.deepEqual(writes, [{path: '/passkeys/remove', body: {id}}], 'retry reads current keys without repeating removal');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       } finally {release(); await browser.close();}
     });

@@ -73,8 +73,8 @@ async function start(f: Fixture, boundary: Boundary) {
   const done = boundary === 'list' ? c.load()
     : boundary.startsWith('enrollment') ? c.enroll(c.password) : c.remove(previous.id, c.password);
   const first = boundary === 'list' ? {path: '/passkeys', body: undefined}
-    : boundary.startsWith('enrollment') ? {path: '/passkeys/registration/options', body: {password: 'old account password'}}
-      : {path: '/passkeys/remove', body: {id: previous.id, password: 'old account password'}};
+    : boundary.startsWith('enrollment') ? {path: '/passkeys/registration/options', body: {}}
+      : {path: '/passkeys/remove', body: {id: previous.id}};
   assert.deepEqual(f.requests.map(({path, body}) => ({path, body})), [first]);
   if (boundary === 'enrollment verification' || boundary === 'enrollment list') {
     f.requests[0]!.finish(ok(options)); await turn();

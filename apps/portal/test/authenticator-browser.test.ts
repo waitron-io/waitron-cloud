@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import {createHmac,randomUUID} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
@@ -33,52 +34,50 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
     assert.deepEqual(Object.keys(storage.local).filter(k=>k!=='cloud.locale'),[]);assert.deepEqual(storage.session,{});assert.ok(!storage.url.includes('token=')&&!storage.url.includes('secret='));}
   async function login(pw=password){await page.locator('input[name=email]').fill(owner.email);await page.locator('input[name=password]').fill(pw);await page.getByRole('button',{name:c.login,exact:true}).click();}
   async function recovery(code:string){await page.getByLabel(c.factorProofType).selectOption('recovery');await page.locator('input[name=factorProof]').fill(code);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();}
-  async function authority(code?:string,pw=password){await page.locator('input[name=factorPassword]').fill(pw).catch(async error=>{throw new Error(JSON.stringify({outcomes:outcomes.slice(-12),heading:await page.locator('h1').textContent(),alerts:await page.locator('[role=alert]').allTextContents(),status:await page.locator('[role=status]').allTextContents()}),{cause:error});});if(code){await page.getByLabel(c.factorProofType).selectOption('recovery');await page.locator('input[name=factorProof]').fill(code);}}
+  async function authority(_code?:string,_pw=password){await prepareBrowserActionWindow(f,page);}
   async function save(){await page.locator('.factor-codes').waitFor().catch(async error=>{throw new Error(JSON.stringify({outcomes:outcomes.slice(-5),heading:await page.locator('h1').textContent(),alerts:await page.locator('[role=alert]').allTextContents()}),{cause:error});});const codes=await page.locator('.factor-codes code').allTextContents();assert.equal(codes.length,10);assert.equal(new Set(codes).size,10);await look('codes');assert.equal(await page.evaluate(()=>document.activeElement===document.querySelector('h1')),true);await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();await page.locator('.factor-codes').waitFor({state:'hidden'});assert.equal(await page.locator('.factor-codes code').count(),0);return codes;}
   try{
     await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner.id]);await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,$2,$3,clock_timestamp())',[owner.id,owner.email,await hashSecret(password)]);
-    await page.goto(`${f.origin}/login#lang=${locale}`);await login();await completeBrowserEmail(f,page,owner.email,locale);await page.getByText(c.accountIntro).waitFor();
-    await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();await page.getByText(c.passkeyAdded,{exact:true}).waitFor();
-    await page.getByText(c.factorOff??'Authenticator is off.',{exact:true}).waitFor();await authority();await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
+    await page.goto(`${f.origin}/login#lang=${locale}`);await login();await completeBrowserEmail(f,page,owner.email,locale);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+    await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();await page.getByText(c.passkeyAdded,{exact:true}).waitFor();
+    await page.getByText(c.factorOff??'Authenticator is off.',{exact:true}).waitFor();await authority();await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
     await page.locator('.factor-secret').waitFor();await look('pending');assert.ok(await page.locator('canvas').evaluate((canvas:HTMLCanvasElement)=>canvas.width>0));
     await page.getByRole('button',{name:c.factorCancel,exact:true}).click();await page.locator('.factor-secret').waitFor({state:'hidden'});assert.equal(await page.locator('.factor-secret').count(),0);
-    await authority();await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
+    await authority();await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
     const secret=await page.locator('.factor-secret').textContent();assert.ok(secret);await authority();await page.locator('input[name=factorConfirmation]').fill(totp(secret));
     await page.getByRole('button',{name:c.factorActivate,exact:true}).click();let codes=await save();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[owner.id])).rows[0].count,'0');
     await login();await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).filter(v=>v.name==='cloud_session').length,0);await look('challenge');assert.equal(await page.evaluate(()=>document.activeElement===document.querySelector('h1')),true);await page.keyboard.press('Tab');assert.equal(await page.getByLabel(c.factorProofType).evaluate(e=>e===document.activeElement),true);
-    await page.locator('input[name=factorProof]').fill(signInCode(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
-    await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await look('active');
-    await authority(codes[1]);await page.getByRole('button',{name:c.factorReplace,exact:true}).click();const replacement=await page.locator('.factor-secret').textContent();assert.ok(replacement);
+    await page.locator('input[name=factorProof]').fill(signInCode(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+    await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);await look('active');
+    await authority(codes[1]);await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorReplace,exact:true}).click();const replacement=await page.locator('.factor-secret').textContent();assert.ok(replacement);
     await authority(codes[2]);await page.locator('input[name=factorConfirmation]').fill(totp(replacement));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.getByText(c.factorChanged,{exact:true}).waitFor();assert.equal(await page.locator('.factor-codes code').count(),0);
-    await login();await recovery(codes[3]!);await page.getByText(c.accountIntro).waitFor();await authority(codes[4]);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
+    await login();await recovery(codes[3]!);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);await authority(codes[4]);await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
     // A consumed recovery proof cannot complete a fresh password challenge.
-    await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await page.getByRole('button',{name:c.signout,exact:true}).click();
-    await login();await recovery(codes[0]!);await page.getByText(c.credentials,{exact:true}).first().waitFor();await login();await recovery(codes[1]!);await page.getByText(c.accountIntro).waitFor();
+    await login();await recovery(codes[0]!);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.signout,exact:true}).click();
+    await login();await recovery(codes[0]!);await page.getByText(c.credentials,{exact:true}).first().waitFor();await login();await recovery(codes[1]!);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
     const newPassword='A changed authenticator account password';
     await page.getByRole('link',{name:c.forgot,exact:true}).click();await page.locator('input[name=email]').fill(owner.email);await page.getByRole('button',{name:c.sendReset,exact:true}).click();await page.getByText(c.emailSent,{exact:true}).waitFor();await f.drainMail();
     const resetText=await mailFor(owner.email,locale==='en'?'Reset your Waitron Cloud password':'Restablece tu contraseña de Waitron Cloud',f.mailEvidence);
     const resetUrl=resetText.match(/http:\/\/localhost:[^\s]+/)?.[0];assert.ok(resetUrl,'password reset link missing');
     await page.goto(resetUrl);await page.locator('input[name=password]').fill(newPassword);await page.getByRole('button',{name:c.savePassword,exact:true}).click();await page.getByText(c.resetReady,{exact:true}).waitFor();await page.getByRole('link',{name:c.login,exact:true}).click();
-    await login(newPassword);await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();await recovery(codes[2]!);await page.getByText(c.accountIntro).waitFor();
-    await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('button',{name:c.passkeySignIn,exact:true}).click();await page.getByText(c.accountIntro).waitFor();
+    await login(newPassword);await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();await recovery(codes[2]!);await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
+    await page.getByRole('button',{name:c.signout,exact:true}).click();await page.getByRole('button',{name:c.passkeySignIn,exact:true}).click();await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);
     // Expire only the fixture’s minute windows to continue the long journey under unchanged budgets.
     const expiredRateKeys=['all-ip','login-ip'].map(scope=>createHmac('sha256',Buffer.from(f.db.rateKey,'hex')).update(JSON.stringify([scope,'127.0.0.1'])).digest('hex'));
     await f.db.pool.query("UPDATE account_rate_limits SET expires_at=clock_timestamp()-interval '1 second' WHERE key=ANY($1::text[])",[expiredRateKeys]);
     // Losing the committed reply never fetches old raw codes; fresh authority can regenerate them.
-    f.loseAccountReply('/authenticator/regenerate');await authority(codes[3],newPassword);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();
+    f.loseAccountReply('/authenticator/regenerate');await authority(codes[3],newPassword);await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();
     await page.getByText(c.factorChangeUncertain,{exact:true}).waitFor().catch(async error=>{throw new Error(JSON.stringify({factor:(await f.db.pool.query('SELECT version FROM cloud_authenticator_factors WHERE account_id=$1',[owner.id])).rows,endedSessions:(await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[owner.id])).rows,outcomes:outcomes.slice(-8),heading:await page.locator('h1').textContent(),alerts:await page.locator('[role=alert]').allTextContents()}),{cause:error});});assert.equal(await page.locator('.factor-codes code').count(),0);
-    await page.getByRole('button',{name:c.passkeySignIn,exact:true}).click();await page.getByText(c.accountIntro).waitFor();await page.getByText(c.factorOn,{exact:true}).waitFor();
-    // A replacement's confirmation consumes its current code. Use a future adjacent step for fresh authority.
-    const bits=[...replacement].map(ch=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(ch).toString(2).padStart(5,'0')).join('');const time=Buffer.alloc(8);time.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30_000)+1));const mac=createHmac('sha1',Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2)))).update(time).digest();const fresh=((mac.readUInt32BE(mac[19]!&15)&0x7fffffff)%1_000_000).toString().padStart(6,'0');
-    await page.locator('input[name=factorPassword]').fill(newPassword);await page.getByLabel(c.factorProofType).selectOption('totp');await page.locator('input[name=factorProof]').fill(fresh);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
+    await page.getByRole('button',{name:c.passkeySignIn,exact:true}).click();await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);await page.getByText(c.factorOn,{exact:true}).waitFor();
+    await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();codes=await save();
     for(const loss of ['whole','body'] as const){await login(newPassword);await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();f.loseAccountReply('/login/factor',loss);await recovery(codes[loss==='whole'?0:1]!);
-      if(loss==='whole'){await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login(newPassword);await recovery(codes[2]!);}await page.getByText(c.accountIntro).waitFor();if(loss==='whole')await page.getByRole('button',{name:c.signout,exact:true}).click();}
-    await authority(codes[3],newPassword);await page.getByRole('button',{name:c.factorRemove,exact:true}).click();await page.getByText(c.factorRemoved,{exact:true}).waitFor();await login(newPassword);
+      if(loss==='whole'){await page.getByRole('heading',{name:c.login,exact:true}).waitFor();await login(newPassword);await recovery(codes[2]!);}await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);if(loss==='whole')await page.getByRole('button',{name:c.signout,exact:true}).click();}
+    await authority(codes[3],newPassword);await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorRemove,exact:true}).click();await page.getByText(c.factorRemoved,{exact:true}).waitFor();await login(newPassword);
     await page.getByText(c.emailOrRecoveryHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
-    await f.drainMail();const checkMail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+    await f.drainMail();const checkMail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
     const checkCode=checkMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(checkCode);await page.locator('input[name=factorProof]').fill(checkCode);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
-    await page.getByText(c.accountIntro).waitFor();await page.getByText(c.factorOff,{exact:true}).waitFor();
+    await page.getByText(c.accountIntro).waitFor();await prepareBrowserActionWindow(f,page);await page.getByText(c.factorOff,{exact:true}).waitFor();
     assert.deepEqual(errors,[]);assert.deepEqual([...requestOrigins],[f.origin]);
   }catch(error){
     let diagnostic:string;

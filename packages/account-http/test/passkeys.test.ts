@@ -1,3 +1,4 @@
+import {openProofWindow} from '../../registration/test/fixtures/action-proof.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -83,14 +84,14 @@ async function account(email = `owner-${randomUUID()}@example.test`) {
 async function signIn(email: string) {
   const response = await completeEmailProof(db,await request('/login', {email, password}),body=>request('/login/email',body));
   assert.equal(response.status, 200);
-  return cookies(response);
+  const result=cookies(response);const token=result.header.match(/__Host-cloud_session=([^;]+)/)![1]!;await openProofWindow(db.pool,token);return result;
 }
 
 test('HTTP passkey journey enrols, lists, authenticates once and removes with fresh authority', async () => {
   const owner = await account();
   const session = await signIn(owner.email);
   const headers = {cookie: session.header, 'x-csrf-token': session.csrf};
-  const options = await request('/passkeys/registration/options', {password}, {headers});
+  const options = await request('/passkeys/registration/options', {}, {headers});
   assert.equal(options.status, 200);
   const registration = await options.json() as {ceremonyId: string; options: {user: {id: string}; authenticatorSelection: unknown}};
   assert.deepEqual(registration.options.authenticatorSelection, {residentKey: 'required', userVerification: 'required'});
@@ -122,17 +123,19 @@ test('HTTP passkey journey enrols, lists, authenticates once and removes with fr
   assert.equal(replay.status, 401);
   assert.deepEqual(await replay.json(), {error: 'credentials_invalid'});
 
-  const wrongPassword = await request('/passkeys/remove', {id: created.id, password: 'wrong'}, {headers});
-  assert.equal(wrongPassword.status, 403);
-  assert.deepEqual(await wrongPassword.json(), {error: 'credentials_invalid'});
-  assert.equal((await request('/passkeys/remove', {id: created.id, password}, {headers})).status, 204);
+  await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes'");
+  const noWindow = await request('/passkeys/remove', {id: created.id}, {headers});
+  assert.equal(noWindow.status, 403);
+  assert.deepEqual(await noWindow.json(), {error: 'proof_required'});
+  await openProofWindow(db.pool,session.header.match(/__Host-cloud_session=([^;]+)/)![1]!);
+  assert.equal((await request('/passkeys/remove', {id: created.id}, {headers})).status, 204);
   assert.deepEqual(await (await request('/passkeys', undefined, {headers: {cookie: session.header}})).json(), {passkeys: []});
   assert.equal((await completeEmailProof(db,await request('/login', {email: owner.email, password}),body=>request('/login/email',body))).status, 200);
 });
 
 test('passkey HTTP sign-in remains independent when an active factor has no usable key or policy',async()=>{
   const owner=await account(),session=await signIn(owner.email),headers={cookie:session.header,'x-csrf-token':session.csrf};
-  const options=await request('/passkeys/registration/options',{password},{headers});assert.equal(options.status,200);
+  const options=await request('/passkeys/registration/options',{},{headers});assert.equal(options.status,200);
   const registration=await options.json() as {ceremonyId:string;options:{user:{id:string}}},credential=registrationResponse();
   assert.equal((await request('/passkeys/registration/verify',{ceremonyId:registration.ceremonyId,response:credential},{headers})).status,201);
   const keys={activeKeyId:'factor',keys:{factor:randomBytes(32).toString('hex')}};
@@ -149,7 +152,7 @@ test('passkey HTTP sign-in remains independent when an active factor has no usab
   assert.equal((await request('/session',undefined,{headers:{cookie:live.header}})).status,200);
   const status=await request('/authenticator',undefined,{headers:{cookie:live.header}});assert.equal(status.status,200);
   assert.deepEqual(await status.json(),{active:true,version:1,recoveryCodesRemaining:0,available:false});
-  const manage=await request('/authenticator/remove',{password},{headers:{cookie:live.header,'x-csrf-token':live.csrf}});
+  const manage=await request('/authenticator/remove',{},{headers:{cookie:live.header,'x-csrf-token':live.csrf}});
   assert.equal(manage.status,503);assert.deepEqual(await manage.json(),{error:'temporarily_unavailable'});
   assert.equal((await db.pool.query('SELECT count(*)::integer AS count FROM cloud_authenticator_factors WHERE secret_envelope IS NOT NULL')).rows[0].count,1);
 });
@@ -179,7 +182,7 @@ test('registration requires its live initiating session and CSRF proof', async (
   const first = await signIn(owner.email);
   const second = await signIn(owner.email);
   const firstHeaders = {cookie: first.header, 'x-csrf-token': first.csrf};
-  const registration = await (await request('/passkeys/registration/options', {password}, {headers: firstHeaders})).json() as {ceremonyId: string};
+  const registration = await (await request('/passkeys/registration/options', {}, {headers: firstHeaders})).json() as {ceremonyId: string};
   const invalidHeaders: Record<string, string>[] = [
     {cookie: first.header},
     {cookie: first.header, 'x-csrf-token': second.csrf},
@@ -191,21 +194,21 @@ test('registration requires its live initiating session and CSRF proof', async (
     {ceremonyId: registration.ceremonyId, response: registrationResponse()}, {headers: firstHeaders});
   assert.equal(completed.status, 201);
   await db.pool.query('UPDATE cloud_accounts SET disabled_at = clock_timestamp() WHERE id = $1', [owner.accountId]);
-  assert.equal((await request('/passkeys/registration/options', {password}, {headers: firstHeaders})).status, 401);
+  assert.equal((await request('/passkeys/registration/options', {}, {headers: firstHeaders})).status, 401);
 });
 
 test('missing and cross-account removals are the same confirmed no-op', async () => {
   const owner = await account();
   const first = await signIn(owner.email);
   const headers = {cookie: first.header, 'x-csrf-token': first.csrf};
-  const registration = await (await request('/passkeys/registration/options', {password}, {headers})).json() as {ceremonyId: string};
+  const registration = await (await request('/passkeys/registration/options', {}, {headers})).json() as {ceremonyId: string};
   const created = await (await request('/passkeys/registration/verify',
     {ceremonyId: registration.ceremonyId, response: registrationResponse()}, {headers})).json() as {id: string};
   const other = await account();
   const second = await signIn(other.email);
   const otherHeaders = {cookie: second.header, 'x-csrf-token': second.csrf};
-  assert.equal((await request('/passkeys/remove', {id: created.id, password}, {headers: otherHeaders})).status, 204);
-  assert.equal((await request('/passkeys/remove', {id: randomUUID(), password}, {headers: otherHeaders})).status, 204);
+  assert.equal((await request('/passkeys/remove', {id: created.id}, {headers: otherHeaders})).status, 204);
+  assert.equal((await request('/passkeys/remove', {id: randomUUID()}, {headers: otherHeaders})).status, 204);
   assert.equal((await request('/passkeys', undefined, {headers: {cookie: second.header}})).status, 200);
   assert.equal((await db.pool.query('SELECT count(*) FROM cloud_passkeys')).rows[0].count, '1');
 });
@@ -214,7 +217,7 @@ test('lost successful replies reconcile through session and list reads without r
   const owner = await account();
   const session = await signIn(owner.email);
   const headers = {cookie: session.header, 'x-csrf-token': session.csrf};
-  const registration = await (await request('/passkeys/registration/options', {password}, {headers})).json() as {ceremonyId: string; options: {user: {id: string}}};
+  const registration = await (await request('/passkeys/registration/options', {}, {headers})).json() as {ceremonyId: string; options: {user: {id: string}}};
   const credential = registrationResponse();
   assert.equal((await request('/passkeys/registration/verify', {ceremonyId: registration.ceremonyId, response: credential}, {headers})).status, 201);
   assert.equal((await request('/passkeys/registration/verify', {ceremonyId: registration.ceremonyId, response: credential}, {headers})).status, 400);
@@ -270,8 +273,9 @@ test('country enrollment policy restricts an existing session until a passkey is
   assert.equal(remembered.status,200,'recognized-browser password login still uses the common session restriction');
   assert.equal((await(await request('/session',undefined,{headers:{cookie:cookies(remembered).header}})).json()).enrollmentRequired,true);
   assert.equal((await request('/sessions',undefined,{headers:{cookie:cookies(remembered).header}})).status,403);
-  assert.equal((await request('/passkeys/registration/options', {password}, {headers: {cookie: session.header}})).status, 403);
-  const pending = await request('/passkeys/registration/options', {password}, {headers});
+  assert.equal((await request('/passkeys/registration/options', {}, {headers: {cookie: session.header}})).status, 403);
+  await openProofWindow(db.pool,session.header.match(/__Host-cloud_session=([^;]+)/)![1]!);
+  const pending = await request('/passkeys/registration/options', {}, {headers});
   assert.equal(pending.status, 200); const ceremony = await pending.json();
   assert.equal((await request('/sessions', undefined, {headers})).status, 403, 'starting enrollment grants no ordinary access');
   const verified = await request('/passkeys/registration/verify', {ceremonyId: ceremony.ceremonyId, response: registrationResponse()}, {headers});
@@ -283,7 +287,8 @@ test('country enrollment policy restricts an existing session until a passkey is
   const signedIn=await request('/passkeys/authentication/verify',{ceremonyId:authentication.ceremonyId,response:authenticationResponse(credential.credential_id,credential.user_handle.toString('base64url'))});
   assert.equal(signedIn.status,200);
   assert.equal((await request('/sessions',undefined,{headers:{cookie:cookies(signedIn).header}})).status,200,'standalone passkey sessions satisfy country policy');
-  assert.equal((await request('/passkeys/remove', {id: passkey.id, password}, {headers})).status, 204);
+  await openProofWindow(db.pool,session.header.match(/__Host-cloud_session=([^;]+)/)![1]!);
+  assert.equal((await request('/passkeys/remove', {id: passkey.id}, {headers})).status, 204);
   assert.equal((await request('/sessions', undefined, {headers})).status, 403, 'removing the last method restricts the live session again');
   app = createAccountApp({pool: db.pool, outbox: db.outbox, factor: {keys: null, policy: emailLoginPolicy}, config: config()});
   assert.equal((await request('/sessions', undefined, {headers})).status, 200, 'turning the country requirement off lifts it');

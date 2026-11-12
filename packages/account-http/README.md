@@ -138,9 +138,9 @@ Use the six requests in two pairs plus the account list:
 | POST `/passkeys/authentication/options` | Exact `Origin` | Ceremony ID and browser request options |
 | POST `/passkeys/authentication/verify` | Exact `Origin` and authenticator response | Account ID plus session and CSRF cookies |
 | GET `/passkeys` | Live session | Account-scoped passkey row IDs, enrolment dates and nullable last-use times |
-| POST `/passkeys/registration/options` | Live session, CSRF and current password | Ceremony ID and browser creation options |
+| POST `/passkeys/registration/options` | Live session, CSRF and a fresh security-proof window | Ceremony ID and browser creation options |
 | POST `/passkeys/registration/verify` | Same live session and CSRF | New passkey row ID, enrolment date and `lastUsedAt: null` |
-| POST `/passkeys/remove` | Live session, CSRF and current password | 204 after an account-scoped removal attempt |
+| POST `/passkeys/remove` | Live session, CSRF and a fresh security-proof window | 204 after an account-scoped removal attempt |
 
 Configure `portalOrigin` to the one origin that serves both the portal and this API. The
 server uses that full value for the WebAuthn origin and its hostname for the relying-party
@@ -148,10 +148,13 @@ ID. Do not configure an IP address as the relying-party ID. For local browser te
 `http://localhost:<port>`; browsers treat `localhost` as a secure-context exception.
 
 An authenticated account can read `GET /passkeys`, begin enrolment with
-`POST /passkeys/registration/options {"password":"<current password>"}`, finish it at
+`POST /passkeys/registration/options {}`, finish it at
 `POST /passkeys/registration/verify`, and remove an account-scoped row with
-`POST /passkeys/remove {"id":"<row uuid>","password":"<current password>"}`.
-These mutations require the current session's CSRF header. If you use a password
+`POST /passkeys/remove {"id":"<row uuid>"}`.
+These mutations require the current session's CSRF header and the shared
+ten-minute proof window described in the [authenticator guide](../../docs/authenticator-app.md#call-the-api).
+Registration completion rechecks its original session and security revision; it
+does not require that short window to remain fresh after authorisation. If you use a password
 while a passkey is enrolled, sign-in also requires an emailed six-digit code or a saved recovery code. With neither method enrolled, a new browser also needs the emailed code. Choose
 **Remember this browser (30 days)** only on a browser you control to use your password
 alone next time. The choice is unchecked by default; password reset forgets every
@@ -265,7 +268,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 | --- | --- | --- |
 | 400 | `invalid_input`, `link_unavailable`, `password_compromised`, `setup_unavailable`, `factor_not_active`, `password_too_long` | Invalid shape, ambiguous cookies, unusable completion token, a password present in the configured corpus, or a refused authenticator change as described in the [authenticator guide](../../docs/authenticator-app.md#call-the-api) |
 | 401 | `credentials_invalid`, `unauthenticated`, `session_expired` | Login failed, no usable session, or a previously live session reached its deadline |
-| 403 | `forbidden`, `credentials_invalid` | Wrong origin/host, missing/incorrect CSRF, or refused authenticator management authority |
+| 403 | `forbidden`, `credentials_invalid`, `proof_required` | Wrong origin/host, missing/incorrect CSRF, refused authenticator management authority, or a missing fresh security proof |
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
 | 408 / 413 / 415 / 431 | `invalid_input` | Receive timeout, body too large, unsupported encoding/type or headers too large |
 | 429 | `rate_limited` | Shared request allowance exhausted; obey `Retry-After` |

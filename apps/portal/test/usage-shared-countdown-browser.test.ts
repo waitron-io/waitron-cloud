@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {readFile} from 'node:fs/promises';
@@ -28,6 +29,7 @@ for(const waits of [{usage:2,alerts:5},{usage:5,alerts:2}])for(const locale of [
   const unexpected:string[]=[];
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
+      const proof=mockActionProof(route);if(proof)return proof;
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:'2027-01-01T00:00:00.000Z'}});
    if(path.endsWith('/usage/read')){reads++;return reads===1?route.fulfill({status:429,headers:{'Retry-After':String(waits.usage)},json:{error:'rate_limited'}}):route.fulfill({json:summary});}

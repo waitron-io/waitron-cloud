@@ -123,7 +123,7 @@ for (const entry of badSetups) {
     assert.equal(write.path, '/authenticator/begin');
     assert.equal(write.init.method, 'POST'); assert.equal(write.init.credentials, 'same-origin');
     assert.equal(new Headers(write.init.headers).get('X-CSRF-Token'), 'factor-proof');
-    assert.deepEqual(JSON.parse(String(write.init.body)), {password: 'current password', proof: {kind: 'totp', code: '123456'}});
+    assert.deepEqual(JSON.parse(String(write.init.body)), {});
   });
 }
 
@@ -170,7 +170,7 @@ for (const action of actions) {
       assert.equal(write.path, `/authenticator/${action}`);
       assert.equal(write.init.method, 'POST'); assert.equal(write.init.credentials, 'same-origin');
       assert.equal(new Headers(write.init.headers).get('X-CSRF-Token'), 'factor-proof');
-      assert.deepEqual(JSON.parse(String(write.init.body)), {password: 'current password', proof: {kind: 'totp', code: '123456'},
+      assert.deepEqual(JSON.parse(String(write.init.body)), {
         ...(action === 'activate' ? {pendingToken: token, code: '654321'} : {})});
     });
   }

@@ -48,7 +48,7 @@ failures receive the same accepted result. Notifications follow commit and canno
 undo a successful reset. Recovery requires verified email and an existing password;
 define recovery for legacy unverified and passwordless accounts separately.
 Optional passkeys now use discoverable, user-verified WebAuthn credentials. You can
-add or remove one only from a live session with your current password and CSRF proof.
+add or remove one only from a live session with CSRF proof and a fresh shared security-proof window.
 You can sign in with a passkey without entering an email address, while password login
 and email recovery remain available. Durable five-minute ceremonies are single-use,
 exact-origin and exact-RP checks are enforced, and a real Chromium virtual authenticator
@@ -61,26 +61,20 @@ one status message, including when the browser library wraps the cancellation.
 Cancelling sends no credential verification request. You can try again; other
 prompt failures keep their alert.
 Controller and stubbed Chromium checks cover these enrollment outcomes.
-Typing your current password enables Add a passkey immediately, so Tab reaches
-it without waiting for the next refresh. Clearing the password disables it again.
-Frozen-clock keyboard checks cover both languages, themes and phone/desktop widths;
-enrollment still disables Add and its password field, keeps password bytes across language
-changes and clears the password after success.
-Removing a passkey with a blank password marks the password field and shows its
-required message beside it, with one section alert and no removal request.
-Stubbed Chromium checks cover both languages, themes and phone/desktop widths;
-wrong-password alerts and server cooldowns keep their existing behavior.
+The shared security prompt replaces repeated password/app inputs for management.
+One proof covers this session for ten minutes; passkey changes preserve its original
+expiry and revoke peer windows and pending requests.
 If reading your passkeys fails, Account offers Retry and does not claim you have
 none. Only a successful empty list shows that message. Retry waits for any server
 cooldown and disables itself during the read. Navigation keeps the explicit retry
 without restarting the read; account changes discard its old success and replies.
 Controller and stubbed Chromium checks cover failure, empty-list retry and account
-changes; the delayed session-activity wrong-password regression remains covered.
+changes; the delayed session-activity refusal regression remains covered.
 A failed refresh keeps the last-read rows alongside Retry. Stubbed browser
 checks cover uncertain removal after a server failure or a lost reply: the
 previous keys stay visible through a failed follow-up read and pending Retry.
 Only a successful empty list removes them; Retry never repeats removal or
-resends your password. These checks cover both languages, themes and widths;
+sends another security change. These checks cover both languages, themes and widths;
 backend authority and provider qualification keep their separate gates.
 With two keys, a lost removal reply keeps both rows while the follow-up read
 is pending. A successful read confirms removal of the selected key and keeps
@@ -89,19 +83,19 @@ both languages, themes and phone/desktop widths.
 Lost enrollment replies also reconcile from the list: a newly listed key
 confirms success and retains the existing key; an unchanged list keeps the
 uncertain-change message. Native Chromium checks hold the follow-up read,
-verify disabled controls and cleared password input, and refuse another
+verify disabled controls, and refuse another
 ceremony or verification request across both languages, themes and widths.
 These stubbed HTTP checks do not qualify backend enrollment authority.
 If the list read also fails after a lost enrollment reply, you retain your old
 keys and can Retry. Native browser checks hold that retry, retain the old rows
 while controls are disabled, then display both old and new keys. Retry neither
-repeats enrollment nor resends your password; the failed follow-up clears it.
+repeats enrollment nor sends another security change; the failed follow-up retains the explicit retry.
 These checks cover both languages, themes and phone/desktop widths.
 Direct controller checks also hold a passkey list read and reject repeated
 reads, refresh, sign-in, enrollment and removal independently of disabled
-buttons. Suppressed calls retain your password and last-read keys; completing
+buttons. Suppressed calls retain the last-read keys; completing
 the read permits the next explicit action. Removing each pending guard makes
-its check fail, including the refresh guard that prevents password clearing.
+its check fail, including the refresh guard.
 Unsupported browsers keep one help message. Stubbed Chromium checks cover both
 languages, themes and widths, repeated cancellation and a later refused attempt.
 Passkey and session
@@ -112,7 +106,7 @@ cover both languages, light/dark themes and phone/desktop widths, with a Chromiu
 virtual authenticator so the fixture offers passkeys on Linux too. Root-to-Account
 navigation now finishes before startup reads begin, so the redirect cannot discard
 their replies. A delayed session-activity reply no longer restarts the passkey list
-and clears a wrong-password alert. A controlled Linux reproduction captured that
+and clears a security-refusal alert. A controlled Linux reproduction captured that
 sequence across both languages, themes and widths; a separate browser regression
 retains the alert after the activity reply, with the original error checks and
 four-second waits unchanged. This addresses the repeated root-route timeout in
@@ -233,12 +227,12 @@ recovery code completes the check. Focused PostgreSQL tests cover concurrent com
 durable attempt limits, stale credentials, code reuse and expiry during database waits:
 `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
 test/password-login.test.ts test/identity.test.ts`. Account controls now require your live
-session, current password and, for an active factor, fresh proof. Activation, replacement,
+session, its CSRF token and the shared security-proof window. Activation, replacement,
 removal and recovery-code regeneration end every session together. Email reset preserves
 the factor, unused codes and replay history but invalidates pending enrolments and login
 challenges. Session cleanup retains factor-referenced rows until a separate retention
 policy is approved. PostgreSQL checks cover concurrent changes, durable failed attempts,
-passkey access during key outages, reset during password derivation and expiry after writes:
+passkey access during key outages, reset during authority waits and expiry after writes:
 `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test
 test/authenticator-factor.test.ts test/password-recovery.test.ts test/passkeys.test.ts
 test/history-cleanup.test.ts`. The account API now returns a cookie-free second-step

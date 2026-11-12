@@ -18,8 +18,9 @@ import type {
   VerifyAuthenticationResponseOpts,
   VerifyRegistrationResponseOpts,
 } from '@simplewebauthn/server';
-import { createSession, IdentityError, requirePasswordAuthority, requireCurrentPassword, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
+import { createSession, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import {accountActionSession,markAccountActionProof,requireAccountActionProof,invalidateAccountActionProof} from './account-action-proof.ts';
 import {retireRecoveryCodesWithoutMethod} from './account-recovery-codes.ts';
 
 // Offer and accept the same reviewed algorithms, independent of runtime defaults.
@@ -52,7 +53,7 @@ export class PasskeyError extends Error {
 }
 
 type Config = Readonly<{rpName: string; rpId: string; origin: string}>;
-type RegistrationCeremony = {accountId: string; challenge: string};
+type RegistrationCeremony = {accountId: string; challenge: string;securityRevision:number};
 
 export class PasskeyStore {
   readonly #pool: Pool;
@@ -68,10 +69,9 @@ export class PasskeyStore {
     this.#adapter = adapter;
   }
 
-  async registrationOptions(token: string, csrfToken: string, password: string): Promise<PasskeyRegistrationOptions> {
+  async registrationOptions(token: string, csrfToken: string): Promise<PasskeyRegistrationOptions> {
     return transaction(this.#pool, async client => {
-      const session = await resolveSession(client, token, {csrfToken, touch: false});
-      await requireCurrentPassword(client, session.accountId, password);
+      const session = await requireAccountActionProof(client,token,csrfToken);
       await client.query(`INSERT INTO cloud_passkey_users (account_id, user_handle) VALUES ($1, $2)
         ON CONFLICT (account_id) DO NOTHING`, [session.accountId, randomBytes(32)]);
       const identity = (await client.query(`SELECT u.user_handle, c.email FROM cloud_passkey_users u
@@ -117,13 +117,14 @@ export class PasskeyStore {
     const id = randomUUID();
     try {
       return await transaction(this.#pool, async client => {
-        const session = await resolveSession(client, token, {csrfToken, touch: false});
-        if (session.accountId !== ceremony.accountId) throw new PasskeyError();
+        const session = await accountActionSession(client,token,csrfToken);
+        if (session.accountId !== ceremony.accountId || session.securityRevision!==ceremony.securityRevision) throw new PasskeyError();
         const inserted = await client.query(`INSERT INTO cloud_passkeys
           (id, account_id, credential_id, public_key, counter, transports, device_type, backed_up)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at`,
         [id, ceremony.accountId, credential.id, Buffer.from(credential.publicKey), credential.counter,
           credential.transports ?? [], credentialDeviceType, credentialBackedUp]);
+        await invalidateAccountActionProof(client,session.accountId,token);
         return {id, createdAt: inserted.rows[0].created_at.toISOString(), lastUsedAt: null};
       });
     } catch (error) {
@@ -132,22 +133,32 @@ export class PasskeyStore {
     }
   }
 
-  async authenticationOptions(): Promise<PasskeyAuthenticationOptions> {
+  async authenticationOptions(token?:string,csrfToken?:string): Promise<PasskeyAuthenticationOptions> {
     const options = await this.#adapter.authenticationOptions({rpID: this.#config.rpId, timeout: CEREMONY_MS,
       userVerification: 'required'});
     requireChallenge(options.challenge);
     return transaction(this.#pool, async client => {
+      if(token!==undefined)await accountActionSession(client,token,csrfToken??'');
       const ceremonyId = randomUUID();
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-      await client.query(`INSERT INTO cloud_webauthn_ceremonies (id, kind, challenge, created_at, expires_at)
-        VALUES ($1, 'authentication', $2, $3, $4)`,
-      [ceremonyId, options.challenge, now, new Date(now.getTime() + CEREMONY_MS)]);
+      await client.query(`INSERT INTO cloud_webauthn_ceremonies (id, kind, challenge, created_at, expires_at,action_session_token_hash)
+        VALUES ($1, 'authentication', $2, $3, $4,$5)`,
+      [ceremonyId, options.challenge, now, new Date(now.getTime() + CEREMONY_MS),token===undefined?null:digest(token)]);
       return {ceremonyId, options};
     });
   }
 
-  async authenticate(ceremonyId: string, response: AuthenticationResponseJSON): Promise<SessionCredentials> {
-    const challenge = await transaction(this.#pool, async client => this.#consumeAuthentication(client, ceremonyId));
+  async authenticate(ceremonyId:string,response:AuthenticationResponseJSON):Promise<SessionCredentials>{
+    return (await this.#authenticate(ceremonyId,response))!;
+  }
+  async reprove(token:string,csrfToken:string,ceremonyId:string,response:AuthenticationResponseJSON):Promise<void>{
+    await this.#authenticate(ceremonyId,response,{token,csrfToken});
+  }
+  async #authenticate(ceremonyId:string,response:AuthenticationResponseJSON,authority?:{token:string;csrfToken:string}):Promise<SessionCredentials|undefined>{
+    const challenge = await transaction(this.#pool, async client => {
+      const actor=authority?await accountActionSession(client,authority.token,authority.csrfToken):undefined;
+      return {challenge:await this.#consumeAuthentication(client,ceremonyId,authority?.token),revision:actor?.securityRevision};
+    });
     if (!validCredentialId(response?.id) || !response.response?.userHandle || !BASE64URL.test(response.response.userHandle)) {
       throw new PasskeyError();
     }
@@ -155,6 +166,7 @@ export class PasskeyStore {
       const candidate = (await client.query(`SELECT p.account_id FROM cloud_passkeys p
         JOIN cloud_accounts a ON a.id = p.account_id WHERE p.credential_id = $1 AND a.disabled_at IS NULL`, [response.id])).rows[0];
       if (!candidate) throw new PasskeyError();
+      if(authority){const actor=await accountActionSession(client,authority.token,authority.csrfToken);if(actor.accountId!==candidate.account_id)throw new PasskeyError();}
       const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [candidate.account_id]);
       if (!account.rowCount) throw new PasskeyError();
       const row = (await client.query(`SELECT p.*, u.user_handle FROM cloud_passkeys p
@@ -166,7 +178,7 @@ export class PasskeyStore {
       let verification: VerifiedAuthenticationResponse;
       try {
         verification = await this.#adapter.verifyAuthentication({
-          response, expectedChallenge: challenge, expectedOrigin: this.#config.origin, expectedRPID: this.#config.rpId,
+          response, expectedChallenge: challenge.challenge, expectedOrigin: this.#config.origin, expectedRPID: this.#config.rpId,
           credential: {id: row.credential_id, publicKey: new Uint8Array(row.public_key), counter, transports: row.transports},
           requireUserVerification: true,
         });
@@ -177,6 +189,7 @@ export class PasskeyStore {
       await client.query(`UPDATE cloud_passkeys SET counter = $2, device_type = $3, backed_up = $4,
         last_used_at = clock_timestamp() WHERE id = $1`,
       [row.id, info.newCounter, info.credentialDeviceType, info.credentialBackedUp]);
+      if(authority){const actor=await accountActionSession(client,authority.token,authority.csrfToken);if(actor.securityRevision!==challenge.revision)throw new PasskeyError();await markAccountActionProof(client,authority.token,authority.csrfToken,'passkey');return;}
       return createSession(client, row.account_id);
     });
   }
@@ -191,15 +204,12 @@ export class PasskeyStore {
     });
   }
 
-  async remove(token: string, csrfToken: string, id: string, password: string): Promise<boolean> {
+  async remove(token: string, csrfToken: string, id: string): Promise<boolean> {
     if (!UUID.test(id)) return false;
     return transaction(this.#pool, async client => {
-      const candidate=(await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[digest(token)])).rows[0];
-      if(!candidate)throw new IdentityError('credentials_invalid');
-      await requirePasswordAuthority(client,{accountId:candidate.account_id},password,'update');
-      const session = await resolveSession(client, token, {csrfToken, touch: false});
+      const session=await requireAccountActionProof(client,token,csrfToken);
       const removed = await client.query('DELETE FROM cloud_passkeys WHERE id = $1 AND account_id = $2', [id, session.accountId]);
-      if(removed.rowCount)await retireRecoveryCodesWithoutMethod(client,session.accountId);
+      if(removed.rowCount){await retireRecoveryCodesWithoutMethod(client,session.accountId);await invalidateAccountActionProof(client,session.accountId,token);}
       return removed.rowCount === 1;
     });
   }
@@ -207,22 +217,22 @@ export class PasskeyStore {
   async #consumeRegistration(client: PoolClient, token: string, csrfToken: string,
     ceremonyId: string): Promise<RegistrationCeremony> {
     if (!UUID.test(ceremonyId)) throw new PasskeyError();
-    const session = await resolveSession(client, token, {csrfToken, touch: false});
+    const session = await accountActionSession(client,token,csrfToken);
     const row = (await client.query(`SELECT * FROM cloud_webauthn_ceremonies
       WHERE id = $1 AND kind = 'registration' FOR UPDATE`, [ceremonyId])).rows[0];
     if (!row || row.account_id !== session.accountId || row.session_token_hash !== digest(token)) throw new PasskeyError();
     const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
     if (row.consumed_at || row.expires_at <= now) throw new PasskeyError();
     await client.query('UPDATE cloud_webauthn_ceremonies SET consumed_at = $2 WHERE id = $1', [ceremonyId, now]);
-    return {accountId: row.account_id, challenge: row.challenge};
+    return {accountId: row.account_id, challenge: row.challenge,securityRevision:session.securityRevision};
   }
 
-  async #consumeAuthentication(client: PoolClient, ceremonyId: string): Promise<string> {
+  async #consumeAuthentication(client: PoolClient, ceremonyId: string,token?:string): Promise<string> {
     if (!UUID.test(ceremonyId)) throw new PasskeyError();
     const row = (await client.query(`SELECT * FROM cloud_webauthn_ceremonies
       WHERE id = $1 AND kind = 'authentication' FOR UPDATE`, [ceremonyId])).rows[0];
     const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-    if (!row || row.consumed_at || row.expires_at <= now) throw new PasskeyError();
+    if (!row || row.consumed_at || row.expires_at <= now || row.action_session_token_hash!==(token===undefined?null:digest(token))) throw new PasskeyError();
     await client.query('UPDATE cloud_webauthn_ceremonies SET consumed_at = $2 WHERE id = $1', [ceremonyId, now]);
     return row.challenge;
   }

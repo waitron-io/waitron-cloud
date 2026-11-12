@@ -4,7 +4,7 @@ For a password-only account, a new browser needs an emailed code. If you choose
 **Remember this browser (30 days)**, that browser can then use your password alone.
 Keep the choice off on a shared browser. Password reset forgets every recognised browser. You can add an optional
 authenticator app from **Account**, then use its six-digit code or a saved recovery
-code when signing in with your password. Passkey sign-in remains available separately. If you have a passkey, you can also create recovery codes under **Passkeys** with your current password. After entering your email and password, choose **Recovery code** to use one instead of the emailed code. You do not need an authenticator app for this.
+code when signing in with your password. Passkey sign-in remains available separately. If you have a passkey, you can also create recovery codes under **Passkeys** after verifying your security changes. After entering your email and password, choose **Recovery code** to use one instead of the emailed code. You do not need an authenticator app for this.
 
 If your country service requires sign-in protection, you see **Set up sign-in
 protection** after signing in. Add a passkey or activate an authenticator app before
@@ -15,7 +15,7 @@ sign in again. A verified passkey opens your account immediately.
 You can paste codes with spaces, such as `123 456`. The portal removes whitespace
 from authenticator and recovery codes, keeping recovery-code hyphens. Blank codes
 show “Enter your code.” without sending a request, so they do not spend a server
-attempt. Missing passwords show “Enter your password.” The missing field is marked
+attempt. The missing field is marked
 with the same message beside it, while the alert or sign-in summary stays visible.
 Your other entries stay in the form so you can correct the missing value and try again.
 
@@ -24,15 +24,21 @@ its current code. The portal renders the QR locally. Save the ten recovery codes
 when they appear: each works once, and Cloud stores only their hashes. Setup secrets
 and recovery codes stay in the current tab; leaving or reloading clears them. Adding or replacing a method keeps your unused codes. If none remain when you activate an app, save the ten new codes shown. **New recovery codes** replaces an existing set. Removing your app keeps codes while a passkey remains. Removing your last method retires them.
 
-Enrolment, replacement, removal and code regeneration end every Cloud session.
-Sign in again afterwards. Each change requires your current password and live
-session; an existing factor also requires a fresh authenticator or recovery code.
+App activation, replacement, removal and code regeneration end every Cloud session.
+Sign in again afterwards. Before changing security, verify once under **Verify security changes**. Use an
+enrolled passkey, an app code or a saved recovery code. With no enrolled method,
+use the emailed code. The proof covers security changes for ten minutes in that
+signed-in session; ordinary sign-in does not count. A passkey change keeps this session’s original window and invalidates other
+windows and all pending proof requests. App activation, removal and code
+regeneration still sign you out. Starting app or passkey setup requires freshness;
+finishing the authorised setup rechecks your session and security changes, without
+requiring the ten-minute window to remain fresh.
 Starting replacement leaves the old factor active until you confirm the new one.
 
 Resetting your password by email keeps your authenticator, unused recovery codes
 and passkeys. Email access alone cannot remove the factor. If you lose the app,
-saved codes and passkey, there is no automatic recovery or support bypass. A passkey
-can still open your account, but cannot alone remove or replace the factor.
+saved codes and passkey, there is no automatic recovery or support bypass. A passkey can open your account and verify a security-change window. App
+management still requires readable app configuration.
 
 If a successful reply is lost, the portal checks your session and asks you to sign
 in or reload account status. It does not automatically resend a consumed code or
@@ -90,24 +96,33 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 | POST `/login` | Email and password | 200 with account ID and cookies, or 202 with `factorRequired:true` (app) or `emailRequired:true` (a new password-only browser or passkey password fallback), `challengeToken`, `expiresAt` and no cookies |
 | POST `/login/recovery` | Email-step `challengeToken`, saved recovery `code`, exact Origin | 200 with account ID and session cookies; no browser-recognition cookie |
 | POST `/login/factor` | `challengeToken`, `proof`, exact Origin | 200 with account ID and cookies |
+| GET `/action-proof` | Live session | Available methods and `freshUntil`, or null when verification is needed |
+| POST `/action-proof/email` | Exact Origin, live session and CSRF; no enrolled method | Five-minute emailed challenge; no session cookie |
+| POST `/action-proof/email/verify` | Same session and CSRF, `challengeToken` and six-digit `code` | 204; opens the ten-minute window |
+| POST `/action-proof/factor` | Same session and CSRF, `kind` (`totp` or `recovery`) and `code` | 204; opens the window without repeating your password |
+| POST `/action-proof/passkey/options` | Same session, CSRF and exact Origin | Browser authentication options bound to that session |
+| POST `/action-proof/passkey/verify` | Same session and CSRF, `ceremonyId` and authenticator `response` | 204; opens the window without another session |
 | GET `/authenticator` | Live session | `active`, `version`, `recoveryCodesRemaining`, `available` |
-| POST `/authenticator/begin` | Password, optional existing-factor proof, live session and CSRF | Pending token, setup secret, URI and expiry |
-| POST `/authenticator/activate` | Password, pending token, new six-digit `code`, optional existing-factor proof, live session and CSRF | Changed active status; ten codes only when none remain unused; clears cookies |
-| POST `/authenticator/regenerate` | Password, existing-app proof when an app is active, live session and CSRF | Changed app status and ten new account codes; clears cookies |
-| POST `/authenticator/remove` | Password, existing-factor proof, live session and CSRF | Changed inactive status; clears cookies |
+| POST `/authenticator/begin` | Fresh proof window, live session and CSRF | Pending token, setup secret, URI and expiry |
+| POST `/authenticator/activate` | Pending token, new six-digit `code`, original live session and CSRF; unchanged security authority | Changed active status; ten codes only when none remain unused; clears cookies |
+| POST `/authenticator/regenerate` | Fresh proof window, live session and CSRF | Changed app status and ten new account codes; clears cookies |
+| POST `/authenticator/remove` | Fresh proof window, live session and CSRF | Changed inactive status; clears cookies |
 | POST `/authenticator/cancel` | Pending token, exact live session and CSRF | 204 |
 
 Challenges are not session credentials and expire after the supplied lifetime. Invalid
 login proof returns 401 `credentials_invalid`; invalid management authority returns
-403 with the same code. If setup has expired, been cancelled or been replaced,
-you receive 400 `setup_unavailable`: start setup again with your password and fresh
-codes. A removal request for an inactive app, or code regeneration with no enrolled app or passkey, returns
+403 with the same code. A missing or expired action window returns 403
+`proof_required`; verify again before starting a new change. Action proof cannot
+be completed through a sign-in endpoint or moved to another session. Requests
+are limited to ten per IP per minute and twenty per account per five minutes;
+email guesses use the configured `challengeAttempts` limit. If setup has expired, been cancelled or been replaced,
+you receive 400 `setup_unavailable`: verify again if needed, then start setup again. A removal request for an inactive app, or code regeneration with no enrolled app or passkey, returns
 400 `factor_not_active`; use **Check authenticator settings** to refresh the status.
-Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
-current account password rather than retrying the same value. For example,
+Management requests refuse the obsolete `password` and `proof` fields with
+400 `invalid_input`; send the documented fields only. For example,
 `POST /authenticator/activate` for a setup already expired when checked returns
 `{"error":"setup_unavailable"}` without ending your session or spending an attempt.
-If setup expires after confirmation starts, including while either proof is
+If setup expires after confirmation starts, including while the new-app code is
 checked, you receive the same restart guidance. The attempt is retained while
 the factor change and proof use roll back.
 

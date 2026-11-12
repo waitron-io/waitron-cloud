@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -39,6 +40,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           let attempts = 0;
           await page.route('https://portal.test' + path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
           await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
             const endpoint = new URL(route.request().url()).pathname.replace('/api/account', '');
             if (endpoint === '/session' || endpoint === '/session/activity') return login ? route.fulfill({status: 401, json: {error: 'credentials_invalid'}})
               : route.fulfill({json: {accountId: 'owner', expiresAt: '2026-10-25T12:00:00Z'}});
@@ -49,7 +51,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             return route.fulfill({status: 503, json: {error: 'unavailable'}});
           });
           await page.goto('https://portal.test' + path); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
-          if (action === 'passkey-add' || action === 'passkey-remove') { await page.locator('input[name=passkeyPassword]').fill('Current account password'); await page.locator('input[name=passkeyPassword]').press('Tab'); await page.clock.runFor(1000); }
+          if (action === 'passkey-add' || action === 'passkey-remove') {  await page.clock.runFor(1000); }
           const target = action === 'session-list' ? page.locator('.sessions').getByRole('button', {name: c.retry, exact: true})
             : page.getByRole('button', {name: action === 'session-revoke' ? c.sessionRevoke : login ? c.passkeySignIn : action === 'passkey-remove' ? c.passkeyRemove : c.passkeyAdd, exact: true});
           if (!action.endsWith('-list')) await target.click();
@@ -71,11 +73,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           }
           await page.clock.runFor(1000);
           assert.equal(await countdown.count(), 0);
-          if (action.startsWith('passkey-') && !login) { await page.locator('input[name=passkeyPassword]').fill('Current account password'); await page.locator('input[name=passkeyPassword]').press('Tab'); await page.clock.runFor(1000); }
+          if (action.startsWith('passkey-') && !login) {  await page.clock.runFor(1000); }
           assert.equal(await target.isEnabled(), true);
           await target.click();
           await section.getByRole('alert').filter({hasText: c.limited}).waitFor();
-          assert.equal(attempts, 2, 'retry is possible when the wait ends');
+          await t.waitFor(()=>assert.equal(attempts,2,'retry is possible when the wait ends'),{timeout:4000});
         } finally { await page.close(); }
       });
     } finally { await browser.close(); }

@@ -91,7 +91,7 @@ test('sign-in uses the browser cause and does not mistake a named JavaScript err
   }
 });
 
-test('enrolment requires the current password, refreshes the list, and fences account changes', async () => {
+test('enrolment uses the session window, refreshes the list, and fences account changes', async () => {
   const calls: Array<{path: string; body: unknown}> = [];
   let wrongPassword = true;
   let finishList: ((result: ApiResult<unknown>) => void) | undefined;
@@ -106,8 +106,8 @@ test('enrolment requires the current password, refreshes the list, and fences ac
   const controller = new PasskeyController(() => {}, request, browser());
   controller.account('owner');
   await controller.enroll('wrong');
-  assert.equal(controller.error, 'passkeyPasswordInvalid');
-  assert.deepEqual(calls.at(-1), {path: '/passkeys/registration/options', body: {password: 'wrong'}});
+  assert.equal(controller.error, 'actionProofUnavailable');
+  assert.deepEqual(calls.at(-1), {path: '/passkeys/registration/options', body: {}});
 
   wrongPassword = false;
   const enrolling = controller.enroll('correct');
@@ -136,13 +136,13 @@ test('lost remove replies are reconciled by reloading the list', async () => {
   assert.equal(controller.error, undefined);
 });
 
-test('fresh-password errors stay distinct from stale CSRF authority', async () => {
+test('proof errors stay distinct from stale CSRF authority', async () => {
   let code = 'credentials_invalid';
   const request = async <T>(): Promise<ApiResult<T>> => ({ok: false, status: 403, code, retryAfterMs: 0});
   const controller = new PasskeyController(() => {}, request, browser());
   controller.account('owner');
   await controller.enroll('wrong');
-  assert.equal(controller.error, 'passkeyPasswordInvalid');
+  assert.equal(controller.error, 'actionProofUnavailable');
   code = 'forbidden';
   await controller.enroll('correct');
   assert.equal(controller.error, 'forbidden');
@@ -174,7 +174,7 @@ for (const [label, failure, notice, error] of [
     assert.equal(controller.error, error);
     assert.equal(controller.pending, false);
     assert.equal(redraws, 2);
-    assert.deepEqual(calls, [{path: '/passkeys/registration/options', body: {password: 'Current account password'}}]);
+    assert.deepEqual(calls, [{path: '/passkeys/registration/options', body: {}}]);
     assert.deepEqual(controller.passkeys, []);
   });
 }

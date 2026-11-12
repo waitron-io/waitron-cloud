@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -21,6 +22,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    try{
     await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**',route=>{
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
      const request=route.request(),path=new URL(request.url()).pathname.replace('/api/account','');
      if(path==='/session'||path==='/session/activity')return route.fulfill({json:{accountId:'owner',expiresAt}});
      if(path==='/authenticator'){reads++;return route.fulfill({json:{active,version:reads,recoveryCodesRemaining:active?8:0,available:true}});}
@@ -30,34 +32,31 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
     });
     await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
-    const factor=page.locator('.authenticator'),password=page.locator('input[name=factorPassword]');await password.waitFor();
-    await password.fill('old password');if(flow.active)await page.locator('input[name=factorProof]').fill('123456');
+    const factor=page.locator('.authenticator'),password=page.locator('input[name=factorPassword]');await factor.locator('h3').waitFor();
+
     if(flow.action==='activate'){
      await factor.getByRole('button',{name:flow.active?c.factorReplace:c.factorEnable,exact:true}).click();await page.locator('input[name=factorConfirmation]').waitFor();
-     await password.fill('old password');if(flow.active)await page.locator('input[name=factorProof]').fill('234567');await page.locator('input[name=factorConfirmation]').fill('654321');
+     await page.locator('input[name=factorConfirmation]').fill('654321');
     }
     await factor.getByRole('button',{name:flow.action==='activate'?c.factorActivate:c.factorRemove,exact:true}).click();
-    const guidance=locale==='en'?'Check your current authenticator settings, then start again with your password and fresh codes.':'Comprueba la configuración actual del autenticador y vuelve a empezar con tu contraseña y códigos nuevos.';
+    const guidance=locale==='en'?'Check your authenticator settings, then verify security and start again.':'Comprueba la configuración del autenticador, verifica tu seguridad y vuelve a empezar.';
     await factor.getByRole('alert').getByText(guidance,{exact:true}).waitFor();
     assert.equal(await factor.getByText(c.factorUnavailable,{exact:true}).count(),0);
-    assert.equal(await password.getAttribute('aria-invalid'),'false');assert.equal(reads,1);
+    assert.equal(await password.count(),0);assert.equal(reads,1);
     const before=writes.length;active=flow.nowActive;
     const receipt=process.env.AUTHENTICATOR_REFRESH_RECEIPT_DIR;
     if(receipt){await mkdir(receipt,{recursive:true});await factor.scrollIntoViewIfNeeded();await factor.screenshot({path:`${receipt}/${locale}-${theme}-${width}-${flow.name.replaceAll(' ','-')}-refused.png`});}
     await factor.getByRole('button',{name:locale==='en'?'Check authenticator settings':'Comprobar configuración del autenticador',exact:true}).click();
     await factor.getByText(flow.nowActive?c.factorOn:c.factorOff,{exact:true}).waitFor();
     assert.equal(await page.locator('h1').evaluate(el=>el===document.activeElement),true,'refresh keeps keyboard focus on the account heading');
-    assert.equal(reads,2);assert.equal(writes.length,before);assert.equal(await factor.locator('.factor-secret').count(),0);assert.equal(await page.locator('input[name=factorConfirmation]').count(),0);assert.equal(await password.inputValue(),'');
-    if(flow.nowActive)assert.equal(await page.locator('input[name=factorProof]').inputValue(),'');
+    assert.equal(reads,2);assert.equal(writes.length,before);assert.equal(await factor.locator('.factor-secret').count(),0);assert.equal(await page.locator('input[name=factorConfirmation]').count(),0);assert.equal(await password.count(),0);
+    assert.equal(await page.locator('input[name=factorProof]').count(),0);
     const begin=factor.getByRole('button',{name:flow.nowActive?c.factorReplace:c.factorEnable,exact:true});
-    await begin.click();await factor.getByRole('alert').getByText(c.requiredPassword,{exact:true}).waitFor();assert.equal(writes.length,before);
-    await password.fill('fresh password');
-    if(flow.nowActive){await begin.click();await factor.getByRole('alert').getByText(c.factorCodeRequired,{exact:true}).waitFor();assert.equal(writes.length,before);await page.locator('input[name=factorProof]').fill('345678');}
     await begin.click();await page.locator('input[name=factorConfirmation]').waitFor();
-    assert.deepEqual(writes.at(-1),{path:'/authenticator/begin',body:{password:'fresh password',...(flow.nowActive?{proof:{kind:'totp',code:'345678'}}:{})}});
+    assert.deepEqual(writes.at(-1),{path:'/authenticator/begin',body:{}});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(receipt){await factor.scrollIntoViewIfNeeded();await factor.screenshot({path:`${receipt}/${locale}-${theme}-${width}-${flow.name.replaceAll(' ','-')}-restarted.png`});}
-    responseWait=60;await password.fill('fresh password');if(flow.nowActive)await page.locator('input[name=factorProof]').fill('456789');await page.locator('input[name=factorConfirmation]').fill('654321');
+    responseWait=60;await page.locator('input[name=factorConfirmation]').fill('654321');
     await factor.getByRole('button',{name:c.factorActivate,exact:true}).click();await factor.getByRole('alert').getByText(guidance,{exact:true}).waitFor();
     const refresh=factor.getByRole('button',{name:locale==='en'?'Check authenticator settings':'Comprobar configuración del autenticador',exact:true});
     assert.equal(await refresh.isDisabled(),true,'status checks respect the response retry delay');

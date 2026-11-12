@@ -16,7 +16,7 @@ function controller(replies: ApiResult<unknown>[], calls: {path:string;body:unkn
 const ok=(value:unknown):ApiResult<unknown>=>({ok:true,value});
 const lost:ApiResult<unknown>={ok:false,status:0,code:'network_error',retryAfterMs:0};
 const enrolment={pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt};
-for(const kind of ['totp','recovery'] as const)for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const){
+for(const kind of ['totp','recovery'] as const)for(const action of ['completeLogin'] as const){
   test(`${action} removes whitespace from ${kind} proof and preserves recovery hyphens`,async()=>{
     const calls:{path:string;body:unknown}[]=[];
     const c=controller([ok(action==='completeLogin'?{accountId:'owner'}:action==='begin'?enrolment:changed)],calls);
@@ -33,7 +33,7 @@ for(const kind of ['totp','recovery'] as const)for(const action of ['completeLog
     const calls:{path:string;body:unknown}[]=[];const c=controller([ok(changed)],calls);
     c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
     c.password='current';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
-    assert.equal(await c[action](),action==='begin'?undefined:false);
+    assert.equal(await c[action](),false);
     assert.deepEqual(calls,[]);assert.equal(c.pending,false);assert.equal(c.challenge?.challengeToken,token);
     assert.equal(c.enrolment,enrolment);assert.equal(c.password,'current');assert.equal(c.confirmation,'654321');
   });
@@ -47,8 +47,8 @@ test('first enrolment and activation need no existing-factor proof',async()=>{
   const calls:{path:string;body:unknown}[]=[];const c=controller([ok(enrolment),ok(changed)],calls);
   c.account('owner');c.status={...status,active:false};c.password='current';await c.begin();
   c.password='current';c.confirmation=' 654 321 ';await c.activate();
-  assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'current'}},
-    {path:'/authenticator/activate',body:{password:'current',pendingToken:token,code:'654321'}}]);
+  assert.deepEqual(calls,[{path:'/authenticator/begin',body:{}},
+    {path:'/authenticator/activate',body:{pendingToken:token,code:'654321'}}]);
 });
 test('password second step stays in memory and failed completion is never automatically retried',async()=>{
   const calls:{path:string;body:unknown}[]=[];const c=controller([ok({factorRequired:true,challengeToken:token,expiresAt}),lost],calls);
@@ -94,7 +94,7 @@ test('cancel, removal and regeneration send fresh authority and erase pending st
   c.account('owner');await c.load();c.password='current';c.proofCode='123456';await c.begin();await c.cancel();
   assert.equal(c.enrolment,undefined);assert.deepEqual(calls[2],{path:'/authenticator/cancel',body:{pendingToken:token}});
   c.password='fresh';c.proofKind='recovery';c.proofCode=codes[0]!;assert.deepEqual(await c.regenerate(),changed);
-  assert.deepEqual(calls[3],{path:'/authenticator/regenerate',body:{password:'fresh',proof:{kind:'recovery',code:codes[0]}}});
+  assert.deepEqual(calls[3],{path:'/authenticator/regenerate',body:{}});
   c.account('owner');c.status=status;c.password='fresh';c.proofCode=codes[1]!;
   assert.deepEqual(await c.remove(),{status:'changed',active:false});assert.equal(c.password,'');
 });
@@ -138,27 +138,17 @@ test('sign-in invalid input is a validation refusal rather than a service outage
   assert.equal(c.error,'invalid');assert.equal(c.pending,false);assert.equal(redraws,2);
 });
 
-for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const)for(const kind of ['totp','recovery'] as const){
+for(const action of ['completeLogin'] as const)for(const kind of ['totp','recovery'] as const){
   test(`${action}: blank ${kind} proof gives feedback without a request or lost input`,async()=>{
     let redraws=0,requests=0;
     const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
     c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;
     c.password=' current password ';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
-    assert.equal(await c[action](),action==='begin'?undefined:false);
+    assert.equal(await c[action](),false);
     assert.equal(c.error,'factorCodeRequired');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
     assert.equal(c.requiredField,'proof');
     assert.equal(c.password,' current password ');assert.equal(c.proofCode,' \t\u00a0\n ');assert.equal(c.confirmation,'654321');
     assert.equal(c.enrolment,enrolment);assert.equal(c.challenge?.challengeToken,token);
-  });
-}
-for(const action of ['begin','activate','remove','regenerate'] as const)for(const active of [false,true]){
-  test(`${action}: blank password gives feedback with active factor ${active}`,async()=>{
-    let redraws=0,requests=0;
-    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
-    c.account('owner');c.status={...status,active};c.enrolment=enrolment;c.proofCode='123456';c.confirmation='654321';
-    assert.equal(await c[action](),action==='begin'?undefined:false);
-    assert.equal(c.error,'requiredPassword');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
-    assert.equal(c.proofCode,'123456');assert.equal(c.confirmation,'654321');assert.equal(c.enrolment,enrolment);
   });
 }
 for(const active of [false,true])test(`activation: blank new code gives feedback with active factor ${active}`,async()=>{
@@ -178,7 +168,7 @@ for(const action of ['completeLogin','begin','activate','remove','regenerate'] a
   });
 }
 
-for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const){
+for(const action of ['completeLogin'] as const){
   test(`${action}: correcting missing input clears feedback before the request settles`,async()=>{
     let redraws=0,resolve!:(reply:ApiResult<unknown>)=>void;
     const calls:{path:string;body:unknown}[]=[];
@@ -222,9 +212,7 @@ for(const context of [
 for(const reset of ['fence','account','load'] as const)test(`required field moves between missing inputs and clears on ${reset}`,async t=>{
   let elapsed=0;t.mock.method(performance,'now',()=>elapsed);
   const c=controller([{ok:false,status:429,code:'rate_limited',retryAfterMs:60_000},ok(status)]);c.account('owner');c.status=status;c.enrolment=enrolment;
-  await c.activate();assert.equal(c.requiredField,'password');assert.equal(c.error,'requiredPassword');
-  c.password='current';await c.activate();assert.equal(c.requiredField,'proof');
-  c.proofCode='123456';await c.activate();assert.equal(c.requiredField,'confirmation');
+  await c.activate();assert.equal(c.requiredField,'confirmation');assert.equal(c.error,'factorCodeRequired');
   c.pending=true;c.password='';await c.activate();assert.equal(c.requiredField,'confirmation');
   c.pending=false;await c.load();c.requiredField='confirmation';await c.activate();assert.equal(c.requiredField,'confirmation');
   elapsed=60_000;

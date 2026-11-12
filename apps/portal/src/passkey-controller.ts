@@ -100,7 +100,7 @@ export class PasskeyController {
     const body = result.code === 'invalid_input' && refusal
       ? result.status === 408 ? 'passkeyRequestInterrupted' : result.status === 413 ? 'passkeyRequestSize' : result.status === 415 ? 'passkeyRequestFormat' : undefined
       : undefined;
-    this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
+    this.error = result.code==='proof_required'||password && result.code === 'credentials_invalid' ? 'actionProofUnavailable'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
       : result.status === 403 ? 'forbidden'
@@ -134,7 +134,7 @@ export class PasskeyController {
     await this.load();
   }
 
-  async signIn(autofill = false): Promise<'authenticated' | 'reconcile' | false> {
+  async signIn(autofill = false,actionProof=false): Promise<'authenticated' | 'reconcile' | false> {
     if (this.pending || this.waiting || (autofill && this.#autofill)) return false;
     if (!autofill && this.#autofill) this.fence();
     const generation = this.#generation;
@@ -150,7 +150,8 @@ export class PasskeyController {
     if (!this.supported) { this.notice = 'passkeyUnsupported'; this.#changed(); return false; }
     this.#autofill = autofill;
     this.pending = !autofill; this.error = undefined; this.notice = undefined; this.#changed();
-    const options = await this.#request<AuthenticationOptions>('/passkeys/authentication/options', {});
+    const proofPath=actionProof?'/action-proof/passkey':'/passkeys/authentication';
+    const options = await this.#request<AuthenticationOptions>(`${proofPath}/options`, {});
     if (generation !== this.#generation) return false;
     if (!options.ok) { this.#autofill = false; this.pending = false; this.#failure(options, false, 'signIn'); this.#changed(); return false; }
     let response: AuthenticationResponseJSON;
@@ -164,10 +165,11 @@ export class PasskeyController {
     }
     if (generation !== this.#generation) return false;
     this.#autofill = false; this.pending = true; this.#changed();
-    const result = await this.#request<{accountId: string}>('/passkeys/authentication/verify', {ceremonyId: options.value.ceremonyId, response});
+    const result = await this.#request<{accountId: string}>(`${proofPath}/verify`, {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return false;
     this.pending = false;
     if (result.ok) {
+      if(actionProof){this.#changed();return 'authenticated';}
       this.preferred = this.remember;
       try { if (this.remember) this.#storage().setItem('cloud.passkeyFirst', 'true'); } catch { /* Sign-in does not depend on storage. */ }
       this.#changed(); return 'authenticated';
@@ -176,12 +178,12 @@ export class PasskeyController {
     this.#failure(result, false, 'signIn'); this.#changed(); return false;
   }
 
-  async enroll(password: string) {
-    if (!this.#account || this.pending || this.waiting || !password) return;
+  async enroll(_password?: string) {
+    if (!this.#account || this.pending || this.waiting) return;
     const generation = this.#generation;
     const before = new Set(this.passkeys.map(passkey => passkey.id));
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
-    const options = await this.#request<RegistrationOptions>('/passkeys/registration/options', {password});
+    const options = await this.#request<RegistrationOptions>('/passkeys/registration/options', {});
     if (generation !== this.#generation) return;
     if (!options.ok) { this.pending = false; this.#failure(options, true, 'passkeyRegistrationRefused'); this.#changed(); return; }
     let response: RegistrationResponseJSON;
@@ -207,11 +209,11 @@ export class PasskeyController {
     this.#changed();
   }
 
-  async remove(id: string, password: string) {
-    if (!this.#account || this.pending || this.waiting || !password || !this.passkeys.some(passkey => passkey.id === id)) return;
+  async remove(id: string, _password?: string) {
+    if (!this.#account || this.pending || this.waiting || !this.passkeys.some(passkey => passkey.id === id)) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
-    const result = await this.#request<void>('/passkeys/remove', {id, password});
+    const result = await this.#request<void>('/passkeys/remove', {id});
     if (generation !== this.#generation) return;
     if (!result.ok) this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
     const listed = await this.#list(generation);

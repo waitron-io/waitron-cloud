@@ -4,7 +4,10 @@ Cloud passkeys use durable five-minute WebAuthn ceremonies and account-scoped
 credential rows from migration `019_passkeys.sql`. `PasskeyStore` requests
 discoverable, user-verified credentials, verifies the configured portal origin and
 RP ID, and consumes every completion challenge once. Enrolment and removal also
-require the live session, its CSRF token and the current password. Password reset
+require the live session, its CSRF token and a fresh security-proof window.
+You verify with an enrolled passkey, app or recovery code; an account without an
+enrolled method uses an emailed code. The window lasts ten minutes in that session
+and security changes invalidate it. Ordinary sign-in does not open it. Password reset
 continues to end sessions but deliberately leaves passkeys enrolled.
 
 This internal package stores an installation's approved connection to an organisation

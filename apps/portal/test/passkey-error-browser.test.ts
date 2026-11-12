@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
@@ -29,6 +30,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           const c = translations[locale], account = path !== '/login';
           await page.route('https://portal.test' + path, route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
           await page.route('**/api/account/**', route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
             const endpoint = new URL(route.request().url()).pathname;
             if (endpoint.endsWith('/session') || endpoint.endsWith('/session/activity')) return account
               ? route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}})
@@ -43,10 +45,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.addStyleTag({content: styles});
           await page.addScriptTag({content: bundle.outputFiles[0]!.text});
           if (account) {
-            await page.locator('input[name=passkeyPassword]').fill('An incorrect account password');
+
             await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
           } else await page.getByRole('button', {name: c.passkeySignIn, exact: true}).click();
-          const message = account ? c.passkeyPasswordInvalid : c.passkeyUnavailable;
+          const message = account ? c.actionProofUnavailable : c.passkeyUnavailable;
           const localAlert = page.locator(account ? '.passkeys' : 'wt-form-error-summary').getByRole('alert').filter({hasText: message});
           await localAlert.waitFor();
           assert.equal(await page.getByRole('alert').filter({hasText: message}).count(), 1, `${path}: announce the passkey failure once`);

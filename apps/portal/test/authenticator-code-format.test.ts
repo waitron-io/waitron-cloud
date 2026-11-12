@@ -11,7 +11,7 @@ function fixture(reply:ApiResult<unknown>={ok:false,status:400,code:'invalid_inp
  c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment={pendingToken:token,secret:'JBSWY3DPEHPK3PXP',uri:'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP',expiresAt};
  return {c,calls};
 }
-for(const action of actions)for(const kind of ['totp','recovery'] as const)test(`${action} refuses malformed ${kind} proof locally and keeps entered input`,async()=>{
+for(const action of ['completeLogin'] as const)for(const kind of ['totp','recovery'] as const)test(`${action} refuses malformed ${kind} proof locally and keeps entered input`,async()=>{
  for(const code of kind==='totp'?['12345','1234567','12345a']:['ABC','a'.repeat(31),'g'.repeat(32),'12345678-12345678-12345678-1234567']){
   const {c,calls}=fixture();c.proofKind=kind;c.proofCode=code;await c[action]();
   assert.deepEqual(calls,[]);assert.equal(c.error,'factorCodeInvalid');assert.equal(c.requiredField,'proof');assert.equal(c.proofCode,code);assert.equal(c.password,'current password');assert.equal(c.pending,false);
@@ -23,7 +23,7 @@ for(const active of [false,true])test(`activation refuses malformed new-app code
   assert.deepEqual(calls,[]);assert.equal(c.error,'factorConfirmationInvalid');assert.equal(c.requiredField,'confirmation');assert.equal(c.confirmation,code);
  }
 });
-for(const action of actions)for(const code of ['aBcDeF0123456789aBcDeF0123456789','aBcDeF01-23456789-aBcDeF01-23456789'])test(`${action} sends accepted recovery format ${code.includes('-')?'grouped':'compact'}`,async()=>{
+for(const action of ['completeLogin'] as const)for(const code of ['aBcDeF0123456789aBcDeF0123456789','aBcDeF01-23456789-aBcDeF01-23456789'])test(`${action} sends accepted recovery format ${code.includes('-')?'grouped':'compact'}`,async()=>{
  const {c,calls}=fixture();c.proofKind='recovery';c.proofCode=code;await c[action]();
  assert.equal(calls.length,1);assert.deepEqual(calls[0]!.body!.proof,{kind:'recovery',code});
 });
@@ -43,13 +43,12 @@ for(const action of actions)test(`${action}: well-formed wrong codes and outages
 });
 test('password-only setup keeps general feedback for an unclassified input refusal',async()=>{
  const {c,calls}=fixture();c.status!.active=false;c.enrolment=undefined;c.password='current password';c.proofCode='';
- await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'current password'}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
+ await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
 });
 
 for(const [code,want,actions] of [
  ['setup_unavailable','factorSetupUnavailable',['activate','cancel']],
  ['factor_not_active','factorNotActive',['remove','regenerate']],
- ['password_too_long','factorPasswordTooLong',['begin','activate','remove','regenerate']],
 ] as const)for(const action of actions)test(`${action}: ${code} gives its own next step without replaying the write`,async()=>{
  const {c,calls}=fixture({ok:false,status:400,code,retryAfterMs:0});
  await c[action]();assert.equal(c.error,want);assert.equal(c.pending,false);

@@ -1,5 +1,4 @@
 import {html, nothing} from 'lit';
-import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import '@waitron-io/ui-core/components/wt-input';
 import '@waitron-io/ui-core/components/wt-button';
 import '@waitron-io/ui-core/components/wt-form-actions';
@@ -41,22 +40,12 @@ export function passkeyAccountScreen(app: PortalApp) {
       <wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting} @click=${() => {void app.removePasskey(passkey.id);}}>${c.passkeyRemove}</wt-button>
     </li>`)}</ul>` : nothing}
     ${app.passkeys.supported === false ? html`<p class="help" role="status">${c.passkeyUnsupported}</p>` : nothing}
-    <wt-input name="passkeyPassword" .error=${app.passkeys.error === 'requiredPassword' ? c.requiredPassword : ''} .label=${c.passkeyCurrentPassword} .value=${app.passkeys.password} .type=${'password'}
-      .autocomplete=${'current-password'} .disabled=${app.passkeys.pending || !!app.passkeys.waiting} .required=${true}
-      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#passkey-add'))}
-      @wt-change=${(event: CustomEvent<{value: string}>) => {
-        app.passkeys.password = event.detail.value;
-        if (app.passkeys.password && app.passkeys.error === 'requiredPassword') {
-          app.passkeys.error = undefined; app.passkeys.notice = undefined;
-        }
-        app.draw();
-      }}></wt-input>
     ${app.passkeys.passkeys.length&&app.authenticator.loaded&&!app.authenticator.status?.active?html`<p>${c.accountRecoveryHelp}</p>
       <p>${c.factorRemaining} ${app.authenticator.status?.recoveryCodesRemaining??0}</p>
-      <wt-button .disabled=${app.passkeys.pending||app.authenticator.pending||!!app.authenticator.waiting||!app.passkeys.password} .loading=${app.authenticator.pending}
+      <wt-button .disabled=${app.passkeys.pending||app.authenticator.pending||!!app.authenticator.waiting} .loading=${app.authenticator.pending}
         @click=${()=>{void app.manageFactor('regenerate',true);}}>${c.factorRegenerate}</wt-button>`:nothing}
     ${app.passkeys.supported === false ? nothing : html`<wt-form-actions>
-      <wt-button id="passkey-add" .disabled=${app.passkeys.pending || !!app.passkeys.waiting || !app.passkeys.password} .loading=${app.passkeys.pending}
+      <wt-button id="passkey-add" .disabled=${app.passkeys.pending || !!app.passkeys.waiting} .loading=${app.passkeys.pending}
         @click=${() => {void app.addPasskey();}}>${app.passkeys.pending ? c.wait : c.passkeyAdd}</wt-button>
     </wt-form-actions>`}
   </section>`;

@@ -48,8 +48,7 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
       return c.json({accountId: session.accountId});
     }
     exact(body, path === '/registration/verify' ? ['ceremonyId', 'response']
-      : path === '/remove' ? ['id', 'password'] : ['password']);
-    const parsedPassword = path === '/registration/verify' ? undefined : password(body.password);
+      : path === '/remove' ? ['id'] : []);
     const registrationCeremony = path === '/registration/verify' ? uuid(body.ceremonyId) : undefined;
     const registrationResponse = path === '/registration/verify' ? registration(body.response) : undefined;
     const removalId = path === '/remove' ? uuid(body.id) : undefined;
@@ -57,12 +56,12 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
     const live = await transaction(options.pool, client => resolveSession(client, token, {csrfToken, touch: false}));
     await options.consume([{scope: 'passkey-manage-account', subject: live.accountId, limit: 20, windowSeconds: 300}]);
     if (path === '/registration/options') {
-      return c.json(await options.store.registrationOptions(token, csrfToken, parsedPassword!));
+      return c.json(await options.store.registrationOptions(token, csrfToken));
     }
     if (path === '/registration/verify') {
       return c.json(await options.store.verifyRegistration(token, csrfToken, registrationCeremony!, registrationResponse!), 201);
     }
-    await options.store.remove(token, csrfToken, removalId!, parsedPassword!);
+    await options.store.remove(token, csrfToken, removalId!);
     return c.body(null, 204);
   } catch (error) {
     if (error instanceof PasskeyError) {
@@ -97,10 +96,6 @@ function uuid(value: unknown): string {
   if (!UUID.test(result)) throw new AccountHttpError(400, 'invalid_input');
   return result;
 }
-function password(value: unknown): string {
-  if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 1024) throw new AccountHttpError(400, 'invalid_input');
-  return value;
-}
 function credential(value: unknown, kind: 'registration' | 'authentication'): Record<string, unknown> {
   if (!plain(value)) throw new AccountHttpError(400, 'invalid_input');
   exact(value, ['id', 'rawId', 'response', 'clientExtensionResults', 'type'], ['authenticatorAttachment']);
@@ -127,6 +122,6 @@ function credential(value: unknown, kind: 'registration' | 'authentication'): Re
 function registration(value: unknown): RegistrationResponseJSON {
   return credential(value, 'registration') as unknown as RegistrationResponseJSON;
 }
-function authentication(value: unknown): AuthenticationResponseJSON {
+export function authentication(value: unknown): AuthenticationResponseJSON {
   return credential(value, 'authentication') as unknown as AuthenticationResponseJSON;
 }

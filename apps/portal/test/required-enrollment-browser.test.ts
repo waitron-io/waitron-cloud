@@ -1,3 +1,4 @@
+import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
 import axe from 'axe-core';
 import {createHmac,randomUUID} from 'node:crypto';
@@ -26,12 +27,12 @@ test(`required passkey enrollment ${locale} ${colorScheme} ${width}`, async () =
     assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
     await look(page,`${locale}-${colorScheme}-${width}-passkey`);
     assert.deepEqual(ordinaryRequests,[],'restricted setup must not queue ordinary account reads');
-    await page.locator('input[name=passkeyPassword]').fill(password);
-    await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
+
+    await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
     await page.getByText(c.accountIntro,{exact:true}).waitFor();
     assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1',[id])).rows[0].count,'1');
     assert.equal(await page.getByText(c.forbidden,{exact:true}).count(),0);
-    await page.locator('input[name=passkeyPassword]').fill(password);const activityBeforeRemoval=activities.length;await page.getByRole('button',{name:c.passkeyRemove,exact:true}).click();
+    const activityBeforeRemoval=activities.length;await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyRemove,exact:true}).click();
     await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
     assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);
     assert.equal(activities.length,activityBeforeRemoval,'removal refresh must not borrow an activity recheck');
@@ -56,13 +57,13 @@ test(`required app enrollment from recovery ${locale} ${colorScheme} ${width}`,a
   await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
   await page.goto(`${f.origin}/recover`);await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
-  await page.locator('input[name=factorPassword]').fill(password);await look(page,`${locale}-${colorScheme}-${width}-app`);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
+  await look(page,`${locale}-${colorScheme}-${width}-app`);await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
   await page.locator('.factor-secret').waitFor();await page.getByRole('button',{name:c.factorCancel,exact:true}).click();await page.locator('.factor-secret').waitFor({state:'detached'});
   assert.equal(await page.getByText(c.accountIntro,{exact:true}).count(),0);assert.equal(await page.locator('.factor-secret').count(),0);
-  await page.locator('input[name=factorPassword]').fill(password);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
+  await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.factorEnable,exact:true}).click();
   const secret=await page.locator('.factor-secret').textContent();assert.ok(secret);await look(page,`${locale}-${colorScheme}-${width}-pending`);
   const code=currentCode(secret);
-  await page.locator('input[name=factorPassword]').fill(password);await page.locator('input[name=factorConfirmation]').fill(code);
+  await page.locator('input[name=factorConfirmation]').fill(code);
   await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.getByRole('heading',{name:c.factorCodesTitle,exact:true}).waitFor();
   assert.equal(await page.locator('.factor-codes code').count(),10);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[id])).rows[0].count,'0');
@@ -90,7 +91,7 @@ test('an enrollment refusal refreshes stale passkey settings into setup',async()
   const accountReady=['/sessions','/alerts','/translation-consent','/installations','/authenticator'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
   await page.goto(`${f.origin}/login`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   await completeBrowserEmail(f,page,email,'en');await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
-  await page.locator('input[name=passkeyPassword]').fill(password);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
+  await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
   await page.getByText(c.accountIntro,{exact:true}).waitFor();await Promise.all(accountReady);await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
   if(!activities.length)await Promise.all([page.waitForResponse(response=>response.url().endsWith('/session/activity')&&response.status()===200),page.locator('h1').click()]);
   const before=activities.length;await f.db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[id]);

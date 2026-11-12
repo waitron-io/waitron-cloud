@@ -1,3 +1,4 @@
+import {mockActionProof} from './action-proof-fixture.ts';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {build} from 'esbuild';
@@ -27,6 +28,7 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
     try {
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
+        const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
         if (path === delayed) await held;
         if (path === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
@@ -51,7 +53,7 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
         const app = (window as unknown as {signoutStartupApp: import('../src/app.ts').PortalApp}).signoutStartupApp;
         return delayed === '/authenticator' ? !app.installations.pending : !app.authenticator.pending;
       }, delayed);
-      await page.locator('input[name=passkeyPassword]').fill('A real account security password');
+
       const options = page.waitForResponse('**/passkeys/registration/options');
       await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
       assert.equal((await options).status(), 200);
