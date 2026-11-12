@@ -25,7 +25,7 @@ test('pinned worker-denying verifier checks all owners of a complete genuine cap
  const output=await verify(input,{version:1,reference:'key-1',secret:key},request,new AbortController().signal);
  assert.equal(output.result.status,'passed',output.result.reason);
  assert.equal(output.result.reason,'none');assert.equal(output.result.activation,'not_attempted');
- assert.deepEqual(output.result.modules.map(m=>m.name).sort(),['adjustments','bookings','catalogue','core','credentials','fiscal-none','fiscal-verifactu','identity','media','payments','scheduler','staffing','venue-service','workforce','workforce-es']);
+ assert.deepEqual(output.result.modules.map(m=>m.name).sort(),['bookings','core','fiscal-none','fiscal-verifactu','node','payments','workforce','workforce-es']);
  assert(output.result.modules.every(m=>m.status==='passed'&&m.checks.length>0));
  assert.deepEqual(output.result.measuredArchive,{sha256:input.receipt.digest,bytes:input.receipt.size});
  assert.equal(output.receipt.terminated,true);assert.equal(output.receipt.cleanupConfirmed,true);
