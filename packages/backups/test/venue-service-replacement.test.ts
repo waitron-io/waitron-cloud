@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
-import {test} from 'node:test';
+import {after,before,test} from 'node:test';
 import {BillingStore,type BillingLevel} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {event} from '../../registration/test/fixtures/venue-service.ts';
@@ -10,9 +10,14 @@ import {BackupRecovery,streamRecoveryDigest} from '../src/recovery.ts';
 import {RecoveryRequests} from '../src/recovery-request.ts';
 import {ReplacementStore,replacementPayload} from '../src/replacement.ts';
 import {ManagedStreams,type ManagedStreamAuthority} from '../src/managed-streams.ts';
+import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
+
+let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>;
+before(async()=>{template=await createVenueServiceTemplate();});
+after(async()=>{await template?.close();});
 
 async function fixture(source:'snapshot'|'continuous',initial:BillingLevel='connected'){
- const db=await database();
+ const db=await database(template.name);
  try{
   const f=await recoveryFixture(db),venueId=f.installed.venueId,scope={organisationId:f.owner.organisationId,legalBusinessId:f.owner.legalBusinessId},billing=new BillingStore(db.pool);
   await billing.execute(scope,event(),{type:'ensure_business'});

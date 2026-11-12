@@ -3405,6 +3405,15 @@ The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-
 failed after 231 seconds with only `Free-service proof failed`. Its later passing
 attempt does not explain the original failure. That cause remains open.
 
+Recovery diagnostic [43146130590](https://github.com/waitron-io/waitron-cloud/actions/runs/43146130590)
+identified PostgreSQL `53200` during per-case `DROP SCHEMA CASCADE` cleanup.
+The six remaining HTTP-fixture venue-proof callers now clone a migrated database
+instead. This reduces lock pressure; each file still runs one full migration.
+Raising the lock limit would leave the repeated work that fills the lock table.
+The [cleanup plan](superpowers/plans/2026-11-12-venue-recovery-cleanup.md)
+records the focused Linux commands: 102 caller cases and one helper case passed.
+Other historical failures remain unexplained.
+
 You now get `SERVICE_PROOF_FAILURE` records from both proof matrices and the
 single-suite command. An observed failure event identifies its service group,
 zero-based file number, reported source line, runner failure category and an
