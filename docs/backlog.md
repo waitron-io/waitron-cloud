@@ -1362,6 +1362,12 @@ implementation or production evidence.
   The unchanged paced case passes once on the shared Linux test box with
   `node scripts/cloud-cost/conformance.mjs --only paced-replay-conformance.test.mjs`;
   that does not reproduce the historical failure.
+  [Nightly run 43207714335](https://github.com/waitron-io/waitron-cloud/actions/runs/43207714335)
+  refused the same paced case at `quiesce-idle` after about 80 seconds on
+  12 November. This is a new boundary in the D581 investigation retained from
+  D530; its cause is unknown. The unchanged Linux case passed once in 85.1
+  seconds (`node scripts/cloud-cost/conformance.mjs --only paced-replay-conformance.test.mjs`).
+  That pass does not repair the refusal. Keep its guards and deadlines intact.
   This repairs evidence loss, not the historical paced-replay failure. Capture
   the next trace and reproduce its first event before changing measurement guards.
   The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)

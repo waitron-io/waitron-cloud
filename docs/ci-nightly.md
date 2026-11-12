@@ -17,7 +17,13 @@ qualification and the complete allowance checks, including the rendered gateway.
 These checks deliberately remove protections in disposable copies. Ordinary pull
 requests run the underlying behavior tests with required-case receipts instead.
 The same job runs the 32-case Linux download-contention check and the password
-and relay deliberate faults, retaining their diagnostic logs on failure. These
+and relay deliberate faults, retaining their diagnostic logs on failure. The password
+probe runs the existing incorrect-password/held-account-lock case against live
+sign-in code. It requires one passing case, a named failure caused by moving
+password verification behind the lock, then one passing case after restoration.
+The probe depends on that test name and the live source lines it moves. If you
+change either, update the probe too: only a change to `nightly.yml` rehearses
+this parent on a PR. A missing target or zero executed cases refuses the probe. These
 fault programs run nightly, while their underlying behavior tests stay in normal
 PR checks. An earlier failed step makes the job fail and skips later programs;
 the upload retains the logs that were produced.

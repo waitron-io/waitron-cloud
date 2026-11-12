@@ -293,7 +293,7 @@ test('nightly wires three diagnostic steps and always uploads their logs', () =>
   const checkout = mutations.match(/      - uses: actions\/checkout@v5\n([\s\S]*?)(?=      - )/)?.[1];
   assert.match(checkout ?? '', /^\s+fetch-depth: 0$/m, 'Relay migration fixtures require historical commits');
   for (const name of ['Exercise stale ownership under bounded CPU contention',
-    'Check password snapshot ordering and deliberate faults', 'Prove counter rollback, retry and deleted-guard refusal']) {
+    'Check live password derivation before account locking', 'Prove counter rollback, retry and deleted-guard refusal']) {
     assert.ok(mutations.includes(`      - name: ${name}\n        run: |\n`), `Missing executable nightly step: ${name}`);
   }
   assert.equal([...mutations.matchAll(/node scripts\/test-postgres\.mjs exec python3 -u - <<'PYTHON'/g)].length, 2);
