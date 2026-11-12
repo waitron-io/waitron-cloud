@@ -12,9 +12,14 @@ the server controller owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 remains separate from this admission retry. The publication fixture
-now supplies its own Git metadata. The published quota reduction has completed its watched request-budget hour,
-and server routing remains enabled. The counters separate command roles, endpoint
-categories and raw quota headers.
+now supplies its own Git metadata. The published quota reduction later exhausted
+the App quota again on 12 November. The client now retains GET validators across
+unrelated writes, including refused cancellation and capacity publication; the
+loopback HTTP test exercises both. A complete busy hour after publication must
+measure non-304 completed requests by role and category, with token traffic separate
+and raw quota series kept distinct. Automatic switching at 4,000 and after reset,
+then bounded staged overflow qualification, remain open. The counters separate
+command roles, endpoint categories and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
 The controller revalidates JSON bodies and shares recent checked admission; see the

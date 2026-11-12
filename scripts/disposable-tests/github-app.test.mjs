@@ -187,7 +187,28 @@ for(const large of [false,true])test(`conditional cache evicts by ${large?'body 
  if(!large)assert.deepEqual(seen.at(-2),['/bounded0','"/bounded0"'],'recently used body stays cached');
 });
 
-for(const change of ['token','mutation','missing-etag'])test(`conditional bodies are discarded after ${change}`,async t=>{
+test('job inventory stays conditional after a refused cancel and capacity publication',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');const seen=[];
+ const inventory='/repos/fixture/waitron/actions/runs/123/jobs';
+ const server=createServer((req,res)=>{
+  seen.push([req.method,req.url,req.headers['if-none-match']??null]);
+  if(req.method==='POST'){res.writeHead(409);res.end();return;}
+  if(req.method==='PATCH'){res.writeHead(204);res.end();return;}
+  res.setHeader('etag','"jobs"');
+  if(req.headers['if-none-match']==='"jobs"'){res.writeHead(304);res.end();}
+  else res.end('{"total_count":0,"jobs":[]}');
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ await assert.rejects(app.post('/repos/fixture/waitron/actions/runs/456/cancel'),{status:409});
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ assert.equal(seen.at(-1)[2],'"jobs"','a refused unrelated cancel retains the inventory validator');
+ assert.equal(await app.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY',{value:'{}'}),null);
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ assert.equal(seen.at(-1)[2],'"jobs"','capacity publication retains the inventory validator');
+});
+
+for(const change of ['token','missing-etag'])test(`conditional bodies are discarded after ${change}`,async t=>{
  const {GithubApp}=await import('./github-app.mjs');let etag=true,token='first';const seen=[];
  const server=createServer((req,res)=>{if(req.method==='POST'){res.end('{}');return;}
   seen.push(req.headers['if-none-match']??null);if(etag)res.setHeader('etag','"stable"');
@@ -195,7 +216,7 @@ for(const change of ['token','mutation','missing-etag'])test(`conditional bodies
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>token;
  await app.get('/current');
- if(change==='token')token='second';else if(change==='mutation')await app.post('/change',{});else{etag=false;await app.get('/current');}
+ if(change==='token')token='second';else{etag=false;await app.get('/current');}
  await app.get('/current');assert.equal(seen.at(-1),null);
 });
 
