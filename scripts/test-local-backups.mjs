@@ -29,6 +29,7 @@ import { login } from "../packages/identity/src/index.ts";
 import { BackupKeyVault } from "../packages/backups/src/keys.ts";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
 import { BackupWorker } from '../packages/backups/src/worker.ts';
+import { createWaitronVerifier } from '../packages/backups/src/waitron-verifier.ts';
 import {openTestBackupVerifier} from '../deploy/test-cloud/backup-worker.mjs';
 import {setVerificationPolicy} from '../packages/backups/src/verification-admission.ts';
 import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
@@ -517,13 +518,23 @@ try {
     const point=await captureClient(venue.root,'publish',{id:reservation.id,metadata});
     assert.deepEqual(await captureClient(venue.root,'publish',{id:reservation.id,metadata}),point);
     let result;
+    const restore = await createWaitronVerifier(waitron);
     const controllerRoot=await root(),{verify,controllerScope}=await openTestBackupVerifier({directory:controllerRoot,image:process.env.CLOUD_VERIFIER_IMAGE});
     const verificationTarget=JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json',import.meta.url),'utf8'));
     await transaction(f.db.pool,c=>setVerificationPolicy(c,verificationTarget,'local.waitron-verifier@'+process.env.CLOUD_VERIFIER_IMAGE,false));
     const queue = new BackupWorker(f.db.pool, catalogue, async (source,key,request,signal) => {
+      const checked = await restore(source,{recoveryKey:key.secret},{modules:request.archive.modules,capturedAt:request.capturedAt,sourceNodeId:request.sourceNodeId},signal);
+      assert(checked.networkDenied);
+      assert(checked.childProcessDenied);
+      assert(checked.addonDenied);
+      assert(checked.hostReadDenied);
+      assert(checked.outsideWriteDenied);
+      assert(checked.integrityOk);
+      assert(checked.hooks.includes("fiscal-verifactu"));
+      assert.equal(checked.cloudCredentialPresent, false);
+      assert.equal(checked.staffKeyPresent, false);
       const output=await verify(source,key,request,signal);
-      assert.equal(output.result.status,'passed');
-      if(request.pointId===point.id)result=output.result;
+      if(request.pointId===point.id)result=checked;
       return output;
     },controllerScope);
     await queue.schedule();
@@ -539,13 +550,11 @@ try {
     // Keep the independent fixture's venue-content assertion as well as queue verification.
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
-    const restored=await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
-    assert(restored.integrityOk);assert(restored.hooks.includes('fiscal-verifactu'));
-    assert.equal(restored.cloudCredentialPresent,false);assert.equal(restored.staffKeyPresent,false);
+    await worker(target,'restore',{recoveryKey:reservation.recoveryKey,sourceNodeId:point.sourceNodeId,modules:point.modules,expectedVenue:captured.venueName});
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey,applicationVault });
   }
   record(
-    "both encrypted snapshots passed container data verification and independent native restoration with integrity/schema checks and module hooks",
+    "both encrypted snapshots restored by Waitron with integrity/schema checks and module hooks while network, subprocess, native-addon, host-read and outside-write permissions were denied",
   );
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {
