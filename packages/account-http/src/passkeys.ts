@@ -48,8 +48,7 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
       return c.json({accountId: session.accountId});
     }
     exact(body, path === '/registration/verify' ? ['ceremonyId', 'response']
-      : path === '/remove' ? ['id'] : [],path==='/registration/verify'?[]:['password']);
-    const parsedPassword = Object.hasOwn(body,'password')?password(body.password):'';
+      : path === '/remove' ? ['id'] : []);
     const registrationCeremony = path === '/registration/verify' ? uuid(body.ceremonyId) : undefined;
     const registrationResponse = path === '/registration/verify' ? registration(body.response) : undefined;
     const removalId = path === '/remove' ? uuid(body.id) : undefined;
@@ -57,12 +56,12 @@ export async function passkeyResponse(c: Context, options: Options): Promise<Res
     const live = await transaction(options.pool, client => resolveSession(client, token, {csrfToken, touch: false}));
     await options.consume([{scope: 'passkey-manage-account', subject: live.accountId, limit: 20, windowSeconds: 300}]);
     if (path === '/registration/options') {
-      return c.json(await options.store.registrationOptions(token, csrfToken, parsedPassword!));
+      return c.json(await options.store.registrationOptions(token, csrfToken));
     }
     if (path === '/registration/verify') {
       return c.json(await options.store.verifyRegistration(token, csrfToken, registrationCeremony!, registrationResponse!), 201);
     }
-    await options.store.remove(token, csrfToken, removalId!, parsedPassword!);
+    await options.store.remove(token, csrfToken, removalId!);
     return c.body(null, 204);
   } catch (error) {
     if (error instanceof PasskeyError) {
@@ -96,10 +95,6 @@ function uuid(value: unknown): string {
   const result = text(value, 36);
   if (!UUID.test(result)) throw new AccountHttpError(400, 'invalid_input');
   return result;
-}
-function password(value: unknown): string {
-  if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 1024) throw new AccountHttpError(400, 'invalid_input');
-  return value;
 }
 function credential(value: unknown, kind: 'registration' | 'authentication'): Record<string, unknown> {
   if (!plain(value)) throw new AccountHttpError(400, 'invalid_input');

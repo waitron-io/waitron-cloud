@@ -225,8 +225,8 @@ for (const operation of ['enroll', 'remove'] as const) {
       }
       const writes = calls.filter(call => call.url !== '/api/account/passkeys');
       assert.deepEqual(writes.map(call => JSON.parse(String(call.init?.body))), operation === 'enroll'
-        ? [{password: 'current password'}, {ceremonyId: id, response: registrationReply}]
-        : [{id, password: 'current password'}]);
+        ? [{}, {ceremonyId: id, response: registrationReply}]
+        : [{id}]);
       list = {passkeys: operation === 'enroll' ? [key, added] : []};
       await controller.refresh();
       assert.deepEqual(controller.passkeys, operation === 'enroll' ? [key, added] : []);
@@ -266,7 +266,7 @@ for (const operation of ['enroll', 'remove'] as const) {
 
 for (const [status, code, error] of [
   [401, 'unauthenticated', 'pairSession'],
-  [403, 'credentials_invalid', 'passkeyPasswordInvalid'],
+  [403, 'credentials_invalid', 'actionProofUnavailable'],
   [403, 'forbidden', 'forbidden'],
   [400, 'invalid_input', 'passkeyRegistrationRefused'],
 ] as const) {

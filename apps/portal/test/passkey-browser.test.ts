@@ -86,7 +86,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
           const csrf = (await otherContext.cookies()).find(cookie => cookie.name === 'cloud_csrf')?.value; assert.ok(csrf);
           await prepareBrowserActionWindow(f,otherContext);
           const removal = await otherContext.request.post(`${f.origin}/api/account/passkeys/remove`,
-            {headers: {origin: f.origin, 'x-csrf-token': csrf}, data: {id: created, password}});
+            {headers: {origin: f.origin, 'x-csrf-token': csrf}, data: {id: created}});
           assert.equal(removal.status(), 204);
           assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE id = $1', [created])).rows[0].count, '1');
         } finally { await otherContext.close(); }
@@ -101,7 +101,7 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
           assert.equal(login.status(),202);
           assert.equal((await unsupportedContext.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
           const challenge=await login.json() as {emailRequired:boolean;challengeToken:string};assert.equal(challenge.emailRequired,true);
-          await f.drainMail();const mail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+          await f.drainMail();const mail=await mailFor(owner.email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
           const code=mail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
           assert.equal((await unsupportedContext.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:challenge.challengeToken,code}})).status(),200);
           const unsupportedPage = await unsupportedContext.newPage(); unsupportedPage.setDefaultTimeout(5000);

@@ -124,7 +124,7 @@ export class PasskeyStore {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at`,
         [id, ceremony.accountId, credential.id, Buffer.from(credential.publicKey), credential.counter,
           credential.transports ?? [], credentialDeviceType, credentialBackedUp]);
-        await invalidateAccountActionProof(client,session.accountId);
+        await invalidateAccountActionProof(client,session.accountId,token);
         return {id, createdAt: inserted.rows[0].created_at.toISOString(), lastUsedAt: null};
       });
     } catch (error) {
@@ -209,7 +209,7 @@ export class PasskeyStore {
     return transaction(this.#pool, async client => {
       const session=await requireAccountActionProof(client,token,csrfToken);
       const removed = await client.query('DELETE FROM cloud_passkeys WHERE id = $1 AND account_id = $2', [id, session.accountId]);
-      if(removed.rowCount){await retireRecoveryCodesWithoutMethod(client,session.accountId);await invalidateAccountActionProof(client,session.accountId);}
+      if(removed.rowCount){await retireRecoveryCodesWithoutMethod(client,session.accountId);await invalidateAccountActionProof(client,session.accountId,token);}
       return removed.rowCount === 1;
     });
   }

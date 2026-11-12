@@ -66,8 +66,8 @@ for (const action of ['load', 'refresh', 'signIn', 'enroll', 'remove'] as const)
         load: [{path: '/passkeys', body: undefined}],
         refresh: [{path: '/passkeys', body: undefined}],
         signIn: [{path: '/passkeys/authentication/options', body: {}}],
-        enroll: [{path: '/passkeys/registration/options', body: {password}}],
-        remove: [{path: '/passkeys/remove', body: {id: existing.id, password}}, {path: '/passkeys', body: undefined}],
+        enroll: [{path: '/passkeys/registration/options', body: {}}],
+        remove: [{path: '/passkeys/remove', body: {id: existing.id}}, {path: '/passkeys', body: undefined}],
       };
       assert.deepEqual(calls.slice(2), resumed[action], 'completion permits the next explicit action');
       assert.equal(controller.pending, false);

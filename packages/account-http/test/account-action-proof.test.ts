@@ -23,6 +23,8 @@ test('the proof routes bind the cookie and CSRF, return no sign-in cookies, and 
   const message=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('code' in message);
   const completion=await request('/action-proof/email/verify',{challengeToken:body.challengeToken,code:message.code});assert.equal(completion.status,204);assert.equal(completion.headers.getSetCookie().length,0);
   const ready=await (await request('/action-proof')).json() as {freshUntil:string};assert.ok(Date.parse(ready.freshUntil)>Date.now());
+  assert.equal((await request('/passkeys/registration/options',{password:'wrong'})).status,400,'obsolete password fields must be refused rather than silently ignored');
+  assert.equal((await request('/authenticator/begin',{proof:{kind:'totp',code:'123456'}})).status,400);
   assert.equal((await request('/passkeys/registration/options',{})).status,200,'restricted enrollment can use the fresh window without repeating a password');
   assert.equal((await request('/action-proof/email/verify',{challengeToken:body.challengeToken,code:message.code})).status,403);
 });

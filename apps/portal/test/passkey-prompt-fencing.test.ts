@@ -58,7 +58,7 @@ for (const mode of ['enrollment', 'sign-in'] as const) {
         const old = f.start();
         await turn();
         assert.equal(f.prompts.length, 1);
-        assert.deepEqual(f.calls, [{path: pathFor(mode) + '/options', body: mode === 'enrollment' ? {password: 'Current password'} : {}}]);
+        assert.deepEqual(f.calls, [{path: pathFor(mode) + '/options', body: mode === 'enrollment' ? {} : {}}]);
         if (transition === 'route change') c.fence();
         else {
           c.account(transition === 'sign-out' ? undefined : 'other');
@@ -116,7 +116,7 @@ for (const mode of ['enrollment', 'sign-in'] as const) {
     f.prompts[0]!.resolve(f.response);
     assert.equal(await current, mode === 'enrollment' ? undefined : 'authenticated');
     assert.deepEqual(f.calls, [
-      {path: pathFor(mode) + '/options', body: mode === 'enrollment' ? {password: 'Current password'} : {}},
+      {path: pathFor(mode) + '/options', body: mode === 'enrollment' ? {} : {}},
       {path: pathFor(mode) + '/verify', body: {ceremonyId: ceremony, response: f.response}},
       ...(mode === 'enrollment' ? [{path: '/passkeys', body: undefined}] : []),
     ]);

@@ -84,9 +84,9 @@ for (const action of ['activate', 'remove', 'regenerate'] as const) for (const s
     cleared(c);
     assert.equal(f.requests.length, 4, 'one change is followed only by one session read');
     request(f.requests[0]!, '/authenticator');
-    request(f.requests[1]!, '/authenticator/begin', {password: 'current password', proof: {kind: 'totp', code: '123456'}});
+    request(f.requests[1]!, '/authenticator/begin', {});
     request(f.requests[2]!, `/authenticator/${action}`, {
-      password: 'current password', proof: {kind: 'totp', code: '123456'},
+
       ...(action === 'activate' ? {pendingToken: token, code: '654321'} : {}),
     });
     request(f.requests[3]!, '/session');
@@ -117,7 +117,7 @@ for (const failure of [
     assert.equal(c.error, undefined); assert.equal(c.enrolment, undefined); cleared(c);
     assert.equal(f.requests.length, 6);
     request(f.requests[3]!, '/authenticator');
-    request(f.requests[4]!, '/authenticator/begin', {password: 'current password', proof: {kind: 'totp', code: '123456'}});
+    request(f.requests[4]!, '/authenticator/begin', {});
     request(f.requests[5]!, '/authenticator/cancel', {pendingToken: token});
     assert.equal(f.replies.length, 0);
   });
@@ -140,7 +140,7 @@ for (const operation of ['load', 'begin', 'cancel'] as const) for (const format 
     assert.equal(f.requests.length, 3);
     request(f.requests[2]!, operation === 'load' ? '/authenticator' : `/authenticator/${operation}`,
       operation === 'load' ? undefined : operation === 'cancel' ? {pendingToken: token}
-        : {password: 'current password', proof: {kind: 'totp', code: '123456'}});
+        : {});
     if (switchAccount) {c.account('other'); c.account(undefined); c.account('owner');}
     authority(c);
     now += 29_999;

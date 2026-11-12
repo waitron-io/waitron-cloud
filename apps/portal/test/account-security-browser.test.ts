@@ -38,7 +38,7 @@ test('account security is clear in both languages at phone and desktop widths', 
             {headers: {origin: f.origin}, data: {email: account.email, password,locale}});
           assert.equal(login.status(),202);assert.equal((await target.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
           const challenge=await login.json() as {emailRequired:boolean;challengeToken:string};assert.equal(challenge.emailRequired,true);
-          await f.drainMail();const message=await mailFor(account.email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud',f.mailEvidence);
+          await f.drainMail();const message=await mailFor(account.email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence);
           const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
           assert.equal((await target.request.post(`${f.origin}/api/account/login/email`,{headers:{origin:f.origin},data:{challengeToken:challenge.challengeToken,code}})).status(),200);
         }

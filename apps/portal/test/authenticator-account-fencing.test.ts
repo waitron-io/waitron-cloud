@@ -61,7 +61,7 @@ function cleared(c: AuthenticatorController) {
 function expectedRequest(action: Action) {
   if (action === 'load') return {path: '/authenticator', body: undefined};
   if (action === 'cancel') return {path: '/authenticator/cancel', body: {pendingToken: 'A'.repeat(43)}};
-  return {path: `/authenticator/${action}`, body: {password: 'old password', proof: {kind: 'totp', code: '123456'},
+  return {path: `/authenticator/${action}`, body: {
     ...(action === 'activate' ? {pendingToken: 'A'.repeat(43), code: '654321'} : {})}};
 }
 

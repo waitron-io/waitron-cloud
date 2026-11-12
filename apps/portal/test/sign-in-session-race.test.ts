@@ -73,7 +73,7 @@ for (const mode of ['password after removal', 'passkey after lost regeneration']
       if(emailReply){
         const response=await emailReply;assert.equal(response.status(),202);assert.equal((await response.json() as {emailRequired:boolean}).emailRequired,true);
         await page.getByText(c.emailOrRecoveryHelp,{exact:true}).waitFor();assert.equal((await context.cookies()).some(cookie=>cookie.name==='cloud_session'),false);
-        await f.drainMail();const message=await mailFor(owner.email,'Your Waitron Cloud sign-in code',f.mailEvidence);
+        await f.drainMail();const message=await mailFor(owner.email,'Your Waitron Cloud verification code',f.mailEvidence);
         const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
         await page.locator('input[name=factorProof]').fill(code);await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
       }

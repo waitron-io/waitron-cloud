@@ -28,8 +28,8 @@ App activation, replacement, removal and code regeneration end every Cloud sessi
 Sign in again afterwards. Before changing security, verify once under **Verify security changes**. Use an
 enrolled passkey, an app code or a saved recovery code. With no enrolled method,
 use the emailed code. The proof covers security changes for ten minutes in that
-signed-in session; ordinary sign-in does not count. A security change invalidates
-existing windows and pending proof requests. App activation, removal and code
+signed-in session; ordinary sign-in does not count. A passkey change keeps this session’s original window and invalidates other
+windows and all pending proof requests. App activation, removal and code
 regeneration still sign you out. Starting app or passkey setup requires freshness;
 finishing the authorised setup rechecks your session and security changes, without
 requiring the ten-minute window to remain fresh.
@@ -118,8 +118,8 @@ are limited to ten per IP per minute and twenty per account per five minutes;
 email guesses use the configured `challengeAttempts` limit. If setup has expired, been cancelled or been replaced,
 you receive 400 `setup_unavailable`: verify again if needed, then start setup again. A removal request for an inactive app, or code regeneration with no enrolled app or passkey, returns
 400 `factor_not_active`; use **Check authenticator settings** to refresh the status.
-Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
-current account password rather than retrying the same value. For example,
+Management requests refuse the obsolete `password` and `proof` fields with
+400 `invalid_input`; send the documented fields only. For example,
 `POST /authenticator/activate` for a setup already expired when checked returns
 `{"error":"setup_unavailable"}` without ending your session or spending an attempt.
 If setup expires after confirmation starts, including while the new-app code is

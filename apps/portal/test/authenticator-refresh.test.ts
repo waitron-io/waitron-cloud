@@ -25,10 +25,7 @@ for(const nowActive of [false,true])test(`refresh discards stale setup and reads
  await c.refresh();assert.deepEqual(calls,[{path:'/authenticator',body:undefined}]);
  assert.deepEqual(c.status,status);assert.equal(c.loaded,true);assert.equal(c.enrolment,undefined);
  assert.equal(c.password,'');assert.equal(c.proofCode,'');assert.equal(c.confirmation,'');
- await c.begin();assert.equal(c.error,'requiredPassword');assert.equal(calls.length,1);
- c.password='fresh password';
- if(nowActive){await c.begin();assert.equal(c.error,'factorCodeRequired');assert.equal(calls.length,1);c.proofCode='234567';}
- await c.begin();assert.deepEqual(calls[1],{path:'/authenticator/begin',body:{password:'fresh password',...(nowActive?{proof:{kind:'totp',code:'234567'}}:{})}});
+ await c.begin();assert.deepEqual(calls[1],{path:'/authenticator/begin',body:{}});
  assert.equal(c.enrolment,enrolled);
 });
 test('refresh failure removes stale controls and leaves status retry available',async()=>{

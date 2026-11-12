@@ -13,6 +13,7 @@ export class AccountActionProofError extends Error {
   readonly code='proof_required' as const;
   constructor(){super('proof_required');this.name='AccountActionProofError';}
 }
+// Take the account lock before any session lock; reversing that order can deadlock concurrent security changes.
 export async function accountActionSession(client:PoolClient,token:string,csrfToken:string){
   const candidate=(await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[digest(token)])).rows[0];
   if(!candidate)throw new AccountActionProofError();
@@ -34,8 +35,12 @@ export async function markAccountActionProof(client:PoolClient,token:string,csrf
   const credential=(await client.query('SELECT c.password_hash FROM cloud_credentials c JOIN cloud_sessions s ON s.account_id=c.account_id WHERE s.token_hash=$1',[digest(token)])).rows[0];
   await client.query('UPDATE cloud_sessions SET action_proved_at=clock_timestamp(),action_proof_method=$2,action_credential_fingerprint=$3 WHERE token_hash=$1',[digest(token),method,digest(credential.password_hash)]);
 }
-export async function invalidateAccountActionProof(client:PoolClient,accountId:string){
-  await client.query('UPDATE cloud_sessions SET action_proved_at=NULL,action_proof_method=NULL,action_credential_fingerprint=NULL,action_security_revision=action_security_revision+1 WHERE account_id=$1',[accountId]);
+export async function invalidateAccountActionProof(client:PoolClient,accountId:string,actingToken?:string){
+  // A passkey change keeps the acting session's original window; revoke peers and all pending requests.
+  await client.query(`UPDATE cloud_sessions SET action_proved_at=CASE WHEN token_hash=$2 THEN action_proved_at END,
+    action_proof_method=CASE WHEN token_hash=$2 THEN action_proof_method END,
+    action_credential_fingerprint=CASE WHEN token_hash=$2 THEN action_credential_fingerprint END,
+    action_security_revision=action_security_revision+1 WHERE account_id=$1`,[accountId,actingToken?digest(actingToken):null]);
   await client.query(`UPDATE cloud_webauthn_ceremonies SET consumed_at=clock_timestamp() WHERE consumed_at IS NULL
     AND (account_id=$1 OR action_session_token_hash IN(SELECT token_hash FROM cloud_sessions WHERE account_id=$1))`,[accountId]);
   await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE account_id=$1 AND action_session_token_hash IS NOT NULL AND consumed_at IS NULL',[accountId]);
@@ -49,9 +54,10 @@ export class AccountActionProofStore {
       const session=await resolveSession(client,token,{touch:false});
       const row=(await client.query(`SELECT EXISTS(SELECT 1 FROM cloud_passkeys WHERE account_id=$1) AS passkey,
         EXISTS(SELECT 1 FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL) AS app,
+        EXISTS(SELECT 1 FROM cloud_factor_recovery_codes WHERE account_id=$1 AND consumed_at IS NULL) AS recovery,
         CASE WHEN action_proved_at>clock_timestamp()-interval '10 minutes' THEN action_proved_at+interval '10 minutes' END AS fresh_until
         FROM cloud_sessions WHERE token_hash=$2`,[session.accountId,digest(token)])).rows[0];
-      return {methods:row.passkey||row.app?[...(row.passkey?['passkey']:[]),...(row.app?['app']:[]),'recovery']:['email'],freshUntil:row.fresh_until?.toISOString()??null};
+      return {methods:row.passkey||row.app?[...(row.passkey?['passkey']:[]),...(row.app?['app']:[]),...(row.recovery?['recovery']:[])]:['email'],freshUntil:row.fresh_until?.toISOString()??null};
     });
   }
   async factor(token:string,csrfToken:string,proof:FactorProof){

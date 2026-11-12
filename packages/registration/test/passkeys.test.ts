@@ -403,3 +403,20 @@ test('a security change while browser registration verifies cannot publish the e
   assert.deepEqual(await store.list(actor.token),[]);assert.equal((await run(c=>resolveSession(c,actor.token))).accountId,accountId);
  }finally{release();await work.catch(()=>{});}
 });
+
+
+test('a security change between consuming a passkey proof and its verification cannot reopen the window',async t=>{
+ const actor=await signIn(),first=await store.registrationOptions(actor.token,actor.csrfToken),response=registrationResponse();
+ await store.verifyRegistration(actor.token,actor.csrfToken,first.ceremonyId,response);await openProofWindow(pool,actor.token);
+ const otherKey=randomUUID();await pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up) VALUES($1,$2,'b3RoZXI',$3,0,'multiDevice',true)`,[otherKey,accountId,Buffer.from([1,2,3])]);
+ const handle=(await pool.query('SELECT user_handle FROM cloud_passkey_users')).rows[0].user_handle.toString('base64url'),options=await store.authenticationOptions(actor.token,actor.csrfToken);
+ const other=new Pool(connection),connect=other.connect.bind(other);let calls=0,entered!:()=>void,release!:()=>void;
+ const waiting=new Promise<void>(r=>{entered=r;}),resume=new Promise<void>(r=>{release=r;});
+ t.mock.method(other,'connect',async()=>{if(++calls===2){entered();await resume;}return connect();});
+ const proving=new PasskeyStore(other,{rpName:'Waitron Cloud',rpId:'cloud.example.test',origin},adapter);
+ const before=(await pool.query('SELECT action_proved_at FROM cloud_sessions')).rows[0].action_proved_at;
+ const result=proving.reprove(actor.token,actor.csrfToken,options.ceremonyId,authenticationResponse(response.id,handle)).then(()=>undefined,e=>e);
+ try{await waiting;assert.equal(await store.remove(actor.token,actor.csrfToken,otherKey),true);release();assert.ok(await result instanceof PasskeyError);
+  assert.deepEqual((await pool.query('SELECT action_proved_at FROM cloud_sessions')).rows[0].action_proved_at,before);
+ }finally{release();await result;await other.end();}
+});

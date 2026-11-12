@@ -19,18 +19,20 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await page.locator('.action-proof').screenshot({path:`/tmp/d608-prompt-${locale}-${colorScheme}-${width}.png`});
   await page.getByRole('button',{name:c.actionProofEmail,exact:true}).click();await page.locator('input[name=actionProofCode]').waitFor();await page.locator('.action-proof').screenshot({path:`/tmp/d608-code-${locale}-${colorScheme}-${width}.png`});await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run('.action-proof')).violations),[]);
   const queued=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='sign_in_check' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.equal(queued.locale,locale,'security proof email follows the selected language');
-  await f.drainMail();const message=await mailFor(email,locale==='en'?'Your Waitron Cloud sign-in code':'Tu código de acceso a Waitron Cloud');const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);await page.locator('input[name=actionProofCode]').fill(code);await page.locator('input[name=actionProofCode]').press('Enter');await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+  await f.drainMail();const message=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud');const code=message.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);await page.locator('input[name=actionProofCode]').fill(code);await page.locator('input[name=actionProofCode]').press('Enter');await page.getByText(c.actionProofReady,{exact:true}).waitFor();
   await page.locator('.action-proof').screenshot({path:`/tmp/d608-ready-${locale}-${colorScheme}-${width}.png`});
   await page.screenshot({path:`/tmp/d608-proof-${locale}-${colorScheme}-${width}.png`,fullPage:true});
   await page.getByRole('button',{name:c.factorEnable,exact:true}).focus();await page.keyboard.press('Enter');await page.locator('.factor-secret').waitFor();await page.getByRole('button',{name:c.factorCancel,exact:true}).click();await page.locator('.factor-secret').waitFor({state:'hidden'});
   await page.getByRole('button',{name:c.passkeyAdd,exact:true}).focus();await page.keyboard.press('Enter');await page.getByText(c.passkeyAdded,{exact:true}).waitFor();
+  assert.equal((await f.db.pool.query('SELECT action_proved_at IS NOT NULL AS fresh FROM cloud_sessions WHERE account_id=$1 AND ended_at IS NULL',[id])).rows[0].fresh,true,'adding a key preserves this session window');
+  await f.db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '11 minutes' WHERE account_id=$1",[id]);await page.reload();await page.getByRole('button',{name:c.actionProofPasskey,exact:true}).waitFor();
   await page.locator('.action-proof').screenshot({path:`/tmp/d608-passkey-${locale}-${colorScheme}-${width}.png`});
   await page.route('**/api/account/action-proof/passkey/verify',route=>route.fulfill({status:403,json:{error:'proof_required'}}));
   await page.getByRole('button',{name:c.actionProofPasskey,exact:true}).click();await page.locator('.action-proof [role=alert]').waitFor();
   assert.equal(await page.locator('.passkeys [role=alert]').count(),0,'proof refusal belongs to its shared prompt');
   await page.unroute('**/api/account/action-proof/passkey/verify');
   await page.getByRole('button',{name:c.actionProofPasskey,exact:true}).click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
-  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.locator('.factor-codes').waitFor();assert.equal(await page.locator('.factor-codes code').count(),10);
+  await page.getByRole('button',{name:c.factorRegenerate,exact:true}).click();await page.locator('.factor-codes').waitFor();assert.equal(await page.locator('.factor-codes code').count(),10);await page.locator('.factor-codes').screenshot({path:`/tmp/d608-codes-${locale}-${colorScheme}-${width}.png`});
   const saved=await page.locator('.factor-codes code').allTextContents(),secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',generation=randomUUID();
   await f.db.pool.query(`INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,$3)
    ON CONFLICT(account_id) DO UPDATE SET version=1,secret_generation=excluded.secret_generation,secret_envelope=excluded.secret_envelope`,[id,generation,encryptFactorSecret(secret,keys,{accountId:id,version:1,purpose:'active'})]);

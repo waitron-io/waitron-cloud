@@ -103,7 +103,7 @@ test('challenge tokens cannot access any session-backed route family',async()=>{
   const owner=await activeAccount(),token=await challenge(owner.email),headers={cookie:`__Host-cloud_session=${token}`,'x-csrf-token':token};
   const get=['/session','/sessions','/passkeys','/authenticator','/alerts','/installations','/pairing/businesses'];
   for(const path of get){const response=await request(path,undefined,{headers});assert.equal(response.status,401,path);assert.equal(response.headers.getSetCookie().length,0,path);}
-  for(const [path,body] of [['/session/activity',{}],['/authenticator/begin',{password}],['/sessions/revoke',{id:randomUUID()}],
+  for(const [path,body] of [['/session/activity',{}],['/authenticator/begin',{}],['/sessions/revoke',{id:randomUUID()}],
     ['/backups/list',{venueId:randomUUID()}],['/remote-access/status',{installationId:randomUUID()}],['/usage/read',{organisationId:randomUUID()}],
     ['/security-audit/read',{organisationId:randomUUID()}],['/diagnostics/read',{installationId:randomUUID()}],['/recovery/inspect',{}]] as const)
     assert.ok([401,403].includes((await request(path,body,{headers})).status),path);
@@ -114,7 +114,7 @@ for(const activationOffset of [0,-1])test('management activates once, returns co
   const owner=await account(),headers=await signIn(owner.email),other=await signIn(owner.email);
   const status=await request('/authenticator',undefined,{headers});assert.equal(status.status,200);
   assert.deepEqual(await status.json(),{active:false,version:0,recoveryCodesRemaining:0,available:true});
-  const begin=await request('/authenticator/begin',{password},{headers});assert.equal(begin.status,200);
+  const begin=await request('/authenticator/begin',{},{headers});assert.equal(begin.status,200);
   const pending=await begin.json() as {pendingToken:string;secret:string;uri:string;expiresAt:string};
   assert.deepEqual(Object.keys(pending).sort(),['expiresAt','pendingToken','secret','uri']);assert.match(pending.uri,/^otpauth:\/\/totp\//);
   // A previous-step fixture needs time to activate before that step leaves the accepted window.
@@ -123,7 +123,7 @@ for(const activationOffset of [0,-1])test('management activates once, returns co
     if(now%30000>25000)await delay(30000-now%30000);
   }
   const activationCode=totp(pending.secret,activationOffset);
-  const changed=await request('/authenticator/activate',{password,pendingToken:pending.pendingToken,code:activationCode},{headers});
+  const changed=await request('/authenticator/activate',{pendingToken:pending.pendingToken,code:activationCode},{headers});
   assert.equal(changed.status,200);const body=await changed.json() as {status:string;active:boolean;recoveryCodes:string[]};
   assert.deepEqual(Object.keys(body).sort(),['active','recoveryCodes','status']);assert.equal(body.status,'changed');assert.equal(body.active,true);
   assert.equal(body.recoveryCodes.length,10);assert.ok(body.recoveryCodes.every(c=>/^[A-F0-9]{32}$/.test(c)));
@@ -145,16 +145,16 @@ test('regeneration and cancellation enforce fresh authority without exposing cod
   const owner=await activeAccount(),direct=new PasswordLoginStore(db.pool,keys,policy);
   const credentials=await direct.complete(await challenge(owner.email),recovery(owner.codes[0]!));
   const headers={cookie:`__Host-cloud_session=${credentials.token}`,'x-csrf-token':credentials.csrfToken};
-  await refusal(await request('/authenticator/regenerate',{password},{headers}),403,'proof_required');
-  await refusal(await request('/authenticator/regenerate',{password:'wrong',proof:recovery(owner.codes[1]!)},{headers}),403,'proof_required');
-  await refusal(await request('/authenticator/regenerate',{password,proof:recovery(owner.codes[1]!)},{headers:{...headers,'x-csrf-token':'wrong'}}),403,'credentials_invalid');
+  await refusal(await request('/authenticator/regenerate',{},{headers}),403,'proof_required');
+  await refusal(await request('/authenticator/regenerate',{},{headers}),403,'proof_required');
+  await refusal(await request('/authenticator/regenerate',{},{headers:{...headers,'x-csrf-token':'wrong'}}),403,'credentials_invalid');
   assert.equal((await request('/action-proof/factor',recovery(owner.codes[1]!),{headers})).status,204);
-  const begun=await request('/authenticator/begin',{password,proof:recovery(owner.codes[1]!)},{headers});assert.equal(begun.status,200);
+  const begun=await request('/authenticator/begin',{},{headers});assert.equal(begun.status,200);
   const pending=await begun.json() as {pendingToken:string};
-  await refusal(await request('/authenticator/activate',{password,proof:recovery(owner.codes[2]!),pendingToken:randomBytes(32).toString('base64url'),code:'123456'},{headers}),400,'invalid_input');
+  await refusal(await request('/authenticator/activate',{pendingToken:randomBytes(32).toString('base64url'),code:'123456'},{headers}),400,'invalid_input');
   const cancel=await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers,app:application({keys:null,policy:null})});assert.equal(cancel.status,204);
   assert.equal((await request('/session',undefined,{headers})).status,200);
-  const regenerated=await request('/authenticator/regenerate',{password,proof:recovery(owner.codes[2]!)},{headers});assert.equal(regenerated.status,200);
+  const regenerated=await request('/authenticator/regenerate',{},{headers});assert.equal(regenerated.status,200);
   const body=await regenerated.json() as {recoveryCodes:string[]};assert.equal(body.recoveryCodes.length,10);
   assert.equal(regenerated.headers.getSetCookie().length,2);assert.equal(await count(),0);
   const token=await challenge(owner.email);await refusal(await request('/login/factor',{challengeToken:token,proof:recovery(owner.codes[3]!)}),401,'credentials_invalid');
@@ -172,14 +172,14 @@ test('nested proofs and management bodies reject extra keys, malformed types and
   const plain=await account(),headers=await signIn(plain.email);
   for(const body of [{password,token},{password,csrfToken:token},{password,proof:{kind:'totp',code:'123456',extra:1}},
     {password:[]}])await refusal(await request('/authenticator/begin',body,{headers}),400,'invalid_input');
-  await refusal(await request('/authenticator/begin',{password:'é'.repeat(513)},{headers}),400,'password_too_long');
-  assert.equal((await request('/authenticator/begin',{password},{headers:{...headers,origin:'https://evil.test'}})).status,403);
+  await refusal(await request('/authenticator/begin',{password:'é'.repeat(513)},{headers}),400,'invalid_input');
+  assert.equal((await request('/authenticator/begin',{},{headers:{...headers,origin:'https://evil.test'}})).status,403);
   assert.equal((await request('/authenticator?secret=oops',undefined,{headers})).status,400);
   assert.equal((await request('/authenticator/unknown',{},{headers})).status,404);
-  assert.equal((await request('/authenticator/complete',{password},{headers})).status,404);
+  assert.equal((await request('/authenticator/complete',{},{headers})).status,404);
   assert.equal((await request('/authenticator',{}, {headers})).status,405);
-  assert.equal((await request('/authenticator/begin',{password},{headers:{...headers,host:'evil.test'}})).status,403);
-  assert.equal((await request('/authenticator/begin',{password},{headers:{...headers,'content-type':'text/plain'}})).status,415);
+  assert.equal((await request('/authenticator/begin',{},{headers:{...headers,host:'evil.test'}})).status,403);
+  assert.equal((await request('/authenticator/begin',{},{headers:{...headers,'content-type':'text/plain'}})).status,415);
   assert.equal((await request('/authenticator/begin',undefined,{headers,raw:JSON.stringify({password:'x'.repeat(17000)})})).status,413);
   assert.equal((await request('/authenticator/begin',undefined,{headers,raw:'[]'})).status,400);
 });
@@ -194,7 +194,7 @@ test('factor keys and policy outages preserve live access and require available 
     const status=await request('/authenticator',undefined,{app:target,headers});assert.equal(status.status,200);assert.equal((await status.json() as {available:boolean}).available,false);
     await refusal(await request('/login',{email:owner.email,password},{app:target}),503,'temporarily_unavailable');
     await refusal(await request('/login/factor',{challengeToken:token,proof:recovery(owner.codes[0]!)},{app:target}),503,'temporarily_unavailable');
-    await refusal(await request('/authenticator/begin',{password},{app:target,headers}),503,'temporarily_unavailable');
+    await refusal(await request('/authenticator/begin',{},{app:target,headers}),503,'temporarily_unavailable');
   }
   assert.equal(await attempts('factor-login-account',owner.accountId),3,'verified issuance attempts survive key outages');
   assert.equal((await request('/login/factor',{challengeToken:token,proof:recovery(owner.codes[0]!)})).status,200);
@@ -249,8 +249,8 @@ test('IP-blocked completion and management requests never spend account or chall
   await refusal(await request('/login/factor',{challengeToken:token,proof:recovery(owner.codes[0]!)},{app:target}),429,'rate_limited');
   assert.equal(await attempts('factor-complete-account',owner.accountId),0);assert.equal(await attempts('factor-complete-challenge',token),0);
   const plain=await account(),headers=await signIn(plain.email);
-  await refusal(await request('/authenticator/begin',{password},{app:target}),403,'credentials_invalid');
-  await refusal(await request('/authenticator/begin',{password},{app:target,headers}),429,'rate_limited');
+  await refusal(await request('/authenticator/begin',{},{app:target}),403,'credentials_invalid');
+  await refusal(await request('/authenticator/begin',{},{app:target,headers}),429,'rate_limited');
   assert.equal(await attempts('factor-manage-account',plain.accountId),0);
 });
 
@@ -258,7 +258,7 @@ test('management account limits survive new IPs and instances and refused proof 
   const owner=await account(),headers=await signIn(owner.email),bounded={...policy,manageAccount:{limit:1,windowSeconds:300}};
   await db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL');
   await refusal(await request('/authenticator/begin',{},{headers,app:application({keys,policy:bounded})}),403,'proof_required');
-  await refusal(await request('/authenticator/begin',{password},{headers,app:application({keys,policy:bounded},db.secondPool),peer:'192.0.2.5'}),429,'rate_limited');
+  await refusal(await request('/authenticator/begin',{},{headers,app:application({keys,policy:bounded},db.secondPool),peer:'192.0.2.5'}),429,'rate_limited');
   assert.equal((await db.pool.query('SELECT count(*)::integer AS count FROM cloud_factor_enrolments')).rows[0].count,0);
 });
 
@@ -330,26 +330,26 @@ test('factor configuration has strict independent keys and policy while bad inpu
 
 for(const reason of ['expired','consumed','superseded'] as const)test(`HTTP ${reason} setup gives restart guidance without clearing the session`,async()=>{
   const owner=await account(),headers=await signIn(owner.email);
-  const begun=await request('/authenticator/begin',{password},{headers});assert.equal(begun.status,200);
+  const begun=await request('/authenticator/begin',{},{headers});assert.equal(begun.status,200);
   const pending=await begun.json() as {pendingToken:string;secret:string};
   if(reason==='expired')await db.pool.query("UPDATE cloud_factor_enrolments SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second'");
   else if(reason==='consumed')assert.equal((await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers})).status,204);
-  else assert.equal((await request('/authenticator/begin',{password},{headers})).status,200);
-  await refusal(await request('/authenticator/activate',{password,pendingToken:pending.pendingToken,code:totp(pending.secret)},{headers}),400,'setup_unavailable');
+  else assert.equal((await request('/authenticator/begin',{},{headers})).status,200);
+  await refusal(await request('/authenticator/activate',{pendingToken:pending.pendingToken,code:totp(pending.secret)},{headers}),400,'setup_unavailable');
   await refusal(await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers}),400,'setup_unavailable');
   assert.equal((await request('/session',undefined,{headers})).status,200);
   assert.equal((await db.pool.query('SELECT sum(attempts)::integer AS n FROM cloud_factor_enrolments')).rows[0].n,0);
 });
 test('HTTP absent factor has its own refusal and does not end the session',async()=>{
   const owner=await account(),headers=await signIn(owner.email);
-  for(const action of ['remove','regenerate'])await refusal(await request(`/authenticator/${action}`,{password},{headers}),400,'factor_not_active');
+  for(const action of ['remove','regenerate'])await refusal(await request(`/authenticator/${action}`,{},{headers}),400,'factor_not_active');
   assert.equal((await request('/session',undefined,{headers})).status,200);
 });
-test('HTTP overlong passwords use a byte-length refusal while malformed input keeps its code',async()=>{
+test('HTTP management refuses obsolete password fields at every byte length',async()=>{
   const owner=await account(),headers=await signIn(owner.email);
   for(const value of ['x'.repeat(1025),'é'.repeat(513)])for(const action of ['begin','activate','remove','regenerate'])
-    await refusal(await request(`/authenticator/${action}`,{password:value,...(action==='activate'?{pendingToken:'A'.repeat(43),code:'123456'}:{})},{headers}),400,'password_too_long');
-  assert.equal((await request('/authenticator/begin',{password:'é'.repeat(512)},{headers})).status,200,'a bounded legacy field does not replace or repeat the fresh session proof');
+    await refusal(await request(`/authenticator/${action}`,{password:value,...(action==='activate'?{pendingToken:'A'.repeat(43),code:'123456'}:{})},{headers}),400,'invalid_input');
+  await refusal(await request('/authenticator/begin',{password:'é'.repeat(512)},{headers}),400,'invalid_input');
   assert.equal((await request('/session',undefined,{headers})).status,200);
 });
 
@@ -397,7 +397,7 @@ test('passkey-only recovery codes are returned once and complete the password-bo
  await db.pool.query('INSERT INTO cloud_passkey_users(account_id,user_handle) VALUES($1,$2)',[owner.accountId,randomBytes(32)]);
  await db.pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
  VALUES($1,$2,'c3ludGhldGlj',$3,0,'multiDevice',true)`,[randomUUID(),owner.accountId,Buffer.from([1,2,3])]);
- const generated=await request('/authenticator/regenerate',{password},{headers});assert.equal(generated.status,200);
+ const generated=await request('/authenticator/regenerate',{},{headers});assert.equal(generated.status,200);
  const reply=await generated.json() as {status:string;active:boolean;recoveryCodes:string[]};
  assert.equal(reply.active,false);assert.equal(reply.recoveryCodes.length,10);
  const start=await request('/login',{email:owner.email,password});assert.equal(start.status,202);assert.equal(start.headers.getSetCookie().length,0);
@@ -414,14 +414,14 @@ test('passkey-only recovery codes are returned once and complete the password-bo
 test('required enrollment permits app setup and cancellation but opens access only after activation and app sign-in',async()=>{
   app=application({keys,policy},db.pool,true);
   const owner=await account(),headers=await signIn(owner.email);
-  for(const action of ['remove','regenerate'])await refusal(await request('/authenticator/'+action,{password},{headers}),403,'enrollment_required');
-  const first=await request('/authenticator/begin',{password},{headers});assert.equal(first.status,200);
+  for(const action of ['remove','regenerate'])await refusal(await request('/authenticator/'+action,{},{headers}),403,'enrollment_required');
+  const first=await request('/authenticator/begin',{},{headers});assert.equal(first.status,200);
   const pending=await first.json();
   await refusal(await request('/sessions',undefined,{headers}),403,'enrollment_required');
   assert.equal((await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers})).status,204);
   await refusal(await request('/sessions',undefined,{headers}),403,'enrollment_required');
-  const setup=await(await request('/authenticator/begin',{password},{headers})).json();
-  const activated=await request('/authenticator/activate',{password,pendingToken:setup.pendingToken,code:totp(setup.secret)},{headers});
+  const setup=await(await request('/authenticator/begin',{},{headers})).json();
+  const activated=await request('/authenticator/activate',{pendingToken:setup.pendingToken,code:totp(setup.secret)},{headers});
   assert.equal(activated.status,200);const changed=await activated.json();assert.equal(changed.recoveryCodes.length,10);
   assert.equal((await request('/sessions',undefined,{headers})).status,401,'activation still ends the enrollment session');
   const token=await challenge(owner.email);

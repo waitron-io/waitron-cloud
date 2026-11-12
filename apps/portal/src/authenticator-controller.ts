@@ -73,14 +73,14 @@ export class AuthenticatorController {
     await this.load();
   }
   #authority(){return {}; }
-  async begin(){if(!this.#account)return;const body=this.#authority();if(!body)return;
+  async begin(){if(!this.#account||this.loadAttempted&&!this.loaded)return;const body=this.#authority();if(!body)return;
     const generation=this.#start();if(generation===undefined)return;
     this.#clearInput();const result=await this.#request<FactorEnrolment>('/authenticator/begin',body);
     if(generation!==this.#generation)return;this.pending=false;this.enrolment=undefined;
     if(result.ok)this.enrolment=result.value;else this.#managementFailure(result,true);this.#changed();}
   async #change(action:'activate'|'remove'|'regenerate'):Promise<FactorChange|'reconcile'|false>{
     const code=normaliseCode(this.confirmation);
-    if(!this.#account||!this.status||action==='activate'&&!this.enrolment)return false;
+    if(!this.#account||!this.status||this.loadAttempted&&!this.loaded||action==='activate'&&!this.enrolment)return false;
     const authority=this.#authority();if(!authority)return false;
     if(action==='activate'&&!code)return this.#required('factorCodeRequired','confirmation');
     if(action==='activate'&&!validCode(code,'totp'))return this.#required('factorConfirmationInvalid','confirmation');
@@ -100,7 +100,7 @@ export class AuthenticatorController {
       // Browsers can repeat a connection-lost POST; its refusal can follow a committed self-revocation.
       if(!session.ok||session.value.accountId!==this.#account){this.enrolment=undefined;this.error='factorChangeUncertain';this.#changed();return 'reconcile';}
     }
-    if(result.status===0||result.status>=500){this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.loaded=false;this.#changed();return 'reconcile';}
+    if(result.status===0||result.status>=500){this.challenge=undefined;this.enrolment=undefined;this.loaded=false;this.loadAttempted=true;this.#changed();return 'reconcile';}
     this.#changed();return false;
   }
   activate(){return this.#change('activate');}remove(){return this.#change('remove');}regenerate(){return this.#change('regenerate');}

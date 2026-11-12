@@ -85,15 +85,16 @@ export class AuthenticatorFactorStore {
     if(typeof a.token!=='string' || !TOKEN.test(a.token)) throw new FactorManagementError();
     const candidate=(await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[factorDigest(a.token)])).rows[0];
     if(!candidate) throw new FactorManagementError();
-    const session=await requireAccountActionProof(client,a.token,a.csrfToken,!completion);
-    const password=(await client.query('SELECT password_hash,email FROM cloud_credentials WHERE account_id=$1',[session.accountId])).rows[0];
+    const session=completion?await this.#session(client,a.token,a.csrfToken):await requireAccountActionProof(client,a.token,a.csrfToken);
+    const password=(await client.query(`SELECT password_hash,email,(SELECT action_credential_fingerprint FROM cloud_sessions WHERE token_hash=$2) AS proved_fingerprint FROM cloud_credentials WHERE account_id=$1`,[session.accountId,factorDigest(a.token)])).rows[0];
+    if(completion&&password.proved_fingerprint&&password.proved_fingerprint!==factorDigest(password.password_hash))throw new FactorManagementError();
     const id=(await client.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[factorDigest(a.token)])).rows[0].id;
     const email=password.email;
     await client.query('INSERT INTO cloud_authenticator_factors(account_id) VALUES($1) ON CONFLICT DO NOTHING',[session.accountId]);
     const factor=(await client.query('SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE',[session.accountId])).rows[0];
     if(factor.secret_envelope&&!decryptFactorSecret(factor.secret_envelope,this.#keys!,{accountId:session.accountId,version:factor.version,purpose:'active'}))throw new FactorManagementError('temporarily_unavailable');
     await resolveSession(client,a.token,{csrfToken:a.csrfToken,touch:false});
-    return {client,...session,sessionId:id,deadline:new Date(session.expiresAt),email,fingerprint:factorDigest(password.password_hash),factor};
+    return {client,...session,sessionId:id,deadline:'deadline' in session?session.deadline:new Date(session.expiresAt),email,fingerprint:factorDigest(password.password_hash),factor};
   }
   async #run<T>(a: FactorAuthority, action:(context:Context)=>Promise<T>, pendingToken?:string):Promise<T> {
     const result=await transaction(this.#pool,async client=>{
