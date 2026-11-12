@@ -15,11 +15,15 @@ remains separate from this admission retry. The publication fixture
 now supplies its own Git metadata. The published quota reduction later exhausted
 the App quota again on 12 November. The client now retains GET validators across
 unrelated writes, including refused cancellation and capacity publication; the
-loopback HTTP test exercises both. A complete busy hour after publication must
-measure non-304 completed requests by role and category, with token traffic separate
-and raw quota series kept distinct. Automatic switching at 4,000 and after reset,
-then bounded staged overflow qualification, remain open. The counters separate
-command roles, endpoint categories and raw quota headers.
+loopback HTTP test exercises both. The installed release's 12 November 08:11–09:11 UTC
+hour contains 2,472 non-token completed non-304 fetches, 135 token requests separately
+and zero failed fetches across 139 scopes. Job inventories account for 23.7% of the
+non-token count and 51.4% of their replies are 304. Peak sampled core use is 1,845/5,000;
+returned reset series stay separate. Different workloads prevent a causal savings claim.
+The [automatic 4,000/reset plan](superpowers/plans/2026-11-12-a1473-automatic-quota-fallback.md)
+is awaiting Claude review and watcher clearance; the switch and bounded staged overflow
+qualification remain open. The counters separate command roles, endpoint categories
+and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired.
 The controller revalidates JSON bodies and shares recent checked admission; see the
