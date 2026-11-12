@@ -13,6 +13,7 @@ export function pairingScreen(app:PortalApp){
   if(p.view&&p.view.state!=='awaiting_cloud')return html`<p role="status">${p.view.state==='complete'?c.pairComplete:c.pairApproved}</p>
     <p>${p.view.organisationName}</p><p>${p.view.legalBusinessName}</p>${logout}`;
   const choice=p.businesses.find(b=>b.legalBusinessId===p.selected);
+  const proofRequested=app.actionProof.loaded||app.actionProof.pending||p.error==='pairEnrollment';
   return html`<p>${c.pairIntro}</p>
     <wt-input name="pairingCode" .label=${c.pairCode} .value=${p.code} .required=${true} .disabled=${p.pending||!!p.view}
       .error=${p.codeError?c.pairCodeError:''} autocomplete="off"
@@ -23,7 +24,7 @@ export function pairingScreen(app:PortalApp){
         html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}
           @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;if(p.selected&&p.error==='pairChoice')p.error=undefined;app.draw();}}>
           <option value="" .selected=${!p.selected}>${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId} .selected=${b.legalBusinessId===p.selected}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
-    ${p.view?html`${p.error==='pairEnrollment'||app.actionProof.status?.methods.every(m=>m==='email')?html`<p>${c.pairEnrollment}</p><a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.accountSecurity}</a>`:accountActionProofScreen(app,2)}`:nothing}
+    ${p.view&&proofRequested?html`${p.error==='pairEnrollment'||app.actionProof.status?.methods.every(m=>m==='email')?html`<p>${c.pairEnrollment}</p><a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.accountSecurity}</a>`:accountActionProofScreen(app,2)}`:nothing}
     <wt-form-actions>${logout}<wt-button id="submit" variant="primary" .disabled=${p.pending||!!p.waiting} .loading=${p.pending}
       @click=${()=>{void app.submitPairing();}}>${p.view?c.pairApprove:c.pairInspect}</wt-button></wt-form-actions>
     ${p.error==='pairSession'?html`<a href="/login" @click=${(event:MouseEvent)=>app.follow(event,'/login')}>${c.login}</a>`:nothing}`;
