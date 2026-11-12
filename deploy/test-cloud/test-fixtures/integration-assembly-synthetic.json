@@ -6,7 +6,7 @@
     "project": "waitron-cloud-test",
     "completeIntegration": false,
     "origin": "https://waitron.local:3000",
-    "waitronHead": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
+    "waitronHead": "741c77a05806bf11367e93ef165c57e4de92eda3",
     "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
     "waitronImage": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
     "cloudSource": {
@@ -20,19 +20,19 @@
     "waitronSource": {
       "base": {
         "image": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
-        "head": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
-        "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
+        "head": "741c77a05806bf11367e93ef165c57e4de92eda3",
+        "tree": "4dfcc3fa24c53954cd7a6f67d70881b136a683dc",
         "dirty": false,
-        "files": 9357,
-        "sourceSha256": "be57b4c0e6748b127db1e909e888b0e8acfff4c4fd7bd933ccd024cfe5a32fe8"
+        "files": 9465,
+        "sourceSha256": "3b6ef22a20b696d56f7e1c3ebf0d7d12ee0e0c8d39588aa5d94b5ccf2e9dd304"
       },
       "client": {
         "image": "sha256:8b862b94412c99183f38cf5203e7597c58723112c83ebd788d934f0533ea3f58",
-        "head": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
-        "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
+        "head": "741c77a05806bf11367e93ef165c57e4de92eda3",
+        "tree": "4dfcc3fa24c53954cd7a6f67d70881b136a683dc",
         "dirty": false,
-        "files": 9357,
-        "sourceSha256": "be57b4c0e6748b127db1e909e888b0e8acfff4c4fd7bd933ccd024cfe5a32fe8"
+        "files": 9465,
+        "sourceSha256": "3b6ef22a20b696d56f7e1c3ebf0d7d12ee0e0c8d39588aa5d94b5ccf2e9dd304"
       }
     },
     "assets": {

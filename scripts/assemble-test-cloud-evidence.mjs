@@ -82,7 +82,7 @@ export function assembleTestCloudEvidence(input) {
   const {journey: raw, freeServices} = input;
   exact(raw, 'version,kind,runId,project,completeIntegration,origin,waitronHead,image,waitronImage,cloudSource,waitronSource,assets,accountMail,clients,tls,organisations,freeSnapshot,restarts,capacity,paidSnapshot,paidStream,paidContinuousRecovery,freeRemote,paidRemote,paidStorageWithdrawal,paidSnapshotExposure,schemaRollback,cleanup,protectedContainersUnchanged' +
     (Object.hasOwn(raw, 'withdrawal') ? ',withdrawal' : ''));
-  assert.equal(raw.waitronHead, 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7', 'assembly.waitron_pin');
+  assert.equal(raw.waitronHead, '741c77a05806bf11367e93ef165c57e4de92eda3', 'assembly.waitron_pin');
   assert.equal(raw.capacity.shippingQualification, false);
   assert.equal(raw.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(raw.capacity.diskMeasurement, 'docker-data-filesystem');

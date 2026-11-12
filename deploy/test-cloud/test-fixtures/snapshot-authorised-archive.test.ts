@@ -1,6 +1,7 @@
 // Mounted into the unchanged pinned Waitron image; its existing helper owns setup and teardown.
-import {archiveHost,archiveCommand,agreeInternet,suite,node,key} from '../test/hour-recovery-host.js';
-import {it,expect,vi} from 'vitest';
+import {archiveHost,archiveCommand,agreeInternet,clock,suite,node,key} from '../test/hour-recovery-host.js';
+import {it,expect} from 'vitest';
+import {recoverySelectPastWaits} from './testing/hour-test-clock.js';
 import {mkdtemp,readFile,writeFile,rm,rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -35,14 +36,14 @@ it('recaptures the authorised source and prepares recovery for its new archive',
   await writeTradingEnv(directory,{nodeId:node.nodeId,locationId:node.locationId,environment:'preproduction',developmentMode:true,onboardingIntent:'demo'});
   await writeFile(join(directory,'modules.json'),JSON.stringify({modules:{'fiscal-verifactu':true,'fiscal-none':false}}));
   const ring=loadKeyRing(await loadBoxEnv({},directory));
-  await establishNodeIdentity({ownerDb:suite.db,ring},node.nodeId);
+  await establishNodeIdentity({ownerDb:suite.db,node:suite.node,ring},node.nodeId);
   const certificate=makeAuthority().issue({organizationIdentifier:'VATES-89890001K'});
   await sealAeatSecret({db:suite.db,ring,nodeId:node.nodeId},{pfxBase64:certificate.pfx.toString('base64'),passphrase:certificate.passphrase,certKind:'sello'});
   let artifact:Uint8Array|undefined;
   const forbidden=async()=>{throw Error('fixture.capture_only');};
   await runOnce({
    backends:[{id:'authorised-fixture',async put(_name,bytes){artifact=bytes;},async putFile(_name,path){artifact=await readFile(path);},get:forbidden,getFile:forbidden,async list(){return [];},delete:forbidden,deleteMany:forbidden,close(){}}],
-   db:suite.db,modules:ALL_MODULES,environment:'preproduction',resolvers:{},stateDir:directory,recoveryKey,stagingDir:join(directory,'staging'),retain:100,retainDays:3650,destinationTimeoutMs:60000,signal:new AbortController().signal,log:()=>{},archive:path=>suite.db.archiveTo(path),
+   nodeId:node.nodeId,db:suite.db,node:suite.node,modules:ALL_MODULES,environment:'preproduction',resolvers:{},stateDir:directory,recoveryKey,stagingDir:join(directory,'staging'),retain:100,retainDays:3650,destinationTimeoutMs:60000,signal:new AbortController().signal,log:()=>{},archive:path=>suite.db.archiveTo(path),
   });
   expect(artifact).toBeDefined();
   const archive=artifact!,manifest=JSON.parse(unpackArchive(decryptArtifact(archive,recoveryKey)).find(entry=>entry.name==='manifest.json')!.bytes.toString());
@@ -82,10 +83,9 @@ it('recaptures the authorised source and prepares recovery for its new archive',
   expect(preparationBoundToRecapture).toBe(true);
   const options={...original.options,selected,binding:{...original.options.binding,eventId:'cloud-authorised-recapture',sourceId:selected.activationSourceId??selected.sourceId}};
   // The synthetic archive already reserved its hour. A new capture gets a new operation and a later observed hour.
-  vi.setSystemTime(new Date('2026-10-16T13:40:00Z'));
-  const service=createSelectedRecoveryPreparation(options),challenge=await service.prepare({action:'clock-challenge'}) as {id:string};
-  await service.prepare({action:'compare-clocks',browser:{challengeId:challenge.id,instantMs:Date.now()}});
-  const outcome=await service.prepare({action:'select',answer:'no',installationCodes:['06RB']}) as {input:unknown};
+  clock.set(Date.parse('2026-10-16T13:40:00Z'));
+  const service=createSelectedRecoveryPreparation(options);
+  const outcome=await recoverySelectPastWaits(clock,service,{onBox:false}) as {input:unknown};
   const command=await archiveCommand({...original,restore,options,outcome});agreeInternet();
   command.env.WAITRON_BACKUP_RECOVERY_KEY=recoveryKey;
   const destination=join(original.roots.venueDir,'venue.db'),identity=join(original.roots.stateDir,'trading.env');

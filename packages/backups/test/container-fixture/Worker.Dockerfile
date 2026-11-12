@@ -7,4 +7,4 @@ RUN mkdir -p /waitron/apps/server/dist/drizzle/core/meta \
 COPY deploy/backup-verifier/target.json /waitron/apps/server/dist/target.json
 COPY packages/backups/test/container-fixture/worker-bundle.mjs /waitron/apps/server/dist/backup-verification.js
 COPY packages/backups/test/container-fixture/restore.mjs /waitron/apps/server/dist/fixture-restore.mjs
-LABEL cloud.waitron-revision="ec91a9e34d2daba146f4ee61850ea4136ad5cfb7"
+LABEL cloud.waitron-revision="741c77a05806bf11367e93ef165c57e4de92eda3"

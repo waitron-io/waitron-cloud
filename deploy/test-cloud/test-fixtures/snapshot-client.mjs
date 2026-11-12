@@ -91,7 +91,7 @@ export async function snapshotClientProof(phase,input={}){
    const row=(await pool.query('SELECT verification FROM backup_points WHERE id=$1',[data.point.id])).rows[0];assert.equal(row.verification,'verified');
    const job=(await pool.query("SELECT status,last_success_at,attempts FROM backup_jobs WHERE target_id=$1 AND kind='verify'",[data.point.id])).rows[0];assert.equal(job.status,'pending');assert.ok(job.last_success_at);assert.equal(job.attempts,0);
    const attempt=(await pool.query('SELECT a.*,q.current_verification FROM backup_verification_attempts a JOIN backup_point_qualification q ON q.verification_id=a.id WHERE a.point_id=$1 AND a.id=(SELECT current_evidence_id FROM backup_points WHERE id=$1)',[data.point.id])).rows[0];
-   assert.equal(attempt.state,'finished');assert.equal(attempt.status,'passed');assert.equal(attempt.current_verification,'verified');assert.equal(attempt.cleanup_confirmed,true);assert.equal(attempt.result.activation,'not_attempted');assert.equal(attempt.result.modules.length,15);
+   assert.equal(attempt.state,'finished');assert.equal(attempt.status,'passed');assert.equal(attempt.current_verification,'verified');assert.equal(attempt.cleanup_confirmed,true);assert.equal(attempt.result.activation,'not_attempted');assert.equal(attempt.result.modules.length,8);
    return{realWaitronSnapshotVerified:true,scopedSignedCapture:true,controllerScope:attempt.controller_scope,attemptId:attempt.id,targetDigest:attempt.target_digest};
   }
   throw Error('fixture.phase');

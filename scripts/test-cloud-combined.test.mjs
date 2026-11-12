@@ -36,11 +36,11 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(receipt.waitronSource.client.image, receipt.assets.waitron.image);
   assert.notEqual(receipt.waitronSource.client.image, receipt.waitronSource.base.image);
   for (const measured of Object.values(receipt.waitronSource)) {
-    assert.equal(measured.head, 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7');
-    assert.equal(measured.tree, '8e833687e870cc3939d23bbb31e2e6bb88f60b2d');
+    assert.equal(measured.head, '741c77a05806bf11367e93ef165c57e4de92eda3');
+    assert.equal(measured.tree, '4dfcc3fa24c53954cd7a6f67d70881b136a683dc');
     assert.equal(measured.dirty, false);
-    assert.equal(measured.files, 9357);
-    assert.equal(measured.sourceSha256, '0bbcb8e4fb303296f491cc630c215049b3aeec3acf89701f19685c4b50a2746e');
+    assert.equal(measured.files, 9465);
+    assert.equal(measured.sourceSha256, '3b6ef22a20b696d56f7e1c3ebf0d7d12ee0e0c8d39588aa5d94b5ccf2e9dd304');
   }
   const free = receipt.organisations.find(value => value.plan === 'free');
   const direct = receipt.paidStorageWithdrawal;

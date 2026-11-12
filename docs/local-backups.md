@@ -472,8 +472,10 @@ policy around Waitron's real restore hooks.
 
 The legacy process-only `createWaitronVerifier` adapter cannot restore the current durable
 Waitron flow: Node's permission mode refuses directory sync with `ERR_ACCESS_DENIED`.
-The local rehearsal keeps that refusal as a control, then uses the container data verifier
-and an independent native restore. The backup worker CLI requires `CLOUD_VERIFIER_IMAGE`
+The older native runner also retains the ordinary fiscal-authority refusal described above;
+it does not qualify current recovery. Use the [test Cloud's authorised joint proof](test-cloud.md#check-real-free-and-paid-clients)
+for current capture, data verification and separately authorised restore.
+The backup worker CLI requires `CLOUD_VERIFIER_IMAGE`
 and `CLOUD_VERIFIER_OWNER` and uses `createBoundContainerWaitronVerifier` to run the data
 verifier inside a disposable container. There is no process-only fallback. Follow
 [the container setup and executed proof](backup-verifier-containment.md) for total memory,

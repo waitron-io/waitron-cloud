@@ -29,7 +29,6 @@ import { login } from "../packages/identity/src/index.ts";
 import { BackupKeyVault } from "../packages/backups/src/keys.ts";
 import { BackupObjects, receipt } from "../packages/backups/src/storage.ts";
 import { BackupWorker } from '../packages/backups/src/worker.ts';
-import { createWaitronVerifier } from '../packages/backups/src/waitron-verifier.ts';
 import {openTestBackupVerifier} from '../deploy/test-cloud/backup-worker.mjs';
 import {setVerificationPolicy} from '../packages/backups/src/verification-admission.ts';
 import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
@@ -524,23 +523,14 @@ try {
     assert(restored.integrityOk);assert(restored.hooks.includes('fiscal-verifactu'));
     assert.equal(restored.cloudCredentialPresent,false);assert.equal(restored.staffKeyPresent,false);
     let result;
-    const restore = await createWaitronVerifier(waitron);
     const controllerRoot=await root(),{verify,controllerScope}=await openTestBackupVerifier({directory:controllerRoot,image:process.env.CLOUD_VERIFIER_IMAGE});
     const verificationTarget=JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json',import.meta.url),'utf8'));
     await transaction(f.db.pool,c=>setVerificationPolicy(c,verificationTarget,'local.waitron-verifier@'+process.env.CLOUD_VERIFIER_IMAGE,false));
     const queue = new BackupWorker(f.db.pool, catalogue, async (source,key,request,signal) => {
-      try {
-      // Node permission mode refuses the durable sync required by the current restore flow.
-      await assert.rejects(restore(source,{recoveryKey:key.secret},{modules:request.archive.modules,capturedAt:request.capturedAt,sourceNodeId:request.sourceNodeId},signal),/^Error: backup.verifier_failed$/);
       const output=await verify(source,key,request,signal);
-      console.error(JSON.stringify({stage:'snapshot-data-verifier',status:output.result.status,reason:output.result.reason,modules:output.result.modules.map(({name,status,checks})=>({name,status,checks}))}));
       assert.equal(output.result.status,'passed');
       if(request.pointId===point.id)result=output.result;
       return output;
-      } catch(error) {
-        console.error(JSON.stringify({stage:'snapshot-verifier',exception:error.name,code:/^backup\.[a-z_]+$/.test(error.message)?error.message:error.code??'unknown',causeCode:/^backup\.[a-z_]+$/.test(error.actual?.message??'')?error.actual.message:undefined,frames:[...new Set(error.stack?.match(/\/[^\s()'"<>]+\.(?:[cm]?js|ts):\d+:\d+/g)??[])].slice(0,5)}));
-        throw error;
-      }
     },controllerScope);
     await queue.schedule();
     const deadline=Date.now()+60000;
@@ -555,7 +545,7 @@ try {
     snapshots.push({ venue, reservation, point, captured, bytes, result,streamKey:internal.keys.streamKey,applicationVault });
   }
   record(
-    "both encrypted snapshots passed container data verification and independent native restoration with integrity/schema checks and module hooks; the legacy permission-mode restore refused durable sync",
+    "both encrypted snapshots passed container data verification and independent native restoration with integrity/schema checks and module hooks",
   );
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {
