@@ -1,8 +1,8 @@
 # D621: first continuous C-loss check on Amazon
 
-**Plan only; no build or provider access.** Source assessment at `d79d05c3fb8e`. Owner 12 November 02:11: “Go: Amazon directly”; watcher 04:46 cleared this smaller rewrite after Claude challenged the draft. The watcher cleared publication on 12 November at 05:05; building remains separately unapproved. D618/D110 are closed on accepted run 7; every D621 criterion stays open. Both decisions are recorded in `~/waitron-campaign-g/questions.md` under 02:11 and 04:46. Claude read the approach and corrections; this records watcher clearance, not owner design approval.
+**First observer build; no provider access.** Source assessment at `d79d05c3fb8e`. Owner 12 November 02:11: “Go: Amazon directly”; watcher 04:46 cleared this smaller rewrite after Claude challenged the draft. The watcher cleared publication on 12 November at 05:05; the watcher separately cleared this first observer build at 05:16 in the same lane questions file. D618/D110 are closed on accepted run 7; every D621 criterion stays open. Both decisions are recorded in `~/waitron-campaign-g/questions.md` under 02:11 and 04:46. Claude read the approach and corrections; this records watcher clearance, not owner design approval.
 
-**Finish:** a reviewed first-cut plan and owner-session brief. After its build/CI land, you can observe the same signed-in clients throughout C’s loss. That first result does not complete D621’s original speed, database-host-loss or real-service checks.
+**Finish:** `node scripts/amazon-run.mjs observe` retains the same signed-in clients throughout C’s loss. The owner-started run still needs qualification; its first result does not complete D621’s original speed, database-host-loss or real-service checks.
 
 **Reuse:** D618’s three x86 Stockholm machines, 90-minute scheduled deletion, genuine venue/capture/restore and SSH. Separate journeys close their clients (`scripts/amazon-run.mjs:8–14`; `scripts/test-cloud-integration.mjs:748–774`). C hosts the manifest worker; A owns database/storage/gateway/control plane/configuration (`scripts/kubernetes-check.mjs:98–99`; `deploy/kubernetes/local-checks.yaml:17–32`; `deploy/kubernetes/bounded-amazon/bootstrap.sh:62–91`). C observations cannot qualify A-loss; this cut proves the observer and manifest-worker replacement baseline.
 
@@ -35,6 +35,6 @@ Keep shared setup/retry budgets: 8 logins/IP/60 seconds, 24/email/900 seconds, 8
 
 ## Brief for the owner-started session
 
-After separate build authority, landed build/CI and the flake repair, select exact Cloud/Waitron revisions and private `D618_CONFIG`. Today’s `node scripts/amazon-run.mjs start|stop` cannot run this observer. Use the landed build’s command.
+After the observer build/CI lands and the flake repair is qualified, select exact Cloud/Waitron revisions and private `D618_CONFIG`. Run `node scripts/amazon-run.mjs observe` from the exact clean Cloud checkout. The `start` mode retains its two separate journeys.
 
 Check prices, spend, authority, quota and deletion prerequisites in the [owner guide](../../aws-infrastructure.md#one-owner-started-amazon-experiment). Authorise resource/duration changes separately. Run one fresh C-observer check; retain private logs/revisions/results, report missing/failed criteria, confirm deletion. Lanes never access Amazon. Production and wider failure qualification stay open.

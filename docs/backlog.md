@@ -3245,8 +3245,10 @@ implementation or production evidence.
   test-service mode and the test backup worker. Full service/fault proof, the strict
   common verifier and P1's production-mode acceptance remain open. The
   [D621 first-cut plan](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md)
-  starts with continuous observation of the same clients during C's loss; it is
-  published only, not built. Original A/all-node loss, real-service and repository
+  adds `node scripts/amazon-run.mjs observe` for an owner-started continuous
+  same-client C-loss check. Its focused observer and adapter checks run with
+  `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs`.
+  Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups

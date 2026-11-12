@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -194,7 +194,15 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
   const removalReady=new Promise(resolve=>{markRemoval=resolve;});
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
-  const running = api.startAmazon(config, {now: () => time, sleep: async ms => {time += ms;},
+  const running = api.startAmazon({...config, observer: scenario.startsWith('observer')}, {now: () => time, sleep: async ms => {time += ms;},
+    observe: async (binary, args, {onReady, timeout}) => {
+      assert.equal(binary, 'ssh'); assert.equal(timeout, 3600000);
+      assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault before observer ready');
+      assert.equal(target.observer, true); assert.ok(args.at(-1).includes('kubernetes-check.mjs'));
+      const messages = []; await onReady(value => messages.push(value));
+      assert.deepEqual(messages, ['P1_STOPPED', 'P1_REPLACEMENT_READY']);
+      time += 900000; return {continuous: true};
+    },
     aws: async (service, args) => {
       calls.push([service, ...args]);
       if (args[0] === 'create-stack' && scenario === 'failed creation') throw Error('creation failed');
@@ -238,6 +246,7 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
         if (script.includes('169.254.169.254')) {const index = Number(args.at(-2).at(-1)); metadata.push(index); return scenario === 'wrong instance' ? 'i-00000000000000009' : output[['A','B','C'][index - 1]];}
         if (script.includes('sha256sum')) return hashes;
         if (script.includes('/opt/cni/bin/flannel')) return scenario === 'missing flannel' && args.at(-2) === 'admin@203.0.113.3' ? 'missing' : 'present';
+        if (script.includes('crictl') && scenario === 'observer expiry') time += 700000;
         if (script.includes('crictl')) return JSON.stringify({status: {id: 'sha256:' + (scenario === 'wrong imported image' ? 'b'.repeat(64) : hashes), pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
         if (script.includes('kubernetes-check.mjs')) {phases.push(target.phase); assert.ok(script.includes('sha256:' + hashes)); assert.equal(target.instances[2], output.C); return JSON.stringify({checked: target.phase});}
         if (script.includes('jsonpath=')) return 'manifest-old';
@@ -310,8 +319,12 @@ for (const [scenario, expectedError] of [['complete', null], ['failed creation',
   assert.ok(lastStorage>=0&&lastStorage<upload,'every worker has its private mount before distribution');
   const removal=calls.findIndex(row=>row[0]==='ssh'&&row.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
   assert.ok(removal>calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'cp'"))&&removal<calls.findIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'ctr'")));
-  assert.deepEqual(phases, ['before', 'after']);
-  assert.deepEqual(result.journeys, [{checked: 'before'}, {checked: 'after'}]);
+  if (scenario === 'observer') {
+    assert.deepEqual(phases, []); assert.deepEqual(result.observation, {continuous: true, stopMs: 0, replacementMs: 0});
+  } else {
+    assert.deepEqual(phases, ['before', 'after']);
+    assert.deepEqual(result.journeys, [{checked: 'before'}, {checked: 'after'}]);
+  }
   assert.equal(result.removed, true);
   const imports = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("'ctr' '-n' 'k8s.io' 'images' 'import'"));
   assert.deepEqual(imports.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
@@ -393,4 +406,34 @@ test('saved tar requires the selected amd64 manifest, config and every layer', a
   pack(); await api.checkAmazonArchive(archive,['synthetic:local'],run);
   await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected,platform:{os:'linux',architecture:'arm64'}}]}));
   pack(); await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run), /amazon.archive_platform/);
+});
+
+// The observer owns the retained clients; no second journey may replace them.
+test('observer mode completes before stopped-state readback and independent deletion', async () => {
+  const calls = [], stage = name => async () => {calls.push(name);};
+  const result = await api.runAmazonExperiment({create: stage('create'), prepare: stage('prepare'),
+    observe: async () => {calls.push('observe'); return {offMs: 900000};},
+    journey: () => {throw Error('separate journey');}, checkStopped: stage('still-stopped'),
+    waitDeleted: stage('deleted'), deleteStack: stage('delete')}, {waitExpiry: stage('expiry')});
+  assert.deepEqual(calls, ['create', 'prepare', 'observe', 'still-stopped', 'expiry', 'deleted']);
+  assert.deepEqual(result.observation, {offMs: 900000}); assert.equal(result.removed, true);
+});
+
+test('observer transport waits for ready, confirms stopped and replacement over its open stdin', async () => {
+  assert.equal(typeof api.observerCommand, 'function');
+  const stages = [];
+  const program = `process.stdout.write('P1_READY\\n'); let s=''; process.stdin.on('data',p=>{s+=p; if(s==='P1_STOPPED\\nP1_REPLACEMENT_READY\\n'){process.stdout.write(JSON.stringify({observed:true}));process.exit(0);}});`;
+  const result = await api.observerCommand(process.execPath, ['-e', program], {
+    onReady: async send => {stages.push('stop'); send('P1_STOPPED'); stages.push('replace'); send('P1_REPLACEMENT_READY');}, timeout: 3000});
+  assert.deepEqual(result, {observed: true}); assert.deepEqual(stages, ['stop', 'replace']);
+});
+
+for (const failure of ['never ready', 'stop failed', 'cancelled']) test('observer transport closes its owned child: ' + failure, async () => {
+  assert.equal(typeof api.observerCommand, 'function');
+  const controller = new AbortController();
+  const ready = failure === 'never ready' ? '' : `process.stdout.write('P1_READY\\n');`;
+  await assert.rejects(api.observerCommand(process.execPath, ['-e', ready + 'setInterval(()=>{},1000);'], {
+    timeout: failure === 'never ready' ? 100 : 3000, signal: controller.signal,
+    onReady: async () => {if (failure === 'stop failed') throw Error('stop failed'); controller.abort();},
+  }), failure === 'stop failed' ? /stop failed/ : /amazon.observer_/);
 });

@@ -12,6 +12,7 @@ import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {observeP1, readP1Signals} from './p1-observer.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
@@ -94,17 +95,17 @@ const env = {...process.env, KUBECONFIG: amazon ? '/etc/kubernetes/admin.conf' :
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
 const recentFailures = [];
-let sharedVolume;
+let sharedVolume, observerSignals, observing = false, replacementReady = false;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
   cluster + ((workerLoss || amazon) && ['manifest', 'verifier'].includes(role) ? role === 'manifest' && amazon?.phase !== 'after' ? '-worker2' : '-worker' : '-control-plane')]));
 const stop = new AbortController(), shutdown = () => stop.abort();
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
-async function run(binary, args, input, cleanup = false) {
+async function run(binary, args, input, cleanup = false, requestSignal) {
   if (!cleanup) stop.signal.throwIfAborted();
   const started = performance.now(), processTimeoutMs = 180000;
   return new Promise((resolve, reject) => {
     const child = execFile(binary, args, {env, timeout: processTimeoutMs, maxBuffer: 2 * 1024 * 1024,
-      ...(cleanup ? {} : {signal: stop.signal})}, (error, stdout, stderr) => {
+      ...(cleanup ? {} : {signal: AbortSignal.any([stop.signal, requestSignal].filter(Boolean))})}, (error, stdout, stderr) => {
         if (!error) return resolve(stdout.trim());
         const command = args[0] === '--context' ? args.slice(4) : args;
         // Only wait arguments are diagnostic selectors; other commands can carry private input.
@@ -123,16 +124,17 @@ async function run(binary, args, input, cleanup = false) {
     child.stdin.on('error', () => {}); child.stdin.end(input);
   });
 }
-const kube = (args, input, cleanup = false) => run('kubectl', ['--context', context, '--namespace', 'default', ...args], input, cleanup);
+const kube = (args, input, cleanup = false, requestSignal) => run('kubectl', ['--context', context, '--namespace', 'default', ...args], input, cleanup, requestSignal);
 const pod = async (role, cleanup = false, optional = false) => {
   const rows = JSON.parse(await kube(['get', 'pods', '-l', 'app=' + role, '-o', 'json'], undefined, cleanup)).items;
   if (optional && rows.length === 0) return;
   assert.equal(rows.length, 1, 'kubernetes.replica_count');
-  assert.equal(rows[0].spec.nodeName, roleNodes[role], 'kubernetes.node_binding');
+  if (role === 'manifest' && amazon?.observer && observing && !replacementReady) assert.ok([cluster + '-worker', cluster + '-worker2'].includes(rows[0].spec.nodeName), 'kubernetes.node_binding');
+  else assert.equal(rows[0].spec.nodeName, roleNodes[role], 'kubernetes.node_binding');
   return rows[0];
 };
-const exec = async (role, args, input) => kube(['exec', '-i', (await pod(role === 'account' ? 'cloud' : role)).metadata.name,
-  '-c', role, '--', ...args], input);
+const exec = async (role, args, input, requestSignal) => kube(['exec', '-i', (await pod(role === 'account' ? 'cloud' : role)).metadata.name,
+  '-c', role, '--', ...args], input, false, requestSignal);
 async function forward(role, ports) {
   const name = (await pod(role)).metadata.name;
   const child = spawn('kubectl', ['--context', context, '--namespace', 'default', 'port-forward', '--address', '127.0.0.1', 'pod/' + name,
@@ -212,12 +214,24 @@ try {
   const verifier = createKubernetesVerifier({template: verifierTemplate, kube, pod, classicImages: Boolean(amazon),
     loadImage: id => loadVerifierImage(id, ['--context', context, '--namespace', 'default', 'exec', '-i',
       'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, stop.signal)});
+  let observe;
+  if (amazon?.observer) {
+    observerSignals = readP1Signals(process.stdin);
+    observerSignals.replacement.then(() => {replacementReady = true; roleNodes.manifest = cluster + '-worker';}).catch(() => {});
+    observe = async (probes, checkBudget) => {
+      observing = true;
+      try {return await observeP1({probes, signal: stop.signal, expiresAt: amazon.expiresAt,
+        ready: () => {checkBudget(); process.stdout.write('P1_READY\n');},
+        stopped: () => observerSignals.stopped, replacement: () => observerSignals.replacement});}
+      catch (error) {stop.abort(error); throw error;}
+    };
+  }
   const journeys = [];
   let loss, stoppedAt, offBeforeSecondMs;
   for (let journey = 0; journey < (workerLoss ? 2 : 1); journey++) {
   result = await runTestCloudClients({image, waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE, freeRemote: true, paidRemote: true, paidVerification: true,
     kubernetes: {cluster, namespace: 'default', account: 'kube-account', ca, network: amazon ? cluster : 'kind', proxyIp: address, ...(amazon ? {amazon} : {}),
-      port: ports[3443], mailPort: ports[8025], exec, remote, verifier}});
+      port: ports[3443], mailPort: ports[8025], exec, remote, verifier, ...(observe ? {observe} : {})}});
   journeys.push(result);
   if (workerLoss && journey === 0) {
     const manifest = (await pod('manifest')).metadata.name;
@@ -247,6 +261,7 @@ try {
   }
   throw error;
 } finally {
+  observerSignals?.close();
   if (created || amazon) await verifierDiagnostics(kube, pod);
   for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {

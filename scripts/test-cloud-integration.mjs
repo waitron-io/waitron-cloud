@@ -22,6 +22,7 @@ import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integrati
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
 import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
+import {createP1Budget} from './p1-observer.mjs';
 import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
 export {completeCleanup};
 
@@ -121,6 +122,7 @@ export function checkProtectedContainers(before, after, ids) {
 }
 
 export function assertAmazonBinding(target) {
+  if (target?.observer) assert.ok(Number.isSafeInteger(target.expiresAt) && target.expiresAt - Date.now() >= 2400000, 'kubernetes.observer_expiry');
   assert.ok(target?.type === 'amazon' && /^d618-[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(target.cluster) &&
     target.context === target.cluster && ['before', 'after'].includes(target.phase) && target.address === '10.77.0.1' &&
     Array.isArray(target.instances) && target.instances.length === 3 && new Set(target.instances).size === 3 &&
@@ -141,6 +143,7 @@ export async function runTestCloudClients(options = {}) {
     assert.ok(!options.paidSnapshot && !options.paidRecovery && !options.paidAuthorisedRecovery && !options.paidStream && !options.paidContinuousRecovery &&
       !options.measureCapacity && !options.measureIntegration && !options.cloudRollback && !options.schemaRollback &&
       !options.fixedProject && !options.pairedExpiry, 'integration.kubernetes_scope');
+    if (k.amazon?.observer) assert.ok(options.paidVerification && options.paidRemote && typeof k.observe === 'function', 'integration.observer_binding');
     if (options.paidVerification) assert.ok(['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
       .every(name => typeof k.verifier?.[name] === 'function'), 'integration.kubernetes_binding');
   }
@@ -182,7 +185,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     try {
       if (kubernetes && args[0] === 'exec' && ['kube-account', 'kube-gateway'].includes(args[args[1] === '-i' ? 2 : 1])) {
         const offset = args[1] === '-i' ? 2 : 1;
-        return kubernetes.exec(args[offset].slice(5), args.slice(offset + 1), input);
+        return kubernetes.exec(args[offset].slice(5), args.slice(offset + 1), input, runSignal());
       }
       const creating = ['volume', 'network'].includes(args[0]) && args[1] === 'create';
       if (creating) args = [...args.slice(0, 2), '--label', 'cloud.integration.owner=' + runId, ...args.slice(2)];
@@ -333,8 +336,12 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     assert.match(ca, /BEGIN CERTIFICATE/); assert.doesNotMatch(ca, /PRIVATE/);
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
-    const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local') => new Promise((resolve, reject) => {
-      const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: runSignal(), method: body === undefined ? 'GET' : 'POST',
+    const budget = kubernetes?.amazon?.observer ? createP1Budget() : undefined;
+    const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local', signal) => {
+      if (path === '/api/account/login') budget?.attempt('login', body.email);
+      if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
+      return new Promise((resolve, reject) => {
+      const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(budget ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
         headers: {host: 'waitron.local:3000', ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
@@ -342,27 +349,39 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           try {resolve({status: res.statusCode, headers: res.headers, body: text ? parseIntegrationJson(text) : null});} catch (error) {reject(error);}
         });
       });
-      req.once('error', reject); req.setTimeout(10000, () => req.destroy(Error('integration.api_timeout')));
+      req.once('error', reject); req.setTimeout(budget ? 5000 : 10000, () => req.destroy(Error('integration.api_timeout')));
       req.end(body === undefined ? undefined : JSON.stringify(body));
     });
+    };
     assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
     const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
-    for (const plan of ['free', 'paid']) {
-      const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
-      assert.equal((await api('/api/account/signup/request', {email})).status, 202);
+    const mailbox = async signal => parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`,
+      {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)])})).text());
+    const readMail = async (email, seen, signal) => {
       let message;
       for (let attempt = 0; attempt < 100; attempt++) {
-        const inbox = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal()].filter(Boolean)])})).text());
-        const found = inbox.messages?.find(value => value.To.some(to => to.Address === email));
-        if (found) {message = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${found.ID}`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal()].filter(Boolean)])})).text()); break;}
+        const inbox = await mailbox(signal);
+        const found = inbox.messages?.find(value => !seen.has(value.ID) && value.To.some(to => to.Address === email));
+        if (found) {message = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${found.ID}`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)])})).text()); break;}
         await delay(100);
       }
+      assert.ok(message, 'integration.mail_missing'); return message;
+    };
+    const signupAccount = async (email, password, name, signal) => {
+      assert.equal((await api('/api/account/signup/request', {email}, {}, undefined, undefined, signal)).status, 202);
+      const message = await readMail(email, new Set(), signal);
       const token = /https:\/\/waitron\.local:3000\/signup#token=([A-Za-z0-9_-]{43})/.exec(message?.Text ?? '')?.[1];
       assert.ok(token, 'integration.signup_mail');
-      const signup = await api('/api/account/signup/complete', {token, password, rememberBrowser:'true', organisationName: plan + ' café', legalBusinessName: plan + ' café SL', countryCode: 'ES'});
+      const signup = await api('/api/account/signup/complete', {token, password, rememberBrowser:'true', organisationName: name, legalBusinessName: name + ' SL', countryCode: 'ES'}, {}, undefined, undefined, signal);
       assert.equal(signup.status, 201, 'integration.signup');
+      return signup;
+    };
+    let repeatBackup, readBackups, observation;
+    for (const plan of ['free', 'paid']) {
+      const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
+      const signup = await signupAccount(email, password, plan + ' café');
       const {organisationId, legalBusinessId} = signup.body;
       const login = await api('/api/account/login', {email, password}, {cookie:signup.headers['set-cookie'].map(value=>value.split(';')[0]).join('; ')}); assert.equal(login.status, 200, 'integration.login');
       const cookie = login.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
@@ -434,7 +453,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         await control(id, 'refresh');
         const recoveryAuthority = paidAuthorisedRecovery ? await control(id, 'recovery-authority') : undefined;
         if (paidVerification || paidRecovery) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
-        const captured = await control(id, 'snapshot-publish');
+        let captured = await control(id, 'snapshot-publish');
         for (const [name, extra] of [
           ['stored-digest', {sha256: '0'.repeat(64)}],
           ['organisation-binding', {organisationId: organisations[0].organisationId}],
@@ -486,6 +505,17 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           publishedSnapshot.verification = 'verified';
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
           };
+          const acknowledged = [captured];
+          if (kubernetes?.observe) readBackups = () => Promise.all(acknowledged.map(point => accountPhase('inspect-snapshot', point)));
+          if (kubernetes?.observe) repeatBackup = signal => cancellation.run({...cancellation.getStore(),
+            signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, async () => {
+            await readBackups();
+            captured = await control(id, 'snapshot-publish'); acknowledged.push(captured);
+            const independent = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
+            publishedSnapshot = {...publishedSnapshot, ...captured, ...independent};
+            await verify();
+            return publishedSnapshot.workerVerification;
+          });
           if (measureCapacity) {
             const {measureCapacityWindow, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
             const measured = await measureCapacityWindow({
@@ -676,13 +706,20 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
         streamId: evidence.streamId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
-      remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1)});
+      remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1), browser, email, password, recognisedCookie: signup.headers['set-cookie'].map(value => value.split(';')[0]).join('; ')});
     }
     if (paidRemote) {
       journeyStage = 'remote-withdrawal';
       const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
+      const paid = remoteClients.find(value => value.plan === 'paid');
       paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account, target: kubernetes?.remote,
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId, storageWithdrawal: paidStream,
+        observe: kubernetes?.observe ? async remote => {
+          observation = await observeRetainedClients({paid, browser: paid.browser, api, docker, control,
+            login: createObserverLogin({api, mailbox, readMail, email: paid.email, password: paid.password, cookie: paid.recognisedCookie}),
+            signup: signal => signupAccount(`integration-observer-${runId}@example.test`, 'Disposable signup ' + runId, 'Observer café', signal),
+            backup: repeatBackup, remote: signal => cancellation.run({...cancellation.getStore(), signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, async () => {await remote(signal); await readBackups();}), observe: probes => kubernetes.observe(probes, () => budget.requireRoom(paid.email))});
+        } : undefined,
         own: id => {owned.push(id); record('container', id);}});
     }
     if (pairedExpiry) {
@@ -739,6 +776,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       ...(waitronBaseSource && waitronClientSource ? {waitronSource: {base: waitronBaseSource, client: waitronClientSource}} : {}),
       ...(cloudAssets && waitronAssets ? {assets: {cloud: cloudAssets, waitron: waitronAssets}} : {}),
       ...(kubernetes ? {kubernetes: {cluster: kubernetes.cluster, namespace: kubernetes.namespace}} : {}),
+      ...(observation ? {p1: observation} : {}),
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
@@ -804,4 +842,37 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       protectedContainerIds: JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]')});
     process.stdout.write(JSON.stringify(value) + '\n');
   } catch {process.stderr.write('Test Cloud client integration failed\n'); process.exitCode = 1;}
+}
+
+export async function observeRetainedClients({observe, paid, browser, api, login, signup, backup, remote, docker, control}) {
+  const before = await control(paid.id, 'evidence');
+  const started = await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]);
+  const result = await observe({
+    session: async signal => {assert.equal((await api('/api/account/session', undefined, browser, undefined, undefined, signal)).status, 200, 'p1.session');},
+    login: async signal => {assert.equal((await login(signal)).status, 200, 'p1.login');},
+    signup: async signal => {assert.equal((await signup(signal)).status, 201, 'p1.signup');},
+    backup, remote,
+  });
+  assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]), started, 'p1.venue_restarted');
+  const after = await control(paid.id, 'evidence');
+  for (const key of ['registration', 'identitySha256', 'stateSha256', 'localVenueId']) assert.deepEqual(after[key], before[key], 'p1.venue_state:' + key);
+  return result;
+}
+
+export function createObserverLogin({api, mailbox, readMail, email, password, cookie}) {
+  let pending;
+  return async signal => {
+    if (!pending) {
+      const seen = new Set((await mailbox(signal)).messages?.map(message => message.ID));
+      const reply = await api('/api/account/login', {email, password}, {cookie}, undefined, undefined, signal);
+      if (reply.status === 200) return reply;
+      assert.ok(reply.status === 202 && reply.body.emailRequired, 'p1.password_signin');
+      pending = {seen, challengeToken: reply.body.challengeToken};
+    }
+    const message = await readMail(email, pending.seen, signal);
+    const code = /^\d{6}$/m.exec(message.Text)?.[0]; assert.ok(code, 'p1.signin_mail');
+    const reply = await api('/api/account/login/email', {challengeToken: pending.challengeToken, code}, {}, undefined, undefined, signal);
+    if (reply.status === 200) pending = undefined;
+    return reply;
+  };
 }

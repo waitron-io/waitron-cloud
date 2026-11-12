@@ -5,7 +5,7 @@ import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
-export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false, target}) {
+export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false, target, observe}) {
   const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
     JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase));
   const gateway = target ? 'kube-gateway' : await compose(['ps', '-q', 'gateway']);
@@ -23,8 +23,8 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     '--mount', 'type=volume,src=' + paid.stateVolume + ',dst=/input,readonly,volume-subpath=' + paid.venueRoot.slice('/tmp/cloud-integration-state/'.length) + '/remote-peer',
     image, 'node', 'packages/remote-access/src/peer-cli.ts'], '', 'remote-peer-create');
   own(peerId); await docker(['start', peerId]);
-  const probe = (hostname, path, {trust = ca, verificationHostname, method = 'GET', body, cookie} = {}) => new Promise((resolve, reject) => {
-    const req = request({host: '127.0.0.1', port, servername: hostname, ca: trust, path, method, agent: false,
+  const probe = (hostname, path, {trust = ca, verificationHostname, method = 'GET', body, cookie, signal} = {}) => new Promise((resolve, reject) => {
+    const req = request({signal: AbortSignal.any([signal, ...(observe ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), host: '127.0.0.1', port, servername: hostname, ca: trust, path, method, agent: false,
       ...(verificationHostname ? {checkServerIdentity: (_hostname, certificate) => checkServerIdentity(verificationHostname, certificate)} : {}),
       headers: {host: hostname, ...(cookie ? {cookie} : {}), ...(body ? {'content-type': 'application/json'} : {})}}, res => {
       const certificateSha256 = createHash('sha256').update(res.socket.getPeerCertificate().raw).digest('hex');
@@ -45,15 +45,18 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   assert.equal((await probe(placement.staffHostname, '/management-api/cloud/status')).status, 401);
   assert.equal((await probe(placement.publicHostname, '/management-api/cloud/status')).status, 404);
   assert.equal((await probe(placement.publicHostname, '/public/availability')).status, 403);
-  const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge')).body);
-  let nonce = 0;
-  const deadline = Date.now() + 10000;
-  while (createHash('sha256').update(challenge.challenge + ':' + nonce).digest().readUInt32BE(0) >= 2 ** (32 - challenge.difficulty)) {
-    nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
-  }
-  const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}});
-  assert.equal(solved.status, 204);
-  const cookie = solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
+  const solvePublic = async () => {
+    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge')).body);
+    let nonce = 0;
+    const deadline = Date.now() + 10000;
+    while (createHash('sha256').update(challenge.challenge + ':' + nonce).digest().readUInt32BE(0) >= 2 ** (32 - challenge.difficulty)) {
+      nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
+    }
+    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}});
+    assert.equal(solved.status, 204);
+    return solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
+  };
+  let cookie = await solvePublic(), renewedAt = Date.now();
   const publicResponse = await probe(placement.publicHostname, '/public/availability', {cookie});
   assert.equal(publicResponse.status, 200); assert.deepEqual(JSON.parse(publicResponse.body), client.availability);
   await assert.rejects(probe('staff-v-' + free.venueId + '.r.waitron.local', '/public/availability'));
@@ -61,6 +64,16 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {trust: null}), /certificate|issuer|verify/i);
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {verificationHostname: placement.publicHostname}), /certificate|Hostname/i);
   assert.ok((await docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers'])).split(/\s+/).includes(peer.peerPublicKey));
+  if (observe) await observe(async signal => {
+    // The public gate cookie lasts five minutes; renew it before expiry.
+    if (Date.now() - renewedAt >= 240000) {cookie = await solvePublic(); renewedAt = Date.now();}
+    signal?.throwIfAborted();
+    const staff = await probe(placement.staffHostname, '/public/availability', {signal});
+    assert.equal(staff.status, 200); assert.deepEqual(JSON.parse(staff.body), client.availability);
+    assert.equal(staff.certificateSha256, client.certificateSha256);
+    const publicReply = await probe(placement.publicHostname, '/public/availability', {cookie, signal});
+    assert.equal(publicReply.status, 200); assert.deepEqual(JSON.parse(publicReply.body), client.availability);
+  });
   let storage, storageBefore, storageStartedAt;
   if (storageWithdrawal) {
     storageBefore = await control(paid.id, 'storage-withdrawal', {phase: 'before', foreignVenueId: free.venueId});

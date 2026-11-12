@@ -1131,3 +1131,28 @@ spending authority:
 
 D110 closes only after that run passes. D621 owns the remaining speed targets,
 database-host loss and production-mode checks. No production service is deployed.
+
+
+### Observe the same clients while C is stopped
+
+To measure recovery without replacing the clients between journeys, use
+`node scripts/amazon-run.mjs observe` in your owner-started session, with the
+same private configuration and prerequisites above. It keeps the signed-in
+session, venue process, staff certificate and routed peer through C's existing
+graceful stop and assisted replacement. The public-page browser check renews
+its five-minute cookie before expiry. Local behavior checks run with
+`node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs`;
+this command has not yet qualified an Amazon observation.
+
+The observer starts only with an hour remaining before scheduled deletion,
+and refuses the fault unless 40 minutes remain after baseline work. It records
+request failures, recovery times and longest gaps on A's clock, confirms at least
+900 seconds after EC2 reports C stopped, and completes another genuine backup
+verification before the existing withdrawal checks and cleanup. Stop and replacement
+durations are separate launcher measurements. Keep the private JSON result and
+bounded diagnostics; failure still requests deletion and confirms it.
+
+Repository repair is reported as unavailable. Abrupt loss of each original node,
+including database host A, and production-mode services remain open under
+[D621](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md). This command
+changes no production deployment or provider permission.

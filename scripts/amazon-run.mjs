@@ -5,16 +5,21 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
   try {
     await operations.create();
     await operations.prepare();
+    let journeys, observation;
+    if (operations.observe) observation = await operations.observe();
+    else {
     const before = await operations.journey('before');
     await operations.stopWorker();
     await operations.waitStopped();
     await operations.replace();
     await sleep(900000);
     const after = await operations.journey('after');
+    journeys = [before, after];
+    }
     await operations.checkStopped();
     await waitExpiry();
     await operations.waitDeleted();
-    return {journeys: [before, after], removed: true};
+    return {...(journeys ? {journeys} : {observation}), removed: true};
   } catch (error) {
     try {await operations.deleteStack(); await operations.waitDeleted();}
     catch (cleanup) {throw new AggregateError([error, cleanup], error.message + '; Amazon teardown failed');}
@@ -22,7 +27,7 @@ export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry
   }
 }
 
-import {execFile} from 'node:child_process';
+import {execFile, spawn} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -44,7 +49,7 @@ async function command(binary, args, input, signal, timeout = 180000) {
 
 async function main() {
   const [mode, stack] = process.argv.slice(2);
-  assert.ok(['start', 'stop'].includes(mode), 'Use start or stop');
+  assert.ok(['start', 'stop', 'observe'].includes(mode), 'Use start or stop or observe');
   assert.ok(process.env.D618_CONFIG, 'Set D618_CONFIG to your private run configuration JSON file.');
   const config = JSON.parse(await readFile(process.env.D618_CONFIG, 'utf8'));
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
@@ -60,7 +65,7 @@ async function main() {
       await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', stack], true);
       return;
     }
-    process.stdout.write(JSON.stringify(await startAmazon(config, {run: (binary, args, input, cleanup, timeout) => command(binary, args, input, cleanup ? undefined : stop.signal, timeout), aws,
+    process.stdout.write(JSON.stringify(await startAmazon({...config, observer: mode === 'observe'}, {signal: stop.signal, run: (binary, args, input, cleanup, timeout) => command(binary, args, input, cleanup ? undefined : stop.signal, timeout), aws,
       sleep: ms => delay(ms, undefined, {signal: stop.signal})})) + '\n');
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
@@ -91,7 +96,7 @@ export async function checkAmazonArchive(archive, images, run) {
   }
 }
 
-export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now}) {
+export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal, observe = observerCommand}) {
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
@@ -151,7 +156,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       try {await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', name], true);}
       catch (error) {if (error.code === 'ETIMEDOUT') throw Error('amazon.deletion_late'); throw error;}
     };
-    const outcome = await runAmazonExperiment({
+    const operations = {
       create: async () => {
         process.stderr.write('Creating owned Amazon stack ' + name + '; expiry ' + new Date(expiry).toISOString() + '\n');
         await aws('cloudformation', ['create-stack', '--stack-name', name, '--role-arn', config.stackRole,
@@ -232,7 +237,25 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       },
       waitDeleted,
       deleteStack: () => aws('cloudformation', ['delete-stack', '--stack-name', name], true),
-    }, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
+    };
+    if (config.observer) operations.observe = async () => {
+      assert.ok(expiry - now() >= 3600000, 'amazon.observer_expiry');
+      target.observer = true; target.expiresAt = expiry;
+      await writeFile(join(directory, 'target.json'), JSON.stringify(target), {mode: 0o600});
+      await copy(0, 'target.json', '/tmp/d618-target.json');
+      let stopMs, replacementMs;
+      const result = await observe('ssh', [...sshOptions, 'admin@' + hosts[0],
+        ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(ids[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(ids[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'].map(quote).join(' ')], {
+        signal, timeout: 3600000, onReady: async send => {
+          const before = now();
+          await operations.stopWorker(); await operations.waitStopped();
+          stopMs = now() - before; send('P1_STOPPED');
+          const replacement = now(); await operations.replace();
+          replacementMs = now() - replacement; send('P1_REPLACEMENT_READY');
+        }});
+      return {...result, stopMs, replacementMs};
+    };
+    const outcome = await runAmazonExperiment(operations, {sleep, waitExpiry: () => sleep(Math.max(0, expiry - now()))});
     return {stack: name, ...outcome};
   } finally {
     for (const host of hosts ?? []) {
@@ -242,4 +265,40 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     for (const image of ownedImages) {try {await run('docker', ['image', 'rm', image], undefined, true);} catch {process.stderr.write('Owned image cleanup failed\n');}}
     await rm(directory, {recursive: true, force: true});
   }
+}
+
+// Only this mode keeps SSH stdin open; the other launcher modes retain execFile.
+export async function observerCommand(binary, args, {onReady, signal, timeout = 3600000}) {
+  signal?.throwIfAborted();
+  const child = spawn(binary, args, {stdio: ['pipe', 'pipe', 'pipe']});
+  let output = '', ready = false, task, failure, bytes = 0;
+  const stop = error => {failure ??= error; child.kill('SIGKILL');};
+  const abort = () => stop(Error('amazon.observer_cancelled'));
+  const timer = setTimeout(() => stop(Error('amazon.observer_timeout')), timeout);
+  signal?.addEventListener('abort', abort, {once: true});
+  child.stdin.on('error', () => {});
+  child.stdout.on('data', part => {
+    bytes += part.length;
+    if (bytes > 32 * 1024 * 1024) return stop(Error('amazon.observer_output_large'));
+    output += part;
+    if (!ready && output.includes('\n')) {
+      if (!output.startsWith('P1_READY\n')) return stop(Error('amazon.observer_not_ready'));
+      ready = true; output = output.slice('P1_READY\n'.length);
+      task = Promise.resolve().then(() => onReady(value => child.stdin.write(value + '\n'))).catch(stop);
+    }
+  });
+  child.stderr.on('data', part => {
+    bytes += part.length;
+    if (bytes > 32 * 1024 * 1024) stop(Error('amazon.observer_output_large'));
+    else process.stderr.write(part);
+  });
+  try {
+    const code = await new Promise(resolve => {
+      child.once('error', error => {failure ??= error;}); child.once('close', resolve);
+    });
+    await task;
+    if (failure) throw failure;
+    assert.ok(ready && code === 0, 'amazon.observer_failed');
+    return JSON.parse(output);
+  } finally {clearTimeout(timer); signal?.removeEventListener('abort', abort); child.stdin.destroy();}
 }

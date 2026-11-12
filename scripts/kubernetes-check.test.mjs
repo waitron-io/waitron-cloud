@@ -461,3 +461,16 @@ test('manifest worker stays behind the actual image-transfer gate', {timeout: 50
   assert.equal(first.split('\n')[0], 'waiting'); assert.equal(output.includes('started'), false);
   await writeFile(ready, ''); assert.equal(await closed, 0); assert.ok(output.endsWith('started\n'));
 });
+
+// A retained observation needs the backup restore adapter and must reject a short expiry.
+test('observer target refuses missing retained-client work before commands', async () => {
+  const cluster = 'd618-12345678-1234-4234-8234-123456789abc';
+  const target = {type: 'amazon', cluster, context: cluster, phase: 'before', address: '10.77.0.1', observer: true,
+    instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
+  const {assertAmazonBinding} = await import('./test-cloud-integration.mjs');
+  assert.throws(() => assertAmazonBinding(target), /kubernetes.observer_expiry/);
+  await assert.rejects(runTestCloudClients({image: 'sha256:' + 'a'.repeat(64), waitronImage: 'sha256:' + 'b'.repeat(64),
+    kubernetes: {...target, amazon: {...target, expiresAt: Date.now() + 3600000}, namespace: 'default', account: 'kube-account', network: cluster,
+      proxyIp: '10.77.0.1', ca: 'test-ca', port: 3000, mailPort: 8025, exec: async () => {}, remote: {worker: async () => {}}}}), /integration.observer_binding/);
+});
