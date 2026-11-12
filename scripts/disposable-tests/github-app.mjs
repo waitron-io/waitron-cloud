@@ -105,7 +105,7 @@ export class GithubApp {
    }
   }
   return parsed;
-  }}finally{if(method!=='GET')clear();}
+  }}finally{if(method!=='GET')this.responseEpoch++;}
  }
  async token(){
   if(this.cached && this.cached.expires>Date.now()+60000)return this.cached.token;

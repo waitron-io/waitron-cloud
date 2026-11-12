@@ -187,7 +187,28 @@ for(const large of [false,true])test(`conditional cache evicts by ${large?'body 
  if(!large)assert.deepEqual(seen.at(-2),['/bounded0','"/bounded0"'],'recently used body stays cached');
 });
 
-for(const change of ['token','mutation','missing-etag'])test(`conditional bodies are discarded after ${change}`,async t=>{
+test('job inventory stays conditional after a refused cancel and capacity publication',async t=>{
+ const {GithubApp}=await import('./github-app.mjs');const seen=[];
+ const inventory='/repos/fixture/waitron/actions/runs/123/jobs';
+ const server=createServer((req,res)=>{
+  seen.push([req.method,req.url,req.headers['if-none-match']??null]);
+  if(req.method==='POST'){res.writeHead(409);res.end();return;}
+  if(req.method==='PATCH'){res.writeHead(204);res.end();return;}
+  res.setHeader('etag','"jobs"');
+  if(req.headers['if-none-match']==='"jobs"'){res.writeHead(304);res.end();}
+  else res.end('{"total_count":0,"jobs":[]}');
+ });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ await assert.rejects(app.post('/repos/fixture/waitron/actions/runs/456/cancel'),{status:409});
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ assert.equal(seen.at(-1)[2],'"jobs"','a refused unrelated cancel retains the inventory validator');
+ assert.equal(await app.patch('/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY',{value:'{}'}),null);
+ assert.deepEqual(await app.get(inventory),{total_count:0,jobs:[]});
+ assert.equal(seen.at(-1)[2],'"jobs"','capacity publication retains the inventory validator');
+});
+
+for(const change of ['token','missing-etag'])test(`conditional bodies are discarded after ${change}`,async t=>{
  const {GithubApp}=await import('./github-app.mjs');let etag=true,token='first';const seen=[];
  const server=createServer((req,res)=>{if(req.method==='POST'){res.end('{}');return;}
   seen.push(req.headers['if-none-match']??null);if(etag)res.setHeader('etag','"stable"');
@@ -195,7 +216,7 @@ for(const change of ['token','mutation','missing-etag'])test(`conditional bodies
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>token;
  await app.get('/current');
- if(change==='token')token='second';else if(change==='mutation')await app.post('/change',{});else{etag=false;await app.get('/current');}
+ if(change==='token')token='second';else{etag=false;await app.get('/current');}
  await app.get('/current');assert.equal(seen.at(-1),null);
 });
 
@@ -208,15 +229,17 @@ for(const persistent of [false,true])test(`a bodyless 304 ${persistent?'refuses 
  assert.equal(reads,2);
 });
 
-test('an in-flight conditional response cannot restore a body invalidated by a write',async t=>{
+for(const failure of ['none','http','network'])test(`an in-flight 304 crossing a write with ${failure} failure is fetched again`,async t=>{
  const {GithubApp}=await import('./github-app.mjs');let revision=1,release,started;const ready=new Promise(resolve=>{started=resolve;});
  const server=createServer(async(req,res)=>{
-  if(req.method==='POST'){revision=2;res.end('{}');return;}
+  if(req.method==='POST'){revision=2;if(failure==='network'){req.socket.destroy();return;}res.writeHead(failure==='http'?500:200);res.end('{}');return;}
   if(req.headers['if-none-match']==='"one"'){started();await new Promise(resolve=>{release=resolve;});res.writeHead(304);res.end();return;}
   res.setHeader('etag',revision===1?'"one"':'"two"');res.end(JSON.stringify({revision}));
  });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const app=new GithubApp({apiBase:`http://127.0.0.1:${server.address().port}`});app.token=async()=>'synthetic';
- await app.get('/current');const pending=app.get('/current');await ready;await app.post('/change',{});release();
+ await app.get('/current');const pending=app.get('/current');await ready;
+ if(failure==='network')await assert.rejects(app.post('/change',{}),TypeError);
+ else if(failure==='http')await assert.rejects(app.post('/change',{}),{status:500});else await app.post('/change',{});release();
  assert.deepEqual(await pending,{revision:2});
 });
 
