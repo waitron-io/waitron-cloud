@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
 import type {Pool} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
@@ -329,4 +329,16 @@ test('checking a completed setup needs current ownership but not the original au
  const response=await request(target,reader,verify,{venueId:f.venueId});
  assert.equal(response.status,200);assert.deepEqual(await response.json(),{state:'verified'});assert.equal(p.calls.length,calls);
  assert.equal((await current(f)).paymentMethod?.kind,'card');
+});
+
+
+for(const change of ['sign-out','absolute expiry'] as const)test(`an ordinary verifying caller loses authority on ${change} while the setup session remains valid`,async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
+ const reader=await transaction(db.pool,c=>createSession(c,f.accountId)),hash=createHash('sha256').update(reader.token).digest('hex');
+ const g=gate();p.setPause(g.pause);const pending=request(target,reader,verify,{venueId:f.venueId});
+ try{await g.waiting;await db.pool.query(`UPDATE cloud_sessions SET ${change==='sign-out'?'ended_at=clock_timestamp()':"absolute_expires_at=clock_timestamp()-interval '1 second'"} WHERE token_hash=$1`,[hash]);}
+ finally{g.release();}
+ const response=await pending;assert.equal((await current(f)).paymentMethod,null);assert.equal(response.status,401);
+ assert.equal((await transaction(db.pool,c=>resolveSession(c,f.session.token,{touch:false}))).accountId,f.accountId);
 });
