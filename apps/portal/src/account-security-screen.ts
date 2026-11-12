@@ -13,10 +13,10 @@ export function accountSecurityScreen(app: PortalApp) {
   return html`<section class="account-security" aria-labelledby="account-security-heading">
     <h2 id="account-security-heading">${c.accountSecurity}</h2>
     <p>${c.accountSecurityIntro}</p>
-    ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
     <section class="sessions" aria-labelledby="sessions-heading">
       <h3 id="sessions-heading">${c.activeSessions}</h3>
       <p class="help">${c.sessionsIntro}</p>
+      ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
       ${app.security.error && !app.security.loaded ? html`<wt-button .disabled=${app.security.pending || !!app.security.waiting}
         @click=${() => {void app.security.load();}}>${c.retry}</wt-button>` : nothing}
       <ul class="session-list">${app.security.sessions.map(session => html`<li>
