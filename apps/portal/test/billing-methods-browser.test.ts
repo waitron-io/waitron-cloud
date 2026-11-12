@@ -10,13 +10,15 @@ const bundle=await build({stdin:{contents:`import {applyTokens} from '@waitron-i
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const sdk=`window.mounts=0;window.unmounts=0;window.SumUpCard={mount(options){window.mounts++;window.cardOptions=options;window.cardReply=options.onResponse;const frame=document.createElement('iframe');frame.title='Synthetic provider card';frame.src='https://gateway.sumup.com/synthetic-frame';document.getElementById(options.id).append(frame);return {unmount(){window.unmounts++;frame.remove();}};}};`;
 async function fixture(page:Page,ordinary=false){
- let selected:'card'|'direct_debit'|null='direct_debit',setup:unknown=null,verifyState='pending',starts=0,verifies=0;
+ let selected:'card'|'direct_debit'|null='direct_debit',setup:unknown=null,verifyState='pending',starts=0,verifies=0,enrolled=true,freshUntil:string|null='2099-01-01T00:00:00Z';
  await page.route('https://portal.test/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/app.js')return route.fulfill({contentType:'text/javascript',body:bundle.outputFiles[0]!.text});
   if(path==='/app.css')return route.fulfill({contentType:'text/css',body:styles});
   if(path==='/account')return route.fulfill({contentType:'text/html',body:'<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><div id="portal" class="portal"></div><script src="/app.js"></script>'});
   if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
+  if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:enrolled?['passkey','recovery']:['email'],freshUntil}});
+  if(path.endsWith('/action-proof/factor')){freshUntil='2099-01-01T00:00:00Z';return route.fulfill({status:204});}
   if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
   if(path.endsWith('/billing/read'))return route.fulfill({json:{venues:[first,second].map(venueId=>({venueId,level:'connected',trial:null,canStartTrial:false,...ordinary?{}:{paymentMethods:{selected,setup}}}))}});
   if(path.endsWith('/method/start')){
@@ -33,7 +35,7 @@ async function fixture(page:Page,ordinary=false){
  });
  await page.route('https://gateway.sumup.com/**',route=>route.fulfill({contentType:route.request().resourceType()==='script'?'text/javascript':'text/html',body:route.request().resourceType()==='script'?sdk:'<!doctype html><title>Synthetic card fields</title><p>Provider test fields</p>'}));
  await page.route('https://checkout.stripe.com/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Synthetic mandate</title><p>Provider test mandate</p><a href="https://portal.test/account">Return</a>'}));
- return {set pending(kind:'card'|'direct_debit'){setup={kind,state:'pending'};},set state(value:string){verifyState=value;},get starts(){return starts;},get verifies(){return verifies;}};
+ return {set enrolled(value:boolean){enrolled=value;},set fresh(value:boolean){freshUntil=value?'2099-01-01T00:00:00Z':null;},set pending(kind:'card'|'direct_debit'){setup={kind,state:'pending'};},set state(value:string){verifyState=value;},get starts(){return starts;},get verifies(){return verifies;}};
 }
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: test payment panel preserves a method through pending and failed card setup`,async()=>{
  const browser=await chromium.launch({headless:true});
@@ -113,7 +115,8 @@ test('a reopened card still tears down on the next pagehide after a history retu
   const page=await browser.newPage();page.setDefaultTimeout(5000);const server=await fixture(page);await page.goto('https://portal.test/account');
   await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));
   assert.equal(await page.evaluate(()=>(window as any).unmounts),1);
-  await page.evaluate(async()=>{const app=(window as any).app;app.billing.account('owner');await app.billing.load();});
+  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+  await page.waitForFunction(()=>(window as any).app.billing.loaded);
   await page.getByRole('button',{name:'Add or switch test card',exact:true}).click();await page.locator('billing-card iframe').waitFor();
   await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));assert.equal(await page.evaluate(()=>(window as any).unmounts),2);assert.equal(await page.locator('billing-card iframe').count(),0);
   await page.evaluate(()=>(window as any).cardReply('success',{}));await page.waitForLoadState('networkidle');assert.equal(server.verifies,0);
@@ -125,5 +128,33 @@ for(const locale of ['en','es'] as const)test(`${locale}: an unverified setup re
   const page=await browser.newPage({locale});page.setDefaultTimeout(5000);const server=await fixture(page);server.pending='card';await page.goto('https://portal.test/account');
   await page.getByText(locale==='en'?'Setup is not confirmed. Check the saved method before starting again. Your previous method stays selected.':'La configuración no está confirmada. Consulta el método guardado antes de volver a empezar. El anterior sigue seleccionado.',{exact:true}).waitFor();
   assert.equal(server.verifies,0);assert.equal(server.starts,0);
+ }finally{await browser.close();}
+});
+
+
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: starting a payment setup asks for enrollment and proof before contacting the provider`,async()=>{
+ const browser=await chromium.launch({headless:true});try{
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
+  const server=await fixture(page),c=translations[locale];server.enrolled=false;server.fresh=false;
+  await page.goto('https://portal.test/account');
+  const panel=page.getByRole('region',{name:c.billingMethodsTitle,exact:true});
+  const start=panel.getByRole('button',{name:c.billingAddCard,exact:true});await start.click();
+  await panel.getByText(c.pairEnrollment,{exact:true}).waitFor();await page.waitForLoadState('networkidle');assert.equal(server.starts,0);
+  const capture=async(state:string)=>{
+   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   if(process.env.BILLING_METHOD_RECEIPT_DIR){await mkdir(process.env.BILLING_METHOD_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.BILLING_METHOD_RECEIPT_DIR}/proof-${locale}-${theme}-${width}-${state}.png`,fullPage:true});}
+  };
+  await capture('enroll');await panel.getByRole('link',{name:c.accountSecurity,exact:true}).click();await page.waitForLoadState('networkidle');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading');
+  server.enrolled=true;await start.click();
+  await panel.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();await page.waitForLoadState('networkidle');assert.equal(server.starts,0);
+  assert.equal(await panel.getByRole('alert').count(),0,'an initial proof prompt is not a verification failure');await capture('prompt');
+  await page.locator('wt-input[name=actionProofCode] input').fill('11111111222222223333333344444444');
+  await panel.getByRole('link',{name:c.actionProofTitle,exact:true}).click();await page.waitForLoadState('networkidle');
+  assert.equal(await page.locator('wt-input[name=actionProofCode] input').inputValue(),'11111111222222223333333344444444');
+  await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
+  await page.locator('.action-proof').getByText(c.actionProofReady,{exact:true}).waitFor();assert.equal(server.starts,0);
+  await capture('ready');await start.click();await panel.locator('iframe').waitFor();assert.equal(server.starts,1);
  }finally{await browser.close();}
 });

@@ -1,7 +1,8 @@
+import {createHash} from 'node:crypto';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {BillingError,transaction,type PlanMode} from '@waitron-cloud/registration';
+import {BillingError,transaction,requireConnectionProof,requirePendingConnectionProof,type PlanMode} from '@waitron-cloud/registration';
 import {BillingMethodSetups,type MethodSetup} from './billing-method-binding.ts';
 import {createTestBillingMethodClient} from './billing-method-providers.ts';
 import {parseTestBillingProviderAccount,type BillingAccountOptions} from './config.ts';
@@ -41,15 +42,22 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
  if(!billing||!methods)throw new AccountHttpError(503,'temporarily_unavailable');
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',proof={touch:false,csrfToken:c.req.header('x-csrf-token')??''};
- const initial=await transaction(pool,client=>resolveSession(client,token,proof));
+ const initial=await transaction(pool,async client=>{
+  const session=await resolveSession(client,token,proof);
+  const row=(await client.query('SELECT id,action_security_revision FROM cloud_sessions WHERE token_hash=$1',[createHash('sha256').update(token).digest('hex')])).rows[0];
+  return {...session,sessionId:row.id as string,securityRevision:row.action_security_revision as number};
+ });
  if(!billing.accountIds.includes(initial.accountId))denied();
  await consume([{scope:'billing-account',subject:initial.accountId,limit:30,windowSeconds:60}]);
  const start=c.req.path.endsWith('/start'),body=await readAccountBody(c.req.raw,start?['venueId','kind']:['venueId']);
  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(body.venueId!)
   ||start&&!['card','direct_debit'].includes(body.kind!))throw new AccountHttpError(400,'invalid_input');
+ const admitted=start?await transaction(pool,client=>requireConnectionProof(client,token,proof.csrfToken)):undefined;
  const setups=new BillingMethodSetups(pool);
  async function guard(client:PoolClient,expected?:MethodSetup){
-  const session=await resolveSession(client,token,proof);if(session.accountId!==initial.accountId)denied();
+  const session=admitted??initial;
+  await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
+  if(session.accountId!==initial.accountId)denied();
   if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[session.accountId])).rowCount)denied();
   const venue=(await client.query<Venue>('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1',[body.venueId])).rows[0];
   if(!venue||venue.environment!=='test')denied();
@@ -60,15 +68,16 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
   if(!final||final.environment!=='test'||final.organisation_id!==venue.organisation_id||final.legal_business_id!==venue.legal_business_id)denied();
   if(saved&&(!start||expected)&&(saved.ownerId!==session.accountId
    ||saved.providerAccountId!==(saved.kind==='card'?methods!.sumupAccount:methods!.stripeAccount)))denied();
+  if(!start&&saved)await requirePendingConnectionProof(client,saved.ownerId,saved.sessionId,saved.securityRevision);
   if(expected)same(saved,expected);
-  await resolveSession(client,token,proof);
+  await requirePendingConnectionProof(client,session.accountId,session.sessionId,session.securityRevision);
   return {scope,saved};
  }
  try{
   const setup=await transaction(pool,async client=>{
    const {scope,saved}=await guard(client);
    if(!start)return saved;
-   const created=await setups.createOn(client,scope,initial.accountId,body.kind as 'card'|'direct_debit',body.kind==='card'?methods!.sumupAccount:methods!.stripeAccount);
+   const created=await setups.createOn(client,scope,initial.accountId,body.kind as 'card'|'direct_debit',body.kind==='card'?methods!.sumupAccount:methods!.stripeAccount,admitted);
    await guard(client,created);return created;
   });
   if(!setup||!start&&(!setup.customerId||!setup.providerReference))return c.json({state:'failed'});

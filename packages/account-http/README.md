@@ -713,11 +713,19 @@ chooser. Cards return a `checkoutId` for SumUp's widget; direct debit returns a
 `url` restricted to `https://checkout.stripe.com`, which returns to `/account`.
 The SumUp setup is a €1 sandbox checkout, as recorded in the
 [provider test](../../docs/billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge).
-On `/account`, choose **Add or switch test card** or **Add or switch test direct debit**.
+Before starting, enroll a passkey or authenticator app and verify it’s you in the
+shared ten-minute window. On `/account`, choose **Add or switch test card** or **Add or switch test direct debit**.
 Card details stay in SumUp’s widget; your bank details stay on Stripe’s page.
 After returning from Stripe, choose **Check saved method** to verify the saved setup.
 A pending or failed setup keeps your previous method selected. If a reply is lost,
 check the saved method before starting again.
+
+Your saved setup retains the session that authorised it. A provider wait or return
+after the ten-minute window does not require another proof. During accepted work,
+browser idle expiry does not cancel that authority; sign-out, absolute expiry,
+changed credentials or security, removed enrollment and lost ownership still
+refuse it. An older setup without its saved session needs a new start. These
+checks use the same shared helper as box connection and remote setup.
 
 POST `/api/account/billing/method/verify` with only the venue ID. The server reads
 the saved setup rather than accepting a customer, token or checkout reference from

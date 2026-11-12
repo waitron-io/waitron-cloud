@@ -66,6 +66,7 @@ export class PortalApp {
     this.locale = this.link.locale ?? chooseLocale(saved, navigator.languages);
     this.actionProof=new AccountActionProofController(()=>{
       if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.remote?.error==='actionProofUnavailable'||this.remote?.error==='remoteProofRequired'))this.remote.error=undefined;
+      if(!this.actionProof.pending&&this.actionProof.status?.freshUntil&&(this.billing?.error==='actionProofUnavailable'||this.billing?.error==='billingProofRequired'))this.billing.error=undefined;
       this.draw();
     });
     this.authenticator = new AuthenticatorController(() => this.draw());
@@ -271,6 +272,16 @@ export class PortalApp {
     }
     if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
+  }
+  async startPaymentMethod(kind:'card'|'direct_debit'){
+    const billing=this.billing,venue=billing.venue;
+    if(!venue?.paymentMethods||billing.pending||billing.waiting)return;
+    const proved=await this.#requireActionProof();
+    if(billing.venue!==venue)return;
+    if(this.actionProof.status?.methods.every(m=>m==='email'))billing.error='pairEnrollment';
+    else if(!proved)billing.error=this.actionProof.error?'actionProofUnavailable':'billingProofRequired';
+    else {await billing.startMethod(kind);return;}
+    this.draw();
   }
   async applyRemote() {
     const remote=this.remote,change=remote.confirmation,id=remote.installationId;
