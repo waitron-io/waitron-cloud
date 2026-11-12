@@ -290,6 +290,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | API routes except liveness, per client IP | 120 per minute |
 | Login, per IP / normalised email | 10 per minute / 30 per 15 minutes |
 | Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
+| Email-change delivery, per destination address | One per minute; keeps the first link during the wait |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
 | Each signup/reset completion route, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |

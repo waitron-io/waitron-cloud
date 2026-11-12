@@ -23,6 +23,13 @@ test('credential changes fence replies after navigation and never replay an unce
   assert.equal(uncertain.error,'credentialChangeUncertain');assert.equal(uncertain.newEmail,'');
 });
 
+for(const [kind,status,code,want] of [['password',503,'temporarily_unavailable','unavailable'],['verify',403,'proof_required','emailChangeInvalid']] as const)
+  test(`credential ${kind} ${code} gives its own guidance`,async()=>{
+    const controller=new AccountSecurityController(()=>{},()=>{},async()=>({ok:false,status,code,retryAfterMs:1000}));
+    controller.account('owner');controller.newPassword='A synthetic replacement password';await controller.change(kind,'en','a'.repeat(43));
+    assert.equal(controller.error,want);
+  });
+
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-09-26T00:00:00.000Z',
   lastUsedAt: '2026-09-26T00:20:00.000Z', expiresAt: '2026-09-26T00:50:00.000Z', current: true};
 const other = {id: '22345678-1234-4234-8234-123456789abc', createdAt: '2026-09-25T22:00:00.000Z',

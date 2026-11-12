@@ -101,7 +101,7 @@ export class AccountSecurityController {
     }else{
       this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
       if(result.status===401)this.#sessionEnded();
-      else this.error=result.code==='proof_required'?'actionProofUnavailable':result.code==='password_compromised'?'passwordCompromised':result.code==='link_unavailable'?'emailChangeInvalid':result.status===429?'limited':result.status===400?(kind==='password'?'passwordHelp':'emailError'):result.status===403?'forbidden':'credentialChangeUncertain';
+      else this.error=result.code==='proof_required'?(kind==='verify'?'emailChangeInvalid':'actionProofUnavailable'):result.code==='password_compromised'?'passwordCompromised':result.code==='link_unavailable'?'emailChangeInvalid':result.status===429?'limited':result.status===503?'unavailable':result.status===400?(kind==='password'?'passwordHelp':'emailError'):result.status===403?'forbidden':'credentialChangeUncertain';
     }
     this.#changed();
   }

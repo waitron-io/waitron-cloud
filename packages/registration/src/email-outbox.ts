@@ -1,3 +1,4 @@
+import {IDLE_TIMEOUT_MS} from '@waitron-cloud/identity';
 import type {EmailChangeMailer} from './account-security.ts';
 import type {SignInCheckMailer} from './sign-in-check.ts';
 import {validServiceAlert,type ServiceAlert,type ServiceAlertMailer} from './service-alert.ts';
@@ -201,8 +202,8 @@ export class EmailWorker {
       if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(row.kind==='verification')await client.query('SELECT token_hash FROM signup_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
       if(row.kind==='email_change'){
-        const pending=(await client.query('SELECT session_token_hash,account_id FROM cloud_email_changes WHERE token_hash=$1',[row.token_hash])).rows[0];
-        if(pending)await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[pending.account_id]);
+        const pending=(await client.query('SELECT account_id FROM cloud_email_changes WHERE token_hash=$1',[row.token_hash])).rows[0];
+        if(pending)await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[pending.account_id]);
       }
       if(row.kind==='sign_in_check') {
         const check=(await client.query('SELECT account_id FROM cloud_sign_in_checks WHERE token_hash=$1',[row.token_hash])).rows[0];
@@ -304,8 +305,8 @@ export class EmailWorker {
         FROM cloud_email_changes p JOIN cloud_accounts a ON a.id=p.account_id JOIN cloud_credentials c ON c.account_id=p.account_id
         JOIN cloud_sessions s ON s.token_hash=p.session_token_hash
         WHERE p.token_hash=$1 AND p.email=$2 AND p.consumed_at IS NULL AND p.expires_at>clock_timestamp()
-        AND s.ended_at IS NULL AND s.absolute_expires_at>clock_timestamp() AND s.last_seen_at>clock_timestamp()-interval '30 minutes'
-        AND a.disabled_at IS NULL`,[row.token_hash,message.email])).rows[0];
+        AND s.ended_at IS NULL AND s.absolute_expires_at>clock_timestamp() AND s.last_seen_at>clock_timestamp()-($3::double precision*interval '1 millisecond')
+        AND a.disabled_at IS NULL`,[row.token_hash,message.email,IDLE_TIMEOUT_MS])).rows[0];
       return !!pending&&pending.security_revision===pending.action_security_revision&&pending.previous_email===pending.current_email
         &&digest(pending.password_hash)===pending.password_fingerprint&&pending.action_credential_fingerprint===pending.password_fingerprint;
     }

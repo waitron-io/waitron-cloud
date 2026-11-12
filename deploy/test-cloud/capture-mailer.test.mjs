@@ -26,3 +26,11 @@ test('test capture delivers a mailbox sign-in code through the loopback sink',as
  await mailer.sendSignInCheck({email:'owner@example.test',token:'x'.repeat(43),code:'000123',expiresAt:'2030-01-01T00:00:00Z',locale:'en'});
  assert.equal(messages.length,1);assert.match(messages[0],/000123/);assert.doesNotMatch(messages[0],/x{43}/);
 });
+
+test('test capture delivers email-change verification and notices through the loopback sink',async t=>{
+ const {createTestCaptureMailer}=await api(),{port,messages}=await sink(t),mailer=createTestCaptureMailer({origin:'https://waitron.local:3000',port});
+ await mailer.sendEmailChange({email:'new@example.test',token:'x'.repeat(43),expiresAt:'2030-01-01T00:00:00Z',locale:'en'});
+ await mailer.sendEmailChanged({email:'old@example.test',locale:'en'});
+ assert.equal(messages.length,2);assert.match(messages[0],/https:\/\/waitron\.local:3000\/account#change=x{43}/);
+ assert.match(messages[1],/Your Waitron Cloud email changed/);assert.doesNotMatch(messages[1],/x{43}/);
+});

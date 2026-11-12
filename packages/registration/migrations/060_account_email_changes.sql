@@ -13,6 +13,7 @@ CREATE TABLE cloud_email_changes (
   CHECK (expires_at > created_at AND expires_at <= created_at + interval '30 minutes')
 );
 CREATE INDEX cloud_email_changes_account_idx ON cloud_email_changes(account_id);
+CREATE INDEX cloud_email_changes_email_time_idx ON cloud_email_changes(email,created_at);
 ALTER TABLE email_outbox DROP CONSTRAINT email_outbox_kind_check;
 ALTER TABLE email_outbox ADD CONSTRAINT email_outbox_kind_check
   CHECK (kind IN ('verification','password_reset','password_changed','service_alert','sign_in_check','email_change','email_changed'));

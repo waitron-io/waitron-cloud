@@ -122,3 +122,36 @@ test('email replacement and session ending roll back together when notices canno
   assert.equal((await pool.query('SELECT ended_at FROM cloud_sessions')).rows[0].ended_at,null);
   assert.equal((await pool.query('SELECT consumed_at FROM cloud_email_changes')).rows[0].consumed_at,null);
 });
+
+test('the mail worker cancels a superseded email link before handing off the latest one',async()=>{
+  const {s}=await pendingEmail();await s.email(actor.token,actor.csrfToken,'latest@example.test');
+  const sent:string[]=[],unexpected=async()=>{throw new Error('unexpected mail kind');};
+  const worker=new registration.EmailWorker(pool,outbox,{sendVerification:unexpected,sendPasswordReset:unexpected,sendPasswordChanged:unexpected,sendServiceAlert:unexpected,
+    async sendEmailChange(message){sent.push(message.email);}});
+  while(await worker.runOnce()){}
+  assert.deepEqual(sent,['latest@example.test']);
+  assert.deepEqual((await pool.query('SELECT status,count(*) AS count FROM email_outbox GROUP BY status ORDER BY status')).rows,[{status:'cancelled',count:'1'},{status:'sent',count:'1'}]);
+});
+
+test('repeating an email change inside a minute keeps the first link, then allows a fresh request',async()=>{
+  const {s,message}=await pendingEmail();
+  assert.deepEqual(await s.email(actor.token,actor.csrfToken,message.email),{status:'accepted'});
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_email_changes')).rows[0].count,'1');
+  assert.equal((await pool.query('SELECT consumed_at FROM cloud_email_changes')).rows[0].consumed_at,null);
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'1');
+  await pool.query("UPDATE cloud_email_changes SET created_at=statement_timestamp()-interval '61 seconds',expires_at=statement_timestamp()+interval '28 minutes'");
+  await s.email(actor.token,actor.csrfToken,message.email);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_email_changes')).rows[0].count,'2');
+  await assert.rejects(s.completeEmail(actor.token,actor.csrfToken,message.token),{code:'change_unavailable'});
+});
+
+test('two accounts requesting the same outside address share one resend wait',async()=>{
+  const otherId=randomUUID();await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[otherId]);
+  await pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[otherId,'second@example.test',await hashSecret('Other synthetic owner password')]);
+  const other=await registration.transaction(pool,c=>createSession(c,otherId));
+  for(const session of [actor,other])await openProofWindow(pool,session.token);
+  const s=store(),answers=await Promise.all([s.email(actor.token,actor.csrfToken,'outside@example.test'),s.email(other.token,other.csrfToken,'outside@example.test')]);
+  assert.deepEqual(answers,[{status:'accepted'},{status:'accepted'}]);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_email_changes')).rows[0].count,'1');
+  assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'1');
+});
