@@ -32,13 +32,13 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await section.getByText(c.pairEnrollment,{exact:true}).waitFor();assert.equal(applies,0,'enrollment guidance precedes the write');
   const capture=async(state:string)=>{await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));if(process.env.REMOTE_PROOF_RECEIPT_DIR){await mkdir(process.env.REMOTE_PROOF_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.REMOTE_PROOF_RECEIPT_DIR}/${locale}-${theme}-${width}-${state}.png`,fullPage:true});}};
   await capture('enroll');await section.getByRole('link',{name:c.accountSecurity,exact:true}).click();await page.waitForLoadState('networkidle');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading','the local link focuses security without navigating');
-  enrolled=true;await confirm.click();await section.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();assert.equal(await section.getByRole('alert').count(),0,'the initial proof prompt is not a failed verification');assert.equal(applies,0,'the prompt precedes the write');await capture('proof');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading','the local link focuses security without navigating');await capture('security-focus');
+  enrolled=true;await confirm.click();await section.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();await section.getByText(c.remoteProofRequired,{exact:true}).waitFor();assert.equal(await section.getByRole('alert').count(),0,'the initial proof prompt is not a failed verification');assert.equal(applies,0,'the prompt precedes the write');await capture('proof');
   const proofInput=page.locator('wt-input[name=actionProofCode] input');await proofInput.fill('11111111222222223333333344444444');
   await section.getByRole('link',{name:c.actionProofTitle,exact:true}).click();await page.waitForLoadState('networkidle');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'action-proof-heading');assert.equal(await proofInput.inputValue(),'11111111222222223333333344444444','the local link preserves an entered proof');
   await page.locator('.action-proof').getByRole('button',{name:c.factorRecovery,exact:true}).click();
-  await page.locator('.action-proof').getByText(c.actionProofReady,{exact:true}).waitFor();await section.getByRole('alert').waitFor({state:'hidden'});assert.equal(applies,0,'verification does not apply the name');await capture('ready');
+  await page.locator('.action-proof').getByText(c.actionProofReady,{exact:true}).waitFor();await section.getByText(c.remoteProofRequired,{exact:true}).waitFor({state:'hidden'});assert.equal(applies,0,'verification does not apply the name');await capture('ready');
   await confirm.click();await section.getByText(c.remoteSaved,{exact:true}).waitFor();assert.equal(applies,1);
  }finally{await browser.close();}
 });
