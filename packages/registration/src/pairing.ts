@@ -1,12 +1,15 @@
 import {PairingCodes,pairingCodeKeysFromEnv,type PairingCodeKeys} from './pairing-codes.ts';
 import type {Pool,PoolClient} from 'pg';
-import {resolveSession} from '@waitron-cloud/identity';
+import {resolveSession,IdentityError} from '@waitron-cloud/identity';
 import {RegistrationStore,type ConnectionBinding,type Registration} from './index.ts';
 import {transaction} from './transaction.ts';
 import {isPairingUuid,PairingError,type PairingClaims} from './pairing-proof.ts';
 import {recordSecurityAuditEvent} from './security-audit.ts';
+import {AccountActionProofError} from './account-action-proof.ts';
+import {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
 import {venueServiceAuthorityInstalled} from './venue-service-schema.ts';
 interface Row {
+  cloud_session_id?:string|null;cloud_security_revision?:number|null;
   id:string;public_key:string;local_venue_id:string;environment:string;code_hash:string;expires_at:Date;
   failed_codes:number;cloud_account_id:string|null;organisation_id:string|null;legal_business_id:string|null;result:Registration|null;
 }
@@ -45,6 +48,10 @@ async function permission(client:PoolClient,account:string,org:string,business:s
     WHERE m.account_id=$1 AND m.organisation_id=$2 AND b.id=$3 AND m.can_register_venues AND a.disabled_at IS NULL FOR SHARE OF m,a,b`,[account,org,business]);
   if(!result.rowCount)throw new PairingError('permission_denied');
 }
+async function pendingAuthority(client:PoolClient,row:Row){
+  try{await requirePendingConnectionProof(client,row.cloud_account_id!,row.cloud_session_id!,row.cloud_security_revision!);}
+  catch(error){if(error instanceof AccountActionProofError||error instanceof IdentityError)throw new PairingError('pairing_unavailable');throw error;}
+}
 /** Machine entry points accept claims only after verifyPairingProof succeeds. */
 export class PairingStore {
   readonly #pool:Pool;
@@ -75,7 +82,9 @@ export class PairingStore {
   }
   async #browser(id:string,code:string,token:string,csrf:string,choice?:{org:string;business:string}):Promise<PairingView> {
     const result=await transaction(this.#pool,async client=>{
-      const row=await lock(client,id);const session=await resolveSession(client,token,{csrfToken:csrf,touch:false});
+      const proof=choice?await requireConnectionProof(client,token,csrf):undefined;
+      const session=proof??await resolveSession(client,token,{csrfToken:csrf,touch:false});
+      const row=await lock(client,id);
       if(row.failed_codes>=5)throw new PairingError('pairing_unavailable');
       await available(client,row);
       const codeMatches=this.#codes.matches(row,row.code_hash,typeof code==='string'?code:'');
@@ -88,10 +97,11 @@ export class PairingStore {
         if(row.organisation_id&&(row.organisation_id!==choice.org||row.legal_business_id!==choice.business))throw new PairingError('binding_conflict');
         await permission(client,session.accountId,choice.org,choice.business);
         await available(client,row);
-        await client.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',[id,session.accountId,choice.org,choice.business]);
+        await client.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4,cloud_session_id=$5,cloud_security_revision=$6 WHERE id=$1',[id,session.accountId,choice.org,choice.business,proof!.sessionId,proof!.securityRevision]);
         row.cloud_account_id=session.accountId;row.organisation_id=choice.org;row.legal_business_id=choice.business;
         await recordSecurityAuditEvent(client,{organisationId:choice.org,venueId:null,type:'pairing.cloud_approved',actorKind:'account',actorId:session.accountId,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       }
+      if(choice)await requireConnectionProof(client,token,csrf);
       await resolveSession(client,token,{csrfToken:csrf,touch:false});return view(client,row);
     });
     // Commit the failed-code count before returning the refusal to the caller.
@@ -101,6 +111,13 @@ export class PairingStore {
   approve(id:string,code:string,org:string,business:string,token:string,csrf:string){return this.#browser(id,code,token,csrf,{org,business});}
   async complete(c:PairingClaims):Promise<PairingView> {
     return transaction(this.#pool,async client=>{
+      if(!isPairingUuid(c.requestId))throw new PairingError('pairing_unavailable');
+      const candidate=(await client.query<Row>('SELECT * FROM pairing_requests WHERE id=$1',[c.requestId])).rows[0];
+      if(!candidate)throw new PairingError('pairing_unavailable');
+      machineBinding(candidate,c);await available(client,candidate,false);
+      if(!candidate.cloud_account_id)throw new PairingError('approval_required');
+      // Historical schemas keep their trusted adapter behavior; current browser approvals retain their session.
+      if(!candidate.result&&'cloud_session_id' in candidate)await pendingAuthority(client,candidate);
       const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row,false);
       if(!row.cloud_account_id)throw new PairingError('approval_required');
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
@@ -124,6 +141,7 @@ export class PairingStore {
       await registration.start(binding);await registration.approveLocal(binding,row.id);await registration.approveCloud(binding,row.cloud_account_id);
       const registered=await registration.complete(binding);
       await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:registered.venueId,type:'pairing.local_approved',actorKind:'local_authority',actorId:row.id,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
+      if('cloud_session_id' in row)await pendingAuthority(client,row);
       await available(client,row);
       await client.query('UPDATE pairing_requests SET result=$2 WHERE id=$1',[row.id,registered]);row.result=registered;
       return view(client,row);

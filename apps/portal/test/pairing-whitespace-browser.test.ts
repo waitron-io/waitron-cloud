@@ -24,6 +24,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
+   if(path.endsWith('/action-proof'))return route.fulfill({json:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00Z'}});
    if(path.endsWith('/pairing/businesses'))return route.fulfill({json:{businesses:[business]}});
    if(path.endsWith('/pairing/inspect')||path.endsWith('/pairing/approve')){
     calls.push({path,body:route.request().postDataJSON()});

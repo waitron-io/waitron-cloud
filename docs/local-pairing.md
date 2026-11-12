@@ -2,15 +2,22 @@
 
 You can connect a Waitron venue through its Cloud services screen in Settings and
 Cloud's `/connect` page. You need a local manager login with `system.manage` and a
-Cloud account permitted to register venues for the chosen business.
+Cloud account permitted to register venues for the chosen business. Enrol a passkey
+or authenticator app in your Cloud account before connecting a box.
 
 1. In Waitron, choose **Connect to Cloud**. Keep the eight-digit code on screen.
 2. Choose **Open Cloud**, sign in and enter that code. Check the venue identifier and
-   choose the business that owns it. Choose **Approve this venue**.
+   choose the business that owns it. Verify your identity, then choose **Approve this venue**.
+   One verification covers sensitive actions in that session for ten minutes.
 3. Return to Waitron and choose **Check connection**. Check the organisation and
    legal business, then choose **Connect this venue**.
 
-Approval in Cloud waits for your final confirmation in Waitron. Connecting registers
+Approval in Cloud waits for your final confirmation in Waitron. Signing out or
+changing your password or security methods withdraws that pending authority at
+local confirmation. Keep
+the same account’s permission and an enrolled method; the browser’s idle timeout and the
+ten-minute verification window do not cancel an already authorised local confirmation. Once connected, the box can retry its
+completed reply independently of the old browser session. Connecting registers
 the installation; remote access and backups still show **Not configured**. You can
 retry a failed check or confirmation. If Cloud reports the request unavailable,
 choose **Start again** in Waitron to obtain another code. This keeps the installation

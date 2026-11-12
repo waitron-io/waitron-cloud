@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../packages/registration/test/fixtures/action-proof.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
 import assert from "node:assert/strict";
 import { request as httpsRequest } from "node:https";
@@ -377,6 +378,7 @@ try {
     session = await transaction(f.db.pool, (c) =>
       login(c, { email, password }),
     );
+  await prepareConnectionProof(f.db.pool,owner.accountId,session.token);
   const catalogue = new BackupCatalogue(f.db.pool, vault, objects),
     recovery = new BackupRecovery(f.db.pool, vault, f.origin),
     venues = [];

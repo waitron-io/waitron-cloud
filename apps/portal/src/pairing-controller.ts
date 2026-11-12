@@ -16,7 +16,7 @@ export class PairingController {
   #ready(){return !!this.requestId&&!!this.#account&&!this.pending&&!this.waiting;}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-    this.error=result.status===429?'limited':result.status===401?'pairSession':result.code==='pairing_unavailable'?'pairUnavailable'
+    this.error=result.code==='enrollment_required'?'pairEnrollment':result.code==='proof_required'?'actionProofUnavailable':result.status===429?'limited':result.status===401?'pairSession':result.code==='pairing_unavailable'?'pairUnavailable'
       :result.status===403||result.code==='binding_conflict'?'pairPermission':write&&(result.status===0||result.status>=500)?'pairUncertain':'unavailable';
   }
   async load(){

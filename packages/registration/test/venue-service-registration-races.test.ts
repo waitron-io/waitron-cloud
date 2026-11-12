@@ -1,3 +1,6 @@
+import {prepareConnectionProof} from './fixtures/action-proof.ts';
+import {createSession,hashSecret} from '@waitron-cloud/identity';
+import {transaction} from '../src/transaction.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -25,8 +28,9 @@ async function approved(f:Fixture,kind:'registration'|'pairing',replay:boolean){
  const c:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:key,localVenueId:venueId,environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
  const writer=new PairingStore(f.pool),reader=new PairingStore(f.peer);
  await writer.start(c);
- // Supply the stored browser approval; completion still runs its real membership and binding checks.
- await f.pool.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',[c.requestId,account,f.scope.organisationId,f.scope.legalBusinessId]);
+ await f.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[account,`${account}@example.test`,await hashSecret('Synthetic pairing password')]);
+ const session=await transaction(f.pool,client=>createSession(client,account));await prepareConnectionProof(f.pool,account,session.token);
+ await writer.approve(c.requestId,c.code,f.scope.organisationId,f.scope.legalBusinessId,session.token,session.csrfToken);
  const complete:PairingClaims={...c,action:'complete',code:'',...f.scope};
  const initial=replay?await writer.complete(complete):undefined;
  return {run:async()=>{const result=await reader.complete(complete);assert.ok(result.registration);return result.registration;},first:initial?.registration,venueId};

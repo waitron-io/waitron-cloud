@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from './fixtures/action-proof.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
@@ -28,6 +29,7 @@ beforeEach(async()=>{
   const queued=(await db.pool.query('SELECT * FROM email_outbox')).rows[0];const mail=db.outbox.open(queued);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));
+  await prepareConnectionProof(db.pool,owner.accountId,session.token);
 });
 test('two approvals create one installation; independent workers recover lost replies',async()=>{
   const a=machine(),b=machine();const start=await store.start(a);assert.equal(start.state,'awaiting_cloud');
@@ -59,7 +61,7 @@ test('five wrong codes persist across workers and block even a subsequent correc
   const a=machine();await store.start(a);
   for(let i=0;i<5;i++)await unavailable((i%2?other:store).inspect(a.requestId,'87654321',session.token,session.csrfToken));
   assert.equal((await db.pool.query('SELECT failed_codes FROM pairing_requests')).rows[0].failed_codes,5);
-  await unavailable(approve(a));assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
+  await unavailable(approve(a));await unavailable(store.complete(completion(a)));assert.equal((await db.pool.query('SELECT count(*) FROM connection_requests')).rows[0].count,'0');
 });
 test('invalid session and CSRF cannot inspect or approve; business choices follow memberships',async()=>{
   const a=machine();await store.start(a);

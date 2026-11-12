@@ -1,3 +1,4 @@
+import {prepareConnectionProof} from '../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath,access} from 'node:fs/promises';
@@ -115,6 +116,7 @@ try{
  await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);
  const owner=await signup.complete(mail.token,{rememberBrowser:true,password,organisationName:'Remote test',legalBusinessName:'Remote test SL',countryCode:'ES'});
  const session=await transaction(f.db.pool,client=>login(client,{email,password}));
+ await prepareConnectionProof(f.db.pool,owner.accountId,session.token);
  const databaseUrl=new URL(process.env.TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+f.db.schema);
  const operator=async(command,value)=>{const file=join(root,'operator-'+randomUUID()+'.json');await secret(file,JSON.stringify(value));return execFileSync(process.execPath,['packages/remote-access/src/operator-cli.ts',command,file],{encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl.toString()}}).trim();};
  const placementStore=new RemoteAccessStore(f.db.pool),installations=new InstallationStore(f.db.pool,f.issuer,f.origin);

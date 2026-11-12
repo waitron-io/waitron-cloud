@@ -388,6 +388,15 @@ Use this for local integration testing. Cloud verifies signatures and Cloud perm
 the implemented Waitron adapter checks a real local administrator before starting and
 before signing completion.
 
+Before approving in Cloud, enrol an app or passkey and open the shared ten-minute
+verification window. Cloud saves the approving session and its security revision.
+The first local completion rechecks enrollment, permission, sign-out and security
+changes, keeping the existing absolute session and request expiry. Browser-idle
+and proof-window expiry do not block it. The independent local confirmation and machine messages
+stay the same. Completed replies keep their installation/key checks and no longer
+depend on the approving browser session. Historical schemas retain their trusted
+adapter behavior.
+
 Machine POSTs use `/api/pairing/start`, `/api/pairing/status` and
 `/api/pairing/complete`. Send only `payload` and `signature`, encoded as base64url,
 without an Origin header. Generate the Ed25519 key on the installation; sign the
@@ -404,7 +413,7 @@ locally. Cloud stores its digest. From a signed-in Cloud browser, use:
 | --- | --- | --- |
 | GET `/api/account/pairing/businesses` | Session cookie | `{businesses:[{organisationId,organisationName,legalBusinessId,legalBusinessName,countryCode}]}` |
 | POST `/api/account/pairing/inspect` | `requestId`, `code` | Bound local venue and current approval state |
-| POST `/api/account/pairing/approve` | `requestId`, `code`, `organisationId`, `legalBusinessId` | Approval bound to the current account and chosen business |
+| POST `/api/account/pairing/approve` | `requestId`, `code`, `organisationId`, `legalBusinessId` | Enrolled app/passkey and fresh session proof; approval bound to the current account and chosen business |
 
 Both browser POSTs require the exact portal Origin, session cookie and its
 `X-CSRF-Token`. They do not renew the session. Start and approval do not create an

@@ -25,7 +25,7 @@ when they appear: each works once, and Cloud stores only their hashes. Setup sec
 and recovery codes stay in the current tab; leaving or reloading clears them. Adding or replacing a method keeps your unused codes. If none remain when you activate an app, save the ten new codes shown. **New recovery codes** replaces an existing set. Removing your app keeps codes while a passkey remains. Removing your last method retires them.
 
 App activation, replacement, removal and code regeneration end every Cloud session.
-Sign in again afterwards. Before changing security, verify once under **Verify security changes**. Use an
+Sign in again afterwards. Before changing security, verify once under **Verify it’s you**. Use an
 enrolled passkey, an app code or a saved recovery code. With no enrolled method,
 use the emailed code. The proof covers security changes for ten minutes in that
 signed-in session; ordinary sign-in does not count. A passkey change keeps this session’s original window and invalidates other
@@ -47,7 +47,7 @@ if you need another set.
 
 ## Change your password or email
 
-Open **Account**, verify under **Verify security changes**, then use **Password and
+Open **Account**, verify under **Verify it’s you**, then use **Password and
 email**. A password change ends every session and forgets recognised browsers, so
 your next password-only sign-in needs its normal email check. Your enrolled methods
 and unused recovery codes stay.

@@ -1,4 +1,6 @@
+import {prepareConnectionProof} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -23,12 +25,14 @@ const {Pool} = createRequire(new URL('../../../packages/registration/package.jso
 const {S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
-const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus, generation, recoverableAt} = JSON.parse(input);
+const {organisationId, plan, sessionToken, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus, generation, recoverableAt} = JSON.parse(input);
 const config = await loadRuntime('/run/local-stack');
 const pool = new Pool({connectionString: `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`, connectionTimeoutMillis: 5000, statement_timeout: 10000});
 try {
   if (!installationId) {
     assert.ok(plan === 'free' || plan === 'paid');
+    const session=(await pool.query('SELECT account_id FROM cloud_sessions WHERE token_hash=$1',[createHash('sha256').update(sessionToken).digest('hex')])).rows[0];
+    assert.ok(session);await prepareConnectionProof(pool,session.account_id,sessionToken);
     const args = plan === 'paid' ? ['set', '--organisation', organisationId, '--plan', 'paid'] : ['show', '--organisation', organisationId];
     const {stdout} = await promisify(execFile)(process.execPath, ['packages/registration/src/organisation-plan-cli.ts', ...args], {
       env: {...process.env, CLOUD_TEST_SERVICE_PLANS: '1', DATABASE_URL: `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`}, timeout: 15000, maxBuffer: 16384,

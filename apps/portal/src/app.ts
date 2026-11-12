@@ -260,6 +260,12 @@ export class PortalApp {
   }
   async submitPairing() {
     this.readFields();
+    if(this.pairing.view?.state==='awaiting_cloud'&&this.pairing.businesses.some(b=>b.legalBusinessId===this.pairing.selected)){
+      if(this.pairing.error==='pairEnrollment')this.pairing.error=undefined;
+      const proved=await this.#requireActionProof();
+      if(this.actionProof.status?.methods.every(m=>m==='email')){this.pairing.error='pairEnrollment';this.draw();return;}
+      if(!proved)return;
+    }
     if (this.pairing.view) await this.pairing.approve(); else await this.pairing.inspect();
     if (this.pairing.error) this.#focusErrors(); else this.focusHeading();
   }
