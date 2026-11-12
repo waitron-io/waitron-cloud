@@ -498,3 +498,20 @@ confirmation uses `/api/account/recovery/replace`; the existing recovery inspect
 response includes the proposal and completed result. These routes remain limited
 to verified test snapshots. An expired or closed recovery cannot start a replacement,
 but an exact completed result remains retrievable while its installation is active.
+
+If Waitron cannot read its saved reconnection request, the matching box action is
+still separate work. Cloud accepts `POST /api/replacement/reissue` when the separate
+recovery key remains usable and the restored recovery is still open within its
+original hour. Sign the ordinary ten-field replacement payload with action
+`reissue`, using that recovery key and the fresh installation key. Cloud returns
+`state: "awaiting_owner"` with the new public keys; it keeps the recovery ID,
+venue, source node and deadline. It does not activate the keys or retire the old
+installation until you confirm replacement through the existing recovery page.
+
+The box must move the unreadable replacement file aside and save its fresh keys
+before sending. Retry a lost reply with those same keys. An identical retry returns
+the saved proposal, or its completed result if you have since confirmed it;
+different keys after completion return `409 conflict`. Requesting new keys while
+the recovery page is open means your confirmation applies to its latest proposal.
+Missing recovery authority, expired or closed recovery and lost keys after
+completion cannot use this repair. No production recovery is enabled.
