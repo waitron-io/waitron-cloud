@@ -1,5 +1,5 @@
 import type { Locale } from './locale.ts';
-export type CapturedLink = {token?: string; requestId?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
+export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
 export function captureLink(url: URL, replace: (url: string) => void): CapturedLink {
   const params = [url.searchParams, new URLSearchParams(url.hash.slice(1))];
   const tokens = params.flatMap(p => p.getAll('token'));
@@ -17,6 +17,11 @@ export function captureLink(url: URL, replace: (url: string) => void): CapturedL
     if (requests.length !== 1 || url.searchParams.has('request') || !['/connect','/recover'].includes(url.pathname)
       || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(requests[0]!) || result.invalid) result.invalid = true;
     else if(url.pathname==='/recover')result.recoveryId=requests[0];else result.requestId = requests[0];
+  }
+  const changes=params.flatMap(p=>p.getAll('change'));
+  if(changes.length){
+    if(changes.length!==1||url.pathname!=='/account'||url.searchParams.has('change')||tokens.length||result.invalid||!/^[A-Za-z0-9_-]{43}$/.test(changes[0]!))result.invalid=true;
+    else result.emailChangeToken=changes[0];
   }
   return result;
 }

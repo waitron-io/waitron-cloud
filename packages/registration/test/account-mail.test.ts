@@ -3,6 +3,14 @@ import { test } from 'node:test';
 import { accountMail } from '../src/account-mail.ts';
 import { createLocalAccountMailer } from '../src/local-mailer.ts';
 const token = 'a'.repeat(43);
+for(const locale of ['en','es'] as const)test(`email change verification and notices render ${locale}`,()=>{
+  const check=accountMail(new URL('https://cloud.example'),'email_change',{email:'new@example.test',token,expiresAt:'2030-01-01T12:00:00Z',locale});
+  assert.equal(check.subject,locale==='en'?'Verify your new Waitron Cloud email':'Verifica tu nuevo correo de Waitron Cloud');
+  assert.ok(check.text.includes(`/account#change=${token}&lang=${locale}`));assert.match(check.text,/UTC/);
+  const notice=accountMail(new URL('https://cloud.example'),'email_changed',{email:'old@example.test',locale});
+  assert.equal(notice.subject,locale==='en'?'Your Waitron Cloud email changed':'Tu correo de Waitron Cloud ha cambiado');
+  assert.doesNotMatch(notice.text,/token=/);assert.ok(notice.text.includes('/forgot-password'));
+});
 for (const locale of ['en', 'es'] as const) for (const kind of ['verification', 'password_reset', 'password_changed'] as const) {
   test(`${kind} renders ${locale} mail with private fragment links`, () => {
     const mail = accountMail(new URL('https://cloud.example'), kind, {

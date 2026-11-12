@@ -4,6 +4,10 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { migrationNames } from '../src/migrate.ts';
 
+test('email changes append migration 060 without replacing the security-window migration',()=>{
+  assert.equal(migrationNames.at(-2),'059_account_action_proof.sql');assert.equal(migrationNames.at(-1),'060_account_email_changes.sql');
+});
+
 test('retained fiscal registry migration keeps its ledger position and original digest', async () => {
   assert.equal(migrationNames[37], '038_fiscal_allocation_registry.sql');
   const sql = await readFile(new URL('../migrations/038_fiscal_allocation_registry.sql', import.meta.url));

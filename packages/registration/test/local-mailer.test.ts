@@ -11,6 +11,8 @@ import { createLocalAccountMailer } from '../src/local-mailer.ts';
 import { migrate } from '../src/migrate.ts';
 import { transaction } from '../src/transaction.ts';
 import { captured } from './fixtures/captured-mail.ts';
+import {AccountSecurityStore} from '../src/account-security.ts';
+import {openProofWindow} from './fixtures/action-proof.ts';
 
 if (!process.env.TEST_DATABASE_URL || !process.env.MAILPIT_TEST_URL || !process.env.MAILPIT_TEST_SMTP_PORT) throw new Error('Run pnpm test with Docker');
 const inbox = process.env.MAILPIT_TEST_URL;
@@ -70,4 +72,23 @@ test('local mailer rejects external portal origins and invalid ports', () => {
     if (previous === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previous;
   }
+});
+
+test('new email verification and both change notices travel through the worker to Mailpit',async()=>{
+  const mailer=createLocalAccountMailer({port:Number(process.env.MAILPIT_TEST_SMTP_PORT),portalOrigin:'http://localhost:3000'});
+  const signup=new SignupStore(pool,testOutbox),email=`email-change-${randomUUID()}@example.test`,next=`changed-${randomUUID()}@example.test`;
+  await signup.request(email);
+  const row=(await pool.query("SELECT * FROM email_outbox WHERE kind='verification' AND status='pending' ORDER BY created_at DESC LIMIT 1")).rows[0];
+  const message=testOutbox.open(row);assert.ok('token' in message);
+  const password='Synthetic change email password';await signup.complete(message.token,{password,organisationName:'Synthetic venue',legalBusinessName:'Synthetic SL',countryCode:'ES'});
+  const session=await transaction(pool,c=>login(c,{email,password}));await openProofWindow(pool,session.token);
+  const security=new AccountSecurityStore(pool,testOutbox),worker=new EmailWorker(pool,testOutbox,mailer);
+  await security.email(session.token,session.csrfToken,next);
+  while(await worker.runOnce()){}
+  const check=await captured(inbox,'Verify your new Waitron Cloud email',next);
+  const token=check.Text.match(/\/account#change=([A-Za-z0-9_-]{43})/)?.[1];assert.ok(token);
+  await security.completeEmail(session.token,session.csrfToken,token);
+  while(await worker.runOnce()){}
+  for(const address of [email,next])assert.equal((await captured(inbox,'Your Waitron Cloud email changed',address)).To[0]?.Address,address);
+  assert.equal((await pool.query("SELECT count(*) FROM email_outbox WHERE kind IN ('email_change','email_changed') AND status='sent'")).rows[0].count,'3');
 });

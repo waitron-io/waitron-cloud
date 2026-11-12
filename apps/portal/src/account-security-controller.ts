@@ -6,6 +6,7 @@ import type {AccountSessionSummary} from './account-security-types.ts';
 type Request = <T>(path: string, body?: Record<string, unknown>) => Promise<ApiResult<T>>;
 
 export class AccountSecurityController {
+  newPassword='';newEmail='';
   sessions: AccountSessionSummary[] = [];
   loaded = false;
   loadAttempted = false;
@@ -29,7 +30,7 @@ export class AccountSecurityController {
 
   get waiting() { return Math.max(0, Math.ceil((this.#retryUntil - performance.now()) / 1000)); }
 
-  fence() { this.#generation++; this.pending = false; this.loaded = false; this.loadAttempted = false; this.error = undefined; this.notice = undefined; }
+  fence() { this.#generation++; this.newPassword='';this.newEmail='';this.pending = false; this.loaded = false; this.loadAttempted = false; this.error = undefined; this.notice = undefined; }
 
   account(id: string | undefined) {
     if (id === this.#account) return;
@@ -84,6 +85,24 @@ export class AccountSecurityController {
     if (listed.ok && !this.sessions.some(session => session.id === id)) this.notice = 'sessionRevoked';
     else if (!result.ok) this.#failure(result, true, target.current);
     else this.error = 'sessionRevokeUncertain';
+    this.#changed();
+  }
+
+  async change(kind:'password'|'email'|'verify',locale:'en'|'es',token?:string){
+    if(!this.#account||this.pending||this.waiting)return;
+    const generation=this.#generation,body=kind==='verify'?{token}:kind==='password'?{password:this.newPassword,locale}:{email:this.newEmail,locale};
+    this.newPassword='';this.newEmail='';this.pending=true;this.error=undefined;this.notice=undefined;this.#changed();
+    const result=await this.#request<void>(`/security/${kind==='verify'?'email/verify':kind}`,body);
+    if(generation!==this.#generation)return;
+    this.pending=false;
+    if(result.ok){
+      if(kind==='email')this.notice='emailChangeSent';
+      else {this.notice=kind==='password'?'passwordChanged':'emailChanged';this.#sessionEnded('signedOut');}
+    }else{
+      this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
+      if(result.status===401)this.#sessionEnded();
+      else this.error=result.code==='proof_required'?(kind==='verify'?'emailChangeInvalid':'actionProofUnavailable'):result.code==='password_compromised'?'passwordCompromised':result.code==='password_screening_unavailable'?'unavailable':result.code==='link_unavailable'?'emailChangeInvalid':result.status===429?'limited':result.status===400?(kind==='password'?'passwordHelp':'emailError'):result.status===403?'forbidden':'credentialChangeUncertain';
+    }
     this.#changed();
   }
 

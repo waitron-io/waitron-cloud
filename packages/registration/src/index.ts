@@ -9,6 +9,7 @@ export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate
 export {decideCountryFlow,spainCountryPolicy,type CountryPolicy,type CountryFlow,type FlowRequest,type CountryFlowDecision} from './country-policy.ts';
 export { SignupStore, SignupError, type SignupEmail, type SignupMailer, type SignupDetails, type SignupResult } from './signup.ts';
 export { PasswordRecoveryStore, PasswordRecoveryError, type PasswordRecoveryMailer } from './password-recovery.ts';
+export {AccountSecurityStore,AccountSecurityError,type EmailChangeMailer} from './account-security.ts';
 export { EmailOutbox, EmailWorker, emailDeliveryStatus, type EmailKind, type EmailDeliveryStatus } from './email-outbox.ts';
 export type { AccountEmail, AccountSignInCheck } from './account-input.ts';
 export { createSmtpAccountMailer, type SmtpAccountMailConfig } from './smtp-mailer.ts';

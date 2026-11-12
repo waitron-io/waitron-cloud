@@ -506,3 +506,11 @@ test('mail measurement includes the mailbox sign-in renderer and its independent
  assert.deepEqual(result.operations.map(row=>[row.action,row.outcome,row.attempts]),[['sign_in_check','accepted',1]]);
  const assessment=assessAccounting({producer:'service',sources:[{scope:'mail',record:result}]});assert.equal(assessment.publicationEligible,false);
 });
+
+test('mail measurement counts verification and notices for email changes',async t=>{
+ const f=await fixture(t),{run,mailer}=await open(t,f);
+ await mailer.sendEmailChange({...message,token:'x'.repeat(43),expiresAt:'2030-01-01T00:00:00Z'},context());
+ await mailer.sendEmailChanged(message,context());await run.close();const result=run.snapshot();
+ assert.equal(f.accepted(),2);assert.equal(result.producer.accepted,2);assert.equal(result.observer.accepted,2);
+ assert.deepEqual(result.operations.map(row=>[row.action,row.outcome,row.attempts]),[['email_change','accepted',1],['email_changed','accepted',1]]);
+});

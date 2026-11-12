@@ -70,10 +70,12 @@ export class PortalApp {
     this.passkeyFirst = this.passkeys.preferred;
     this.security = new AccountSecurityController(() => this.draw(), async reason => {
       const session = this.session;
+      const credentialNotice=this.security.notice;
       if (reason === 'signedOut') this.#signOutCheck = session;
       // Revocation needs a read started after the write, not an older session snapshot.
       try { await session.check({fresh: reason === 'signedOut'}); }
       finally { if (this.#signOutCheck === session) this.#signOutCheck = undefined; }
+      if(this.session===session&&session.state.kind==='anonymous'&&(credentialNotice==='passwordChanged'||credentialNotice==='emailChanged')){this.notice=credentialNotice;this.draw();}
     });
     void this.passkeys.checkSupport();
     this.alerts = new AlertController(() => this.draw());
@@ -225,6 +227,9 @@ export class PortalApp {
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    for(const [name,key] of [['newAccountPassword','newPassword'],['newAccountEmail','newEmail']] as const){
+      const value=this.root.querySelector(`wt-input[name="${name}"]`)?.shadowRoot?.querySelector('input')?.value;if(value!==undefined)this.security[key]=value;
+    }
     for (const [name,key] of [['factorPassword','password'],['factorProof','proofCode'],['factorConfirmation','confirmation']] as const) {
       const value=this.root.querySelector(`wt-input[name="${name}"]`)?.shadowRoot?.querySelector('input')?.value;
       if(value!==undefined)this.authenticator[key]=value;
@@ -383,6 +388,10 @@ export class PortalApp {
     if (this.passkeys.notice === 'passkeyRemoved') await this.session.check({fresh: true});
   }
   async revokeSession(id: string) { await this.security.revoke(id); }
+  async changeCredentials(kind:'password'|'email'|'verify'){
+    this.readFields();if(kind!=='verify'&&!await this.#requireActionProof())return;
+    await this.security.change(kind,this.locale,this.link.emailChangeToken);
+  }
   get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
   get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
