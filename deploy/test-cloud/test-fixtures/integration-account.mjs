@@ -93,10 +93,13 @@ try {
         return objects;
       };
       const retained = async () => {
-        const point = (await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3', [pointId, installationId, venueId])).rows[0];
-        assert.ok(point);
-        inspectIntegrationRetainedSnapshot(point, await runtime.options.objects(location).read(point.object_key),
-          {pointId, installationId, venueId, sha256, bytes, sourceNodeId, attemptId});
+        // One process checks the retained set within the account container's memory limit.
+        for (const expected of phase === 'inspect-retained-snapshot' ? JSON.parse(input).points : [{pointId, sha256, bytes, sourceNodeId, attemptId}]) {
+          const point = (await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3', [expected.pointId, installationId, venueId])).rows[0];
+          assert.ok(point);
+          inspectIntegrationRetainedSnapshot(point, await runtime.options.objects(location).read(point.object_key),
+            {...expected, installationId, venueId});
+        }
       };
       try {
         await retained();

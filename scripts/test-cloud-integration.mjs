@@ -506,7 +506,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
           if (kubernetes?.observe) acknowledged.push({...captured, attemptId: admission.attemptId});
           };
-          if (kubernetes?.observe) readBackups = () => Promise.all(acknowledged.map(point => accountPhase('inspect-retained-snapshot', point)));
+          if (kubernetes?.observe) readBackups = () => accountPhase('inspect-retained-snapshot', {points: acknowledged});
           if (kubernetes?.observe) repeatBackup = signal => cancellation.run({...cancellation.getStore(),
             signal: AbortSignal.any([runSignal(), signal].filter(Boolean))}, async () => {
             await readBackups();
