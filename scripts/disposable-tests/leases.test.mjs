@@ -50,7 +50,10 @@ test('malformed retained turn entries cannot be accepted as an empty or valid hi
   for(const [key,entry] of [
     ['I:damaged',null],['I:damaged',[]],['I:damaged',{}],
     ['I:damaged',{...valid,fingerprint:'bad'}],['I:damaged',{...valid,slot:1}],
-    ['I:damaged',{...valid,generation:0}],['I:damaged',{...valid,generation:2}],['bad-key',valid]
+    ['I:damaged',{...valid,generation:0}],['I:damaged',{...valid,generation:2}],['bad-key',valid],
+    ['I:damaged',{...valid,registration5xxFailedAt:-1}],['I:damaged',{...valid,registration5xxFailedAt:'1'}],
+    ['I:damaged',{...valid,registration5xxRetried:true}],
+    ['I:damaged',{...valid,registration5xxFailedAt:0,registration5xxRetried:false}]
   ]){
     const {leases,dir}=await setup(t);leases.reserveLocal(request());const path=join(dir,'state.json');
     const state=JSON.parse(readFileSync(path,'utf8'));state.turns[key]=entry;

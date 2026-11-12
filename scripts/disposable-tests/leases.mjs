@@ -9,9 +9,10 @@ import {withKernelLock} from './kernel-lock.mjs';
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export const ciRetryReady=(turn,state,jobId,now=Date.now())=>!turn.busyRunnerRetried && !turn.admissionQuotaRetried &&
+export const ciRetryReady=(turn,state,jobId,now=Date.now())=>!turn.busyRunnerRetried && !turn.admissionQuotaRetried && !turn.registration5xxRetried &&
   (turn.busyRunnerRefusedAt!==undefined && now-turn.busyRunnerRefusedAt>=60000 ||
-   turn.admissionQuotaRetryAt!==undefined && now>=turn.admissionQuotaRetryAt) &&
+   turn.admissionQuotaRetryAt!==undefined && now>=turn.admissionQuotaRetryAt ||
+   turn.registration5xxFailedAt!==undefined && now-turn.registration5xxFailedAt>=60000) &&
   ![state,...state.slots].some(s=>s.orphanRunners?.some(r=>r.ci.jobId===jobId));
 function requestIdentity(request) {
   assert.ok(request && typeof request.lane === 'string' && /^[A-K]$/.test(request.lane) &&
@@ -102,6 +103,8 @@ export class LocalLeases {
       (turn.busyRunnerRetried===undefined || turn.busyRunnerRetried===true && turn.busyRunnerRefusedAt!==undefined) &&
       (turn.admissionQuotaRetryAt===undefined || Number.isSafeInteger(turn.admissionQuotaRetryAt) && turn.admissionQuotaRetryAt>=0) &&
       (turn.admissionQuotaRetried===undefined || turn.admissionQuotaRetried===true && turn.admissionQuotaRetryAt!==undefined) &&
+      (turn.registration5xxFailedAt===undefined || Number.isSafeInteger(turn.registration5xxFailedAt) && turn.registration5xxFailedAt>=0) &&
+      (turn.registration5xxRetried===undefined || turn.registration5xxRetried===true && turn.registration5xxFailedAt!==undefined) &&
       Number.isSafeInteger(turn.generation) && turn.generation>=1 && turn.generation<=state.slots[turn.slot].generation),
       'Invalid retained turn history');
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
@@ -180,24 +183,24 @@ export class LocalLeases {
       slot.state = 'reserved';
       slot.lease = {...identity, slot: slot.id, hostGeneration: this.hostGeneration, generation: slot.generation,
         resourceId: `dt-${this.hostGeneration}-${slot.id}-${slot.generation}`, createdAt: now, deadline: now + durationMs};
-      state.turns[key] = {...prior,fingerprint, slot: slot.id, generation: slot.generation,...(prior?(prior.admissionQuotaRetryAt!==undefined?{admissionQuotaRetried:true}:{busyRunnerRetried:true}):{})};
+      state.turns[key] = {...prior,fingerprint, slot: slot.id, generation: slot.generation,...(prior?(prior.admissionQuotaRetryAt!==undefined?{admissionQuotaRetried:true}:prior.registration5xxFailedAt!==undefined?{registration5xxRetried:true}:{busyRunnerRetried:true}):{})};
       return {code: 0, created: true, lease: slot.lease};
     });
   }
   recordBusyRunnerFailure(result) {
     return this.recordCIRetryFailure(result);
   }
-  recordCIRetryFailure(result,quotaRetryAt) {
-    const lease=result?.lease,quota=Number.isSafeInteger(quotaRetryAt) && quotaRetryAt>=0;
-    if(result?.code!==125 || result.cleanup!=='absent' || !(quota || /^CI runner assignment is busy elsewhere(?:\n|$)/.test(result.error??'')) ||
+  recordCIRetryFailure(result,reason) {
+    const lease=result?.lease,quota=Number.isSafeInteger(reason) && reason>=0,registration=reason==='registration-5xx';
+    if(result?.code!==125 || result.cleanup!=='absent' || !(quota || registration || /^CI runner assignment is busy elsewhere(?:\n|$)/.test(result.error??'')) ||
       lease?.ci?.workflowPath!=='.github/workflows/ci.yml')return false;
     let identity;try{identity=requestIdentity(lease);}catch{return false;}
     return this.transaction((state,now)=>{
       const turn=state.turns[`${lease.lane}:${lease.turn}`];
       if(!turn || turn.fingerprint!==digest(identity) || turn.slot!==lease.slot || turn.generation!==lease.generation ||
         lease.hostGeneration!==this.hostGeneration || lease.resourceId!==`dt-${this.hostGeneration}-${turn.slot}-${turn.generation}` ||
-        state.slots.some(slot=>slot.lease?.resourceId===lease.resourceId) || turn.busyRunnerRefusedAt!==undefined || turn.admissionQuotaRetryAt!==undefined)return false;
-      if(quota)turn.admissionQuotaRetryAt=quotaRetryAt;else turn.busyRunnerRefusedAt=now;return true;
+        state.slots.some(slot=>slot.lease?.resourceId===lease.resourceId) || turn.busyRunnerRefusedAt!==undefined || turn.admissionQuotaRetryAt!==undefined || turn.registration5xxFailedAt!==undefined)return false;
+      if(quota)turn.admissionQuotaRetryAt=reason;else if(registration)turn.registration5xxFailedAt=now;else turn.busyRunnerRefusedAt=now;return true;
     });
   }
   owns(slot, lease) {

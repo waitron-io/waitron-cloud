@@ -28,7 +28,8 @@ Malformed/token headers and failed ledger recording retain the HTTP response.
 Immutable quiet-window publication/readback and bounded staged overflow qualification remain open. The counters separate command roles, endpoint categories
 and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
-retry time and confirmed guest and runner removal; sent registration requests remain retired.
+retry time and confirmed guest and runner removal; sent registration requests remain retired
+unless they receive the HTTP 5xx refusal described under A1473 below.
 The controller revalidates JSON bodies and shares recent checked admission; see the
 [controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
 For a replacement release, qualify a full busy hour below about 4,000 used requests
@@ -69,6 +70,8 @@ published assignment and any change in incomplete-inventory events remain separa
 no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
+
+Controlled cases cover one retry after a received registration HTTP 5xx, following a 60-second delay and verified guest and exact-name runner removal; publication and live assignment/cleanup qualification remain open.
 
 A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; publication and natural recovery remain to be read.
 
