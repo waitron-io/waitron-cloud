@@ -95,7 +95,7 @@ test('only a received registration 5xx records a retry, after exact-name runner 
    route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
   f.api.post=async(...args)=>{try{return await post(...args);}catch(error){
    if(!refused)return {runner:{id:1001,name:'dt-123-789-1-901'},encoded_jit_config:'synthetic-jit'};
-   if(status==='lost')throw error;
+   if(status==='lost')throw Object.assign(error,{code:'GITHUB_RESPONSE_INTERRUPTED'});
    if(status==='invalid-success')return {runner:{id:1001,name:'dt-123-789-1-901'}};
    throw Object.assign(error,{status});
   }};
