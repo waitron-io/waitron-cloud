@@ -278,7 +278,7 @@ export class PortalApp {
   }
   async approveRecovery(){
     const recovery=this.recovery,view=recovery.view;
-    if(!view||view.state!=='awaiting_owner'||recovery.pending||recovery.waiting)return;
+    if(!view||(view.state!=='awaiting_owner'&&view.operation?.status!=='pending')||recovery.pending||recovery.waiting)return;
     const proved=await this.#requireActionProof();
     if(recovery.view!==view)return;
     if(this.actionProof.status?.methods.every(m=>m==='email'))recovery.error='pairEnrollment';

@@ -127,6 +127,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     assert.deepEqual((await p.query('SELECT current_evidence_id,last_attempt_id FROM backup_points')).rows, [{current_evidence_id: null, last_attempt_id: null}]);
     assert.equal((await p.query('SELECT current_verification FROM backup_point_qualification')).rows[0].current_verification, 'pending');
     assert.equal((await p.query("SELECT EXISTS(SELECT 1 FROM backup_verifications WHERE point_id=$1 AND outcome='verified') AS protected", [f.point])).rows[0].protected, true);
+    for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null});
     assert.deepEqual(await allOldRows(), allBefore, 'the additive migration preserves every pre-existing stored row and ciphertext');
     assert.deepEqual((await p.query('SELECT protocol_version,verification_target FROM backup_recovery_requests')).rows, [{protocol_version: null, verification_target: null}]);
     assert.deepEqual((await p.query('SELECT verification_attempt_id,verification_target FROM backup_recoveries')).rows, [{verification_attempt_id: null, verification_target: null}]);

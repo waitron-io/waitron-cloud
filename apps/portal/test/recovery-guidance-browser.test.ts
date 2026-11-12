@@ -84,7 +84,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.getByRole('button',{name:locale==='en'?'Check request status':'Comprobar estado de la solicitud',exact:true}).click();
     await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action,'/api/account/recovery/inspect']);
-    assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),1);assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).count(),0);
    }catch(error){await failPortalWait(page,trace,stage,error,details=>t.diagnostic(details));}finally{await page.close();}
   });
  }finally{await browser.close();}

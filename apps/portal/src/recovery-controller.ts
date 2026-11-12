@@ -29,16 +29,18 @@ export class RecoveryController {
   if(!this.#account||!this.requestId||this.pending||this.waiting)return;
   this.code=this.code.trim();
   if(!/^\d{8}$/.test(this.code)){this.error='pairCodeError';this.#changed();return;}
-  if(action==='approve'&&(this.uncertain||this.view?.state!=='awaiting_owner'||!this.venueId||!this.source||(this.source==='snapshot'&&!this.pointId)||!this.stopped||!this.acceptLoss||Date.parse(this.view.expiresAt)<=Date.now()))return;
+  const operation=this.view?.operation,approvalVenue=operation?.venueId??this.venueId,approvalSource=operation?.source.kind??this.source,approvalPoint=operation?operation.pointId:this.pointId;
+  if(action==='approve'&&(this.uncertain||!this.view||(operation?operation.status!=='pending':this.view.state!=='awaiting_owner')||!approvalVenue||!approvalSource||(approvalSource==='snapshot'&&!approvalPoint)||!this.stopped||!this.acceptLoss||Date.parse(operation?.expiresAt??this.view.expiresAt)<=Date.now()))return;
   if(action==='close'&&!this.view?.operation)return;
   const replacement=this.view?.replacement;
   if(action==='replace'&&(this.uncertain||!this.confirmReplacement||!replacement||replacement.state!=='awaiting_owner'||this.view?.operation?.status!=='restored'||Date.parse(replacement.expiresAt)<=Date.now()||Date.parse(this.view.operation.expiresAt)<=Date.now()))return;
-  const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,this.source==='continuous'?{source:'continuous',venueId:this.venueId}:{source:'snapshot',pointId:this.pointId},{oldServerUnavailable:'true',acceptDataLoss:'true'});
+  const body:Record<string,string>={requestId:this.requestId,code:this.code};if(action==='approve')Object.assign(body,approvalSource==='continuous'?{source:'continuous',venueId:approvalVenue}:{source:'snapshot',pointId:approvalPoint},{oldServerUnavailable:'true',acceptDataLoss:'true'});
   if(action==='replace')Object.assign(body,{oldInstallationId:replacement!.oldInstallationId,oldServerUnavailable:'true',confirmReplacement:'true'});
-  const generation=this.#generation,point=this.pointId,venue=this.venueId,source=this.source,proposal=this.#proposal();this.pending=true;this.error=undefined;this.#changed();
+  const generation=this.#generation,point=approvalPoint,venue=approvalVenue,source=approvalSource,proposal=this.#proposal();this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<RecoveryView>('/recovery/'+action,body);if(generation!==this.#generation)return;this.pending=false;
+  // A confirmed or uncertain approval consumes its confirmations before another authorisation.
   const returned=result.ok?result.value.operation:null;
-  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(source==='continuous'?returned.pointId===null:returned.pointId===point)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.localVenueId===replacement.localVenueId&&result.value.replacement.nodeId===replacement.nodeId))){this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
+  if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(source==='continuous'?returned.pointId===null:returned.pointId===point)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.localVenueId===replacement.localVenueId&&result.value.replacement.nodeId===replacement.nodeId))){if(action==='approve'||returned?.id!==operation?.id){this.stopped=false;this.acceptLoss=false;}this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
   else{
    if(!result.ok){
     const refusals:Record<number,Record<string,keyof Copy>>={
@@ -52,7 +54,7 @@ export class RecoveryController {
     if(result.status===401||result.status===403&&!proofRefusal){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
    }
    else this.error='unavailable';
-   if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
+   if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){if(action==='approve'){this.stopped=false;this.acceptLoss=false;}this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
   }
   this.#changed();
  }
