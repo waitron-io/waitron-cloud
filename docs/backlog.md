@@ -27,7 +27,7 @@ has a Claude plan read and watcher clearance (12 November 10:34). Controlled thr
 checks cover zero available capacity for new placements, durable holds across entry points,
 continued existing-label pickup, retained active reservations and suppressed forward overflow.
 Malformed/token headers and failed ledger recording retain the HTTP response.
-The reviewed controller is installed with independent release/configuration readback; bounded staged overflow qualification remains open. The counters separate command roles, endpoint categories
+The reviewed controller is installed with independent release/configuration readback; its [owned forward-overflow drill](https://github.com/clintongormley/waitron/actions/runs/43390920001) reached a successful hosted second attempt. The counters separate command roles, endpoint categories
 and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired
@@ -73,7 +73,7 @@ no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
 
-The controller from [PR #1195](https://github.com/waitron-io/waitron-cloud/pull/1195) is installed. Publication and independent readback on 13 November matched its release files, configuration, pinned keys and 12-slot mapping, with one enabled server timer and the Mac controller disabled. Isolated checks against the installed files cover quota reset and retained reservations, loopback quota recording, and one delayed received-5xx retry after guest and exact-name runner removal. Natural registration-failure recovery and the bounded staged overflow drill remain unqualified.
+The controller from [PR #1195](https://github.com/waitron-io/waitron-cloud/pull/1195) is installed. Publication and independent readback on 13 November matched its release files, configuration, pinned keys and 12-slot mapping, with one enabled server timer and the Mac controller disabled. Isolated checks against the installed files cover quota reset and retained reservations, loopback quota recording, and one delayed received-5xx retry after guest and exact-name runner removal. Natural registration-failure recovery remains unqualified. The later measured-memory release retains these paths; one owned no-op forward-overflow run was automatically marked, cancelled and rerun on GitHub on 13 November. Ordinary work filled the pool; the prepared filler was not dispatched. The [run and both attempts](https://github.com/clintongormley/waitron/actions/runs/43390920001) retain the unchanged source head. This supplies no product-test or speed qualification.
 
 A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; natural recovery remains to be read.
 
@@ -86,7 +86,7 @@ HTTP, lifecycle, cancellation and diagnostic-excerpt checks. The busy-hour prere
 [forward-overflow plan](superpowers/plans/2026-11-10-a1473-forward-overflow.md).
 Controlled cases now exercise forward overflow from a full pool: oldest untouched current-head PR,
 shared pressure reads, fresh refusal checks and recorded cancellation/rerun recovery.
-Capture the bounded staged mark/cancel/hosted-rerun drill and an owned stuck cancel.
+An owned stuck cancel still needs qualification.
 Empty queued runs older than an hour now have controlled once-only cancel/force-cancel
 and restart checks; the existing ledger keeps them out of subsequent automatic passes.
 Installed readback matched this code; natural cleanup outcomes remain to be read.
