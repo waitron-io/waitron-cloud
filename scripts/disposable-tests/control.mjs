@@ -121,7 +121,6 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(config.slotHosts!==undefined){
   transport??=new CITransport(config);
   healthy=await transport.healthySlots({signal});
-  // Host health checks room for another guest; occupied leases still consume capacity.
   healthy=[...new Set([...healthy,...state.slots.filter(slot=>slot.state!=='free'&&slot.state!=='quarantined'&&!slot.orphanRunners?.length).map(slot=>slot.id)])];
   free=Math.max(0,state.slots.filter(slot=>healthy.includes(slot.id)&&slot.state==='free'&&!slot.ciInvocation).length-starting);
   if(!healthy.length){
@@ -179,7 +178,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
     memoryFits(current,slot.id,ciGuestMemoryMiB(ci),pending))?.id;
    if(memorySlot===undefined)break;
   }
-  const admission={ci,checkedAt};
+  const admission={ci,checkedAt,...(memorySlot===undefined?{}:{slot:memorySlot})};
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
   let result=await runWorker(ci,admission);
@@ -226,8 +225,9 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
  const policy=config.ci;let ci,checkedAt=admission?.checkedAt??Date.now();
  if(admission!==undefined){
-  assert.ok(admission && Object.keys(admission).sort().join(',')==='checkedAt,ci' &&
+  assert.ok(admission && Object.keys(admission).sort().join(',')===(admission.slot===undefined?'checkedAt,ci':'checkedAt,ci,slot') &&
    Number.isSafeInteger(checkedAt) && checkedAt>=0 && checkedAt<=Date.now(),'Invalid shared admission timestamp');
+  if(admission.slot!==undefined)assert.ok(config.hostMemoryMiB && Number.isSafeInteger(admission.slot) && admission.slot>=0 && admission.slot<configuredSlots(config),'Invalid planned slot');
   ci=ciIdentity(admission.ci);
   assert.ok(ci.repositoryId===policy.repositoryId && ci.workflowId===policy.workflowId && ci.workflowPath===policy.workflowPath &&
    ci.runId===runId && ci.jobId===jobId,'Shared admission identity differs');
@@ -244,7 +244,7 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
   if(!ci)return {code:75,reason:'job-no-longer-queued'};
   if(Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
   return executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true});
- }),{signal,healthySlots,ci});
+ }),{signal,healthySlots,ci,preferredSlot:admission?.slot});
 }
 
 export async function main(args){

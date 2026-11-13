@@ -506,6 +506,37 @@ test('pending worker starts share the host memory budget before leases appear',a
  assert.equal(result.served,6);assert.equal(peak,4);
 });
 
+test('workers keep the planned host when a newer small job reaches admission first',async t=>{
+ const {automaticTick,automaticJob}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const {ciRequest}=await import('./ci-identity.mjs'),{CITransport}=await import('./transport.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;
+ Object.assign(config,{host:'host-a',recipe:'/opt/waitron-disposable-fixture'});
+ const base=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ for(const slot of [0,1,2,3,4,8,9,10,11,12])new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot})
+  .reserveLocal({lane:'I',turn:'large-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot:13}).reserveLocal(ciRequest('I',{...base,jobId:2500,jobKey:'test-identity-1'}));
+ const original=f.jobs[0];f.jobs.splice(0,f.jobs.length,...[['typecheck','typecheck-1'],['changes','changes-1']].map(([name,key],i)=>
+  ({...original,id:901+i,name,labels:['self-hosted','dt-123-789-1-'+key]})));
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);
+ const smallReserved=Promise.withResolvers(),largeChecked=Promise.withResolvers(),results=[];
+ t.mock.method(CITransport.prototype,'healthySlots',async()=>Array.from({length:16},(_,i)=>i));
+ t.mock.method(CITransport.prototype,'healthy',async()=>true);
+ t.mock.method(CITransport.prototype,'transfer',async lease=>{
+  if(lease.ci.jobId===902){smallReserved.resolve();await largeChecked.promise;}
+  throw new Error('fixture ends after reservation');
+ });
+ t.mock.method(CITransport.prototype,'destroy',async()=>{});
+ t.mock.method(CITransport.prototype,'inspect',async({resourceId})=>({resourceId,absent:true}));
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i)},wait:async()=>{},runWorker:async(ci,admission)=>{
+   if(ci.jobId===901)await smallReserved.promise;
+   try{const result=await automaticJob({config,api:f.api,runId:789,jobId:ci.jobId,admission});results.push({jobId:ci.jobId,slot:result.lease?.slot,code:result.code});return result;}
+   finally{if(ci.jobId===901)largeChecked.resolve();}
+  }});
+ assert.deepEqual(results.find(r=>r.jobId===901),{jobId:901,slot:5,code:125});
+ assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:14,code:125});
+});
+
 test('an older large job keeps its place ahead of a later small job that fits',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
  const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;

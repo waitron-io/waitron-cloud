@@ -172,6 +172,9 @@ class StatusTests(unittest.TestCase):
             ledger['memory']=dict(slotHosts=config['slotHosts'],hostMiB=config['hostMemoryMiB']);path.write_text(json.dumps(ledger))
             self.calls=[];r=self.collect()
             self.assertEqual(r['slots'],dict(total=8,busy=6,free=2,admissible=want))
+        ledger['slots'][6]['ciInvocation']=dict(jobId=43,guestMemoryMiB=6144,createdAt=400000)
+        path.write_text(json.dumps(ledger));self.calls=[]
+        self.assertEqual(self.collect()['slots'],dict(total=8,busy=7,free=1,admissible=0))
 
     def test_idle_errors_and_last_admission_read_existing_tails(self):
         (self.state/'out').write_text('not json\n'+json.dumps(dict(code=0, lease=dict(createdAt=800000)))+'\n'+json.dumps(dict(event='automatic-ci-job', at='later'))+'\n')

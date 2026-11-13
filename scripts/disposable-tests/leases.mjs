@@ -353,12 +353,14 @@ export function refuseLegacy(state) {
 }
 
 // The slot lock lives through cleanup; the shared ledger lock covers only updates.
-export async function withAvailableSlot({state,hostGeneration,slots,host,slotHosts},work,{signal,healthySlots,ci}={}) {
+export async function withAvailableSlot({state,hostGeneration,slots,host,slotHosts},work,{signal,healthySlots,ci,preferredSlot}={}) {
   assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
   assert.ok(healthySlots===undefined || Array.isArray(healthySlots) && healthySlots.every(slot=>Number.isSafeInteger(slot) && slot>=0 && slot<slots),'Invalid healthy slot inventory');
   refuseLegacy(state);
-  const refusedHosts=new Set();
-  for(let slot=0;slot<slots;slot++){
+  assert.ok(preferredSlot===undefined || Number.isSafeInteger(preferredSlot)&&preferredSlot>=0&&preferredSlot<slots,'Invalid planned slot');
+  const refusedHosts=new Set(),order=Array.from({length:slots},(_,slot)=>slot);
+  if(preferredSlot!==undefined)order.unshift(...order.splice(preferredSlot,1));
+  for(const slot of order){
     const target=slotHosts?.[slot]??host??slot;
     if(refusedHosts.has(target))continue;
     if(healthySlots!==undefined && !healthySlots.includes(slot))continue;

@@ -469,7 +469,9 @@ Admission sums retained caps on each host, including preparations and pending st
 and leaves 16 GiB for the host. It checks that budget under both the controller's
 existing ledger lock and the host's existing lock. Uncertain guest cleanup keeps its
 charge until absence is confirmed. The controller tries a fitting identifier on either
-host; when the oldest eligible job fits nowhere, later small jobs wait for it.
+host; workers try their selected identifier first. Within the existing oldest-run-first order,
+jobs use their own creation times; when the next eligible job fits nowhere, later small
+jobs wait for it.
 A memory-full host remains healthy. Four reserved physical cores and the disk reserve
 still apply; live free memory is not a second admission gate.
 
@@ -507,7 +509,9 @@ Age uses the attempt's start, falling back to run creation. Known ignored attemp
 do not consume the existing 100-run allowance; listings can read their extra pages.
 A later attempt is checked separately. This does not delete a run from GitHub.
 
-The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable capacity, occupied/manual/preparing slots and distinct server/hosted queues; with memory budgets, spare capacity uses the conservative 18 GiB calculation above. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a full pool retains the existing ledger-only health behavior. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
+The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable capacity, occupied/manual/preparing slots and distinct server/hosted queues; with memory budgets, spare capacity uses the conservative 18 GiB calculation above. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a pool without free identifiers retains ledger-only health publication. A memory-full
+host now answers healthy, including without the optional memory configuration;
+after a host refusal, slot selection can try the other host. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
 
 Multi-slot controller and worker responses reporting core use of at least 4,000 retain the returned reset
 in the existing durable ledger. New placements use GitHub when the next due capacity pass
