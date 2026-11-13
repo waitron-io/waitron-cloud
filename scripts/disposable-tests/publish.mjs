@@ -301,8 +301,8 @@ export async function publishServer(p,{execute=runProcess,api,transport,signal=A
  }
  copyRelease(p);const localConfiguration=join(p.newController,'config.json');writeFileSync(localConfiguration,JSON.stringify(old)+'\n',{mode:0o400});
  // A rollback payload can reject fields in the running version's ledger.
- const driver=p.oldServer??receipt;
- const activate=()=>rootCommand(p,`${shellQuote(driver.node??controllerNode)} ${shellQuote(driver.release+'/scripts/disposable-tests/publish.mjs')} server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
+ const driver=p.oldServer;
+ const activate=()=>rootCommand(p,`${shellQuote(driver?.node??controllerNode)} ${shellQuote((driver?.release??receipt.release)+'/scripts/disposable-tests/publish.mjs')} server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
  const commitCallers=async target=>{assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');await renderTo({host:p.controllerHost,configuration:target.configuration},localConfiguration);freezeRelease(p.newController);};
  if(p.oldServer){
   const result=await activate();let value;

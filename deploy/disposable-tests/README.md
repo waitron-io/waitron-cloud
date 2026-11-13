@@ -288,9 +288,12 @@ before creating fresh Mac rollback state. Existing App credentials and pinned SS
 keys must match; staging refuses changes to those private files.
 
 For a later release, add `oldServer` with the installed receipt's `release`,
-`configuration` and `node`. The same command drains that server's ledger and installs
-fresh state. A refused activation restores the previous code under a fresh release,
-state and generation. Keep the installed receipt for the next publication.
+`configuration` and `node`. The command uses that running release and Node to drain
+its own ledger and switch to fresh state. Changes to that switch-over implementation
+take effect when the published release is used for a later update. On activation refusal,
+it attempts to drain the replacement before restoring the previous code under a fresh
+release, state and generation. A refused replacement drain stops publication before
+caller paths change. Keep the installed receipt for the next publication.
 
 The manual helper still verifies your local checkout. A confirmed full remote pool refuses before capture; unknown status leaves admission
 to NEW. Upload reception holds no slot;
@@ -454,7 +457,11 @@ Host updates wait for their current writer. A guest stop has a 40-second command
 To try measured sizes, publish a fresh generation with sixteen `slots`, a `slotHosts`
 list mapping eight identifiers to each host, and `hostMemoryMiB` mapping those same host
 names to their measured integer MiB totals. The twelve-slot example above remains the
-rollback profile. Use the existing publication command and its quiet-window drain;
+rollback profile. Run the publisher from the current landed checkout, including the
+rollback driver fix. For an older payload, set the manifest's `source` to a separate
+clean checkout detached at that older commit and `sha` to the same commit. Invoke
+`node /CURRENT_CHECKOUT/scripts/disposable-tests/publish.mjs server /PRIVATE/publication.json`;
+keep `oldServer` pointing to the release currently running. Use its quiet-window drain;
 never change a live ledger's mapping or budgets.
 
 The family table in `scripts/disposable-tests/leases.mjs` reduces only measured
