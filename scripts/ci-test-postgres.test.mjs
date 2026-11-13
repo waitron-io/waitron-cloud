@@ -106,14 +106,17 @@ import os from 'node:os';
 import {appendFileSync} from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 const execute = childProcess.execFileSync;
+let monotonic = 9000000000n;
 childProcess.execFileSync = (command, args, options) => {
   appendFileSync(process.env.LAUNCHER_INVOCATIONS, JSON.stringify({command, args, timeout: options.timeout, killSignal: options.killSignal, maxBuffer: options.maxBuffer}) + '\\n');
+  if (args[0] === 'info' || ['systemctl', 'curl'].includes(command)) monotonic += 1000000000n;
   if (['systemctl', 'curl'].includes(command)) {
     const fixture = command === 'systemctl' ? ${JSON.stringify(scenario.serviceReply ?? '')} : ${JSON.stringify(scenario.socketReply ?? 'OK')};
     const mode = ${JSON.stringify(scenario.probeMode ?? '')};
     if (mode === 'missing') throw Object.assign(new Error('PRIVATE_PROBE'), {code: 'ENOENT'});
     return execute(process.execPath, ['-e', mode === 'hang'
       ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000)'
+      : mode === 'stderr' ? "console.error('PRIVATE_PROBE'); process.exit(1)"
       : mode === 'oversized' ? "console.log('PRIVATE_PROBE'.repeat(1000))" : 'process.stdout.write(' + JSON.stringify(fixture) + ')'], options);
   }
   if (args[0] === 'info' && ${JSON.stringify(scenario.daemonMode === 'spawn')}) throw Object.assign(new Error('PRIVATE_DAEMON_ERROR'), {code: 'ENOENT'});
@@ -128,7 +131,7 @@ childProcess.execFileSync = (command, args, options) => {
 };
 if (${JSON.stringify(!!scenario.reportThrows)}) os.uptime = () => {throw new Error('PRIVATE_HOST_ERROR');};
 Object.defineProperty(process, 'platform', {value: ${JSON.stringify(scenario.platform ?? process.platform)}});
-process.hrtime.bigint = () => 9000000000n;
+process.hrtime.bigint = () => monotonic;
 syncBuiltinESMExports();
 const phase = ${JSON.stringify(scenario.budgetPhase ?? null)};
 if (phase) {
@@ -508,7 +511,7 @@ for (const [active, sub, entered, socketReply] of [
   });
 }
 
-for (const [probeMode, status] of [['missing', 'spawn-error'], ['hang', 'timeout'], ['oversized', 'output-limit'], ['', 'unrecognized']]) {
+for (const [probeMode, status] of [['missing', 'spawn-error'], ['hang', 'timeout'], ['oversized', 'output-limit'], ['stderr', 'exit-error'], ['', 'unrecognized']]) {
   test(`hosted inspection retains original refusal with ${probeMode || 'malformed'} probes`, async t => {
     const result = await launch(t, {hosted: true, platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT',
       probeMode, serviceReply: 'Id=docker.service\nType=PRIVATE_PROBE\nMainPID=PRIVATE_PROBE', socketReply: 'PRIVATE_PROBE'});
