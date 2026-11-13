@@ -37,6 +37,11 @@ in each returned quota series; confirm automatic zero-capacity publication if it
 OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
 
+A1454's renewed 12 November ask is full-day memory measurement, per-family sizes and
+memory-based admission, then comparison against 11–12 November waits. Its
+[replacement plan](superpowers/plans/2026-11-13-a1454-memory-admission.md) is awaiting
+Claude review and watcher clearance; no sizing or admission change is implemented.
+
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
 Pickup now retains active workers across temporary routing and inventory reads with a 30-second retry. Automatic worker recovery cleans guests and runners without moving the run; full-pool forward overflow follows the A1473 rules below. Guest readiness tolerates SSH restarts during cloud-init within its original boot budget. The matching stability controller and host recipe ran [six simultaneous GitHub jobs successfully](https://github.com/waitron-io/waitron-cloud/actions/runs/42490199973), with all six guests and runner registrations cleaned up. The later widened admission release retains those fixes; the watcher restored server mode on 8 November at 17:50, and ordinary assignment resumed. Sustained operation remains to be measured.
