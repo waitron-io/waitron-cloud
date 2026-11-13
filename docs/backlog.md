@@ -3164,8 +3164,11 @@ implementation or production evidence.
 
   **Local registration test processes.** The exact handle behind the earlier
   nine-minute `relay-control.test.ts` hold remains unidentified. Capture it if
-  it recurs with `pnpm --dir packages/registration exec node --test
-  --test-timeout=30000 test/relay-control.test.ts`, which keeps normal exit.
+  it recurs with `node scripts/test-postgres.mjs exec pnpm --dir
+  packages/registration exec node --test --test-concurrency=2
+  --test-timeout=30000 "test/*.test.ts"`, which supplies the temporary database
+  and keeps normal exit. The two-worker cap limits concurrent whole-schema
+  migrations competing for PostgreSQL's shared lock table ([#569](https://github.com/waitron-io/waitron-cloud/pull/569)).
   Full local package commands force exit and can miss later background errors;
   CI's shard commands retain normal exit.
 
