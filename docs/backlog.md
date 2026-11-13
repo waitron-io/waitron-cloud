@@ -1044,8 +1044,12 @@ implementation or production evidence.
   See the [release-driver handoff](test-cloud.md#release-driver-handoff).
   Publication remains `unqualified`; complete-integration and shipping flags stay
   false. Final complete receipt, current-release resources and later reviewed LAN
-  deployment remain required. Snapshots stay unavailable, plan enforcement and
-  deployed translation stay off, address providers stay disabled, and no image
+  deployment remain required. Qualify the 64 MiB background workers before shipping:
+  the Debian pairing-v2 `runTestCloudClients` run recorded memory kills and restarts
+  for usage-reconciler, monitor-worker, remote-probe and gateway-manifest. Its passing
+  paired-client receipt does not qualify those workers' health. Snapshots stay
+  unavailable, plan enforcement and deployed translation stay off, address providers
+  stay disabled, and no image
   publication, account, provider resource or spending is authorised here.
 
   Other open maintenance remains separate: keep organisation writes in the plan
