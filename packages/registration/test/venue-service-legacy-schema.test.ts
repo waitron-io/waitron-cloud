@@ -8,7 +8,7 @@ import {transaction} from '../src/transaction.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 import {venueServiceFixture,set,rows} from './fixtures/venue-service.ts';
 
-// Historical binaries own pre-v2 schema controls; current plan checks still refuse damaged authority.
+// Release-45 binaries own registration/pairing controls; current plan readers retain legacy-schema coverage.
 async function legacyFixture(){
  const schema='venue_legacy_'+randomUUID().replaceAll('-',''),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema} -c statement_timeout=5000`});

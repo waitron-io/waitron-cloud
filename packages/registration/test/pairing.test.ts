@@ -1,4 +1,5 @@
 import {prepareConnectionProof} from './fixtures/action-proof.ts';
+import {requireConnectionProof} from '../src/connection-proof.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
@@ -56,7 +57,8 @@ test('unknown and foreign requested Cloud venues refuse before account approval 
     await store.start(a);await assert.rejects(approve(a),/permission_denied/);
     const row=(await db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1',[a.requestId])).rows[0];
     assert.equal(row.cloud_account_id,null);
-    await db.pool.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',[a.requestId,owner.accountId,owner.organisationId,owner.legalBusinessId]);
+    const proof=await transaction(db.pool,client=>requireConnectionProof(client,session.token,session.csrfToken));
+    await db.pool.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4,cloud_session_id=$5,cloud_security_revision=$6 WHERE id=$1',[a.requestId,owner.accountId,owner.organisationId,owner.legalBusinessId,proof.sessionId,proof.securityRevision]);
     await assert.rejects(store.complete(completion(a)),/permission_denied/);
   }
 });
