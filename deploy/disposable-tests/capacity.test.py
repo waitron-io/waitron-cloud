@@ -117,6 +117,6 @@ except BlockingIOError:sys.exit(75)
                     shutil.rmtree(turn)
                     for slot in [0,1,2,3,5,6]:
                         host.active_path(f'dt-measured-{slot}-1').write_text(json.dumps({'resourceId':f'dt-measured-{slot}-1'}))
-                    with self.assertRaisesRegex(ValueError,'memory'):host.capacity('dt-proposed-7-1',memory_mib=4096)
+                    with self.assertRaises(host.MemoryBusy):host.capacity('dt-proposed-7-1',memory_mib=4096)
 
 unittest.main(verbosity=2)

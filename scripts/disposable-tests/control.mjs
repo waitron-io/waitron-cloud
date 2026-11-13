@@ -44,7 +44,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   const recorded=new Set(state.slots.flatMap(slot=>[slot.ciInvocation?.jobId,slot.lease?.ci?.jobId,...(slot.orphanRunners??[]).map(runner=>runner.ci.jobId)]).filter(Boolean));
   return [...active.values()].filter(ci=>!recorded.has(ci.jobId));
  };
- const pendingMemory=state=>startingJobs(state).map(ci=>({slot:ci.memorySlot,guestMemoryMiB:ciGuestMemoryMiB(ci)}));
+ const pendingMemory=state=>startingJobs(state).map(ci=>({slot:ci.memorySlot,jobId:ci.jobId,guestMemoryMiB:ciGuestMemoryMiB(ci)}));
  const local=()=>{
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
   const identities=state.slots.flatMap(slot=>[slot.ciInvocation,slot.lease?.ci,...(slot.orphanRunners??[]).map(runner=>runner.ci)]).filter(Boolean);
@@ -169,16 +169,16 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
     readFailed=false;console.error(JSON.stringify({event:'automatic-ci-refused',runId:ci.runId,error:error.message}));continue;}
    if(!ci || Date.now()-checkedAt>60000)continue;
   }
-  let memorySlot;
+  let memorySlot,priorStarts=[];
   if(state.memory){
    const current=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-   const pending=pendingMemory(current);
+   const pending=priorStarts=pendingMemory(current);
    memorySlot=current.slots.find(slot=>slot.state==='free'&&!slot.ciInvocation&&!slot.orphanRunners?.length&&
     (!Array.isArray(healthy)||healthy.includes(slot.id))&&!pending.some(p=>p.slot===slot.id)&&
     memoryFits(current,slot.id,ciGuestMemoryMiB(ci),pending))?.id;
    if(memorySlot===undefined)break;
   }
-  const admission={ci,checkedAt,...(memorySlot===undefined?{}:{slot:memorySlot})};
+  const admission={ci,checkedAt,...(memorySlot===undefined?{}:{slot:memorySlot,pending:priorStarts})};
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
   let result=await runWorker(ci,admission);
@@ -225,9 +225,12 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
  const policy=config.ci;let ci,checkedAt=admission?.checkedAt??Date.now();
  if(admission!==undefined){
-  assert.ok(admission && Object.keys(admission).sort().join(',')===(admission.slot===undefined?'checkedAt,ci':'checkedAt,ci,slot') &&
+  assert.ok(admission && Object.keys(admission).sort().join(',')===(admission.slot===undefined?'checkedAt,ci':'checkedAt,ci,pending,slot') &&
    Number.isSafeInteger(checkedAt) && checkedAt>=0 && checkedAt<=Date.now(),'Invalid shared admission timestamp');
   if(admission.slot!==undefined)assert.ok(config.hostMemoryMiB && Number.isSafeInteger(admission.slot) && admission.slot>=0 && admission.slot<configuredSlots(config),'Invalid planned slot');
+  if(admission.slot!==undefined)assert.ok(Array.isArray(admission.pending) && admission.pending.length<configuredSlots(config) && admission.pending.every(p=>
+   p && Object.keys(p).sort().join(',')==='guestMemoryMiB,jobId,slot' && Number.isSafeInteger(p.slot) && p.slot>=0 && p.slot<configuredSlots(config) &&
+   Number.isSafeInteger(p.jobId) && p.jobId>0 && Number.isSafeInteger(p.guestMemoryMiB) && p.guestMemoryMiB>=4096 && p.guestMemoryMiB<=16384 && p.guestMemoryMiB%1024===0),'Invalid pending memory reservations');
   ci=ciIdentity(admission.ci);
   assert.ok(ci.repositoryId===policy.repositoryId && ci.workflowId===policy.workflowId && ci.workflowPath===policy.workflowPath &&
    ci.runId===runId && ci.jobId===jobId,'Shared admission identity differs');
@@ -244,7 +247,7 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
   if(!ci)return {code:75,reason:'job-no-longer-queued'};
   if(Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
   return executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true});
- }),{signal,healthySlots,ci,preferredSlot:admission?.slot});
+ }),{signal,healthySlots,ci,preferredSlot:admission?.slot,pending:admission?.pending});
 }
 
 export async function main(args){

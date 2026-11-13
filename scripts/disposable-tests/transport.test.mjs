@@ -17,6 +17,13 @@ test('CI transfer keeps the measured guest memory beside the bound job identity'
  assert.equal(sent.guestMemoryMiB,6144);assert.deepEqual(sent.ci,ci);
 });
 
+test('late host capacity refusal names the stopped preparation for controller diagnostics',async()=>{
+ const {CITransport}=await import('./transport.mjs');
+ const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});
+ transport.remote=async()=>({code:75});
+ await assert.rejects(transport.prepare({resourceId:'dt-measured-0-1'},{}),/Host capacity refused after reservation/);
+});
+
 test('health distinguishes a memory-full host from a candidate that fits',async()=>{
  const {CITransport}=await import('./transport.mjs');const requests=[];
  const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});

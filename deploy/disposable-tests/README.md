@@ -469,10 +469,13 @@ Admission sums retained caps on each host, including preparations and pending st
 and leaves 16 GiB for the host. It checks that budget under both the controller's
 existing ledger lock and the host's existing lock. Uncertain guest cleanup keeps its
 charge until absence is confirmed. The controller tries a fitting identifier on either
-host; workers try their selected identifier first. Within the existing oldest-run-first order,
+host; workers try their selected identifier first and retain older pending memory charges
+when trying another host. Within the existing oldest-run-first order,
 jobs use their own creation times; when the next eligible job fits nowhere, later small
 jobs wait for it.
-A memory-full host remains healthy. Four reserved physical cores and the disk reserve
+A memory-full host remains healthy. A late host refusal after reservation is logged
+as “Host capacity refused after reservation”; cleanup runs, but that attempt is not
+automatically retried. Cleanup-aware waiting after reservation is outside this cut. Four reserved physical cores and the disk reserve
 still apply; live free memory is not a second admission gate.
 
 Published routing capacity counts occupied usable identifiers plus the number of

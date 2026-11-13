@@ -353,7 +353,7 @@ export function refuseLegacy(state) {
 }
 
 // The slot lock lives through cleanup; the shared ledger lock covers only updates.
-export async function withAvailableSlot({state,hostGeneration,slots,host,slotHosts},work,{signal,healthySlots,ci,preferredSlot}={}) {
+export async function withAvailableSlot({state,hostGeneration,slots,host,slotHosts},work,{signal,healthySlots,ci,preferredSlot,pending=[]}={}) {
   assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
   assert.ok(healthySlots===undefined || Array.isArray(healthySlots) && healthySlots.every(slot=>Number.isSafeInteger(slot) && slot>=0 && slot<slots),'Invalid healthy slot inventory');
   refuseLegacy(state);
@@ -370,7 +370,8 @@ export async function withAvailableSlot({state,hostGeneration,slots,host,slotHos
       const current=leases.inspect();
       if(current.ciInvocation || current.slots[0].state!=='free')return {code:75,reason:'recorded-slot-busy-or-quarantined'};
       const whole=new LocalLeases(join(state,'ledger'),{hostGeneration,slots}).inspect();
-      if(!memoryFits(whole,slot,ciGuestMemoryMiB(ci)))return {code:75,reason:'memory-capacity-busy'};
+      const recorded=new Set(whole.slots.flatMap(s=>[s.lease?.ci?.jobId,s.ciInvocation?.jobId]).filter(Boolean));
+      if(!memoryFits(whole,slot,ciGuestMemoryMiB(ci),pending.filter(p=>!recorded.has(p.jobId))))return {code:75,reason:'memory-capacity-busy'};
       admitted=true;
       const result=await work({leases,slot,temporaryState:join(state,'slot-'+slot)});
       if(result.code===75&&['host-unavailable','host-down','memory-capacity-busy'].includes(result.reason)){

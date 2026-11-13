@@ -506,7 +506,7 @@ test('pending worker starts share the host memory budget before leases appear',a
  assert.equal(result.served,6);assert.equal(peak,4);
 });
 
-test('workers keep the planned host when a newer small job reaches admission first',async t=>{
+for(const unavailable of [false,true])test(`workers preserve older planned memory with newer small worker first, host refusal=${unavailable}`,{timeout:15000},async t=>{
  const {automaticTick,automaticJob}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
  const {ciRequest}=await import('./ci-identity.mjs'),{CITransport}=await import('./transport.mjs');
  const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;
@@ -520,7 +520,7 @@ test('workers keep the planned host when a newer small job reaches admission fir
  f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);
  const smallReserved=Promise.withResolvers(),largeChecked=Promise.withResolvers(),results=[];
  t.mock.method(CITransport.prototype,'healthySlots',async()=>Array.from({length:16},(_,i)=>i));
- t.mock.method(CITransport.prototype,'healthy',async()=>true);
+ t.mock.method(CITransport.prototype,'healthy',async function({guestMemoryMiB}){return !(unavailable&&this.slot>=8&&guestMemoryMiB===6144);});
  t.mock.method(CITransport.prototype,'transfer',async lease=>{
   if(lease.ci.jobId===902){smallReserved.resolve();await largeChecked.promise;}
   throw new Error('fixture ends after reservation');
@@ -531,10 +531,11 @@ test('workers keep the planned host when a newer small job reaches admission fir
   transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i)},wait:async()=>{},runWorker:async(ci,admission)=>{
    if(ci.jobId===901)await smallReserved.promise;
    try{const result=await automaticJob({config,api:f.api,runId:789,jobId:ci.jobId,admission});results.push({jobId:ci.jobId,slot:result.lease?.slot,code:result.code});return result;}
-   finally{if(ci.jobId===901)largeChecked.resolve();}
+   finally{if(ci.jobId===901)largeChecked.resolve();else smallReserved.resolve();}
   }});
  assert.deepEqual(results.find(r=>r.jobId===901),{jobId:901,slot:5,code:125});
- assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:14,code:125});
+ if(unavailable)assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:undefined,code:75});
+ else assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:14,code:125});
 });
 
 test('an older large job keeps its place ahead of a later small job that fits',async t=>{

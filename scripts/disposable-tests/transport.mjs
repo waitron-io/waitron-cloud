@@ -72,7 +72,7 @@ export class SSHTransport {
   }
   async prepare(lease, {signal}) {
     const result = await this.remote('prepare', lease, {signal});
-    assert.equal(result.code, 0, 'Guest preparation failed');
+    assert.equal(result.code, 0, result.code===75?'Host capacity refused after reservation; automatic retry was not requested':'Guest preparation failed');
   }
   async execute(lease, {signal}) {
     const executed = await this.remote('execute-v2', lease, {signal});
