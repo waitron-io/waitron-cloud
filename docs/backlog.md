@@ -7,8 +7,9 @@ publication, fresh-state rollback, systemd status and Mac-only manual capture.
 Controlled tests cover installation, cutover, rollback, upload completion/EOF and
 status. Both replacement hosts passed corrected native guest isolation and idle
 reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
-The matched two-archive support is published on NEW/BENCH. The active pool is back
-to six fixed guests per host after A1454’s trial rollback. The server controller
+The matched two-archive support is published on NEW/BENCH. The active pool uses
+sixteen identifiers with measured family sizes and per-host memory admission; its
+fresh-generation rollback retains six fixed guests per host. The server controller
 owns the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
@@ -37,22 +38,6 @@ For a replacement release, qualify a full busy hour below about 4,000 used reque
 in each returned quota series; confirm automatic zero-capacity publication if it crosses that threshold.
 OLD's CI startup is disabled; it stays
 available for periodic benchmarks and practice, not as a quota fallback.
-
-A1454's renewed 12 November ask is full-day memory measurement, per-family sizes and
-memory-based admission, then comparison against 11–12 November waits. Its
-[replacement plan](superpowers/plans/2026-11-13-a1454-memory-admission.md) received a Claude review;
-the watcher cleared sixteen identifiers, eight per host, on 13 November at 01:54.
-The source now selects measured PR-family sizes, reserves caps per host under the
-existing locks, waits for the oldest fitting job, and publishes conservative spare
-capacity. Read-only status preserves physical counts and adds admissible memory room.
-The sixteen-ID trial completed forty actual CI jobs successfully and reached eight
-guests per host, but was [rolled back to the previous profile](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6843575516)
-after the watcher’s hosted-queue/free-server trigger. Its timing comparison is
-unqualified because checkout reached 33 seconds. Keep the previous profile active;
-a clean-run comparison and the placement mismatch remain unresolved. The publisher
-now uses the running version to drain its own ledger before activating any server
-update. An older payload may reject newer intent fields. The new assertions pin that
-command while preserving the existing interrupted-update checks.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
@@ -105,7 +90,9 @@ Capture the bounded staged mark/cancel/hosted-rerun drill and an owned stuck can
 Empty queued runs older than an hour now have controlled once-only cancel/force-cancel
 and restart checks; the existing ledger keeps them out of subsequent automatic passes.
 Installed readback matched this code; natural cleanup outcomes remain to be read.
-The five-minute untaken-job rule and reverse movement remain for slice 3b.
+The five-minute untaken-job rule has no named eligible case after source refusals
+and recorded turns are excluded; the watcher held new code until one is measured
+on 13 November at 07:02. Reverse movement remains open, pending a measured case.
 Main pushes, schedules and manual runs still require hand moves.
 
 
