@@ -70,7 +70,7 @@ if(phase==='start'){
  let refusal;try{await runStagedRestore({stateDir:root,venueDir:join(root,'venue'),migrationsRoot:'/waitron/apps/server/dist/drizzle',log:()=>{}});}catch(error){refusal=error;}
  if(refusal?.code!=='restore.hook_failed')console.error('fixture-error:restore_refusal:'+String(refusal?.code??'missing').replace(/[^A-Za-z0-9_]/g,'_'));
  assert.equal(refusal?.code,'restore.hook_failed');assert.deepEqual(refusal?.params,{module:'fiscal-verifactu',code:'sif.allocation_invalid'});
- const refused=await readRestoreFlow(root);assert.equal(refused?.phase,'staged');assert.deepEqual(refused.request,staged.request);assert.equal(refused.request.managedCloud?.pointId,input.pointId);
+ const refused=await readRestoreFlow(root);assert.equal(refused?.phase,'placing');assert.deepEqual(refused.request,staged.request);assert.equal(refused.request.managedCloud?.pointId,input.pointId);
  assert.equal(await absent('trading.env'),true);assert.equal(await firstStartPending(root),null);
  const saved=JSON.parse(await readFile(join(root,CLOUD_RECOVERY_FILE),'utf8'));assert.equal(saved.phase,'staged');assert(!actions.includes('restored'));
  console.log(JSON.stringify({ordinaryRestore:'FISCAL_RESTORE',activation:'not_attempted',routeMoved:false,reportedRestored:false,actions}));
