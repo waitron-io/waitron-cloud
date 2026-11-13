@@ -167,7 +167,7 @@ try {
         assert.ok(point, 'integration.verification_point_missing');
         const attempt = (await pool.query('SELECT a.*,q.current_verification FROM backup_verification_attempts a JOIN backup_point_qualification q ON q.verification_id=a.id WHERE a.id=$1 AND a.point_id=$2', [point.current_evidence_id, pointId])).rows[0];
         assert.ok(attempt, 'integration.verification_admission_missing');
-        const expectedOwners = revision !== pinnedTarget.runtime.revision ? target.modules.map(value => value.name) : undefined;
+        const expectedOwners = target.modules.map(value => value.name);
         const evidence = inspectIntegrationVerification(point, attempt, {pointId, installationId, venueId: rows[0].venue_id, sourceNodeId, sha256, bytes}, target.digest, image, expectedOwners);
         const job = (await pool.query("SELECT status,attempts,last_success_at,last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1", [pointId])).rows[0];
         assert.equal(job.status, 'pending'); assert.equal(job.attempts, 0); assert.ok(job.last_success_at); assert.equal(job.last_error, null);
