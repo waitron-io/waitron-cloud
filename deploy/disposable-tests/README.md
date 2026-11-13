@@ -457,8 +457,7 @@ Host updates wait for their current writer. A guest stop has a 40-second command
 To try measured sizes, publish a fresh generation with sixteen `slots`, a `slotHosts`
 list mapping eight identifiers to each host, and `hostMemoryMiB` mapping those same host
 names to their measured integer MiB totals. The twelve-slot example above remains the
-rollback profile. Run the publisher from the current landed checkout, including the
-rollback driver fix. For an older payload, set the manifest's `source` to a separate
+rollback profile. Run the publisher from the current landed checkout. For an older payload, set the manifest's `source` to a separate
 clean checkout detached at that older commit and `sha` to the same commit. Invoke
 `node /CURRENT_CHECKOUT/scripts/disposable-tests/publish.mjs server /PRIVATE/publication.json`;
 keep `oldServer` pointing to the release currently running. Use its quiet-window drain;

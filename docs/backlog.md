@@ -51,8 +51,8 @@ after the watcher’s hosted-queue/free-server trigger. Its timing comparison is
 unqualified because checkout reached 33 seconds. Keep the previous profile active;
 a clean-run comparison and the placement mismatch remain unresolved. The publisher
 now uses the running version to drain its own ledger before activating any server
-update; an older payload may reject newer intent fields; the new assertions pin that command
-while preserving the existing interrupted-update checks.
+update. An older payload may reject newer intent fields. The new assertions pin that
+command while preserving the existing interrupted-update checks.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
