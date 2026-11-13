@@ -342,11 +342,16 @@ for(const field of ['state','hostGeneration'])test(`server updates refuse reusin
 for(const reply of ['', '{"code":1}', '{'])test(`an interrupted server update preserves callers and reports its closed rollback: ${reply}`,async t=>{
  const f=await fixture(t),{publishServer}=await import('./publish.mjs');
  writeFileSync(f.p.configuration.ci.appEnv,'private identity',{mode:0o600});writeFileSync(f.p.configuration.ci.appKey,'private signing material',{mode:0o600});
- Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\n',oldServer:{release:'/opt/waitron-disposable-controller-old',configuration:'/opt/waitron-disposable-controller-old/config.json'}});
- const before=readFileSync(f.p.wrapper);
+ Object.assign(f.p,{controllerHost:'new.invalid',serverRelease:'/opt/waitron-disposable-controller-new',serverState:'/var/lib/waitron-disposable-controller/states/new',knownHosts:'new.invalid ssh-ed25519 fixture\n',oldServer:{release:'/opt/waitron-disposable-controller-old',configuration:'/opt/waitron-disposable-controller-old/config.json',node:'/opt/fixture-controller-node'}});
+ const before=readFileSync(f.p.wrapper);let activation;
  const execute=async(command,argv,options)=>{
-  if(command==='bash')return argv.at(-1).includes('server-activate')?{code:1,stdout:reply}:{code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',publicKey:'ssh-ed25519 fixture'})};
+  if(command==='bash'){
+   if(argv.at(-1).includes('server-activate')){activation=argv.at(-1);return {code:1,stdout:reply};}
+   return {code:0,stdout:JSON.stringify({release:f.p.serverRelease,configuration:f.p.serverRelease+'/config.json',publicKey:'ssh-ed25519 fixture'})};
+  }
   return f.execute(command,argv,options);
  };
  await assert.rejects(publishServer(f.p,{execute}),/Server rollback stopped; callers remain closed/);assert.deepEqual(readFileSync(f.p.wrapper),before);
+ const argv=JSON.parse(execFileSync('python3',['-I','-c','import json,shlex,sys;print(json.dumps(shlex.split(sys.argv[1])))',activation],{encoding:'utf8'}));
+ assert.deepEqual(argv,['/opt/fixture-controller-node','/opt/waitron-disposable-controller-old/scripts/disposable-tests/publish.mjs','server-activate']);
 });
