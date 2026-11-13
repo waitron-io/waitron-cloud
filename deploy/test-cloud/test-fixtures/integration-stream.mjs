@@ -9,7 +9,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {seedTermZeroMembership} from '/waitron/apps/server/src/membership-seed.ts';
 import {loadBoxEnv} from '/waitron/apps/server/src/box-env.ts';
 const require=createRequire('/waitron/apps/server/package.json');
-const {openVenueDatabase}=require('@waitron/db'),{loadKeyRing}=require('@waitron/credentials');
+const {openVenueDatabase,withTransaction,saveVenueFields}=require('@waitron/db'),{loadKeyRing}=require('@waitron/credentials');
 const {createS3ObjectStore,readPointer,verifyPointer}=require('@waitron/stream');
 
 // The fixture drives the normal management API and native stream host for this paired source.
@@ -21,7 +21,10 @@ export async function startIntegrationStream(root) {
   const sourceIdentity=await readIntegrationSourceIdentity(root);
   const ready=JSON.parse(await readFile(root+'/ready.json','utf8'));
   const store=await openVenueDatabase(root+'/venue',{exclusive:false});
-  try {await seedTermZeroMembership({db:store.venue,node:store.node,ring:loadKeyRing(await loadBoxEnv({},root))},sourceIdentity.nodeId,saved.WAITRON_MANAGEMENT_ORIGIN);}
+  try {
+    await withTransaction(store.venue,tx=>saveVenueFields(tx,{streamId:sourceIdentity.streamId},null));
+    await seedTermZeroMembership({db:store.venue,node:store.node,ring:loadKeyRing(await loadBoxEnv({},root))},sourceIdentity.nodeId,saved.WAITRON_MANAGEMENT_ORIGIN);
+  }
   finally {await store.close();}
   const db=new DatabaseSync(root+'/venue/venue.db',{readOnly:true});
   let signer;
