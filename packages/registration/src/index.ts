@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
-import { venueServiceAuthorityInstalled } from './venue-service-schema.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
 export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';
@@ -198,8 +197,7 @@ export class RegistrationStore {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
         if (row.result) {
-          const authority = await venueServiceAuthorityInstalled(client)
-            ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]) : {rowCount: 0};
+          const authority = await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]);
           if (authority.rowCount) {
             await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
           }
@@ -216,7 +214,7 @@ export class RegistrationStore {
         await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
         // Only enrolled venues share the parent lock with service transitions.
-        const enrolled = binding.venueId && await venueServiceAuthorityInstalled(client)
+        const enrolled = binding.venueId
           ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [binding.venueId]) : {rowCount: 0};
         if (enrolled.rowCount) await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
         let venue;

@@ -28,7 +28,8 @@ keys and a sixty-second timestamp window are required. Reject browser Origin, ov
 requests, unknown fields/actions and forged or crossed proofs. Limit IP and proven keys.
 
 Prepare requires the approved verified snapshot's actual restore report, a live original
-owner, an unexpired/unclosed recovery and matching Cloud venue/source-node/environment.
+owner and an unexpired/unclosed recovery. The recovery operation supplies the Cloud
+venue and test environment; the message must match its source node.
 Store the exact proposal and current installation binding once. Refuse previously used
 installation or recovery keys, reused peer keys and changed retries. A proposal cannot
 make any service grant. One active backup recovery already serializes the venue's restore;

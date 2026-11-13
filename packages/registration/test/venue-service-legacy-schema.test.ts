@@ -8,7 +8,7 @@ import {transaction} from '../src/transaction.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 import {venueServiceFixture,set,rows} from './fixtures/venue-service.ts';
 
-// New authority checks must preserve historical clients without treating damaged current schemas as legacy.
+// Historical binaries own pre-v2 schema controls; current plan checks still refuse damaged authority.
 async function legacyFixture(){
  const schema='venue_legacy_'+randomUUID().replaceAll('-',''),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema} -c statement_timeout=5000`});

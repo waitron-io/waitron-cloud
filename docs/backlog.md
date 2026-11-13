@@ -1042,6 +1042,10 @@ implementation or production evidence.
   assets, name a supported old/new release pair, prove its real schema upgrade
   and old-consumer refusal, then restore the matching database, configuration,
   storage and gateway state and prove both original pairings still exchange.
+  The existing schema-upgrade rehearsal refuses a target containing migration 064
+  because its source seeds use the retired local-id layout; the release driver
+  must provide a v2 seed before qualifying that upgrade. Historical pairs remain
+  available to the existing rehearsal.
   See the [release-driver handoff](test-cloud.md#release-driver-handoff).
   Publication remains `unqualified`; complete-integration and shipping flags stay
   false. Final complete receipt, current-release resources and later reviewed LAN

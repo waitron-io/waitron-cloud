@@ -7,7 +7,6 @@ import {isPairingUuid,PairingError,type PairingClaims} from './pairing-proof.ts'
 import {recordSecurityAuditEvent} from './security-audit.ts';
 import {AccountActionProofError} from './account-action-proof.ts';
 import {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
-import {venueServiceAuthorityInstalled} from './venue-service-schema.ts';
 interface Row {
   cloud_session_id?:string|null;cloud_security_revision?:number|null;
   id:string;public_key:string;requested_venue_id:string|null;environment:string;code_hash:string;expires_at:Date;
@@ -124,15 +123,14 @@ export class PairingStore {
       machineBinding(candidate,c);await available(client,candidate,false);
       if(!candidate.cloud_account_id)throw new PairingError('approval_required');
       await requestedVenue(client,candidate,c.organisationId,c.legalBusinessId);
-      // Historical schemas keep their trusted adapter behavior; current browser approvals retain their session.
-      if(!candidate.result&&'cloud_session_id' in candidate)await pendingAuthority(client,candidate);
+      // Browser approval retains its session authority through local completion.
+      if(!candidate.result)await pendingAuthority(client,candidate);
       const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row,false);
       if(!row.cloud_account_id)throw new PairingError('approval_required');
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
       if(row.result){
         // Completion never holds an installation while waiting for its policy parents.
-        const authority=await venueServiceAuthorityInstalled(client)
-          ?await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1',[row.result.venueId]):{rowCount:0};
+        const authority=await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1',[row.result.venueId]);
         if(authority.rowCount){
           await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[row.organisation_id]);
         }
@@ -150,7 +148,7 @@ export class PairingStore {
       await registration.start(binding);await registration.approveLocal(binding,row.id);await registration.approveCloud(binding,row.cloud_account_id);
       const registered=await registration.complete(binding);
       await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:registered.venueId,type:'pairing.local_approved',actorKind:'local_authority',actorId:row.id,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
-      if('cloud_session_id' in row)await pendingAuthority(client,row);
+      await pendingAuthority(client,row);
       await available(client,row);
       await client.query('UPDATE pairing_requests SET result=$2 WHERE id=$1',[row.id,registered]);row.result=registered;
       return view(client,row);

@@ -132,3 +132,8 @@ installations, keys or backups. Start again for a fresh code after this cutover.
 Configure the separately held [pairing-code key](pairing-code-keys.md) before starting
 account workers. The stored code verifier keeps its version-1 domain; the signed
 pairing protocol is version 2.
+
+If the completion reply is lost before Waitron saves its allocated venue id, retry
+the original request. A fresh empty-id request with the same key is refused; once
+history cleanup deletes the original request, that retry is unavailable. If you
+already have the Cloud venue id, the same key can quote it in a new request.
