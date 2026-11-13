@@ -36,7 +36,10 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   console.log(JSON.stringify(result));
 } else if (phase === 'start' || phase === 'check' || phase === 'complete' || phase === 'refresh') {
   const response = await post('/management-api/cloud/' + phase, phase === 'complete' ? choice : {}, cookie);
-  assert.equal(response.status, 200, 'integration.local_' + phase);
+  const refusal = response.status === 200 ? null : await response.clone().json().catch(() => null);
+  const known = ['cloud.unavailable','cloud.state_invalid','cloud.failed','cloud.request_invalid','cloud.request_unavailable',
+    'cloud.not_primary','cloud.not_configured','cloud.binding_conflict','cloud.busy','authorization.not_permitted'];
+  assert.equal(response.status, 200, 'integration.local_' + phase + ':http=' + response.status + ':' + (known.includes(refusal?.error?.code) ? refusal.error.code : 'redacted'));
   console.log(JSON.stringify(await response.json()));
 } else {
   assert.equal(phase, 'evidence');

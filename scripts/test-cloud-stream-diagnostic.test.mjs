@@ -17,3 +17,18 @@ test('stream-start failures retain child status and safe stderr without private 
   assert.equal(integration.streamStartCommandDiagnostic('token=PRIVATE_CANARY',null,'SIGKILL'),
     ':exit=null:signal=SIGKILL:stderr=redacted');
 });
+
+// A start refusal or deadline must identify its fixed category without echoing credentials.
+test('client-start failures keep local refusal and timeout categories private',()=>{
+  assert.equal(integration.streamStartCommandDiagnostic('AssertionError [ERR_ASSERTION]: integration.local_start\nPRIVATE_CANARY',1,null),
+    ':exit=1:signal=none:stderr=ERR_ASSERTION,integration.local_start');
+  assert.equal(integration.streamStartCommandDiagnostic('DOMException [TimeoutError]: PRIVATE_CANARY',1,null),
+    ':exit=1:signal=none:stderr=TimeoutError');
+});
+
+test('client-start refusal keeps only its HTTP status and known Cloud error',()=>{
+  assert.equal(integration.streamStartCommandDiagnostic('ERR_ASSERTION integration.local_start:http=503:cloud.unavailable PRIVATE_CANARY',1,null),
+    ':exit=1:signal=none:stderr=ERR_ASSERTION,integration.local_start,cloud.unavailable:http=503');
+  assert.equal(integration.streamStartCommandDiagnostic('ERR_ASSERTION integration.local_start:http=PRIVATE_CANARY:cloud.PRIVATE_CANARY',1,null),
+    ':exit=1:signal=none:stderr=ERR_ASSERTION,integration.local_start');
+});
