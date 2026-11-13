@@ -5,7 +5,7 @@ import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {LocalLeases,configuredSlots,refuseLegacy,withAvailableSlot} from './leases.mjs';
+import {LocalLeases,configuredSlots,configuredMemory,refuseLegacy,withAvailableSlot} from './leases.mjs';
 export {refuseLegacy,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {runLocal} from './local.mjs';
@@ -156,7 +156,7 @@ export async function main(args) {
   }
   const config=JSON.parse(readFileSync(configuration,'utf8'));
   if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
-  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration',...(config.hostMemoryMiB===undefined?[]:['hostMemoryMiB']),'mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
   const slots=configuredSlots(config);
   return withQuotaObserver(async()=>{
   assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
@@ -193,7 +193,7 @@ export async function main(args) {
       cancellation.signal.throwIfAborted();
       if(!remote)refuseLegacy(config.state);
       if (bootstrap) {
-        new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots,bootstrap:true});
+        new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots,bootstrap:true,memory:configuredMemory(config)});
         if(slots>1)for(let slot=0;slot<slots;slot++)await withKernelLock(join(config.state,'slot-'+slot),async()=>({code:0}),{bootstrap:true,signal:cancellation.signal});
         return {code:0};
       }

@@ -5,6 +5,7 @@ import * as controller from './ci-canary.mjs';
 const head='1'.repeat(40),execution='2'.repeat(40),workflow='reviewed workflow using vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS';
 const policy={repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex')};
 const routingStores=new WeakMap();
+const memoryBudget={slotHosts:[...Array(8).fill('host-a'),...Array(8).fill('host-b')],hostMiB:{'host-a':128000,'host-b':128000}};
 function routingVariables(api){
  if(!routingStores.has(api))routingStores.set(api,{value:'{}'});
  const stored=routingStores.get(api);
@@ -81,6 +82,18 @@ for(const healthy of [true,false])test(`capacity publication counts usable occup
  assert.equal(typeof controller.publishCapacity,'function');
  await controller.publishCapacity({api:f.api,policy,state,snapshot,healthy,now:123000});
  assert.deepEqual(JSON.parse(published),{observedAt:123000,slots:healthy?4:0,serverRunning:healthy?3:0,serverWaiting:2,hostedRunning:2,hostedWaiting:4});
+});
+
+test('capacity publication accounts for memory behind idle and occupied identifiers',async()=>{
+ for(const [occupied,guestMiB,wantSlots,wantRunning] of [[0,16384,12,0],[6,16384,12,12],[7,6144,16,14]]){
+  const state={memory:{slotHosts:[...Array(8).fill('host-a'),...Array(8).fill('host-b')],
+   hostMiB:{'host-a':128000,'host-b':128000}},slots:Array.from({length:16},(_,id)=>({id,
+    state:id%8<occupied?'running':'free',lease:id%8<occupied?{guestMemoryMiB:guestMiB}:null}))};
+  let published,value='';
+  const api={get:async()=>({value}),patch:async(_path,body)=>{value=body.value;published=JSON.parse(value);}};
+  await controller.publishCapacity({api,policy,state,snapshot:new Map(),healthy:true,now:123000});
+  assert.equal(published.slots,wantSlots);assert.equal(published.serverRunning,wantRunning);
+ }
 });
 for(const action of ['overflow','recover'])for(const [name,status,runner,blocked,conclusion,recovery] of [
  ['bundle-smoke','in_progress',7,true,undefined,'cancel'],['bundle-smoke','queued',7,true,undefined,'cancel'],
@@ -453,14 +466,124 @@ test('recovery of a refused intent preserves a job assigned after its previous A
  assert.equal(result.code,0);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
 });
 
-async function refusalPool(t){
+async function refusalPool(t,memory){
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-refusal-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
- await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
- for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
- return {version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',ci:policy};
+ const slots=memory?16:6;
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots,bootstrap:true,memory});},{bootstrap:true});
+ for(let i=0;i<slots;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
+ return {version:2,mode:'manual-slots',slots,state,hostGeneration:'test',ci:policy,
+  ...(memory?{slotHosts:memory.slotHosts,hostMemoryMiB:memory.hostMiB}:{})};
 }
+
+test('memory-full hosts move untouched work even with unused identifiers',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get,actions=[],served=[];
+ for(const slot of [0,1,2,3,4,5,8,9,10,11,12,13])new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot})
+  .reserveLocal({lane:'I',turn:'large-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.endsWith('/actions/jobs/901')?f.jobs[0]:get(path);
+ f.api.post=async path=>actions.push(path.split('/').at(-1));
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i),healthy:async()=>true},
+  runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(served,[]);assert.deepEqual(actions,['cancel']);
+});
+
+test('pending worker starts share the host memory budget before leases appear',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;
+ for(const slot of [0,1,2,3,4,8,9,10,11,12])new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot})
+  .reserveLocal({lane:'I',turn:'large-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ const original=f.jobs[0],keys=['changes-1','test-identity-1','bundle-smoke-1','mutation-shared-aggregate-1','test-workforce-1','root-guards-1'];
+ f.jobs.splice(0,f.jobs.length,...keys.map((key,i)=>({...original,id:901+i,name:key.slice(0,-2),labels:['self-hosted','dt-123-789-1-'+key]})));
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ let active=0,peak=0;
+ const result=await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i),healthy:async()=>true},runWorker:async()=>{
+   active++;peak=Math.max(peak,active);await new Promise(resolve=>setImmediate(resolve));active--;return {code:0};
+  }});
+ assert.equal(result.served,6);assert.equal(peak,4);
+});
+
+for(const unavailable of [false,true])test(`workers preserve older planned memory with newer small worker first, host refusal=${unavailable}`,{timeout:15000},async t=>{
+ const {automaticTick,automaticJob}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const {ciRequest}=await import('./ci-identity.mjs'),{CITransport}=await import('./transport.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;
+ Object.assign(config,{host:'host-a',recipe:'/opt/waitron-disposable-fixture'});
+ const base=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0];
+ for(const slot of [0,1,2,3,4,8,9,10,11,12])new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot})
+  .reserveLocal({lane:'I',turn:'large-'+slot,snapshot:'a'.repeat(64),argv:['true']});
+ new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot:13}).reserveLocal(ciRequest('I',{...base,jobId:2500,jobKey:'test-identity-1'}));
+ const original=f.jobs[0];f.jobs.splice(0,f.jobs.length,...[['typecheck','typecheck-1'],['changes','changes-1']].map(([name,key],i)=>
+  ({...original,id:901+i,name,labels:['self-hosted','dt-123-789-1-'+key]})));
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);
+ const smallReserved=Promise.withResolvers(),largeChecked=Promise.withResolvers(),results=[];
+ t.mock.method(CITransport.prototype,'healthySlots',async()=>Array.from({length:16},(_,i)=>i));
+ t.mock.method(CITransport.prototype,'healthy',async function({guestMemoryMiB}){return !(unavailable&&this.slot>=8&&guestMemoryMiB===6144);});
+ t.mock.method(CITransport.prototype,'transfer',async lease=>{
+  if(lease.ci.jobId===902){smallReserved.resolve();await largeChecked.promise;}
+  throw new Error('fixture ends after reservation');
+ });
+ t.mock.method(CITransport.prototype,'destroy',async()=>{});
+ t.mock.method(CITransport.prototype,'inspect',async({resourceId})=>({resourceId,absent:true}));
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i)},wait:async()=>{},runWorker:async(ci,admission)=>{
+   if(ci.jobId===901)await smallReserved.promise;
+   try{const result=await automaticJob({config,api:f.api,runId:789,jobId:ci.jobId,admission});results.push({jobId:ci.jobId,slot:result.lease?.slot,code:result.code});return result;}
+   finally{if(ci.jobId===901)largeChecked.resolve();else smallReserved.resolve();}
+  }});
+ assert.deepEqual(results.find(r=>r.jobId===901),{jobId:901,slot:5,code:125});
+ if(unavailable)assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:undefined,code:75});
+ else assert.deepEqual(results.find(r=>r.jobId===902),{jobId:902,slot:14,code:125});
+});
+
+test('an older large job keeps its place ahead of a later small job that fits',async t=>{
+ const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get;
+ const base=(await controller.findAutomatic({api:f.api,policy,limit:1}))[0],original=f.jobs[0],held=[];
+ for(const [i,slot] of [0,1,2,3,4,5,8,9,10,11,12,13].entries()){
+  const identity={...base,jobId:2000+i,jobKey:'test-server-'+(i+1)};
+  new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16,slot}).reserveLocal(ciRequest('I',identity));
+  held.push({...original,id:identity.jobId,name:`test-server (${i+1})`,status:'in_progress',runner_id:3000+i,
+   labels:['self-hosted','dt-123-789-1-'+identity.jobKey]});
+ }
+ const queued=(id,name,key,age)=>({...original,id,name,created_at:new Date(Date.now()-age).toISOString(),
+  labels:['self-hosted','dt-123-789-1-'+key]});
+ f.jobs.splice(0,f.jobs.length,queued(902,'test-identity','test-identity-1',60000),queued(901,'typecheck','typecheck-1',120000),...held);
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:get(path);
+ const served=[],actions=[];f.api.post=async path=>actions.push(path);
+ await automaticTick({configuration:'/fixture/config',config,api:routingVariables(f.api),
+  transport:{healthySlots:async()=>Array.from({length:16},(_,i)=>i),healthy:async()=>true},
+  runWorker:async ci=>{served.push(ci.jobId);return {code:0};}});
+ assert.deepEqual(served,[]);assert.deepEqual(actions,[]);assert.ok(f.jobs.slice(0,2).every(job=>job.status==='queued'));
+});
+
+for(const mode of ['fits','second','busy'])test(`execution checks actual host room before a memory reservation: ${mode}`,async t=>{
+ const {automaticJob}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs'),{CITransport}=await import('./transport.mjs');
+ const config=await refusalPool(t,memoryBudget),f=fixture(),get=f.api.get,probes=[];let transfers=0;
+ Object.assign(config,{host:'host-a',recipe:'/opt/waitron-disposable-fixture'});
+ f.jobs.splice(1);Object.assign(f.jobs[0],{name:'changes',labels:['self-hosted','dt-123-789-1-changes-1']});
+ f.api.get=async path=>path.endsWith('DISPOSABLE_TESTS_HEAD')?{value:''}:path.includes('/runners?')?{total_count:0,runners:[]}:get(path);
+ t.mock.method(CITransport.prototype,'healthySlots',async()=>Array.from({length:16},(_,i)=>i));
+ t.mock.method(CITransport.prototype,'healthy',async function({guestMemoryMiB}){
+  if(guestMemoryMiB===undefined)return true;
+  probes.push(guestMemoryMiB);return mode==='fits'||mode==='second'&&this.slot>=8;
+ });
+ t.mock.method(CITransport.prototype,'transfer',async()=>{transfers++;throw new Error('fixture transfer failed');});
+ t.mock.method(CITransport.prototype,'destroy',async()=>{});
+ t.mock.method(CITransport.prototype,'inspect',async({resourceId})=>({resourceId,absent:true}));
+ const result=await automaticJob({config,api:f.api,runId:789,jobId:901});
+ assert.deepEqual(probes,mode==='fits'?[6144]:[6144,6144],JSON.stringify({code:result.code,reason:result.reason,error:result.error}));
+ if(mode==='busy'){
+  assert.equal(result.code,75);assert.equal(transfers,0);
+  const state=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:16}).inspect();
+  assert.deepEqual(state.turns,{});assert.ok(state.slots.every(slot=>slot.state==='free'&&!slot.ciInvocation));
+ }else{
+  assert.equal(result.code,125);assert.match(result.error,/fixture transfer failed/);
+  assert.equal(result.lease.slot,mode==='fits'?0:8);assert.equal(result.lease.guestMemoryMiB,6144);assert.equal(transfers,1);
+ }
+});
 
 test('pickup leaves queued work alone when only the unhealthy server has free slots',async t=>{
  const {automaticTick}=await import('./control.mjs'),{LocalLeases}=await import('./leases.mjs');

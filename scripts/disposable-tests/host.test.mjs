@@ -62,3 +62,15 @@ test('the tenth-slot plan sets bounded memory and CPU with its own identity',()=
  assert.equal(p.uid,62009);assert.equal(p.port,22009);
  assert.ok(p.service.includes('CPUQuota=400%'));
 });
+
+test('a measured small guest receives its RAM and the two GiB host allowance',()=>{
+ const result=plan({...request(),guestMemoryMiB:6144});assert.equal(result.status,0,result.stderr);
+ const p=JSON.parse(result.stdout);
+ assert.equal(p.qemu[p.qemu.indexOf('-m')+1],'6144');
+ assert.ok(p.service.includes('MemoryMax=8192M'));
+ assert.ok(p.service.includes('CPUQuota=400%'));
+ for(const guestMemoryMiB of [0,4095,4608,17408,'6144',true]){
+  const refused=plan({...request(),guestMemoryMiB});
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/memory/i);
+ }
+});

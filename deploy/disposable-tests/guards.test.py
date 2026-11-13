@@ -179,6 +179,14 @@ class Guards(unittest.TestCase):
   with patch.object(session,'os',types.SimpleNamespace(geteuid=lambda:0)),patch.object(session,'Path',lambda p:types.SimpleNamespace(is_char_device=lambda:True) if str(p)=='/dev/kvm' else original(p)),patch.object(sys,'argv',['session.py','health']),contextlib.redirect_stdout(output):
    self.assertEqual(session.main(),0)
   self.assertEqual(json.loads(output.getvalue()),{'healthy':True})
+  def full_capacity(*args,**kwargs):
+   host.budget(7,memory=125*1024**3,threads=32,disk_total=1800*1024**3,disk_free=1700*1024**3,allocated=0)
+  for argv,want in [(['session.py','health'],{'healthy':True}),
+                    (['session.py','health','16384'],{'healthy':True,'fits':False})]:
+   output=io.StringIO()
+   with patch.object(session,'os',types.SimpleNamespace(geteuid=lambda:0)),patch.object(session,'Path',lambda p:types.SimpleNamespace(is_char_device=lambda:True) if str(p)=='/dev/kvm' else original(p)),patch.object(sys,'argv',argv),patch.object(host,'capacity',side_effect=full_capacity),contextlib.redirect_stdout(output):
+    self.assertEqual(session.main(),0)
+   self.assertEqual(json.loads(output.getvalue()),want)
 
  def test_health_owns_the_host_inventory_lock_while_reading_capacity(self):
   import fcntl,stat

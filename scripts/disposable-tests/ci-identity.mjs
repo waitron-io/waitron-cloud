@@ -29,7 +29,9 @@ export function orphanRunner(value) {
 }
 
 export function ciInvocation(value){
- assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId','ordinaryStage'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ assert.ok(value && Object.keys(value).filter(key=>!['serverRunnerId','jobId','ordinaryStage','guestMemoryMiB'].includes(key)).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ if(value.guestMemoryMiB!==undefined)assert.ok(value.route==='server'&&Number.isSafeInteger(value.jobId)&&
+  Number.isSafeInteger(value.guestMemoryMiB)&&value.guestMemoryMiB>=4096&&value.guestMemoryMiB<=16384&&value.guestMemoryMiB%1024===0,'Invalid pending guest memory');
  if(value.ordinaryStage!==undefined)assert.ok(['admitted','refused','cancel-requested'].includes(value.ordinaryStage) &&
   value.route==='server' && Number.isSafeInteger(value.jobId) && value.sourceSha===value.workflowSha,'Invalid ordinary CI stage');
  if(value.jobId!==undefined)assert.ok(Number.isSafeInteger(value.jobId) && value.jobId>0,'Invalid recorded CI job');

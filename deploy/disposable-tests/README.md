@@ -443,15 +443,60 @@ Recovery reads the recorded job before cancelling its run. A completed job leave
 
 For a selected multi-slot Waitron measurement, the trusted caller uses `withAvailableSlot` around each `runCI` call. Persist the concrete CI intent on the supplied scoped lease manager, and keep its slot lock through guest cleanup and runner removal. The original `control run` and shared canary entry remain one-slot rehearsals; `control status` and mode changes inspect the entire configured pool. The installed pool also supports automatic pickup, described below.
 
-Each host slot has its own nonlogin UID `62000+slot`, loopback port `22000+slot`, egress rules and active record. Slot zero keeps `active.json`; the other slots use `active-N.json`. Each guest has 16 GiB of memory inside an 18 GiB host cap. The single-host operating profile uses six slots: six caps plus the unchanged 16 GiB host reserve need 124 GiB, below this host’s measured 124.92 GiB. Admission also reserves four complete physical CPU cores, including their siblings, and 20% of disk after guest maximum growth. The ten-slot ceiling remains an additional refusal even on a larger host; available memory can lower it. Run `python3 -B deploy/disposable-tests/capacity.test.py` and `node --test scripts/disposable-tests/host.test.mjs` for the budget and QEMU plan.
+Each host slot has its own nonlogin UID `62000+slot`, loopback port `22000+slot`, egress rules and active record. Slot zero keeps `active.json`; the other slots use `active-N.json`. Without memory-budget configuration, each guest has 16 GiB of memory inside an 18 GiB host cap. The original single-host operating profile uses six slots: six caps plus the unchanged 16 GiB host reserve need 124 GiB, below this host’s measured 124.92 GiB. Admission also reserves four complete physical CPU cores, including their siblings, and 20% of disk after guest maximum growth. The ten-slot ceiling remains an additional refusal even on a larger host; available memory can lower it. Run `python3 -B deploy/disposable-tests/capacity.test.py` and `node --test scripts/disposable-tests/host.test.mjs` for the budget and QEMU plan.
 
-The ten-slot trial’s 10.5 GiB guests did not cover dashboard coverage memory: [a real dashboard shard](https://github.com/clintongormley/waitron/actions/runs/42425687655/job/128565949100) exhausted guest memory and the guest kernel killed Node. Keep the 16 GiB profile until a smaller guest completes the full workload, including coverage. Fewer simultaneous guests alone cannot enlarge an individual guest. Read each guest service’s `memory.peak` and `memory.events` on the host, plus guest `AnonPages`, `Shmem`, `MemAvailable`, memory pressure and OOM counters. Record host available memory and load too; guest-only monitoring misses a host kill of QEMU.
+The ten-slot trial’s 10.5 GiB guests did not cover dashboard coverage memory: [a real dashboard shard](https://github.com/clintongormley/waitron/actions/runs/42425687655/job/128565949100) exhausted guest memory and the guest kernel killed Node. Keep dashboard and unqualified workloads at 16 GiB; the PR-only trials below do not qualify smaller coverage guests. Fewer simultaneous guests alone cannot enlarge an individual guest. Read each guest service’s `memory.peak` and `memory.events` on the host, plus guest `AnonPages`, `Shmem`, `MemAvailable`, memory pressure and OOM counters. Record host available memory and load too; guest-only monitoring misses a host kill of QEMU.
 
 Host updates wait for their current writer. A guest stop has a 40-second command limit; initial image downloading has a 130-second command limit. The ordinary caller retains its health and stage deadlines, so a long update can temporarily report the host unavailable. Prepare the pinned image and reserved accounts with `host.py prepare-image` before opening the published helper.
 
+## Fit measured PR jobs by memory
+
+To try measured sizes, publish a fresh generation with sixteen `slots`, a `slotHosts`
+list mapping eight identifiers to each host, and `hostMemoryMiB` mapping those same host
+names to their measured integer MiB totals. The twelve-slot example above remains the
+rollback profile. Use the existing publication command and its quiet-window drain;
+never change a live ledger's mapping or budgets.
+
+The family table in `scripts/disposable-tests/leases.mjs` reduces only measured
+`ci.yml` pull-request jobs. Each trial guest size is the whole-GiB ceiling of 125% of
+that family's observed host peak, with another 2 GiB for its host cap. These peaks
+include cache and QEMU overhead; they are not guest working-set measurements.
+Unknown families, manual turns and other events keep the 16/18 GiB profile. Dashboard,
+till and UI also keep that profile. The 12 November day and its identity joins are
+recorded in the [memory-admission plan](../../docs/superpowers/plans/2026-11-13-a1454-memory-admission.md).
+
+Admission sums retained caps on each host, including preparations and pending starts,
+and leaves 16 GiB for the host. It checks that budget under both the controller's
+existing ledger lock and the host's existing lock. Uncertain guest cleanup keeps its
+charge until absence is confirmed. The controller tries a fitting identifier on either
+host; workers try their selected identifier first and retain older pending memory charges
+when trying another host. Within the existing oldest-run-first order,
+jobs use their own creation times; when the next eligible job fits nowhere, later small
+jobs wait for it.
+A memory-full host remains healthy. A late host refusal after reservation is logged
+as “Host capacity refused after reservation”; cleanup runs, but that attempt is not
+automatically retried. Cleanup-aware waiting after reservation is outside this cut. Four reserved physical cores and the disk reserve
+still apply; live free memory is not a second admission gate.
+
+Published routing capacity counts occupied usable identifiers plus the number of
+additional 18 GiB caps that fit, bounded by free healthy identifiers on each host.
+An idle sixteen-identifier pool therefore publishes twelve slots on these hosts;
+small active jobs can raise that figure. This conservative spare-cap calculation can
+understate room for small jobs. A full memory budget also triggers the existing
+forward-overflow path even when identifiers remain unused. Job queues retain their
+current units and Waitron's router is unchanged.
+
+Before leaving this trial unattended, watch a bounded mixture of actual jobs and read
+guest OOM counters and host memory events through existing access. Compare waiting
+times, job durations and throughput by family/event/coverage with 11–12 November,
+accounting for workload and GitHub incidents. Restore six identifiers per host and
+16/18 GiB guests through fresh-generation rollback for a memory, admission or cleanup
+failure, or a clear comparable job-duration regression. Portable tests exercise
+budget arithmetic and dispatch; they do not qualify this live trial.
+
 ## Pick up ordinary PR jobs automatically
 
-The published pool's existing `--once` entry recovers interrupted turns, checks host health when capacity is free, then picks up queued jobs from its configured repository's `ci.yml`. Enable `DISPOSABLE_TESTS_MODE=server` and remove `DISPOSABLE_TESTS_HEAD` to route new same-repository PR jobs to the server. Switching mode to `hosted` affects new workflow routing; automatic pickup still serves jobs already carrying server labels. Manual selected-head admission still requires server mode before and after its health check. The server-first Waitron workflow also admits main pushes, schedules, manual runs and later attempts; forks and other workflow paths remain outside this controller. The workflow removes the old family caps; the six-slot operating pool enables server, heavy, till, UI and dashboard after [six actual font-fixed PR jobs passed](https://github.com/clintongormley/waitron/actions/runs/42410518785). An unhealthy or unreachable host selects hosted mode before polling jobs or creating a guest; that health refusal alone requests no cancellation or rerun. A host-health refusal leaves existing server labels on their queue; full-pool forward overflow follows the rules below. A stopped queue raises the existing health alarm for intervention. After a host outage, existing labelled jobs resume when health returns; explicitly restore server mode only for new workflow routing. Hosted mode does not pause pickup. Stop the login agent for an agreed maintenance window only after its workers finish. A retained manual head selection keeps automatic pickup closed; in hosted mode it returns quietly, and in server mode it refuses the incompatible selection. Keep the routing, watchdog, final required summary and publishing jobs on GitHub so they can still run when server assignment stops.
+The published pool's existing `--once` entry recovers interrupted turns, checks host health when capacity is free, then picks up queued jobs from its configured repository's `ci.yml`. Enable `DISPOSABLE_TESTS_MODE=server` and remove `DISPOSABLE_TESTS_HEAD` to route new same-repository PR jobs to the server. Switching mode to `hosted` affects new workflow routing; automatic pickup still serves jobs already carrying server labels. Manual selected-head admission still requires server mode before and after its health check. The server-first Waitron workflow also admits main pushes, schedules, manual runs and later attempts; forks and other workflow paths remain outside this controller. The workflow removes the old family caps; the earlier six-slot operating pool enabled server, heavy, till, UI and dashboard after [six actual font-fixed PR jobs passed](https://github.com/clintongormley/waitron/actions/runs/42410518785). An unhealthy or unreachable host selects hosted mode before polling jobs or creating a guest; that health refusal alone requests no cancellation or rerun. A host-health refusal leaves existing server labels on their queue; full-pool forward overflow follows the rules below. A stopped queue raises the existing health alarm for intervention. After a host outage, existing labelled jobs resume when health returns; explicitly restore server mode only for new workflow routing. Hosted mode does not pause pickup. Stop the login agent for an agreed maintenance window only after its workers finish. A retained manual head selection keeps automatic pickup closed; in hosted mode it returns quietly, and in server mode it refuses the incompatible selection. Keep the routing, watchdog, final required summary and publishing jobs on GitHub so they can still run when server assignment stops.
 
 Pickup, due capacity reads and obsolete-PR cleanup share the pass’s complete run listing, open-PR observations and job pages, including when all slots are occupied. If either repository status list exceeds 100 runs, that pass skips cleanup and capacity publication while retaining workflow-scoped pickup. Shared capacity carries the pass’s observation time, including after a worker wait. Cancellation refreshes its own run, PR and complete jobs before acting. A closed PR or a replaced head authorises cancellation after fresh run and complete job checks. Missing run links are resolved through the open PR inventory or commit-associated PRs; unknown association defers. Assigned unfinished work receives normal cancellation; if every unfinished job has no runner, the controller force-cancels immediately. A current head's cancelled siblings do not authorise stopping the run. The cancellation path excludes main pushes and schedules. Finished or missing hosted-attempt markers are retired; pending moves retain their marker. Forward overflow and its recorded cancellation recovery follow the rules below. Run `node --test scripts/disposable-tests/ci-auto.test.mjs` for these controlled API cases; live publication evidence is separate.
 
@@ -467,7 +512,9 @@ Age uses the attempt's start, falling back to run creation. Known ignored attemp
 do not consume the existing 100-run allowance; listings can read their extra pages.
 A later attempt is checked separately. This does not delete a run from GitHub.
 
-The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable slots, occupied/manual/preparing slots and distinct server/hosted queues. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a full pool retains the existing ledger-only health behavior. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
+The polling path publishes `DISPOSABLE_TESTS_CAPACITY` at most once per minute across pickup restarts using existing inventories and variable readback. It reports observed time, healthy usable capacity, occupied/manual/preparing slots and distinct server/hosted queues; with memory budgets, spare capacity uses the conservative 18 GiB calculation above. Admitted jobs are not counted twice; quarantined slots and retained runners contribute no usable capacity. A failed existing free-capacity host check publishes zero slots; a pool without free identifiers retains ledger-only health publication. A memory-full
+host now answers healthy, including without the optional memory configuration;
+after a host refusal, slot selection can try the other host. Authentication and rate-limit refusals stop the tick through its existing refusal or retry path; other capacity-publication errors are logged while pickup continues. Waitron compares queue pressure against its stipulated 20 hosted slots; this snapshot reserves nothing and variable delivery still needs live qualification before activation.
 
 Multi-slot controller and worker responses reporting core use of at least 4,000 retain the returned reset
 in the existing durable ledger. New placements use GitHub when the next due capacity pass
@@ -527,7 +574,7 @@ When GitHub shows waiting jobs, first check whether the server is preparing a gu
 python3 -I -B ~/waitron-campaign-shared/disposable-ci-status.py
 ```
 
-It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection per configured host. `slots.busy` includes preparation, pending admission and retained cleanup records. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
+It prints one JSON line from the installed agent configuration, local ledger, existing log tails and one reused SSH connection per configured host. `slots.busy` includes preparation, pending admission and retained cleanup records. Physical `total`, `busy` and `free` count identifiers. With memory budgets, `slots.admissible` separately counts additional 18 GiB caps that fit under the retained reservations; it is not a fresh host-health probe. Use that field when checking whether unused identifiers imply room for work. A missing or inconsistent ledger reports unknown capacity. `controller.state` can be `idle` between periodic agent runs; that alone does not mean recovery has stopped.
 
 Times are Unix milliseconds; durations are seconds. `admissionAgeSeconds` starts when the slot was reserved. `start` and `runtimeSeconds` come from a single worker log filename in that guest, which does not establish when GitHub acknowledged the job. Manual commands instead report `executionRequested`, the command-file timestamp. Missing or ambiguous evidence stays `unknown`. `lastAdmission` is the newest lease time in the current ledger or the last 1 MiB of output containing a job result code and lease creation time. Errors keep unknown times, show the error file's last-write time separately, mask IP addresses and stop at 200 characters. Log paths come from the installed agent; the repository agent template omits them, so an installation using that template unchanged reports unknown history and errors.
 

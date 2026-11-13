@@ -9,6 +9,50 @@ import {withKernelLock} from './kernel-lock.mjs';
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const familyGuestMiB={
+ 'bundle-smoke':9216,'changes':6144,'lint':10240,'mutation-shared':9216,'mutation-shared-aggregate':4096,
+ 'root-guards':10240,'test-adjustments':10240,'test-bookings':10240,'test-fiscal-verifactu':11264,
+ 'test-heavy':9216,'test-identity':8192,'test-light-a':9216,'test-light-b':9216,'test-media':11264,
+ 'test-payments-stripe':10240,'test-payments-sumup':10240,'test-provisioning':10240,'test-server':14336,
+ 'test-server-stream':10240,'test-staffing':13312,'test-venue-service':12288,'test-workforce':8192
+};
+export const ciGuestMemoryMiB=ci=>ci?.workflowPath==='.github/workflows/ci.yml' && ci.event==='pull_request'
+ ?familyGuestMiB[ci.jobKey.replace(/-[0-9]+$/,'')]??16384:16384;
+const validGuestMiB=value=>Number.isSafeInteger(value)&&value>=4096&&value<=16384&&value%1024===0;
+function validateMemory(memory,slots){
+ const {slotHosts,hostMiB}=memory;
+ assert.ok(Array.isArray(slotHosts)&&slotHosts.length===slots&&hostMiB&&
+  new Set(slotHosts).size===Object.keys(hostMiB).length&&slotHosts.every(host=>typeof host==='string'&&
+   /^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/.test(host)&&Number.isSafeInteger(hostMiB[host])&&hostMiB[host]>=34816),'Invalid host memory budget');
+}
+export function configuredMemory(config){
+ if(config.hostMemoryMiB===undefined)return;
+ assert.ok(config.mode==='manual-slots','Memory budgets require the multi-slot controller');
+ const memory={slotHosts:config.slotHosts,hostMiB:config.hostMemoryMiB};validateMemory(memory,config.slots);return memory;
+}
+const reservedMiB=slot=>slot.lease?(slot.lease.guestMemoryMiB??16384)+2048:
+ slot.ciInvocation?(slot.ciInvocation.guestMemoryMiB??16384)+2048:0;
+export function memoryFits(state,slot,guestMiB,pending=[]){
+ if(!state.memory)return true;
+ const host=state.memory.slotHosts[slot];
+ const used=state.slots.reduce((sum,s)=>sum+(s.id!==slot && state.memory.slotHosts[s.id]===host?reservedMiB(s):0),0)+
+  pending.reduce((sum,p)=>sum+(state.memory.slotHosts[p.slot]===host?p.guestMemoryMiB+2048:0),0);
+ return used+guestMiB+2048+16384<=state.memory.hostMiB[host];
+}
+export function memoryCapacity(state,healthy=true,pending=[]){
+ const usable=healthy?state.slots.filter(s=>(!Array.isArray(healthy)||healthy.includes(s.id))&&s.state!=='quarantined'&&!s.orphanRunners?.length):[];
+ const busy=usable.filter(s=>s.state!=='free'||s.ciInvocation).length+pending.length;
+ if(!state.memory)return {slots:usable.length,busy};
+ let free=0;
+ for(const host of new Set(state.memory.slotHosts)){
+  const onHost=s=>state.memory.slotHosts[s.id]===host;
+  const waiting=pending.filter(p=>state.memory.slotHosts[p.slot]===host);
+  const identifiers=usable.filter(s=>onHost(s)&&s.state==='free'&&!s.ciInvocation&&!waiting.some(p=>p.slot===s.id)).length;
+  const used=state.slots.filter(onHost).reduce((sum,s)=>sum+reservedMiB(s),0)+waiting.reduce((sum,p)=>sum+p.guestMemoryMiB+2048,0);
+  free+=Math.min(identifiers,Math.floor(Math.max(0,state.memory.hostMiB[host]-16384-used)/18432));
+ }
+ return {slots:busy+free,busy};
+}
 export const ciRetryReady=(turn,state,jobId,now=Date.now())=>!turn.busyRunnerRetried && !turn.admissionQuotaRetried && !turn.registration5xxRetried &&
   (turn.busyRunnerRefusedAt!==undefined && now-turn.busyRunnerRefusedAt>=60000 ||
    turn.admissionQuotaRetryAt!==undefined && now>=turn.admissionQuotaRetryAt ||
@@ -32,6 +76,7 @@ function requestIdentity(request) {
 
 export function configuredSlots(config) {
   assert.equal(config.version,2,'Invalid controller configuration version');
+  configuredMemory(config);
   if(config.mode==='manual-one-slot'){
     assert.ok(config.slots===undefined && config.slotHosts===undefined,'Single-slot configuration cannot change capacity');return 1;
   }
@@ -44,13 +89,14 @@ export function configuredSlots(config) {
 // Multi-slot writers hold the short ledger lock only during durable updates.
 // Only independently observed guest absence can free capacity.
 export class LocalLeases {
-  constructor(directory, {hostGeneration, slots, now = Date.now, bootstrap = false, slot}) {
+  constructor(directory, {hostGeneration, slots, now = Date.now, bootstrap = false, slot, memory}) {
     assert.ok(typeof hostGeneration === 'string' && word.test(hostGeneration) && Number.isSafeInteger(slots) && slots >= 1 && slots <= 16, 'Invalid host configuration');
     this.directory = resolve(directory);
     this.hostGeneration = hostGeneration;
     this.capacity = slots;
     assert.ok(slot===undefined || Number.isSafeInteger(slot) && slot>=0 && slot<slots,'Invalid selected slot');
     this.slot = slot;
+    this.memory = memory;
     this.now = now;
     if (bootstrap) mkdirSync(this.directory, {mode: 0o700});
     const info = lstatSync(this.directory);
@@ -87,8 +133,11 @@ export class LocalLeases {
       if (error.code !== 'ENOENT') throw error;
       assert.ok(initialize, 'Recorded ledger is missing; initialization requires explicit bootstrap');
       state = {version: 1, hostGeneration: this.hostGeneration, slots: Array.from({length: this.capacity}, (_, id) => ({id, generation: 0, state: 'free', lease: null})), turns: {}};
+      if(this.memory!==undefined)state.memory=structuredClone(this.memory);
     }
     assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
+    if(this.memory!==undefined)assert.deepEqual(state.memory,this.memory,'Memory configuration changed; reconcile the previous host first');
+    if(state.memory!==undefined)validateMemory(state.memory,this.capacity);
     assert.ok(state.quotaHoldUntil===undefined || Number.isSafeInteger(state.quotaHoldUntil) && state.quotaHoldUntil>=0,'Invalid quota hold');
     assert.ok(state.ignoredEmptyRuns===undefined || Array.isArray(state.ignoredEmptyRuns) &&
       state.ignoredEmptyRuns.every(key=>typeof key==='string' && /^[1-9][0-9]*:[1-9][0-9]*$/.test(key)),'Invalid ignored empty runs');
@@ -110,6 +159,7 @@ export class LocalLeases {
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
       const lease = slot.lease;
       requestIdentity(lease);
+      assert.ok(lease.guestMemoryMiB===undefined||validGuestMiB(lease.guestMemoryMiB),'Invalid leased guest memory');
       if(lease.runnerId!==undefined) assert.ok(lease.ci && Number.isSafeInteger(lease.runnerId) && lease.runnerId>0,'Invalid bound CI runner');
       assert.ok(lease.hostGeneration === this.hostGeneration && lease.slot === slot.id &&
         lease.resourceId === `dt-${this.hostGeneration}-${slot.id}-${slot.generation}` &&
@@ -177,12 +227,15 @@ export class LocalLeases {
       if(identity.ci && (this.scope(state).orphanRunners?.length??0)>=32) return {code:75,reason:'orphan-runners-full'};
       const slot = state.slots.find(s => s.state === 'free' && (this.slot===undefined || s.id===this.slot));
       if (!slot) return {code: 75, reason: 'capacity-busy'};
+      const guestMemoryMiB=ciGuestMemoryMiB(identity.ci);
+      if(!memoryFits(state,slot.id,guestMemoryMiB))return {code:75,reason:'memory-capacity-busy'};
       assert.ok(prior || Object.keys(state.turns).length < 10000, 'Local turn history full; archive only after reconciliation');
       assert.ok(slot.generation < Number.MAX_SAFE_INTEGER, 'Slot generation exhausted');
       slot.generation++;
       slot.state = 'reserved';
       slot.lease = {...identity, slot: slot.id, hostGeneration: this.hostGeneration, generation: slot.generation,
         resourceId: `dt-${this.hostGeneration}-${slot.id}-${slot.generation}`, createdAt: now, deadline: now + durationMs};
+      if(state.memory)slot.lease.guestMemoryMiB=guestMemoryMiB;
       state.turns[key] = {...prior,fingerprint, slot: slot.id, generation: slot.generation,...(prior?(prior.admissionQuotaRetryAt!==undefined?{admissionQuotaRetried:true}:prior.registration5xxFailedAt!==undefined?{registration5xxRetried:true}:{busyRunnerRetried:true}):{})};
       return {code: 0, created: true, lease: slot.lease};
     });
@@ -249,6 +302,7 @@ export class LocalLeases {
     assert.ok(this.capacity===1 || this.slot!==undefined,'Concurrent CI intent requires a scoped slot');
     ciInvocation(value);
     return this.transaction(state=>{
+      if(!memoryFits(state,this.slot??0,value.guestMemoryMiB??16384))return false;
       if(this.capacity>1 && value.jobId!==undefined)assert.ok(!state.slots.some(slot=>slot.id!==this.slot &&
         slot.ciInvocation?.runId===value.runId && slot.ciInvocation.attempt===value.attempt && slot.ciInvocation.jobId===value.jobId),
         'CI job is already recorded on another slot');
@@ -284,6 +338,7 @@ export class LocalLeases {
     if(this.slot===undefined)return state;
     const scoped=this.scope(state);
     return {version:state.version,hostGeneration:state.hostGeneration,turns:state.turns,slots:[scoped],
+      ...(state.memory===undefined?{}:{memory:state.memory}),
       ...(scoped.ciInvocation===undefined?{}:{ciInvocation:scoped.ciInvocation}),
       ...(scoped.orphanRunners===undefined?{}:{orphanRunners:scoped.orphanRunners})};
   }); }
@@ -298,21 +353,34 @@ export function refuseLegacy(state) {
 }
 
 // The slot lock lives through cleanup; the shared ledger lock covers only updates.
-export async function withAvailableSlot({state,hostGeneration,slots},work,{signal,healthySlots}={}) {
+export async function withAvailableSlot({state,hostGeneration,slots,host,slotHosts},work,{signal,healthySlots,ci,preferredSlot,pending=[]}={}) {
   assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
   assert.ok(healthySlots===undefined || Array.isArray(healthySlots) && healthySlots.every(slot=>Number.isSafeInteger(slot) && slot>=0 && slot<slots),'Invalid healthy slot inventory');
   refuseLegacy(state);
-  for(let slot=0;slot<slots;slot++){
+  assert.ok(preferredSlot===undefined || Number.isSafeInteger(preferredSlot)&&preferredSlot>=0&&preferredSlot<slots,'Invalid planned slot');
+  const refusedHosts=new Set(),order=Array.from({length:slots},(_,slot)=>slot);
+  if(preferredSlot!==undefined)order.unshift(...order.splice(preferredSlot,1));
+  for(const slot of order){
+    const target=slotHosts?.[slot]??host??slot;
+    if(refusedHosts.has(target))continue;
     if(healthySlots!==undefined && !healthySlots.includes(slot))continue;
-    let admitted=false;
+    let admitted=false,tryAnother=false;
     const result=await withKernelLock(join(state,'slot-'+slot),async()=>{
       const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});
       const current=leases.inspect();
       if(current.ciInvocation || current.slots[0].state!=='free')return {code:75,reason:'recorded-slot-busy-or-quarantined'};
+      const whole=new LocalLeases(join(state,'ledger'),{hostGeneration,slots}).inspect();
+      const recorded=new Set(whole.slots.flatMap(s=>[s.lease?.ci?.jobId,s.ciInvocation?.jobId]).filter(Boolean));
+      if(!memoryFits(whole,slot,ciGuestMemoryMiB(ci),pending.filter(p=>!recorded.has(p.jobId))))return {code:75,reason:'memory-capacity-busy'};
       admitted=true;
-      return work({leases,slot,temporaryState:join(state,'slot-'+slot)});
+      const result=await work({leases,slot,temporaryState:join(state,'slot-'+slot)});
+      if(result.code===75&&['host-unavailable','host-down','memory-capacity-busy'].includes(result.reason)){
+        const after=leases.inspect();tryAnother=!after.ciInvocation&&after.slots[0].state==='free';
+      }
+      return result;
     },{signal});
-    if(admitted || result.code!==75)return result;
+    if(tryAnother)refusedHosts.add(target);
+    else if(admitted || result.code!==75)return result;
   }
   return {code:75,reason:'capacity-busy'};
 }

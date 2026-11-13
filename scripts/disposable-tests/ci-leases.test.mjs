@@ -14,6 +14,82 @@ const canonical=(identity=ci)=>({lane:'I',turn:'ci-789-1-901',snapshot:createHas
 function setup(t){const root=mkdtempSync(join(tmpdir(),'ci-leases-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  return new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:1,bootstrap:true});}
 
+function memoryPool(t){
+ const root=mkdtempSync(join(tmpdir(),'ci-memory-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const options={hostGeneration:'bridge-1',slots:16};
+ const leases=new LocalLeases(join(root,'ledger'),{...options,bootstrap:true,memory:{
+  slotHosts:[...Array(8).fill('host-a'),...Array(8).fill('host-b')],hostMiB:{'host-a':128000,'host-b':128000}}});
+ return {root,leases,slot:id=>new LocalLeases(leases.directory,{...options,slot:id})};
+}
+
+test('memory reservations preserve six large jobs, isolate hosts and retain uncertain cleanup',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');const p=memoryPool(t),held=[];
+ for(let i=0;i<6;i++)held.push(p.slot(i).reserveLocal(ciRequest('I',{...ci,jobId:901+i})).lease);
+ const request=ciRequest('I',{...ci,jobId:920});
+ assert.equal(p.slot(6).reserveLocal(request).code,75,'a seventh large guest exceeds host-a memory');
+ assert.equal(p.slot(8).reserveLocal(request).code,0,'host-b retains its own memory budget');
+ assert.equal(p.slot(0).release(held[0],{resourceId:held[0].resourceId,absent:false}),false);
+ assert.equal(p.slot(6).reserveLocal(ciRequest('I',{...ci,jobId:921})).code,75);
+ assert.equal(p.slot(0).release(held[0],{resourceId:held[0].resourceId,absent:true}),true);
+ assert.equal(p.slot(6).reserveLocal(ciRequest('I',{...ci,jobId:921})).code,0);
+});
+
+test('eight measured PR planners share one host and retain their chosen guest size',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');const p=memoryPool(t);
+ for(let i=0;i<8;i++){
+  const result=p.slot(i).reserveLocal(ciRequest('I',{...ci,workflowPath:'.github/workflows/ci.yml',event:'pull_request',jobKey:'changes-1',jobId:1000+i}));
+  assert.equal(result.code,0);assert.equal(result.lease.guestMemoryMiB,6144);
+ }
+ assert.equal(p.leases.inspect().slots.filter(slot=>slot.state==='reserved').length,8);
+});
+
+test('pending job starts consume memory once and a refused start leaves no retained intent',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');const p=memoryPool(t);
+ for(let i=0;i<5;i++)p.slot(i).reserveLocal(ciRequest('I',{...ci,jobId:1100+i}));
+ const intent=id=>({nonce:String(id).repeat(32),sourceSha:ci.workflowSha,workflowSha:ci.workflowSha,route:'server',
+  createdAt:Date.now(),runId:789,attempt:1,jobId:1200+id,ordinaryStage:'admitted',guestMemoryMiB:6144});
+ assert.notEqual(p.slot(5).setInvocation(intent(5)),false);
+ assert.notEqual(p.slot(6).setInvocation(intent(6)),false);
+ assert.equal(p.slot(7).setInvocation(intent(7)),false);
+ assert.equal(p.slot(7).inspect().ciInvocation,undefined);
+ const started=p.slot(5).reserveLocal(ciRequest('I',{...ci,workflowPath:'.github/workflows/ci.yml',event:'pull_request',
+  sourceSha:ci.workflowSha,jobKey:'changes-1',jobId:1205}));
+ assert.equal(started.code,0,'moving a pending reservation into its lease must not double charge it');
+ assert.equal(p.slot(7).setInvocation(intent(7)),false);
+ assert.equal(p.slot(6).clearInvocation(intent(6).nonce),true);
+ assert.notEqual(p.slot(7).setInvocation(intent(7)),false);
+});
+
+for(const unavailable of [false,true])test(`slot choice tries the other host after ${unavailable?'a host refusal':'a memory-full host'}`,async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs'),{withAvailableSlot}=await import('./leases.mjs');
+ const {withKernelLock}=await import('./kernel-lock.mjs');const p=memoryPool(t);
+ for(let slot=0;slot<16;slot++)await withKernelLock(join(p.root,'slot-'+slot),async()=>({code:0}),{bootstrap:true});
+ if(!unavailable)for(let i=0;i<6;i++)p.slot(i).reserveLocal(ciRequest('I',{...ci,jobId:1300+i}));
+ const attempted=[],identity={...ci,jobId:1400};
+ const result=await withAvailableSlot({state:p.root,hostGeneration:'bridge-1',slots:16,
+  slotHosts:p.leases.inspect().memory.slotHosts},context=>{
+  attempted.push(context.slot);
+  if(unavailable&&context.slot<8)return {code:75,reason:'host-unavailable'};
+  return context.leases.reserveLocal(ciRequest('I',identity));
+ },{ci:identity});
+ assert.equal(result.code,0);assert.equal(result.lease.slot,8);
+ assert.deepEqual(attempted,unavailable?[0,8]:[8]);
+});
+
+test('normal bootstrap records measured per-host budgets before accepting jobs',async t=>{
+ const {main}=await import('./manual.mjs');const root=mkdtempSync(join(tmpdir(),'ci-memory-bootstrap-'));
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const slotHosts=[...Array(8).fill('host-a'),...Array(8).fill('host-b')],hostMemoryMiB={'host-a':128000,'host-b':128000};
+ const config={version:2,mode:'manual-slots',slots:16,host:'host-a',hostGeneration:'memory-test',state:root+'/state',
+  recipe:'/opt/waitron-disposable-fixture',repository:root,slotHosts,hostMemoryMiB,
+  ci:{repository:'fixture/waitron',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',
+   workflowDigest:'1'.repeat(64),appEnv:root+'/app.env',appKey:root+'/app.key'}};
+ const file=root+'/config.json';writeFileSync(file,JSON.stringify(config));
+ assert.equal(await main([file,'--bootstrap']),0);
+ const state=new LocalLeases(root+'/state/ledger',{hostGeneration:'memory-test',slots:16}).inspect();
+ assert.deepEqual(state.memory,{slotHosts,hostMiB:hostMemoryMiB});
+});
+
 test('CI admission persists exact job identity and rejects a changed job on replay',t=>{
  const leases=setup(t),first=leases.reserveLocal(canonical());
  assert.deepEqual(first.lease.ci,ci);

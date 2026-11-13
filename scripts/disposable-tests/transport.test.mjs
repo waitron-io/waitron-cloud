@@ -5,6 +5,36 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
+test('CI transfer keeps the measured guest memory beside the bound job identity',async()=>{
+ const {CITransport}=await import('./transport.mjs');let sent;
+ const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});
+ transport.remote=async(mode,lease,options)=>{assert.equal(mode,'transfer-ci');sent=JSON.parse(options.input);return {code:0};};
+ const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowSha:'1'.repeat(40),
+  workflowDigest:'2'.repeat(64),event:'pull_request',sourceSha:'1'.repeat(40),sourceTree:'3'.repeat(40),
+  runId:789,attempt:1,jobId:123,jobKey:'changes-1'};
+ const {ciRequest}=await import('./ci-identity.mjs');
+ await transport.transfer({...ciRequest('I',ci),resourceId:'dt-measured-0-1',deadline:Date.now()+600000,guestMemoryMiB:6144},{});
+ assert.equal(sent.guestMemoryMiB,6144);assert.deepEqual(sent.ci,ci);
+});
+
+test('late host capacity refusal names the stopped preparation for controller diagnostics',async()=>{
+ const {CITransport}=await import('./transport.mjs');
+ const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});
+ transport.remote=async()=>({code:75});
+ await assert.rejects(transport.prepare({resourceId:'dt-measured-0-1'},{}),/Host capacity refused after reservation/);
+});
+
+test('health distinguishes a memory-full host from a candidate that fits',async()=>{
+ const {CITransport}=await import('./transport.mjs');const requests=[];
+ const transport=new CITransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});
+ transport.remote=async(mode,lease)=>{assert.equal(mode,'health');requests.push(lease.guestMemoryMiB);
+  return {code:0,stdout:JSON.stringify({healthy:true,...(lease.guestMemoryMiB===undefined?{}:{fits:lease.guestMemoryMiB===6144})})};};
+ assert.equal(await transport.healthy({}),true);
+ assert.equal(await transport.healthy({guestMemoryMiB:6144}),true);
+ assert.equal(await transport.healthy({guestMemoryMiB:16384}),false);
+ assert.deepEqual(requests,[undefined,6144,16384]);
+});
+
 test('slot mapping sends transfer, results and cleanup to the same server across the pool boundary', async t => {
   const {spawnSync} = await import('node:child_process');
   const root=mkdtempSync(join(tmpdir(),'disposable-slot-hosts-'));

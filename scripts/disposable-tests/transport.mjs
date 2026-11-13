@@ -39,12 +39,15 @@ export class SSHTransport {
     const slot=mode==='health'?(lease?.slot??0):Number(resource.split('-').at(-2));
     const host=this.slotHosts===undefined?this.host:this.slotHosts[slot];
     assert.ok(host && Number.isSafeInteger(slot) && slot>=0 && slot<=15,'Unmapped transport slot');
+    const memory=mode==='health'?lease?.guestMemoryMiB:undefined;
+    if(memory!==undefined)assert.ok(Number.isSafeInteger(memory)&&memory>=4096&&memory<=16384&&memory%1024===0,'Invalid health memory size');
     return runProcess('bash', [sshWrapper, host,
-      `python3 -B ${this.recipe}/session.py ${mode}${resource ? ' '+resource : ''}`], options);
+      `python3 -B ${this.recipe}/session.py ${mode}${resource ? ' '+resource : ''}${memory===undefined?'':' '+memory}`], options);
   }
-  async healthy({signal,slot=this.slot}) {
-    const result = await this.remote('health', {slot}, {signal, capture: true});
-    return result.code === 0 && JSON.parse(result.stdout).healthy === true;
+  async healthy({signal,slot=this.slot,guestMemoryMiB}) {
+    const result = await this.remote('health', {slot,...(guestMemoryMiB===undefined?{}:{guestMemoryMiB})}, {signal, capture: true});
+    const observed=result.code===0?JSON.parse(result.stdout):{};
+    return observed.healthy===true&&(guestMemoryMiB===undefined||observed.fits===true);
   }
   async healthySlots({signal,timeoutMs=7500}) {
     const hosts=this.slotHosts??Array(this.slots).fill(this.host);
@@ -69,7 +72,7 @@ export class SSHTransport {
   }
   async prepare(lease, {signal}) {
     const result = await this.remote('prepare', lease, {signal});
-    assert.equal(result.code, 0, 'Guest preparation failed');
+    assert.equal(result.code, 0, result.code===75?'Host capacity refused after reservation; automatic retry was not requested':'Guest preparation failed');
   }
   async execute(lease, {signal}) {
     const executed = await this.remote('execute-v2', lease, {signal});
@@ -115,8 +118,9 @@ export class SSHTransport {
 
 export class CITransport extends SSHTransport {
   async transfer(lease,{signal}) {
-    const {resourceId,snapshot,argv,deadline,ci}=lease;
-    const result=await this.remote('transfer-ci',lease,{signal,capture:true,input:JSON.stringify({resourceId,snapshot,argv,deadline,ci})});
+    const {resourceId,snapshot,argv,deadline,ci,guestMemoryMiB}=lease;
+    const result=await this.remote('transfer-ci',lease,{signal,capture:true,input:JSON.stringify({resourceId,snapshot,argv,deadline,ci,
+      ...(guestMemoryMiB===undefined?{}:{guestMemoryMiB})})});
     assert.equal(result.code,0,'Host refused the CI request');
   }
   async execute(lease,{signal,jitconfig}) {

@@ -49,6 +49,12 @@ class CISession(unittest.TestCase):
   joined='\n'.join(' '.join(argv) for argv in calls)
   self.assertIn('runner-tools.sh',joined)
   for forbidden in ['source.tar','ui.tgz','contract-','pnpm install','snapshot.py extract']:self.assertNotIn(forbidden,joined)
+  resource='dt-ci-1-1';directory=self.root/resource;directory.mkdir()
+  value={**request(resource),'guestMemoryMiB':6144};(directory/'request.json').write_text(json.dumps(value))
+  with patch.object(session,'turn_directory',return_value=directory),patch.object(session,'command',side_effect=keygen),patch.object(session.host,'create',return_value={'preparation':'install'}) as created:
+   session.prepare(resource)
+  self.assertEqual(created.call_args.args[0],{'resourceId':resource,'deadline':value['deadline'],
+   'sshPublicKey':'ssh-ed25519 fake','guestMemoryMiB':6144})
  def test_preparation_waits_through_only_ssh_boot_resets_within_the_original_deadline(self):
   for statuses in [[255,0],[2],[255,255]]:
    with self.subTest(statuses=statuses),tempfile.TemporaryDirectory() as temporary:

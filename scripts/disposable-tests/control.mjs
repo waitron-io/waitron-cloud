@@ -3,7 +3,7 @@ import {readFileSync,readSync,realpathSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp,withRequestCounts,withQuotaObserver} from './github-app.mjs';
-import {LocalLeases,configuredSlots,ciRetryReady} from './leases.mjs';
+import {LocalLeases,configuredSlots,ciRetryReady,ciGuestMemoryMiB,memoryFits,memoryCapacity} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {ciIdentity} from './ci-identity.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
@@ -40,12 +40,15 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   finally{wake.abort();}
  };
  let served=0,healthy,lastCapacity=-Infinity;
+ const startingJobs=state=>{
+  const recorded=new Set(state.slots.flatMap(slot=>[slot.ciInvocation?.jobId,slot.lease?.ci?.jobId,...(slot.orphanRunners??[]).map(runner=>runner.ci.jobId)]).filter(Boolean));
+  return [...active.values()].filter(ci=>!recorded.has(ci.jobId));
+ };
+ const pendingMemory=state=>startingJobs(state).map(ci=>({slot:ci.memorySlot,jobId:ci.jobId,guestMemoryMiB:ciGuestMemoryMiB(ci)}));
  const local=()=>{
   const state=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
-  const usable=state.slots.filter(slot=>slot.state!=='quarantined'&&!slot.orphanRunners?.length&&(!Array.isArray(healthy)||healthy.includes(slot.id)));
   const identities=state.slots.flatMap(slot=>[slot.ciInvocation,slot.lease?.ci,...(slot.orphanRunners??[]).map(runner=>runner.ci)]).filter(Boolean);
-  const starting=[...active.values()].filter(ci=>!identities.some(value=>value.jobId===ci.jobId));
-  return {slots:usable.length,busy:usable.filter(slot=>slot.state!=='free'||slot.ciInvocation).length+starting.length,
+  return {...memoryCapacity(state,healthy??true,pendingMemory(state)),
    owned:new Set([...identities,...active.values()].map(ci=>ci.runId)),jobs:new Set(identities.map(ci=>ci.jobId))};
  };
  const pending=(error,runId,event='automatic-ci-overflow-pending')=>{
@@ -118,7 +121,6 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
  if(config.slotHosts!==undefined){
   transport??=new CITransport(config);
   healthy=await transport.healthySlots({signal});
-  // Host health checks room for another guest; occupied leases still consume capacity.
   healthy=[...new Set([...healthy,...state.slots.filter(slot=>slot.state!=='free'&&slot.state!=='quarantined'&&!slot.orphanRunners?.length).map(slot=>slot.id)])];
   free=Math.max(0,state.slots.filter(slot=>healthy.includes(slot.id)&&slot.state==='free'&&!slot.ciInvocation).length-starting);
   if(!healthy.length){
@@ -167,7 +169,16 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
     readFailed=false;console.error(JSON.stringify({event:'automatic-ci-refused',runId:ci.runId,error:error.message}));continue;}
    if(!ci || Date.now()-checkedAt>60000)continue;
   }
-  const admission={ci,checkedAt};
+  let memorySlot,priorStarts=[];
+  if(state.memory){
+   const current=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   const pending=priorStarts=pendingMemory(current);
+   memorySlot=current.slots.find(slot=>slot.state==='free'&&!slot.ciInvocation&&!slot.orphanRunners?.length&&
+    (!Array.isArray(healthy)||healthy.includes(slot.id))&&!pending.some(p=>p.slot===slot.id)&&
+    memoryFits(current,slot.id,ciGuestMemoryMiB(ci),pending))?.id;
+   if(memorySlot===undefined)break;
+  }
+  const admission={ci,checkedAt,...(memorySlot===undefined?{}:{slot:memorySlot,pending:priorStarts})};
   seen.add(ci.jobId);served++;
   const worker=(async()=>{
   let result=await runWorker(ci,admission);
@@ -186,7 +197,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   })().then(result=>console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,...result})),
    error=>console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:ci.runId,jobId:ci.jobId,code:125,error:error.message})))
    .finally(()=>active.delete(worker));
-  active.set(worker,ci);
+  active.set(worker,memorySlot===undefined?ci:{...ci,memorySlot});
  }
  if(active.size)await waitForWorker();
  await read(()=>publish(pass));
@@ -214,8 +225,12 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
  const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
  const policy=config.ci;let ci,checkedAt=admission?.checkedAt??Date.now();
  if(admission!==undefined){
-  assert.ok(admission && Object.keys(admission).sort().join(',')==='checkedAt,ci' &&
+  assert.ok(admission && Object.keys(admission).sort().join(',')===(admission.slot===undefined?'checkedAt,ci':'checkedAt,ci,pending,slot') &&
    Number.isSafeInteger(checkedAt) && checkedAt>=0 && checkedAt<=Date.now(),'Invalid shared admission timestamp');
+  if(admission.slot!==undefined)assert.ok(config.hostMemoryMiB && Number.isSafeInteger(admission.slot) && admission.slot>=0 && admission.slot<configuredSlots(config),'Invalid planned slot');
+  if(admission.slot!==undefined)assert.ok(Array.isArray(admission.pending) && admission.pending.length<configuredSlots(config) && admission.pending.every(p=>
+   p && Object.keys(p).sort().join(',')==='guestMemoryMiB,jobId,slot' && Number.isSafeInteger(p.slot) && p.slot>=0 && p.slot<configuredSlots(config) &&
+   Number.isSafeInteger(p.jobId) && p.jobId>0 && Number.isSafeInteger(p.guestMemoryMiB) && p.guestMemoryMiB>=4096 && p.guestMemoryMiB<=16384 && p.guestMemoryMiB%1024===0),'Invalid pending memory reservations');
   ci=ciIdentity(admission.ci);
   assert.ok(ci.repositoryId===policy.repositoryId && ci.workflowId===policy.workflowId && ci.workflowPath===policy.workflowPath &&
    ci.runId===runId && ci.jobId===jobId,'Shared admission identity differs');
@@ -232,7 +247,7 @@ export async function automaticJob({config,api,runId,jobId,signal,admission}){
   if(!ci)return {code:75,reason:'job-no-longer-queued'};
   if(Date.now()-checkedAt>60000)return {code:75,reason:'admission-check-expired'};
   return executeOrdinary({api,policy,leases:context.leases,ci,lane:'I',transport:new CITransport({...config,slot:context.slot}),signal,automatic:true});
- }),{signal,healthySlots});
+ }),{signal,healthySlots,ci,preferredSlot:admission?.slot,pending:admission?.pending});
 }
 
 export async function main(args){

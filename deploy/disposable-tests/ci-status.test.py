@@ -159,6 +159,22 @@ class StatusTests(unittest.TestCase):
         self.assertEqual(r['controller']['version'], str(self.config.parent))
         self.assertEqual(r['jobs'][0]['guestState'], 'prepared'); self.assertTrue(r['jobs'][1]['pendingIntent'])
         self.assertEqual(r['jobs'][0]['job'], dict(jobId=42, jobKey='test-ui-1'))
+        config=json.loads(self.config.read_text());config.update(slots=8,slotHosts=['fixture.invalid']*8,hostMemoryMiB={'fixture.invalid':128000})
+        self.config.write_text(json.dumps(config))
+        self.slots=[dict(id=i,generation=1,state='free',lease=None) for i in range(8)]
+        for i in range(6):
+            self.slots[i].update(state='running',lease=dict(lane='I',turn=f'large-{i}',snapshot='a'*64,argv=['true'],
+                slot=i,hostGeneration='test',resourceId=f'dt-test-{i}-1',generation=1,createdAt=400000,deadline=1100000,guestMemoryMiB=16384))
+        for small,want in [(False,0),(True,1)]:
+            if small:
+                for i in [0,1]:self.slots[i]['lease']['guestMemoryMiB']=6144
+            self.write_ledger();path=self.state/'ledger/state.json';ledger=json.loads(path.read_text())
+            ledger['memory']=dict(slotHosts=config['slotHosts'],hostMiB=config['hostMemoryMiB']);path.write_text(json.dumps(ledger))
+            self.calls=[];r=self.collect()
+            self.assertEqual(r['slots'],dict(total=8,busy=6,free=2,admissible=want))
+        ledger['slots'][6]['ciInvocation']=dict(jobId=43,guestMemoryMiB=6144,createdAt=400000)
+        path.write_text(json.dumps(ledger));self.calls=[]
+        self.assertEqual(self.collect()['slots'],dict(total=8,busy=7,free=1,admissible=0))
 
     def test_idle_errors_and_last_admission_read_existing_tails(self):
         (self.state/'out').write_text('not json\n'+json.dumps(dict(code=0, lease=dict(createdAt=800000)))+'\n'+json.dumps(dict(event='automatic-ci-job', at='later'))+'\n')
