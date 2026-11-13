@@ -7,8 +7,9 @@ publication, fresh-state rollback, systemd status and Mac-only manual capture.
 Controlled tests cover installation, cutover, rollback, upload completion/EOF and
 status. Both replacement hosts passed corrected native guest isolation and idle
 reboot qualification ([receipt](https://github.com/waitron-io/waitron-cloud/pull/1147#issuecomment-6778586320)).
-The matched two-archive support is published on NEW/BENCH with twelve mapped slots;
-the server controller owns the sole ledger and the Mac controller is disabled.
+The matched two-archive support is published on NEW/BENCH; A1454 now maps eight
+identifiers per host with memory-budgeted admission. The server controller owns
+the sole ledger and the Mac controller is disabled.
 Mixed jobs, server restart, runtime exit and SSH cancellation have been exercised.
 Physical Mac sleep is watcher-deferred to a coordinated window. Guest-tools adoption
 remains separate from this admission retry. The publication fixture
@@ -44,8 +45,9 @@ the watcher cleared sixteen identifiers, eight per host, on 13 November at 01:54
 The source now selects measured PR-family sizes, reserves caps per host under the
 existing locks, waits for the oldest fitting job, and publishes conservative spare
 capacity. Read-only status preserves physical counts and adds admissible memory room.
-Installation, the watched mixed-job trial and the before/after wait and duration
-comparison remain open; the live pool still uses twelve 16/18 GiB guests.
+The matched recipes and controller are [installed with independent readback](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6842611690)
+from exact merge `82bd3ac6c02b`. The watched mixed-job trial and before/after wait
+and duration comparison remain open; installation alone does not qualify them.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
