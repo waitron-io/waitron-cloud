@@ -28,6 +28,16 @@ HOST_CAP_MIB = 18432
 PEER_ADDRESSES = Path(__file__).with_name('peer-addresses.json')
 
 
+class MemoryBusy(ValueError):
+    pass
+
+
+def guest_memory_mib(value=GUEST_MEMORY_MIB):
+    if type(value) is not int or not 4096 <= value <= GUEST_MEMORY_MIB or value % 1024:
+        raise ValueError('Invalid guest memory size')
+    return value
+
+
 def resource_id(value):
     if not isinstance(value, str) or not re.fullmatch(r'dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-(?:[0-9]|1[0-5])-[1-9][0-9]{0,14}', value):
         raise ValueError('Invalid local resource ID or slot')
@@ -212,21 +222,26 @@ def network_policy(resource):
 '''
 
 
-def budget(slots, *, memory, threads, disk_total, disk_free, allocated):
+def budget(slots, *, memory, threads, disk_total, disk_free, allocated, caps_mib=None):
     if type(slots) is not int or not 1 <= slots <= 16:
         raise ValueError('Invalid host slot budget')
     if any(type(v) is not int or v < 0 for v in [memory, threads, disk_total, disk_free, allocated]):
         raise ValueError('Invalid host resource measurement')
     if slots > 10:
         raise ValueError('Ten-slot operating limit exceeded')
-    if slots*HOST_CAP_MIB*1024**2+16*1024**3 > memory:
-        raise ValueError('Insufficient memory for guest caps and host reserve')
+    caps_mib = [HOST_CAP_MIB]*slots if caps_mib is None else caps_mib
+    if (len(caps_mib) != slots or
+            any(type(cap) is not int or not 6144 <= cap <= HOST_CAP_MIB or cap % 1024 for cap in caps_mib)):
+        raise ValueError('Invalid memory cap inventory')
+    memory_full = sum(caps_mib)*1024**2+16*1024**3 > memory
     # On the 32-thread host, guests share 24; four complete cores stay reserved.
     if min(slots*4, 24)+8 > threads:
         raise ValueError('Insufficient execution threads after host reserve')
     remaining = max(0, slots*64*1024**3-allocated)
     if disk_free-remaining < (disk_total+4)//5:
         raise ValueError('Insufficient disk after guest maxima and twenty-percent reserve')
+    if memory_full:
+        raise MemoryBusy('Insufficient memory for guest caps and host reserve')
 
 
 def guest_cpus(topology):
@@ -241,18 +256,21 @@ def guest_cpus(topology):
     return sorted(cpu for cpu, core in topology.items() if core not in reserved)
 
 
-def capacity(extra=None):
+def capacity(extra=None, memory_mib=GUEST_MEMORY_MIB):
     resources = set()
+    caps = {}
     for path in sorted({ROOT/'active.json', *ROOT.glob('active-*.json')}):
         if not os.path.lexists(path):
             continue
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
             raise ValueError('Unsafe active allocation record')
-        resource = resource_id(json.loads(path.read_text()).get('resourceId'))
+        request = json.loads(path.read_text())
+        resource = resource_id(request.get('resourceId'))
         if path != active_path(resource):
             raise ValueError('Active allocation belongs to another slot')
         resources.add(resource)
+        caps[resource] = guest_memory_mib(request.get('guestMemoryMiB', GUEST_MEMORY_MIB))+2048
     allocated = 0
     turns = ROOT/'turns'
     if turns.exists():
@@ -270,7 +288,11 @@ def capacity(extra=None):
                     allocated += info.st_blocks*512
     if extra is not None:
         resources.add(resource_id(extra))
+        caps[extra] = guest_memory_mib(memory_mib)+2048
     slots = len(resources)+(extra is None)
+    charged = [caps.get(resource, HOST_CAP_MIB) for resource in resources]
+    if extra is None:
+        charged.append(guest_memory_mib(memory_mib)+2048)
     memory = int(next(line.split()[1] for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemTotal:')))*1024
     topology = {}
     for cpu in os.sched_getaffinity(0):
@@ -278,13 +300,16 @@ def capacity(extra=None):
         topology[cpu] = tuple(int((base/name).read_text()) for name in ['physical_package_id','core_id'])
     allowed = guest_cpus(topology)
     disk = shutil.disk_usage(ROOT)
-    budget(slots,memory=memory,threads=min(len(topology),len(allowed)+8),disk_total=disk.total,disk_free=disk.free,allocated=allocated)
+    budget(slots,memory=memory,threads=min(len(topology),len(allowed)+8),disk_total=disk.total,disk_free=disk.free,allocated=allocated,caps_mib=charged)
     return {'slots': slots, 'cpus': allowed}
 
 
 def plan(request):
-    if not isinstance(request, dict) or set(request) != {'resourceId', 'deadline', 'sshPublicKey'}:
+    if not isinstance(request, dict) or set(request) not in (
+            {'resourceId', 'deadline', 'sshPublicKey'},
+            {'resourceId', 'deadline', 'sshPublicKey', 'guestMemoryMiB'}):
         raise ValueError('Unknown or missing host request field')
+    memory_mib = guest_memory_mib(request.get('guestMemoryMiB', GUEST_MEMORY_MIB))
     resource = resource_id(request['resourceId'])
     deadline = request['deadline']
     now = int(time.time() * 1000)
@@ -299,7 +324,7 @@ def plan(request):
     directory = ROOT / 'turns' / resource
     uid, port = 62000+slot_id(resource), 22000+slot_id(resource)
     qemu = ['/usr/bin/qemu-system-x86_64', '-no-user-config', '-nodefaults',
-            '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', str(GUEST_MEMORY_MIB),
+            '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', str(memory_mib),
             '-display', 'none', '-monitor', 'none',
             '-chardev', 'ringbuf,id=serial0,size=16384', '-serial', 'chardev:serial0',
             '-device', 'VGA',
@@ -311,7 +336,7 @@ def plan(request):
             '-device', 'virtio-net-pci,netdev=net0',
             '-sandbox', 'on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny']
     service = [f'User={uid}', 'Group=kvm', 'KillMode=control-group', 'TimeoutStopSec=30',
-               f'RuntimeMaxSec={(deadline - now) // 1000}', f'MemoryMax={HOST_CAP_MIB}M', 'CPUQuota=400%',
+               f'RuntimeMaxSec={(deadline - now) // 1000}', f'MemoryMax={memory_mib+2048}M', 'CPUQuota=400%',
                'NoNewPrivileges=yes', 'ProtectSystem=strict', f'ReadWritePaths={directory}',
                'ProtectHome=yes', 'PrivateTmp=yes', 'DevicePolicy=closed', 'DeviceAllow=/dev/kvm rw']
     cloud = {'users': [{'name': 'root', 'lock_passwd': True, 'ssh_authorized_keys': [key]}],
@@ -345,7 +370,7 @@ def _create(request, *, fresh=False):
         active = active_path(resource)
         if active.exists() or (ROOT / 'history' / (resource + '.json')).exists():
             raise BlockingIOError('A slot is occupied or this resource ID is already retired')
-        admitted = capacity(resource)
+        admitted = capacity(resource, memory_mib=request['guestMemoryMiB']) if 'guestMemoryMiB' in request else capacity(resource)
         image.recheck(chosen, run)
         guest_account(slot_id(resource))
         if not observation(resource)['absent']:
@@ -428,7 +453,7 @@ if __name__ == '__main__':
         else:
             raise ValueError('Unknown host operation')
         print(json.dumps(result))
-    except BlockingIOError as error:
+    except (BlockingIOError, MemoryBusy) as error:
         print(str(error), file=sys.stderr)
         sys.exit(75)
     except (ValueError, OSError, subprocess.SubprocessError) as error:

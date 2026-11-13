@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ciIdentity,routingLabel,jobName,ciJobKeyPattern} from './ci-identity.mjs';
-import {configuredSlots} from './leases.mjs';
+import {configuredSlots,memoryCapacity,ciGuestMemoryMiB} from './leases.mjs';
 
 async function runInventory(api,path,signal){
  for(let attempt=1;attempt<=3;attempt++){
@@ -159,9 +159,9 @@ function startedWork(job){
 }
 const blocksRecovery=job=>job.name!=='ci' && startedWork(job);
 export async function publishCapacity({api,policy,state,snapshot,healthy,signal,now=Date.now()}){
- const usable=healthy?state.slots.filter(s=>(!Array.isArray(healthy)||healthy.includes(s.id))&&s.state!=='quarantined'&&!s.orphanRunners?.length):[];
+ const capacity=memoryCapacity(state,healthy);
  const admitted=new Set(state.slots.flatMap(s=>[s.ciInvocation?.jobId,s.lease?.ci?.jobId]).filter(Boolean));
- const value={observedAt:now,slots:usable.length,serverRunning:usable.filter(s=>s.state!=='free'||s.ciInvocation).length,serverWaiting:0,hostedRunning:0,hostedWaiting:0};
+ const value={observedAt:now,slots:capacity.slots,serverRunning:capacity.busy,serverWaiting:0,hostedRunning:0,hostedWaiting:0};
  for(const {jobs} of snapshot.values())for(const job of jobs){
   if(!job.labels.length)continue;
   const server=job.labels.includes('self-hosted');
@@ -465,7 +465,10 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   if(untouched && inventory.jobs.some(startedWork))continue;
-  for(const job of inventory.jobs){
+  for(const job of [...inventory.jobs].sort((a,b)=>{
+   const first=Date.parse(a.created_at??a.started_at),second=Date.parse(b.created_at??b.started_at);
+   return Number.isFinite(first)&&Number.isFinite(second)?first-second||a.id-b.id:0;
+  })){
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name,job.labels);
    if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
@@ -489,8 +492,9 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
  assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head differs');
  const {randomBytes}=await import('node:crypto');
  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
-  route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,ordinaryStage:'admitted'};
- leases.setInvocation(invocation);
+  route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId,ordinaryStage:'admitted',
+  ...(leases.inspect().memory?{guestMemoryMiB:ciGuestMemoryMiB(ci)}:{})};
+ if(leases.setInvocation(invocation)===false)return {code:75,reason:'memory-capacity-busy'};
  let result;
  try{
   const health=signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500);
@@ -498,6 +502,7 @@ export async function executeOrdinary({api,policy,leases,ci,lane,transport,signa
   if(!automatic)assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
   assert.equal(await routingHead({api,policy,signal}),automatic?'':ci.sourceSha,'Ordinary CI selected head changed during health check');
   result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
+  if(result.code===75&&!result.lease&&leases.inspect().memory){leases.clearInvocation(invocation.nonce);return result;}
   if(result.completion?.code===0)return result;
   assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');
   leases.clearInvocation(invocation.nonce);return result;
@@ -617,15 +622,16 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
  const {ciRequest,runnerName,jobName}=await import('./ci-identity.mjs');
  const {runLocal}=await import('./local.mjs');
  ci=ciIdentity(ci);
+ const owned=leases.inspect(),memory=owned.memory?{guestMemoryMiB:ciGuestMemoryMiB(ci)}:{};
  if(ci.workflowPath==='.github/workflows/ci.yml'){
-  const pending=leases.inspect().ciInvocation;
+  const pending=owned.ciInvocation;
   assert.ok(pending && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId &&
    pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
  }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
  let completion,admissionQuotaRetryAt,registration5xx=false;
  let result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
-  healthy:options=>transport.healthy(options),transfer:(lease,options)=>transport.transfer(lease,options),
+  healthy:options=>transport.healthy({...options,...memory}),transfer:(lease,options)=>transport.transfer(lease,options),
   prepare:(lease,options)=>transport.prepare(lease,options),
   execute:async(lease,options)=>{
    try{
@@ -910,7 +916,7 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 export function validateCIConfig(config){
- assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+ assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration',...(config.hostMemoryMiB===undefined?[]:['hostMemoryMiB']),'mode','recipe','repository',...(config.slotHosts===undefined?[]:['slotHosts']),...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
  configuredSlots(config);
  const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey',...(ci.candidateWorkflowDigest===undefined?[]:['candidateWorkflowDigest']),'repository','repositoryId','workflowDigest',...(ci.workflowHistory===undefined?[]:['workflowHistory']),'workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&

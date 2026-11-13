@@ -39,9 +39,13 @@ available for periodic benchmarks and practice, not as a quota fallback.
 
 A1454's renewed 12 November ask is full-day memory measurement, per-family sizes and
 memory-based admission, then comparison against 11–12 November waits. Its
-[replacement plan](superpowers/plans/2026-11-13-a1454-memory-admission.md) received a Claude review; its
-revised sixteen-identifier first cut was cleared by the watcher on 13 November at
-01:54. Implementation and live qualification remain open.
+[replacement plan](superpowers/plans/2026-11-13-a1454-memory-admission.md) received a Claude review;
+the watcher cleared sixteen identifiers, eight per host, on 13 November at 01:54.
+The source now selects measured PR-family sizes, reserves caps per host under the
+existing locks, waits for the oldest fitting job, and publishes conservative spare
+capacity. Read-only status preserves physical counts and adds admissible memory room.
+Installation, the watched mixed-job trial and the before/after wait and duration
+comparison remain open; the live pool still uses twelve 16/18 GiB guests.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 

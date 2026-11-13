@@ -1,3 +1,5 @@
+Superseded by [the 13 November memory-admission plan](2026-11-13-a1454-memory-admission.md).
+
 # A1454: measured guest profiles and more simultaneous CI jobs
 
 Authority: `/Users/clintongormley/waitron-campaign-i/queue.md`, A1454. The owner answered “y” to the watcher’s proposal on 2026-11-08 and asked on 2026-11-11: “there was a plan to provide big and small servers on our CI machines, so that we could offer more than 6 job slots per server. where are we with that?” Build after A1509, Claude review and watcher clearance; this design has neither yet. The old November 8 plan supplies no clearance or current evidence.

@@ -36,8 +36,12 @@ RECIPE = Path(__file__).resolve().parent
 
 def request_identity(value, resource, now=None):
     now = int(time.time()*1000) if now is None else now
-    if not isinstance(value, dict) or set(value) not in ({'resourceId', 'snapshot', 'argv', 'deadline'}, {'resourceId', 'snapshot', 'argv', 'deadline', 'ci'}):
+    if not isinstance(value, dict) or set(value) not in ({'resourceId', 'snapshot', 'argv', 'deadline'},
+            {'resourceId', 'snapshot', 'argv', 'deadline', 'ci'},
+            {'resourceId', 'snapshot', 'argv', 'deadline', 'ci', 'guestMemoryMiB'}):
         raise ValueError('Unknown or missing turn request field')
+    if 'guestMemoryMiB' in value:
+        host.guest_memory_mib(value['guestMemoryMiB'])
     argv = value['argv']
     digest = value['snapshot']
     if (value['resourceId'] != resource or not isinstance(digest, str) or len(digest) != 64 or
@@ -248,7 +252,8 @@ def prepare(resource):
         raise ValueError('Reviewed private dependency bytes are required')
     command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
     public = ' '.join((directory/'key.pub').read_text().split()[:2])
-    preparation = host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public})['preparation']
+    memory = {'guestMemoryMiB':request['guestMemoryMiB']} if 'guestMemoryMiB' in request else {}
+    preparation = host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public, **memory})['preparation']
     ssh = wait_for_guest(directory, deadline)
     with (RECIPE/'guest-tools.sh').open('rb') as source:
         command([*ssh, 'bash -s -- --check' if preparation == 'prebuilt' else 'bash -s'],
@@ -426,15 +431,23 @@ def main():
     import startup
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
-    if len(sys.argv) == 2 and sys.argv[1] == 'health':
+    if len(sys.argv) in (2,3) and sys.argv[1] == 'health':
+        memory = host.guest_memory_mib(int(sys.argv[2])) if len(sys.argv)==3 else None
         healthy = startup.ready()
+        fits = healthy
         if healthy:
             try:
                 with host.locked():
-                    host.capacity()
+                    if memory is None:
+                        host.capacity()
+                    else:
+                        host.capacity(memory_mib=memory)
+            except host.MemoryBusy:
+                fits = False
             except (OSError,ValueError):
                 healthy = False
-        print(json.dumps({'healthy': healthy}))
+                fits = False
+        print(json.dumps({'healthy': healthy, **({} if memory is None else {'fits':fits})}))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == '_cleanup':
         resource = resource_id(sys.argv[2])
@@ -474,7 +487,7 @@ if __name__ == '__main__':
         signal.signal(signum, interrupted)
     try:
         sys.exit(main())
-    except BlockingIOError as error:
+    except (BlockingIOError, host.MemoryBusy) as error:
         print(str(error), file=sys.stderr)
         sys.exit(75)
     except KeyboardInterrupt:

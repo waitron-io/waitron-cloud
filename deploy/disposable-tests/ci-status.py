@@ -161,6 +161,23 @@ def collect(home=None,configuration=None,budget=4.5):
         if total == 1 and (ledger.get('ciInvocation') or ledger.get('orphanRunners')) and not jobs:
             jobs.append(dict(slot=0, state='legacy-gate', job=UNKNOWN, resource=UNKNOWN, start=UNKNOWN, runtimeSeconds=UNKNOWN, guestState=UNKNOWN, executionRequested=UNKNOWN, pendingIntent=bool(ledger.get('ciInvocation')), retainedRunners=bool(ledger.get('orphanRunners'))))
         result.update(jobs=jobs, slots=dict(total=total, busy=len(jobs), free=total-len(jobs)))
+        if 'memory' in ledger:
+            result['slots']['admissible']=UNKNOWN
+            memory=ledger['memory'];hosts=memory['slotHosts'];budgets=memory['hostMiB']
+            assert isinstance(hosts,list) and len(hosts)==total and set(hosts)==set(budgets)
+            spare=dict.fromkeys(budgets,0);free=dict.fromkeys(budgets,0)
+            for host,limit in budgets.items():
+                assert type(limit) is int and limit >= 34816
+                spare[host]=limit-16384
+            for slot,host in zip(ledger['slots'],hosts):
+                request=slot.get('lease') or slot.get('ciInvocation')
+                if request:
+                    size=request.get('guestMemoryMiB',16384)
+                    assert type(size) is int and 4096 <= size <= 16384 and size%1024==0
+                    spare[host]-=size+2048
+                elif slot['state']=='free' and not slot.get('orphanRunners'):
+                    free[host]+=1
+            result['slots']['admissible']=sum(min(free[host],max(0,spare[host])//18432) for host in budgets)
     except (OSError, ValueError, KeyError, TypeError, AssertionError):
         admitted = []
     try:

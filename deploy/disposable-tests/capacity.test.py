@@ -14,6 +14,11 @@ class Capacity(unittest.TestCase):
             host.budget(slots, memory=125*G, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
         with self.assertRaisesRegex(ValueError, 'memory'):
             host.budget(7, memory=125*G, threads=64, disk_total=1800*G, disk_free=1700*G, allocated=0)
+        host.budget(8, memory=125*G, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0,
+                    caps_mib=[18432]*4+[8192]*4)
+        with self.assertRaisesRegex(ValueError, 'memory'):
+            host.budget(8, memory=125*G, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0,
+                        caps_mib=[18432]*5+[8192]*3)
 
     def test_six_guests_fit_the_measured_host_without_using_its_reserve(self):
         host.budget(6, memory=130989480*1024, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
@@ -98,5 +103,15 @@ except BlockingIOError:sys.exit(75)
                 self.assertEqual(admitted['cpus'],list(range(4,16))+list(range(20,32)))
                 with patch.object(host.shutil,'disk_usage',lambda path:types.SimpleNamespace(total=1000*G,free=327*G)):
                     with self.assertRaisesRegex(ValueError,'disk'):host.capacity('dt-proposed-0-1')
+                import json
+                for slot in [0,1,2,3,5,6]:
+                    memory=16384 if slot<2 else 6144
+                    host.active_path(f'dt-measured-{slot}-1').write_text(json.dumps(
+                        {'resourceId':f'dt-measured-{slot}-1','guestMemoryMiB':memory}))
+                with patch.object(host.shutil,'disk_usage',lambda path:types.SimpleNamespace(total=1000*G,free=900*G)):
+                    self.assertEqual(host.capacity('dt-proposed-7-1')['slots'],8)
+                    host.active_path('dt-measured-2-1').write_text(json.dumps(
+                        {'resourceId':'dt-measured-2-1','guestMemoryMiB':16384}))
+                    with self.assertRaisesRegex(ValueError,'memory'):host.capacity('dt-proposed-7-1')
 
 unittest.main(verbosity=2)
