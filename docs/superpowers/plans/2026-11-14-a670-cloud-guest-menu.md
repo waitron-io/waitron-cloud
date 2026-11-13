@@ -1,8 +1,8 @@
 # A670-CLOUD: permanent guest-menu contract
 
-**Plan only; build follows D619 and watcher clearance.** Separate Sol-high author, driver revisions after Claude's approach/fixes reads (213/132 seconds); no owner design approval claimed. Ask: Lane G queue A670-CLOUD; owner, Lane D questions 13 November 22:31: “Online ordering requires forwarding cloud requests to the server. If the internet is down we can show a cloud hosted copy of the menu but without online ordering.” Consumer: Waitron's `2026-11-13-a670-guest-menu-build.md`, slice 3. Inspection only.
+**Plan only; build follows D619 and watcher clearance.** Sources: Lane G queue A670-CLOUD; owner quote, Lane D questions 13 November 22:31; Waitron's `2026-11-13-a670-guest-menu-build.md`, slice 3. Sol-high author; Claude reads 213/132 seconds; driver final fixes. No owner design approval or runtime qualification.
 
-**Finish:** one anonymous HTTPS link, current-box forwarding, confirmed-copy fallback, and usable Cloud takedown. No ordering, payments, table identity, new tunnel, renderer, gateway database access or provider work.
+**Finish:** anonymous HTTPS forwarding, confirmed-copy fallback and portal takedown. No ordering, payments, table identity, new tunnel, renderer, gateway database access or provider work.
 
 ## Contract proposed for slice 3
 
@@ -18,6 +18,6 @@
 2. **Hosted link and takedown:** new account `src/guest-menu-server.ts`, local-stack runtime wiring; `apps/portal/src/remote-{controller,screen,types}.ts`/`locale.ts`. Guest listener: 120 requests/minute per source, eight active requests, at most two concurrent database operations, no waiting queue; saturation 429/503. Tests: account `test/guest-menu-server.test.ts`, portal `test/guest-menu-browser.test.ts`, including delayed-response takedown. +200–280 code, +160–220 tests, +30–50 support.
 3. **Live forwarding:** central relay plus remote `src/public-gate.ts`; retain `test/{public-gate,haproxy}.test.ts`, add two-cell movement/TLS/refusal/fallback cases. Extend local-deployment fixture/proof; update `docs/{waitron-integration-contract,backlog,local-deployment}.md`. +140–220 code, +160–220 tests, +40–70 support. Total removals 0–30. Waitron owns sender retries/scheduled publication.
 
-Run named database files through `node scripts/test-postgres.mjs exec pnpm --dir packages/<package> exec node --test test/<file>`; portal's named browser file, typecheck, changed migration checks, then CI full suites. Inspect EN/ES, both themes, 390/1280. Local two-cell proof uses no customer/provider data; production/mobile-phone access remains unqualified. Each built slice gets normal finish-branch review.
+Run named database files with `node scripts/test-postgres.mjs exec pnpm --dir packages/<package> exec node --test test/<file>`, the portal browser file, types and migration checks; CI owns full suites. Inspect EN/ES, both themes, 390/1280. Two-cell local proof uses synthetic data; production/mobile-phone access stays unqualified. Each slice follows finish-branch.
 
 **Watcher decisions before build:** recommend central ownership; confirm connected/hosted (legacy paid) eligibility, persistent block plus portal enable, and menu-only challenge-cookie bypass. Preserve gateway 120 requests/minute per source and 64 active limits; central traffic shares that source budget, with no trusted-IP exception. Forwarding stays blocked until bypass and aggregate budget are settled. Keep publish's revision: default-menu/scheduled changes do not guarantee increasing publication timestamps; takedown/withdraw never require one.
