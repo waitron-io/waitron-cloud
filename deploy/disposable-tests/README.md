@@ -495,10 +495,26 @@ current units and Waitron's router is unchanged.
 Before leaving this trial unattended, watch a bounded mixture of actual jobs and read
 guest OOM counters and host memory events through existing access. Compare waiting
 times, job durations and throughput by family/event/coverage with 11–12 November,
-accounting for workload and GitHub incidents. Restore six identifiers per host and
-16/18 GiB guests through fresh-generation rollback for a memory, admission or cleanup
-failure, or a clear comparable job-duration regression. Portable tests exercise
+accounting for workload and GitHub incidents. Under the watcher's 13 November 07:43
+operating rule, restore six identifiers per host and 16/18 GiB guests through
+fresh-generation rollback for a failure outside the job’s own steps, such as a lost
+runner, a guest that cannot start or a memory kill, or for five minutes with admissible
+room and queued server work but no new admission.
+Read a failed job's last test lines before classifying it. A pull request's failing
+assertion, coverage bar or lint check stays with that pull request; it does not by
+itself show a server failure. Keep those failures visible. Portable tests exercise
 budget arithmetic and dispatch; they do not qualify this live trial.
+
+The 13 November bounded watch of the unchanged measured release completed two ordinary
+PR runs with [8](https://github.com/clintongormley/waitron/actions/runs/43383817678)
+and [48](https://github.com/clintongormley/waitron/actions/runs/43383904860) selected
+checks passing. Direct host reads reached fifteen live guests, including eight on
+one host, without an observed infrastructure failure or sampled memory kill. That
+qualifies the observed mixture, not every family or future workload. The watcher accepted keeping this operating
+profile and closing A1454 on 13 November at 08:39. The after runs' slowest
+checkouts took 12/14 seconds, so their timing comparison does not qualify under the
+ten-second screen. Do not infer a speed gain from their raw wait/duration comparison
+with the 12 November self-hosted baseline.
 
 ## Pick up ordinary PR jobs automatically
 
