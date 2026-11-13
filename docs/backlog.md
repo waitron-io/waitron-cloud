@@ -667,6 +667,13 @@ Snapshots remain unavailable in the delivered deployment and plan enforcement st
 off until release qualification. Recheck active migration reservations before new
 database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle journal.
 
+## Hosted guest menu (A670-CLOUD)
+
+Build the box's publication delivery/confirmation and permanent hosted HTTPS link
+with portal takedown after D619. Every venue connected to Cloud qualifies without
+a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
+exclude live forwarding, which belongs to Waitron A509 online ordering.
+
 ## Launch platform work, in priority order
 
 Ordered at the owner's request on 2026-10-22. The order follows what stops the first real
