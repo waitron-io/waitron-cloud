@@ -106,8 +106,19 @@ import os from 'node:os';
 import {appendFileSync} from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 const execute = childProcess.execFileSync;
+let monotonic = 9000000000n;
 childProcess.execFileSync = (command, args, options) => {
   appendFileSync(process.env.LAUNCHER_INVOCATIONS, JSON.stringify({command, args, timeout: options.timeout, killSignal: options.killSignal, maxBuffer: options.maxBuffer}) + '\\n');
+  if (args[0] === 'info' || ['systemctl', 'curl'].includes(command)) monotonic += 1000000000n;
+  if (['systemctl', 'curl'].includes(command)) {
+    const fixture = command === 'systemctl' ? ${JSON.stringify(scenario.serviceReply ?? '')} : ${JSON.stringify(scenario.socketReply ?? 'OK')};
+    const mode = ${JSON.stringify(scenario.probeMode ?? '')};
+    if (mode === 'missing') throw Object.assign(new Error('PRIVATE_PROBE'), {code: 'ENOENT'});
+    return execute(process.execPath, ['-e', mode === 'hang'
+      ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000)'
+      : mode === 'stderr' ? "console.error('PRIVATE_PROBE'); process.exit(1)"
+      : mode === 'oversized' ? "console.log('PRIVATE_PROBE'.repeat(1000))" : 'process.stdout.write(' + JSON.stringify(fixture) + ')'], options);
+  }
   if (args[0] === 'info' && ${JSON.stringify(scenario.daemonMode === 'spawn')}) throw Object.assign(new Error('PRIVATE_DAEMON_ERROR'), {code: 'ENOENT'});
   try { return execute(command, args, options); }
   catch (error) {
@@ -119,6 +130,8 @@ childProcess.execFileSync = (command, args, options) => {
   }
 };
 if (${JSON.stringify(!!scenario.reportThrows)}) os.uptime = () => {throw new Error('PRIVATE_HOST_ERROR');};
+Object.defineProperty(process, 'platform', {value: ${JSON.stringify(scenario.platform ?? process.platform)}});
+process.hrtime.bigint = () => monotonic;
 syncBuiltinESMExports();
 const phase = ${JSON.stringify(scenario.budgetPhase ?? null)};
 if (phase) {
@@ -132,9 +145,10 @@ if (phase) {
 }
 `);
   const clockArgs = scenario.shortBudget ? ['--import', clock] : [];
-  if (scenario.budgetPhase || scenario.failures?.includes('CONTROLLED_EARLY_TIMEOUT') || scenario.inspectFailure === 'CONTROLLED_EARLY_TIMEOUT') clockArgs.push('--import', probe);
+  clockArgs.push('--import', probe);
+  const {GITHUB_ACTIONS, RUNNER_ENVIRONMENT, ...environment} = process.env;
   const child = spawn(process.execPath, [...clockArgs, launcher.pathname, 'exec', 'node', 'controlled-test'], {
-    env: {...process.env, PATH: `${root}:${process.env.PATH}`, LAUNCHER_STATE: state,
+    env: {...environment, ...(scenario.hosted ? {GITHUB_ACTIONS: scenario.actions ?? 'true', RUNNER_ENVIRONMENT: scenario.runner ?? 'github-hosted'} : {}), PATH: `${root}:${process.env.PATH}`, LAUNCHER_STATE: state,
       LAUNCHER_INVOCATIONS: invocations, LAUNCHER_PORT: String(server.address().port)}, stdio: ['ignore', 'pipe', 'pipe'],
   });
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
@@ -466,3 +480,58 @@ test('a diagnostic failure preserves the original inspection error', async t => 
   assert.doesNotMatch(result.output, /PRIVATE_HOST_ERROR/);
   assert.equal(result.calls.some(call => ['info', 'pull', 'run', 'pnpm', 'rm'].includes(call.command)), false);
 });
+
+// Losing hosted failure evidence must hide whether Docker is starting or already active.
+for (const [active, sub, entered, socketReply] of [
+  ['activating', 'start', '0', 'OK'], ['active', 'running', '8000000', 'PRIVATE_SOCKET'],
+]) {
+  test(`hosted inspection stall records ${active} service and direct socket outcome`, async t => {
+    const result = await launch(t, {hosted: true, platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT',
+      socketReply, serviceReply: `Id=docker.service\nType=notify\nActiveState=${active}\nSubState=${sub}\nResult=success\nMainPID=123\nNRestarts=0\nExecMainStartTimestampMonotonic=1000000\nActiveEnterTimestampMonotonic=${entered}\nPrivate=PRIVATE_SERVICE\n\nId=containerd.service\nType=notify\nActiveState=active\nSubState=running\n\nId=docker.socket\nActiveState=active\nSubState=listening\n`});
+    assert.equal(result.code, 1);
+    const report = JSON.parse(result.output.split('docker_stall=')[1].split('\n')[0]);
+    assert.equal(report.observedMonotonicMs, 9000);
+    assert.deepEqual(report.service.units['docker.service'], {Type: 'notify', ActiveState: active, SubState: sub,
+      Result: 'success', MainPID: 123, NRestarts: 0, ExecMainStartTimestampMonotonic: 1000000,
+      ActiveEnterTimestampMonotonic: Number(entered)});
+    assert.equal(report.service.units['containerd.service'].Type, 'notify');
+    assert.equal(report.service.units['docker.socket'].SubState, 'listening');
+    assert.deepEqual(report.socket, {status: socketReply === 'OK' ? 'responsive' : 'unrecognized'});
+    assert.doesNotMatch(result.output, /PRIVATE_SERVICE|PRIVATE_SOCKET/);
+    assert.equal(result.calls.some(call => ['pull', 'run', 'pnpm', 'rm'].includes(call.command)), false);
+    const probes = result.invocations.filter(call => ['systemctl', 'curl'].includes(call.command));
+    assert.equal(probes.length, 2);
+    assert.ok(probes[0].args.includes('docker.service') && probes[0].args.includes('containerd.service') && probes[0].args.includes('docker.socket'));
+    assert.deepEqual(probes[1].args, ['--silent', '--show-error', '--fail', '--max-time', '1', '--unix-socket', '/var/run/docker.sock', 'http://localhost/_ping']);
+    for (const probe of probes) {
+      assert.equal(probe.timeout, 1000);
+      assert.equal(probe.killSignal, 'SIGKILL');
+      assert.equal(probe.maxBuffer, 4096);
+    }
+  });
+}
+
+for (const [probeMode, status] of [['missing', 'spawn-error'], ['hang', 'timeout'], ['oversized', 'output-limit'], ['stderr', 'exit-error'], ['', 'unrecognized']]) {
+  test(`hosted inspection retains original refusal with ${probeMode || 'malformed'} probes`, async t => {
+    const result = await launch(t, {hosted: true, platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT',
+      probeMode, serviceReply: 'Id=docker.service\nType=PRIVATE_PROBE\nMainPID=PRIVATE_PROBE', socketReply: 'PRIVATE_PROBE'});
+    assert.equal(result.code, 1);
+    assert.match(result.output, /code: 'ETIMEDOUT'/);
+    const report = JSON.parse(result.output.split('docker_stall=')[1].split('\n')[0]);
+    assert.deepEqual(report.service, {status});
+    assert.deepEqual(report.socket, {status});
+    assert.doesNotMatch(result.output, /PRIVATE_PROBE/);
+    assert.equal(result.calls.some(call => ['pull', 'run', 'pnpm', 'rm'].includes(call.command)), false);
+  });
+}
+
+for (const scenario of [{hosted: false, platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT'},
+  {hosted: true, actions: 'false', platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT'},
+  {hosted: true, runner: 'self-hosted', platform: 'linux', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT'},
+  {hosted: true, platform: 'darwin', inspectFailure: 'CONTROLLED_EARLY_TIMEOUT'}, {hosted: true, platform: 'linux'},
+  {hosted: true, platform: 'linux', inspectFailure: 'Cannot connect to the Docker daemon'}]) {
+  test(`extra probes require a hosted Linux inspection timeout ${JSON.stringify(scenario)}`, async t => {
+    const result = await launch(t, scenario);
+    assert.equal(result.invocations.some(call => ['systemctl', 'curl'].includes(call.command)), false);
+  });
+}

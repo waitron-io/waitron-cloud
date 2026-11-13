@@ -394,4 +394,17 @@ The authenticator browser matrix retains recent response paths/statuses, heading
 alerts, scoped IP counters and live session/factor counts when it fails, preserving
 the original exception even if collecting diagnostics fails.
 
+## Shared action-proof email confirmation in CI
+
+The English, dark, desktop case in portal shard 2/6 of
+[run 43490222222](https://github.com/waitron-io/waitron-cloud/actions/runs/43490222222/job/132109256464)
+failed at `account-action-proof-browser.test.ts:22:399` while waiting seven seconds
+for email-proof confirmation. Its cause remains unknown. The unchanged focused
+file passed all eight cases on a disposable Linux guest. A separate bounded
+24-case diagnostic saw every received synthetic code match its queued code and
+every verification reply return 204; it did not reproduce the hosted failure.
+Capture the failing verification response and browser request stage on recurrence,
+then reproduce the cause before changing any check or deadline. A passing hosted
+retry does not repair this failure.
+
 Return to the [backlog index](../backlog.md#platform-work-to-scope).
