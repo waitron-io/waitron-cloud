@@ -25,7 +25,7 @@ has a Claude plan read and watcher clearance (12 November 10:34). Controlled thr
 checks cover zero available capacity for new placements, durable holds across entry points,
 continued existing-label pickup, retained active reservations and suppressed forward overflow.
 Malformed/token headers and failed ledger recording retain the HTTP response.
-Immutable quiet-window publication/readback and bounded staged overflow qualification remain open. The counters separate command roles, endpoint categories
+The reviewed controller is installed with independent release/configuration readback; bounded staged overflow qualification remains open. The counters separate command roles, endpoint categories
 and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired
@@ -71,9 +71,9 @@ no queue saving is established by those tests.
 
 ### CI self-recovery (A1473)
 
-Controlled cases cover one retry after a received registration HTTP 5xx, following a 60-second delay and verified guest and exact-name runner removal; publication and live assignment/cleanup qualification remain open.
+The controller from [PR #1195](https://github.com/waitron-io/waitron-cloud/pull/1195) is installed. Publication and independent readback on 13 November matched its release files, configuration, pinned keys and 12-slot mapping, with one enabled server timer and the Mac controller disabled. Isolated checks against the installed files cover quota reset and retained reservations, loopback quota recording, and one delayed received-5xx retry after guest and exact-name runner removal. Natural registration-failure recovery and the bounded staged overflow drill remain unqualified.
 
-A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; publication and natural recovery remain to be read.
+A1473's execution monitor retains independently healthy guests across identified rate limits and pauses GitHub reads until reset. Controlled cases cover both statuses and resumed reads; the six recorded live 403 refusals lack headers, so their rate-limit cause remains unverified. Live rate-limit recovery still needs qualification. The monitor now tolerates a busy runner with an unassigned job for 60 seconds, and records that specific failure for one later queued-job retry. Controlled runtime, reservation and pickup cases cover the path; natural recovery remains to be read.
 
 The [approved three-slice plan](superpowers/plans/2026-11-10-a1473-ci-self-recovery.md)
 covers obsolete-PR cancellation, terminal-marker retirement and shared per-pass reads.
@@ -84,10 +84,10 @@ HTTP, lifecycle, cancellation and diagnostic-excerpt checks. The busy-hour prere
 [forward-overflow plan](superpowers/plans/2026-11-10-a1473-forward-overflow.md).
 Controlled cases now exercise forward overflow from a full pool: oldest untouched current-head PR,
 shared pressure reads, fresh refusal checks and recorded cancellation/rerun recovery.
-Publish and capture a natural mark/cancel/hosted-rerun outcome and an owned stuck cancel.
+Capture the bounded staged mark/cancel/hosted-rerun drill and an owned stuck cancel.
 Empty queued runs older than an hour now have controlled once-only cancel/force-cancel
 and restart checks; the existing ledger keeps them out of subsequent automatic passes.
-Installed cleanup/readback remains part of the next quiet-window publication.
+Installed readback matched this code; natural cleanup outcomes remain to be read.
 The five-minute untaken-job rule and reverse movement remain for slice 3b.
 Main pushes, schedules and manual runs still require hand moves.
 
