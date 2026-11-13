@@ -116,7 +116,7 @@ for (const packageName of ['registration', 'account-http']) {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /controlled live-handle failure/);
     assert.match(result.stdout, /# tests 6\n# suites 0\n# pass 5\n# fail 1\n# cancelled 0/);
-    assert.match(result.stdout, /# Required cases: 0 passed\n/);
+    assert.match(result.stdout, /# Required cases: 0 passed\n$/);
   });
 
   test(`${packageName} reports timeout and completes later files with a live handle`, async t => {
@@ -124,7 +124,7 @@ for (const packageName of ['registration', 'account-http']) {
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stdout, /test timed out after 2000ms/);
     assert.match(result.stdout, /# tests 6\n# suites 0\n# pass 5\n# fail 0\n# cancelled 1/);
-    assert.match(result.stdout, /# Required cases: 0 passed\n/);
+    assert.match(result.stdout, /# Required cases: 0 passed\n$/);
   });
 }
 

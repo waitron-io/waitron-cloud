@@ -3192,6 +3192,10 @@ implementation or production evidence.
   with their saved test commands; existing assertions and production selection
   guards stay unchanged. The historical lock exhaustion and unidentified
   failed-setup handles remain recorded; database limits are unchanged.
+  Diagnose lingering handles with `pnpm --dir packages/registration exec node
+  --test --test-timeout=30000 test/relay-control.test.ts`, which keeps normal exit.
+  The full local package commands force exit and can miss later background
+  errors; CI's shard commands retain normal exit.
 
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before
@@ -3793,7 +3797,8 @@ The source is [Waitron's backlog at `830cf71fe854`](https://github.com/clintongo
 Its section titled "The cloud primary" mixed cloud services with core SQLite work.
 The [ownership map](documentation-ownership.md) records what remains in Waitron.
 
-- **Historical cost fixtures.** The pinned cost-test runtimes keep `venue.location` and `provisioned.locationId` on purpose because those releases require them.
+- **Historical cost fixtures.** Their `venue.location` and
+  `provisioned.locationId` inputs match the pinned Waitron releases.
 - **Cloud provisioning and trial onboarding.** Own the service that creates a
   customer's resources and supplies configuration and credentials to Waitron, plus
   the hosted trial entry path. The local integration contract is mapped and proved;
