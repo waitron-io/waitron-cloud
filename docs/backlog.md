@@ -346,9 +346,10 @@ See [the native installation boundaries](backlog/venue-connection-http.md#instal
 
 ## Pairing deployment qualification
 
-**Open.** Pairing v2 assigns one Cloud venue id and uses it for managed streams and
-recovery. Qualify server permissions, local confirmation and live delivery against the
-selected deployment.
+**Open.** Qualify the combined continuous-recovery journey through its final source
+restart and refresh; preserve its existing checks and keep that service unavailable.
+The next slice starts with an isolated restart/refresh diagnostic. Also qualify server
+permissions, local confirmation and live delivery against the selected deployment.
 See [the native pairing boundaries](backlog/venue-connection-http.md#pairing-deployment-qualification).
 
 ## Alert-preference deployment qualification

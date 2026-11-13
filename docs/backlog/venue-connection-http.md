@@ -20,3 +20,12 @@ their exact expiry; reading the body consumes that same wait. Retrying keeps you
 existing request proof and binding, including an empty requested venue id in v2.
 Cloud returns the allocated id separately in the completed registration. These native checks leave server permissions,
 local confirmation and live delivery against the selected deployment unqualified.
+
+The pairing-v2 slice separates local pairing, stream observation and archive recovery
+from the combined continuous/restart journey. With the pinned native candidate and
+both image variables set, `node --test scripts/test-cloud-paid-stream.test.mjs`
+passed 1/1 without skips on 14 November. The companion
+`node --test scripts/test-cloud-paid-continuous-recovery.test.mjs` failed 0/1 at
+`integration.command_failed:client-refresh` after 259 seconds. The failure does not
+establish its cause. Preserve that journey's checks; qualify its final restart and
+refresh in the next slice before enabling continuous recovery.

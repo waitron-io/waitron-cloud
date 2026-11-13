@@ -1832,3 +1832,16 @@ registration id after pairing; a restarted fixture reads it from the venue datab
 The rehearsal's `streamId` is the same Cloud venue id observed by the native client.
 Historical verifier targets remain separate controls; they do not qualify this
 paired-client cutover.
+
+The current slice qualifies pairing, native stream observation and archive recovery
+separately. On 14 November, with the native candidate
+`5e67b8eb8efc3ea7c868c7d129547d291c64e037`, its locally prepared v2 signing package
+and both image variables set, `node --test scripts/test-cloud-paid-stream.test.mjs`
+passed 1/1 with no skips in 178 seconds. The combined continuous/restart command
+`node --test scripts/test-cloud-paid-continuous-recovery.test.mjs` failed 0/1 with
+no skips at `integration.command_failed:client-refresh` after 259 seconds.
+That phase still lacks child details; the cause remains unestablished. Its checks
+remain for the next slice. Keep continuous recovery unavailable: the ordinary
+`captureRuntime` does not configure a managed-stream reader, and the read endpoint
+returns 503 without one. The explicit test-only adapter supplies one for these
+proofs. These local results qualify no deployment or published image.

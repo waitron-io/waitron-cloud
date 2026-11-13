@@ -138,14 +138,19 @@ it('restores the native paired stream using its owner-approved kit and separate 
     const restoredNodeId = trading.WAITRON_NODE_ID ?? trading.WAITRON_TILL_NODE_ID;
     let restoredVenueId = currentRecovery ? undefined : trading.WAITRON_TILL_LOCATION_ID;
     if (currentRecovery) {
-      const {readCopyNodeAndVenue} = await import('./restore.js');
+      const {readCopyNode} = await import('./restore.js');
+      const {readCloudVenueId} = await import('@waitron/db');
+      expect(typeof readCopyNode).toBe('function');
+      expect(typeof readCloudVenueId).toBe('function');
       const {openBackupQuery} = await import('@waitron/store');
       const restoredQuery = await openBackupQuery(join(venueDir, 'venue.db'));
       try {
-        const identity = await readCopyNodeAndVenue(restoredQuery.query, sourceIdentityEntries);
+        const identity = await readCopyNode(restoredQuery.query, sourceIdentityEntries);
         expect(identity.node.nodeId).toBe(input.selected.sourceNodeId);
-        restoredVenueId = identity.venueId;
       } finally {await restoredQuery.close();}
+      const restoredStore = await openVenueDatabase(venueDir);
+      try {restoredVenueId = await readCloudVenueId(restoredStore.venue);}
+      finally {await restoredStore.close();}
     }
     expect(restoredNodeId).toBe(input.selected.sourceNodeId);
     expect(restoredVenueId).toBe(input.selected.streamId);
