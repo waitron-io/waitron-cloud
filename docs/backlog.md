@@ -3516,10 +3516,12 @@ an ID is returned and a child created by a separate host remain outside this res
 ## Bound verifier fixture build timeout (D312)
 
 **Open.** The current image builds on the Linux test box, but the historical CI
-timeout remains unexplained. Two later PostgreSQL image inspections also time out
+timeout remains unexplained. Three later PostgreSQL image inspections also time out
 before package tests, and a backup-worker fixture build fails at the same limit.
-Inspection timeouts now retain bounded host and Docker-client diagnostics without
-retrying the inspection or replacing its error. A shared cause is unproved.
+Inspection timeouts retain bounded host and Docker-client diagnostics; hosted Linux
+also records service state, monotonic timestamps and a direct socket ping.
+These do not repair the stall; capture a recurrence before choosing a repair.
+A shared cause is unproved.
 See [the evidence and remaining investigation](backlog/verifier-build.md#bound-verifier-fixture-build-timeout-d312).
 Keep every verifier assertion and the existing build and job limits.
 

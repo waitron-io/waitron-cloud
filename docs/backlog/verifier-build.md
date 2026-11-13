@@ -34,7 +34,7 @@ Inspect the next recurrence's immediate build report before changing the fixture
 Keep the original verifier assertions, 120-second build limit, 150-second setup
 limit and CI job limit. A passing reproduction or CI run does not close this item.
 
-Three later failures also reach the unchanged 120-second Docker command limit.
+Later failures also reach the unchanged 120-second Docker command limit.
 Two are `docker image inspect postgres:18-alpine`, before any container or package
 test: account HTTP on 4 November (run 41859910075, job 126686634772) and UI smoke
 on 5 November (run 42094443206, job 127481196486). Their retained logs show empty
@@ -53,12 +53,29 @@ separate read-only Docker service probe with a one-second limit. The probe
 reports a version, client timeout, nonzero exit, killed or missing client, oversized
 output or unrecognized reply; it omits raw service output and errors. It runs only after an inspection timeout. Normal launches,
 missing-image handling, acquisition limits and retry decisions stay unchanged.
-The extra probe can add one second after the original timeout. These samples
+The Docker-client probe can add one second after the original timeout. These samples
 describe the host immediately after the client timeout; they do not measure the
 preceding stall or enumerate other processes on the runner. A probe timeout
 does not establish whether its client or the service stalled. Use the next
 recurrence to see whether the service answers this separate request before
-proposing a repair. The backup-worker build
+proposing a repair.
+
+The 13 November nightly repeats the inspection stall in portal shard 1/6
+([run 43413690187](https://github.com/waitron-io/waitron-cloud/actions/runs/43413690187)).
+Its record shows host uptime 250.66 seconds and a timed-out separate Docker-client
+probe, but no service state. On GitHub-hosted Linux, the record now also captures
+Docker, containerd and socket service state/type, process and restart counts,
+and start/active timestamps from one read-only systemctl call. Compare those
+microsecond timestamps with the reporter-entry monotonic milliseconds. The actual
+unit type matters: active time indicates readiness for a notify service.
+A direct Docker socket ping records only its outcome. Each added probe has a
+one-second forced termination and 4 KiB output limit; raw replies and errors
+are discarded. These add at most two seconds of command timeout allowance.
+Run the launcher controls above to check state capture, bounded failures,
+private-output filtering and the hosted-Linux gate. The original inspection
+refusal and 120-second acquisition limit remain. Capture the next natural stall;
+a clean manual nightly checks regressions but cannot establish or repair its cause.
+The backup-worker build
 still needs its own immediate progress and service evidence. No timeout cause
 is closed by these diagnostics or by a clean retry.
 
