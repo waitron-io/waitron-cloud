@@ -44,6 +44,14 @@ export function streamCommandDiagnostic(text) {
   return names.includes(found) ? ':integration.stream_'+found : '';
 }
 
+export function streamStartCommandDiagnostic(text, code, signal) {
+  const names = ['ERR_ASSERTION', 'ENOENT', 'EACCES', 'EROFS', 'ERR_MODULE_NOT_FOUND', 'ERR_DLOPEN_FAILED',
+    'SQLITE_ERROR', 'ECONNREFUSED', 'ETIMEDOUT', 'integration.fixture_refused', 'integration.refusal_timeout',
+    'integration.local_login', 'integration.local_fresh_sign_in'];
+  const found = names.filter(name => text.includes(name));
+  return ':exit=' + code + ':signal=' + (signal ?? 'none') + ':stderr=' + (found.join(',') || 'redacted');
+}
+
 // Docker failures expose fixed phases; successful structured replies still require private parsing.
 function command(args, input = '', phase = args[0], env = {}) {
   const signal = runSignal();
@@ -55,12 +63,12 @@ function command(args, input = '', phase = args[0], env = {}) {
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
-    child.once('close', code => {
+    child.once('close', (code, signal) => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-stream-start' ? streamStartCommandDiagnostic(diagnostic, code, signal) : '') + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
       else resolve(output.trim());
     });
     child.stdin.end(input);
@@ -514,7 +522,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           const recoveryImage = parseIntegrationJson(await docker(['image', 'inspect', recoveryTag]))[0].Id;
           record('image', recoveryImage);
           const target = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
-            '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+            '--network', network, '--memory', '2240m', '--memory-swap', '2240m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
             ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
