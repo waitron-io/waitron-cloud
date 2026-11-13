@@ -300,7 +300,9 @@ export async function publishServer(p,{execute=runProcess,api,transport,signal=A
   const result=await execute('bash',[wrapperPath,host,'python3 -I -B -c '+shellQuote(authorize)],{input:JSON.stringify({host:p.controllerHost,key:receipt.publicKey}),signal,capture:true});assert.equal(result.code,0,'Server SSH authorization failed');
  }
  copyRelease(p);const localConfiguration=join(p.newController,'config.json');writeFileSync(localConfiguration,JSON.stringify(old)+'\n',{mode:0o400});
- const activate=()=>rootCommand(p,`${controllerNode} ${receipt.release}/scripts/disposable-tests/publish.mjs server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
+ // A replacement payload may not understand the running version's ledger.
+ const driver=p.oldServer;
+ const activate=()=>rootCommand(p,`${shellQuote(driver?.node??controllerNode)} ${shellQuote((driver?.release??receipt.release)+'/scripts/disposable-tests/publish.mjs')} server-activate`,JSON.stringify({receipt,oldServer:p.oldServer}),{execute,signal});
  const commitCallers=async target=>{assert.deepEqual(readFileSync(p.launchAgent),agent,'Mac agent changed during drain');assert.equal(readFileSync(p.wrapper,'utf8'),body,'Manual helper changed during drain');await renderTo({host:p.controllerHost,configuration:target.configuration},localConfiguration);freezeRelease(p.newController);};
  if(p.oldServer){
   const result=await activate();let value;
