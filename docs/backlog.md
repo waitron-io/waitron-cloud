@@ -1076,21 +1076,6 @@ implementation or production evidence.
   This does not prove the cause of the earlier nine-minute stall. Run local full
   package suites sequentially with two file workers and retain the five-second
   assertion. Capture process/phase timings if it fails under that arrangement.
-- **Local registration run stalls after earlier failures.** In the test-plan
-  review checkout at `cc99eef378bd9db2716a2325cd07fbe491ab06c9`,
-  `node scripts/test-postgres.mjs exec pnpm --dir packages/registration test`
-  emitted failures and left its sole `relay-control.test.ts` child alive for more
-  than nine minutes despite the 30-second test timeout. The driver stopped that
-  recorded child. An isolated run of the same command on landed base
-  `f56b4c8595ed3cb81d0931352c0bac2880648e18` reproduces PostgreSQL
-  `out of shared memory` within seven seconds; it was stopped after that observed
-  failure. This proves a baseline resource failure, but not the cause of the
-  nine-minute child stall. Neither interrupted run is a pass.
-  The review's default-concurrency account suite also emitted failures. Complete
-  registration/account suites passed all 679/382 tests with two file workers on
-  the corrected PR2 branch. PR3 passes 679/384 and runs full packages sequentially. Capture the full output of both default-concurrency commands,
-  without piping it through `head`, and diagnose failure cleanup and resource
-  contention. Preserve every assertion and deadline; do not treat a rerun as a fix.
 - **Operating cost.** You can compare the running platform and per-venue usage
   with the [offline calculator](cloud-cost-calculator.html) and
   [model explanation](cloud-cost-model.md). They show priced subtotals at zero,
@@ -3177,25 +3162,12 @@ implementation or production evidence.
   cause of [the historical registration activation refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/41167290103/job/124437552213)
   remains unproved because that run did not capture both code periods.
 
-  **Local registration suite lock capacity.** Running the complete registration
-  suite with this Mac's default 18 test-file workers exhausted PostgreSQL's shared
-  lock table (`out of shared memory`, with `max_locks_per_transaction` hints).
-  That run reported 486 passes and 198 failures across 684 reported cases; two
-  stalled test processes and their recorded descendant required termination.
-  The wrapper then cleaned up its owned database and mail containers.
-  Full local registration and account HTTP package commands now run at most two
-  test files at once, keeping every discovered file and its existing deadline.
-  Docker-free command probes check the bound, new-file discovery and failure
-  reporting with real Node workers. A complete unsharded PostgreSQL run still
-  needs qualification when local Docker returns; CI's existing database shards
-  keep their own commands. Receipt fixtures compare seeded historical manifests
-  with their saved test commands; existing assertions and production selection
-  guards stay unchanged. The historical lock exhaustion and unidentified
-  failed-setup handles remain recorded; database limits are unchanged.
-  Diagnose lingering handles with `pnpm --dir packages/registration exec node
-  --test --test-timeout=30000 test/relay-control.test.ts`, which keeps normal exit.
-  The full local package commands force exit and can miss later background
-  errors; CI's shard commands retain normal exit.
+  **Local registration test processes.** The exact handle behind the earlier
+  nine-minute `relay-control.test.ts` hold remains unidentified. Capture it if
+  it recurs with `pnpm --dir packages/registration exec node --test
+  --test-timeout=30000 test/relay-control.test.ts`, which keeps normal exit.
+  Full local package commands force exit and can miss later background errors;
+  CI's shard commands retain normal exit.
 
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before
