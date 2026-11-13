@@ -35,8 +35,8 @@ Keep the original verifier assertions, 120-second build limit, 150-second setup
 limit and CI job limit. A passing reproduction or CI run does not close this item.
 
 Later failures also reach the unchanged 120-second Docker command limit.
-The earlier `docker image inspect postgres:18-alpine` failures precede any container or package
-test: account HTTP on 4 November (run 41859910075, job 126686634772) and UI smoke
+Two of these are earlier `docker image inspect postgres:18-alpine` failures,
+which precede any container or package test: account HTTP on 4 November (run 41859910075, job 126686634772) and UI smoke
 on 5 November (run 42094443206, job 127481196486). Their retained logs show empty
 output and a killed client. The first launcher starts about seven minutes after
 the first runner log; the second starts after 53 seconds, including browser
