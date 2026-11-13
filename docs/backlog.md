@@ -40,8 +40,8 @@ available for periodic benchmarks and practice, not as a quota fallback.
 A1454's renewed 12 November ask is full-day memory measurement, per-family sizes and
 memory-based admission, then comparison against 11–12 November waits. Its
 [replacement plan](superpowers/plans/2026-11-13-a1454-memory-admission.md) received a Claude review; its
-revised sixteen-identifier first cut awaits the fixes read and watcher clearance. No
-sizing or admission change is implemented.
+revised sixteen-identifier first cut was cleared by the watcher on 13 November at
+01:54. Implementation and live qualification remain open.
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
