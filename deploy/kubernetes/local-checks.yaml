@@ -14,7 +14,7 @@
     {
       "apiVersion": "v1",
       "kind": "Pod",
-      "metadata": {"name": "cloud", "labels": {"app": "cloud"}},
+      "metadata": {"name": "cloud", "labels": {"app": "cloud"}, "annotations": {"waitron.io/storage-memory-basis": "519.54 MiB measured peak plus 50%, rounded to 800Mi; docs/aws-infrastructure.md#observe-the-same-clients-while-c-is-stopped"}},
       "spec": {
         "terminationGracePeriodSeconds": 15,
         "hostAliases": [{"ip": "127.0.0.1", "hostnames": ["postgres", "storage", "waitron.local"]}],
@@ -82,7 +82,7 @@
             "command": ["node", "deploy/test-cloud/runtime.mjs", "storage"],
             "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}],
             "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "storage", "mountPath": "/data"}],
-            "resources": {"limits": {"memory": "1Gi"}},
+            "resources": {"limits": {"memory": "800Mi"}},
             "readinessProbe": {"exec": {"command": ["test", "-f", "/tmp/test-cloud-storage-ready"]}, "periodSeconds": 2},
             "ports": [{"containerPort": 8333, "hostPort": 8333}, {"containerPort": 8444, "hostPort": 8444}]
           },

@@ -26,7 +26,7 @@ Keep shared setup/retry budgets: 8 logins/IP/60 seconds, 24/email/900 seconds, 8
 
 **Failure ownership:** the observer and adapters stream existing bounded stage/exit/command/verifier diagnostics while the machines are available. The launcher retains teardown in its existing failure/cancellation path, including if diagnostics fail. Use no wrapper that keeps a failed stack alive. Preserve the scheduled deletion independently of the observing process. Translation/AI and real mail stay off; all venue/account data is synthetic.
 
-**Local qualification:** the watcher cleared the genuine three-node variant on 12 November at 15:23 in Lane G questions.md. `node scripts/kubernetes-check.mjs --observer-worker-loss` runs the same observer and native clients locally, before the owner-started Amazon run. It retains the existing Kind worker kill, withdrawal and cleanup boundaries.
+**Local qualification:** the watcher cleared the genuine three-node variant on 12 November at 15:23 in Lane G questions.md. `node scripts/kubernetes-check.mjs --observer-worker-loss` runs the same observer and native clients locally. It retains the existing Kind worker kill, withdrawal and cleanup boundaries. Full local qualification has not passed. On 14 November at 21:03 the watcher relayed the owner’s “2. Ok” to stopping full local runs, landing the fixes with their own tests and moving the remaining checks into the owner-started Amazon session. That decision replaces the local full-pass prerequisite; it authorises no provider access by the lane.
 
 ## Original D621 work still open
 
@@ -37,6 +37,6 @@ Keep shared setup/retry budgets: 8 logins/IP/60 seconds, 24/email/900 seconds, 8
 
 ## Brief for the owner-started session
 
-After the observer build/CI lands and the flake repair is qualified, select exact Cloud/Waitron revisions and private `D618_CONFIG`. Run `node scripts/amazon-run.mjs observe` from the exact clean Cloud checkout. The `start` mode retains its two separate journeys.
+After the tested observer fixes land with current-head CI, select exact Cloud/Waitron revisions and private `D618_CONFIG`. Run `node scripts/amazon-run.mjs observe` from the exact clean Cloud checkout. The `start` mode retains its two separate journeys.
 
 Check prices, spend, authority, quota and deletion prerequisites in the [owner guide](../../aws-infrastructure.md#one-owner-started-amazon-experiment). Authorise resource/duration changes separately. Run one fresh C-observer check; retain private logs/revisions/results, report missing/failed criteria, confirm deletion. Lanes never access Amazon. Production and wider failure qualification stay open.

@@ -3248,8 +3248,10 @@ implementation or production evidence.
   adds `node scripts/amazon-run.mjs observe` for an owner-started continuous
   same-client C-loss check. Its focused observer and adapter checks run with
   `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`.
-  Actual Amazon observation, original A/all-node loss, real-service and repository
-  repair checks remain open. The three-node
+  Full local qualification has not passed (paid-remote fixture HTTP 500 after
+  worker replacement); the owner moved the remaining checks to the owner-started
+  Amazon session on 14 November. Actual Amazon observation, original A/all-node
+  loss, real-service and repository repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
   across 15 modules, with the manifest worker replaced after its host stopped,
@@ -3261,13 +3263,7 @@ implementation or production evidence.
   distribution run with `node --test scripts/amazon-run.test.mjs`. Archive-copy
   cutoffs use measured bytes and a stated 10 Mbit/s floor. Failed Kubernetes
   commands now retain bounded wait and process evidence; failed checks collect
-  application pods and events on Amazon as well as Kind. Storage startup failures
-  retain fixed stage/error codes and provider exit codes or signals;
-  `node --test deploy/test-cloud/storage-worker-diagnostics.test.mjs` checks those
-  refusals without printing private configuration and checks that a replacement waits
-  for a killed owner’s lease to expire while refusing a live owner. Failure snapshots
-  retain only the controller lease’s age/digest and the storage termination state.
-  The controlled checks
+  application pods and events on Amazon as well as Kind. The controlled checks
   run with `node --test scripts/kubernetes-check.test.mjs`. The fifth run's pods
   never started because Debian's containerd looked for network plugins in
   `/usr/lib/cni`; machine set-up now points it at `/opt/cni/bin` and refuses at once

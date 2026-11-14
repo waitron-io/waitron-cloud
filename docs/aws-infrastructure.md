@@ -1153,14 +1153,26 @@ verification before the existing withdrawal checks and cleanup. Stop and replace
 durations are separate launcher measurements. Keep the private JSON result and
 bounded diagnostics; failure still requests deletion and confirms it.
 
-Before an Amazon run, you can exercise the observer against three owned local
-Kind nodes with `node scripts/kubernetes-check.mjs --observer-worker-loss`.
+The optional three-node local observer uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
 Use the same pinned Cloud and Waitron image variables as the other local checks,
 Kind 0.31.0 and kubectl 1.34.3. Allow 10 GiB of Docker memory and 30 GiB of disk.
 The corresponding opt-in assertion is
 `TEST_KUBERNETES_OBSERVER_LOSS=1 node --test --test-name-pattern='same signed-in clients' scripts/kubernetes-worker-loss.test.mjs`.
-This local check kills worker2 and retains the same clients. Amazon still uses
-its existing graceful C stop. A local result does not qualify Amazon timing.
+This local check kills worker2 and retains the same clients. Full local P1
+qualification has **not passed**: the last run failed at the paid-remote fixture
+with HTTP 500 after worker replacement. On 14 November the owner chose to stop
+full local runs and move the remaining checks to the owner-started Amazon
+session (decision relayed by the watcher at 21:03). Amazon uses its existing
+graceful C stop; a local result does not qualify Amazon timing.
+
+Storage has an 800 MiB limit. The failed 14 November local run recorded a peak
+of 544,772,096 bytes (519.54 MiB), with no storage restart or memory events in
+213 samples under the 1 GiB trial limit. Peak plus 50% is 779.30 MiB, rounded
+up to 800 MiB. This sizes the next experiment; it does not qualify the complete
+run or production capacity. The private measurement is retained in Lane G's
+`receipts/d621/build/memory-cell-20261114/memory.jsonl`. Check the configured
+limit with `node -e 'const m=JSON.parse(require("node:fs").readFileSync("deploy/kubernetes/local-checks.yaml")); console.log(m.items.find(i=>i.metadata.name==="cloud").spec.containers.find(c=>c.name==="storage").resources.limits.memory)'`;
+it prints `800Mi`.
 
 The manifest worker reports ready only after its test cell is committed, so
 remote provisioning cannot race that startup transaction. You can check the
