@@ -99,13 +99,13 @@ test('a takedown committed while the copy is buffered prevents HTML from being r
  }finally{release();await reply.catch(()=>{});await running.close();await f.close();}
 });
 
-for(const trusted of [false,true])test(`guest budgets use forwarding only from a configured proxy: ${trusted}`,async()=>{
- const f=await guestTlsFixture();await f.seed();const running=await startGuestMenuServer({...f.options,trustedProxyIps:trusted?['127.0.0.1']:[]}),address=running.server.address();assert(address&&typeof address!=='string');
+test('guest budgets use only the direct source and ignore forwarding headers',async()=>{
+ const f=await guestTlsFixture();await f.seed();const running=await startGuestMenuServer(f.options),address=running.server.address();assert(address&&typeof address!=='string');
  const send=(ip:string)=>f.send(address.port,'/m/'+f.venueId,'GET',{'x-forwarded-for':ip});
  try{
   assert.equal((await send('192.0.2.1')).status,200);await f.db.pool.query('UPDATE account_rate_limits SET attempts=120');
-  assert.equal((await send('192.0.2.2')).status,trusted?200:429);
+  assert.equal((await send('192.0.2.2')).status,429);
   assert.equal((await send('192.0.2.1')).status,429);
-  if(trusted)assert.equal((await send('192.0.2.1,192.0.2.2')).status,400);
+  assert.equal((await send('192.0.2.1,192.0.2.2')).status,429);
  }finally{await running.close();await f.close();}
 });

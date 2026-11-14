@@ -410,6 +410,9 @@ export COMPOSE_FILE=compose.yaml:deploy/local-stack/guest-menu.compose.yaml
 pnpm local-stack:upgrade
 ```
 
+If you change `LOCAL_STACK_GUEST_PORT`, use the same exposed port in
+`GUEST_ORIGIN` so the browser’s Host header matches.
+
 Keep that `COMPOSE_FILE` setting for later status and shutdown commands. The port
 is exposed only at `127.0.0.1:${LOCAL_STACK_GUEST_PORT:-3443}`; the default stack
 does not reserve a guest port. No certificate is requested and no DNS

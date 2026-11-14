@@ -12,7 +12,7 @@ export function validateGuestOrigin(value:string):string{
 }
 const headers={'cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
  'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};
-export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string;trustedProxyIps?:readonly string[]}){
+export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string}){
  const origin=validateGuestOrigin(options.origin),limiter=new AccountRateLimiter(options.pool,options.rateKey);let active=0;
  const respond=(res:ServerResponse,status:number,code:string)=>{
   if(res.destroyed)return;
@@ -33,7 +33,7 @@ export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;ori
     ||(language!==undefined&&!['en','es','ca','gl'].includes(language))
     ||req.headers['transfer-encoding']!==undefined||req.headers.upgrade!==undefined
     ||(req.headers['content-length']!==undefined&&req.headers['content-length']!=='0')){respond(res,400,'invalid_input');return;}
-   const rate=await limiter.consume([{scope:'guest-menu-ip',subject:clientAddress(req.socket.remoteAddress??'',req.headers['x-forwarded-for'] as string|undefined,options.trustedProxyIps??[]),limit:120,windowSeconds:60}]);
+   const rate=await limiter.consume([{scope:'guest-menu-ip',subject:clientAddress(req.socket.remoteAddress??'',undefined,[]),limit:120,windowSeconds:60}]);
    if(!rate.allowed){res.setHeader('retry-after',rate.retryAfterSeconds);respond(res,429,'limited');return;}
    const menu=await readGuestMenu(options.pool,id,language);
    if(!menu){respond(res,404,'not_found');return;}

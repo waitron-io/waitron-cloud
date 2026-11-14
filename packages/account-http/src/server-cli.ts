@@ -68,7 +68,7 @@ try {
     running = await startAccountServer({guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
-    if(guestOptions&&!stopRequested)guest=await startGuestMenuServer({...guestOptions,pool,rateKey:config.rateKey,trustedProxyIps:config.trustedProxyIps});
+    if(guestOptions&&!stopRequested)guest=await startGuestMenuServer({...guestOptions,pool,rateKey:config.rateKey});
     const guestAddress=guest?.server.address();
     console.log(JSON.stringify({status: 'listening', port: address.port,...(guestAddress&&typeof guestAddress!=='string'?{guestPort:guestAddress.port}:{})}));
     const limiter = new AccountRateLimiter(pool, config.rateKey); let pruning = false;
