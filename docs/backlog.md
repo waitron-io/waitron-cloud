@@ -700,9 +700,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    test file and the original job limits. The historical database provider
    startup failure in nightly 43495535547 (no initial plugin response) still
    needs its cause established; passing later runs does not explain it.
-   Bring AWS jobs towards the four-minute feedback target without cutting checks.
-   Baseline run 43637939520 took 6:24 / 11:39 / 10:13 for the three guard shards
-   and 18:50 for the complete suites. These are mocked
+   These are mocked
    plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
@@ -1572,6 +1570,11 @@ implementation or production evidence.
   from the last observed record. Preserve run identity, final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
+
+- **AWS mocked-plan runtime.** Bring each AWS check job towards four minutes
+  without cutting checks. [Baseline run 43637939520](https://github.com/waitron-io/waitron-cloud/actions/runs/43637939520)
+  took 6:24 / 11:39 / 10:13 for guard shards 1 / 2 / 3 and 18:50 for the complete
+  suites. Keep the command, container and job deadlines.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate.
