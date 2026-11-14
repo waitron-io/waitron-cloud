@@ -62,22 +62,29 @@ function command(args, input = '', phase = args[0], env = {}) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn('docker', args, {cwd: root, env: {...process.env, ...env}, stdio: ['pipe', 'pipe', 'pipe']});
-    let output = '', diagnostic = '', size = 0, invalid = false;
+    let output = '', diagnostic = '', diagnosticSize = 0, size = 0, invalid = false;
     const timer = setTimeout(() => {invalid = true; child.kill('SIGKILL');}, 120000);
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start' || phase === 'client-start') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; diagnosticSize += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'client-paid-remote') diagnostic=(diagnostic+part).slice(-8192); else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start' || phase === 'client-start') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', (code, childSignal) => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-stream-start' || phase === 'client-start' ? streamStartCommandDiagnostic(diagnostic, code, childSignal) : '') + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
+      if (invalid || code !== 0) {
+        const error = new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-stream-start' || phase === 'client-start' ? streamStartCommandDiagnostic(diagnostic, code, childSignal) : '') + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : ''));
+        // This fixture uses synthetic venues; retain its terminal error without command input or stdout.
+        if (phase === 'client-paid-remote') error.diagnostic = {phase, exitCode: code, signal: childSignal,
+          stderr: diagnostic, stderrTruncated: diagnosticSize > 8192};
+        reject(error);
+      }
       else resolve(output.trim());
     });
     child.stdin.end(input);
   });
 }
+export {command as integrationCommand};
 const lines = text => text.split(/\s+/).filter(Boolean);
 
 export async function runTestCloudCombined({image, waitronImage, protectedContainerIds = [], waitronCheckout} = {}) {
@@ -855,7 +862,7 @@ export async function observeRetainedClients({observe, paid, browser, api, login
   });
   assert.equal(await docker(['inspect', '--format', '{{.State.StartedAt}}', paid.id]), started, 'p1.venue_restarted');
   const after = await control(paid.id, 'evidence');
-  for (const key of ['registration', 'identitySha256', 'localVenueId']) assert.deepEqual(after[key], before[key], 'p1.venue_state:' + key);
+  for (const key of ['registration', 'identitySha256', 'streamId']) assert.deepEqual(after[key], before[key], 'p1.venue_state:' + key);
   return result;
 }
 
