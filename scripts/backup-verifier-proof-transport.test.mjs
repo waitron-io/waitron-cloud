@@ -7,7 +7,12 @@ import {jointProofLine,readJointProofRun} from './backup-verifier-proof.mjs';
 const counts='\n# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n';
 const compressed=value=>'# CLOUD_BACKUP_JOINT_ZLIB='+deflateSync(Buffer.from(JSON.stringify(value))).toString('base64')+counts;
 test('reads bounded compressed same-run evidence larger than a TAP stream chunk',()=>{
- const r=jointReceipt();assert(JSON.stringify(r).length>65536);assert.deepEqual(readJointProofRun(compressed(r)),r);
+ const r=jointReceipt();
+ // Exercise the chunk boundary independently of the installed module inventory.
+ for(const result of [r.verification.result,r.verifierControls.cases.find(c=>c.name==='later-valid').result])for(const module of result.modules){
+  module.checks=['data','immutable','chain','head','history','source','secret','entries','effects'].map(code=>({code,status:'passed'}));
+ }
+ assert(JSON.stringify(r).length>65536);assert.deepEqual(readJointProofRun(compressed(r)),r);
 });
 for(const [name,output] of [
  ['uncompressed and compressed receipts',()=>compressed(jointReceipt())+'# CLOUD_BACKUP_JOINT='+JSON.stringify(jointReceipt())+'\n'],

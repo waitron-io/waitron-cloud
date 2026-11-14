@@ -34,7 +34,7 @@ async function emptyBilling(pool:Pool){
  for(const {tablename} of names)assert.equal((await pool.query(`SELECT count(*) FROM ${tablename}`)).rows[0].count,'0',tablename);
 }
 
-test('044 upgrades to billing without changing old rows or digests',async()=>{
+test('044 upgrades preserve retained rows and digests while v2 invalidates old request proofs',async()=>{
  const f=await fixture();try{
   const before=await rows(f.pool),ledger=before.schema_migrations;delete before.schema_migrations;
   assert.equal((ledger as unknown[]).length,44);
@@ -45,12 +45,13 @@ test('044 upgrades to billing without changing old rows or digests',async()=>{
   assert.equal(hasReleaseMigrationCount(String(migrationNames.length+1),migrationNames),false);
   for(const name of f.old.names)assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),await readFile(f.old.root+'/packages/registration/migrations/'+name),name);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
-  const expected={...before};
-  for(const table of ['pairing_requests'])expected[table]=(before[table] as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,cloud_session_id:null,cloud_security_revision:null}}));
+  const expected={...before,connection_requests:[],pairing_requests:[],venues:(before.venues as {row:Record<string,unknown>}[]).map(({row})=>{
+   const {local_venue_id,...retained}=row;return {row:retained};
+  })};
   assert.deepEqual(await rows(f.pool,Object.keys(before)),expected);
   const current=(await rows(f.pool,['schema_migrations'])).schema_migrations as unknown[];
   assert.equal(current.length,migrationNames.length);assert.deepEqual(current.slice(0,44),ledger);
-  assert.equal(current.length-(ledger as unknown[]).length,21);assert.equal((current[60] as {row:{name:string}}).row.name,'061_connection_action_proof.sql');assert.equal((current[61] as {row:{name:string}}).row.name,'062_billing_method_action_proof.sql');assert.equal((current[59] as {row:{name:string}}).row.name,'060_account_email_changes.sql');assert.equal((current[58] as {row:{name:string}}).row.name,'059_account_action_proof.sql');assert.equal((current[57] as {row:{name:string}}).row.name,'058_account_recovery_codes.sql');assert.equal((current[56] as {row:{name:string}}).row.name,'057_recognised_browsers.sql');assert.equal((current[54] as {row:{name:string}}).row.name,'055_billing_method_setups.sql');assert.equal((current[50] as {row:{name:string}}).row.name,'051_mail_suppression_reconciliation.sql');assert.equal((current[51] as {row:{name:string}}).row.name,'052_box_error_reports.sql');assert.equal((current[52] as {row:{name:string}}).row.name,'053_country_flow_authority.sql');assert.equal((current[53] as {row:{name:string}}).row.name,'054_staff_problem_reports.sql');assert.equal((current[49] as {row:{name:string}}).row.name,'050_mail_legacy_suppression_scopes.sql');assert.equal((current[48] as {row:{name:string}}).row.name,'049_ses_feedback.sql');assert.equal((current[47] as {row:{name:string}}).row.name,'048_billing_allowances_traffic.sql');assert.equal((current[46] as {row:{name:string}}).row.name,'047_data_lifecycle.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
+  assert.equal(current.length-(ledger as unknown[]).length,22);assert.equal((current[60] as {row:{name:string}}).row.name,'061_connection_action_proof.sql');assert.equal((current[61] as {row:{name:string}}).row.name,'062_billing_method_action_proof.sql');assert.equal((current[59] as {row:{name:string}}).row.name,'060_account_email_changes.sql');assert.equal((current[58] as {row:{name:string}}).row.name,'059_account_action_proof.sql');assert.equal((current[57] as {row:{name:string}}).row.name,'058_account_recovery_codes.sql');assert.equal((current[56] as {row:{name:string}}).row.name,'057_recognised_browsers.sql');assert.equal((current[54] as {row:{name:string}}).row.name,'055_billing_method_setups.sql');assert.equal((current[50] as {row:{name:string}}).row.name,'051_mail_suppression_reconciliation.sql');assert.equal((current[51] as {row:{name:string}}).row.name,'052_box_error_reports.sql');assert.equal((current[52] as {row:{name:string}}).row.name,'053_country_flow_authority.sql');assert.equal((current[53] as {row:{name:string}}).row.name,'054_staff_problem_reports.sql');assert.equal((current[49] as {row:{name:string}}).row.name,'050_mail_legacy_suppression_scopes.sql');assert.equal((current[48] as {row:{name:string}}).row.name,'049_ses_feedback.sql');assert.equal((current[47] as {row:{name:string}}).row.name,'048_billing_allowances_traffic.sql');assert.equal((current[46] as {row:{name:string}}).row.name,'047_data_lifecycle.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
  }finally{await f.close();}
 });
 

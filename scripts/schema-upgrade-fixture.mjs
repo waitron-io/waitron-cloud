@@ -15,6 +15,7 @@ export async function seed(root,pool,email,pairing){
  const {SignupStore,EmailOutbox,RegistrationStore,transaction}=await source(root,'packages/registration/src/index.ts');
  const {PairingStore}=await source(root,'packages/registration/src/pairing.ts');
  const outbox=new EmailOutbox(email),installations=[],owners=[];
+ const v2=(await pool.query("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='connection_requests' AND column_name='requested_venue_id') AS present")).rows[0].present;
  for(const name of ['one','two']){
   const signup=new SignupStore(pool,outbox);await signup.request(`upgrade-${name}@example.test`);
   const row=(await pool.query("SELECT * FROM email_outbox WHERE status='pending' ORDER BY created_at DESC LIMIT 1")).rows[0];
@@ -22,13 +23,13 @@ export async function seed(root,pool,email,pairing){
   const password=`A sufficiently long ${name} upgrade password`;
   owners.push({...owner,email:`upgrade-${name}@example.test`,password});
   const keys=generateKeyPairSync('ed25519');
-  const binding={operationId:randomUUID(),installationKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const binding={operationId:randomUUID(),installationKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),...(v2?{venueId:''}:{localVenueId:randomUUID()}),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   const store=new RegistrationStore(pool);await store.start(binding);await store.approveCloud(binding,owner.accountId);await store.approveLocal(binding,randomUUID());
   installations.push({...await store.complete(binding),binding,privateKey:keys.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')});
  }
  await pool.query('DELETE FROM email_outbox');
  const messageId=await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'upgrade-one@example.test',locale:'en'}));
- const pending={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:installations[0].binding.installationKey,localVenueId:randomUUID(),environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+ const pending={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:installations[0].binding.installationKey,...(v2?{venueId:''}:{localVenueId:randomUUID()}),environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
  await new PairingStore(pool,pairing).start(pending);
  return{installations,messageId,pending,owners};
 }

@@ -12,6 +12,7 @@ test('the private control process reports a rollback code without its response b
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-control-'));
   t.after(() => rm(root, {recursive: true, force: true}));
   const login = createServer((req, res) => {
+    if(req.url==='/management-api/session/me/fresh-sign-in'){res.writeHead(204);res.end();return;}
     assert.equal(req.url, '/management-api/session');
     res.setHeader('set-cookie', 'session=local');
     res.end('{}');

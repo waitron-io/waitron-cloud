@@ -31,14 +31,14 @@ async function unchanged(f:Awaited<ReturnType<typeof legacyFixture>>){
  assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,f.ledger);
  assert.equal((await f.pool.query("SELECT to_regclass('billing_service_authority') AS authority")).rows[0].authority,null);
 }
-test('release 45 binary registration completion and replay preserve the historical schema',async()=>{
+test('release 45 registration completion and replay preserve the historical schema',async()=>{
  const f=await legacyFixture();try{
   const store=new f.RegistrationStore(f.pool);await store.start(f.binding);await store.approveLocal(f.binding,randomUUID());await store.approveCloud(f.binding,f.account);
   const first=await store.complete(f.binding);assert.ok(first.installationId);assert.deepEqual(await store.complete(f.binding),first);
   assert.equal((await f.pool.query('SELECT count(*) FROM installations')).rows[0].count,'1');await unchanged(f);
  }finally{await f.close();}
 });
-test('release 45 binary pairing completion and replay preserve the historical schema',async()=>{
+test('release 45 pairing completion and replay preserve the historical schema',async()=>{
  const f=await legacyFixture();try{
   const store=new f.PairingStore(f.pool),c={...f.binding,environment:'test',origin:'https://cloud.example',action:'start',requestId:f.binding.operationId,
    publicKey:f.binding.installationKey,code:'12345678',issuedAt:Date.now()};
