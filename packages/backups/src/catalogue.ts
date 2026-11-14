@@ -281,7 +281,7 @@ export class BackupCatalogue {
             UNION ALL SELECT i.id FROM installations i JOIN retired r ON i.superseded_by=r.id
               WHERE i.venue_id=$2 AND i.revoked_at IS NOT NULL
           ) SELECT 1 FROM retired WHERE id=$3`, [installationId, install.venue_id, prior.installation_id]);
-          if (install.superseded_by || !predecessor.rowCount) backupFail("conflict");
+          if (!predecessor.rowCount) backupFail("conflict");
           const version = prior.active_key_version + 1;
           await client.query('INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,$2,$3)',
             [install.venue_id, version, this.#vault.create(install.venue_id, version)]);

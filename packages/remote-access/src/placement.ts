@@ -88,12 +88,19 @@ export class RemoteAccessStore {
    if((await client.query("SELECT 1 FROM remote_cell_moves WHERE target_peer_public_key=$1 AND state IN ('staged','ready') LIMIT 1",[peerPublicKey])).rowCount)fail('placement_conflict');
    const retained=(await client.query('SELECT * FROM remote_placements WHERE venue_id=$1 FOR UPDATE',[install.venue_id])).rows[0];
    if(retained){
+    if(environment!=='test')fail('local_integration_only');
     const predecessor=await client.query(`WITH RECURSIVE retired AS (
      SELECT id FROM installations WHERE superseded_by=$1 AND venue_id=$2 AND revoked_at IS NOT NULL
      UNION ALL SELECT i.id FROM installations i JOIN retired r ON i.superseded_by=r.id
       WHERE i.venue_id=$2 AND i.revoked_at IS NOT NULL
     ) SELECT 1 FROM retired WHERE id=$3`,[installationId,install.venue_id,retained.installation_id]);
-    if(install.superseded_by||!predecessor.rowCount||retained.cell_id!==cellId||retained.port!==port||retained.peer_public_key===peerPublicKey)fail('placement_conflict');
+    if(!predecessor.rowCount||retained.cell_id!==cellId||retained.port!==port||retained.peer_public_key===peerPublicKey)fail('placement_conflict');
+    // Retired boxes keep their private tunnel keys; recorded keys must not regain a route.
+    const used=await client.query(`SELECT 1 FROM installation_services s JOIN installations i ON i.id=s.installation_id
+     WHERE i.venue_id=$1 AND s.service='remote_access' AND s.configuration->>'peerPublicKey'=$2
+     UNION ALL SELECT 1 FROM installation_replacements WHERE venue_id=$1 AND $2 IN (peer_public_key,old_peer_public_key)
+     UNION ALL SELECT 1 FROM remote_cell_moves WHERE venue_id=$1 AND $2 IN (source_peer_public_key,target_peer_public_key) LIMIT 1`,[install.venue_id,peerPublicKey]);
+    if(used.rowCount)fail('placement_conflict');
     await client.query('UPDATE remote_placements SET installation_id=$2,peer_public_key=$3 WHERE venue_id=$1',[install.venue_id,installationId,peerPublicKey]);
    }else{
     if(cell.next_address>=66)fail('cell_full');
