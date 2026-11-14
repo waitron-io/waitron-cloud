@@ -61,11 +61,11 @@ export async function runTestStorage({directory='/run/local-stack',mode,signal}=
   if(child&&child.exitCode===null&&child.signalCode===null){child.kill('SIGTERM');const timer=setTimeout(()=>child.kill('SIGKILL'),5000);try{await closed;}finally{clearTimeout(timer);}}
   client?.destroy();await issuer?.close();await pool?.end();await held.release();
  }
- }catch(error){console.error('storage_failure='+JSON.stringify({stage,code:errorCode(error),child:childFailure}));throw error;}
+ }catch(error){throw Object.assign(error,{storageFailure:{stage,code:errorCode(error),child:childFailure}});}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
  try{if(process.argv.length!==2)throw Error();await runTestStorage({directory:process.env.LOCAL_STACK_CONFIG_DIR,mode:parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS),signal:stop.signal});}
- catch{console.error('Test storage failed; check private state, schema and owned provider');process.exitCode=1;}
+ catch(error){if(error.storageFailure)console.error('storage_failure='+JSON.stringify(error.storageFailure));console.error('Test storage failed; check private state, schema and owned provider');process.exitCode=1;}
  finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
 }
