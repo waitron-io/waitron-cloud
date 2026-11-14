@@ -171,7 +171,8 @@
                 "command": ["node", "deploy/test-cloud/runtime.mjs", "manifest"],
                 "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}],
                 "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}],
-                "resources": {"limits": {"memory": "96Mi"}}
+                "resources": {"limits": {"memory": "96Mi"}},
+                "readinessProbe": {"exec": {"command": ["sh", "-ec", "test -f \"${TMPDIR:-/tmp}/test-cloud-remote-ready\""]}, "periodSeconds": 1}
               }
             ]
           }

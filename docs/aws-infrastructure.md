@@ -1162,6 +1162,10 @@ The corresponding opt-in assertion is
 This local check kills worker2 and retains the same clients. Amazon still uses
 its existing graceful C stop. A local result does not qualify Amazon timing.
 
+The manifest worker reports ready only after its test cell is committed, so
+remote provisioning cannot race that startup transaction. You can check the
+held-transaction case with `node scripts/test-postgres.mjs exec node --test --test-name-pattern='manifest readiness' deploy/test-cloud/remote-runtime.test.mjs`.
+
 Repository repair is reported as unavailable. Abrupt loss of each original node,
 including database host A, and production-mode services remain open under
 [D621](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md). This command
