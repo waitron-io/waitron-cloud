@@ -2170,6 +2170,12 @@ confirm these bytes and provide authenticated-lease, route/refusal and URL
 vectors; no endpoint, shared parser or live lease was qualified by this probe.
 The separate hosted/P6 and activation gates below remain in force.
 
+One operational question from the plan read also needs Cloud’s answer: does
+`not_provisioned` already cover an unbuilt or unusable hosted-start path, so
+the display cannot say `open:true` before Cloud can actually serve that start?
+Waitron recommends that interpretation of the existing reason, with no new
+wire field or runtime probe. Watcher clearance and Cloud’s answer are pending.
+
 ### Read the facts without starting a copy
 
 When your box stops answering, tills need an address they already learned.
