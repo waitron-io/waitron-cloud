@@ -2117,8 +2117,9 @@ replace each numbered choice, then pin both repository revisions.
    case-fold or accept aliases. Synthetic valid examples are
    `ABCD-EFGH-JKLM-NPQR-STUV-WXYZ` and `2345-6789-ABCD-EFGH-JKLM-NPQR`.
    Lowercase, surrounding spaces, any `I`, `O`, `0` or `1`, a missing group or a
-   missing separator are invalid. Cloud must confirm generation and entry use
-   this same format; this read never generates or rotates a code.
+   missing separator are invalid. This is the reply’s wire spelling only; Cloud’s entry page may ignore case,
+   spaces and hyphens. Do not apply that input normalization to the wire reader.
+   This read never generates or rotates a code.
 2. **Code-read budget:** an additional six authenticated reads per installation
    per 60 seconds, using Cloud's existing limiter window semantics. Count code
    reads independently of display reads; retain the inherited 30 installation
@@ -2137,12 +2138,12 @@ replace each numbered choice, then pin both repository revisions.
    authenticated `revoked` refusal retains revocation handling. Unknown state
    remains HTTP 503 `{"error":"temporarily_unavailable"}`. Cloud must confirm
    these exact bodies, existing precedence and installation eligibility checks.
-4. **Daily display:** compute `hostedMonthlyCents / 30` from published `Prices`,
+4. **Daily display:** compute `hostedMonthlyCents / hostedDayDivisor` (30) from published `Prices`,
    rounding once to the nearest whole cent, half up, with exact arithmetic.
    Synthetic monthly-to-daily cent pairs: `9000:300`, `10000:333`, `10005:334`,
-   `14:0`, `15:1`. Display “About {amount} per day, excluding VAT ({rate}%)”
-   (Spanish: “Aproximadamente {amount} al día, sin IVA ({rate}%)”), using the
-   returned currency and VAT rate. This informational projection changes no
+   `14:0`, `15:1`. Display “About {amount} per day, excluding VAT ({vat})”
+   (Spanish: “Aproximadamente {amount} al día, sin IVA ({vat})”), using the
+   returned currency and VAT rate, formatted once with one percent sign. This informational projection changes no
    charge, invoice or billing-v1 field. Unpublished prices stay unavailable.
    Cloud must confirm the rounding and tax wording; production prices retain
    their owner gate.
@@ -2174,7 +2175,7 @@ One operational question from the plan read also needs Cloud’s answer: does
 `not_provisioned` already cover an unbuilt or unusable hosted-start path, so
 the display cannot say `open:true` before Cloud can actually serve that start?
 Waitron recommends that interpretation of the existing reason, with no new
-wire field or runtime probe. Watcher clearance and Cloud’s answer are pending.
+wire field or runtime probe. The watcher cleared that interpretation at 13:17; Cloud’s answer is pending.
 
 ### Read the facts without starting a copy
 
