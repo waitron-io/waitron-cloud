@@ -277,11 +277,19 @@ try {
     delete error.diagnostic;
   }
   const probeFailure = error.message?.startsWith('p1.') === true;
-  if ((created || amazon) && (!stop.signal.aborted || probeFailure)) for (const resource of ['pods', 'events']) {
-    try {
-      const output = await kube(['get', resource, '--request-timeout=5s', ...(resource === 'events' ? ['--sort-by=.lastTimestamp'] : ['-o', 'wide'])], undefined, probeFailure);
-      process.stderr.write('Kubernetes failure ' + resource + ' ' + output.slice(-16384) + '\n');
-    } catch {}
+  if ((created || amazon) && (!stop.signal.aborted || probeFailure)) {
+    for (const resource of ['pods', 'events', 'nodes']) {
+      try {
+        const output = await kube(['get', resource, '--request-timeout=5s', ...(resource === 'events' ? ['--sort-by=.lastTimestamp'] : ['-o', 'wide'])], undefined, probeFailure);
+        process.stderr.write('Kubernetes failure ' + resource + ' ' + output.slice(-16384) + '\n');
+      } catch {}
+    }
+    for (const previous of [false, true]) {
+      try {
+        const output = await kube(['logs', 'pod/cloud', '-c', 'storage', '--tail=100', '--limit-bytes=16384', '--request-timeout=5s', ...(previous ? ['--previous'] : [])], undefined, probeFailure);
+        process.stderr.write('Kubernetes failure storage-' + (previous ? 'previous' : 'current') + ' ' + output.slice(-16384) + '\n');
+      } catch {}
+    }
   }
   throw error;
 } finally {

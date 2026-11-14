@@ -120,6 +120,8 @@ if(name==='kubectl'){
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
  if(b[0]==='wait'&&((mode.startsWith('wait-cloud')&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
  if(b[0]==='get'&&b[1]==='events'){console.log('x'.repeat(20000)+'cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
+ if(b[0]==='get'&&b[1]==='nodes'){console.log('worker2 NotReady');process.exit(0);}
+ if(b[0]==='logs'&&b[1]==='pod/cloud'&&b.includes('storage')){console.log('x'.repeat(20000)+(b.includes('--previous')?'previous storage exit':'current storage startup'));process.exit(0);}
  if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode!=='wait-cloud-slow-pods'){console.log('cloud 0/8 Pending');process.exit(0);}
  if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
  if(b[0]==='get'&&b.includes('app=verifier')&&mode==='wait-cloud-probe-fails'){process.stderr.write('synthetic optional verifier missing');process.exit(17);}
@@ -173,7 +175,16 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
   assert.match(run.stderr, /cloud 0\/8 Pending/); assert.match(run.stderr, /FailedCreatePodSandBox synthetic event/);
   const events = run.stderr.split('\n').find(line => line.startsWith('Kubernetes failure events '));
   assert.equal(events.slice('Kubernetes failure events '.length).length, 16384);
+  assert.match(run.stderr, /Kubernetes failure nodes worker2 NotReady/);
+  for (const [label, ending] of [['storage-current', 'current storage startup'], ['storage-previous', 'previous storage exit']]) {
+    const output = run.stderr.split('\n').find(line => line.startsWith('Kubernetes failure ' + label + ' '));
+    assert.ok(output, 'failure must retain ' + label);
+    assert.equal(output.slice(('Kubernetes failure ' + label + ' ').length).length, 16384);
+    assert.ok(output.endsWith(ending));
+  }
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  for (const previous of [false, true]) assert.ok(rows.some(row => row.name === 'kubectl'
+    && JSON.stringify(row.args.slice(4)) === JSON.stringify(['logs', 'pod/cloud', '-c', 'storage', '--tail=100', '--limit-bytes=16384', '--request-timeout=5s', ...(previous ? ['--previous'] : [])])));
   assert.equal(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), target === 'kind');
   assert.equal(rows.some(row => row.name === 'kind'), target === 'kind');
 });
@@ -541,7 +552,11 @@ const result=await runKubernetesCheck(${JSON.stringify(target)},{
     }
   }); child.stderr.on('data', part => {stderr += part;});
   const exit = await closed;
-  if (failProbe) {assert.equal(exit, 1, stderr); assert.match(stderr, /Kubernetes failure pods/); assert.match(stderr, /Kubernetes failure events/); assert.match(stderr, /Error: p1.remote_after_recovery/); return;}
+  if (failProbe) {
+    assert.equal(exit, 1, stderr);
+    for (const label of ['pods', 'events', 'nodes', 'storage-current', 'storage-previous']) assert.ok(stderr.includes('Kubernetes failure ' + label + ' '), label);
+    assert.match(stderr, /Error: p1.remote_after_recovery/); return;
+  }
   assert.equal(exit, 0, stderr);
   assert.equal(sent, true);
   assert.deepEqual(stdout.trim().split('\n').map((line, index) => index ? JSON.parse(line) : line),
