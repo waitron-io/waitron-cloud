@@ -470,10 +470,14 @@ process tests exercise the fixed permission and resource policy with real childr
 database suite covers object-size refusal, while the two-venue runner exercises the loader
 policy around Waitron's real restore hooks.
 
-The process-only `createWaitronVerifier` adapter remains available to local development
-proofs. Its heap and per-file limits do not bound native memory or total scratch. The
-backup worker CLI now requires `CLOUD_VERIFIER_IMAGE` and `CLOUD_VERIFIER_OWNER` and runs
-this adapter inside a disposable container. There is no process-only fallback. Follow
+The legacy process-only `createWaitronVerifier` adapter cannot restore the current durable
+Waitron flow: Node's permission mode refuses directory sync with `ERR_ACCESS_DENIED`.
+The older native runner also retains the ordinary fiscal-authority refusal described above;
+it does not qualify current recovery. Use the [test Cloud's authorised joint proof](test-cloud.md#check-real-free-and-paid-clients)
+for current capture, data verification and separately authorised restore.
+The backup worker CLI requires `CLOUD_VERIFIER_IMAGE`
+and `CLOUD_VERIFIER_OWNER` and uses `createBoundContainerWaitronVerifier` to run the data
+verifier inside a disposable container. There is no process-only fallback. Follow
 [the container setup and executed proof](backup-verifier-containment.md) for total memory,
 scratch, restart cleanup and deployment limits. `WAITRON_CHECKOUT` still selects the
 checkout for development proofs and image builds; the deployed worker uses the image.
@@ -502,7 +506,7 @@ but an exact completed result remains retrievable while its installation is acti
 If Waitron cannot read its saved reconnection request, the matching box action is
 still separate work. Cloud accepts `POST /api/replacement/reissue` when the separate
 recovery key remains usable and the restored recovery is still open within its
-original hour. Sign the ordinary ten-field replacement payload with action
+original hour. Sign the ordinary nine-field v2 replacement payload with action
 `reissue`, using that recovery key and a fresh installation key. Generate a fresh
 tunnel key too; retaining the pending proposal’s tunnel key is refused. Cloud returns
 `state: "awaiting_owner"` with the new public keys; it keeps the recovery ID,
@@ -516,3 +520,19 @@ different keys after completion return `409 conflict`. Requesting new keys while
 the recovery page is open means your confirmation applies to its latest proposal.
 Missing recovery authority, expired or closed recovery and lost keys after
 completion cannot use this repair. No production recovery is enabled.
+
+## Managed-stream identity
+
+Use the same Cloud venue id for pairing, streaming and recovery. The stream configure
+request carries its configuration revision, source node id and pointer signer; Cloud
+derives `streamId` from the authenticated installation. The returned bucket prefix is
+the full `streams/<Cloud venue id>/` folder. Read `current.json` directly in that folder.
+Managed recovery emits only `WAITRON-RECOVERY-KIT-2` with `version:2` and `streamId`;
+old kits cannot be used with the v2 Waitron reader.
+
+Migration 064 clears old pointer observations and closes unfinished continuous
+recoveries, so observe a new signed pointer and authorise recovery again after the
+cutover. It expires unclaimed recovery codes and deletes pending replacement
+proposals. It retains completed replacement results, venues, installations, stored
+backup objects and keys. The PostgreSQL checks are in
+`packages/registration/test/pairing-v2-migration.test.ts`.

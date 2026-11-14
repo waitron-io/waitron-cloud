@@ -6,7 +6,7 @@ import {chromium, type Page} from 'playwright';
 import {translations} from '../src/locale.ts';
 
 const requestId = '10000000-0000-4000-8000-000000000001';
-const localVenueId = '10000000-0000-4000-8000-000000000002';
+const venueId = '10000000-0000-4000-8000-000000000002';
 const business = {organisationId: '20000000-0000-4000-8000-000000000001',
   legalBusinessId: '30000000-0000-4000-8000-000000000001', organisationName: 'Café Sol',
   legalBusinessName: 'Sol SL', countryCode: 'ES'};
@@ -41,7 +41,7 @@ async function start(page: Page, eligible = false) {
       account = undefined; return route.fulfill({status: 204});
     }
     if (path === '/login') { account = 'business-owner'; return route.fulfill({json: {accountId: account}}); }
-    if (path === '/pairing/inspect') return route.fulfill({json: {requestId, localVenueId,
+    if (path === '/pairing/inspect') return route.fulfill({json: {requestId, venueId,
       environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'}});
     unexpected.push(`${request.method()} ${path}`);
     return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});

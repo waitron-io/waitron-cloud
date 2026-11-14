@@ -10,7 +10,7 @@ export async function retainedRegistry(seedEvent = true) {
     await db.pool.query('INSERT INTO organisations(id) VALUES($1)', [organisation]);
     await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)', [account, organisation]);
     await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)', [business, organisation]);
-    await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')", [venue, organisation, business, randomUUID()]);
+    await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')", [venue, organisation, business]);
     const allocation = payload().allocation;
     await db.pool.query("INSERT INTO fiscal_registry_scopes VALUES('89890001K','WT','preproduction',42,42,$1,2)", ['a'.repeat(64)]);
     await db.pool.query(`INSERT INTO fiscal_registry_allocations(allocation_id,taxpayer_nif,software_id,environment,installation_identity,venue_id,account_id,allocation,binding,custody_version,entitlement_version,initial_receipt)

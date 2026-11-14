@@ -19,7 +19,7 @@ test('targets are bounded current authorised placements with stable tenant ident
  const owner=await signup.complete(message.token,{password:'a long enough probe password',organisationName:'Probe venues',legalBusinessName:'Probe venues SL',countryCode:'ES'});
  const registrations=new RegistrationStore(db.pool);
  const create=async()=>{
-  const input={operationId:randomUUID(),installationKey:installationKey(),localVenueId:randomUUID(),environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const input={operationId:randomUUID(),installationKey:installationKey(),venueId:'',environment:'test' as const,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registrations.start(input);await registrations.approveCloud(input,owner.accountId);await registrations.approveLocal(input,randomUUID());return registrations.complete(input);
  };
  const [first,second,unconfigured,revoked]=await Promise.all([create(),create(),create(),create()]);

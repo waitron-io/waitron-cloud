@@ -26,7 +26,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
     await signup.request('recovery-scope@example.test');
     const mail = f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]); assert('token' in mail);
     const owner = await signup.complete(mail.token, {password: 'A long synthetic owner password', organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'});
-    const reg = new RegistrationStore(f.db.pool), binding = {operationId: randomUUID(), installationKey: machineTarget().publicKey, localVenueId: randomUUID(), environment: 'test', organisationId: owner.organisationId, legalBusinessId: owner.legalBusinessId};
+    const reg = new RegistrationStore(f.db.pool), binding = {operationId: randomUUID(), installationKey: machineTarget().publicKey, venueId:'', environment: 'test', organisationId: owner.organisationId, legalBusinessId: owner.legalBusinessId};
     await reg.start(binding); await reg.approveCloud(binding, owner.accountId); await reg.approveLocal(binding, randomUUID()); const venue = await reg.complete(binding);
     const catalogue = new BackupCatalogue(f.db.pool, vault, objects);
     await catalogue.provision(venue.installationId, {endpoint: 'https://storage.test', region: 'local', bucket: 'recovery-' + randomUUID()});
@@ -35,10 +35,10 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
     await admitPointFixture(f.db.pool, point.id);
     if (source === 'continuous') {
       const revision = Number((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1', [venue.installationId])).rows[0].configuration_revision), key = generateKeyPairSync('ed25519'), nodeId = randomUUID(), streams = new ManagedStreams(f.db.pool, vault, managedStreams);
-      const configured = await streams.configure(venue.installationId, revision, {localVenueId: binding.localVenueId, sourceNodeId: nodeId, pointerSignerPublicKey: key.publicKey.export({type: 'spki', format: 'der'}).toString('base64')});
-      const generation = `gen-2-${nodeId}-20261023T100000Z`, writtenAt = new Date(Date.now() - 60000).toISOString(), pointer = {venueId: binding.localVenueId, term: 2, nodeId, generation, writtenAt};
-      const message = JSON.stringify({pointer: {generation, nodeId, term: 2, venueId: binding.localVenueId, writtenAt}, purpose: 'waitron.stream.pointer.v1'});
-      streamObjects.set(`${configured.bucket.prefix}venues/${binding.localVenueId}/current.json`, Buffer.from(JSON.stringify({body: pointer, signature: sign(null, Buffer.from(message), key.privateKey).toString('base64')})));
+      const configured = await streams.configure(venue.installationId, revision, {sourceNodeId: nodeId, pointerSignerPublicKey: key.publicKey.export({type: 'spki', format: 'der'}).toString('base64')});
+      const generation = `gen-2-${nodeId}-20261023T100000Z`, writtenAt = new Date(Date.now() - 60000).toISOString(), pointer = {streamId: venue.venueId, term: 2, nodeId, generation, writtenAt};
+      const message = JSON.stringify({pointer: {generation, nodeId, streamId: venue.venueId, term: 2, writtenAt}, purpose: 'waitron.stream.pointer.v1'});
+      streamObjects.set(`${configured.bucket.prefix}current.json`, Buffer.from(JSON.stringify({body: pointer, signature: sign(null, Buffer.from(message), key.privateKey).toString('base64')})));
       await streams.observe(venue.installationId, configured.configurationRevision);
     }
     // Seed retained metadata before marking the venue as production: normal capture

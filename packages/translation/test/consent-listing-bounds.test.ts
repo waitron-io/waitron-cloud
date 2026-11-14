@@ -14,8 +14,8 @@ test('listing one venue does not read unrelated active consent rows',async t=>{
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
   const viewer=await connectedVenue(db,issuer,'https://cloud.example.test'),foreign=await connectedVenue(db,issuer,'https://cloud.example.test');
   await giveConsent(db,viewer);
-  await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment)
-   SELECT gen_random_uuid(),$1,$2,gen_random_uuid(),'test' FROM generate_series(1,5000)`,[foreign.organisationId,foreign.legalBusinessId]);
+  await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,environment)
+   SELECT gen_random_uuid(),$1,$2,'test' FROM generate_series(1,5000)`,[foreign.organisationId,foreign.legalBusinessId]);
   await db.pool.query(`INSERT INTO translation_consents(id,venue_id,organisation_id,account_id,consent_version,providers)
    SELECT gen_random_uuid(),id,organisation_id,$2,'providers-2026-10-14',ARRAY['openai','anthropic','google'] FROM venues WHERE organisation_id=$1`,[foreign.organisationId,foreign.accountId]);
   await db.pool.query('ANALYZE venues; ANALYZE translation_consents; ANALYZE organisation_memberships; ANALYZE cloud_accounts; ANALYZE cloud_credentials');

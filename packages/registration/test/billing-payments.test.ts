@@ -30,7 +30,7 @@ async function fixture(){
    await store.execute(s,event(),{type:'ensure_business'});
   }
   for(const [s,id] of [[scope,venues[0]],[scope,venues[1]],[other,otherVenue],[foreign,foreignVenue]] as const){
-   await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[id,s.organisationId,s.legalBusinessId]);
+   await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[id,s.organisationId,s.legalBusinessId]);
    await store.execute(s,event(),{type:'set_venue',venueId:id,expectedRevision:0,value:{level:'connected',connectedFrom:'2026-10-01',lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
   }
   await prices.publish(price);

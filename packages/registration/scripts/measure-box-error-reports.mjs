@@ -38,8 +38,8 @@ export async function measureBoxReports({boxes=1000,releases=20,volumes=[10000,1
  try{
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
   const box=await connectedVenue(db,issuer,origin);
-  const venues=(await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment)
-   SELECT gen_random_uuid(),$1,$2,gen_random_uuid(),'test' FROM generate_series(1,$3::integer) RETURNING id`,[box.organisationId,box.legalBusinessId,boxes-1])).rows;
+  const venues=(await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,environment)
+   SELECT gen_random_uuid(),$1,$2,'test' FROM generate_series(1,$3::integer) RETURNING id`,[box.organisationId,box.legalBusinessId,boxes-1])).rows;
   const extra=(await db.pool.query(`INSERT INTO installations(id,venue_id,public_key)
    SELECT gen_random_uuid(),v,'synthetic-cost-'||v FROM unnest($1::uuid[]) v RETURNING id`,[venues.map(v=>v.id)])).rows;
   const ids=[box.installationId,...extra.map(row=>row.id)];

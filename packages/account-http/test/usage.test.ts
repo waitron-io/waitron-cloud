@@ -22,7 +22,7 @@ beforeEach(async()=>{
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1),($2)',[owner,member]);
  await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Owner Org'),($2,'Foreign Org')",[organisation,foreignOrganisation]);
  await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Owner SL','ES'),($3,$4,'Foreign SL','ES')",[business,organisation,foreignBusiness,foreignOrganisation]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test'),($5,$6,$7,$8,'test')",[venue,organisation,business,randomUUID(),foreignVenue,foreignOrganisation,foreignBusiness,randomUUID()]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test'),($4,$5,$6,'test')",[venue,organisation,business,foreignVenue,foreignOrganisation,foreignBusiness]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true),($3,$2,true,false)',[owner,organisation,member]);
  session=await transaction(db.pool,client=>createSession(client,owner));
  memberSession=await transaction(db.pool,client=>createSession(client,member));

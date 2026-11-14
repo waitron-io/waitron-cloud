@@ -42,7 +42,7 @@ export type RecoveryInfo=V2Response&(
  |{source:ContinuousRecoverySource;operationExpiresAt:string});
 export type RecoveryAccess=V2Response&(
  |{source:SnapshotRecoverySource;point:import("./catalogue.ts").BackupPoint;location:import("./storage.ts").StorageLocation;keys:import("./keys.ts").BackupKeys;operationExpiresAt:string}
- |{source:ContinuousRecoverySource;stream:{venueId:string;location:import("./storage.ts").StorageLocation;prefix:string;readerReference:string;pointerSignerPublicKey:string;recoveryKey:string;localVenueId:string;generation:string};operationExpiresAt:string});
+ |{source:ContinuousRecoverySource;stream:{venueId:string;location:import("./storage.ts").StorageLocation;prefix:string;readerReference:string;pointerSignerPublicKey:string;recoveryKey:string;streamId:string;generation:string};operationExpiresAt:string});
 export interface RecoveryView {
   id:string;venueId:string;pointId:string|null;source:SnapshotRecoverySource|Omit<ContinuousRecoverySource,"sourceDigest">;
   mode:"planned"|"failure";status:string;expiresAt:string;
@@ -134,7 +134,7 @@ async function operationCurrent(client:PoolClient,id:string):Promise<boolean>{
   return (await client.query("SELECT expires_at>clock_timestamp() AS valid FROM backup_recoveries WHERE id=$1",[id])).rows[0]?.valid === true;
 }
 interface StreamRow extends Record<string,unknown>{
- venue_id:string;installation_id:string;configuration_revision:number;key_version:number;local_venue_id:string;source_node_id:string;
+ venue_id:string;installation_id:string;configuration_revision:number;key_version:number;source_node_id:string;
  pointer_signer_public_key:string;object_prefix:string;reader_reference:string;generation:string|null;recoverable_at:Date|null;observed_at:Date|null;
  endpoint:string;bucket:string;region:string;current_revision:number;location_installation_id:string;revoked_at:Date|null;superseded_by:string|null;
 }
@@ -362,7 +362,7 @@ export class BackupRecovery {
       );
       await requirePendingConnectionProof(client,row.account_id,row.cloud_session_id??null,row.cloud_security_revision??null);
       const operationExpiresAt=row.expires_at.toISOString() as string;
-      if(continuous)return {source:continuousSource(row,digest),stream:{venueId:row.venue_id,location:location(l),prefix:stream!.object_prefix,readerReference:stream!.reader_reference,pointerSignerPublicKey:stream!.pointer_signer_public_key,recoveryKey:keys.recoveryKey,localVenueId:stream!.local_venue_id,generation:stream!.generation!},operationExpiresAt};
+      if(continuous)return {source:continuousSource(row,digest),stream:{venueId:row.venue_id,location:location(l),prefix:stream!.object_prefix,readerReference:stream!.reader_reference,pointerSignerPublicKey:stream!.pointer_signer_public_key,recoveryKey:keys.recoveryKey,streamId:stream!.venue_id,generation:stream!.generation!},operationExpiresAt};
       return {...binding,source:snapshotSource(row),point:{...p!,verification:"verified" as const},location:location(l),keys,operationExpiresAt};
     });
   }

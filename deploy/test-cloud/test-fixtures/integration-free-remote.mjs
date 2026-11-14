@@ -4,13 +4,13 @@ import {createPrivateKey, randomUUID, sign} from 'node:crypto';
 
 // Requests use the actual paired installation and its current lease; no issuer key enters the venue.
 export async function proveIntegrationFreeRemote(root, {hostname, revision}) {
-  const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+  const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
   assert.equal(state.environment, 'test');
   assert.equal(state.origin, 'https://waitron.local:3000');
   assert.equal(state.lifecycle.view.revision, revision);
   const {createStaffCsr} = await import('/waitron/apps/server/src/cloud-remote.ts');
   const csr = await createStaffCsr(root, hostname);
-  const staffKey = await lstat(root + '/cloud-staff.key');
+  const staffKey = await lstat(root + '/cloud/staff.key');
   assert.equal(staffKey.isFile(), true);
   assert.equal(staffKey.mode & 0o077, 0);
   const key = createPrivateKey({key: Buffer.from(state.privateKey, 'base64url'), format: 'der', type: 'pkcs8'});

@@ -33,7 +33,7 @@ async function fixture(){
    for(let i=0;i<(scope===scopes[0]?2:1);i++){
     const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
     const venueId=randomUUID(),installationId=randomUUID();
-    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[venueId,scope.organisationId,scope.legalBusinessId]);
+    await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,scope.organisationId,scope.legalBusinessId]);
     await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installationId,venueId,publicKey]);
     targets.push({scope,venueId,installationId,key,publicKey});
    }

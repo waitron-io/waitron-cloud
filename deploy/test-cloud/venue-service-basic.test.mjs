@@ -15,7 +15,7 @@ import {testRuntimeEnvironment} from './runtime.mjs';
 async function billingVenue(db,owner){
  const venueId=randomUUID(),scope={organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId},store=new BillingStore(db.pool);
  const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}});
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[venueId,scope.organisationId,scope.legalBusinessId]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,scope.organisationId,scope.legalBusinessId]);
  await store.execute(scope,event(),{type:'ensure_business'});
  return async level=>{
   const old=await store.venue(scope,venueId);

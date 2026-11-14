@@ -21,14 +21,15 @@ restore progress nor startup alone retires the old installation or changes route
 
 Machine POST `/api/replacement/prepare` and `/api/replacement/status` accept
 `{id,payload,signature,keySignature}`. Both signatures cover canonical UTF-8 JSON:
-`["waitron-cloud-replacement-v1",origin,id,action,localVenueId,nodeId,"test",publicKey,peerPublicKey,issuedAt]`.
+`["waitron-cloud-replacement-v2",origin,id,action,nodeId,"test",publicKey,peerPublicKey,issuedAt]`.
 `signature` uses the existing recovery target key; `keySignature` uses the proposed fresh
 Ed25519 key. UUIDs, SPKI base64url Ed25519 keys, canonical 32-byte base64 WireGuard public
 keys and a sixty-second timestamp window are required. Reject browser Origin, oversized
 requests, unknown fields/actions and forged or crossed proofs. Limit IP and proven keys.
 
 Prepare requires the approved verified snapshot's actual restore report, a live original
-owner, an unexpired/unclosed recovery and matching local venue/source-node/environment.
+owner and an unexpired/unclosed recovery. The recovery operation supplies the Cloud
+venue and test environment; the message must match its source node.
 Store the exact proposal and current installation binding once. Refuse previously used
 installation or recovery keys, reused peer keys and changed retries. A proposal cannot
 make any service grant. One active backup recovery already serializes the venue's restore;
@@ -63,7 +64,7 @@ continues to show provisioning until those adapters are configured and checked.
 
 ## Resuming and customer screens
 
-The complete result binds request, source installation, target keys, local identity and
+The complete result binds request, source installation, target keys, source node identity and
 registration. Exact signed status retries can retrieve it after operation expiry/closure
 while the replacement installation remains active, so a lost response cannot strand the
 new owner of the venue. They cannot retrieve a revoked/superseded installation result.

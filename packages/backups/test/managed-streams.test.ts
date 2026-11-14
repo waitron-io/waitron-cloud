@@ -85,7 +85,7 @@ async function installed(label: string) {
     installationKey: generateKeyPairSync("ed25519")
       .publicKey.export({ type: "spki", format: "der" })
       .toString("base64url"),
-    localVenueId: randomUUID(),
+    venueId: '',
     environment: "test",
     organisationId: owner.organisationId,
     legalBusinessId: owner.legalBusinessId,
@@ -115,7 +115,7 @@ async function installed(label: string) {
       ])
     ).rows[0].configuration_revision,
   );
-  return { ...result, localVenueId: binding.localVenueId, revision };
+  return { ...result, revision };
 }
 
 function signer() {
@@ -126,28 +126,27 @@ function signer() {
   };
 }
 
-function input(item: Awaited<ReturnType<typeof installed>>, publicKey: string) {
+function input(_item: Awaited<ReturnType<typeof installed>>, publicKey: string) {
   return {
-    localVenueId: item.localVenueId,
     sourceNodeId: randomUUID(),
     pointerSignerPublicKey: publicKey,
   };
 }
 
 function pointer(
-  venueId: string,
+  streamId: string,
   nodeId: string,
   key: KeyObject,
   writtenAt = "2026-09-25T18:00:00.000Z",
 ) {
   const body = {
-    venueId,
+    streamId,
     term: 2,
     nodeId,
     generation: `gen-2-${nodeId}-20260925T175500Z`,
     writtenAt,
   };
-  const message = `{"pointer":{"generation":"${body.generation}","nodeId":"${body.nodeId}","term":2,"venueId":"${body.venueId}","writtenAt":"${body.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+  const message = `{"pointer":{"generation":"${body.generation}","nodeId":"${body.nodeId}","streamId":"${body.streamId}","term":2,"writtenAt":"${body.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
   return Buffer.from(
     JSON.stringify({
       body,
@@ -161,7 +160,7 @@ function storePointer(
   bytes: Buffer,
 ) {
   objects.set(
-    `reader:${configured.venueId}:${configured.bucket.bucket}:${configured.bucket.prefix}venues/${configured.localVenueId}/current.json`,
+    `reader:${configured.venueId}:${configured.bucket.bucket}:${configured.bucket.prefix}current.json`,
     bytes,
   );
 }
@@ -172,7 +171,7 @@ test('test-plan observe refuses after downgrade during a valid signed pointer re
  const revision=Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[item.installationId])).rows[0].configuration_revision);
  const stream=new ManagedStreams(db.pool,vault,authority,'test-free-paid'),desired=input(item,key.publicKey);
  const configured=await stream.configure(item.installationId,revision,desired);
- storePointer(configured,pointer(item.localVenueId,desired.sourceNodeId,key.privateKey));
+ storePointer(configured,pointer(item.venueId,desired.sourceNodeId,key.privateKey));
  readWait=async()=>{await plans.set(item.organisationId,'free');};
  await assert.rejects(stream.observe(item.installationId,configured.configurationRevision),/permission_denied/);
  assert.equal((await db.pool.query('SELECT generation FROM backup_managed_streams WHERE venue_id=$1',[item.venueId])).rows[0].generation,null);
@@ -188,6 +187,7 @@ test("configuration retries preserve one venue-scoped authority and reject chang
     bInput = input(b, bSigner.publicKey);
   const configured = await streams.configure(a.installationId, a.revision, aInput);
   assert.deepEqual(await streams.configure(a.installationId, a.revision, aInput), configured);
+  assert.equal(configured.streamId,a.venueId);
   assert.equal(configured.bucket.prefix, `streams/${a.venueId}/`);
   assert.equal(configured.bucket.accessKeyId, `write-${a.venueId}`);
   assert.equal(configured.configurationRevision, a.revision + 1);
@@ -204,7 +204,7 @@ test("configuration retries preserve one venue-scoped authority and reject chang
   assert.notEqual(other.bucket.accessKeyId, configured.bucket.accessKeyId);
 });
 
-test("configuration validates UUIDs and a canonical Ed25519 signer before provider access", async () => {
+test("configuration refuses extra fields, invalid UUIDs and noncanonical signers before provider access", async () => {
   const item = await installed("Invalid"),
     streams = new ManagedStreams(db.pool, vault, authority),
     valid = input(item, signer().publicKey);
@@ -213,7 +213,7 @@ test("configuration validates UUIDs and a canonical Ed25519 signer before provid
     providerCalls++;
   };
   for (const changed of [
-    { ...valid, localVenueId: "not-a-uuid" },
+    { ...valid, localVenueId: item.venueId },
     { ...valid, sourceNodeId: "not-a-uuid" },
     { ...valid, pointerSignerPublicKey: "not-a-key" },
     { ...valid, pointerSignerPublicKey: valid.pointerSignerPublicKey.replace(/=$/, "") },
@@ -276,21 +276,21 @@ test("observation accepts only the registered venue, node and signer and never m
     streams = new ManagedStreams(db.pool, vault, authority),
     desired = input(item, correct.publicKey),
     configured = await streams.configure(item.installationId, item.revision, desired);
-  storePointer(configured, pointer(item.localVenueId, desired.sourceNodeId, wrong.privateKey));
+  storePointer(configured, pointer(item.venueId, desired.sourceNodeId, wrong.privateKey));
   await assert.rejects(
     streams.observe(item.installationId, configured.configurationRevision),
     /backup.invalid_stream_pointer/,
   );
   assert.equal((await streams.recovery(item.venueId, configured.configurationRevision))?.recoverableAt, null);
 
-  storePointer(configured, pointer(item.localVenueId, desired.sourceNodeId, correct.privateKey));
+  storePointer(configured, pointer(item.venueId, desired.sourceNodeId, correct.privateKey));
   const observed = await streams.observe(item.installationId, configured.configurationRevision);
   assert.equal(observed.recoverableAt, "2026-09-25T18:00:00.000Z");
   assert.equal(observed.sourceNodeId, desired.sourceNodeId);
 
   storePointer(
     configured,
-    pointer(item.localVenueId, desired.sourceNodeId, correct.privateKey, "2026-09-25T17:00:00.000Z"),
+    pointer(item.venueId, desired.sourceNodeId, correct.privateKey, "2026-09-25T17:00:00.000Z"),
   );
   assert.deepEqual(await streams.observe(item.installationId, configured.configurationRevision), observed);
   const crossed = pointer(randomUUID(), desired.sourceNodeId, correct.privateKey);
@@ -308,7 +308,7 @@ test("a late observation cannot commit after revocation or configuration replace
       streams = new ManagedStreams(db.pool, vault, authority),
       desired = input(item, key.publicKey),
       configured = await streams.configure(item.installationId, item.revision, desired);
-    storePointer(configured, pointer(item.localVenueId, desired.sourceNodeId, key.privateKey));
+    storePointer(configured, pointer(item.venueId, desired.sourceNodeId, key.privateKey));
     readWait = async () => {
       if (change === "revoked") {
         await db.secondPool.query("UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1", [
@@ -333,7 +333,7 @@ test("a late observation cannot commit after revocation or configuration replace
 test('fresh signed stream health and ready configuration cannot qualify an archive snapshot',async()=>{
  const item=await installed('Separate stream health'),key=signer(),desired=input(item,key.publicKey);
  const stream=new ManagedStreams(db.pool,vault,authority),configured=await stream.configure(item.installationId,item.revision,desired);
- storePointer(configured,pointer(item.localVenueId,desired.sourceNodeId,key.privateKey,new Date().toISOString()));
+ storePointer(configured,pointer(item.venueId,desired.sourceNodeId,key.privateKey,new Date().toISOString()));
  await stream.observe(item.installationId,configured.configurationRevision);
  const point=randomUUID();
  await db.pool.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[point,item.venueId,item.installationId]);

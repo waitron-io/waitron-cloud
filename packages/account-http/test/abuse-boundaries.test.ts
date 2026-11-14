@@ -50,7 +50,7 @@ function browserHeaders() {
 
 function pairingTarget() {
   const keys = generateKeyPairSync('ed25519');
-  const claims: PairingClaims = {origin, action: 'start', requestId: randomUUID(), publicKey: keys.publicKey.export({type: 'spki', format: 'der'}).toString('base64url'), localVenueId: randomUUID(), environment: 'test', code: '12345678', organisationId: '', legalBusinessId: '', issuedAt: Date.now()};
+  const claims: PairingClaims = {origin, action: 'start', requestId: randomUUID(), publicKey: keys.publicKey.export({type: 'spki', format: 'der'}).toString('base64url'), venueId:'', environment: 'test', code: '12345678', organisationId: '', legalBusinessId: '', issuedAt: Date.now()};
   const proof = (action: PairingClaims['action']) => {
     const payload = pairingPayload({...claims, action, code: action === 'start' ? claims.code : '', organisationId: action === 'complete' ? owner.organisationId : '', legalBusinessId: action === 'complete' ? owner.legalBusinessId : '', issuedAt: Date.now()});
     return {payload: payload.toString('base64url'), signature: sign(null, payload, keys.privateKey).toString('base64url')};

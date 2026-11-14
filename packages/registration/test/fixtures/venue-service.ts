@@ -29,7 +29,7 @@ export async function venueServiceFixture(template?:string){
   for(const s of [scope,other,foreign])await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[s.legalBusinessId,s.organisationId]);
   const venues=[randomUUID(),randomUUID()].sort(),otherVenue=randomUUID(),foreignVenue=randomUUID(),production=randomUUID();
   for(const [s,id,environment] of [[scope,venues[0],'test'],[scope,venues[1],'test'],[other,otherVenue,'test'],[foreign,foreignVenue,'test'],[scope,production,'production']] as const){
-   await pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
+   await pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
    const current=randomUUID();
    for(let i=0;i<2;i++){
     const installation=i===0?current:randomUUID();

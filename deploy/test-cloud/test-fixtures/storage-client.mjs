@@ -30,22 +30,22 @@ export async function storageClientProof(phase){
  }
  async function stream(item){
   const revision=Number((await pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[item.installationId])).rows[0].configuration_revision);
-  const response=await machine(item,'backup-stream-configure',{revision,localVenueId:item.localVenueId,sourceNodeId:item.sourceNodeId,pointerSignerPublicKey:item.pointerSignerPublicKey});assert.equal(response.status,200,JSON.stringify(response.body));return response.body;
+  const response=await machine(item,'backup-stream-configure',{revision,sourceNodeId:item.sourceNodeId,pointerSignerPublicKey:item.pointerSignerPublicKey});assert.equal(response.status,200,JSON.stringify(response.body));return response.body;
  }
  try{
   if(phase==='seed'||phase==='seed-snapshot'){
    runtime=await openTestCaptureRuntime({pool,directory,mode:'test-free-paid'});
    const catalogue=new BackupCatalogue(pool,runtime.options.vault,runtime.options.objects,'test-free-paid');
    async function venue(paid){
-    const item={organisationId:randomUUID(),business:randomUUID(),venueId:randomUUID(),installationId:randomUUID(),localVenueId:randomUUID(),sourceNodeId:randomUUID()};
+    const item={organisationId:randomUUID(),business:randomUUID(),venueId:randomUUID(),installationId:randomUUID(),sourceNodeId:randomUUID()};
     const key=generateKeyPairSync('ed25519');item.privateKey=key.privateKey.export({type:'pkcs8',format:'pem'});item.publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');item.pointerSignerPublicKey=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64');
-    await pool.query('INSERT INTO organisations(id) VALUES($1)',[item.organisationId]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[item.business,item.organisationId]);await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[item.venueId,item.organisationId,item.business,item.localVenueId]);await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[item.installationId,item.venueId,item.publicKey]);await pool.query("INSERT INTO installation_services(installation_id,service) SELECT $1,unnest(ARRAY['retained_snapshots','continuous_backup','remote_access'])",[item.installationId]);
+    await pool.query('INSERT INTO organisations(id) VALUES($1)',[item.organisationId]);await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[item.business,item.organisationId]);await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[item.venueId,item.organisationId,item.business]);await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[item.installationId,item.venueId,item.publicKey]);await pool.query("INSERT INTO installation_services(installation_id,service) SELECT $1,unnest(ARRAY['retained_snapshots','continuous_backup','remote_access'])",[item.installationId]);
     item.location={endpoint,region:'local',bucket:'venue-'+item.venueId};
     if(paid){await plans.set(item.organisationId,'paid');await admin.send(new CreateBucketCommand({Bucket:item.location.bucket}));await catalogue.provision(item.installationId,item.location);}
     return item;
    }
    const free=await venue(false),a=await venue(true),b=await venue(true);
-   for(const action of ['backup-reserve','backup-stream-configure']){const refusal=await machine(free,action,action==='backup-stream-configure'?{revision:0,localVenueId:free.localVenueId,sourceNodeId:free.sourceNodeId,pointerSignerPublicKey:free.pointerSignerPublicKey}:{});assert.equal(refusal.status,403);assert.equal(refusal.body.error,'permission_denied');}
+   for(const action of ['backup-reserve','backup-stream-configure']){const refusal=await machine(free,action,action==='backup-stream-configure'?{revision:0,sourceNodeId:free.sourceNodeId,pointerSignerPublicKey:free.pointerSignerPublicKey}:{});assert.equal(refusal.status,403);assert.equal(refusal.body.error,'permission_denied');}
    const capture=await machine(a,'backup-reserve');assert.equal(capture.status,200,JSON.stringify(capture.body));assert.equal(capture.body.location.endpoint,endpoint);assert.ok(Date.parse(capture.body.expiresAt)<=Date.now()+901000);
    const snapshot=client(capture.body.credentials);await put(snapshot,a.location.bucket,capture.body.incomingKey);await assert.rejects(put(snapshot,a.location.bucket,'incoming/foreign'),denied);await assert.rejects(put(snapshot,b.location.bucket,capture.body.incomingKey),denied);
    if(phase==='seed-snapshot'){

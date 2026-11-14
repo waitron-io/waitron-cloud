@@ -8,7 +8,7 @@ import {waitForStorageWithdrawal, checkStorageWithdrawalBucket, proveStorageBefo
 export async function probeIntegrationStorage(root, {phase, foreignVenueId, startedAt}) {
   assert.equal(process.env.CLOUD_TEST_STREAM, '1');
   const bucket = JSON.parse(await readFile(root + '/direct-storage.json', 'utf8'));
-  const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+  const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
   const venueId = state.view.registration.venueId;
   checkStorageWithdrawalBucket(bucket, venueId);
   const {S3Client, PutObjectCommand, GetObjectCommand} = createRequire('/waitron/apps/server/package.json')('@aws-sdk/client-s3');

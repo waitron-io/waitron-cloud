@@ -91,7 +91,7 @@ existing package access and authenticated install and image build paths.
 ## Prepare private signing packages for disposable tests
 
 The signing package is published from Waitron as `@waitron-io/contract`. Cloud's
-registration package pins `0.2.14` and re-exports its signing functions. The
+registration package pins `0.2.16` and re-exports its signing functions. The
 disposable-test adapter recognizes those reviewed bytes alongside the UI package.
 UI-only historical captures continue to select their own approved release.
 

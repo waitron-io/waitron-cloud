@@ -22,7 +22,6 @@ function views(id = requestId) {
     replacement: {
       requestId: id, pointId, source, venueId,
       oldInstallationId: '52345678-1234-4234-8234-123456789abc',
-      localVenueId: '62345678-1234-4234-8234-123456789abc',
       nodeId: '72345678-1234-4234-8234-123456789abc', environment: 'test',
       publicKey: 'MCowBQYDK2VwAyEA' + 'A'.repeat(43), peerPublicKey: Buffer.alloc(32).toString('base64'),
       state: 'awaiting_owner', expiresAt, organisationName: 'Café Sol', legalBusinessName: 'Sol SL', registration: null,

@@ -31,7 +31,7 @@ for (const detail of ['', ' npm E404']) test('client build records the observed 
   const image = 'sha256:' + 'b'.repeat(64);
   await writeFile(join(directory, 'docker'), `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='image'&&a[1]==='inspect')console.log(JSON.stringify([{Id:${JSON.stringify(image)},RepoTags:['d620-pinned:local'],Config:{Labels:{'cloud.waitron-revision':'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7'}}}]));
+if(a[0]==='image'&&a[1]==='inspect')console.log(JSON.stringify([{Id:${JSON.stringify(image)},RepoTags:['d620-pinned:local'],Config:{Labels:{'cloud.waitron-revision':'8eed667ab0586a3144ed7911b57cf50fcb3b0766'}}}]));
 if(a[0]==='build'){process.stderr.write(${JSON.stringify('DEPRECATED: The legacy builder is deprecated. Install the buildx component.' + detail + ' PRIVATE_BUILD_CANARY')});process.exit(17);}
 `, {mode: 0o700});
   process.env.PATH = directory + ':' + before;

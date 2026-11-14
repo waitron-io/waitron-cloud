@@ -21,3 +21,19 @@ await assert.rejects(runTestCloudClients({image:'sha256:'+'b'.repeat(64),waitron
     assert.deepEqual(await readdir(scratch), []);
   } finally {await rm(root, {recursive: true, force: true});}
 });
+
+// A killed child must settle the owning run instead of throwing from its close handler.
+test('a killed Docker child rejects the integration run without an uncaught exception', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-killed-child-'));
+  try {
+    const bin = join(root, 'bin'); await mkdir(bin);
+    await writeFile(join(bin, 'docker'), `#!${process.execPath}\nprocess.kill(process.pid, 'SIGKILL');\n`, {mode: 0o700});
+    const runner = new URL('./test-cloud-integration.mjs', import.meta.url).href;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+import assert from 'node:assert/strict';import {runTestCloudClients} from ${JSON.stringify(runner)};
+await assert.rejects(runTestCloudClients({image:'sha256:'+'b'.repeat(64),waitronImage:'sha256:'+'c'.repeat(64)}),{message:'integration.command_failed:ps'});
+`], {encoding: 'utf8', timeout: 10000, env: {...process.env, PATH: bin + ':' + process.env.PATH}});
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout + result.stderr, '');
+  } finally {await rm(root, {recursive: true, force: true});}
+});

@@ -33,7 +33,7 @@ beforeEach(async()=>{
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('capture@example.test');const m=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in m);
  const owner=await signup.complete(m.token,{password:'A long enough test password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const r=new RegistrationStore(db.pool);const ids=[];
- for(let n=0;n<2;n++){const b={operationId:randomUUID(),installationKey:(n===0?key:secondKey).publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());ids.push((await r.complete(b)).installationId);}
+ for(let n=0;n<2;n++){const b={operationId:randomUUID(),installationKey:(n===0?key:secondKey).publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());ids.push((await r.complete(b)).installationId);}
  [id,otherId]=ids as [string,string];catalogue=new BackupCatalogue(db.pool,vault,objects);
  await catalogue.provision(id,{endpoint:'https://store.test',bucket:'venue-one',region:'local'});await catalogue.provision(otherId,{endpoint:'https://store.test',bucket:'venue-two',region:'local'});lease=await renew();resetApp();
 });

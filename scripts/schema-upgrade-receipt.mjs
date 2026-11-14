@@ -119,6 +119,8 @@ try{
   run('git',['checkout','--quiet','--detach',head],{cwd:path},{release,operation:'checkout'});
   run('pnpm',['install','--frozen-lockfile'],{cwd:path,timeout:180000},{release,operation:'install'});
  }
+ // The historical v1 seed cannot run across the pairing cutover.
+ if(existsSync(join(next,'packages/registration/migrations/064_cloud_pairing_v2.sql')))throw Error('schema upgrade v1 proof does not support pairing v2');
  phase='databases';console.log(JSON.stringify({phase}));
  const primary=await database(containers[0]);
  docker('run','-d','--name',containers[2],'-p','127.0.0.1::1025','-p','127.0.0.1::8025','axllent/mailpit:v1.31.1');

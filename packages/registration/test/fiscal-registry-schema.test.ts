@@ -65,7 +65,7 @@ async function allocation(pool: Pool, account: string, venue: string, identity =
   );
   return id;
 }
-test('populated release37 upgrades concurrently without changing any old row or digest', async () => {
+test('populated release37 upgrades concurrently preserving retained rows and digests', async () => {
   const f = await fixture(release.migrate);
   const second = new Pool({
     connectionString: process.env.TEST_DATABASE_URL,
@@ -102,7 +102,10 @@ test('populated release37 upgrades concurrently without changing any old row or 
     const expectedSessions=(before.cloud_sessions as {value:Record<string,unknown>}[]).map(({value})=>({value:{...value,
       action_proved_at:null,action_proof_method:null,action_credential_fingerprint:null,action_security_revision:0}}));
     const connectionDefaults=(rows:typeof expectedSessions)=>rows.map(({value})=>({value:{...value,cloud_session_id:null,cloud_security_revision:null}}));
-    assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, {...before,cloud_sessions:expectedSessions,
+    const expectedVenues=(before.venues as {value:Record<string,unknown>}[]).map(({value})=>{
+      const {local_venue_id,...retained}=value;return {value:retained};
+    });
+    assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, {...before,venues:expectedVenues,cloud_sessions:expectedSessions,
       pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions)});
     assert.deepEqual(backup_verification_attempts, []);
     assert.deepEqual(remote_forward_observations, []);

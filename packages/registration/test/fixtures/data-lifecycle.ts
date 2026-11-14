@@ -16,8 +16,8 @@ export function lifecycleFixture(prefix:string){
   await resetSchema(pool);
   await pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[businessId,organisationId]);
-  await pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment)
-   VALUES($1,$3,$4,$1,'test'),($2,$3,$4,$2,'test')`,[venueId,foreignVenueId,organisationId,businessId]);
+  await pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,environment)
+   VALUES($1,$3,$4,'test'),($2,$3,$4,'test')`,[venueId,foreignVenueId,organisationId,businessId]);
  });
  after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
  return {pool,venueId,foreignVenueId,connectionString,options,schema};

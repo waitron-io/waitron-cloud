@@ -1,3 +1,4 @@
+import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
@@ -8,11 +9,11 @@ import {renewIntegrationAfterRollback} from './test-fixtures/integration-renewal
 test('rollback waits for native lock contention before draining and completing its renewal', async t => {
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-contention-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json');
+  const path = join(root, 'cloud/connection.json');
   const original = {action: 'configuration', operationId: 'original-operation'};
   const renewal = {action: 'renew', operationId: 'new-operation'};
   const state = {environment: 'test', lifecycle: {revoked: false, pending: original}};
-  await writeFile(path, JSON.stringify(state), {mode: 0o600});
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, JSON.stringify(state), {mode: 0o600});
   let calls = 0;
   const result = await renewIntegrationAfterRollback(root, () => renewal, async () => {
     const current = JSON.parse(await readFile(path, 'utf8'));
@@ -20,7 +21,7 @@ test('rollback waits for native lock contention before draining and completing i
     assert.deepEqual(current.lifecycle.pending, calls <= 3 ? original : renewal);
     if ([1, 2, 4].includes(calls)) throw Object.assign(Error('private native lock'), {code: 'cloud.busy'});
     delete current.lifecycle.pending;
-    await writeFile(path, JSON.stringify(current));
+    await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, JSON.stringify(current));
   });
   assert.deepEqual(result, {renewed: true});
   assert.equal(calls, 5);
@@ -30,8 +31,8 @@ test('rollback waits for native lock contention before draining and completing i
 test('a permanently busy native client refuses within the original control timeout without replacing pending work', {timeout: 10000}, async t => {
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-stuck-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
-  await writeFile(path, saved, {mode: 0o600});
+  const path = join(root, 'cloud/connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, saved, {mode: 0o600});
   let calls = 0, queued = false, diagnostic;
   const started = performance.now();
   await assert.rejects(renewIntegrationAfterRollback(root, () => {queued = true;}, async () => {
@@ -50,8 +51,8 @@ for (const code of ['cloud.unavailable', 'cloud.binding_conflict', 'unexpected']
 test('rollback immediately preserves a non-busy native refusal: ' + code, async t => {
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-native-refusal-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
-  await writeFile(path, saved, {mode: 0o600});
+  const path = join(root, 'cloud/connection.json'), saved = '{"lifecycle":{"pending":{"operationId":"keep-this"}}}';
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, saved, {mode: 0o600});
   const failure = Object.assign(Error('private native refusal'), {code});
   let calls = 0, queued = false;
   await assert.rejects(renewIntegrationAfterRollback(root, () => {queued = true;}, async () => {

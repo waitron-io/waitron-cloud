@@ -114,7 +114,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     {cachedConfigurationMasked: true, signedCertificateRefused: true});
   const sourceAfter = await control(paid.id, 'evidence');
   assert.deepEqual(sourceAfter.registration, sourceBefore.registration); assert.equal(sourceAfter.identitySha256, sourceBefore.identitySha256);
-  assert.equal(sourceAfter.localVenueId, sourceBefore.localVenueId);
+  assert.equal(sourceAfter.streamId, sourceBefore.streamId);
   return {organisationId: paid.organisationId, installationId: paid.installationId, venueId: paid.venueId,
     client: client.client, peerPresent: true,
     ...(directStorage ? {directStorage} : {}),

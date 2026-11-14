@@ -26,7 +26,7 @@ boundary with real local sessions. Keep public deployment gated on that proof.
 
 Machine endpoints: POST `/api/pairing/start`, `/status`, `/complete`. JSON contains only
 `payload` and `signature`, base64url-encoded bytes. Payload is an ordered JSON array:
-`["waitron-cloud-pair-v1", origin, action, requestId, publicKey, localVenueId,
+`["waitron-cloud-pair-v2", origin, action, requestId, publicKey, venueId,
 environment, code, organisationId, legalBusinessId, issuedAt]`.
 The public key is Ed25519 SPKI DER, encoded as base64url. Sign the exact payload bytes.
 Origin and action are checked against the receiving server/path. Timestamp is integer

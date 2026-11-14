@@ -11,7 +11,7 @@ const {openVenueDatabase} = require('@waitron/db'), {loadKeyRing} = require('@wa
 export async function prepareIntegrationVerificationState(root) {
   assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
   const sourceIdentity=await readIntegrationSourceIdentity(root);
-  const certificate = makeAuthority().issue({organizationIdentifier: 'VATES-73000001K'});
+  const certificate = makeAuthority().issue({organizationIdentifier: 'VATES-73000001W'});
   const store = await openVenueDatabase(root + '/venue', {exclusive: false});
   try {
     await sealAeatSecret({db: store.venue, ring: loadKeyRing(await loadBoxEnv({}, root)), nodeId: sourceIdentity.nodeId},

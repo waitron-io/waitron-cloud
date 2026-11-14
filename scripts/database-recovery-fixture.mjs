@@ -19,7 +19,7 @@ async function account(address,name){
 }
 
 async function installation(owner){
- const key=generateKeyPairSync('ed25519'),binding={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const key=generateKeyPairSync('ed25519'),binding={operationId:randomUUID(),installationKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registration=new RegistrationStore(pool);await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
  return {...await registration.complete(binding),publicKey:binding.installationKey,privateKey:key.privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')};
 }

@@ -63,13 +63,13 @@ test('two demo Waitron venues pair free and paid signup accounts through trusted
   assert.equal(receipt.kind, 'test-cloud-clients');
   assert.equal(receipt.completeIntegration, false);
   assert.equal(receipt.origin, 'https://waitron.local:3000');
-  assert.equal(receipt.waitronHead, 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7');
+  assert.equal(receipt.waitronHead, '8eed667ab0586a3144ed7911b57cf50fcb3b0766');
   assert.deepEqual(receipt.accountMail, {free: 'proved', paid: 'proved', transport: 'mailpit'});
   assert.deepEqual(receipt.clients, {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'});
   assert.deepEqual(receipt.tls, {untrustedRefused: true, wrongHostnameRefused: true});
   assert.deepEqual(receipt.freeSnapshot, {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
   assert.deepEqual(receipt.organisations.map(value => value.plan), ['free', 'paid']);
-  for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(receipt.organisations.map(value => value[key])).size, 2, key);
+  for (const key of ['organisationId', 'venueId', 'installationId', 'streamId', 'stateSha256']) assert.equal(new Set(receipt.organisations.map(value => value[key])).size, 2, key);
   for (const value of receipt.organisations) {
     assert.match(value.stateSha256, /^[a-f0-9]{64}$/);
     assert.equal(value.installationState, 'active');

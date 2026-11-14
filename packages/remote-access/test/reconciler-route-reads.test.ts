@@ -20,7 +20,7 @@ async function venue(cellId:string){
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password:'A sufficiently long test password',organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
  await new OrganisationPlanStore(db.pool).set(owner.organisationId,'paid');
- const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
  const installed=await registration.complete(binding);await store.provision(installed.installationId,cellId,peer());
  return {...owner,...installed};

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
-import { venueServiceAuthorityInstalled } from './venue-service-schema.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
 export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';
@@ -29,7 +28,7 @@ export interface ConnectionBinding {
   operationId: string;
   /** Canonical public-key identifier supplied by the trusted identity adapter. */
   installationKey: string;
-  localVenueId: string;
+  venueId: string;
   environment: string;
   organisationId: string;
   legalBusinessId: string;
@@ -56,7 +55,7 @@ export class RegistrationError extends Error {
   }
 }
 interface RequestRow {
-  local_venue_id: string;
+  requested_venue_id: string | null;
   environment: string;
   organisation_id: string;
   legal_business_id: string;
@@ -74,13 +73,14 @@ function requireText(value: string, max: number) {
   }
 }
 function validate(binding: ConnectionBinding) {
-  for (const id of [binding.operationId, binding.localVenueId, binding.organisationId, binding.legalBusinessId]) requireUuid(id);
+  for (const id of [binding.operationId, binding.organisationId, binding.legalBusinessId]) requireUuid(id);
+  if (binding.venueId !== '') requireUuid(binding.venueId);
   requireText(binding.installationKey, 256);
   requireText(binding.environment, 64);
 }
 function key(binding: ConnectionBinding) { return [binding.installationKey, binding.operationId]; }
 function checkBinding(row: RequestRow, binding: ConnectionBinding) {
-  if (row.local_venue_id !== binding.localVenueId || row.environment !== binding.environment
+  if ((row.requested_venue_id ?? '') !== binding.venueId || row.environment !== binding.environment
     || row.organisation_id !== binding.organisationId || row.legal_business_id !== binding.legalBusinessId) {
     throw new RegistrationError('binding_conflict');
   }
@@ -136,9 +136,9 @@ export class RegistrationStore {
         [binding.legalBusinessId, binding.organisationId]);
       if (!business.rowCount) throw new RegistrationError('business_not_found');
       await client.query(`INSERT INTO connection_requests
-        (installation_key, operation_id, local_venue_id, environment, organisation_id, legal_business_id)
+        (installation_key, operation_id, requested_venue_id, environment, organisation_id, legal_business_id)
         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (installation_key, operation_id) DO NOTHING`,
-      [...key(binding), binding.localVenueId, binding.environment, binding.organisationId, binding.legalBusinessId]);
+      [...key(binding), binding.venueId || null, binding.environment, binding.organisationId, binding.legalBusinessId]);
       await lockRequest(client, binding);
       await requireUnexpired(client, binding);
     });
@@ -197,14 +197,13 @@ export class RegistrationStore {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
         if (row.result) {
-          const authority = await venueServiceAuthorityInstalled(client)
-            ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]) : {rowCount: 0};
+          const authority = await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]);
           if (authority.rowCount) {
             await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
           }
           const venue = await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
-            AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
-          [row.result.venueId, binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
+            AND legal_business_id=$3 AND environment=$4 FOR NO KEY UPDATE`,
+          [row.result.venueId, binding.organisationId, binding.legalBusinessId, binding.environment]);
           if (!venue.rowCount) throw new RegistrationError('registration_conflict');
           const active = await client.query('SELECT id FROM installations WHERE id = $1 AND revoked_at IS NULL FOR SHARE',
             [row.result.installationId]);
@@ -214,22 +213,21 @@ export class RegistrationStore {
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
         await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
-        // Unenrolled linking keeps its legacy path; the venue lock still serializes first enrolment.
-        const enrolled = await venueServiceAuthorityInstalled(client)
-          ? await client.query(`SELECT 1 FROM billing_service_authority a JOIN venues v ON v.id=a.venue_id
-          WHERE v.environment=$1 AND v.local_venue_id=$2`, [binding.environment, binding.localVenueId]) : {rowCount: 0};
-        if (enrolled.rowCount) {
-          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
-        }
-        await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
-          VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
-        [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
-        // Serialize venue linking without blocking incident foreign-key checks while awaiting the installation.
-        const { rows: venues } = await client.query(`SELECT * FROM venues
-          WHERE environment = $1 AND local_venue_id = $2 FOR NO KEY UPDATE`, [binding.environment, binding.localVenueId]);
-        const venue = venues[0];
-        if (!venue || venue.organisation_id !== binding.organisationId || venue.legal_business_id !== binding.legalBusinessId) {
-          throw new RegistrationError('registration_conflict');
+        // Only enrolled venues share the parent lock with service transitions.
+        const enrolled = binding.venueId
+          ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [binding.venueId]) : {rowCount: 0};
+        if (enrolled.rowCount) await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+        let venue;
+        if (binding.venueId) {
+          venue = (await client.query(`SELECT * FROM venues WHERE id=$1 AND organisation_id=$2
+            AND legal_business_id=$3 AND environment=$4 FOR NO KEY UPDATE`,
+          [binding.venueId, binding.organisationId, binding.legalBusinessId, binding.environment])).rows[0];
+          if (!venue) throw new RegistrationError('permission_denied');
+        } else {
+          // The installation key is unique: a second empty request rolls this venue back on conflict.
+          venue = (await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, environment)
+            VALUES ($1, $2, $3, $4) RETURNING *`,
+          [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.environment])).rows[0];
         }
         const { rows: installations } = await client.query('SELECT * FROM installations WHERE venue_id = $1 AND superseded_by IS NULL FOR UPDATE', [venue.id]);
         let installation = installations[0];

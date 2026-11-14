@@ -9,7 +9,7 @@ export async function connectedVenue(db:Awaited<ReturnType<typeof database>>,iss
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password:'A long enough test password',organisationName:'Cafe Sol',legalBusinessName:'Cafe Sol SL',countryCode:'ES'});
  const key=generateKeyPairSync('ed25519'),installationKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
- const binding={operationId:randomUUID(),installationKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const binding={operationId:randomUUID(),installationKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registrations=new RegistrationStore(db.pool);await registrations.start(binding);await registrations.approveCloud(binding,owner.accountId);await registrations.approveLocal(binding,randomUUID());
  const installation=await registrations.complete(binding);
  function proof(action:string,body:unknown={},operationId=randomUUID(),lease?:SignedEnvelope,raw?:string,issuedAt=Date.now(),overrides:{origin?:string;installationId?:string;lease?:string}={}):SignedEnvelope{

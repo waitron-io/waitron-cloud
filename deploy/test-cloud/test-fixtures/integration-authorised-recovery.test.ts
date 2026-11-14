@@ -127,23 +127,26 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
     const trading = parseEnvFile(await readFile(join(stateDir, 'trading.env'), 'utf8'));
     const restoredNodeId = trading.WAITRON_NODE_ID ?? trading.WAITRON_TILL_NODE_ID;
     let restoredVenueId = currentRecovery ? undefined : trading.WAITRON_TILL_LOCATION_ID;
-    const readCopyIdentity = Reflect.get(await import('./restore.js'), 'readCopyNodeAndVenue');
     if (currentRecovery) {
-      expect(typeof readCopyIdentity).toBe('function');
+      const {readCopyNode} = await import('./restore.js');
+      const {readCloudVenueId} = await import('@waitron/db');
+      expect(typeof readCopyNode).toBe('function');
+      expect(typeof readCloudVenueId).toBe('function');
       const {openBackupQuery} = await import('@waitron/store');
-      const identityArchive = await validateArtifact(restore);
       const restoredQuery = await openBackupQuery(join(venueDir, 'venue.db'));
       try {
-        const identity = await readCopyIdentity(restoredQuery.query, identityArchive.secretEntries);
+        const identity = await readCopyNode(restoredQuery.query, copy.secretEntries);
         expect(identity.node.nodeId).toBe(input.authority.sourceNodeId);
-        restoredVenueId = identity.venueId;
-      } finally {await restoredQuery.close(); await identityArchive.discard();}
+      } finally {await restoredQuery.close();}
+      const restoredStore = await openVenueDatabase(venueDir);
+      try {restoredVenueId = await readCloudVenueId(restoredStore.venue);}
+      finally {await restoredStore.close();}
     }
     expect(restoredNodeId).toBe(input.authority.sourceNodeId);
-    expect(restoredVenueId).toBe(input.authority.localVenueId);
-    for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
+    expect(restoredVenueId).toBe(input.authority.streamId);
+    for (const name of ['cloud/connection.json','cloud/staff.key','cloud-connection.json','cloud-staff.key','ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     console.log('CLOUD_PAIRED_AUTHORISED_RECOVERY=' + JSON.stringify({exit, sha256, bytes: artifact.length,
-      sourceNodeId: restoredNodeId, localVenueId: restoredVenueId,
+      sourceNodeId: restoredNodeId, streamId: restoredVenueId,
       preparationBoundToDeliveredArchive: binding.sourceId === selected.sourceId, sourceAuthorityVerified: true,
       wrongAuthorityRefused: true, missingPreparationRefused: true, integrity: 'ok', sourceRecordsPreserved: true,
       noServerStarted: true, noCloudCredentials: true, cloudReportedRestored: false}));

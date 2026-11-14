@@ -32,8 +32,8 @@ async function fixture(source:Source,asTrial=false,initialLevel:BillingLevel='co
   const location=(await db.pool.query('SELECT endpoint,bucket,region FROM backup_locations WHERE venue_id=$1',[venueId])).rows[0];
   let wait:undefined|(()=>Promise<void>);const calls={grant:0,reader:0};
   const pointerKey=generateKeyPairSync('ed25519'),sourceNodeId=randomUUID();
-  const pointer={venueId,term:2,nodeId:sourceNodeId,generation:`gen-2-${sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
-  const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${pointer.nodeId}","term":2,"venueId":"${pointer.venueId}","writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+  const pointer={streamId:venueId,term:2,nodeId:sourceNodeId,generation:`gen-2-${sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
+  const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${pointer.nodeId}","streamId":"${pointer.streamId}","term":2,"writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
   const authority:ManagedStreamAuthority={
    async provision(){return {writerReference:'writer-one',readerReference:'reader-one',writerCredentials:{accessKeyId:'synthetic-writer',secretAccessKey:'synthetic-writer-secret'}};},
    async read(){return Buffer.from(JSON.stringify({body:pointer,signature:sign(null,Buffer.from(message),pointerKey.privateKey).toString('base64')}));},
@@ -42,7 +42,7 @@ async function fixture(source:Source,asTrial=false,initialLevel:BillingLevel='co
   if(source==='continuous'){
    const streams=new ManagedStreams(db.pool,f.vault,authority,'test-venue-levels');
    const revision=Number((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].configuration_revision);
-   const configured=await streams.configure(f.installed.installationId,revision,{localVenueId:venueId,sourceNodeId,pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')});
+   const configured=await streams.configure(f.installed.installationId,revision,{sourceNodeId,pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')});
    await streams.observe(f.installed.installationId,configured.configurationRevision);
   }
   const target=machineTarget(),version=source==='snapshot'?2:1,digest=source==='snapshot'?f.point.digest:streamRecoveryDigest(pointer.generation);
@@ -80,8 +80,9 @@ for(const source of ['snapshot','continuous'] as const)for(const level of ['conn
   if(source==='snapshot'){
    assert.equal(body.version,2);assert.equal(body.point.id,f.point.id);assert.deepEqual(body.location,f.location);assert.equal(body.recoveryKey,f.capture.keys.recoveryKey);assert.equal(body.credentials.secretAccessKey,'synthetic-secret');assert.deepEqual(body.verification.target,f.target.target);
   }else{
-   const kit=JSON.parse(Buffer.from(body.recoveryKit.slice('WAITRON-RECOVERY-KIT-1:'.length),'base64url').toString());
-   assert.equal(kit.venueId,f.venueId);assert.equal(kit.bucket.secretAccessKey,'synthetic-reader-secret');assert.equal(body.source.kind,'continuous');assert.equal(body.source.sourceNodeId,f.sourceNodeId);
+   assert.match(body.recoveryKit,/^WAITRON-RECOVERY-KIT-2:/);
+   const kit=JSON.parse(Buffer.from(body.recoveryKit.slice('WAITRON-RECOVERY-KIT-2:'.length),'base64url').toString());
+   assert.equal(kit.version,2);assert.equal(kit.streamId,f.venueId);assert.equal(kit.bucket.secretAccessKey,'synthetic-reader-secret');assert.equal(body.source.kind,'continuous');assert.equal(body.source.sourceNodeId,f.sourceNodeId);
   }
   assert.deepEqual(f.calls,{grant:source==='snapshot'?1:0,reader:source==='continuous'?1:0});assert.deepEqual(await f.state(),before);
   assert.equal((await f.db.pool.query('SELECT service_plan FROM organisations WHERE id=$1',[f.scope.organisationId])).rows[0].service_plan,'free');

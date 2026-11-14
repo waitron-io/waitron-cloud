@@ -9,7 +9,7 @@ export const reviewedDirectoryReaders = Object.freeze({
   "packages/backups/src/waitron-data-verify-child.mjs": {"mode":"100644","type":"blob","id":"60bed2d33942b37bf41e72d8b30c45368cef13cb","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/bound-fixture-failure.test.ts": {"mode":"100644","type":"blob","id":"143fd206c6beccd3abc6c561b9fee8c68601c81b","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/bound-waitron-verifier.test.ts": {"mode":"100644","type":"blob","id":"43cc683d6fce1ac01a06feff4c127ecdc8b583d2","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
-  "packages/backups/test/claim-pipeline.test.ts": {"mode":"100644","type":"blob","id":"c111aa8fb6dcfece993b0bf5cbcbf64cba6c963b","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/backups/test/claim-pipeline.test.ts": {"mode":"100644","type":"blob","id":"dac2a3b26f631b36f8edf2994e7bbad09cb20130","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/container-resource-diagnostics.test.ts": {"mode":"100644","type":"blob","id":"273ff46531eb8d78e10122b92929dc530b74fd36","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/object-transfer.test.ts": {"mode":"100644","type":"blob","id":"88eadc6c02919df90635f7cd175d51bcaaba5039","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/waitron-verifier.test.ts": {"mode":"100644","type":"blob","id":"98f96f41e5210ef80bdb5d8b73ef78c8676bcb24","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},

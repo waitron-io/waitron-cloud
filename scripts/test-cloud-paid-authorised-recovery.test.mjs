@@ -21,7 +21,7 @@ test('the paired paid archive restores with separately prepared source authority
   assert.equal(restored.sha256, snapshot.sha256);
   assert.equal(restored.bytes, snapshot.bytes);
   assert.equal(restored.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(restored.localVenueId, snapshot.localVenueId);
+  assert.equal(restored.streamId, snapshot.streamId);
   assert.equal(restored.preparationBoundToDeliveredArchive, true);
   assert.equal(restored.sourceAuthorityVerified, true);
   assert.equal(restored.wrongAuthorityRefused, true);

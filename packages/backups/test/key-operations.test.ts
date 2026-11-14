@@ -71,7 +71,7 @@ beforeEach(async () => {
     installationKey: generateKeyPairSync("ed25519")
       .publicKey.export({ type: "spki", format: "der" })
       .toString("base64url"),
-    localVenueId: randomUUID(),
+    venueId:'',
     environment: "test",
     organisationId: owner.organisationId,
     legalBusinessId: owner.legalBusinessId,
@@ -106,10 +106,10 @@ test("inventory blocks active and referenced keys without exposing key material"
   await catalogue.rotate(installationId);
   await db.pool.query(
     `INSERT INTO backup_managed_streams(venue_id,installation_id,requested_revision,
-      configuration_revision,key_version,local_venue_id,source_node_id,
+      configuration_revision,key_version,source_node_id,
       pointer_signer_public_key,object_prefix,writer_reference,reader_reference)
-     VALUES($1,$2,0,1,2,$3,$4,'test-signer',$5,'test-writer','test-reader')`,
-    [venueId, installationId, randomUUID(), randomUUID(), `streams/${venueId}/`],
+     VALUES($1,$2,0,1,2,$3,'test-signer',$4,'test-writer','test-reader')`,
+    [venueId, installationId, randomUUID(), `streams/${venueId}/`],
   );
   await catalogue.rotate(installationId);
   await catalogue.rotate(installationId);

@@ -7,7 +7,7 @@ import {translations} from '../src/locale.ts';
 
 const requestId = '10000000-0000-4000-8000-000000000001';
 const business = {organisationId: '20000000-0000-4000-8000-000000000001', legalBusinessId: '30000000-0000-4000-8000-000000000001', organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'};
-const view = {requestId, localVenueId: '10000000-0000-4000-8000-000000000002', environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'};
+const view = {requestId, venueId: '10000000-0000-4000-8000-000000000002', environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'};
 const bundle = await build({stdin: {contents: `
  import {applyTokens} from '@waitron-io/ui-core/tokens';
  import {PortalApp} from './src/app.ts';

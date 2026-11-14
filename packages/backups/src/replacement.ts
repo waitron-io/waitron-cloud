@@ -7,16 +7,16 @@ import {recordSecurityAuditEvent,transaction,suppressAlertEpisode,type PlanMode}
 import {decode,publicKey,type Proof} from './recovery.ts';
 import {backupPlan,backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
-export interface ReplacementClaims {id:string;localVenueId:string;nodeId:string;publicKey:string;peerPublicKey:string;issuedAt?:number;}
+export interface ReplacementClaims {id:string;nodeId:string;publicKey:string;peerPublicKey:string;issuedAt?:number;}
 export interface ReplacementEnvelope extends Proof {id:string;keySignature:string;}
-export function replacementPayload(origin:string,action:'prepare'|'status'|'reissue',c:ReplacementClaims,issuedAt:number){return Buffer.from(JSON.stringify(['waitron-cloud-replacement-v1',origin,c.id,action,c.localVenueId,c.nodeId,'test',c.publicKey,c.peerPublicKey,issuedAt]));}
+export function replacementPayload(origin:string,action:'prepare'|'status'|'reissue',c:ReplacementClaims,issuedAt:number){return Buffer.from(JSON.stringify(['waitron-cloud-replacement-v2',origin,c.id,action,c.nodeId,'test',c.publicKey,c.peerPublicKey,issuedAt]));}
 function claims(origin:string,action:'prepare'|'status'|'reissue',envelope:ReplacementEnvelope):ReplacementClaims {
  try{
   if(!envelope||!uuid(envelope.id)||!['prepare','status','reissue'].includes(action))throw Error();
   const bytes=decode(envelope.payload,4096),v:unknown=JSON.parse(new TextDecoder('utf8',{fatal:true}).decode(bytes));
-  if(!Array.isArray(v)||v.length!==10||!uuid(v[4])||!uuid(v[5])||typeof v[7]!=='string'||typeof v[8]!=='string'||!Number.isSafeInteger(v[9])||Math.abs(Date.now()-v[9])>60000)throw Error();
-  const c={id:envelope.id,localVenueId:v[4],nodeId:v[5],publicKey:v[7],peerPublicKey:v[8],issuedAt:v[9]};
-  if(!replacementPayload(origin,action,c,v[9]).equals(bytes)||!verify(null,bytes,publicKey(c.publicKey),decode(envelope.keySignature,86))||! /^[A-Za-z0-9+/]{43}=$/.test(c.peerPublicKey)||Buffer.from(c.peerPublicKey,'base64').length!==32||Buffer.from(c.peerPublicKey,'base64').toString('base64')!==c.peerPublicKey)throw Error();
+  if(!Array.isArray(v)||v.length!==9||!uuid(v[4])||typeof v[6]!=='string'||typeof v[7]!=='string'||!Number.isSafeInteger(v[8])||Math.abs(Date.now()-v[8])>60000)throw Error();
+  const c={id:envelope.id,nodeId:v[4],publicKey:v[6],peerPublicKey:v[7],issuedAt:v[8]};
+  if(!replacementPayload(origin,action,c,v[8]).equals(bytes)||!verify(null,bytes,publicKey(c.publicKey),decode(envelope.keySignature,86))||! /^[A-Za-z0-9+/]{43}=$/.test(c.peerPublicKey)||Buffer.from(c.peerPublicKey,'base64').length!==32||Buffer.from(c.peerPublicKey,'base64').toString('base64')!==c.peerPublicKey)throw Error();
   return c;
  }catch{return backupFail('invalid_proof');}
 }
@@ -24,7 +24,7 @@ async function permission(client:PoolClient,account:string,venue:string){
  if(!(await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE m.account_id=$1 AND v.id=$2 AND m.is_owner AND a.disabled_at IS NULL FOR SHARE OF a,m`,[account,venue])).rowCount)backupFail('permission_denied');
 }
 async function recovery(client:PoolClient,id:string){
- const r=(await client.query(`SELECT r.*,COALESCE(p.source_node_id,r.stream_source_node_id) AS source_node_id,r.source_kind AS kind,p.verification,p.deleting,p.deleted_at,v.local_venue_id,v.environment,v.organisation_id,v.legal_business_id,o.name AS organisation_name,b.name AS business_name
+ const r=(await client.query(`SELECT r.*,COALESCE(p.source_node_id,r.stream_source_node_id) AS source_node_id,r.source_kind AS kind,p.verification,p.deleting,p.deleted_at,v.environment,v.organisation_id,v.legal_business_id,o.name AS organisation_name,b.name AS business_name
  FROM backup_recoveries r LEFT JOIN backup_points p ON p.id=r.point_id JOIN venues v ON v.id=r.venue_id JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id WHERE r.id=$1`,[id])).rows[0];
  if(!r)backupFail('unavailable');if(r.environment!=='test')backupFail('local_integration_only');return r;
 }
@@ -35,8 +35,8 @@ async function current(client:PoolClient,id:string){
   FROM backup_recoveries r LEFT JOIN backup_points p ON p.id=r.point_id WHERE r.id=$1`,[id])).rows[0];if(!r?.valid)backupFail('unavailable');
  await snapshotBinding(client,await recovery(client,id),'unavailable');
 }
-function bound(row:Record<string,any>,c:ReplacementClaims){if(row.public_key!==c.publicKey||row.peer_public_key!==c.peerPublicKey||row.local_venue_id!==c.localVenueId||row.node_id!==c.nodeId)backupFail('conflict');}
-function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,source:r.source_kind==='continuous'?{kind:'continuous',recoverableAt:r.stream_recoverable_at.toISOString(),sourceNodeId:r.stream_source_node_id}:{kind:'snapshot',pointId:r.point_id},venueId:r.venue_id,oldInstallationId:p.old_installation_id,localVenueId:p.local_venue_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
+function bound(row:Record<string,any>,c:ReplacementClaims){if(row.public_key!==c.publicKey||row.peer_public_key!==c.peerPublicKey||row.node_id!==c.nodeId)backupFail('conflict');}
+function view(r:Record<string,any>,p:Record<string,any>){return p.result??{requestId:r.id,pointId:r.point_id,source:r.source_kind==='continuous'?{kind:'continuous',recoverableAt:r.stream_recoverable_at.toISOString(),sourceNodeId:r.stream_source_node_id}:{kind:'snapshot',pointId:r.point_id},venueId:r.venue_id,oldInstallationId:p.old_installation_id,nodeId:p.node_id,environment:'test',publicKey:p.public_key,peerPublicKey:p.peer_public_key,state:'awaiting_owner',expiresAt:r.expires_at.toISOString(),organisationName:r.organisation_name,legalBusinessName:r.business_name,registration:null};}
 export class ReplacementStore {
  readonly planMode:PlanMode;readonly pool:Pool;readonly vault:BackupKeyVault;readonly origin:string;
  constructor(pool:Pool,vault:BackupKeyVault,origin:string,planMode:PlanMode='existing'){this.planMode=planMode;this.pool=pool;this.vault=vault;this.origin=origin;}
@@ -84,7 +84,7 @@ export class ReplacementStore {
     const result=await this.#activeResult(client,prior);claims(this.origin,action,envelope);return result;
    }
    const {r,old,l,p}=await this.#locked(client,c.id);
-   if(r.local_venue_id!==c.localVenueId||r.source_node_id!==c.nodeId)backupFail('conflict');
+   if(r.source_node_id!==c.nodeId)backupFail('conflict');
    if(p?.result){bound(p,c);const result=await this.#activeResult(client,p);claims(this.origin,action,envelope);return result;}
    await current(client,c.id);
    if(r.kind==='snapshot'&&(r.verification!=='verified'||r.deleting||r.deleted_at))backupFail('unavailable');
@@ -96,7 +96,7 @@ export class ReplacementStore {
    const remote=(await client.query('SELECT peer_public_key FROM remote_placements WHERE venue_id=$1',[r.venue_id])).rows[0];
    const saved=p
     ?(await client.query(`UPDATE installation_replacements SET old_installation_id=$2,public_key=$3,peer_public_key=$4,old_peer_public_key=$5 WHERE id=$1 RETURNING *`,[c.id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null])).rows[0]
-    :(await client.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,old_peer_public_key,local_venue_id,node_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[c.id,r.venue_id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null,c.localVenueId,c.nodeId])).rows[0];
+    :(await client.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,old_peer_public_key,node_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[c.id,r.venue_id,old.id,c.publicKey,c.peerPublicKey,remote?.peer_public_key??null,c.nodeId])).rows[0];
    await current(client,c.id);claims(this.origin,action,envelope);return view(r,saved);
   }).catch(error=>{if(error?.code==='23505')backupFail('conflict');throw error;});
  }

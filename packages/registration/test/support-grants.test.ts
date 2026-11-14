@@ -31,7 +31,7 @@ beforeEach(async()=>{
  await pool.query("INSERT INTO organisations(id,name) VALUES($1,'Customer Org'),($2,'Foreign Org')",[organisation,foreignOrganisation]);
  const business=randomUUID(),foreignBusiness=randomUUID();
  await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Customer SL','ES'),($3,$4,'Foreign SL','ES')",[business,organisation,foreignBusiness,foreignOrganisation]);
- await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test'),($5,$6,$7,$8,'test')",[venue,organisation,business,randomUUID(),foreignVenue,foreignOrganisation,foreignBusiness,randomUUID()]);
+ await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test'),($4,$5,$6,'test')",[venue,organisation,business,foreignVenue,foreignOrganisation,foreignBusiness]);
  await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true),($3,$2,true),($4,$2,false),($4,$5,true)',[owner,organisation,secondOwner,member,foreignOrganisation]);
  await pool.query("INSERT INTO platform_permissions(account_id,permission) VALUES($1,'support.eligible')",[platform]);
  ownerSession=await transaction(pool,client=>createSession(client,owner));
@@ -142,7 +142,7 @@ test('one operation identity records separate granted actions and organisation v
  const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval({venueId:null})),operationId=randomUUID();
  const secondBusiness=randomUUID(),secondVenue=randomUUID();
  await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Second SL','ES')",[secondBusiness,organisation]);
- await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[secondVenue,organisation,secondBusiness,randomUUID()]);
+ await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[secondVenue,organisation,secondBusiness]);
  await store.authorize(authorization(grant.id,{venueId:venue,action:'customer.data.read',operationId}),marker(randomUUID(),'read first venue'));
  await store.authorize(authorization(grant.id,{venueId:venue,action:'diagnostics.run',operationId}),marker(randomUUID(),'diagnose first venue'));
  await store.authorize(authorization(grant.id,{venueId:secondVenue,action:'customer.data.read',operationId}),marker(randomUUID(),'read second venue'));

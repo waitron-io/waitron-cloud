@@ -24,7 +24,7 @@ const peerKey=()=>randomBytes(32).toString('base64'),checks=[];
 async function installation(email){
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);
  const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Reconciler proof',legalBusinessName:'Reconciler proof SL',countryCode:'ES'});
- const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  const registrations=new RegistrationStore(db.pool);await registrations.start(binding);await registrations.approveCloud(binding,owner.accountId);await registrations.approveLocal(binding,randomUUID());return registrations.complete(binding);
 }
 const waitronCertificate=(command,hostname,file)=>execFileSync('pnpm',['--filter','@waitron/server','exec','tsx','scripts/cloud-certificate.ts',command,waitronState,hostname,file],{cwd:waitron,encoding:'utf8',timeout:30000});
@@ -46,7 +46,7 @@ try{
  assert.equal(initialRuns,3);assert.equal(issuances,2);assert.equal(routePublications,1);checks.push('initial route plus public and staff certificates reconciled through local adapters');
  const initialStaff=new X509Certificate(await readFile(staffCertificate)),initialPublic=new X509Certificate(await readFile(publicCertificate));
  waitronCertificate('install',selectedPlacement.staffHostname,staffCertificate);assert.equal(await readFile(join(waitronState,'cloud-staff.crt'),'utf8'),await readFile(staffCertificate,'utf8'));
- const staffPrivate=await readFile(join(waitronState,'cloud-staff.key'),'utf8'),cloudArtifacts=(await Promise.all([staffCsr,staffCertificate,publicCsr,publicCertificate,manifestFile].map(file=>readFile(file,'utf8')))).join('\n');assert.equal(cloudArtifacts.includes(staffPrivate),false);checks.push('Waitron existing install interface accepted the staff chain while its private key stayed in Waitron state');
+ const staffPrivate=await readFile(join(waitronState,'cloud/staff.key'),'utf8'),cloudArtifacts=(await Promise.all([staffCsr,staffCertificate,publicCsr,publicCertificate,manifestFile].map(file=>readFile(file,'utf8')))).join('\n');assert.equal(cloudArtifacts.includes(staffPrivate),false);checks.push('Waitron existing install interface accepted the staff chain while its private key stayed in Waitron state');
  const firstManifest=verifyManifest(envelopes[0],signing.publicKey,cellId);assert.deepEqual(firstManifest.routes.map(route=>route.installationId).sort(),[selected.installationId,other.installationId].sort());
  assert.notEqual(firstManifest.routes.find(route=>route.installationId===selected.installationId)?.peerPublicKey,otherPlacement.peerPublicKey);checks.push('signed route projection contains two isolated venue identities');
 
@@ -56,13 +56,13 @@ try{
  await db.pool.query("UPDATE remote_configuration_jobs SET status='running',claim_id=$2,lease_until=clock_timestamp()-interval '1 second',attempts=1 WHERE kind='route' AND target_id=$1",[cellId,randomUUID()]);
  assert.equal(await new RemoteConfigurationReconciler(db.pool,options).runOnce(),true);assert.equal(routePublications,3);const thirdManifest=verifyManifest(envelopes[2],signing.publicKey,cellId,Date.now(),secondManifest.sequence);checks.push('a restarted worker reclaimed an expired route lease and published fresh authority');
 
- await rm(join(waitronState,'cloud-staff.key'));waitronCertificate('csr',selectedPlacement.staffHostname,staffCsr);
+ await rm(join(waitronState,'cloud/staff.key'));waitronCertificate('csr',selectedPlacement.staffHostname,staffCsr);
  [,publicCsrBytes]=await acmeCrypto.createCsr({commonName:selectedPlacement.publicHostname,altNames:[selectedPlacement.publicHostname]});await writeFile(publicCsr,publicCsrBytes,{mode:0o600});
  await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE target_id=$1 AND kind LIKE 'certificate_%'",[selected.installationId]);assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),true);
  const renewedStaff=new X509Certificate(await readFile(staffCertificate)),renewedPublic=new X509Certificate(await readFile(publicCertificate));assert.notEqual(renewedStaff.serialNumber,initialStaff.serialNumber);assert.notEqual(renewedPublic.serialNumber,initialPublic.serialNumber);
  waitronCertificate('install',selectedPlacement.staffHostname,staffCertificate);checks.push('periodic checks renewed both chains after their CSR keys changed and Waitron installed the new staff chain');
 
- const retained=await readFile(staffCertificate,'utf8');await rm(join(waitronState,'cloud-staff.key'));waitronCertificate('csr',selectedPlacement.staffHostname,staffCsr);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[selected.installationId]);
+ const retained=await readFile(staffCertificate,'utf8');await rm(join(waitronState,'cloud/staff.key'));waitronCertificate('csr',selectedPlacement.staffHostname,staffCsr);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[selected.installationId]);
  await new RemoteConfigurationReconciler(db.pool,{...options,issueCertificate:async()=>{throw new Error('local injected failure');}}).runOnce();assert.equal(await readFile(staffCertificate,'utf8'),retained);checks.push('failed renewal retained the usable staff chain');
 
  const staleCsr=await readFile(staffCsr,'utf8'),staleFile=join(root,'stale-issued.crt');await writeFile(join(root,'stale.csr'),staleCsr,{mode:0o600});const staleChain=await acme.issue({hostname:selectedPlacement.staffHostname,csrFile:join(root,'stale.csr'),accountKeyFile,output:staleFile,dnsName:`_acme-challenge.${selectedPlacement.staffHostname}`});

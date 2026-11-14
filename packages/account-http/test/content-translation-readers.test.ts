@@ -17,7 +17,7 @@ beforeEach(async()=>{
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner]);
  await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Sol')",[organisation]);
  await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Sol SL','ES')",[business,organisation]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,organisation,business,randomUUID()]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
  await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'readers-key')",[installation,venue]);
  await db.pool.query(`INSERT INTO installation_services(installation_id,service,state) VALUES($1,'continuous_backup','unconfigured'),($1,'remote_access','unconfigured'),
   ($1,'retained_snapshots','unconfigured'),($1,'content_translation','ready')`,[installation]);

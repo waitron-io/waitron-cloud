@@ -20,15 +20,15 @@ async function fixture(){
   const installation=(await f.pool.query('UPDATE installations SET public_key=$2 WHERE venue_id=$1 AND superseded_by IS NULL RETURNING id',[f.venues[0],publicKey])).rows[0].id as string;
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
   const vault=new BackupKeyVault(randomBytes(32)),pointerKey=generateKeyPairSync('ed25519');
-  const input={localVenueId:f.venues[0]!,sourceNodeId:randomUUID(),pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')};
+  const input={sourceNodeId:randomUUID(),pointerSignerPublicKey:pointerKey.publicKey.export({type:'spki',format:'der'}).toString('base64')};
   const location={endpoint:'https://storage.example.test',bucket:'venue-'+f.venues[0],region:'local'},calls={provision:0,read:0};
   let wait:undefined|(()=>Promise<void>);
-  const pointer={venueId:input.localVenueId,term:2,nodeId:input.sourceNodeId,generation:`gen-2-${input.sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
-  const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${pointer.nodeId}","term":2,"venueId":"${pointer.venueId}","writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+  const pointer={streamId:f.venues[0]!,term:2,nodeId:input.sourceNodeId,generation:`gen-2-${input.sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
+  const message=`{"pointer":{"generation":"${pointer.generation}","nodeId":"${pointer.nodeId}","streamId":"${pointer.streamId}","term":2,"writtenAt":"${pointer.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
   const bytes=Buffer.from(JSON.stringify({body:pointer,signature:sign(null,Buffer.from(message),pointerKey.privateKey).toString('base64')}));
   const authority:ManagedStreamAuthority={
    async provision(value){assert.deepEqual(value,{venueId:f.venues[0],location,prefix:`streams/${f.venues[0]}/`});calls.provision++;await wait?.();return {writerReference:'writer-one',readerReference:'reader-one',writerCredentials:{accessKeyId:'synthetic-access',secretAccessKey:'synthetic-secret'}};},
-   async read(reference,at,path){assert.equal(reference,'reader-one');assert.deepEqual(at,location);assert.equal(path,`streams/${f.venues[0]}/venues/${input.localVenueId}/current.json`);calls.read++;await wait?.();return bytes;},
+   async read(reference,at,path){assert.equal(reference,'reader-one');assert.deepEqual(at,location);assert.equal(path,`streams/${f.venues[0]}/current.json`);calls.read++;await wait?.();return bytes;},
   };
   const objects=()=>({async read(){throw Error('unused');},async put(){throw Error('unused');},async remove(){}});
   const catalogue=new BackupCatalogue(f.pool,vault,objects,'test-venue-levels'),streams=new ManagedStreams(f.pool,vault,authority,'test-venue-levels');
@@ -72,7 +72,7 @@ for(const action of actions)for(const level of ['registered','connected','hosted
   const result=await response.json();
   if(level==='registered'){assert.equal(result.error,'permission_denied');assert.deepEqual(f.calls,{provision:0,read:0});assert.deepEqual(await state(f),before);}
   else if(action==='backup-stream-configure'){assert.equal(result.bucket.secretAccessKey,'synthetic-secret');assert.equal(result.venueId,f.venues[0]);assert.equal(result.installationId,f.installation);assert.equal(f.calls.provision,1);}
-  else{assert.deepEqual(Object.keys(result).sort(),['checkedAt','configurationRevision','installationId','localVenueId','recoverableAt','sourceNodeId','venueId']);assert.equal(result.recoverableAt,'2026-10-29T09:00:00.000Z');assert.equal(f.calls.read,1);}
+  else{assert.deepEqual(Object.keys(result).sort(),['checkedAt','configurationRevision','installationId','recoverableAt','sourceNodeId','streamId','venueId']);assert.equal(result.recoverableAt,'2026-10-29T09:00:00.000Z');assert.equal(f.calls.read,1);}
   const history=JSON.stringify((await f.pool.query('SELECT * FROM installation_operations')).rows);assert.equal(history.includes('synthetic-secret'),false);
  }finally{await f.close();}
 });

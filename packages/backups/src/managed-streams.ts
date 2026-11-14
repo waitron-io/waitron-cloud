@@ -26,7 +26,6 @@ export interface ManagedStreamAuthority {
 }
 
 export interface ManagedStreamInput {
-  localVenueId: string;
   sourceNodeId: string;
   pointerSignerPublicKey: string;
 }
@@ -36,7 +35,7 @@ export interface ManagedStreamConfiguration {
   venueId: string;
   installationId: string;
   configurationRevision: number;
-  localVenueId: string;
+  streamId: string;
   sourceNodeId: string;
   bucket: StorageLocation & {
     prefix: string;
@@ -51,7 +50,7 @@ export interface ManagedStreamRecovery {
   installationId: string;
   configurationRevision: number;
   keyVersion: number;
-  localVenueId: string;
+  streamId: string;
   sourceNodeId: string;
   pointerSignerPublicKey: string;
   location: StorageLocation;
@@ -68,7 +67,6 @@ interface StreamRow {
   requested_revision: number;
   configuration_revision: number;
   key_version: number;
-  local_venue_id: string;
   source_node_id: string;
   pointer_signer_public_key: string;
   object_prefix: string;
@@ -83,7 +81,7 @@ interface StreamRow {
 }
 
 interface PointerBody {
-  venueId: string;
+  streamId: string;
   term: number;
   nodeId: string;
   generation: string;
@@ -128,8 +126,7 @@ function publicKey(value: string) {
 
 function validInput(input: ManagedStreamInput) {
   if (
-    !exactObject(input, ["localVenueId", "sourceNodeId", "pointerSignerPublicKey"]) ||
-    !uuid(input.localVenueId) ||
+    !exactObject(input, ["sourceNodeId", "pointerSignerPublicKey"]) ||
     !uuid(input.sourceNodeId)
   )
     backupFail("invalid_stream_configuration");
@@ -157,7 +154,6 @@ function validProvision(value: ManagedStreamProvision) {
 function sameInput(row: StreamRow, revision: number, input: ManagedStreamInput) {
   return (
     row.requested_revision === revision &&
-    row.local_venue_id === input.localVenueId &&
     row.source_node_id === input.sourceNodeId &&
     row.pointer_signer_public_key === input.pointerSignerPublicKey
   );
@@ -169,7 +165,7 @@ function decodeRow(row: StreamRow): ManagedStreamRecovery {
     installationId: row.installation_id,
     configurationRevision: row.configuration_revision,
     keyVersion: row.key_version,
-    localVenueId: row.local_venue_id,
+    streamId: row.venue_id,
     sourceNodeId: row.source_node_id,
     pointerSignerPublicKey: row.pointer_signer_public_key,
     location: location(row),
@@ -221,7 +217,7 @@ function configuration(
     venueId: row.venue_id,
     installationId: row.installation_id,
     configurationRevision: row.configuration_revision,
-    localVenueId: row.local_venue_id,
+    streamId: row.venue_id,
     sourceNodeId: row.source_node_id,
     bucket: {
       ...location(row),
@@ -243,14 +239,14 @@ function pointer(bytes: Buffer, expected: StreamRow): PointerBody & { signature:
     backupFail("invalid_stream_pointer");
   const body = value.body;
   if (
-    !exactObject(body, ["venueId", "term", "nodeId", "generation", "writtenAt"]) ||
-    typeof body.venueId !== "string" ||
+    !exactObject(body, ["streamId", "term", "nodeId", "generation", "writtenAt"]) ||
+    typeof body.streamId !== "string" ||
     !Number.isSafeInteger(body.term) ||
     Number(body.term) < 0 ||
     typeof body.nodeId !== "string" ||
     typeof body.generation !== "string" ||
     typeof body.writtenAt !== "string" ||
-    body.venueId !== expected.local_venue_id ||
+    body.streamId !== expected.venue_id ||
     body.nodeId !== expected.source_node_id
   )
     backupFail("invalid_stream_pointer");
@@ -314,7 +310,7 @@ export class ManagedStreams {
       const existing = await streamRow(client, install.venue_id);
       const cleared=(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && existing && install.configuration_revision===revision
         && (await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='continuous_backup'",[installationId])).rows[0]?.state==='unconfigured';
-      if (existing && !sameInput(existing, revision, input) && !(cleared && existing.local_venue_id===input.localVenueId && existing.source_node_id===input.sourceNodeId && existing.pointer_signer_public_key===input.pointerSignerPublicKey)) backupFail("conflict");
+      if (existing && !sameInput(existing, revision, input) && !(cleared && existing.source_node_id===input.sourceNodeId && existing.pointer_signer_public_key===input.pointerSignerPublicKey)) backupFail("conflict");
       if (!existing && install.configuration_revision !== revision) backupFail("conflict");
       return { install, existing, cleared };
     });
@@ -352,17 +348,16 @@ export class ManagedStreams {
           await client.query<StreamRow>(
             `INSERT INTO backup_managed_streams(
               venue_id,installation_id,requested_revision,configuration_revision,key_version,
-              local_venue_id,source_node_id,pointer_signer_public_key,object_prefix,
+              source_node_id,pointer_signer_public_key,object_prefix,
               writer_reference,reader_reference)
-             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-             RETURNING *, $12::text AS endpoint,$13::text AS bucket,$14::text AS region`,
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+             RETURNING *, $11::text AS endpoint,$12::text AS bucket,$13::text AS region`,
             [
               install.venue_id,
               installationId,
               revision,
               revision + 1,
               install.active_key_version,
-              input.localVenueId,
               input.sourceNodeId,
               input.pointerSignerPublicKey,
               prefix,
@@ -403,7 +398,7 @@ export class ManagedStreams {
     const bytes = await this.#authority.read(
       initial.reader_reference,
       location(initial),
-      `${initial.object_prefix}venues/${initial.local_venue_id}/current.json`,
+      `${initial.object_prefix}current.json`,
     );
     const observed = pointer(bytes, initial);
     return transaction(this.#pool, async (client) => {

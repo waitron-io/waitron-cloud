@@ -14,7 +14,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
     await writeFile(directory + '/wireguard.key', key.privateKey.export({format: 'der', type: 'pkcs8'}).subarray(-32).toString('base64'), {mode: 0o600, flag: 'wx'});
     return {peerPublicKey: key.publicKey.export({format: 'der', type: 'spki'}).subarray(-32).toString('base64')};
   }
-  const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+  const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
   assert.equal(state.environment, 'test');
   assert.equal(state.origin, 'https://waitron.local:3000');
   const installationId = state.view.registration.installationId;
@@ -84,7 +84,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
     req.once('error', reject); req.end();
   });
   // This TLS adapter forwards to the running native venue; it supplies no application responses.
-  const server = createServer({key: await readFile(root + '/cloud-staff.key'), cert: certificate}, (req, res) => {
+  const server = createServer({key: await readFile(root + '/cloud/staff.key'), cert: certificate}, (req, res) => {
     const upstream = requestIntegrationVenue(ready.origin, req.url, {...upstreamTrust, method: req.method, headers: req.headers}, response => {
       res.writeHead(response.statusCode, response.headers); response.pipe(res);
     });

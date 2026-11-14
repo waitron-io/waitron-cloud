@@ -41,7 +41,7 @@ try {
     assert.equal(result.plan, plan);
     console.log(JSON.stringify(result));
   } else {
-    const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
+    const {rows} = await pool.query('SELECT v.organisation_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
     if (phase === 'paid-remote-provision' || phase === 'paid-remote-inspect' || phase === 'paid-remote-downgrade') {
       const {paidRemoteAccount} = await import('./integration-paid-remote-account.mjs');
@@ -135,10 +135,10 @@ try {
           venueId: rows[0].venue_id, publicKey: saved.public_key, readerReference: saved.reader_reference, location}));
 
         console.log(JSON.stringify(inspectIntegrationStream({venueId:observed.venueId,installationId:observed.installationId,
-          sourceNodeId:observed.sourceNodeId,localVenueId:observed.localVenueId,generation:observed.generation,
+          sourceNodeId:observed.sourceNodeId,streamId:observed.streamId,generation:observed.generation,
           recoverableAt:observed.recoverableAt,checkedAt:observed.checkedAt,nativeStreaming:true,signedPointerVerified:true,
           retainedSnapshotUnchanged:true,noSupersession:true,noActivation:true},
-          {venueId:rows[0].venue_id,installationId,sourceNodeId,localVenueId:rows[0].local_venue_id,generation,recoverableAt})));
+          {venueId:rows[0].venue_id,installationId,sourceNodeId,streamId:rows[0].venue_id,generation,recoverableAt})));
       } catch(error) {
         const named=/^integration\.stream_[A-Za-z0-9_]+/.exec(error.message)?.[0];
         console.error(named??'integration.stream_'+invariant);
@@ -167,7 +167,7 @@ try {
         assert.ok(point, 'integration.verification_point_missing');
         const attempt = (await pool.query('SELECT a.*,q.current_verification FROM backup_verification_attempts a JOIN backup_point_qualification q ON q.verification_id=a.id WHERE a.id=$1 AND a.point_id=$2', [point.current_evidence_id, pointId])).rows[0];
         assert.ok(attempt, 'integration.verification_admission_missing');
-        const expectedOwners = revision !== pinnedTarget.runtime.revision ? target.modules.map(value => value.name) : undefined;
+        const expectedOwners = target.modules.map(value => value.name);
         const evidence = inspectIntegrationVerification(point, attempt, {pointId, installationId, venueId: rows[0].venue_id, sourceNodeId, sha256, bytes}, target.digest, image, expectedOwners);
         const job = (await pool.query("SELECT status,attempts,last_success_at,last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1", [pointId])).rows[0];
         assert.equal(job.status, 'pending'); assert.equal(job.attempts, 0); assert.ok(job.last_success_at); assert.equal(job.last_error, null);
@@ -198,7 +198,7 @@ try {
     } else {
       const operations = await pool.query('SELECT result FROM installation_operations WHERE installation_id=$1', [installationId]);
       assert.ok(operations.rows.some(row => row.result.lease), 'integration.persisted_renewal_missing');
-      console.log(JSON.stringify({organisationId, venueId: rows[0].venue_id, localVenueId: rows[0].local_venue_id, persistedRenewal: true}));
+      console.log(JSON.stringify({organisationId, venueId: rows[0].venue_id, streamId: rows[0].venue_id, persistedRenewal: true}));
     }
   }
 } finally {await pool.end();}

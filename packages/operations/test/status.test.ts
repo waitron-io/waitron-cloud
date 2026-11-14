@@ -78,7 +78,7 @@ async function configuredVenue(){
  const organisation=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),cell=randomUUID();
  await db.pool.query('INSERT INTO organisations(id,name) VALUES($1,$2)',[organisation,'Private operator fixture']);
  await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Private business','ES')",[business,organisation]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,organisation,business,randomUUID()]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
  await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'private-installation-key')",[installation,venue]);
  await db.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','ready'),($1,'continuous_backup','ready'),($1,'retained_snapshots','ready')",[installation]);
  await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','private.example.test',81,'private-cell-key','private.gateway.test:51820')",[cell]);

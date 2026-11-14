@@ -492,10 +492,11 @@ TEST_CLOUD_SNAPSHOT_VERIFIER_IMAGE=<pinned-verifier-image-id> \
   node --test deploy/test-cloud/snapshot-proof.test.mjs
 ```
 
-The current local candidate pins Waitron A1004 at
-`ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. Its complete compiled target includes
-all 15 owners, core schema 185 and venue-service schema 66. A1004 removes the
-verification-only lock watchdog; the Cloud child still denies worker threads.
+The current candidate is the reviewed pairing-v2 build named in
+`deploy/backup-verifier/target.json`. Its complete compiled target includes eight
+module owners and core schema 1. The older A1004 descriptor remains a historical
+control; it does not qualify the current runtime. The Cloud data-verification child
+still denies worker threads.
 The image build compares its complete compiled descriptor with the checked-in
 manifest before accepting the candidate.
 
@@ -554,7 +555,8 @@ This reuses Waitron's existing `archiveHost()` and `archiveCommand()` from the
 Its original synthetic archive restores, but does not pass the complete data
 verifier. The Cloud fixture instead captures the same disposable source through
 Waitron's backup writer after normal node-identity and test-certificate setup.
-All 15 module checks then pass. It prepares a new recovery operation for these
+The verifier requires every module check in `deploy/backup-verifier/target.json`
+to pass. It prepares a new recovery operation for these
 exact recaptured bytes, using the fixture's controlled later clock, and executes
 the ordinary restore. The recovered counters stay at 123; the restored series
 start at 1 and the database holds two fiscal allocations. A wrong node key and a
@@ -656,8 +658,8 @@ command. Each account pairs a separate disposable Waitron demo venue through the
 normal manager login and pairing APIs.
 
 Use immutable local image IDs, with the reviewed Cloud source and installed dependencies
-in the first image. The second is the existing Waitron verifier image pinned to
-`ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. The runner builds that pinned source's
+in the first image. The second is the Waitron verifier image for the exact revision in
+`deploy/backup-verifier/target.json`. The runner builds that pinned source's
 dashboard without network access and runs its unchanged integration fixture with
 its installed TypeScript loader. It creates no host venue or private key file.
 
@@ -740,7 +742,7 @@ change invoice allocation or captured fiscal records.
 
 The real test worker reads the published object and delivers it to its bounded
 verifier child. The independent evidence check requires the same paired source,
-archive bytes and hash, pinned target and all 15 module results. It also requires
+archive bytes and hash, pinned target and every module result in that target. It also requires
 current catalogue admission, confirmed child cleanup and no activation attempt.
 The trusted worker alone receives the Docker socket. Its verifier child keeps
 its existing network, filesystem and resource restrictions.
@@ -854,14 +856,14 @@ node --test scripts/test-cloud-paid-stream.test.mjs
 Use the same explicit image inputs as the snapshot proof. To test a newer Waitron
 image, set `TEST_CLOUD_INTEGRATION_WAITRON_REVISION` to its full Git commit hash.
 The image's `cloud.waitron-revision` label must match exactly. Leave it unset to
-keep the default `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` pin. This setting applies to
+keep the current default in `scripts/test-cloud-integration.mjs`. This setting applies to
 all client runners in that shell; combined evidence assembly still accepts only
 the default revision. For a newer selected revision, the disposable verification
 policy uses the target exported by that image's compiled verifier. Cloud checks
 its revision and recomputes its hashes before admission. The production target
 and release-readiness rules stay pinned; this test does not qualify a production
 release. The proof requires the complete owner list from the selected target;
-the default image keeps its fixed fifteen-owner check. This opt-in image adds
+the current default keeps its fixed eight-owner check. This opt-in image adds
 the checksum-verified Linux x86-64 Litestream release named by the paired image's
 `LITESTREAM_VERSION`. The fixture supports 0.5.17 and 0.5.18; an unknown version
 refuses the build until you add its verified checksum. The disposable venue forwards
@@ -1573,7 +1575,7 @@ Dockerfile-specific ignore file for fixture exclusions; replacing the tracked
 
 ```sh
 node deploy/test-cloud/test-fixtures/integration-waitron-source.mjs capture \
-  /path/to/pinned-waitron ec91a9e34d2daba146f4ee61850ea4136ad5cfb7 \
+  /path/to/pinned-waitron <pinned-Waitron-revision> \
   > /tmp/waitron-source.json
 node --test deploy/test-cloud/integration-waitron-source.test.mjs
 ```
@@ -1823,3 +1825,23 @@ Linux free-service proof at the same commit and tree: all seven groups pass,
 containers retain their IDs, start times and health. Its 533 resource readings
 pass unchanged. This qualifies those recorded inputs; keep deployed plan
 enforcement off.
+
+Pairing v2 and the managed-stream cutover require matching Waitron and Cloud builds.
+Before pairing, the native fixture's `ready.venueId` is null. Use the completed
+registration id after pairing; a restarted fixture reads it from the venue database.
+The rehearsal's `streamId` is the same Cloud venue id observed by the native client.
+Historical verifier targets remain separate controls; they do not qualify this
+paired-client cutover.
+
+The current slice qualifies pairing, native stream observation and archive recovery
+separately. On 14 November, with the native candidate
+`5e67b8eb8efc3ea7c868c7d129547d291c64e037`, its locally prepared v2 signing package
+and both image variables set, `node --test scripts/test-cloud-paid-stream.test.mjs`
+passed 1/1 with no skips in 178 seconds. The combined continuous/restart command
+`node --test scripts/test-cloud-paid-continuous-recovery.test.mjs` failed 0/1 with
+no skips at `integration.command_failed:client-refresh` after 259 seconds.
+That phase still lacks child details; the cause remains unestablished. Its checks
+remain for the next slice. Keep continuous recovery unavailable: the ordinary
+`captureRuntime` does not configure a managed-stream reader, and the read endpoint
+returns 503 without one. The explicit test-only adapter supplies one for these
+proofs. These local results qualify no deployment or published image.

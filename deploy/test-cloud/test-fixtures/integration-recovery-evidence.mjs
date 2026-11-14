@@ -25,10 +25,10 @@ export function inspectIntegrationRecovery(row, expected, status) {
 }
 
 export function inspectIntegrationAuthorisedRecovery(row, expected) {
-  for (const name of ['sha256', 'bytes', 'sourceNodeId', 'localVenueId']) assert.equal(row[name], expected[name]);
+  for (const name of ['sha256', 'bytes', 'sourceNodeId', 'streamId']) assert.equal(row[name], expected[name]);
   const observed = {exit: 0, preparationBoundToDeliveredArchive: true, sourceAuthorityVerified: true,
     wrongAuthorityRefused: true, missingPreparationRefused: true, integrity: 'ok',
     sourceRecordsPreserved: true, noServerStarted: true, noCloudCredentials: true, cloudReportedRestored: false};
   for (const [name, value] of Object.entries(observed)) assert.equal(row[name], value);
-  return {sha256: row.sha256, bytes: row.bytes, sourceNodeId: row.sourceNodeId, localVenueId: row.localVenueId, ...observed};
+  return {sha256: row.sha256, bytes: row.bytes, sourceNodeId: row.sourceNodeId, streamId: row.streamId, ...observed};
 }

@@ -44,8 +44,8 @@ beforeEach(async () => {
   await pool.query('INSERT INTO organisations(id) VALUES($1)', [organisationId]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)', [businessId, organisationId]);
   await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)', [accountId, organisationId]);
-  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",
-    [venueId, organisationId, businessId, randomUUID()]);
+  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",
+    [venueId, organisationId, businessId]);
   await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)', [installationId, venueId, `key:${installationId}`]);
   await pool.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'remote_access'),($1,'continuous_backup'),($1,'retained_snapshots')", [installationId]);
 });
@@ -143,10 +143,10 @@ test('dry run and apply bound identity, registration, delivery and operation his
     VALUES($1,'reset@example.test',$2,$3,$3),($4,'recent-reset@example.test',$5,$6,NULL)`,
   [hash('4'), older, old, hash('5'), '2029-12-31T23:55:00.000Z', future]);
 
-  await pool.query(`INSERT INTO pairing_requests(id,public_key,local_venue_id,environment,code_hash,expires_at)
+  await pool.query(`INSERT INTO pairing_requests(id,public_key,requested_venue_id,environment,code_hash,expires_at)
     VALUES($1,'pair-old',$2,'test',$3,$4),($5,'pair-recent',$6,'test',$7,$8)`,
   [randomUUID(), randomUUID(), hash('6'), old, randomUUID(), randomUUID(), hash('7'), future]);
-  await pool.query(`INSERT INTO connection_requests(operation_id,installation_key,local_venue_id,environment,organisation_id,legal_business_id,created_at,expires_at)
+  await pool.query(`INSERT INTO connection_requests(operation_id,installation_key,requested_venue_id,environment,organisation_id,legal_business_id,created_at,expires_at)
     VALUES($1,'connection-old',$2,'test',$3,$4,$5,$5),($6,'connection-recent',$7,'test',$3,$4,$8,$8)`,
   [randomUUID(), randomUUID(), organisationId, businessId, old, randomUUID(), randomUUID(), future]);
   await pool.query(`INSERT INTO installation_operations(installation_id,operation_id,digest,result,created_at)
@@ -238,11 +238,11 @@ test('backup cleanup preserves work and references while chunks resume across wo
   [oldRecovery, venueId, recoveredPoint, accountId, old, blockedRecovery, blockedPoint, activeRecovery, protectedPoint, future]);
   await pool.query(`INSERT INTO backup_recovery_requests(id,public_key,code_hash,expires_at,account_id,operation_id)
     VALUES($1,'recovery-complete',$2,$3,$4,$1)`, [oldRecovery, hash('8'), old, accountId]);
-  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,local_venue_id,node_id,created_at,completed_at,result)
-    VALUES($1,$2,$3,'replacement-complete','peer-complete',$4,$5,$6,$6,'{}'),
-      ($7,$2,$3,'replacement-incomplete','peer-incomplete',$8,$9,$6,NULL,NULL)`,
-  [oldRecovery, venueId, installationId, randomUUID(), randomUUID(), old,
-    blockedRecovery, randomUUID(), randomUUID()]);
+  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,node_id,created_at,completed_at,result)
+    VALUES($1,$2,$3,'replacement-complete','peer-complete',$4,$5,$5,'{}'),
+      ($6,$2,$3,'replacement-incomplete','peer-incomplete',$7,$5,NULL,NULL)`,
+  [oldRecovery, venueId, installationId, randomUUID(), old,
+    blockedRecovery, randomUUID()]);
 
   const lockedJob = '00000000-0000-4000-8000-000000000021';
   const freeJob = '00000000-0000-4000-8000-000000000022';
@@ -418,9 +418,9 @@ test('recovery cleanup skips a closed operation whose replacement row is worker-
   await pool.query(`INSERT INTO backup_recoveries(id,venue_id,point_id,account_id,target_public_key,mode,status,created_at,expires_at)
     VALUES($1,$2,$3,$4,'locked-recovery-key','failure','closed',$5,$5)`,
   [recoveryId, venueId, pointId, accountId, old]);
-  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,local_venue_id,node_id,created_at,completed_at,result)
-    VALUES($1,$2,$3,'locked-replacement','locked-peer',$4,$5,$6,$6,'{}')`,
-  [recoveryId, venueId, installationId, randomUUID(), randomUUID(), old]);
+  await pool.query(`INSERT INTO installation_replacements(id,venue_id,old_installation_id,public_key,peer_public_key,node_id,created_at,completed_at,result)
+    VALUES($1,$2,$3,'locked-replacement','locked-peer',$4,$5,$5,'{}')`,
+  [recoveryId, venueId, installationId, randomUUID(), old]);
   const worker = await otherPool.connect();
   await worker.query('BEGIN');
   await worker.query('SELECT id FROM installation_replacements WHERE id=$1 FOR UPDATE', [recoveryId]);

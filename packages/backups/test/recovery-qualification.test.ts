@@ -17,7 +17,7 @@ async function approved(){
 }
 async function replacement(){
  const f=await approved();await f.recovery.target(f.t.id,'restored',f.t.envelope('restored',f.point.digest));
- const key=generateKeyPairSync('ed25519'),claims={id:f.t.id,localVenueId:f.binding.localVenueId,nodeId:f.point.sourceNodeId,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
+ const key=generateKeyPairSync('ed25519'),claims={id:f.t.id,nodeId:f.point.sourceNodeId,publicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey:randomBytes(32).toString('base64')};
  return {...f,store:new ReplacementStore(db.pool,f.vault,origin),confirmation:{oldInstallationId:f.installed.installationId,oldServerUnavailable:true,confirmReplacement:true},
  envelope(action:'prepare'|'status'){const bytes=replacementPayload(origin,action,claims,Date.now());return {id:f.t.id,payload:bytes.toString('base64url'),signature:f.t.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};}};
 }

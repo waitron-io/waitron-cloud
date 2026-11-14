@@ -87,7 +87,7 @@ To run the complete private command-path proof, first prepare the snapshot and r
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
   /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
-  /tmp/cloud-private-packages/contract-0.2.14.tgz
+  /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 
 This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, each supplied private package’s integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
@@ -122,7 +122,7 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
   /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
-  /tmp/cloud-private-packages/contract-0.2.14.tgz
+  /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 
 Use a new absent private ledger path for each opt-in proof. Explicit bootstrap refuses a directory left by an earlier proof so it cannot forget an old lease.

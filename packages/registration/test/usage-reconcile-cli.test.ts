@@ -29,7 +29,7 @@ beforeEach(async()=>{
  for(const item of [first,second]){
   await pool.query('INSERT INTO organisations(id) VALUES($1)',[item.organisation]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[item.business,item.organisation]);
-  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[item.venue,item.organisation,item.business,randomUUID()]);
+  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[item.venue,item.organisation,item.business]);
   await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[item.installation,item.venue,`key:${item.installation}`]);
  }
 });

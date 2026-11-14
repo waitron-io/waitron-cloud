@@ -8,7 +8,7 @@ const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234
 const expiresAt='2099-01-01T00:00:00.000Z';
 const pending:RecoveryView={requestId:id,state:'awaiting_owner',expiresAt,operationId:null,operation:null};
 const ready:RecoveryView={...pending,state:'approved',operationId:id,operation:{id,pointId,venueId,source:{kind:'snapshot',pointId},mode:'failure',status:'restored',expiresAt},
- replacement:{requestId:id,pointId,venueId,source:{kind:'snapshot',pointId},oldInstallationId:'42345678-1234-4234-8234-123456789abc',localVenueId:'52345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt,organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null}};
+ replacement:{requestId:id,pointId,venueId,source:{kind:'snapshot',pointId},oldInstallationId:'42345678-1234-4234-8234-123456789abc',nodeId:'62345678-1234-4234-8234-123456789abc',environment:'test',publicKey:'MCowBQYDK2VwAyEA'+'A'.repeat(43),peerPublicKey:Buffer.alloc(32).toString('base64'),state:'awaiting_owner',expiresAt,organisationName:'Café Sol',legalBusinessName:'Sol SL',registration:null}};
 const refusals=[
  {status:400,code:'confirmation_required',error:'recoveryConfirmation'},
  {status:400,code:'unverified',error:'recoveryUnverified'},

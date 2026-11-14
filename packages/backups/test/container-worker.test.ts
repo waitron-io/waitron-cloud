@@ -34,7 +34,7 @@ test('database worker survives resource failures, preserves venue identity and v
   const catalogue=new BackupCatalogue(db.pool,new BackupKeyVault(randomBytes(32)),()=>({async read(key:string){return objects.get(key)!;},async put(key:string,value:Uint8Array){objects.set(key,Buffer.from(value));return receipt(value);},async remove(key:string){objects.delete(key);}}));
   const venues=[];
   for(let n=0;n<2;n++){
-   const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
+   const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:account.organisationId,legalBusinessId:account.legalBusinessId};
    await registration.start(binding);await registration.approveCloud(binding,account.accountId);await registration.approveLocal(binding,randomUUID());const venue=await registration.complete(binding);venues.push(venue);
    await catalogue.provision(venue.installationId,{endpoint:'https://storage.test',bucket:'container-fixture-'+n,region:'local'});
   }

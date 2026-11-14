@@ -187,7 +187,7 @@ function databaseHead(path) {
 }
 async function machine(dir, action, body) {
   const state = JSON.parse(
-      await readFile(join(dir, "cloud-connection.json"), "utf8"),
+      await readFile(join(dir, "cloud/connection.json"), "utf8"),
     ),
     pending = {
       action,
@@ -327,12 +327,15 @@ async function worker(dir, command, input) {
   const child = spawn(
     process.execPath,
     [
-      "--permission",
-      "--allow-fs-read=*",
-      "--allow-fs-write=" + scratch,
-      "--allow-worker",
-      "--allow-child-process",
-      "--allow-addons",
+      // Full native restores exercise durable writes; container data verification owns isolation.
+      ...(command === 'restore' ? [] : [
+        "--permission",
+        "--allow-fs-read=*",
+        "--allow-fs-write=" + scratch,
+        "--allow-worker",
+        "--allow-child-process",
+        "--allow-addons",
+      ]),
       "--import",
       require.resolve("tsx"),
       join(waitron, "apps/server/scripts/cloud-backup-fixture.ts"),
@@ -387,7 +390,7 @@ try {
       server = await launch(dir),
       ca = await readFile(join(dir, "tls", "ca.crt"));
     let cookie = "";
-    const local = (method,path, data) =>
+    const local = (method,path,data,expectedStatus=200) =>
       new Promise((done, fail) => {
         const body = data===undefined?'':JSON.stringify(data),
           url = new URL(server.origin + path);
@@ -408,12 +411,12 @@ try {
             res.on("data", (v) => (text += v));
             res.on("end", () => {
               try {
-                assert.equal(res.statusCode, 200, `${text}\n${server.logs()}`);
+                assert.equal(res.statusCode, expectedStatus, `${text}\n${server.logs()}`);
                 if (res.headers["set-cookie"])
                   cookie = res.headers["set-cookie"]
                     .map((c) => c.split(";")[0])
                     .join("; ");
-                done(JSON.parse(text));
+                done(text?JSON.parse(text):null);
               } catch (e) {
                 fail(e);
               }
@@ -431,6 +434,7 @@ try {
       email: "owner@example.test",
       password: "Local integration password",
     });
+    await local('POST','/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},204);
     const pairing = await post("/management-api/cloud/start");
     await new PairingStore(f.db.pool).approve(
       pairing.requestId,
@@ -453,7 +457,7 @@ try {
       server,
       registration: paired.registration,
       location,
-      localVenueId:server.localVenueId,
+      streamId:paired.registration.venueId,
       post,put,get,
     });
   }
@@ -472,10 +476,10 @@ try {
         csrHostname: "backup-" + randomUUID() + ".example.test",
       });
     });
-    assert((await readFile(join(venue.root, "cloud-staff.key"))).length > 0);
+    assert((await readFile(join(venue.root, "cloud/staff.key"))).length > 0);
     await writeFile(
       join(venue.root, "backup.env"),
-      "WAITRON_BACKUP_DIR=/old-backup-target\n",
+      `WAITRON_BACKUP_DIR=/old-backup-target\nWAITRON_BACKUP_RECOVERY_KEY=${randomBytes(32).toString('base64url')}\n`,
       { mode: 0o600 },
     );
     const captureId=randomUUID();
@@ -607,11 +611,10 @@ try {
     source.close();
     assert(signer);
     const cloudState = JSON.parse(
-        await readFile(join(snapshot.venue.root, "cloud-connection.json"), "utf8"),
+        await readFile(join(snapshot.venue.root, "cloud/connection.json"), "utf8"),
       ),
       configured = await machine(snapshot.venue.root, "backup-stream-configure", {
         revision: cloudState.lifecycle.view.revision,
-        localVenueId: snapshot.venue.localVenueId,
         sourceNodeId: snapshot.point.sourceNodeId,
         pointerSignerPublicKey: signer,
       });
@@ -683,7 +686,7 @@ try {
           [snapshot.venue.registration.venueId],
         )
       ).rows[0],
-      pointerKey = `${configured.bucket.prefix}venues/${snapshot.venue.localVenueId}/current.json`,
+      pointerKey = `${configured.bucket.prefix}current.json`,
       pointer = JSON.parse(
         (
           await s3.managedStreams.read(
@@ -731,7 +734,7 @@ try {
       requestHandler: { httpsAgent: s3.agent() },
     }),
     other = streamViews[1],
-    otherKey = `${other.configured.bucket.prefix}venues/${other.snapshot.venue.localVenueId}/current.json`,
+    otherKey = `${other.configured.bucket.prefix}current.json`,
     otherGeneration = other.pointer.body.generation;
   const isolation = {
     crossVenueReadDenied: await denied(() =>
@@ -830,7 +833,7 @@ try {
   assert.equal(info.source.generation, undefined);
   assert.equal(info.source.sourceDigest, continuousDigest);
   const continuousAccess = await targetPost("read");
-  assert.match(continuousAccess.recoveryKit, /^WAITRON-RECOVERY-KIT-1:/);
+  assert.match(continuousAccess.recoveryKit, /^WAITRON-RECOVERY-KIT-2:/);
 
   const continuousTarget = await root(),
     interrupted = await restoreFromKit(
@@ -1090,9 +1093,9 @@ try {
       (await readFile(join(guided, "state", "secrets.env"), "utf8")) ===
       item.applicationVault,
     backupDestinationInherited: await exists(join(guided, "state", "backup.env")),
-    cloudAuthorityInherited: await exists(join(guided, "state", "cloud-connection.json")),
+    cloudAuthorityInherited: (await exists(join(guided,"state","cloud/connection.json"))) || (await exists(join(guided,"state","cloud-connection.json"))),
     staffTlsInherited:
-      (await exists(join(guided, "state", "cloud-staff.key"))) ||
+      (await exists(join(guided,"state","cloud/staff.key"))) || (await exists(join(guided,"state","cloud-staff.key"))) ||
       (await exists(join(guided, "state", "cloud-staff.crt"))),
   };
   assert.deepEqual(restoredArchive, {
@@ -1110,7 +1113,7 @@ try {
   const replacementStarted=performance.now(),proposal=await recoveryClient(guided,'prepareReplacement',{expectedSourceNodeId:item.point.sourceNodeId});
   assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.oldInstallationId,item.venue.registration.installationId);
   const sourceCloudAuthority = JSON.parse(
-    await readFile(join(item.venue.root, "cloud-connection.json"), "utf8"),
+    await readFile(join(item.venue.root, "cloud/connection.json"), "utf8"),
   );
   assert.notEqual(proposal.publicKey, sourceCloudAuthority.publicKey);
   assert.equal((await ownerPost('inspect')).replacement.publicKey,proposal.publicKey);

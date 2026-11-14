@@ -20,6 +20,8 @@ const post = (path, body, cookie = '') => fetch(ready.origin + path, {method: 'P
 const login = await post('/management-api/session', {email: 'owner@example.test', password: 'Local integration password'});
 assert.equal(login.status, 200, 'integration.local_login');
 const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+const fresh=await post('/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},cookie);
+assert.equal(fresh.status,204,'integration.local_fresh_sign_in');
 if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'rollback-refresh') {
   const result = await new Promise((resolve, reject) => {
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
@@ -34,14 +36,17 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   console.log(JSON.stringify(result));
 } else if (phase === 'start' || phase === 'check' || phase === 'complete' || phase === 'refresh') {
   const response = await post('/management-api/cloud/' + phase, phase === 'complete' ? choice : {}, cookie);
-  assert.equal(response.status, 200, 'integration.local_' + phase);
+  const refusal = response.status === 200 ? null : await response.clone().json().catch(() => null);
+  const known = ['cloud.unavailable','cloud.state_invalid','cloud.failed','cloud.request_invalid','cloud.request_unavailable',
+    'cloud.not_primary','cloud.not_configured','cloud.binding_conflict','cloud.busy','authorization.not_permitted'];
+  assert.equal(response.status, 200, 'integration.local_' + phase + ':http=' + response.status + ':' + (known.includes(refusal?.error?.code) ? refusal.error.code : 'redacted'));
   console.log(JSON.stringify(await response.json()));
 } else {
   assert.equal(phase, 'evidence');
   const response = await fetch(ready.origin + '/management-api/cloud/status', {headers: {cookie}, signal: AbortSignal.timeout(5000)});
   assert.equal(response.status, 200);
   const status = await response.json();
-  const bytes = await readFile(root + '/cloud-connection.json');
+  const bytes = await readFile(root + '/cloud/connection.json');
   const saved = JSON.parse(bytes);
   assert.equal(saved.origin, 'https://waitron.local:3000');
   assert.equal(saved.environment, 'test');
@@ -49,6 +54,6 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   assert.ok(saved.lifecycle.lease);
   const exchanges = (await readFile(root + '/exchanges.jsonl', 'utf8')).trim().split('\n').map(line => JSON.parse(line));
   for (const path of ['/api/pairing/complete', '/api/installations/renew', '/api/installations/configuration']) assert.ok(exchanges.some(value => value.path === path && value.status === 200), 'integration.exchange_missing:' + path);
-  console.log(JSON.stringify({registration: status.registration, localVenueId: ready.localVenueId, installationState: status.installation.state,
+  console.log(JSON.stringify({registration: status.registration, streamId: status.venueId, installationState: status.installation.state,
     stateSha256: createHash('sha256').update(bytes).digest('hex'), identitySha256: createHash('sha256').update(saved.publicKey).digest('hex')}));
 }

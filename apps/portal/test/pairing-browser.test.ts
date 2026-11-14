@@ -13,8 +13,8 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
     const row=(await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];const payload=f.db.outbox.open(row);assert.ok('token' in payload);
     const owner=await signup.complete(payload.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
-    const requestId=randomUUID(),localVenueId=randomUUID(),code='12345678';
-    await new PairingStore(f.db.pool).start({origin:f.origin,action:'start',requestId,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId,environment:'test',code,organisationId:'',legalBusinessId:'',issuedAt:Date.now()});
+    const requestId=randomUUID(),code='12345678';
+    await new PairingStore(f.db.pool).start({origin:f.origin,action:'start',requestId,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code,organisationId:'',legalBusinessId:'',issuedAt:Date.now()});
     const context=await f.browser.newContext({locale,viewport:{width:375,height:812},colorScheme:locale==='es'?'dark':'light'});const page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()));
     await page.goto(`${f.origin}/connect#request=${requestId}`);await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
@@ -27,7 +27,7 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.getByLabel(c.language,{exact:true}).selectOption(locale==='en'?'es':'en');
     assert.equal(await page.locator('input[name=pairingCode]').inputValue(),code);
     await page.getByLabel(translations[locale==='en'?'es':'en'].language,{exact:true}).selectOption(locale);
-    await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByText(localVenueId,{exact:true}).waitFor();
+    await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByText(c.pairNewVenue,{exact:true}).waitFor();
     assert.equal((await f.db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
     assert.ok(await page.getByText('Sol SL',{exact:true}).isVisible());
     await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);

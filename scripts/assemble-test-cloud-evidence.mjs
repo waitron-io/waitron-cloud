@@ -82,7 +82,7 @@ export function assembleTestCloudEvidence(input) {
   const {journey: raw, freeServices} = input;
   exact(raw, 'version,kind,runId,project,completeIntegration,origin,waitronHead,image,waitronImage,cloudSource,waitronSource,assets,accountMail,clients,tls,organisations,freeSnapshot,restarts,capacity,paidSnapshot,paidStream,paidContinuousRecovery,freeRemote,paidRemote,paidStorageWithdrawal,paidSnapshotExposure,schemaRollback,cleanup,protectedContainersUnchanged' +
     (Object.hasOwn(raw, 'withdrawal') ? ',withdrawal' : ''));
-  assert.equal(raw.waitronHead, 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7', 'assembly.waitron_pin');
+  assert.equal(raw.waitronHead, '8eed667ab0586a3144ed7911b57cf50fcb3b0766', 'assembly.waitron_pin');
   assert.equal(raw.capacity.shippingQualification, false);
   assert.equal(raw.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(raw.capacity.diskMeasurement, 'docker-data-filesystem');
@@ -102,11 +102,11 @@ export function assembleTestCloudEvidence(input) {
   asset(raw.assets.cloud, 'cloud', raw.image); asset(raw.assets.waitron, 'waitron', client.image);
   assert.equal(raw.assets.waitron.baseImage, base.image);
   const organisations = raw.organisations.map(value => {
-    assert.match(value.localVenueId, uuid); assert.equal(value.installationState, 'active');
+    assert.match(value.streamId, uuid); assert.equal(value.installationState, 'active');
     return Object.fromEntries(['plan', 'organisationId', 'venueId', 'installationId', 'stateSha256'].map(k => [k, value[k]]));
   });
   const paid = raw.organisations.find(v => v.plan === 'paid'), free = raw.organisations.find(v => v.plan === 'free');
-  assert.notEqual(paid.localVenueId, free.localVenueId);
+  assert.notEqual(paid.streamId, free.streamId);
   assert.deepEqual(raw.clients, {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'});
   assert.deepEqual(raw.restarts.map(row => row.installationId).sort(), organisations.map(row => row.installationId).sort());
   for (const row of raw.restarts) {
@@ -115,7 +115,7 @@ export function assembleTestCloudEvidence(input) {
   }
   assert.deepEqual(raw.tls, {untrustedRefused: true, wrongHostnameRefused: true});
   const snapshot = raw.paidSnapshot, verification = snapshot.workerVerification, recovery = snapshot.ownerRecovery;
-  bind(snapshot, paid); assert.equal(snapshot.localVenueId, paid.localVenueId);
+  bind(snapshot, paid); assert.equal(snapshot.streamId, paid.streamId);
   assert.match(snapshot.pointId, uuid); assert.match(snapshot.sourceNodeId, uuid); assert.match(snapshot.sha256, hash); positive(snapshot.bytes);
   assert.equal(snapshot.status, 'published'); assert.equal(snapshot.verification, 'verified');
   assert.equal(snapshot.recovery, 'fiscal-authority-required');
@@ -135,7 +135,7 @@ export function assembleTestCloudEvidence(input) {
     observations: ['before-snapshot-request', 'after-snapshot-read', 'after-snapshot-restore-and-close']});
   const {status, independentObservation, ...stream} = raw.paidStream;
   assert.deepEqual(inspectIntegrationStream(stream, {venueId: paid.venueId, installationId: paid.installationId,
-    sourceNodeId: snapshot.sourceNodeId, localVenueId: snapshot.localVenueId,
+    sourceNodeId: snapshot.sourceNodeId, streamId: snapshot.streamId,
     generation: stream.generation, recoverableAt: stream.recoverableAt}), raw.paidStream);
   const continuous = inspectIntegrationContinuousRecovery(raw.paidContinuousRecovery, raw.paidStream);
   bind(raw.freeRemote, free, 'organisationId,installationId');

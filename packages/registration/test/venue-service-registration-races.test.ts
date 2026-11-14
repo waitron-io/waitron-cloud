@@ -19,13 +19,13 @@ async function approved(f:Fixture,kind:'registration'|'pairing',replay:boolean){
  const key=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url');
  await f.pool.query('UPDATE installations SET public_key=$2 WHERE venue_id=$1 AND superseded_by IS NULL',[venueId,key]);
  if(kind==='registration'){
-  const binding:ConnectionBinding={...f.scope,operationId:randomUUID(),installationKey:key,localVenueId:venueId,environment:'test'};
+  const binding:ConnectionBinding={...f.scope,operationId:randomUUID(),installationKey:key,venueId,environment:'test'};
   const writer=new RegistrationStore(f.pool),reader=new RegistrationStore(f.peer);
   await writer.start(binding);await writer.approveLocal(binding,randomUUID());await writer.approveCloud(binding,account);
   const first=replay?await writer.complete(binding):undefined;
   return {run:()=>reader.complete(binding),first,venueId};
  }
- const c:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:key,localVenueId:venueId,environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+ const c:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:key,venueId,environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
  const writer=new PairingStore(f.pool),reader=new PairingStore(f.peer);
  await writer.start(c);
  await f.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[account,`${account}@example.test`,await hashSecret('Synthetic pairing password')]);

@@ -53,13 +53,14 @@ export async function seedMonitoring(root,pool,state,email){
   return{legacy:records};
  }
  const {RegistrationStore}=await source(root,'packages/registration/src/index.ts');
+ const v2=(await pool.query("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='connection_requests' AND column_name='requested_venue_id') AS present")).rows[0].present;
  const {MonitorWorker}=await source(root,'packages/registration/src/monitoring.ts');
  const {createLocalAccountMailer}=await source(root,'packages/registration/src/local-mailer.ts');
  const mailer=createLocalAccountMailer({port:email.smtpPort??Number(process.env.MAILPIT_TEST_SMTP_PORT)});
  const cases={};
  for(const [name,quiet] of [['quiet',120],['reminder',0],['late',0]]){
   const owner=state.owners[name==='reminder'?1:0];
-  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),...(v2?{venueId:''}:{localVenueId:randomUUID()}),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   const store=new RegistrationStore(pool);await store.start(binding);await store.approveCloud(binding,owner.accountId);await store.approveLocal(binding,randomUUID());const installation=await store.complete(binding);
   await pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[installation.installationId]);
   await pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '1 day' WHERE id=$1",[installation.installationId]);

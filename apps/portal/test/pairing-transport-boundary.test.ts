@@ -5,11 +5,11 @@ import {PairingController} from '../src/pairing-controller.ts';
 const requestId = '12345678-1234-4234-8234-123456789abc';
 const organisationId = '22345678-1234-4234-8234-123456789abc';
 const legalBusinessId = '32345678-1234-4234-8234-123456789abc';
-const localVenueId = '42345678-1234-4234-8234-123456789abc';
+const venueId = '42345678-1234-4234-8234-123456789abc';
 const nextRequestId = '52345678-1234-4234-8234-123456789abc';
 const business = {organisationId, legalBusinessId, organisationName: 'Harbour Kitchen',
   legalBusinessName: 'Harbour Kitchen SL', countryCode: 'ES'};
-const inspection = {requestId, localVenueId, environment: 'test',
+const inspection = {requestId, venueId, environment: 'test',
   expiresAt: '2026-10-29T12:00:00.000Z', state: 'awaiting_cloud'};
 const approval = {...inspection, ...business, state: 'awaiting_local'};
 type Operation = 'load' | 'inspect' | 'approve';

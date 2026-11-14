@@ -19,7 +19,7 @@ export async function fixture(t:TestContext,freezeClock=true){
  const organisationId=randomUUID(),legalBusinessId=randomUUID(),venueId=randomUUID(),installationId=randomUUID();
  await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);
  await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[legalBusinessId,organisationId]);
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[venueId,organisationId,legalBusinessId]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,organisationId,legalBusinessId]);
  await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installationId,venueId,publicKey]);
  await db.pool.query("INSERT INTO installation_services(installation_id,service) SELECT $1,unnest(ARRAY['remote_access','continuous_backup','retained_snapshots','content_translation'])",[installationId]);
  const options:AppOptions={pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},leaseIssuer:issuer,billingDisplay:settings};

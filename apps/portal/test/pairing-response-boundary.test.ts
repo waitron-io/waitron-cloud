@@ -5,11 +5,11 @@ import {PairingController} from '../src/pairing-controller.ts';
 const requestId = '12345678-1234-4234-8234-123456789abc';
 const organisationId = '22345678-1234-4234-8234-123456789abc';
 const legalBusinessId = '32345678-1234-4234-8234-123456789abc';
-const localVenueId = '42345678-1234-4234-8234-123456789abc';
+const venueId = '42345678-1234-4234-8234-123456789abc';
 const otherId = '52345678-1234-4234-8234-123456789abc';
 const business = {organisationId, legalBusinessId, organisationName: 'Harbour Kitchen',
   legalBusinessName: 'Harbour Kitchen SL', countryCode: 'ES'};
-const inspection = {requestId, localVenueId, environment: 'test',
+const inspection = {requestId, venueId, environment: 'test',
   expiresAt: '2026-10-28T16:00:00.000Z', state: 'awaiting_cloud'};
 const approval = {...inspection, ...business, state: 'awaiting_local'};
 
@@ -86,7 +86,7 @@ for (const entry of invalidBusinesses) {
 const invalidViews = [
   {name: 'null view', change: () => null},
   {name: 'missing request', change: (v: typeof approval) => ({...v, requestId: undefined})},
-  {name: 'invalid venue', change: (v: typeof approval) => ({...v, localVenueId: 'venue'})},
+  {name: 'invalid venue', change: (v: typeof approval) => ({...v, venueId: 'venue'})},
   {name: 'unknown environment', change: (v: typeof approval) => ({...v, environment: 'staging'})},
   {name: 'invalid expiry', change: (v: typeof approval) => ({...v, expiresAt: 'tomorrow'})},
   {name: 'unknown state', change: (v: typeof approval) => ({...v, state: 'approved'})},
@@ -128,8 +128,8 @@ for (const operation of ['inspect', 'approve'] as const) for (const entry of inv
 
 for (const operation of ['inspect', 'approve'] as const) {
   const mismatches = operation === 'inspect'
-    ? [{name: 'another request', patch: {requestId: otherId}}, {name: 'another venue', patch: {localVenueId: otherId}}]
-    : [{name: 'another request', patch: {requestId: otherId}}, {name: 'another venue', patch: {localVenueId: otherId}},
+    ? [{name: 'another request', patch: {requestId: otherId}}, {name: 'another venue', patch: {venueId: otherId}}]
+    : [{name: 'another request', patch: {requestId: otherId}}, {name: 'another venue', patch: {venueId: otherId}},
       {name: 'another organisation', patch: {organisationId: otherId}}, {name: 'another business', patch: {legalBusinessId: otherId}},
       {name: 'unaccepted approval', patch: {state: 'awaiting_cloud'}}];
   for (const entry of mismatches) {
@@ -153,3 +153,15 @@ for (const operation of ['inspect', 'approve'] as const) {
     });
   }
 }
+
+test('a new venue keeps its empty requested id through inspection and approval', async t => {
+  const {controller:c,replies,calls}=harness(t);
+  const requested={...inspection,venueId:''};
+  replies['/api/account/pairing/inspect']=requested;
+  await c.load();c.code='12345678';await c.inspect();assert.deepEqual(c.view,requested);
+  replies['/api/account/pairing/approve']={...requested,...business,venueId:otherId,state:'awaiting_local'};
+  await c.approve();assert.equal(c.error,'unavailable');assert.deepEqual(c.view,requested);
+  const accepted={...requested,...business,state:'awaiting_local'};
+  replies['/api/account/pairing/approve']=accepted;await c.approve();assert.deepEqual(c.view,accepted);
+  assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)),{requestId,code:'12345678',organisationId,legalBusinessId});
+});

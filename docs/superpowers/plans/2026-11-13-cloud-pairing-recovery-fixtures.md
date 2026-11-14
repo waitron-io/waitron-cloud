@@ -1,0 +1,19 @@
+# PLAN FOR APPROVAL
+
+**Blocked:** recovery fixtures within [pairing v2](2026-11-09-cloud-pairing-v2.md). After diagnostic PR1203 landed, the sole cleared target-cap experiment failed.
+
+Requested by the watcher, Lane G `questions.md`, 13 November 19:45. No further build or experiment before clearance.
+
+Five runs, per supplied Lane G questions/receipts:
+
+- 11:42: matching certificate verified snapshot; recovery-build refused retired REBUILD_MARKER import.
+- 12:06: first-start/restore-flow port built; integration.command_failed:recovery-restore-refusal, exact child check not yet retained.
+- 12:14: the repeated proof failed fixture.assert.refused_phase: expected staged, observed placing.
+- 12:22: cleared placing assertion passed; target1024MiB restore child SIGKILL, cause unproved.
+- 20:56: target2240MiB restored and passed earlier guards; authorised fixture:132 failed because readCopyNodeAndVenue is undefined. One test: 0 pass/1 fail, no skips/cancellations, 246.79s. Target peak 1586.82MiB; no OOM/max event. Production/whole-box budgets stay unqualified.
+
+**One correction:** port only post-restore identity readback in `deploy/test-cloud/test-fixtures/integration-authorised-recovery.test.ts:130` and `integration-continuous-recovery.test.ts:141`. At `5e67b8eb8efc3ea7c868c7d129547d291c64e037`, exported `restore.ts:929 readCopyNode` returns `{node}` with `node.nodeId` (`module/src/provisioning.ts:8`). Reuse authorised `copy.secretEntries` already in scope; continuous keeps `sourceIdentityEntries`: pinned `validateEntries.discard` only removes its scratch directory and `validateDatabaseEntries.discard` is a no-op (`restore.ts:278–308`, source read only). Remove the second decryption/discard. Inside `currentRecovery`, dynamically import/check both `readCopyNode` and `readCloudVenueId`. Read/close the backup query in `finally`; then separately open/read/close the venue store, following `integration-venue.mjs:36` and native `restore-fiscal-e2e.test.ts:366`. Exact source-node/stream-id equalities and historical branches stay. Post-restore compatibility of the node reader is unverified: any refusal stops the work. No helper/API, SQL or schema parser.
+
+**After Claude review and watcher clearance:** the observed 20:56 failure supplies the red test. Retain every authority, record-equality, integrity, refusal, no-first-start/server/credentials/restored-Cloud-report check; compare exact identities to independently supplied inputs, with no added paid control runs. Run `scripts/test-cloud-paid-authorised-recovery.test.mjs` first, recording peak/events and child/case elapsed time against existing 2240 MiB/90 s/300 s limits; only after a pass run stream then continuous (`test-cloud-paid-{stream,continuous-recovery}.test.mjs`). Clearance permits at most these three local paid-plan runs, in that order. Stop on any new reason; no cap/deadline changes.
+
+**Size:** fixture additions 14–22/removals 10–14; production 0; new support 0. Separately retain the already-cleared uncommitted harness cap at `scripts/test-cloud-integration.mjs:517` (+1/−1). Documentation: this plan about 25 lines, backlog 2–4 later. Published/merged H5g pin, main reconciliation and final CI still remain; recheck exports at the final pin. No build/run before clearance; no owner design approval claimed.

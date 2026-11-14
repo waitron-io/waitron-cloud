@@ -17,7 +17,7 @@ const replacement: PairingBusiness = {
   organisationName: 'Café Luna', legalBusinessName: 'Luna SL', countryCode: 'ES',
 };
 const sourceView: PairingView = {
-  requestId, localVenueId: '72345678-1234-4234-8234-123456789abc',
+  requestId, venueId: '72345678-1234-4234-8234-123456789abc',
   environment: 'test', expiresAt: '2099-01-01T00:00:00Z', state: 'awaiting_cloud',
 };
 const failures = {
@@ -91,7 +91,7 @@ for (const boundary of ['businesses', 'inspect', 'approve'] as const) {
           controller.code = '87654321';
           const currentReply = {ok: true as const, value: {businesses: [replacement]}};
           const currentView: PairingView = {...sourceView, requestId: currentRequestId,
-            localVenueId: '82345678-1234-4234-8234-123456789abc'};
+            venueId: '82345678-1234-4234-8234-123456789abc'};
           const staleReply: ApiResult<unknown> = outcome === 'success' ? {ok: true, value:
             boundary === 'businesses' ? {businesses: [source]} : boundary === 'inspect'
               ? sourceView : {...sourceView, ...source, state: 'awaiting_local'}} : failures[outcome];

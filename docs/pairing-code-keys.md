@@ -87,8 +87,8 @@ account workers. Do not delete or regenerate the configuration volume to add a k
 ## Verification boundary
 
 The version-1 verifier is HMAC-SHA256 over a JSON array of the domain label
-`waitron-cloud/pairing-code/v1`, request UUID, installation public key, local venue
-UUID, environment and SHA-256(code). UUIDs are lowercase. The stored form is
+`waitron-cloud/pairing-code/v1`, request UUID, installation public key, requested Cloud venue
+UUID (the empty string for a new venue), environment and SHA-256(code). UUIDs are lowercase. The stored form is
 `v1:<key-id>:<mac>` and comparisons use constant-time byte comparison. Binding the
 MAC to the request prevents transplanting a stored verifier to another request.
 

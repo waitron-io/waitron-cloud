@@ -26,7 +26,7 @@ import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride
 export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const origin = 'https://waitron.local:3000', defaultWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const origin = 'https://waitron.local:3000', defaultWaitronRevision = '8eed667ab0586a3144ed7911b57cf50fcb3b0766', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
@@ -38,10 +38,21 @@ export function parseIntegrationJson(text) {
 
 
 export function streamCommandDiagnostic(text) {
-  const names=['shape','venueId','installationId','sourceNodeId','localVenueId','generation','recoverableAt','observation','identity',
+  const names=['shape','venueId','installationId','sourceNodeId','streamId','generation','recoverableAt','observation','identity',
     'nativeStreaming','signedPointerVerified','retainedSnapshotUnchanged','noSupersession','noActivation','observer','snapshot'];
   const found=/integration\.stream_([A-Za-z0-9_]+)/.exec(text)?.[1];
   return names.includes(found) ? ':integration.stream_'+found : '';
+}
+
+export function streamStartCommandDiagnostic(text, code, signal) {
+  const names = ['ERR_ASSERTION', 'ENOENT', 'EACCES', 'EROFS', 'ERR_MODULE_NOT_FOUND', 'ERR_DLOPEN_FAILED',
+    'SQLITE_ERROR', 'ECONNREFUSED', 'ETIMEDOUT', 'integration.fixture_refused', 'integration.refusal_timeout',
+    'integration.local_login', 'integration.local_fresh_sign_in', 'integration.local_start', 'TimeoutError',
+    'cloud.unavailable', 'cloud.state_invalid', 'cloud.failed', 'cloud.request_invalid', 'cloud.request_unavailable',
+    'cloud.not_primary', 'cloud.not_configured', 'cloud.binding_conflict', 'cloud.busy', 'authorization.not_permitted'];
+  const found = names.filter(name => text.includes(name));
+  const status = /integration\.local_start:http=([1-5]\d{2})\b/.exec(text)?.[1];
+  return ':exit=' + code + ':signal=' + (signal ?? 'none') + ':stderr=' + (found.join(',') || 'redacted') + (status ? ':http=' + status : '');
 }
 
 // Docker failures expose fixed phases; successful structured replies still require private parsing.
@@ -55,12 +66,12 @@ function command(args, input = '', phase = args[0], env = {}) {
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start' || phase === 'client-start') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
-    child.once('close', code => {
+    child.once('close', (code, childSignal) => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-stream-start' || phase === 'client-start' ? streamStartCommandDiagnostic(diagnostic, code, childSignal) : '') + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : '')));
       else resolve(output.trim());
     });
     child.stdin.end(input);
@@ -270,7 +281,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
-      if ((paidVerification || paidRecovery) && revision !== defaultWaitronRevision) {
+      if ((paidVerification || paidRecovery) && revision !== historicalWaitronRevision) {
         const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
           '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
           '--user', '1000:1000', '--memory', '256m', '--memory-swap', '256m', '--pids-limit', '32',
@@ -366,11 +377,11 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
         ...(kubernetes ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
-        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', captureSnapshot ? '2240m' : '1024m', '--memory-swap', captureSnapshot ? '2240m' : '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
-        ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
+        ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
         ...(paidStream && plan === 'paid' ? ['--env', 'CLOUD_TEST_STREAM=1', '--env', 'SSL_CERT_FILE=/proof/ca.pem'] : []),
         '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem', clientImage], '', 'client-create');
@@ -397,7 +408,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       const choice = {requestId: startedClient.requestId, organisationId, legalBusinessId};
       const inspected = await api('/api/account/pairing/inspect', {requestId: choice.requestId, code: startedClient.code}, browser);
       assert.equal(inspected.status, 200);
-      assert.equal(inspected.body.localVenueId, startedClient.localVenueId);
+      assert.equal(inspected.body.venueId, startedClient.venueId);
       assert.equal((await api('/api/account/pairing/approve', {...choice, code: startedClient.code}, browser)).status, 200);
       const checked = await control(id, 'check'); assert.equal(checked.organisationId, organisationId);
       const completed = await control(id, 'complete', choice); assert.equal(completed.state, 'complete');
@@ -415,7 +426,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const persisted = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
         JSON.stringify({organisationId, installationId: evidence.registration.installationId}), 'persisted-binding'));
-      assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.localVenueId, evidence.localVenueId);
+      assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.streamId, evidence.streamId);
       if (captureSnapshot) {
         const accountPhase = (phase, extra = {}) => docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
@@ -432,7 +443,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         const independent = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
         assert.equal(independent.independentStoredDigest, true);
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
-          installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
+          installationId: evidence.registration.installationId, streamId: evidence.streamId, recovery: 'not-run'};
         if (paidVerification || paidRecovery) {
           journeyStage = 'verification';
           const verify = async () => {
@@ -445,7 +456,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-verifier-state']);
           record('volume', stateVolume);
           verifierWorker = await docker(['create', '--label', 'com.docker.compose.project=' + project,
-            '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '128m', '--memory-swap', '128m',
+            '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '256m', '--memory-swap', '256m',
             '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
             '--env', 'CLOUD_INTEGRATION_POINT_ID=' + captured.pointId, '--env', 'CLOUD_INTEGRATION_WAITRON_REVISION=' + revision,
@@ -500,7 +511,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           journeyStage = 'stream';
           const streamed = await control(id, 'stream-start');
           assert.equal(streamed.sourceNodeId, captured.sourceNodeId);
-          assert.equal(streamed.localVenueId, evidence.localVenueId);
+          assert.equal(streamed.streamId, evidence.streamId);
           assert.equal(streamed.nativeStreaming, true);
           const inspect = extra => accountPhase('inspect-stream', {...captured, ...streamed, attemptId: publishedSnapshot.workerVerification.attemptId, ...extra});
           for (const extra of [{sourceNodeId: randomUUID()}, {generation: 'another-generation'}, {recoverableAt: '2026-01-01T00:00:00.000Z'}]) await assert.rejects(inspect(extra));
@@ -514,10 +525,10 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           const recoveryImage = parseIntegrationJson(await docker(['image', 'inspect', recoveryTag]))[0].Id;
           record('image', recoveryImage);
           const target = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
-            '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+            '--network', network, '--memory', '2240m', '--memory-swap', '2240m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
-            ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
+            ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
             ...(paidContinuousRecovery ? ['--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem'] : []),
             ...(paidAuthorisedRecovery ? ['--tmpfs', '/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777',
               '--tmpfs', '/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777'] : []),
@@ -605,7 +616,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           assert.deepEqual(refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
           if (paidAuthorisedRecovery) {
             assert.equal(recoveryAuthority.sourceNodeId, captured.sourceNodeId);
-            assert.equal(recoveryAuthority.localVenueId, evidence.localVenueId);
+            assert.equal(recoveryAuthority.streamId, evidence.streamId);
             // Archive bytes and the archive key stay in the target; the host forwards the separate recovery authority privately.
             const delivery = parseIntegrationJson(await docker(['exec', '-i', target, 'node', '--input-type=module', '-e', `
               import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
@@ -638,7 +649,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
               `], '', 'authorised-ordinary-restore'));
             assert.equal(checked.exit, 0, 'integration.authorised_restore_failed:' + checked.diagnostic);
             publishedSnapshot.authorisedRecovery = inspectIntegrationAuthorisedRecovery(checked.report,
-              {sha256: captured.sha256, bytes: captured.bytes, sourceNodeId: captured.sourceNodeId, localVenueId: evidence.localVenueId});
+              {sha256: captured.sha256, bytes: captured.bytes, sourceNodeId: captured.sourceNodeId, streamId: evidence.streamId});
             assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
           }
           const independent = extra => accountPhase('inspect-recovery', {...captured, requestId: request.requestId,
@@ -660,11 +671,11 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       assert.ok(Date.parse(afterRestart) > Date.parse(beforeRestart), 'integration.restart_not_observed');
       const restarted = await control(id, 'evidence');
       assert.deepEqual(restarted.registration, evidence.registration); assert.equal(restarted.identitySha256, evidence.identitySha256);
-      assert.equal(restarted.localVenueId, evidence.localVenueId);
+      assert.equal(restarted.streamId, evidence.streamId);
       if (plan === 'paid' && paidRecovery) publishedSnapshot.ownerRecovery.sourceIdentityPreserved = true;
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
-        localVenueId: evidence.localVenueId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
+        streamId: evidence.streamId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
       remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1)});
     }
     if (paidRemote) {
@@ -722,7 +733,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       evidence.pairedClientsPreserved = clients.length;
       if (schemaRollback) schemaRollbackEvidence = evidence; else cloudRollbackEvidence = evidence;
     }
-    for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
+    for (const key of ['organisationId', 'venueId', 'installationId', 'streamId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, ...(fixedProject ? {project} : {}), completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       ...(cloudSource ? {cloudSource} : {}),
       ...(waitronBaseSource && waitronClientSource ? {waitronSource: {base: waitronBaseSource, client: waitronClientSource}} : {}),

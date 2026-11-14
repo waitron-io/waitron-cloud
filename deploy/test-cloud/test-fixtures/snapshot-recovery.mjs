@@ -8,7 +8,8 @@ import {createCloudRecoveryClient} from '/waitron/apps/server/src/cloud-recovery
 import {currentBackupVerificationTarget} from '/waitron/apps/server/src/backup-verification-target.ts';
 import {backupVerificationTargetDigests,validateBackupVerificationTarget} from '/waitron/apps/server/src/backup-verification-protocol.ts';
 import {stageRestoreRequest,runStagedRestore} from '/waitron/apps/server/src/restore-request.ts';
-import {REBUILD_MARKER} from '/waitron/apps/server/src/rebuild-first-start.ts';
+import {readRestoreFlow,firstStartPending} from '/waitron/apps/server/src/restore-flow.ts';
+import {CLOUD_RECOVERY_FILE} from '/waitron/packages/store/src/state-layout.ts';
 const root='/tmp/cloud-integration-backup-recovery-d79',origin='https://waitron.local:3000';
 let text='';for await(const bytes of process.stdin){text+=bytes;assert(text.length<65536);}
 const input=JSON.parse(text),phase=input.phase;
@@ -34,7 +35,7 @@ if(phase==='start'){
  const checked=await client.preview(async archive=>{
   assert.equal(archive.managedCloud.pointId,input.pointId);assert.equal(archive.snapshotVerification.target.digest,currentBackupVerificationTarget().digest);
   assert.equal(archive.artifact.length,input.bytes);assert.equal(createHash('sha256').update(archive.artifact).digest('hex'),input.digest);
-  assert.equal(await absent('venue/venue.db'),true);assert.equal(await absent('restore-request.json'),true);
+  assert.equal(await absent('venue/venue.db'),true);assert.equal(await readRestoreFlow(root),null);
   return{independentDigest:true,prePlacement:true,...(phase==='read'?{privateDelivery:{archive:Buffer.from(archive.artifact).toString('base64'),recoveryKey:archive.recoveryKey,digest:input.digest}}:{sha256:createHash('sha256').update(archive.artifact).digest('hex'),bytes:archive.artifact.length})};
  },input.pointId);
  assert(actions.includes('info'));assert(actions.includes('read'));
@@ -42,7 +43,7 @@ if(phase==='start'){
 }else if(phase==='delivery-refusals'){
  const original=await client.preview(async archive=>Buffer.from(archive.artifact),input.pointId);
  assert.equal(createHash('sha256').update(original).digest('hex'),input.digest);
- const saved=await readFile(join(root,'cloud-recovery.json'));
+ const saved=await readFile(join(root,CLOUD_RECOVERY_FILE));
  let placementCalls=0,downloads=0;
  const stage=async()=>{placementCalls++;};
  const current=currentBackupVerificationTarget(),runtime={...current.runtime,fingerprint:createHash('sha256').update(current.runtime.fingerprint+'alternate-binary').digest('hex')};
@@ -60,16 +61,17 @@ if(phase==='start'){
  await assert.rejects(broken.restore(stage,input.pointId),/Cloud recovery is unavailable/);
  assert.equal(downloads,1,'the damaged copy must reach the real client integrity check');
  assert(actions.includes('info'));assert(actions.includes('read'));assert(!actions.includes('restored'));
- assert.equal(placementCalls,0);assert.equal(await absent('restore-request.json'),true);assert.equal(await absent('venue/venue.db'),true);
- assert.deepEqual(await readFile(join(root,'cloud-recovery.json')),saved);
+ assert.equal(placementCalls,0);assert.equal(await readRestoreFlow(root),null);assert.equal(await absent('venue/venue.db'),true);
+ assert.deepEqual(await readFile(join(root,CLOUD_RECOVERY_FILE)),saved);
  console.log(JSON.stringify({alternateTargetRefused:true,damagedArchiveRefused:true,placementCalls,restoredReports:0,stateUnchanged:true}));
 }else if(phase==='restore-refusal'){
  await client.restore(archive=>stageRestoreRequest(root,archive),input.pointId);
- assert.equal(JSON.parse(await readFile(join(root,'restore-request.json'),'utf8')).version,2);
+ const staged=await readRestoreFlow(root);assert.equal(staged?.phase,'staged');assert.equal(staged.request?.version,2);assert.equal(staged.request.managedCloud?.pointId,input.pointId);
  let refusal;try{await runStagedRestore({stateDir:root,venueDir:join(root,'venue'),migrationsRoot:'/waitron/apps/server/dist/drizzle',log:()=>{}});}catch(error){refusal=error;}
  if(refusal?.code!=='restore.hook_failed')console.error('fixture-error:restore_refusal:'+String(refusal?.code??'missing').replace(/[^A-Za-z0-9_]/g,'_'));
  assert.equal(refusal?.code,'restore.hook_failed');assert.deepEqual(refusal?.params,{module:'fiscal-verifactu',code:'sif.allocation_invalid'});
- assert.equal(await absent('restore-request.json'),true);assert.equal(await absent('trading.env'),true);assert.equal(await absent(REBUILD_MARKER),true);
- const saved=JSON.parse(await readFile(join(root,'cloud-recovery.json'),'utf8'));assert.equal(saved.phase,'staged');assert(!actions.includes('restored'));
+ const refused=await readRestoreFlow(root);assert.equal(refused?.phase,'placing');assert.deepEqual(refused.request,staged.request);assert.equal(refused.request.managedCloud?.pointId,input.pointId);
+ assert.equal(await absent('trading.env'),true);assert.equal(await firstStartPending(root),null);
+ const saved=JSON.parse(await readFile(join(root,CLOUD_RECOVERY_FILE),'utf8'));assert.equal(saved.phase,'staged');assert(!actions.includes('restored'));
  console.log(JSON.stringify({ordinaryRestore:'FISCAL_RESTORE',activation:'not_attempted',routeMoved:false,reportedRestored:false,actions}));
 }else throw Error('fixture.phase');

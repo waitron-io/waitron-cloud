@@ -15,7 +15,7 @@ export function inspectIntegrationContinuousState(row, selected, status) {
 
 export function inspectIntegrationContinuousRecovery(value, selected) {
   const result = {};
-  for (const key of ['sourceNodeId', 'localVenueId', 'generation']) {
+  for (const key of ['sourceNodeId', 'streamId', 'generation']) {
     assert.equal(value[key], selected[key], 'integration.continuous_' + key);
     result[key] = value[key];
   }

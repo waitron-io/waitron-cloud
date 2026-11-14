@@ -109,5 +109,5 @@ test('delivered scoped backup worker verifies a genuine pinned Waitron snapshot'
  assert.equal(joint.phases.find(p=>p.name==='refusals').state,'executed','all current-run verifier refusals must be complete');
  assert.equal(joint.verifierControls?.cases.length,11,'the joint run must execute fresh verifier refusal controls for its own archive');
  assert.equal(joint.authorisedRecovery?.ordinaryRestore.exit,0,'the joint run must recover its independently delivered archive with separate authority');
- console.log(JSON.stringify({realWaitronSnapshotVerified:true,pinnedRevision:'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7',childCleanup:true,planMode:'test-free-paid',captureNetwork:'none',ownerApprovalV2:true,ordinaryRestore:refusal.ordinaryRestore,separatelyAuthorisedRestore:true}));
+ console.log(JSON.stringify({realWaitronSnapshotVerified:true,pinnedRevision:'8eed667ab0586a3144ed7911b57cf50fcb3b0766',childCleanup:true,planMode:'test-free-paid',captureNetwork:'none',ownerApprovalV2:true,ordinaryRestore:refusal.ordinaryRestore,separatelyAuthorisedRestore:true}));
 });

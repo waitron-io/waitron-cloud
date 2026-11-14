@@ -25,7 +25,7 @@ const legalBusinessId = randomUUID();
 const secondOrganisationId = randomUUID();
 const secondBusinessId = randomUUID();
 function binding(overrides: Partial<ConnectionBinding> = {}): ConnectionBinding {
-  return { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, localVenueId: randomUUID(),
+  return { operationId: randomUUID(), installationKey: `key:${randomUUID()}`, venueId: '',
     environment: 'test', organisationId, legalBusinessId, ...overrides };
 }
 async function approved(input = binding()) {
@@ -76,7 +76,7 @@ test('migration remains repeatable after concurrent initial application', async 
   assert.equal(migrationNames.slice(0,35).length,35);
   assert.equal(migrationNames[33],'034_relay_admission_bounds.sql');
   assert.equal(migrationNames[34],'035_authenticator_factor.sql');
-  assert.equal(migrationNames.length,65);assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrationNames.at(54),'055_billing_method_setups.sql');assert.equal(migrationNames.at(55),'056_sign_in_checks.sql');assert.equal(migrationNames.at(56),'057_recognised_browsers.sql');assert.equal(migrationNames.at(57),'058_account_recovery_codes.sql');assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(61),'062_billing_method_action_proof.sql');assert.equal(migrationNames.at(62),'063_recovery_action_proof.sql');assert.equal(migrationNames.at(63),'065_guest_menus.sql');assert.equal(migrationNames.at(-1),'066_guest_menu_languages.sql');assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');assert.equal(migrationNames.at(44),'045_billing_store.sql');assert.equal(migrationNames[43],'044_remote_forward_observations.sql');assert.equal(migrationNames[42],'043_backup_target_verification.sql');assert.equal(migrationNames[41],'042_organisation_service_plans.sql');assert.equal(migrationNames[40],'041_content_translation_service.sql');assert.equal(migrationNames[39],'040_translation_result_json.sql');
+  assert.equal(migrationNames.length,66);assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrationNames.at(54),'055_billing_method_setups.sql');assert.equal(migrationNames.at(55),'056_sign_in_checks.sql');assert.equal(migrationNames.at(56),'057_recognised_browsers.sql');assert.equal(migrationNames.at(57),'058_account_recovery_codes.sql');assert.equal(migrationNames.at(58),'059_account_action_proof.sql');assert.equal(migrationNames.at(59),'060_account_email_changes.sql');assert.equal(migrationNames.at(60),'061_connection_action_proof.sql');assert.equal(migrationNames.at(61),'062_billing_method_action_proof.sql');assert.equal(migrationNames.at(62),'063_recovery_action_proof.sql');assert.equal(migrationNames.at(63),'064_cloud_pairing_v2.sql');assert.equal(migrationNames.at(64),'065_guest_menus.sql');assert.equal(migrationNames.at(-1),'066_guest_menu_languages.sql');assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');assert.equal(migrationNames.at(44),'045_billing_store.sql');assert.equal(migrationNames[43],'044_remote_forward_observations.sql');assert.equal(migrationNames[42],'043_backup_target_verification.sql');assert.equal(migrationNames[41],'042_organisation_service_plans.sql');assert.equal(migrationNames[40],'041_content_translation_service.sql');assert.equal(migrationNames[39],'040_translation_result_json.sql');
   assert.equal(migrationNames[35],'036_relay_operator_stop.sql');
   assert.equal(migrationNames[36],'037_monitoring_quiet_escalation.sql');
   assert.equal(migrationNames[37],'038_fiscal_allocation_registry.sql');assert.equal(migrationNames[38],'039_translation_jobs.sql');
@@ -127,7 +127,7 @@ test('retries preserve the original expiry and reject any changed binding', asyn
   assert.deepEqual((await pool.query('SELECT expires_at FROM connection_requests')).rows[0].expires_at, expiry);
   for (const changed of [
     { organisationId: secondOrganisationId, legalBusinessId: secondBusinessId },
-    { legalBusinessId: secondBusinessId }, { localVenueId: randomUUID() }, { environment: 'production' },
+    { legalBusinessId: secondBusinessId }, { venueId: randomUUID() }, { environment: 'production' },
   ]) {
     const wrong = { ...input, ...changed };
     await expectCode(store.start(wrong), 'binding_conflict');
@@ -203,16 +203,16 @@ test('requests for the same venue cannot transfer ownership or replace a server'
     { organisationId: secondOrganisationId, legalBusinessId: secondBusinessId },
     { installationKey: `key:${randomUUID()}` },
   ]) {
-    const input = await approved({ ...first, operationId: randomUUID(), ...changes });
-    await expectCode(store.complete(input), 'registration_conflict');
+    const input = await approved({ ...first, venueId:result.venueId, operationId: randomUUID(), ...changes });
+    await expectCode(store.complete(input), 'organisationId' in changes?'permission_denied':'registration_conflict');
   }
   assert.equal(await count('venues'), 1);
   assert.equal((await store.configuration(first.installationKey)).venueId, result.venueId);
 });
 
-test('concurrent distinct requests for one local venue create only one link', async () => {
+test('concurrent empty requests with the same key create only one link', async () => {
   const first = await approved();
-  const second = await approved(binding({ localVenueId: first.localVenueId }));
+  const second = await approved(binding({ installationKey: first.installationKey }));
   const results = await Promise.allSettled([store.complete(first), other.complete(second)]);
   assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
   const rejected = results.find(r => r.status === 'rejected');
@@ -343,8 +343,7 @@ test('expiry during a venue insert wait rolls back the installation, services an
   let completion: Promise<void> | undefined;
   try {
     await blocker.query('BEGIN');
-    await blocker.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
-      VALUES ($1, $2, $3, $4, $5)`, [randomUUID(), organisationId, legalBusinessId, input.localVenueId, input.environment]);
+    await blocker.query('LOCK TABLE venues IN SHARE MODE');
     completion = expectCode(other.complete(input), 'request_expired');
     let blocked = false;
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -386,13 +385,12 @@ test('unexpected database uniqueness errors remain distinguishable from registra
 });
 
 test('concurrent approved requests sharing a key serialize an existing unlinked venue', async () => {
-  const localVenueId = randomUUID();
   const installationKey = `key:${randomUUID()}`;
   const venueId = randomUUID();
   // An unlinked venue bypasses insert-conflict serialization, so its row lock must arbitrate installation creation.
-  await pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
-    VALUES ($1, $2, $3, $4, 'test')`, [venueId, organisationId, legalBusinessId, localVenueId]);
-  const first = await approved(binding({localVenueId, installationKey}));
+  await pool.query(`INSERT INTO venues (id, organisation_id, legal_business_id, environment)
+    VALUES ($1, $2, $3, 'test')`, [venueId, organisationId, legalBusinessId]);
+  const first = await approved(binding({venueId, installationKey}));
   const second = await approved({...first, operationId: randomUUID()});
   const blocker = await pool.connect();
   let firstCompletion: Promise<unknown> | undefined, secondCompletion: Promise<unknown> | undefined;
@@ -434,7 +432,7 @@ test('concurrent approved requests sharing a key serialize an existing unlinked 
 for (const differentKey of [false, true]) test(`pairing ${differentKey ? 'conflict' : 'retry'} allows a concurrent monitor incident to commit`, async () => {
   const initial = await approved();
   const installed = await store.complete(initial);
-  const request = await approved({ ...initial, operationId: randomUUID(),
+  const request = await approved({ ...initial, venueId:installed.venueId, operationId: randomUUID(),
     ...(differentKey ? { installationKey: `key:${randomUUID()}` } : {}) });
   await pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'", [installed.installationId]);
   await pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '16 minutes' WHERE id=$1", [installed.installationId]);

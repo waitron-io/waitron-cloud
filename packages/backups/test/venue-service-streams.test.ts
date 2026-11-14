@@ -14,7 +14,7 @@ async function fixture(){
   const installation=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.venues[0]])).rows[0].id as string;
   const vault=new BackupKeyVault(randomBytes(32)),key=generateKeyPairSync('ed25519');
   const location={endpoint:'https://stream.example.test',bucket:'venue-'+f.venues[0],region:'local'};
-  const input={localVenueId:f.venues[0]!,sourceNodeId:randomUUID(),pointerSignerPublicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64')};
+  const input={sourceNodeId:randomUUID(),pointerSignerPublicKey:key.publicKey.export({type:'spki',format:'der'}).toString('base64')};
   const objects=new Map<string,Buffer>(),calls:{provision:Parameters<ManagedStreamAuthority['provision']>[0][];read:string[]}={provision:[],read:[]};
   let provisionWait:undefined|(()=>Promise<void>),readWait:undefined|(()=>Promise<void>);
   let provision:ManagedStreamProvision={writerReference:'writer-one',readerReference:'reader-one',writerCredentials:{accessKeyId:'synthetic-access-one',secretAccessKey:'synthetic-secret-one'}};
@@ -27,9 +27,9 @@ async function fixture(){
   async function revision(){return Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installation])).rows[0].configuration_revision);}
   async function configure(){return streams.configure(installation,await revision(),input);}
   function pointer(){
-   const body={venueId:input.localVenueId,term:2,nodeId:input.sourceNodeId,generation:`gen-2-${input.sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
-   const message=`{"pointer":{"generation":"${body.generation}","nodeId":"${body.nodeId}","term":2,"venueId":"${body.venueId}","writtenAt":"${body.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
-   objects.set(`streams/${f.venues[0]}/venues/${input.localVenueId}/current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key.privateKey).toString('base64')})));
+   const body={streamId:f.venues[0]!,term:2,nodeId:input.sourceNodeId,generation:`gen-2-${input.sourceNodeId}-20261029T090000Z`,writtenAt:'2026-10-29T09:00:00.000Z'};
+   const message=`{"pointer":{"generation":"${body.generation}","nodeId":"${body.nodeId}","streamId":"${body.streamId}","term":2,"writtenAt":"${body.writtenAt}"},"purpose":"waitron.stream.pointer.v1"}`;
+   objects.set(`streams/${f.venues[0]}/current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key.privateKey).toString('base64')})));
    return body;
   }
   return {...f,installation,vault,location,input,objects,calls,catalogue,streams,legacyStreams,revision,configure,pointer,
@@ -123,7 +123,7 @@ test(`venue stream explicit reprovision after ${gap} preserves recovery and its 
   await assert.rejects(f.streams.configure(f.installation,revision,{...f.input,sourceNodeId:randomUUID()}),{message:'backup.conflict'});
   const next=await f.configure();assert.equal(next.configurationRevision,revision+1);assert.equal(next.recoveryKey,first.recoveryKey);
   assert.equal(next.bucket.accessKeyId,'synthetic-access-two');assert.equal(next.bucket.secretAccessKey,'synthetic-secret-two');
-  assert.equal(next.bucket.prefix,first.bucket.prefix);assert.equal(next.localVenueId,first.localVenueId);assert.equal(next.sourceNodeId,first.sourceNodeId);
+  assert.equal(next.bucket.prefix,first.bucket.prefix);assert.equal(next.streamId,first.streamId);assert.equal(next.sourceNodeId,first.sourceNodeId);
   const saved=(await f.pool.query('SELECT * FROM backup_managed_streams WHERE venue_id=$1',[f.venues[0]])).rows[0];
   assert.equal(saved.reader_reference,'reader-one');assert.equal(saved.writer_reference,'writer-two');assert.equal(saved.generation,observed.generation);
   assert.equal(saved.recoverable_at.toISOString(),observed.recoverableAt);assert.equal(saved.observed_at.toISOString(),observed.checkedAt);

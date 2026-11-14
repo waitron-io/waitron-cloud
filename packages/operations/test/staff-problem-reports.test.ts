@@ -17,7 +17,7 @@ test('the local reader lists unmatched reports and groups distinct staff reports
   const org=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),reportId=randomUUID(),emptyId=randomUUID();
   await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Synthetic organisation')",[org]);
   await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Synthetic business','ES')",[business,org]);
-  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,business,randomUUID()]);
+  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,business]);
   await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'synthetic-key')",[installation,venue]);
   const log={level:'error',code:'storage.disk_full',source:'packages/storage/src/archive.ts#write'},details={device:'till',equipment:['printer'],upgradedAt:null,hosting:'unknown'};
   for(const [id,logs,text,at] of [[reportId,[log,log],'Printer stopped\u202e.','2026-11-07T10:00:00Z'],[emptyId,[],null,'2026-11-07T11:00:00Z']] as const){
@@ -80,7 +80,7 @@ test('the grouped reader stays within its database deadline with 200000 reports 
   const org=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID();
   await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Synthetic scale organisation')",[org]);
   await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Synthetic scale business','ES')",[business,org]);
-  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[venue,org,business,randomUUID()]);
+  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,business]);
   await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'synthetic-scale-key')",[installation,venue]);
   await db.pool.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,code,source,version_major,version_minor,version_patch,reported_at,occurrences,logs)
    SELECT $1,gen_random_uuid(),'test',$2,'storage.disk_full','packages/storage/src/archive.ts#write',1,2,3,'2026-11-07T10:00:00Z',1,'[]'

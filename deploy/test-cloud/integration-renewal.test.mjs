@@ -1,3 +1,4 @@
+import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
@@ -11,18 +12,18 @@ test('the private rollback fixture queues a native renewal without changing its 
   });
   assert.equal(typeof prepareIntegrationRenewal, 'function', 'Explicit native renewal preparation is missing');
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-renewal-'));
-  const state = {origin: 'https://waitron.local:3000', environment: 'test', localVenueId: 'venue', publicKey: 'same-key',
+  const state = {origin: 'https://waitron.local:3000', environment: 'test', venueId: 'venue', publicKey: 'same-key',
     view: {registration: {installationId: 'same-installation'}}, lifecycle: {revoked: false, lease: {payload: 'untouched', signature: 'untouched'}}};
   const pending = {action: 'renew', operationId: '12345678-1234-4234-8234-123456789012', lease: '', body: '{}'};
   try {
-    await writeFile(join(root, 'cloud-connection.json'), JSON.stringify(state), {mode: 0o600});
+    await mkdir(join(root,'cloud'),{recursive:true});await writeFile(join(root, 'cloud/connection.json'), JSON.stringify(state), {mode: 0o600});
     await prepareIntegrationRenewal(root, action => {assert.equal(action, 'renew'); return pending;});
-    assert.deepEqual(JSON.parse(await readFile(join(root, 'cloud-connection.json'), 'utf8')), {...state, lifecycle: {...state.lifecycle, pending}});
+    assert.deepEqual(JSON.parse(await readFile(join(root, 'cloud/connection.json'), 'utf8')), {...state, lifecycle: {...state.lifecycle, pending}});
     await assert.rejects(prepareIntegrationRenewal(root, () => pending));
     for (const changed of [{...state, environment: 'production'}, {...state, lifecycle: {...state.lifecycle, revoked: true}}]) {
-      await writeFile(join(root, 'cloud-connection.json'), JSON.stringify(changed));
+      await mkdir(join(root,'cloud'),{recursive:true});await writeFile(join(root, 'cloud/connection.json'), JSON.stringify(changed));
       await assert.rejects(prepareIntegrationRenewal(root, () => pending));
-      assert.deepEqual(JSON.parse(await readFile(join(root, 'cloud-connection.json'), 'utf8')), changed);
+      assert.deepEqual(JSON.parse(await readFile(join(root, 'cloud/connection.json'), 'utf8')), changed);
     }
   } finally {await rm(root, {recursive: true, force: true});}
 });

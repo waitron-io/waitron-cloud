@@ -13,24 +13,10 @@ const raw = readFileSync(
 );
 const manifest = JSON.parse(raw);
 const owners = [
-  "adjustments",
-  "bookings",
-  "catalogue",
-  "core",
-  "credentials",
-  "fiscal-none",
-  "fiscal-verifactu",
-  "identity",
-  "media",
-  "payments",
-  "scheduler",
-  "staffing",
-  "venue-service",
-  "workforce",
-  "workforce-es",
+  "bookings", "core", "fiscal-none", "fiscal-verifactu", "node", "payments", "workforce", "workforce-es",
 ];
 const digest =
-  "2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10";
+  "05d5b2665dc9d76426615dd347815f48e0bab7a3dbd208083e2dba3c6b0e0ec0";
 
 function rehash(value: typeof manifest) {
   Object.assign(value, backupVerificationTargetDigests(value));
@@ -43,11 +29,11 @@ test("complete_pinned_public_target_includes_every_owner", () => {
   assert.equal(target.digest, digest);
   assert.equal(
     target.runtime.fingerprint,
-    "a62d25dfd879e6092efd9f6ffac64dd1f08304585d4e0e535535a53e7b818cf6",
+    "0d2f448733aeb47977034260a79d3075d9d925c3fa283f23ea70e20cdea1892e",
   );
   assert.deepEqual(target.modules.map((m) => m.name).sort(), owners);
   assert.equal(target.modules.find((m) => m.name === "fiscal-none")!.schema, 0);
-  assert.equal(target.modules.find((m) => m.name === "core")!.schema, 185);
+  assert.equal(target.modules.find((m) => m.name === "core")!.schema, 1);
   assert.equal(
     target.modules.find((m) => m.name === "core")!.packageVersion,
     "0.0.0",
@@ -271,4 +257,12 @@ test("previous_release_target_cannot_qualify_the_current_verifier", () => {
   const previous = readFileSync(new URL("fixtures/verification-target-a850.json", import.meta.url), "utf8");
   assert.equal(validateBackupVerificationTarget(JSON.parse(previous)).runtime.revision, "5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa");
   assert.throws(() => readVerificationTarget(previous), {message: "Invalid backup verification target"});
+});
+
+test('the historical ec91 descriptor remains valid but cannot authorise the current verifier',()=>{
+ const old=readFileSync(new URL('./fixtures/verification-target-ec91.json',import.meta.url),'utf8');
+ const historical=validateBackupVerificationTarget(JSON.parse(old));
+ assert.equal(historical.digest,'2e9a53ebe041b37415b0983563edaa1529714b42f3cd2637987b976667164d10');
+ assert.equal(historical.modules.length,15);assert.equal(historical.modules.find(m=>m.name==='core')!.schema,185);
+ assert.throws(()=>readVerificationTarget(old),/Invalid backup verification target/);
 });

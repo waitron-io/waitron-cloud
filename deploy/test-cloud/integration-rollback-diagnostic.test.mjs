@@ -1,3 +1,4 @@
+import {mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
@@ -14,10 +15,10 @@ for (const [failedStage, code, expected] of [
 ]) test('rollback diagnostic identifies ' + failedStage + '/' + code + ' without private error text', async t => {
   const root = await mkdtemp(join(tmpdir(), 'cloud-rollback-diagnostic-'));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const path = join(root, 'cloud-connection.json');
+  const path = join(root, 'cloud/connection.json');
   const state = {environment: 'test', lifecycle: {revoked: false}};
   if (failedStage === 'prepare') state.lifecycle.pending = {operationId: 'preserve-this'};
-  await writeFile(path, JSON.stringify(state), {mode: 0o600});
+  await mkdir(join(root,'cloud'),{recursive:true});await writeFile(path, JSON.stringify(state), {mode: 0o600});
   const failure = Object.assign(Error('private-password and private-key'), {code});
   let calls = 0, diagnostic;
   await assert.rejects(renewIntegrationAfterRollback(root, () => ({action: 'renew'}), async () => {

@@ -140,7 +140,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.evaluate(({first, second, request}) => {
         const app = (window as any).app, p = app.pairing; p.open(request); p.loaded = true; p.code = '12345678'; p.selected = second;
         p.businesses = [first, second].map(id => ({organisationId: id, legalBusinessId: id, organisationName: id === first ? 'A first organisation' : 'Z second organisation', legalBusinessName: id === first ? 'First test venue' : 'Second test venue', countryCode: 'ES'}));
-        p.view = {requestId: request, state: 'awaiting_cloud', localVenueId: second, environment: 'test'}; app.path = '/connect'; app.draw();
+        p.view = {requestId: request, state: 'awaiting_cloud', venueId: second, environment: 'test'}; app.path = '/connect'; app.draw();
       }, {first, second, request});
       const business = page.locator('select[name=legalBusinessId]'); assert.equal(await business.inputValue(), second);
       await page.evaluate(() => (window as any).app.draw()); assert.equal(await business.inputValue(), second);

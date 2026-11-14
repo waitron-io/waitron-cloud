@@ -23,7 +23,7 @@ beforeEach(async()=>{
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),registration=new RegistrationStore(db.pool);venues=[];
  for(let i=0;i<2;i++){
-  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const v=await registration.complete(binding);venues.push(v);
   await db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://secret-store.test',$3,'local')",[v.venueId,v.installationId,'private-'+i]);
   await db.pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'private-sealed-key')",[v.venueId]);
@@ -76,7 +76,7 @@ test('retention protection is distinct from current verification and active reco
 test('another organisation is refused even with a valid session and a known venue identifier',async()=>{
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('other@example.test');const row=(await db.pool.query("SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1")).rows[0],mail=db.outbox.open(row);assert('token' in mail);
  const other=await signup.complete(mail.token,{password,organisationName:'Luna',legalBusinessName:'Luna SL',countryCode:'ES'});
- const r=new RegistrationStore(db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:other.organisationId,legalBusinessId:other.legalBusinessId};await r.start(b);await r.approveCloud(b,other.accountId);await r.approveLocal(b,randomUUID());const foreign=await r.complete(b);
+ const r=new RegistrationStore(db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:other.organisationId,legalBusinessId:other.legalBusinessId};await r.start(b);await r.approveCloud(b,other.accountId);await r.approveLocal(b,randomUUID());const foreign=await r.complete(b);
  assert.equal((await request({venueId:foreign.venueId})).status,403);
 });
 test('catalogue limits persist across API processes',async()=>{

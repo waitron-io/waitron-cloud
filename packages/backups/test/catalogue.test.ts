@@ -94,7 +94,7 @@ beforeEach(async () => {
       installationKey: generateKeyPairSync("ed25519")
         .publicKey.export({ type: "spki", format: "der" })
         .toString("base64url"),
-      localVenueId: randomUUID(),
+      venueId:'',
       environment: "test",
       organisationId: owner.organisationId,
       legalBusinessId: owner.legalBusinessId,

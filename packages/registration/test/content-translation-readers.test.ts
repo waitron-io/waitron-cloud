@@ -15,7 +15,7 @@ beforeEach(async()=>{
  const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  installationKey=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url');
- const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());venue=await r.complete(binding);
  await db.pool.query(`INSERT INTO installation_services(installation_id,service,state) VALUES($1,'content_translation','ready')
   ON CONFLICT (installation_id,service) DO UPDATE SET state='ready'`,[venue.installationId]);

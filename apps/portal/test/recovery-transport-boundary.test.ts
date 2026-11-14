@@ -15,7 +15,7 @@ const pending: RecoveryView = {requestId, state: 'awaiting_owner', expiresAt, op
 const approved: RecoveryView = {requestId, state: 'approved', expiresAt, operationId: requestId,
   operation: {id: requestId, venueId, pointId, source, mode: 'failure', status: 'restored', expiresAt}};
 const ready: RecoveryView = {...approved, replacement: {requestId, pointId, source, venueId,
-  oldInstallationId, localVenueId: otherId, nodeId: otherId, environment: 'test',
+  oldInstallationId, nodeId: otherId, environment: 'test',
   publicKey: 'MCowBQYDK2VwAyEA' + 'A'.repeat(43), peerPublicKey: Buffer.alloc(32).toString('base64'),
   state: 'awaiting_owner', expiresAt, organisationName: 'Harbour Kitchen', legalBusinessName: 'Harbour Kitchen SL',
   registration: null}};

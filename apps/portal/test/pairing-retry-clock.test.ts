@@ -7,7 +7,7 @@ const requestId = '10000000-0000-4000-8000-000000000001';
 const nextRequestId = '10000000-0000-4000-8000-000000000002';
 const business = {organisationId: requestId, legalBusinessId: nextRequestId,
   organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'};
-const view = {requestId, localVenueId: '10000000-0000-4000-8000-000000000003',
+const view = {requestId, venueId: '10000000-0000-4000-8000-000000000003',
   environment: 'test', state: 'awaiting_cloud', expiresAt: '2099-01-01T00:00:00Z'};
 type Operation = 'load' | 'inspect' | 'approve';
 function fixture(t: TestContext) {

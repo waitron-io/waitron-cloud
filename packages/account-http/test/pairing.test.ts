@@ -18,7 +18,7 @@ function request(path:string,body?:unknown,headers:Record<string,string>={},targ
   return target.request(origin+path,{method,headers:{'content-type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
 }
 const browser=(path:string,body?:unknown,headers:Record<string,string>={})=>request('/api/account/pairing/'+path,body,{origin,cookie,'x-csrf-token':csrf,...headers});
-function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClaims={origin,action:'start',requestId:randomUUID(),publicKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClaims={origin,action:'start',requestId:randomUUID(),publicKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
   function proof(action:PairingClaims['action'],changes:Partial<PairingClaims>={}){const bytes=pairingPayload({...c,action,code:action==='start'?c.code:'',organisationId:action==='complete'?owner.organisationId:'',legalBusinessId:action==='complete'?owner.legalBusinessId:'',issuedAt:Date.now(),...changes});return {payload:bytes.toString('base64url'),signature:sign(null,bytes,keys.privateKey).toString('base64url')};}
   return {c,proof,call:(action:PairingClaims['action'],changes:Partial<PairingClaims>={})=>request('/api/pairing/'+action,proof(action,changes))};
 }
@@ -37,7 +37,7 @@ test('signed machines and browser approval link two distinct venues with durable
   for(const m of [a,b]) {
     const started=await m.call('start');assert.equal(started.status,200);assert.equal((await started.json() as {state:string}).state,'awaiting_cloud');
     assert.equal((await m.call('complete')).status,400);
-    const inspect=await browser('inspect',{requestId:m.c.requestId,code:m.c.code});assert.equal(inspect.status,200);assert.equal((await inspect.json() as {localVenueId:string}).localVenueId,m.c.localVenueId);
+    const inspect=await browser('inspect',{requestId:m.c.requestId,code:m.c.code});assert.equal(inspect.status,200);assert.equal((await inspect.json() as {venueId:string}).venueId,m.c.venueId);
     assert.equal((await browser('approve',choice(m))).status,200);
   }
   assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');

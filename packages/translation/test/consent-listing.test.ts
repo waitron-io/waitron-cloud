@@ -29,8 +29,8 @@ test('listing many venues keeps database round trips bounded and preserves every
  const expected:ConsentView[]=[...small.rows];
  for(let i=0;i<31;i++){
   const venueId=randomUUID();
-  await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment)
-   SELECT $1,organisation_id,legal_business_id,$2,environment FROM venues WHERE id=$3`,[venueId,randomUUID(),v.venueId]);
+  await db.pool.query(`INSERT INTO venues(id,organisation_id,legal_business_id,environment)
+   SELECT $1,organisation_id,legal_business_id,environment FROM venues WHERE id=$2`,[venueId,v.venueId]);
   if(i===30)await consent({...v,venueId});
   expected.push({venueId,consented:i===30,consentedAt:i===30?consentedAt:null});
  }

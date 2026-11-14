@@ -37,7 +37,7 @@ export async function recoveryFixture(db:Awaited<ReturnType<typeof database>>,qu
  await signup.request(email);const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);if(!('token' in mail))throw Error('missing signup token');
  const owner=await signup.complete(mail.token,{password,organisationName:email,legalBusinessName:'Recovery SL',countryCode:'ES'}),session=await transaction(db.pool,c=>login(c,{email,password}));
  await prepareConnectionProof(db.pool,owner.accountId,session.token);
- const reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:machineTarget().publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:machineTarget().publicKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await reg.start(binding);await reg.approveCloud(binding,owner.accountId);await reg.approveLocal(binding,randomUUID());const installed=await reg.complete(binding);
  await catalogue.provision(installed.installationId,{endpoint:'https://store.test',bucket:'recovery-'+randomUUID(),region:'local'});
  await transaction(db.pool,c=>setVerificationPolicy(c,fixtureTarget,fixtureImage,qualified));

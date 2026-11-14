@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {Pool} from 'pg';
-import {RegistrationStore,type ConnectionBinding} from '../src/index.ts';
 import {OrganisationPlanStore,readVenuePlan} from '../src/organisation-plans.ts';
-import {PairingStore} from '../src/pairing.ts';
-import type {PairingClaims} from '../src/pairing-proof.ts';
 import {transaction} from '../src/transaction.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 import {venueServiceFixture,set,rows} from './fixtures/venue-service.ts';
 
-// New authority checks must preserve historical clients without treating damaged current schemas as legacy.
+// Release-45 binaries own registration/pairing controls; current plan readers retain legacy-schema coverage.
 async function legacyFixture(){
  const schema='venue_legacy_'+randomUUID().replaceAll('-',''),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema} -c statement_timeout=5000`});
@@ -21,10 +19,12 @@ async function legacyFixture(){
   await pool.query("INSERT INTO legal_businesses(id,organisation_id,name) VALUES($1,$2,'Test business')",[legalBusinessId,organisationId]);
   await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[account]);
   await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues) VALUES($1,$2,true)',[account,organisationId]);
-  const binding:ConnectionBinding={organisationId,legalBusinessId,operationId:randomUUID(),localVenueId:randomUUID(),environment:'test',
+  const binding={organisationId,legalBusinessId,operationId:randomUUID(),localVenueId:randomUUID(),environment:'test',
    installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')};
   const ledger=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;assert.equal(ledger.length,45);
-  return {pool,binding,account,ledger,async close(){await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();await release.close();}};
+  const {RegistrationStore}=await import(pathToFileURL(release.root+'/packages/registration/src/index.ts').href);
+  const {PairingStore}=await import(pathToFileURL(release.root+'/packages/registration/src/pairing.ts').href);
+  return {pool,binding,account,ledger,RegistrationStore,PairingStore,async close(){await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();await release.close();}};
  }catch(error){await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();await release.close();throw error;}
 }
 async function unchanged(f:Awaited<ReturnType<typeof legacyFixture>>){
@@ -33,14 +33,14 @@ async function unchanged(f:Awaited<ReturnType<typeof legacyFixture>>){
 }
 test('release 45 registration completion and replay preserve the historical schema',async()=>{
  const f=await legacyFixture();try{
-  const store=new RegistrationStore(f.pool);await store.start(f.binding);await store.approveLocal(f.binding,randomUUID());await store.approveCloud(f.binding,f.account);
+  const store=new f.RegistrationStore(f.pool);await store.start(f.binding);await store.approveLocal(f.binding,randomUUID());await store.approveCloud(f.binding,f.account);
   const first=await store.complete(f.binding);assert.ok(first.installationId);assert.deepEqual(await store.complete(f.binding),first);
   assert.equal((await f.pool.query('SELECT count(*) FROM installations')).rows[0].count,'1');await unchanged(f);
  }finally{await f.close();}
 });
 test('release 45 pairing completion and replay preserve the historical schema',async()=>{
  const f=await legacyFixture();try{
-  const store=new PairingStore(f.pool),c:PairingClaims={...f.binding,environment:'test',origin:'https://cloud.example',action:'start',requestId:f.binding.operationId,
+  const store=new f.PairingStore(f.pool),c={...f.binding,environment:'test',origin:'https://cloud.example',action:'start',requestId:f.binding.operationId,
    publicKey:f.binding.installationKey,code:'12345678',issuedAt:Date.now()};
   await store.start(c);await f.pool.query('UPDATE pairing_requests SET cloud_account_id=$2,organisation_id=$3,legal_business_id=$4 WHERE id=$1',
    [c.requestId,f.account,f.binding.organisationId,f.binding.legalBusinessId]);

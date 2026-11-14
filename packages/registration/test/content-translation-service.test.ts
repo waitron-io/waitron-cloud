@@ -16,7 +16,7 @@ beforeEach(async()=>{
  const owner=await signup.complete(mail.token,{password:'A sufficiently long password',organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const pair=generateKeyPairSync('ed25519');key=pair.privateKey;
  const r=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:pair.publicKey.export({type:'spki',format:'der'}).toString('base64url'),
-  localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await r.start(binding);await r.approveCloud(binding,owner.accountId);await r.approveLocal(binding,randomUUID());venue=await r.complete(binding);
 });
 function proof(action:MachineAction,body:unknown,operationId=randomUUID(),lease?:SignedEnvelope):SignedEnvelope{

@@ -14,7 +14,7 @@ import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
 function recoveryDestination(access:RecoveryAccess){
  return JSON.stringify('stream' in access
-  ?[access.source,access.stream.venueId,access.stream.location,access.stream.prefix,access.stream.readerReference,access.stream.pointerSignerPublicKey,access.stream.localVenueId,access.stream.generation]
+  ?[access.source,access.stream.venueId,access.stream.location,access.stream.prefix,access.stream.readerReference,access.stream.pointerSignerPublicKey,access.stream.streamId,access.stream.generation]
   :[access.source,access.point.venueId,access.location,access.point.objectKey,access.point.keyVersion,access.point.digest]);
 }
 export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:RecoveryCodeKeys|null;pool:Pool;origin:string;ip:string;captures?:CaptureOptions;consume:(rules:RateRule[])=>Promise<void>}){
@@ -88,7 +88,7 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
    const credentials=await reader({reference:first.stream.readerReference,venueId:first.stream.venueId,location:first.stream.location,prefix:first.stream.prefix});
    const current=await read();
    if(!('stream' in current)||!credentials||Object.keys(credentials).sort().join(',')!=='accessKeyId,secretAccessKey'||!credentials.accessKeyId||!credentials.secretAccessKey)throw new AccountHttpError(503,'temporarily_unavailable');
-   const recoveryKit='WAITRON-RECOVERY-KIT-1:'+Buffer.from(JSON.stringify({version:1,venueId:current.stream.localVenueId,bucket:{...current.stream.location,prefix:current.stream.prefix,...credentials},recoveryKey:current.stream.recoveryKey,pointerSignerPublicKey:current.stream.pointerSignerPublicKey})).toString('base64url');
+   const recoveryKit='WAITRON-RECOVERY-KIT-2:'+Buffer.from(JSON.stringify({version:2,streamId:current.stream.streamId,bucket:{...current.stream.location,prefix:current.stream.prefix,...credentials},recoveryKey:current.stream.recoveryKey,pointerSignerPublicKey:current.stream.pointerSignerPublicKey})).toString('base64url');
    return machineJson({source:current.source,recoveryKit,operationExpiresAt:current.operationExpiresAt});
   }
   const grant=await captures.grant(first.location,{kind:'restore',bucket:first.location.bucket,scope:first.point.objectKey});

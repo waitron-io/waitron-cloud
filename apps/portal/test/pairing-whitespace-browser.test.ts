@@ -7,7 +7,7 @@ import {translations} from '../src/locale.ts';
 
 const requestId='12345678-1234-4234-8234-123456789abc';
 const business={organisationId:requestId,legalBusinessId:'22345678-1234-4234-8234-123456789abc',organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'};
-const view={requestId,localVenueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:'2026-10-25T12:00:00Z',state:'awaiting_cloud'};
+const view={requestId,venueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:'2026-10-25T12:00:00Z',state:'awaiting_cloud'};
 const bundle=await build({stdin:{contents:`
  import {applyTokens} from '@waitron-io/ui-core/tokens';
  import {PortalApp} from './src/app.ts';

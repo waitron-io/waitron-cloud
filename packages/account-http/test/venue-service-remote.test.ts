@@ -17,7 +17,7 @@ async function fixture(){
   const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   const session=await transaction(db.pool,c=>login(c,{email,password}));
   await prepareConnectionProof(db.pool,owner.accountId,session.token);
-  const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+  const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
   await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());const installed=await registration.complete(binding);
   const billing=new BillingStore(db.pool),scope={organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await billing.execute(scope,event(),{type:'ensure_business'});
   async function level(value:BillingLevel){const old=await billing.venue(scope,installed.venueId);return billing.transition(scope,event(),{type:'set_venue',venueId:installed.venueId,expectedRevision:old.revision,value:{level:value,connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});}

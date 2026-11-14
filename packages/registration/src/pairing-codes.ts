@@ -3,7 +3,7 @@ import type {Pool} from 'pg';
 import {transaction} from './transaction.ts';
 
 export interface PairingCodeKeys {activeKeyId:string;keys:Readonly<Record<string,string>>;}
-export interface PairingCodeBinding {id:string;public_key:string;local_venue_id:string;environment:string;}
+export interface PairingCodeBinding {id:string;public_key:string;requested_venue_id:string|null;environment:string;}
 const idPattern=/^[A-Za-z0-9_-]{1,64}$/;
 const unavailable=()=>new Error('Pairing code configuration unavailable');
 export function pairingCodeKeysFromEnv(env:NodeJS.ProcessEnv):PairingCodeKeys|undefined {
@@ -28,7 +28,7 @@ export class PairingCodes {
   }
   #mac(row:PairingCodeBinding,digest:string,keyId:string):string {
     const key=this.#keys.get(keyId);if(!key)throw unavailable();
-    return createHmac('sha256',key).update(JSON.stringify(['waitron-cloud/pairing-code/v1',row.id.toLowerCase(),row.public_key,row.local_venue_id.toLowerCase(),row.environment,digest])).digest('hex');
+    return createHmac('sha256',key).update(JSON.stringify(['waitron-cloud/pairing-code/v1',row.id.toLowerCase(),row.public_key,(row.requested_venue_id??'').toLowerCase(),row.environment,digest])).digest('hex');
   }
   protectDigest(row:PairingCodeBinding,digest:string):string {
     if(!this.#active||!/^[a-f0-9]{64}$/.test(digest))throw unavailable();
@@ -50,7 +50,7 @@ export async function upgradePairingCodes(pool:Pool,keys:PairingCodeKeys,batchSi
   if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw unavailable();
   const codes=new PairingCodes(keys);
   return transaction(pool,async client=>{
-    const rows=(await client.query<PairingCodeBinding&{code_hash:string}>(`SELECT id,public_key,local_venue_id,environment,code_hash FROM pairing_requests
+    const rows=(await client.query<PairingCodeBinding&{code_hash:string}>(`SELECT id,public_key,requested_venue_id,environment,code_hash FROM pairing_requests
       WHERE code_hash ~ '^[a-f0-9]{64}$' ORDER BY id LIMIT $1 FOR UPDATE`,[batchSize])).rows;
     for(const row of rows)await client.query('UPDATE pairing_requests SET code_hash=$2 WHERE id=$1',[row.id,codes.protectDigest(row,row.code_hash)]);
     return rows.length;

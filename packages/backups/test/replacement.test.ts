@@ -28,7 +28,7 @@ async function fixture(){
  await signup.request(email);const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:email,legalBusinessName:'Recovery SL',countryCode:'ES'}),session=await transaction(db.pool,c=>login(c,{email,password}));
  await prepareConnectionProof(db.pool,owner.accountId,session.token);
- const installedKey=target(),reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:installedKey.publicKey,localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const installedKey=target(),reg=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:installedKey.publicKey,venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await reg.start(binding);await reg.approveCloud(binding,owner.accountId);await reg.approveLocal(binding,randomUUID());const installed=await reg.complete(binding);
  await catalogue.provision(installed.installationId,{endpoint:'https://store.test',bucket:'recovery-'+randomUUID(),region:'local'});const capture=await catalogue.reserveCapture(installed.installationId,randomUUID()),bytes=Buffer.from('encrypted archive');objects.set(capture.incomingKey,bytes);
  const point=await catalogue.publish(installed.installationId,capture.id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}});await verifyPointFixture(db.pool,catalogue,point.id);
@@ -40,8 +40,7 @@ async function ready(){
  await f.requests.approve(t.id,t.code,f.session.token,f.session.csrfToken,{pointId:f.point.id,oldServerUnavailable:true,acceptDataLoss:true});
   await f.recovery.target(t.id,'restored',t.recovery('restored',f.point.digest));
  const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url'),peerPublicKey=randomBytes(32).toString('base64');
- const localVenueId=(await db.pool.query('SELECT local_venue_id FROM venues WHERE id=$1',[f.installed.venueId])).rows[0].local_venue_id;
- const proposed={id:t.id,localVenueId,nodeId:f.point.sourceNodeId,publicKey,peerPublicKey};
+ const proposed={id:t.id,nodeId:f.point.sourceNodeId,publicKey,peerPublicKey};
  const envelope=(action:'prepare'|'status'|'reissue')=>{const bytes=replacementPayload(origin,action,proposed,Date.now());return {id:t.id,payload:bytes.toString('base64url'),signature:t.sign(bytes),keySignature:sign(null,bytes,key.privateKey).toString('base64url')};};
  return {...f,t,key,proposed,envelope,store:new ReplacementStore(db.pool,f.vault,origin)};
 }
@@ -53,7 +52,7 @@ for(const pending of [false,true])test(`reissue ${pending?'replaces a pending':'
  const envelope=()=>{const b=replacementPayload(origin,'reissue',candidate,Date.now());return {id:f.t.id,payload:b.toString('base64url'),signature:f.t.sign(b),keySignature:sign(null,b,key.privateKey).toString('base64url')};};
  const proposal=await f.store.machine('reissue',envelope());
  assert.equal(proposal.state,'awaiting_owner');assert.equal(proposal.publicKey,candidate.publicKey);assert.equal(proposal.peerPublicKey,candidate.peerPublicKey);
- assert.equal(proposal.localVenueId,f.proposed.localVenueId);assert.equal(proposal.nodeId,f.proposed.nodeId);
+ assert.equal(proposal.venueId,f.installed.venueId);assert.equal(proposal.nodeId,f.proposed.nodeId);
  assert.deepEqual(await f.store.machine('reissue',envelope()),proposal);
  const saved=(await db.pool.query('SELECT * FROM installation_replacements WHERE id=$1',[f.t.id])).rows[0];
  assert.equal(saved.id,f.t.id);assert.equal(saved.old_installation_id,f.installed.installationId);
@@ -185,7 +184,7 @@ test('current installation consumers preserve one venue and do not inherit the o
  // Keep unrelated fixtures out of this worker selection, so it must evaluate this current installation.
  await db.pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '1 day' WHERE venue_id<>$1",[f.installed.venueId]);
  await new MonitorWorker(db.pool,db.outbox).runOnce();assert.equal((await db.pool.query("SELECT status FROM venue_incidents WHERE venue_id=$1 AND kind='disconnected'",[f.installed.venueId])).rows[0].status,'recovered');
- const unrelated={...f.binding,operationId:randomUUID(),installationKey:target().publicKey};await f.reg.start(unrelated);await f.reg.approveCloud(unrelated,f.owner.accountId);await f.reg.approveLocal(unrelated,randomUUID());await assert.rejects(f.reg.complete(unrelated));
+ const unrelated={...f.binding,venueId:f.installed.venueId,operationId:randomUUID(),installationKey:target().publicKey};await f.reg.start(unrelated);await f.reg.approveCloud(unrelated,f.owner.accountId);await f.reg.approveLocal(unrelated,randomUUID());await assert.rejects(f.reg.complete(unrelated));
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[result.registration.installationId]);await assert.rejects(f.reg.complete(unrelated));
 });
 test('replacement during provider grant issuance refuses to disclose old installation credentials',async()=>{
@@ -219,7 +218,7 @@ test('monitor incident insertion can finish while replacement waits for its inst
 });
 test('a proposed key claimed by another registration returns a conflict with no partial retirement',async()=>{
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
- const other={...f.binding,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:f.proposed.publicKey};await f.reg.start(other);await f.reg.approveCloud(other,f.owner.accountId);await f.reg.approveLocal(other,randomUUID());await f.reg.complete(other);
+ const other={...f.binding,operationId:randomUUID(),venueId:'',installationKey:f.proposed.publicKey};await f.reg.start(other);await f.reg.approveCloud(other,f.owner.accountId);await f.reg.approveLocal(other,randomUUID());await f.reg.complete(other);
  await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f)),/backup.conflict/);
  assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
 });
@@ -231,7 +230,7 @@ test('expiry after key rotation begins rolls back the entire replacement',async(
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
 test('completion refuses backup ownership that changed after preparing the proposal',async()=>{
- const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));const binding={...f.binding,operationId:randomUUID(),localVenueId:randomUUID(),installationKey:target().publicKey};await f.reg.start(binding);await f.reg.approveCloud(binding,f.owner.accountId);await f.reg.approveLocal(binding,randomUUID());const other=await f.reg.complete(binding);
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));const binding={...f.binding,operationId:randomUUID(),venueId:'',installationKey:target().publicKey};await f.reg.start(binding);await f.reg.approveCloud(binding,f.owner.accountId);await f.reg.approveLocal(binding,randomUUID());const other=await f.reg.complete(binding);
  await db.pool.query('UPDATE backup_locations SET installation_id=$2 WHERE venue_id=$1',[f.installed.venueId,other.installationId]);await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f)),/conflict/);assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[f.installed.installationId])).rows[0].revoked_at,null);
 });
 test('unexpected database failures are redacted and retryable at the HTTP boundary',async context=>{
@@ -267,4 +266,9 @@ test('replacement cancels the old disconnected episode in its approval transacti
  await f.store.machine('prepare',f.envelope('prepare'));await f.store.complete(f.t.id,f.session.token,f.session.csrfToken,confirm(f));
  const stopped=(await db.pool.query('SELECT * FROM venue_alert_episodes WHERE id=$1',[e.id])).rows[0];assert.equal(stopped.status,'suppressed');assert.equal(stopped.recovery_complete,true);
  const slot=(await db.pool.query('SELECT * FROM venue_alert_recipients WHERE episode_id=$1',[e.id])).rows[0];assert.equal(slot.reminder_status,'cancelled');assert.equal(slot.recovery_status,'cancelled');
+});
+
+test('replacement v2 signs the Cloud recovery and node without a local venue field',()=>{
+ const proposed={id:'12345678-1234-4234-8234-123456789abc',nodeId:'22345678-1234-4234-8234-123456789abc',publicKey:'new-key',peerPublicKey:'peer-key'};
+ assert.equal(replacementPayload('https://cloud.test','prepare',proposed,1800000000000).toString(),'["waitron-cloud-replacement-v2","https://cloud.test","12345678-1234-4234-8234-123456789abc","prepare","22345678-1234-4234-8234-123456789abc","test","new-key","peer-key",1800000000000]');
 });

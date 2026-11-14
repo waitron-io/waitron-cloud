@@ -27,7 +27,7 @@ beforeEach(async()=>{
  await db.pool.query(`INSERT INTO cloud_passkeys(id,account_id,credential_id,public_key,counter,device_type,backed_up)
    VALUES($1,$2,$3,$4,0,'multiDevice',true)`,[randomUUID(),owner.accountId,randomUUID(),Buffer.from([1,2,3])]);
  await openProofWindow(db.pool,session.token);
- claims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),localVenueId:randomUUID(),environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+ claims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
  await store.start(claims);
 });
 
@@ -79,7 +79,7 @@ test('completed replies still authenticate the machine binding after browser sig
 
 test('first completion rechecks absolute session expiry after waiting for the venue insert',async()=>{
  await approve();const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
- await blocker.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$4,'test')",[randomUUID(),owner.organisationId,owner.legalBusinessId,claims.localVenueId]);
+ await blocker.query("LOCK TABLE venues IN SHARE MODE");
  await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '300 milliseconds' WHERE account_id=$1",[owner.accountId]);
  const pending=assert.rejects(complete(),/pairing_unavailable/);let waiting=false,accountLocked=false;
  try{

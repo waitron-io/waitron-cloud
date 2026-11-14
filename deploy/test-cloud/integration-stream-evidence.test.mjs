@@ -5,7 +5,7 @@ const load = () => import('./test-fixtures/integration-stream-evidence.mjs').cat
   throw error;
 });
 const selected = {venueId:'11111111-1111-4111-8111-111111111111',installationId:'22222222-2222-4222-8222-222222222222',
-  sourceNodeId:'33333333-3333-4333-8333-333333333333',localVenueId:'44444444-4444-4444-8444-444444444444',
+  sourceNodeId:'33333333-3333-4333-8333-333333333333',streamId:'44444444-4444-4444-8444-444444444444',
   generation:'20261101T050000Z-abcdef',recoverableAt:'2026-11-01T05:00:00.000Z'};
 const fixture = () => ({...selected,checkedAt:'2026-11-01T05:00:01.000Z',nativeStreaming:true,
   signedPointerVerified:true,retainedSnapshotUnchanged:true,noSupersession:true,noActivation:true});
@@ -17,7 +17,7 @@ test('stream evidence retains an independently observed source binding without p
   assert.equal(value.generation,'20261101T050000Z-abcdef');
   assert.deepEqual(value,{status:'observed',...fixture(),independentObservation:true});
 });
-for(const key of ['venueId','installationId','sourceNodeId','localVenueId','generation','recoverableAt']) {
+for(const key of ['venueId','installationId','sourceNodeId','streamId','generation','recoverableAt']) {
   test('stream evidence rejects another '+key, async()=>{
     const {inspectIntegrationStream}=await load();assert.equal(typeof inspectIntegrationStream,'function');
     assert.throws(()=>inspectIntegrationStream({...fixture(),[key]:key==='recoverableAt'?'2026-11-01T04:00:00.000Z':key==='generation'?'another-generation':'55555555-5555-4555-8555-555555555555'},selected));

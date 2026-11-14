@@ -79,6 +79,8 @@ test('migration reporting never reads hostile thrown values and reporter failure
 function relayDatabase(t:TestContext,failAt:number,error:unknown){
  const queries:{sql:string,args:unknown}[]=[];const ended:Pool[]=[];
  t.mock.method(Pool.prototype,'query',async function(this:Pool,sql:string,args?:unknown[]){
+  // Failure ordinals address setup statements; schema discovery supplies current metadata.
+  if(sql==="SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='venues' AND column_name='local_venue_id') AS present")return {rows:[{present:false}],rowCount:1,command:'SELECT',oid:0,fields:[]};
   queries.push({sql,args});if(queries.length===failAt)throw error;
   return {rows:sql==='SELECT clock_timestamp() AS now'?[{now:new Date('2026-10-28T00:00:00Z')}]:[],rowCount:0,command:'SELECT',oid:0,fields:[]};
  });

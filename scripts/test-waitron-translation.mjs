@@ -46,7 +46,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
  const bundles=await Promise.all(bundleFiles.map(name=>readFile(join(waitron,'apps/dashboard/dist/assets',name),'utf8')));
  assert.ok(bundles.some(text=>text.includes('content.suggestions_ready_partly')&&text.includes("couldn't be done this time")),'translation_proof_current_dashboard_required');
  const require=createRequire(join(waitron,'apps/server/package.json')),tsx=require.resolve('tsx');
- const [{startPortalFixture},{SignupStore},{TranslationWorker,createLoopbackOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
+ const [{startPortalFixture,completeBrowserEmail,prepareBrowserActionWindow},{SignupStore},{TranslationWorker,createLoopbackOpenAiClient,sweepTranslationJobs},{startFakeOpenAi,echoFirstPass,isReview,emptyReview,responsesBody},{DatabaseSync}]=await Promise.all([
   import('../apps/portal/test/fixtures.ts'),import('../packages/registration/src/index.ts'),import('../packages/translation/src/index.ts'),import('../packages/translation/test/fake-openai.ts'),import('node:sqlite'),
  ]);
  let f,context,provider,root,stage='setup',generation=0,workerWork,loss,gate,firstSuggestion,releaseSnapshot;
@@ -74,7 +74,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   return {...ready,running};
  };
  try{
-  f=await startPortalFixture(undefined,undefined,undefined,undefined,{pageBytes:512});
+  f=await startPortalFixture(undefined,undefined,undefined,{pageBytes:512});
   f.translation.events.push=(...events)=>Array.prototype.push.apply(f.translation.events,events.map(event=>({...event,generation})));
   root=await mkdtemp(join(tmpdir(),'cloud-integration-translation-'));receipt.root=root;
   stage='launch';const server=await launch();
@@ -82,7 +82,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   stage='account';const signup=new SignupStore(f.db.pool,f.db.outbox),email=`translation-${randomUUID()}@example.test`,password='Cloud translation proof password';
   await signup.request(email);
   const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);assert.ok('token' in mail);
-  await signup.complete(mail.token,{password,organisationName:'Translation Proof',legalBusinessName:'Translation Proof SL',countryCode:'ES'});
+  const owner=await signup.complete(mail.token,{password,organisationName:'Translation Proof',legalBusinessName:'Translation Proof SL',countryCode:'ES'});
   context=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900}});
   const page=await context.newPage();page.setDefaultTimeout(15000);
   const request=async(method,path,data,status=200)=>{
@@ -91,13 +91,14 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
    return status===204?null:response.json();
   };
   stage='pairing';await request('POST','session',{email:'owner@example.test',password:'Local integration password'});
+  await request('POST','session/me/fresh-sign-in',{method:'password',password:'Local integration password'},204);
   await page.goto(server.origin+'/manage/cloud');await page.getByRole('button',{name:'Connect to Cloud',exact:true}).click();
   const localScreen=page.locator('dashboard-cloud-services-screen');await localScreen.locator('.code').waitFor();
   const code=(await localScreen.locator('.code').innerText()).trim();assert.match(code,/^\d{8}$/);
   const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const portal=await popupPromise;portal.setDefaultTimeout(15000);
-  await portal.getByLabel('Email').fill(email);await portal.locator('input[name=password]').fill(password);await portal.getByRole('button',{name:'Sign in',exact:true}).click();
+  await portal.getByLabel('Email').fill(email);await portal.locator('input[name=password]').fill(password);await portal.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,portal,email);
   await portal.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await portal.getByRole('button',{name:'Check code',exact:true}).click();
-  await portal.getByText(server.localVenueId,{exact:true}).waitFor();await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
+  await portal.getByText('New venue',{exact:true}).waitFor();await prepareBrowserActionWindow(f,portal,owner.accountId);await portal.getByRole('button',{name:'Approve this venue',exact:true}).click();await portal.getByText('Approved in Cloud.',{exact:false}).waitFor();
   await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Translation Proof SL',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Connect this venue',exact:true}).click();await page.getByText('Connected',{exact:true}).waitFor();
   const connected=await request('GET','cloud/status');receipt.installationId=connected.registration.installationId;
@@ -110,7 +111,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   // A fresh connection renews its lease before it can request version-2 configuration.
   await request('POST','cloud/refresh',{});
   const configured=await request('GET','cloud/status');receipt.services=configured.installation.services;assert.ok(configured.installation.services.some(row=>row.service==='content_translation'&&row.state==='ready'),'translation_proof_service_ready');
-  const available=await request('GET','content-suggestions?language=en');assert.equal(available.service,'on');assert.equal(available.cloudOrigin,f.origin);
+  const available=await request('GET','content-suggestions');assert.equal(available.service,'on');assert.equal(available.cloudOrigin,f.origin);
   stage='content';await request('PUT','content-languages',{defaultLanguage:'es',languages:['es','en']},204);
   const languages=await request('GET','content-languages');receipt.languages=languages;assert.equal(languages.defaultLanguage,'es');assert.deepEqual(languages.languages,['es','en']);
   await request('GET','content-language-rules');
@@ -125,10 +126,8 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   const gaps=await request('GET','content-translation-gaps');
   const expectedRefs=[...expectedProducts.keys()].map(id=>'product:'+id).sort();
-  receipt.gaps=gaps.map(row=>({language:row.language,refs:row.gaps.map(gap=>`${gap.kind}:${gap.id}`)}));
-  assert.deepEqual(gaps.map(row=>row.language),['es','en']);
-  assert.deepEqual(gaps.find(row=>row.language==='es').gaps,[]);
-  assert.deepEqual(gaps.find(row=>row.language==='en').gaps.map(row=>`${row.kind}:${row.id}`).sort(),expectedRefs);
+  receipt.gaps=gaps;
+  assert.deepEqual(gaps,[{language:'es',count:0},{language:'en',count:3}]);
   const assertStored=(state,count,refs,cursor=null,jobState='done')=>{
    assert.equal(refs.length,count);
    return verifyTranslationStorage(state,{refs,translations:[...expectedProducts],cursor,state:jobState});
@@ -188,7 +187,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
    gate.cancel();
    await checked(until(()=>f.translation.events.find(event=>event.kind==='reply'&&event.cursor===1&&event.status===503&&event.generation===1),'cancelled_collect'));
    receipt.restart={signal:restartSignal,exit,boundary:{cursor:state.jobs[0].collect_cursor,refs:JSON.parse(state.jobs[0].collected_refs),count:state.suggestions.length,dropped:state.jobs[0].dropped}};
-   const resumed=await launch();assert.equal(resumed.origin,server.origin);assert.equal(resumed.localVenueId,server.localVenueId);
+   const resumed=await launch();assert.equal(resumed.origin,server.origin);assert.equal(resumed.venueId,connected.registration.venueId);
    await checked(until(()=>f.translation.events.find(event=>event.kind==='request'&&event.action==='translation-collect'&&event.generation===2),'resumed_collect'));
    receipt.restart.firstCursor=verifyTranslationResume(f.translation.events);
    }
@@ -200,7 +199,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   stage='collect';await checked(until(()=>{const job=snapshot().jobs[0];return job?.released===1&&job;},'released'));
   if(expiry){
    stage='notification';const ended=snapshot();verifyTranslationExpiry(ended,firstSuggestion,receipt.filteredRefs);
-   if(readFinishedBeforeAlert)await request('GET','content-suggestions?language=en');
+   if(readFinishedBeforeAlert)await request('GET','content-suggestions');
    const alerts=await request('GET','alerts');
    receipt.expiry.alert=verifyTranslationNotification(alerts,ended.jobs[0].finished_at);
    const bell=page.locator('dashboard-alerts-bell');await bell.getByRole('button').first().click();
@@ -209,7 +208,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   stage='suggestions';const suggestions=[];let after;
   do{
-   const read=await request('GET','content-suggestions?language=en'+(after?'&after='+encodeURIComponent(after):''));
+   const read=await request('GET','content-suggestions'+(after?'?after='+encodeURIComponent(after):''));
    assert.equal(read.run.state,expiry?'expired':'done');assert.equal(read.run.total,3);assert.equal(read.run.done,suggestionCount);assert.equal(read.run.failed,expiry?2:0);assert.equal(read.run.progress,3);assert.equal(read.run.waiting,suggestionCount);
    if(expiry)assert.equal(read.run.code,'content.suggestion_expired');
    suggestions.push(...read.suggestions);after=read.next;
@@ -234,13 +233,13 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   }
   receipt.events=safeEvents();
   receipt.passed=true;
- }catch(error){receipt.events=safeEvents();receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed'};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
+ }catch(error){receipt.events=safeEvents();receipt.failure={stage,code:error.code==='ERR_ASSERTION'?error.message.split('\n')[0]:'translation_proof_'+stage+'_failed',exception:error.name,frames:[...new Set(error.stack?.match(/\/[^\s()'"<>]+\.(?:[cm]?js|ts):\d+:\d+/g)??[])].slice(0,5)};throw Object.assign(new Error(`translation_proof_failed_${stage}`),{receipt});}
  finally{
   gate?.cancel();abort.abort();if(workerWork)await Promise.allSettled([workerWork]);
   for(const running of children)await running.stop();
   await context?.close();await provider?.close();await f?.close();
   if(root)await rm(root,{recursive:true,force:true});
-  receipt.cleanup={rootRemoved:!!root,children:children.map(r=>({pid:r.child.pid,exited:r.exited})),fixtureClosed:!!f,providerClosed:!!provider};
+  receipt.cleanup={rootRemoved:!!root,children:await Promise.all(children.map(async r=>({pid:r.child.pid,exited:r.exited,exit:await r.done}))),fixtureClosed:!!f,providerClosed:!!provider};
  }
  return receipt;
 }

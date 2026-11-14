@@ -15,7 +15,7 @@ test('the same paired paid source streams through native Waitron and Cloud obser
   const snapshot = receipt.paidSnapshot, stream = receipt.paidStream;
   assert.equal(stream?.status, 'observed', 'The real paired source must stream and Cloud must observe its signed pointer');
   assert.equal(stream.sourceNodeId, snapshot.sourceNodeId);
-  assert.equal(stream.localVenueId, snapshot.localVenueId);
+  assert.equal(stream.streamId, snapshot.streamId);
   assert.equal(stream.venueId, snapshot.venueId);
   assert.equal(stream.installationId, snapshot.installationId);
   assert.equal(stream.nativeStreaming, true);
