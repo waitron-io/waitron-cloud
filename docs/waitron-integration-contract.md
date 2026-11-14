@@ -2047,13 +2047,14 @@ and per-venue production calendars. Production prices, retention, collection,
 hosted-stop legality and provider/invoice qualification retain their existing
 gates. The [D568 emergency display proposal](#emergency-hosting-display-and-code-proposed-d568)
 defines separate reads for A1188. Waitron accepts their boundaries in its
-14 November response; code and daily-price details remain open. Billing display
+14 November response; Cloud agreed the remaining part 1 values at 13:33 CET
+([agreement](https://github.com/waitron-io/waitron-cloud/pull/1214#issuecomment-6877323126)). Billing display
 version 1 gains no fields or new authority from that proposal.
 
 ## Emergency hosting display and code (proposed, D568)
 
 **Cloud proposal, 4 November 2026. Waitron accepts the read boundaries in its
-14 November response; code and daily-price details remain open. No endpoint,
+14 November response; Cloud agreed the remaining part 1 values at 13:33 CET. No endpoint,
 signing vector or runtime is qualified here.** This answers A1188 part 1 and
 A1187's recovery-pack dependency. The source is Waitron
 `e0da0ad18aa952306e39c1a8e3cade6302794b43`,
@@ -2063,7 +2064,7 @@ The owner approved A1188's defaults on 29 October. Agreement to this proposed
 wire and permission to build Cloud billing section 7 or P6 are separate gates.
 This revision incorporates Lane B's eight part 1 amendments. Its review agreed
 with the separate-read approach subject to those amendments. Waitron's response
-below accepts those boundaries and identifies the remaining details. Lane A
+below accepts those boundaries; the agreement below settles the remaining part 1 values. Lane A
 agrees with the four A1018 answers subject to the amendments recorded below; that agreement does not
 qualify a hosted format or implementation.
 
@@ -2086,8 +2087,8 @@ person's permission locally. The successor permission now exists as
 [node.manage](https://github.com/clintongormley/waitron/blob/6c429900745c509c6efb471e348225de8fec0553/packages/identity/src/permissions.ts#L29).
 The display/code reads neither start a copy nor confirm a declaration.
 
-Two slots already identified below still need a joint answer before Waitron can
-implement the complete part 1 card:
+The response originally requested joint answers for these two slots; the
+13:33 CET agreement below settles their values, with runtime qualification still open:
 
 - Supply the code's exact encoding, length and fixed valid/invalid vectors,
   including the closed and installation-ineligible replies. The proposal says
@@ -2102,6 +2103,83 @@ reads. No other change to the display/code proposal is requested. Endpoint,
 vector and DNS qualification remain with Cloud's builders; P6, hosted authority
 and production billing keep their separate gates. The later A1018 hosted formats
 are outside this part 1 response.
+
+### Agreed part 1 values, 14 November 2026
+
+**Cloud agreed these values at 13:33 CET in
+[PR #1214](https://github.com/waitron-io/waitron-cloud/pull/1214#issuecomment-6877323126).**
+Lane J's watcher requested the proposals at 12:49 on 14 November, after
+response #1212. This is a technical contract agreement, not owner design
+approval, a live code, a production price or endpoint qualification. The
+Waitron companion plan pins the resulting Cloud revision. Shared signing-action
+publication, both adapters and authenticated-route qualification remain open.
+
+1. **Code format:** exactly six groups of four uppercase symbols, separated by
+   five ASCII hyphens, using `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (29 ASCII
+   characters including separators). Treat the spelling as exact; do not trim,
+   case-fold or accept aliases. Synthetic valid examples are
+   `ABCD-EFGH-JKLM-NPQR-STUV-WXYZ` and `2345-6789-ABCD-EFGH-JKLM-NPQR`.
+   Lowercase, surrounding spaces, any `I`, `O`, `0` or `1`, a missing group or a
+   missing separator are invalid. This is the reply’s wire spelling only; Cloud’s entry page may ignore case,
+   spaces and hyphens. Do not apply that input normalization to the wire reader.
+   This read never generates or rotates a code.
+2. **Code-read budget:** an additional six authenticated reads per installation
+   per 60 seconds, using Cloud's existing limiter window semantics. Count code
+   reads independently of display reads; retain the inherited 30 installation
+   and 60 machine/IP requests per 60 seconds, the general 120/IP budget,
+   and display's one-read-per-minute rule.
+   Refuse exhausted capacity with HTTP 429, body `{"error":"rate_limited"}`
+   and integer `Retry-After` seconds until the next permitted read. Do not share
+   code responses to evade the cap. Bind the counter to the authenticated stored
+   installation; use the existing post-lock clock and positive integer wait.
+3. **Refusal examples:** HTTP 403
+   `{"error":"emergency_hosting_closed","reason":"setting_off"}` maps to
+   `cloud.emergency_hosting_closed` with that reason; substituting
+   `level_inactive`, `no_payment_method` or `not_provisioned` is also valid.
+   An extra key, missing reason or another reason is malformed, mapped to
+   `cloud.unavailable`. HTTP 403
+   `{"error":"emergency_hosting_installation_ineligible"}` maps to
+   `cloud.unavailable` without retiring the connection. Only the existing
+   authenticated `revoked` refusal retains revocation handling. Unknown state
+   remains HTTP 503 `{"error":"temporarily_unavailable"}`. The existing
+   precedence and installation eligibility checks stay unchanged.
+4. **Daily display:** compute `hostedMonthlyCents / hostedDayDivisor` (30) from published `Prices`,
+   rounding once to the nearest whole cent, half up, with exact arithmetic.
+   Synthetic monthly-to-daily cent pairs: `9000:300`, `10000:333`, `10005:334`,
+   `14:0`, `15:1`. Display “About {amount} per day, excluding VAT ({vat})”
+   (Spanish: “Aproximadamente {amount} al día, sin IVA ({vat})”), using the
+   returned currency and VAT rate, formatted once with one percent sign. This informational projection changes no
+   charge, invoice or billing-v1 field. Unpublished prices stay unavailable.
+   Cloud agreed the rounding and tax wording; production prices retain their
+   owner gate.
+
+For the signing proposal use the unchanged machine-v1 UTF-8 JSON array below,
+with no whitespace. Substitute each action from the table, then base64url the
+array bytes for `payload`; Ed25519 signs the array bytes, not that base64url text.
+The public synthetic seed is 32 bytes of `01`; its SPKI DER public key in
+unpadded base64url is `MCowBQYDK2VwAyEAiojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w`.
+
+```json
+["waitron-cloud-machine-v1","https://cloud.example.test","ACTION","11111111-1111-4111-8111-111111111111","33333333-3333-4333-8333-333333333333",1800000000000,"synthetic-lease-not-authority","{\"version\":1}"]
+```
+
+| Action substituted for `ACTION` | Expected unpadded base64url signature |
+| --- | --- |
+| `emergency-hosting-display` | `ZlI6sjLzNukjrGYE7dhEfxRaqgpNKTiUTYKRbmfVwv3uOx_PITz9MAXiCTB6od077fAja270f2mqtJoCKjTcDA` |
+| `emergency-hosting-code` | `nH8zlNQI9NrZASWbw607w-fa6hn6PJfLjI5EAoK_uvFHk4TM82Q8jqdSiUBRocJ--TN2fmBxmCwpjWjH7bXKDA` |
+
+Local Node `crypto.sign`/`verify` reproduced both signatures; substituting the
+other action while retaining the signature returned false. These are primitive
+signing examples only: the lease is deliberately not authority, and Waitron's
+current machine action allowlist does not admit either action. Cloud agreed
+these bytes and independently reproduced the primitive checks; its builders still
+provide authenticated-lease, route/refusal and URL vectors; no endpoint, shared parser or live lease was qualified by this probe.
+The separate hosted/P6 and activation gates below remain in force.
+
+Cloud also agreed that `not_provisioned` covers a known unbuilt or unusable
+hosted-start path: it must not report `open:true`. Unknown readiness remains
+the existing HTTP 503 case. The watcher cleared this interpretation at 13:17;
+Cloud's 13:33 CET agreement adds no wire field or runtime probe.
 
 ### Read the facts without starting a copy
 
