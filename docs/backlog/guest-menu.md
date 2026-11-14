@@ -2,15 +2,12 @@
 
 ## Hosted menu (A670-CLOUD)
 
-Finish signed box publication delivery/confirmation against the
+Connect Waitron's sender to the signed publication/status/withdrawal routes in the
 [watcher-cleared contract](../superpowers/plans/2026-11-14-a670-cloud-guest-menu.md).
-The permanent local HTTPS reader and portal takedown/Enable controls use a synthetic
-stored copy; connect Waitron's sender after the shared guest-menu signing actions
-are released. Public DNS, production certificates and outside-network qualification
-remain open. Every venue connected to Cloud qualifies without a billing gate.
-The watcher cleared the hosted reader first on 14 November at 01:34; this is not
-owner design approval. See [local deployment](../local-deployment.md#exercise-a-stored-guest-menu-copy)
-for the synthetic-copy commands.
+Qualify public DNS, production certificates and outside-network access. Every venue
+connected to Cloud qualifies without a billing gate. See
+[local deployment](../local-deployment.md#exercise-a-stored-guest-menu-copy)
+for focused synthetic checks.
 
 ## Live forwarding belongs to online ordering (Waitron A509)
 

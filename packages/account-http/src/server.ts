@@ -1,3 +1,4 @@
+import {guestMenuPublishPath,guestMenuReadMs} from './guest-menu.ts';
 import type {BillingMethodsOptions} from './billing-methods.ts';
 import type {BillingAccountOptions} from './config.ts';
 import type {TunnelProvisionOptions} from './tunnel-provision.ts';
@@ -29,6 +30,7 @@ export async function startAccountServer(options: {guestOrigin?:string;pool: Poo
   if(options.localMetrics&&config.production)throw Error('Local metrics are unavailable in production');
   const app = createAccountApp({...options, config});
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;
+  let publishing=0;const publishers=new Set<string>();
   let submitting = 0; const submitters = new Set<string>();
   const listener = getRequestListener(async (request, bindings) => {
     const url = new URL(request.url);
@@ -53,6 +55,17 @@ export async function startAccountServer(options: {guestOrigin?:string;pool: Poo
         finally {submitting--; submitters.delete(ip);}
       }
     }
+    if(options.guestOrigin&&getPath(request)===guestMenuPublishPath){
+      let ip:string|undefined;
+      try{ip=clientAddress(bindings.incoming.socket.remoteAddress??'',request.headers.get('x-forwarded-for')??undefined,config.trustedProxyIps);}
+      catch{ip=undefined;}
+      if(ip!==undefined){
+        if(publishing>=4||publishers.has(ip))return Response.json({error:'unavailable'},{status:503,headers:{...securityHeaders,'Retry-After':'1'}});
+        publishing++;publishers.add(ip);
+        try{return await app.fetch(request,bindings);}
+        finally{publishing--;publishers.delete(ip);}
+      }
+    }
     const readiness=url.pathname==='/api/health/ready';
     if (active >= 8||(readiness&&readinessActive>=1)) return unavailable();
     active++;if(readiness)readinessActive++;
@@ -61,7 +74,7 @@ export async function startAccountServer(options: {guestOrigin?:string;pool: Poo
   }, {overrideGlobalObjects: false, errorHandler: () => unavailable()});
   const metrics=new RequestMetrics();
   const receiving=new WeakMap<Duplex,(status:number)=>void>();
-  const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: options.translation ? submitRequestMs : 5000, connectionsCheckingInterval: 1000}, (request,response)=>{
+  const server = createServer({maxHeaderSize: 8192, headersTimeout: 5000, requestTimeout: options.translation||options.guestOrigin ? Math.max(submitRequestMs,guestMenuReadMs) : 5000, connectionsCheckingInterval: 1000}, (request,response)=>{
     const started=performance.now(),group=requestGroup(request.url??'',!!options.portalAssets);
     const forget=()=>{if(receiving.get(request.socket)===settle)receiving.delete(request.socket);};
     const settle=(status:number)=>{forget();metrics.record(group,status,(performance.now()-started)/1000);};
