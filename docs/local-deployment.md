@@ -362,3 +362,44 @@ supported-release upgrade, matching four-volume rollback, both original client
 exchanges and final release receipt to the later owner-authorised Cloud/Waitron
 release driver. Keep snapshots unavailable and enforcement off until those gates
 and the separate reviewed deployment are complete.
+
+## Exercise a stored guest-menu copy
+
+A hosted copy lets a guest read the menu while the venue's box is offline. The local
+reader and portal controls are implemented; signed delivery from Waitron and a
+public deployment remain separate. You can exercise a synthetic stored copy with:
+
+```sh
+node scripts/test-postgres.mjs exec node --test packages/account-http/test/guest-menu-runtime.test.ts packages/account-http/test/guest-menu.test.ts
+pnpm --dir apps/portal build
+node scripts/test-postgres.mjs exec node --test apps/portal/test/guest-menu-browser.test.ts
+```
+
+The runtime test starts the account command with a separate HTTPS listener and a
+temporary local certificate. The browser test opens Remote access setup, stops
+sharing, reloads the account, then allows sharing again. The copy stays absent
+until another publish; allowing sharing does not restore deleted pages.
+
+To start the reader alongside your account process, provide `GUEST_ORIGIN`,
+`GUEST_TLS_KEY_FILE` and `GUEST_TLS_CERT_FILE` in your local environment, then run
+`pnpm account:serve`. Use an HTTPS origin distinct from `CLOUD_PORTAL_ORIGIN` and a
+certificate from your local certificate authority. The key and certificate stay
+outside Git. `GUEST_HTTP_HOST` defaults to `127.0.0.1`; `GUEST_HTTP_PORT` defaults to
+3443. The public origin determines the accepted Host header independently of the
+listener's local port. Supplying only part of the configuration refuses startup.
+
+For Compose, place your certificate files in the existing `/run/local-stack`
+volume and set those two paths plus `GUEST_ORIGIN` in the stack environment. The
+account container listens on port 3443. Add the optional loopback port mapping
+when you upgrade your existing local stack:
+
+```sh
+export COMPOSE_FILE=compose.yaml:deploy/local-stack/guest-menu.compose.yaml
+pnpm local-stack:upgrade
+```
+
+Keep that `COMPOSE_FILE` setting for later status and shutdown commands. The port
+is exposed only at `127.0.0.1:${LOCAL_STACK_GUEST_PORT:-3443}`; the default stack
+does not reserve a guest port. No certificate is requested and no DNS
+record is created. Starting this listener does not make it reachable from a phone
+outside your local network.

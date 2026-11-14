@@ -2,12 +2,15 @@
 
 ## Hosted menu (A670-CLOUD)
 
-Build delivery/confirmation and the permanent hosted link with portal takedown after
-D619, following the [watcher-cleared contract plan](../superpowers/plans/2026-11-14-a670-cloud-guest-menu.md).
-The watcher cleared these two slices on 14 November 2026 at 00:22; this is not owner
-approval of the design. Every venue connected to Cloud qualifies, without a new
-billing gate. Takedown blocks publication until you choose Enable in the portal.
-No guest-menu service or public deployment is implemented by this plan.
+Finish signed box publication delivery/confirmation against the
+[watcher-cleared contract](../superpowers/plans/2026-11-14-a670-cloud-guest-menu.md).
+The permanent local HTTPS reader and portal takedown/Enable controls use a synthetic
+stored copy; connect Waitron's sender after the shared guest-menu signing actions
+are released. Public DNS, production certificates and outside-network qualification
+remain open. Every venue connected to Cloud qualifies without a billing gate.
+The watcher cleared the hosted reader first on 14 November at 01:34; this is not
+owner design approval. See [local deployment](../local-deployment.md#exercise-a-stored-guest-menu-copy)
+for the synthetic-copy commands.
 
 ## Live forwarding belongs to online ordering (Waitron A509)
 

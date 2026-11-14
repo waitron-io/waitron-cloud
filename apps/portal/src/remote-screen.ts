@@ -15,6 +15,13 @@ export function remoteScreen(app:PortalApp,id:string){
   ${r.error==='remoteRevoked'?html`<wt-button .disabled=${disabled||!!app.installations.waiting} @click=${()=>{void app.installations.load();}}>${c.remoteRefreshInstallations}</wt-button>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.remoteRevoked:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
+  ${v?.guestMenu?html`<section aria-label=${c.guestMenuTitle}><h5>${c.guestMenuTitle}</h5>
+   <p role="status">${v.guestMenu.state==='current'?c.guestMenuCurrent:v.guestMenu.state==='blocked'?c.guestMenuBlocked:c.guestMenuOff}</p>
+   <p><a href=${v.guestMenu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>
+   ${v.guestMenu.publication?html`<p><time datetime=${v.guestMenu.publication.receivedAt}>${new Date(v.guestMenu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
+   <wt-button .disabled=${disabled} @click=${()=>{void r.setGuestMenuBlocked(v.guestMenu!.state!=='blocked');}}>${v.guestMenu.state==='blocked'?c.guestMenuEnable:c.guestMenuTakedown}</wt-button>
+   ${v.guestMenu.state==='blocked'?html`<p class="help">${c.guestMenuHelp}</p>`:nothing}
+  </section>`:nothing}
   ${v?html`<section aria-label=${c.forwardTitle}><h5>${c.forwardTitle}</h5>
    <p>${!v.publicForward?c.forwardUnknown:v.publicForward.category===null?c.forwardSuccess:c[forwardCopy[v.publicForward.category]]}</p>
    ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}

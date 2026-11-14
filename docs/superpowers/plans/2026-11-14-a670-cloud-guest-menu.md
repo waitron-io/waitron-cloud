@@ -1,6 +1,6 @@
 # A670-CLOUD: permanent hosted guest-menu contract
 
-**Cleared by the watcher on 14 November at 00:22; build follows D619.** Sources: Lane G queue A670-CLOUD; owner quote, Lane D questions 13 November 22:31; Waitron's `2026-11-13-a670-guest-menu-build.md`, slice 3. Sol-high author; Claude reads 213/132 seconds; driver final fixes. No owner design approval or runtime qualification.
+**Cleared by the watcher on 14 November at 00:22.** The watcher amended the order at 01:34: “Meanwhile, if A670-CLOUD slice 2 (hosted link and portal takedown) needs no new signed action, build it from Cloud main with a test-stored copy.” The reader brings its planned venue-row migration with it; delivery still waits for the shared action release. Sources: Lane G queue A670-CLOUD; owner quote, Lane D questions 13 November 22:31; Waitron's `2026-11-13-a670-guest-menu-build.md`, slice 3. Sol-high author; Claude reads 213/132 seconds; driver final fixes. No owner design approval or runtime qualification.
 
 **Finish:** one permanent anonymous HTTPS link serves the confirmed published copy and honours portal takedown. Every venue connected to Cloud qualifies; add no billing or paid-level gate. No ordering, payments, table identity, live forwarding, new tunnel, renderer or provider work.
 

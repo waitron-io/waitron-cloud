@@ -1,3 +1,5 @@
+import {readFile} from 'node:fs/promises';
+import {startGuestMenuServer,validateGuestOrigin} from './guest-menu-server.ts';
 import {billingMethodsOptionsFromEnv} from './billing-methods.ts';
 import {sweepTranslationJobs} from '@waitron-cloud/translation';
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
@@ -10,6 +12,7 @@ import { startAccountServer } from './server.ts';
 let captures:ReturnType<typeof captureRuntime>;
 let pool: Pool | undefined;
 let running: Awaited<ReturnType<typeof startAccountServer>> | undefined;
+let guest:Awaited<ReturnType<typeof startGuestMenuServer>>|undefined;
 let cleanup: ReturnType<typeof setInterval> | undefined;
 let sweep: ReturnType<typeof setInterval> | undefined;
 let hardDeadline: ReturnType<typeof setTimeout> | undefined;
@@ -37,6 +40,15 @@ try {
   if(!['0','1'].includes(metricsFlag)||metricsFlag==='1'&&process.env.NODE_ENV==='production')throw new Error();
   const localMetrics=metricsFlag==='1'?{host:'0.0.0.0',port:9092}:undefined;
   const config = accountHttpConfig(process.env);
+  const guestEnabled=['GUEST_ORIGIN','GUEST_TLS_KEY_FILE','GUEST_TLS_CERT_FILE','GUEST_HTTP_PORT','GUEST_HTTP_HOST'].some(name=>!!process.env[name]);
+  let guestOptions:{origin:string;tls:{key:Buffer;cert:Buffer};port:number;host:string}|undefined;
+  if(guestEnabled){
+    if(!process.env.GUEST_ORIGIN||!process.env.GUEST_TLS_KEY_FILE||!process.env.GUEST_TLS_CERT_FILE)throw Error();
+    const origin=validateGuestOrigin(process.env.GUEST_ORIGIN),port=process.env.GUEST_HTTP_PORT??'3443';
+    if(origin===config.portalOrigin||!/^\d+$/.test(port)||Number(port)>65535)throw Error();
+    guestOptions={origin,tls:{key:await readFile(process.env.GUEST_TLS_KEY_FILE),cert:await readFile(process.env.GUEST_TLS_CERT_FILE)},port:Number(port),host:process.env.GUEST_HTTP_HOST??'127.0.0.1'};
+  }
+
   const billingMethods=billingMethodsOptionsFromEnv(process.env,planMode,billingAccount,config.portalOrigin);
   const factor = factorConfigFromEnv(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
@@ -53,10 +65,12 @@ try {
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
     if (translation) await sweepTranslationJobs(pool);
-    running = await startAccountServer({localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
-    console.log(JSON.stringify({status: 'listening', port: address.port}));
+    if(guestOptions&&!stopRequested)guest=await startGuestMenuServer({...guestOptions,pool,rateKey:config.rateKey});
+    const guestAddress=guest?.server.address();
+    console.log(JSON.stringify({status: 'listening', port: address.port,...(guestAddress&&typeof guestAddress!=='string'?{guestPort:guestAddress.port}:{})}));
     const limiter = new AccountRateLimiter(pool, config.rateKey); let pruning = false;
     cleanup = setInterval(async () => {
       if (pruning || stopRequested) return;
@@ -81,7 +95,7 @@ try {
     :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
 } finally {
   stop();
-  try {await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
+  try {await guest?.close(); await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
   clearInterval(cleanup); clearInterval(sweep); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }
