@@ -2103,6 +2103,73 @@ vector and DNS qualification remain with Cloud's builders; P6, hosted authority
 and production billing keep their separate gates. The later A1018 hosted formats
 are outside this part 1 response.
 
+### Waitron proposes the remaining part 1 values, 14 November 2026
+
+**Proposed by Waitron; Cloud confirmation is required before either adapter is
+built.** Lane J's watcher requested these concrete proposals at 12:49 on
+14 November, after response #1212. This is not owner approval of new values,
+a live code, a production price or endpoint qualification. Please confirm or
+replace each numbered choice, then pin both repository revisions.
+
+1. **Code format:** exactly six groups of four uppercase symbols, separated by
+   five ASCII hyphens, using `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (29 ASCII
+   characters including separators). Treat the spelling as exact; do not trim,
+   case-fold or accept aliases. Synthetic valid examples are
+   `ABCD-EFGH-JKLM-NPQR-STUV-WXYZ` and `2345-6789-ABCD-EFGH-JKLM-NPQR`.
+   Lowercase, surrounding spaces, any `I`, `O`, `0` or `1`, a missing group or a
+   missing separator are invalid. Cloud must confirm generation and entry use
+   this same format; this read never generates or rotates a code.
+2. **Code-read budget:** an additional six authenticated reads per installation
+   per 60 seconds, using Cloud's existing limiter window semantics. Count code
+   reads independently of display reads; retain the inherited 30 installation
+   and 60 IP requests per 60 seconds and display's one-read-per-minute rule.
+   Refuse exhausted capacity with HTTP 429, body `{"error":"rate_limited"}`
+   and integer `Retry-After` seconds until the next permitted read. Do not share
+   code responses to evade the cap. Cloud must confirm the limiter and header.
+3. **Refusal examples:** HTTP 403
+   `{"error":"emergency_hosting_closed","reason":"setting_off"}` maps to
+   `cloud.emergency_hosting_closed` with that reason; substituting
+   `level_inactive`, `no_payment_method` or `not_provisioned` is also valid.
+   An extra key, missing reason or another reason is malformed, mapped to
+   `cloud.unavailable`. HTTP 403
+   `{"error":"emergency_hosting_installation_ineligible"}` maps to
+   `cloud.unavailable` without retiring the connection. Only the existing
+   authenticated `revoked` refusal retains revocation handling. Unknown state
+   remains HTTP 503 `{"error":"temporarily_unavailable"}`. Cloud must confirm
+   these exact bodies, existing precedence and installation eligibility checks.
+4. **Daily display:** compute `hostedMonthlyCents / 30` from published `Prices`,
+   rounding once to the nearest whole cent, half up, with exact arithmetic.
+   Synthetic monthly-to-daily cent pairs: `9000:300`, `10000:333`, `10005:334`,
+   `14:0`, `15:1`. Display “About {amount} per day, excluding VAT ({rate}%)”
+   (Spanish: “Aproximadamente {amount} al día, sin IVA ({rate}%)”), using the
+   returned currency and VAT rate. This informational projection changes no
+   charge, invoice or billing-v1 field. Unpublished prices stay unavailable.
+   Cloud must confirm the rounding and tax wording; production prices retain
+   their owner gate.
+
+For the signing proposal use the unchanged machine-v1 UTF-8 JSON array below,
+with no whitespace. Substitute each action from the table, then base64url the
+array bytes for `payload`; Ed25519 signs the array bytes, not that base64url text.
+The public synthetic seed is 32 bytes of `01`; its SPKI DER public key in
+unpadded base64url is `MCowBQYDK2VwAyEAiojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w`.
+
+```json
+["waitron-cloud-machine-v1","https://cloud.example.test","ACTION","11111111-1111-4111-8111-111111111111","33333333-3333-4333-8333-333333333333",1800000000000,"synthetic-lease-not-authority","{\"version\":1}"]
+```
+
+| Action substituted for `ACTION` | Expected unpadded base64url signature |
+| --- | --- |
+| `emergency-hosting-display` | `ZlI6sjLzNukjrGYE7dhEfxRaqgpNKTiUTYKRbmfVwv3uOx_PITz9MAXiCTB6od077fAja270f2mqtJoCKjTcDA` |
+| `emergency-hosting-code` | `nH8zlNQI9NrZASWbw607w-fa6hn6PJfLjI5EAoK_uvFHk4TM82Q8jqdSiUBRocJ--TN2fmBxmCwpjWjH7bXKDA` |
+
+Local Node `crypto.sign`/`verify` reproduced both signatures; substituting the
+other action while retaining the signature returned false. These are primitive
+signing examples only: the lease is deliberately not authority, and Waitron's
+current machine action allowlist does not admit either action. Cloud must
+confirm these bytes and provide authenticated-lease, route/refusal and URL
+vectors; no endpoint, shared parser or live lease was qualified by this probe.
+The separate hosted/P6 and activation gates below remain in force.
+
 ### Read the facts without starting a copy
 
 When your box stops answering, tills need an address they already learned.
