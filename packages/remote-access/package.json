@@ -22,6 +22,7 @@
     "@types/pg": "^8.23.1"
   },
   "exports": {
+    "./guest-menu": "./src/guest-menu.ts",
     "./staff-exchange": "./src/staff-exchange.ts",
     "./placement": "./src/placement.ts",
     "./manifest": "./src/manifest.ts",

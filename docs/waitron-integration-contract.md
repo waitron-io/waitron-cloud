@@ -2438,3 +2438,33 @@ original 83 bytes without final newline, SHA-256
 No provider, deployment, publication/pause, customer-product, writer or fiscal
 permission follows. This edition raises no new owner decision; the proposed
 representation, reserve and permission/commit mappings need E/G engineering acceptance.
+
+## Hosted guest-menu copy: local reader and owner controls
+
+The [guest-menu contract](superpowers/plans/2026-11-14-a670-cloud-guest-menu.md)
+separates stored public pages from live ordering. Its local reader serves
+`GUEST_ORIGIN/m/<venueUuid>` with optional `lang=en|es|ca|gl`, choosing the stored
+default when a supported translation is absent. GET and HEAD require the exact
+guest host; extra paths, duplicate or unsupported `lang`, request bodies and
+upgrades are refused. Unknown query parameters are ignored.
+HTML is limited to 2 MiB and sent with `no-store` and a content policy that denies
+scripts, external assets, forms and framing, while allowing inline styles.
+
+Owner/CSRF POSTs to `/api/account/guest-menu/takedown` and `/enable` take `{venueId}`.
+They return `{venueId,version,url,revision,state,publication}` using the planned
+version-1 confirmation shape. Takedown commits `blocked` and removes the pages;
+Enable changes a blocked row to `off`. Both are idempotent. The reader rechecks the
+stored revision before releasing buffered HTML; bytes already sent cannot be
+recalled. It admits at most eight active requests and shares the existing bounded
+account connection pool. Database work may wait for that pool. The existing
+database-backed rate limiter permits 120 requests per source per minute, using
+the canonical direct connection address, with forwarded headers ignored. Capacity refusal is 503, rate refusal 429. Browser refusals at 404/429/503
+show short EN/ES pages; 503 includes `Retry-After: 1`. Revoking an installation
+does not remove the stored copy; the owner can still reach takedown in the portal.
+
+`packages/account-http/test/guest-menu-runtime.test.ts` exercises the separate TLS
+listener; `guest-menu-server.test.ts` exercises the HTML, limits and delayed-takedown
+boundaries. The portal browser test covers EN/ES, both themes and 390/1280 widths.
+These use synthetic stored pages. Signed box publish/status/withdraw and Waitron's
+sender remain unimplemented here, pending the shared three-action release; there
+is no public deployment, live forwarding, ordering, payments or table identity.

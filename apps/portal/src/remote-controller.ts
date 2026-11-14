@@ -1,13 +1,23 @@
 import {bodyRefusal} from './body-refusal.ts';
 import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
-import {remoteHostname,validRemoteView,validRemoteDns,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
+import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:RemoteDns['records']}|undefined;
  error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.close();}}
+ async setGuestMenuBlocked(blocked:boolean){
+  const menu=this.view?.guestMenu;if(!this.#account||!menu||this.pending||this.waiting)return;
+  const generation=this.#generation;this.pending=true;this.error=undefined;this.notice=undefined;this.#changed();
+  const result=await this.#request<GuestMenuView>('/guest-menu/'+(blocked?'takedown':'enable'),{venueId:menu.venueId});
+  if(generation!==this.#generation)return;this.pending=false;
+  if(result.ok&&validGuestMenuView(result.value)&&result.value.venueId===menu.venueId&&this.view){this.view={...this.view,guestMenu:result.value};}
+  else if(!result.ok){this.#failure(result);if(result.status===0||result.status>=500)await this.#load(true);}
+  else{this.view=undefined;this.error='unavailable';}
+  this.#changed();
+ }
  get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
  #retryUntil=0;

@@ -9,6 +9,13 @@ import {loadRuntime,runtimeEnvironment} from './runtime.mjs';
 const roots=[];test.afterEach(async()=>Promise.all(roots.splice(0).map(path=>rm(path,{recursive:true,force:true}))));
 async function configured(){const path=await mkdtemp(join(tmpdir(),'cloud-runtime-'));roots.push(path);return {path,config:await bootstrap(path)};}
 
+test('guest menu settings reach only the account runtime',async()=>{
+ const {config}=await configured(),settings={GUEST_ORIGIN:'https://menus.example.test',GUEST_TLS_KEY_FILE:'/run/local-stack/guest-key.pem',GUEST_TLS_CERT_FILE:'/run/local-stack/guest-cert.pem',GUEST_HTTP_PORT:'3443',GUEST_HTTP_HOST:'0.0.0.0'};
+ const account=runtimeEnvironment('account',config,settings);
+ for(const [name,value] of Object.entries(settings))assert.equal(account[name],value);
+ for(const role of ['email','monitor','usage','probe','backup','translation'])for(const name of Object.keys(settings))assert.equal(runtimeEnvironment(role,config,settings)[name],undefined);
+});
+
 test('runtime roles receive only their explicit configuration',async()=>{
  const {config}=await configured(),database=`postgres://cloud:${config.database.password}@postgres:5432/cloud`;
  const expected={

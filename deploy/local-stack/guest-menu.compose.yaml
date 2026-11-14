@@ -1,0 +1,4 @@
+services:
+  account:
+    ports:
+      - "127.0.0.1:${LOCAL_STACK_GUEST_PORT:-3443}:3443"
