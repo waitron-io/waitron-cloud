@@ -21,8 +21,8 @@ importers:
         specifier: 14.0.0
         version: 14.0.0
       '@waitron-io/ui-core':
-        specifier: 0.2.1
-        version: 0.2.1(lit@3.3.3)
+        specifier: 0.2.10
+        version: 0.2.10(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -209,8 +209,8 @@ importers:
   packages/ui-smoke:
     dependencies:
       '@waitron-io/ui-core':
-        specifier: 0.2.1
-        version: 0.2.1(lit@3.3.3)
+        specifier: 0.2.10
+        version: 0.2.10(lit@3.3.3)
       lit:
         specifier: 3.3.3
         version: 3.3.3
@@ -644,7 +644,9 @@ packages:
   '@smithy/core@3.35.0':
     resolution: {integrity: sha512-zRMhfkByhT2snNdr1si24vJitU6Cr9ix2MikUfWmkAgp4jrNP0GcKSP5YvwQ+TlI8AZXER5QOGJn3JsVtSD9/A==}
     engines: {node: '>=18.0.0'}
-    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with this
+        version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/core@3.39.0':
     resolution: {integrity: sha512-JJ/46AWQ4ipS1N2eZmUj7yzIhH8NhQIfAE+dce7NSB6dmFh+7hvD4pbofcoT4I0Xzfy/LNhZx3V2QhwYyAiqdg==}
@@ -826,8 +828,8 @@ packages:
   '@waitron-io/contract@0.2.14':
     resolution: {integrity: sha512-bSvM7Sha3SPtWvqRrUzsLa7qijIIR3e984z6frGLZFHIG6yyH0l5JsPR6cJpyFcD3rqC2ogtMjm86D2kq4KyZQ==, tarball: https://npm.pkg.github.com/download/@waitron-io/contract/0.2.14/e7278ff5d7a629b892280a0d4ee7ae7a5652bce5}
 
-  '@waitron-io/ui-core@0.2.1':
-    resolution: {integrity: sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58}
+  '@waitron-io/ui-core@0.2.10':
+    resolution: {integrity: sha512-Q8pKTZfC6K9M9Y1ZWfugy+j8A7fqLcwoc/BALmwBi/5b1fQud690WZXFfoFbgBR1768Ffr+90qHreGq+7UUwPw==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.10/6faef69b33f70d64c1d00952bec813891892a18e}
     peerDependencies:
       lit: ^3.2.0
 
@@ -1970,7 +1972,7 @@ snapshots:
 
   '@waitron-io/contract@0.2.14': {}
 
-  '@waitron-io/ui-core@0.2.1(lit@3.3.3)':
+  '@waitron-io/ui-core@0.2.10(lit@3.3.3)':
     dependencies:
       lit: 3.3.3
 
