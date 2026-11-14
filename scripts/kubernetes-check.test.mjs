@@ -508,7 +508,7 @@ test('local observer confirms worker stop before signalling or moving its manife
 });
 
 // This drives the Amazon adapter's actual stdout/stdin and strict post-replacement placement.
-for (const failProbe of [null, 'p1.remote_after_recovery', 'integration.command_failed:remote-inspect-retained-snapshot']) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics: ' + failProbe : ''), async t => {
+for (const failProbe of [null, 'p1.remote_after_recovery', 'integration.command_failed:remote-inspect-retained-snapshot', 'shutdown-during-setup']) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics: ' + failProbe : ''), async t => {
   const directory = await mkdtemp(join(tmpdir(), 'p1-wire-')), ownedPids = join(directory, 'owned-pids');
   t.after(async () => {
     const pids = await readFile(ownedPids, 'utf8').catch(error => {if (error.code !== 'ENOENT') throw error; return '';});
@@ -545,7 +545,7 @@ if(name==='kubectl'){
   for (const name of ['docker', 'kubectl']) await writeFile(join(directory, name), fake, {mode: 0o700});
   const code = `import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
 const result=await runKubernetesCheck(${JSON.stringify(target)},{
- clients:async ({kubernetes:k})=>({observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')}),
+ clients:async ({kubernetes:k})=>{if(${JSON.stringify(failProbe)}==='shutdown-during-setup'){process.emit('SIGTERM');await k.exec('account',['true']);}return {observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')};},
  observer:async ({ready,stopped,replacement})=>{if(${JSON.stringify(failProbe)})throw Error(${JSON.stringify(failProbe)});ready();await stopped();await replacement();return {done:true};}
 });process.stdout.write(JSON.stringify(result)+'\\n');`;
   const child = spawn(process.execPath, ['--import', standalone, '--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
@@ -561,6 +561,10 @@ const result=await runKubernetesCheck(${JSON.stringify(target)},{
     }
   }); child.stderr.on('data', part => {stderr += part;});
   const exit = await closed;
+  if (failProbe === 'shutdown-during-setup') {
+    assert.equal(exit, 1, stderr);assert.match(stderr, /AbortError/);
+    assert.equal(stderr.includes('Kubernetes failure '), false, stderr);return;
+  }
   if (failProbe) {
     assert.equal(exit, 1, stderr);
     for (const label of ['pods', 'events', 'nodes', 'storage-current', 'storage-previous']) assert.ok(stderr.includes('Kubernetes failure ' + label + ' '), label);

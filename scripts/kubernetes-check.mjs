@@ -98,10 +98,10 @@ const env = {...process.env, KUBECONFIG: amazon ? '/etc/kubernetes/admin.conf' :
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
 const recentFailures = [];
-let sharedVolume, observerSignals;
+let sharedVolume, observerSignals, shutdownRequested = false;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
   cluster + ((threeNodes || amazon) && ['manifest', 'verifier'].includes(role) ? role === 'manifest' && amazon?.phase !== 'after' ? '-worker2' : '-worker' : '-control-plane')]));
-const stop = new AbortController(), shutdown = () => stop.abort();
+const stop = new AbortController(), shutdown = () => {shutdownRequested = true; stop.abort();};
 process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
 async function run(binary, args, input, cleanup = false, requestSignal) {
   if (!cleanup) stop.signal.throwIfAborted();
@@ -276,7 +276,7 @@ try {
     process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n');
     delete error.diagnostic;
   }
-  const probeFailure = stop.signal.aborted && stop.signal.reason === error;
+  const probeFailure = !shutdownRequested && stop.signal.aborted && stop.signal.reason === error;
   if ((created || amazon) && (!stop.signal.aborted || probeFailure)) {
     for (const resource of ['pods', 'events', 'nodes']) {
       try {

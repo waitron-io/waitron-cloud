@@ -1154,7 +1154,7 @@ durations are separate launcher measurements. Keep the private JSON result and
 bounded diagnostics; failure still requests deletion and confirms it.
 
 The opt-in three-node local reproducer is not a qualified check; no further full
-local run is planned (watcher clearance, 14 November at 21:14). It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
+local run is planned. It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
 Use the same pinned Cloud and Waitron image variables as the other local checks,
 Kind 0.31.0 and kubectl 1.34.3. Allow 10 GiB of Docker memory and 30 GiB of disk.
 The corresponding opt-in assertion is
