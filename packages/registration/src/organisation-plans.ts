@@ -107,7 +107,11 @@ export async function advancePlanConfiguration(client: PoolClient, organisationI
     WHERE v.organisation_id=$1${exclusion} ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
   for (const row of rows) {
     await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1', [row.id]);
-    if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration='{}'
+    // Retired public tunnel keys must remain refused when a later box reclaims the route.
+    if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration=CASE
+      WHEN service='remote_access' AND configuration ? 'peerPublicKey'
+      AND EXISTS(SELECT 1 FROM installations i WHERE i.id=$1 AND i.revoked_at IS NOT NULL)
+      THEN jsonb_build_object('peerPublicKey',configuration->'peerPublicKey') ELSE '{}'::jsonb END
       WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')`, [row.id]);
   }
 }

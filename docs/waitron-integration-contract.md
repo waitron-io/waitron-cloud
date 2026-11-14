@@ -116,8 +116,21 @@ must not activate trading or change fiscal identity.
 Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs
 `venueId: ""`; its view keeps that requested value and `registration.venueId` returns
 Cloud's allocated UUID. Retries retain the original request binding. An existing id
-must belong to the permitted organisation, business and environment. Pairing does not
-replace a box with a different installation key.
+must belong to the permitted organisation, business and environment. A different
+installation key conflicts unless the current installation has persisted `revoked_at`.
+Then ordinary two-sided pairing requires a Cloud owner and supersedes the retired
+installation while retaining the venue id. It never reactivates the retired key.
+This applies in either environment; the tests are registration `test/registration.test.ts`
+and `test/pairing.test.ts`.
+
+On test venues only, operator-run retained-snapshot and tunnel provisioning can reclaim
+the same venue's storage and placement from a revoked, superseded predecessor. Setup
+uses a fresh backup-key version and tunnel peer key while retaining recovery history,
+addresses and hostnames (`packages/backups/test/catalogue.test.ts` and
+`packages/remote-access/test/placement.test.ts`). Production setup and box self-service
+remain unavailable. Continuous backup is not rebound, and its old writer credential
+is not withdrawn here. Cloud revocation is not proof that an offline writer stopped;
+the A1018 selected-successor retirement adapter remains separate.
 
 For a managed stream, `streamId` is that same authenticated Cloud venue id. Configure
 with exactly `{revision,sourceNodeId,pointerSignerPublicKey}`. Use the full returned

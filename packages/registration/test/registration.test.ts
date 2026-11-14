@@ -483,3 +483,58 @@ for (const differentKey of [false, true]) test(`pairing ${differentKey ? 'confli
     await pool.query('DROP TRIGGER IF EXISTS pause_incident ON venue_incidents; DROP FUNCTION IF EXISTS pause_incident(); DROP TABLE IF EXISTS incident_gate');
   }
 });
+
+for (const environment of ['test', 'production']) test(`owner replaces a retired ${environment} installation without changing venue identity`, async () => {
+  await pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1', [accountId]);
+  const initial = await approved(binding({environment})), old = await store.complete(initial);
+  await pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'", [old.installationId]);
+  await pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '1 day' WHERE id=$1", [old.installationId]);
+  const monitor = new MonitorWorker(pool, new EmailOutbox({activeKeyId:'test', keys:{test:randomBytes(32).toString('hex')}}));
+  await monitor.schedule(); await monitor.runOnce();
+  const episode = (await pool.query('SELECT id FROM venue_alert_episodes WHERE installation_id=$1', [old.installationId])).rows[0];
+  if(environment==='test') assert.ok(episode);
+  await pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1', [old.installationId]);
+  const replacement = await approved(binding({venueId:old.venueId, environment}));
+  const result = await store.complete(replacement);
+  assert.deepEqual({...result, installationId:old.installationId}, old);
+  assert.notEqual(result.installationId, old.installationId);
+  assert.deepEqual(await other.complete(replacement), result);
+  assert.equal(await count('venues'), 1);
+  assert.deepEqual((await pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL', [old.venueId])).rows, [{id:result.installationId}]);
+  const predecessor = (await pool.query('SELECT revoked_at,superseded_by FROM installations WHERE id=$1', [old.installationId])).rows[0];
+  assert.ok(predecessor.revoked_at); assert.equal(predecessor.superseded_by, result.installationId);
+  await expectCode(store.configuration(initial.installationKey), 'installation_unavailable');
+  await expectCode(store.complete(initial), 'installation_unavailable');
+  assert.deepEqual((await store.configuration(replacement.installationKey)).services, [
+    {service:'continuous_backup',state:'unconfigured'}, {service:'remote_access',state:'unconfigured'}, {service:'retained_snapshots',state:'unconfigured'},
+  ]);
+  const health = (await pool.query('SELECT last_contact_at FROM installations WHERE id=$1', [result.installationId])).rows[0];
+  assert.equal(health.last_contact_at, null);
+  if(environment==='test') {
+    assert.deepEqual((await pool.query('SELECT status,recovery_complete FROM venue_alert_episodes WHERE id=$1', [episode.id])).rows, [{status:'suppressed',recovery_complete:true}]);
+    assert.equal((await pool.query('SELECT checked_at FROM venue_monitors WHERE venue_id=$1', [old.venueId])).rows[0].checked_at, null);
+  }
+});
+
+test('replacement requires owner permission at completion and never reactivates the revoked key', async () => {
+  const initial = await approved(), old = await store.complete(initial);
+  await pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1', [old.installationId]);
+  await expectCode(store.complete(await approved({...initial, venueId:old.venueId, operationId:randomUUID()})), 'installation_unavailable');
+  const replacement = await approved(binding({venueId:old.venueId}));
+  await expectCode(store.complete(replacement), 'permission_denied');
+  assert.equal(await count('installations'), 1);
+  await pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1', [accountId]);
+  assert.equal((await store.complete(replacement)).venueId, old.venueId);
+});
+
+test('two approved replacements race for one current installation', async () => {
+  await pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1', [accountId]);
+  const old = await store.complete(await approved());
+  await pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1', [old.installationId]);
+  const one = await approved(binding({venueId:old.venueId})), two = await approved(binding({venueId:old.venueId}));
+  const results = await Promise.allSettled([store.complete(one), other.complete(two)]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length, 1);
+  assert.equal(results.find(r=>r.status==='rejected')?.reason.code, 'registration_conflict');
+  assert.equal(await count('installations'), 2);
+  assert.equal((await pool.query('SELECT count(*) FROM installations WHERE superseded_by IS NULL')).rows[0].count, '1');
+});

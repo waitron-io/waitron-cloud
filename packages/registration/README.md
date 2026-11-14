@@ -240,13 +240,20 @@ active. Retrieving that recorded result is independent
 of the original approver's current permission; it cannot issue credentials or create
 another link. New completions always require current Cloud permission.
 
-Local venue UUIDs are unique within an environment in this registry. A conflicting
-organisation, legal business or installation is rejected rather than silently taking
-over the record. The approval protocol must establish the provenance of that local
-identifier; knowing it grants no access. Server replacement and resolving cloned
-local identities require a separate flow. An installation key can belong to only one
-venue, and this slice permits one installation per venue, including revoked records.
-The replacement implementation will need an explicit migration for installation history.
+Cloud assigns each new venue its UUID. Knowing an existing UUID grants no access:
+both approvals and the organisation, legal business and environment must still match.
+A different installation key conflicts while the current installation is active.
+After you revoke it, a Cloud owner can approve ordinary two-sided pairing for a fresh
+key, keeping the venue and superseding the retired installation in one transaction.
+The retired key stays unavailable; one current installation remains per venue.
+See `test/registration.test.ts` and `test/pairing.test.ts`.
+
+On test venues, an operator can reuse existing retained-snapshot storage and remote
+placement through their provisioning APIs, using a new backup-key version and tunnel
+peer key. Old recovery points, backup keys, addresses and custom hostnames remain.
+Production service setup and box self-service remain unavailable. Continuous backup
+is not rebound here, and the old continuous writer credential is not withdrawn.
+A1018 retirement and trading authority remain separate.
 
 `configuration(authenticatedInstallationKey)` returns only the matching active
 installation's registration and three service states. Remote access, continuous

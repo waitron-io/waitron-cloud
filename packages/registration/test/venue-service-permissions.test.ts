@@ -150,3 +150,25 @@ test('caller-owned permission transition keeps trial enrolment, rollback and rep
   assert.deepEqual(await f.store.transition(f.scope,e,command),applied);assert.deepEqual(await snapshot(f),committed);
  }finally{await client.query('ROLLBACK');client.release();await f.close();}
 });
+
+for(const mode of ['organisation','venue'] as const)test(`${mode} permission clearing retains only retired public tunnel keys`,async()=>{
+ const f=await fixture();try{
+  const legacy=new f.api.OrganisationPlanStore(f.pool);
+  if(mode==='organisation')await legacy.set(f.scope.organisationId,'paid');else await set(f);
+  const peerPublicKey='synthetic-retired-public-peer';
+  await f.pool.query("UPDATE installation_services s SET configuration=$2 FROM installations i WHERE s.installation_id=i.id AND i.venue_id=$1 AND s.service='remote_access'",[f.venues[0],{peerPublicKey,endpoint:'old.example.test',secret:'synthetic-discard'}]);
+  const before=await rows(f);
+  if(mode==='organisation')await legacy.set(f.scope.organisationId,'free');else await set(f,'registered');
+  const after=await rows(f);
+  for(const i of after.installations)assert.equal(i.row.configuration_revision,before.installations.find(old=>old.row.id===i.row.id)!.row.configuration_revision+1);
+  for(const service of after.services){
+   const retired=after.installations.find(i=>i.row.id===service.installation_id)!.row.revoked_at!==null;
+   if(service.service==='content_translation'){
+    assert.equal(service.state,'ready');assert.deepEqual(service.configuration,{synthetic:'content_translation'});
+   }else{
+    assert.equal(service.state,'unconfigured');
+    assert.deepEqual(service.configuration,retired&&service.service==='remote_access'?{peerPublicKey}:{});
+   }
+  }
+ }finally{await f.close();}
+});

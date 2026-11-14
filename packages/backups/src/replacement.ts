@@ -3,7 +3,7 @@ import {snapshotBinding} from './recovery.ts';
 import {randomUUID,verify} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {recordSecurityAuditEvent,transaction,suppressAlertEpisode,type PlanMode} from '@waitron-cloud/registration';
+import {recordSecurityAuditEvent,transaction,resetInstallationMonitor,type PlanMode} from '@waitron-cloud/registration';
 import {decode,publicKey,type Proof} from './recovery.ts';
 import {backupPlan,backupFail,lockVenue,uuid,uniqueViolation} from './catalogue.ts';
 import type {BackupKeyVault} from './keys.ts';
@@ -134,13 +134,7 @@ export class ReplacementStore {
     const config=(await client.query(`SELECT 1 AS version,p.installation_id AS "installationId",p.venue_id AS "venueId",p.cell_id AS "cellId",host(p.address) AS address,p.port,p.peer_public_key AS "peerPublicKey",c.public_key AS "gatewayPublicKey",c.endpoint,s.hostname AS "staffHostname",u.hostname AS "publicHostname" FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.venue_id=$1`,[r.venue_id])).rows[0];
     await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[installationId,config]);
    }
-   // A replacement has not contacted Cloud yet; old disconnection alerts must not describe it.
-   // A monitor already holding the old installation can finish its venue foreign-key checks; later monitors skip this installation lock.
-   await client.query("UPDATE venue_monitors SET checked_at=NULL,contact_since=clock_timestamp(),next_check_at=clock_timestamp() WHERE venue_id=$1",[r.venue_id]);
-   await client.query("UPDATE venue_incidents SET status='suppressed',revision=revision+1,changed_at=clock_timestamp() WHERE venue_id=$1 AND kind='disconnected' AND status='open'",[r.venue_id]);
-   const episodes=(await client.query(`SELECT e.id FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND i.kind='disconnected' AND e.status<>'suppressed' ORDER BY e.opening_revision FOR UPDATE OF e`,[r.venue_id])).rows;
-   const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-   for(const episode of episodes)await suppressAlertEpisode(client,episode.id,now);
+   await resetInstallationMonitor(client,r.venue_id);
    const result={...view(r,p),state:'complete',registration:{venueId:r.venue_id,installationId,organisationId:r.organisation_id,legalBusinessId:r.legal_business_id}};
    await client.query('UPDATE installation_replacements SET result=$2,completed_at=clock_timestamp() WHERE id=$1',[id,result]);
    await current(client,id);await resolveSession(client,token,{csrfToken:csrf,touch:false});

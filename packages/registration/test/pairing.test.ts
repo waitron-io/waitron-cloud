@@ -323,3 +323,16 @@ test('legacy upgrade is bounded and a failed pass leaves all rows retryable',asy
  assert.equal(await upgradePairingCodes(db.pool,keys,1),1);assert.equal(await upgradePairingCodes(db.pool,keys,1),0);
  assert.equal((await approve(a)).state,'awaiting_local');
 });
+
+test('a replacement needs both ordinary approvals and returns the retained Cloud venue identity',async()=>{
+  const first=machine();await store.start(first);await approve(first);
+  const old=(await store.complete(completion(first))).registration!;
+  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[old.installationId]);
+  const replacement={...machine(),venueId:old.venueId};await store.start(replacement);
+  await assert.rejects(store.complete(completion(replacement)),/approval_required/);
+  await approve(replacement);
+  assert.equal((await store.status(status(replacement))).state,'awaiting_local');
+  const result=(await store.complete(completion(replacement))).registration!;
+  assert.equal(result.venueId,old.venueId);assert.notEqual(result.installationId,old.installationId);
+  assert.deepEqual((await other.complete(completion(replacement))).registration,result);
+});

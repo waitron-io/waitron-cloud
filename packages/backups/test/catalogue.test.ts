@@ -15,7 +15,7 @@ import {
 let db: Awaited<ReturnType<typeof database>>,
   store: BackupCatalogue,
   other: BackupCatalogue;
-let a: { installationId: string; venueId: string }, b: typeof a;
+let a: { installationId: string; venueId: string; organisationId:string; legalBusinessId:string }, b: typeof a;
 const vault = new BackupKeyVault(randomBytes(32)),
   objects = new Map<string, Buffer>();
 let failDelete = false,
@@ -506,4 +506,37 @@ test('retention wins an acknowledged venue lock race against result admission',a
   assert.equal((await db.pool.query('SELECT count(*) FROM backup_verifications WHERE point_id=$1',[old.point.id])).rows[0].count,'0');
   assert(!objects.has('venue-a/'+old.point.objectKey));
  }finally{releaseVerifier();releaseCleanup();await Promise.allSettled([verification,...cleanup?[cleanup]:[]]);}
+});
+
+test('retained storage follows a retired installation chain with a fresh key and unchanged recovery history', async () => {
+  const captured = await capture();
+  const location = {endpoint:'https://store.test',bucket:'venue-a',region:'local'};
+  const oldKeys = (await store.reserveCapture(a.installationId, randomUUID())).keys;
+  const versions = (await db.pool.query('SELECT * FROM backup_key_versions WHERE venue_id=$1 ORDER BY version', [a.venueId])).rows;
+  const registration = new RegistrationStore(db.pool);
+  let current = a;
+  const owner = (await db.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner', [a.organisationId])).rows[0];
+  assert.ok(owner);
+  for(let n=0;n<2;n++) {
+    await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1', [current.installationId]);
+    const input = {operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),
+      venueId:a.venueId,environment:'test',organisationId:a.organisationId,legalBusinessId:a.legalBusinessId};
+    await registration.start(input); await registration.approveCloud(input,owner.account_id); await registration.approveLocal(input,randomUUID());
+    current = await registration.complete(input);
+  }
+  await assert.rejects(store.provision(current.installationId,{...location,bucket:'another-bucket'}), /backup.conflict/);
+  await store.provision(current.installationId, location);
+  const reservation = await store.reserveCapture(current.installationId, randomUUID());
+  assert.equal(reservation.keyVersion, 2); assert.notEqual(reservation.keys.recoveryKey, oldKeys.recoveryKey);
+  assert.deepEqual((await db.pool.query('SELECT * FROM backup_key_versions WHERE venue_id=$1 AND version=1', [a.venueId])).rows, versions);
+  assert.deepEqual((await db.pool.query('SELECT id,installation_id,key_version FROM backup_points WHERE venue_id=$1', [a.venueId])).rows,
+    [{id:captured.point.id,installation_id:a.installationId,key_version:1}]);
+  assert.deepEqual((await db.pool.query('SELECT installation_id,active_key_version FROM backup_locations WHERE venue_id=$1', [a.venueId])).rows,
+    [{installation_id:current.installationId,active_key_version:2}]);
+  const revision = (await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1', [current.installationId])).rows[0].configuration_revision;
+  await other.provision(current.installationId, location);
+  assert.equal((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1', [current.installationId])).rows[0].configuration_revision, revision);
+  assert.equal((await db.pool.query('SELECT count(*) FROM backup_key_versions WHERE venue_id=$1', [a.venueId])).rows[0].count, '2');
+  assert.equal((await db.pool.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'", [current.installationId])).rows[0].state, 'provisioning');
+  await assert.rejects(store.reserveCapture(a.installationId, randomUUID()), /backup.revoked/);
 });

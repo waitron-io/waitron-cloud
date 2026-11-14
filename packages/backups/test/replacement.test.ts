@@ -185,7 +185,10 @@ test('current installation consumers preserve one venue and do not inherit the o
  await db.pool.query("UPDATE venue_monitors SET next_check_at=clock_timestamp()+interval '1 day' WHERE venue_id<>$1",[f.installed.venueId]);
  await new MonitorWorker(db.pool,db.outbox).runOnce();assert.equal((await db.pool.query("SELECT status FROM venue_incidents WHERE venue_id=$1 AND kind='disconnected'",[f.installed.venueId])).rows[0].status,'recovered');
  const unrelated={...f.binding,venueId:f.installed.venueId,operationId:randomUUID(),installationKey:target().publicKey};await f.reg.start(unrelated);await f.reg.approveCloud(unrelated,f.owner.accountId);await f.reg.approveLocal(unrelated,randomUUID());await assert.rejects(f.reg.complete(unrelated));
- await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[result.registration.installationId]);await assert.rejects(f.reg.complete(unrelated));
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[result.registration.installationId]);
+ const paired=await f.reg.complete(unrelated);assert.equal(paired.venueId,f.installed.venueId);assert.notEqual(paired.installationId,result.registration.installationId);
+ assert.deepEqual((await db.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[paired.venueId])).rows,[{id:paired.installationId}]);
+ await assert.rejects(f.reg.configuration(f.proposed.publicKey),/installation_unavailable/);
 });
 test('replacement during provider grant issuance refuses to disclose old installation credentials',async()=>{
  const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
