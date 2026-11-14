@@ -49,6 +49,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   }
   assert.equal(phase, 'certificate');
   const {createStaffCsr, installStaffCertificate} = await import('/waitron/apps/server/src/cloud-remote.ts');
+  const {CLOUD_STAFF_CERT_FILE} = await import('/waitron/packages/store/src/state-layout.ts');
   const csr = await createStaffCsr(root, placement.staffHostname);
   const saved = envelope('configuration', {servicesVersion: 2});
   const configured = await exchange('configuration', saved);
@@ -67,7 +68,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   assert.equal(reply.installationId, installationId);
   assert.equal(reply.hostname, placement.staffHostname);
   await installStaffCertificate(root, placement.staffHostname, reply.certificate);
-  const certificate = await readFile(root + '/cloud-staff.crt', 'utf8');
+  const certificate = await readFile(root + '/' + CLOUD_STAFF_CERT_FILE, 'utf8');
   assert.equal(certificate, reply.certificate);
   const ready = JSON.parse(await readFile(root + '/ready.json', 'utf8'));
   const upstreamTrust = ready.origin.startsWith('https:') ? {ca: await readFile(root + '/tls/ca.crt')} : {};
