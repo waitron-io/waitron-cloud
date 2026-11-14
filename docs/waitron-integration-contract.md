@@ -2026,12 +2026,14 @@ calendar with no production default; it does not choose between country-wide
 and per-venue production calendars. Production prices, retention, collection,
 hosted-stop legality and provider/invoice qualification retain their existing
 gates. The [D568 emergency display proposal](#emergency-hosting-display-and-code-proposed-d568)
-defines a separate read for A1188; it still needs Waitron's agreement. Billing
-display version 1 gains no fields or new authority from that proposal.
+defines separate reads for A1188. Waitron accepts their boundaries in its
+14 November response; code and daily-price details remain open. Billing display
+version 1 gains no fields or new authority from that proposal.
 
 ## Emergency hosting display and code (proposed, D568)
 
-**Cloud proposal, 4 November 2026. Awaiting Waitron agreement; no endpoint,
+**Cloud proposal, 4 November 2026. Waitron accepts the read boundaries in its
+14 November response; code and daily-price details remain open. No endpoint,
 signing vector or runtime is qualified here.** This answers A1188 part 1 and
 A1187's recovery-pack dependency. The source is Waitron
 `e0da0ad18aa952306e39c1a8e3cade6302794b43`,
@@ -2040,9 +2042,9 @@ and Cloud's [billing design, section 7](superpowers/specs/2026-10-29-cloud-billi
 The owner approved A1188's defaults on 29 October. Agreement to this proposed
 wire and permission to build Cloud billing section 7 or P6 are separate gates.
 This revision incorporates Lane B's eight part 1 amendments. Its review agreed
-with the separate-read approach subject to those amendments; final agreement
-on this exact emergency-read revision remains open. Lane A agrees with the four
-A1018 answers subject to the amendments recorded below; that agreement does not
+with the separate-read approach subject to those amendments. Waitron's response
+below accepts those boundaries and identifies the remaining details. Lane A
+agrees with the four A1018 answers subject to the amendments recorded below; that agreement does not
 qualify a hosted format or implementation.
 
 ### Waitron response, 14 November 2026
@@ -2225,8 +2227,9 @@ installation cannot fetch it. Once Cloud confirms a declaration, the previous
 box's installation is refused the code read, as one of the services A1188
 section 9 item 8 withdraws. A Cloud account cookie is no
 substitute. The box's authenticated local route checks the person's current
-`node.promote` permission before requesting, returning or printing the code.
-Follow its successor `node.manage` only when A1002 actually provides it.
+`node.manage` permission before requesting, returning or printing the code.
+This is the successor to A1188's original `node.promote` permission, as pinned
+in Waitron's response above.
 Cloud authenticates the installation; this endpoint does not claim to verify
 the staff member or map a Cloud account to that permission.
 
@@ -2383,9 +2386,10 @@ Cloud runtime receipt or agreement to the whole emergency-read proposal.
 
 ### Agreement and implementation gates
 
-Waitron must reply to this exact proposal revision before the read becomes an
-agreed contract. Pin both repository revisions and shared request/signature,
-closed-response, URL and code-format vectors, including the independent code-read
+Waitron's 14 November response accepts the read boundaries. The exact code
+format and daily-price projection still need joint agreement before the complete
+part 1 card can be implemented. Pin both repository revisions and shared
+request/signature, closed-response, URL and code-format vectors, including the independent code-read
 rate budget. Then qualify both adapters with
 same-venue/sibling isolation, post-wait revocation/key changes, stale out-of-order
 replies, code rotation during print, no persisted code, unavailable prices and
