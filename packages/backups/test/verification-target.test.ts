@@ -16,7 +16,7 @@ const owners = [
   "bookings", "core", "fiscal-none", "fiscal-verifactu", "node", "payments", "workforce", "workforce-es",
 ];
 const digest =
-  "47641bc8edc4909fe7dcf427c36675a3656878bc3c0ff759b8c3222dadc549fe";
+  "05d5b2665dc9d76426615dd347815f48e0bab7a3dbd208083e2dba3c6b0e0ec0";
 
 function rehash(value: typeof manifest) {
   Object.assign(value, backupVerificationTargetDigests(value));
@@ -29,7 +29,7 @@ test("complete_pinned_public_target_includes_every_owner", () => {
   assert.equal(target.digest, digest);
   assert.equal(
     target.runtime.fingerprint,
-    "fdd2e1044e675d0142f79204388404ddf20ad85ccf8b20cac0e057b7688c789f",
+    "0d2f448733aeb47977034260a79d3075d9d925c3fa283f23ea70e20cdea1892e",
   );
   assert.deepEqual(target.modules.map((m) => m.name).sort(), owners);
   assert.equal(target.modules.find((m) => m.name === "fiscal-none")!.schema, 0);

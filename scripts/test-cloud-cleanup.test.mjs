@@ -145,7 +145,7 @@ appendFileSync(root+'/commands.jsonl',JSON.stringify(args)+'\\n');
 let state=existsSync(root+'/state.json')?JSON.parse(readFileSync(root+'/state.json')):{};
 const save=()=>writeFileSync(root+'/state.json',JSON.stringify(state));
 const output=value=>process.stdout.write(typeof value==='string'?value:JSON.stringify(value));
-if(args[0]==='image'&&args[1]==='inspect')output([{Id:args[2].includes('venue:local')?'sha256:'+'d'.repeat(64):'sha256:'+'c'.repeat(64),RepoTags:['waitron-test:local'],Config:{Labels:{'cloud.waitron-revision':'741c77a05806bf11367e93ef165c57e4de92eda3','cloud.integration.owner':state.owner}}}]);
+if(args[0]==='image'&&args[1]==='inspect')output([{Id:args[2].includes('venue:local')?'sha256:'+'d'.repeat(64):'sha256:'+'c'.repeat(64),RepoTags:['waitron-test:local'],Config:{Labels:{'cloud.waitron-revision':'8eed667ab0586a3144ed7911b57cf50fcb3b0766','cloud.integration.owner':state.owner}}}]);
 else if(args[0]==='build'){state.owner=args.find(a=>a.startsWith('cloud.integration.owner=')).split('=')[1];state.project=args[args.indexOf('-t')+1].replace('-venue:local','');save();}
 else if(args[0]==='compose'){
  if(args.includes('config'))output({services:{account:{},postgres:{}},networks:{default:{}},volumes:{config:{}}});

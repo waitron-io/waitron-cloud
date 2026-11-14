@@ -63,7 +63,7 @@ test('two demo Waitron venues pair free and paid signup accounts through trusted
   assert.equal(receipt.kind, 'test-cloud-clients');
   assert.equal(receipt.completeIntegration, false);
   assert.equal(receipt.origin, 'https://waitron.local:3000');
-  assert.equal(receipt.waitronHead, '741c77a05806bf11367e93ef165c57e4de92eda3');
+  assert.equal(receipt.waitronHead, '8eed667ab0586a3144ed7911b57cf50fcb3b0766');
   assert.deepEqual(receipt.accountMail, {free: 'proved', paid: 'proved', transport: 'mailpit'});
   assert.deepEqual(receipt.clients, {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'});
   assert.deepEqual(receipt.tls, {untrustedRefused: true, wrongHostnameRefused: true});

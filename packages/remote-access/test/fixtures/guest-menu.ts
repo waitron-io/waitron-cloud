@@ -7,7 +7,7 @@ export async function guestMenuFixture(existing?:Awaited<ReturnType<typeof datab
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
  const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
  const owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
- const store=new RegistrationStore(db.pool),input={operationId:randomUUID(),installationKey:'menu-test-key',localVenueId:randomUUID(),environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
+ const store=new RegistrationStore(db.pool),input={operationId:randomUUID(),installationKey:'menu-test-key',venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await store.start(input);await store.approveCloud(input,owner.accountId);await store.approveLocal(input,randomUUID());
  const installed=await store.complete(input);
  const seed=async(pages:Record<string,string>={'en':'<h1>Menu</h1>','es':'<h1>Menú</h1>'})=>db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)

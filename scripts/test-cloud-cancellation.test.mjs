@@ -19,7 +19,7 @@ fs.appendFileSync(root+'/calls',JSON.stringify(args)+'\n');
 const calls=fs.readFileSync(root+'/calls','utf8').trim().split('\n').map(JSON.parse);
 const build=calls.find(a=>a[0]==='build'),owner=build?.find(a=>a.startsWith('cloud.integration.owner='))?.split('=')[1];
 if(args[0]==='ps'||['network','volume','image'].includes(args[0])&&args[1]==='ls'){}
-else if(args[0]==='image'&&args[1]==='inspect')process.stdout.write(JSON.stringify([{Id:'sha256:'+'c'.repeat(64),RepoTags:['pin:local'],Config:{Labels:{'cloud.waitron-revision':'741c77a05806bf11367e93ef165c57e4de92eda3','cloud.integration.owner':owner}}}]));
+else if(args[0]==='image'&&args[1]==='inspect')process.stdout.write(JSON.stringify([{Id:'sha256:'+'c'.repeat(64),RepoTags:['pin:local'],Config:{Labels:{'cloud.waitron-revision':'8eed667ab0586a3144ed7911b57cf50fcb3b0766','cloud.integration.owner':owner}}}]));
 else if(args[0]==='build'){}
 else if(args[0]==='image'&&args[1]==='rm'){process.kill(process.ppid,'SIGTERM');setTimeout(()=>{},100);}
 else if(args[0]==='compose'){

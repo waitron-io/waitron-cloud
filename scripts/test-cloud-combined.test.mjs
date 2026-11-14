@@ -36,7 +36,7 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(receipt.waitronSource.client.image, receipt.assets.waitron.image);
   assert.notEqual(receipt.waitronSource.client.image, receipt.waitronSource.base.image);
   for (const measured of Object.values(receipt.waitronSource)) {
-    assert.equal(measured.head, '741c77a05806bf11367e93ef165c57e4de92eda3');
+    assert.equal(measured.head, '8eed667ab0586a3144ed7911b57cf50fcb3b0766');
     assert.equal(measured.tree, '4dfcc3fa24c53954cd7a6f67d70881b136a683dc');
     assert.equal(measured.dirty, false);
     assert.equal(measured.files, 9465);
