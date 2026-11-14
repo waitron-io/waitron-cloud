@@ -87,10 +87,10 @@ test('delivery routes expose bounded, non-browser errors without changing the st
  }finally{await f.db.close();}
 });
 
-function wire(port:number,path:string,body:string,end=true,from?:string){
+function wire(port:number,path:string,body:string,end=true,from?:string,hostHeader='localhost'){
  let req:ClientRequest;
  const result=new Promise<{status:number;body:string}>((resolve,reject)=>{
-  req=request({host:'127.0.0.1',port,path,method:'POST',headers:{host:'localhost','content-type':'application/json',...(from?{'x-forwarded-for':from}:{})}},r=>{
+  req=request({host:'127.0.0.1',port,path,method:'POST',headers:{host:hostHeader,'content-type':'application/json',...(from?{'x-forwarded-for':from}:{})}},r=>{
    let text='';r.on('data',c=>text+=c);r.on('end',()=>resolve({status:r.statusCode!,body:text}));r.on('error',reject);
   });req.on('error',reject);req.write(body);if(end)req.end();
  });void result.catch(()=>{});
@@ -130,14 +130,17 @@ test('a publish arriving after the general five-second body window is still read
 });
 
 
-test('the signed HTTP route accepts an exact 2 MiB escaped publication and refuses larger bodies',async()=>{
- const f=await deliveryFixture();try{
+test('the real HTTP server accepts an exact 2 MiB escaped publication and refuses larger bodies',async()=>{
+ const f=await deliveryFixture(),running=await startAccountServer({...f.options,port:0});
+ const address=running.server.address();assert(address&&typeof address!=='string');
+ const send=(envelope:unknown)=>wire(address.port,'/api/installations/guest-menu-publish',JSON.stringify(envelope),true,undefined,new URL(cloudOrigin).host).result;
+ try{
   const empty=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1></h1>'}}),quotes='"'.repeat(Math.floor((2097152-Buffer.byteLength(empty))/2));
   let body=JSON.stringify({defaultLanguage:'en',pages:{en:'<h1>'+quotes+'</h1>'}});body+=' '.repeat(2097152-Buffer.byteLength(body));
   assert.equal(Buffer.byteLength(body),2097152);assert(Buffer.byteLength(JSON.stringify(f.publish(body)))>3*1048576);
-  const accepted=await f.send('publish',f.publish(body));assert.equal(accepted.status,200,await accepted.clone().text());
+  const accepted=await send(f.publish(body));assert.equal(accepted.status,200,accepted.body);
   assert.equal((await readGuestMenu(f.db.pool,f.box.venueId))?.html,'<h1>'+quotes+'</h1>');
-  const oversized=await f.send('publish',f.publish(body+' ',1));assert.equal(oversized.status,413);assert.deepEqual(await oversized.json(),{error:'too_large'});
-  assert.equal((await f.send('publish',{body:' '.repeat(12*1048576+16385),payload:'x',signature:'y'})).status,413);
- }finally{await f.db.close();}
+  const oversized=await send(f.publish(body+' ',1));assert.equal(oversized.status,413);assert.deepEqual(JSON.parse(oversized.body),{error:'too_large'});
+  assert.equal((await send({body:' '.repeat(12*1048576+16385),payload:'x',signature:'y'})).status,413);
+ }finally{await running.close();await f.db.close();}
 });

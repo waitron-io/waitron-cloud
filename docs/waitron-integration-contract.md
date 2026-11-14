@@ -2478,6 +2478,8 @@ whitespace. The body limit is 2 MiB; outer JSON has a 12 MiB + 16 KiB limit to a
 escaping. Publish has four request slots, at most one per canonical client IP, and a
 60-second read limit, leaving
 the eight general slots available. Encoded path aliases use the same admission.
+Four sources can fill all publish slots; boxes sharing one public source address
+publish one at a time. Capacity refusal is 503/unavailable with Retry-After: 1.
 
 POST `/api/installations/guest-menu-status` and `/guest-menu-withdraw` use their
 matching actions, `{payload,signature}` and signed body `{version:1}`. All three
