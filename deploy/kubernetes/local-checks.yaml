@@ -82,7 +82,7 @@
             "command": ["node", "deploy/test-cloud/runtime.mjs", "storage"],
             "env": [{"name": "CLOUD_TEST_SERVICE_PLANS", "value": "1"}],
             "volumeMounts": [{"name": "config", "mountPath": "/run/local-stack"}, {"name": "storage", "mountPath": "/data"}],
-            "resources": {"limits": {"memory": "384Mi"}},
+            "resources": {"limits": {"memory": "1Gi"}},
             "readinessProbe": {"exec": {"command": ["test", "-f", "/tmp/test-cloud-storage-ready"]}, "periodSeconds": 2},
             "ports": [{"containerPort": 8333, "hostPort": 8333}, {"containerPort": 8444, "hostPort": 8444}]
           },
