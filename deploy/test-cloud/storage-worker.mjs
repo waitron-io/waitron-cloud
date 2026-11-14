@@ -33,7 +33,7 @@ export async function runTestStorage({directory='/run/local-stack',mode,signal}=
  try{
  if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  stage='bootstrap';await bootstrapStorageIssuer(directory);
- stage='controller-lease';let held;for(let n=0;n<200&&!held;n++){held=await claimLease(join(directory,'storage-authority/.controller.lock'));if(!held)await delay(25);}if(!held)throw Error('test_cloud.storage_busy');
+ stage='controller-lease';let held;for(let n=0;n<200&&!held&&!signal?.aborted;n++){held=await claimLease(join(directory,'storage-authority/.controller.lock'));if(!held)await delay(25,undefined,{signal}).catch(()=>{});}if(signal?.aborted){await held?.release();return;}if(!held)throw Error('test_cloud.storage_busy');
  const socket=join(directory,'storage-authority/reload.sock'),ready='/tmp/test-cloud-storage-ready';
  let issuer,child,closed,server,pool,client;const stop=new AbortController(),abort=()=>stop.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
  try{

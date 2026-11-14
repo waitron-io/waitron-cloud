@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {execFile} from 'node:child_process';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {execFile,spawn} from 'node:child_process';
+import {mkdtemp,rm,writeFile,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
@@ -58,4 +58,25 @@ test('storage restart refuses a live controller after a bounded wait without tak
  assert.equal(failure.code,1,failure.stderr);assert.ok(performance.now()-started>=4000,'replacement must allow its bounded lease wait');
  assert.match(failure.stderr,/"stage":"controller-lease","code":"test_cloud.storage_busy"/);
  await held.assertOwned();
+});
+
+// Shutdown while waiting for a predecessor must not start a new storage provider.
+test('storage shutdown during lease wait exits without starting the provider',{timeout:15000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'storage-cancel-owner-'));
+ const {bootstrapStorageIssuer}=await import('./storage-issuer.mjs'),{claimLease}=await import('../local-stack/lease.mjs');
+ let held,child,closed;
+ t.after(async()=>{if(child?.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;await held?.release();await rm(directory,{recursive:true,force:true});});
+ await bootstrapStorageIssuer(directory);held=await claimLease(join(directory,'storage-authority/.controller.lock'));
+ const waiting=join(directory,'waiting'),signalled=join(directory,'signalled'),provider=join(directory,'provider');
+ const injection=`import cp from 'node:child_process';import timers from 'node:timers/promises';import {writeFileSync} from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+ const real=timers.setTimeout;timers.setTimeout=(ms,...args)=>{if(ms===25)writeFileSync(${JSON.stringify(waiting)},'');return real(ms,...args);};
+ const spawn=cp.spawn;cp.spawn=(binary,...args)=>{if(binary==='weed'){writeFileSync(${JSON.stringify(provider)},'');process.exit(73);}return spawn(binary,...args);};
+ process.once('SIGTERM',()=>writeFileSync(${JSON.stringify(signalled)},''));syncBuiltinESMExports();`;
+ const env={...process.env,LOCAL_STACK_CONFIG_DIR:directory,CLOUD_TEST_SERVICE_PLANS:'1'};delete env.NODE_TEST_CONTEXT;
+ child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(injection),worker],{env,stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',part=>{stderr+=part;});closed=new Promise(resolve=>child.once('close',resolve));
+ const wait=async path=>{for(let n=0;n<200;n++){if(await access(path).then(()=>true,()=>false))return;await new Promise(resolve=>setTimeout(resolve,10));}assert.fail('worker did not reach '+path+': '+stderr);};
+ await wait(waiting);child.kill('SIGTERM');await wait(signalled);await held.release();held=undefined;
+ assert.equal(await closed,0,stderr);
+ assert.equal(await access(provider).then(()=>true,()=>false),false,'shutdown must finish before starting the provider');
+ assert.equal(stderr.includes('storage_failure='),false,stderr);
 });

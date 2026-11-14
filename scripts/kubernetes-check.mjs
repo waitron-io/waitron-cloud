@@ -276,7 +276,7 @@ try {
     process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n');
     delete error.diagnostic;
   }
-  const probeFailure = error.message?.startsWith('p1.') === true;
+  const probeFailure = stop.signal.aborted && stop.signal.reason === error;
   if ((created || amazon) && (!stop.signal.aborted || probeFailure)) {
     for (const resource of ['pods', 'events', 'nodes']) {
       try {

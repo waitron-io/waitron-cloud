@@ -508,7 +508,7 @@ test('local observer confirms worker stop before signalling or moving its manife
 });
 
 // This drives the Amazon adapter's actual stdout/stdin and strict post-replacement placement.
-for (const failProbe of [false, true]) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics' : ''), async t => {
+for (const failProbe of [null, 'p1.remote_after_recovery', 'integration.command_failed:remote-inspect-retained-snapshot']) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics: ' + failProbe : ''), async t => {
   const directory = await mkdtemp(join(tmpdir(), 'p1-wire-')), ownedPids = join(directory, 'owned-pids');
   t.after(async () => {
     const pids = await readFile(ownedPids, 'utf8').catch(error => {if (error.code !== 'ENOENT') throw error; return '';});
@@ -546,7 +546,7 @@ if(name==='kubectl'){
   const code = `import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
 const result=await runKubernetesCheck(${JSON.stringify(target)},{
  clients:async ({kubernetes:k})=>({observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')}),
- observer:async ({ready,stopped,replacement})=>{if(${failProbe})throw Error('p1.remote_after_recovery');ready();await stopped();await replacement();return {done:true};}
+ observer:async ({ready,stopped,replacement})=>{if(${JSON.stringify(failProbe)})throw Error(${JSON.stringify(failProbe)});ready();await stopped();await replacement();return {done:true};}
 });process.stdout.write(JSON.stringify(result)+'\\n');`;
   const child = spawn(process.execPath, ['--import', standalone, '--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
     TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}, stdio: ['pipe', 'pipe', 'pipe']});
@@ -564,7 +564,7 @@ const result=await runKubernetesCheck(${JSON.stringify(target)},{
   if (failProbe) {
     assert.equal(exit, 1, stderr);
     for (const label of ['pods', 'events', 'nodes', 'storage-current', 'storage-previous']) assert.ok(stderr.includes('Kubernetes failure ' + label + ' '), label);
-    assert.match(stderr, /Error: p1.remote_after_recovery/); return;
+    assert.ok(stderr.includes('Error: ' + failProbe), stderr); return;
   }
   assert.equal(exit, 0, stderr);
   assert.equal(sent, true);
