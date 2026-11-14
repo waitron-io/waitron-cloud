@@ -1,3 +1,4 @@
+import {isGuestMenuLanguage} from './guest-menu-language.ts';
 import type {Pool,PoolClient} from 'pg';
 import {createHash} from 'node:crypto';
 import {createLeaseTrust,InstallationError,readMachineClaims,transaction,verifyMachine,verifyLease,type LeaseIssuer} from '@waitron-cloud/registration';
@@ -45,11 +46,10 @@ function publication(signed:string,body:string|undefined){
  if(typeof body!=='string'||!(body as string&{isWellFormed():boolean}).isWellFormed()||Buffer.byteLength(body)!==value.bodyBytes
   ||createHash('sha256').update(body).digest('hex')!==value.bodySha256)return fail('forbidden');
  let menu:unknown;try{menu=JSON.parse(body);}catch{return fail('invalid_input');}
- const languages=['en','es','ca','gl'];
- if(!object(menu,['defaultLanguage','pages'])||typeof menu.defaultLanguage!=='string'||!languages.includes(menu.defaultLanguage)
+ if(!object(menu,['defaultLanguage','pages'])||!isGuestMenuLanguage(menu.defaultLanguage)
   ||!menu.pages||typeof menu.pages!=='object'||Array.isArray(menu.pages))return fail('invalid_input');
  const pages=menu.pages as Record<string,unknown>;
- if(typeof pages[menu.defaultLanguage]!=='string'||Object.entries(pages).some(([lang,html])=>!languages.includes(lang)||typeof html!=='string'||!(html as string&{isWellFormed():boolean}).isWellFormed()||html.includes('\u0000')))return fail('invalid_input');
+ if(typeof pages[menu.defaultLanguage]!=='string'||Object.entries(pages).some(([lang,html])=>!isGuestMenuLanguage(lang)||typeof html!=='string'||!(html as string&{isWellFormed():boolean}).isWellFormed()||html.includes('\u0000')))return fail('invalid_input');
  return {revision:Number(value.expectedRevision),digest:value.bodySha256,defaultLanguage:menu.defaultLanguage,pages};
 }
 export class GuestMenuMachine {

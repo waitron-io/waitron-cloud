@@ -20,6 +20,7 @@ test('a stored public copy has one permanent link; takedown removes bytes and En
  const status=()=>transaction(db.pool,c=>guestMenuStatus(c,venueId,origin));
  assert.deepEqual(await status(),{version:1,url:`${origin}/m/${venueId}`,revision:0,state:'off',publication:null});
  await f.seed();
+ await assert.rejects(db.pool.query("UPDATE guest_menus SET default_language='bad_tag',pages=pages || '{\"bad_tag\":\"menu\"}'::jsonb WHERE venue_id=$1",[venueId]),(error:unknown)=>(error as {constraint?:string}).constraint==='guest_menus_default_language_check');
  assert.equal((await status()).state,'current');
  assert.equal((await readGuestMenu(db.pool,venueId,'es'))?.html,'<h1>Menú</h1>');
  assert.equal((await readGuestMenu(db.pool,venueId,'ca'))?.html,'<h1>Menu</h1>');
@@ -47,6 +48,15 @@ async function delivery(){
  return {db,issuer,box,machine,proof,text,publish,status};
  }catch(error){await db.close();throw error;}
 }
+
+for(const language of ['ca-ES-valencia','fr'])test('signed delivery preserves a '+language+' default and exact translated choice',async()=>{
+ const f=await delivery();try{
+  const body=JSON.stringify({defaultLanguage:language,pages:{[language]:'<h1>Carte</h1>',es:'<h1>Menú</h1>'}});
+  assert.equal((await f.publish(body)).publication?.defaultLanguage,language);
+  assert.deepEqual(await readGuestMenu(f.db.pool,f.box.venueId),{html:'<h1>Carte</h1>',revision:1,language});
+  assert.equal((await readGuestMenu(f.db.pool,f.box.venueId,'es'))?.html,'<h1>Menú</h1>');
+ }finally{await f.db.close();}
+});
 
 test('signed delivery serialises retries, revision conflicts, withdrawal and owner block',async()=>{
  const f=await delivery();try{
@@ -81,8 +91,8 @@ test('the exact bounded UTF-8 publication body must match its signed fingerprint
    [{...fingerprint,expectedRevision:-1},body,/invalid_input/],
    [fingerprint,'\ud800',/forbidden/],
   ] as const)await assert.rejects(f.machine.execute('guest-menu-publish',f.proof('guest-menu-publish',signed),raw),want);
-  for(const value of [{defaultLanguage:'fr',pages:{fr:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},{defaultLanguage:'en',pages:{en:'menu\u0000text'}},{defaultLanguage:'en',pages:{en:'\ud800'}},
-   {defaultLanguage:'en',pages:{en:'menu',fr:'menu'}},{defaultLanguage:'en',pages:{en:'menu'},venueId:f.box.venueId}])await assert.rejects(f.publish(JSON.stringify(value)),/invalid_input/);
+  for(const value of [{defaultLanguage:'xx',pages:{xx:'menu'}},{defaultLanguage:'bad_tag',pages:{bad_tag:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},{defaultLanguage:'en',pages:{en:'menu\u0000text'}},{defaultLanguage:'en',pages:{en:'\ud800'}},
+   {defaultLanguage:'en',pages:{en:'menu',bad_tag:'menu'}},{defaultLanguage:'en',pages:{en:'menu'},venueId:f.box.venueId}])await assert.rejects(f.publish(JSON.stringify(value)),/invalid_input/);
   const overhead=Buffer.byteLength(f.text('')),exact=f.text('x'.repeat(2097152-overhead));assert.equal(Buffer.byteLength(exact),2097152);
   assert.equal((await f.publish(exact)).state,'current');
   await assert.rejects(f.publish(exact+' ',1),/too_large/);

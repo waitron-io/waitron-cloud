@@ -43,7 +43,7 @@ test('anonymous HTTPS serves only the stored menu with language fallback, HEAD a
   assert.match(String(es.headers['content-security-policy']),/frame-ancestors 'none'/);
   assert.equal((await send(path+'?lang=ca')).body,'<h1>Menu</h1>');
   const head=await send(path,'HEAD');assert.equal(head.status,200);assert.equal(head.body,'');assert.equal(Number(head.headers['content-length']),13);
-  for(const suffix of ['?lang=xx','?lang=es&lang=en','/extra'])assert.equal((await send(path+suffix)).status,400);
+  for(const suffix of ['?lang=xx','?lang=iw','?lang=FR','?lang=bad_tag','?lang=es&lang=en','/extra'])assert.equal((await send(path+suffix)).status,400);
   assert.equal((await send(path+'/../'+f.venueId)).status,400);
   assert.equal((await send(path+'?unknown=1')).body,'<h1>Menu</h1>');
   assert.equal((await send(path+'?lang=es&x=1')).body,'<h1>Menú</h1>');
@@ -54,6 +54,20 @@ test('anonymous HTTPS serves only the stored menu with language fallback, HEAD a
   const maximum=await send(path);assert.equal(maximum.status,200);assert.equal(Buffer.byteLength(maximum.body),2097152);
   await f.db.pool.query('UPDATE guest_menus SET pages=$2,revision=revision+1 WHERE venue_id=$1',[f.venueId,{en:'á'.repeat(1048577)}]);
   assert.equal((await send(path)).status,503);
+ }finally{await running?.close();await f.close();}
+});
+
+for(const language of ['ca-ES-valencia','fr'])test('HTTPS preserves '+language+' default, explicit choice and absent translation fallback',async()=>{
+ const f=await guestTlsFixture();let running:Awaited<ReturnType<typeof startGuestMenuServer>>|undefined;
+ try{
+  await f.seed({en:'<h1>Menu</h1>',[language]:'<h1>Carte</h1>'});
+  await f.db.pool.query('UPDATE guest_menus SET default_language=$1 WHERE venue_id=$2',[language,f.venueId]);
+  running=await startGuestMenuServer(f.options);const address=running.server.address();assert(address&&typeof address!=='string');
+  for(const suffix of ['', '?lang='+language,'?lang=gl']){
+   const reply=await f.send(address.port,'/m/'+f.venueId+suffix);
+   assert.equal(reply.status,200);assert.equal(reply.body,'<h1>Carte</h1>');assert.equal(reply.headers['content-language'],language);
+  }
+  const english=await f.send(address.port,'/m/'+f.venueId+'?lang=en');assert.equal(english.body,'<h1>Menu</h1>');assert.equal(english.headers['content-language'],'en');
  }finally{await running?.close();await f.close();}
 });
 
