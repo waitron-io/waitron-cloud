@@ -18,9 +18,13 @@ test('the real portal decoder accepts guest sharing confirmations',async t=>{
  assert.equal(headers?.['X-CSRF-Token'],'synthetic-proof');assert.equal(result.ok,true);
 });
 
+test('portal status accepts canonical menu defaults without browser language-name data',t=>{
+ t.mock.method(Intl,'DisplayNames',()=>{throw Error('language data unavailable');});
+ for(const defaultLanguage of ['ca-ES-valencia','fr','xx'])assert.equal(validRemoteView({...view,guestMenu:{...menu,publication:{...menu.publication,defaultLanguage}}}),true);
+});
 test('guest links are validated before the portal offers them',()=>{
  assert.equal(validRemoteView(view),true);
- for(const patch of [{url:'javascript:alert(1)'},{url:'https://menus.example.test/m/'+id},{state:'unknown'},{revision:-1},{publication:{...menu.publication,defaultLanguage:'xx'}}])assert.equal(validRemoteView({...view,guestMenu:{...menu,...patch}}),false);
+ for(const patch of [{url:'javascript:alert(1)'},{url:'https://menus.example.test/m/'+id},{state:'unknown'},{revision:-1},{publication:{...menu.publication,defaultLanguage:'bad_tag'}}])assert.equal(validRemoteView({...view,guestMenu:{...menu,...patch}}),false);
 });
 test('sharing actions bind the venue and discard a reply after the account changes',async()=>{
  const calls:{path:string;body?:Record<string,unknown>}[]=[];

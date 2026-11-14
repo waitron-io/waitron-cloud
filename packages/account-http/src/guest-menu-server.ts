@@ -1,3 +1,4 @@
+import {isGuestMenuLanguage} from '../../remote-access/src/guest-menu-language.ts';
 import {createServer} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {Pool} from 'pg';
@@ -30,7 +31,7 @@ export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;ori
    if(url.origin!==origin||req.headers.host!==new URL(origin).host){respond(res,403,'forbidden');return;}
    if(!['GET','HEAD'].includes(req.method??'')){respond(res,405,'method_not_allowed');return;}
    if((req.url??'').split('?')[0]!==url.pathname||!url.pathname.startsWith('/m/')||!isUuid(id)||url.hash||url.searchParams.getAll('lang').length>1
-    ||(language!==undefined&&!['en','es','ca','gl'].includes(language))
+    ||(language!==undefined&&!isGuestMenuLanguage(language))
     ||req.headers['transfer-encoding']!==undefined||req.headers.upgrade!==undefined
     ||(req.headers['content-length']!==undefined&&req.headers['content-length']!=='0')){respond(res,400,'invalid_input');return;}
    const rate=await limiter.consume([{scope:'guest-menu-ip',subject:clientAddress(req.socket.remoteAddress??'',undefined,[]),limit:120,windowSeconds:60}]);

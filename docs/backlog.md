@@ -669,8 +669,8 @@ database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle jou
 
 ## Hosted guest menu (A670-CLOUD)
 
-Connect Waitron's sender to the signed publication routes and qualify public
-access. Public DNS, production certificates and outside-network checks remain
+Connect Waitron's sender to the signed publication routes with its content-language
+keys unchanged, and qualify public access. Public DNS, production certificates and outside-network checks remain
 open. Every venue connected to Cloud qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
 exclude live forwarding, which belongs to Waitron A509 online ordering.
 

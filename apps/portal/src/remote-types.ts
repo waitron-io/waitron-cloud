@@ -1,3 +1,4 @@
+import {isGuestMenuLanguageShape} from '../../../packages/remote-access/src/guest-menu-language.ts';
 export type RemoteKind='staff'|'public';
 export type ForwardCause='upstream_non_200'|'upstream_timeout'|'upstream_response_limit'|'upstream_transport'|'forward_internal';
 export interface PublicForwardView {category:ForwardCause|null;observedAt:string;expiresAt:string}
@@ -13,7 +14,7 @@ export function validGuestMenuView(v:unknown):v is GuestMenuView{
  try{const url=new URL(v.url);if(url.protocol!=='https:'||url.href!==url.origin+'/m/'+v.venueId)return false;}catch{return false;}
  if(v.state!=='current')return v.publication===null;
  const p=v.publication;
- return Number(v.revision)>0&&object(p)&&typeof p.bodySha256==='string'&&/^[0-9a-f]{64}$/.test(p.bodySha256)&&['en','es','ca','gl'].includes(String(p.defaultLanguage))&&iso(p.receivedAt);
+ return Number(v.revision)>0&&object(p)&&typeof p.bodySha256==='string'&&/^[0-9a-f]{64}$/.test(p.bodySha256)&&isGuestMenuLanguageShape(p.defaultLanguage)&&iso(p.receivedAt);
 }
 function validForward(v:unknown):boolean{
  if(v===null||v===undefined)return true;

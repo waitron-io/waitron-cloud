@@ -48,6 +48,15 @@ async function delivery(){
  }catch(error){await db.close();throw error;}
 }
 
+for(const language of ['ca-ES-valencia','fr'])test('signed delivery preserves a '+language+' default and exact translated choice',async()=>{
+ const f=await delivery();try{
+  const body=JSON.stringify({defaultLanguage:language,pages:{[language]:'<h1>Carte</h1>',es:'<h1>Menú</h1>'}});
+  assert.equal((await f.publish(body)).publication?.defaultLanguage,language);
+  assert.deepEqual(await readGuestMenu(f.db.pool,f.box.venueId),{html:'<h1>Carte</h1>',revision:1,language});
+  assert.equal((await readGuestMenu(f.db.pool,f.box.venueId,'es'))?.html,'<h1>Menú</h1>');
+ }finally{await f.db.close();}
+});
+
 test('signed delivery serialises retries, revision conflicts, withdrawal and owner block',async()=>{
  const f=await delivery();try{
   assert.equal((await f.status()).revision,0);
@@ -81,8 +90,8 @@ test('the exact bounded UTF-8 publication body must match its signed fingerprint
    [{...fingerprint,expectedRevision:-1},body,/invalid_input/],
    [fingerprint,'\ud800',/forbidden/],
   ] as const)await assert.rejects(f.machine.execute('guest-menu-publish',f.proof('guest-menu-publish',signed),raw),want);
-  for(const value of [{defaultLanguage:'fr',pages:{fr:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},{defaultLanguage:'en',pages:{en:'menu\u0000text'}},{defaultLanguage:'en',pages:{en:'\ud800'}},
-   {defaultLanguage:'en',pages:{en:'menu',fr:'menu'}},{defaultLanguage:'en',pages:{en:'menu'},venueId:f.box.venueId}])await assert.rejects(f.publish(JSON.stringify(value)),/invalid_input/);
+  for(const value of [{defaultLanguage:'bad_tag',pages:{bad_tag:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},{defaultLanguage:'en',pages:{en:'menu\u0000text'}},{defaultLanguage:'en',pages:{en:'\ud800'}},
+   {defaultLanguage:'en',pages:{en:'menu',bad_tag:'menu'}},{defaultLanguage:'en',pages:{en:'menu'},venueId:f.box.venueId}])await assert.rejects(f.publish(JSON.stringify(value)),/invalid_input/);
   const overhead=Buffer.byteLength(f.text('')),exact=f.text('x'.repeat(2097152-overhead));assert.equal(Buffer.byteLength(exact),2097152);
   assert.equal((await f.publish(exact)).state,'current');
   await assert.rejects(f.publish(exact+' ',1),/too_large/);
