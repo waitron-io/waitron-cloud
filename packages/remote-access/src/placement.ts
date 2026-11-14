@@ -86,12 +86,23 @@ export class RemoteAccessStore {
     }return prior;}
    await lockPeerKey(client,peerPublicKey);
    if((await client.query("SELECT 1 FROM remote_cell_moves WHERE target_peer_public_key=$1 AND state IN ('staged','ready') LIMIT 1",[peerPublicKey])).rowCount)fail('placement_conflict');
-   if(cell.next_address>=66)fail('cell_full');
-   const address=`10.77.${cell.subnet}.${cell.next_address}`;
-   await client.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,$4,$5,$6)',[install.venue_id,installationId,cellId,address,peerPublicKey,port]);
-   const stem=`v-${install.venue_id}`;
-   await client.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,'staff'),($3,$2,'public')",[`staff-${stem}.${cell.suffix}`,install.venue_id,`${stem}.${cell.suffix}`]);
-   await client.query('UPDATE remote_cells SET next_address=next_address+1 WHERE id=$1',[cellId]);
+   const retained=(await client.query('SELECT * FROM remote_placements WHERE venue_id=$1 FOR UPDATE',[install.venue_id])).rows[0];
+   if(retained){
+    const predecessor=await client.query(`WITH RECURSIVE retired AS (
+     SELECT id FROM installations WHERE superseded_by=$1 AND venue_id=$2 AND revoked_at IS NOT NULL
+     UNION ALL SELECT i.id FROM installations i JOIN retired r ON i.superseded_by=r.id
+      WHERE i.venue_id=$2 AND i.revoked_at IS NOT NULL
+    ) SELECT 1 FROM retired WHERE id=$3`,[installationId,install.venue_id,retained.installation_id]);
+    if(install.superseded_by||!predecessor.rowCount||retained.cell_id!==cellId||retained.port!==port||retained.peer_public_key===peerPublicKey)fail('placement_conflict');
+    await client.query('UPDATE remote_placements SET installation_id=$2,peer_public_key=$3 WHERE venue_id=$1',[install.venue_id,installationId,peerPublicKey]);
+   }else{
+    if(cell.next_address>=66)fail('cell_full');
+    const address=`10.77.${cell.subnet}.${cell.next_address}`;
+    await client.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,$4,$5,$6)',[install.venue_id,installationId,cellId,address,peerPublicKey,port]);
+    const stem=`v-${install.venue_id}`;
+    await client.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,'staff'),($3,$2,'public')",[`staff-${stem}.${cell.suffix}`,install.venue_id,`${stem}.${cell.suffix}`]);
+    await client.query('UPDATE remote_cells SET next_address=next_address+1 WHERE id=$1',[cellId]);
+   }
    const result=(await placement(client,installationId))!;
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[installationId,{version:1,...result}]);
    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);return result;

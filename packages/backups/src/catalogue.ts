@@ -265,18 +265,32 @@ export class BackupCatalogue {
       const install = await active(client, installationId, this.#planMode),
         prior = (
           await client.query(
-            "SELECT * FROM backup_locations WHERE venue_id=$1",
+            "SELECT * FROM backup_locations WHERE venue_id=$1 FOR UPDATE",
             [install.venue_id],
           )
         ).rows[0];
       if (prior) {
         if (
-          prior.endpoint !== l.endpoint || prior.bucket !== l.bucket || prior.region !== l.region ||
-          prior.installation_id !== installationId
+          prior.endpoint !== l.endpoint || prior.bucket !== l.bucket || prior.region !== l.region
         )
           backupFail("conflict");
+        let reclaimed = false;
+        if (prior.installation_id !== installationId) {
+          const predecessor = await client.query(`WITH RECURSIVE retired AS (
+            SELECT id FROM installations WHERE superseded_by=$1 AND venue_id=$2 AND revoked_at IS NOT NULL
+            UNION ALL SELECT i.id FROM installations i JOIN retired r ON i.superseded_by=r.id
+              WHERE i.venue_id=$2 AND i.revoked_at IS NOT NULL
+          ) SELECT 1 FROM retired WHERE id=$3`, [installationId, install.venue_id, prior.installation_id]);
+          if (install.superseded_by || !predecessor.rowCount) backupFail("conflict");
+          const version = prior.active_key_version + 1;
+          await client.query('INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,$2,$3)',
+            [install.venue_id, version, this.#vault.create(install.venue_id, version)]);
+          await client.query('UPDATE backup_locations SET installation_id=$2,active_key_version=$3 WHERE venue_id=$1',
+            [install.venue_id, installationId, version]);
+          reclaimed = true;
+        }
         const setup=(await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'",[installationId])).rows[0];
-        if((this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && setup?.state==='unconfigured') {
+        if(reclaimed || ((this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && setup?.state==='unconfigured')) {
           await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='retained_snapshots'",[installationId,{version:1,provider:'local-s3',bucket:l.bucket}]);
           await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
         }

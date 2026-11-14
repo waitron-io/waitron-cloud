@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import {resetInstallationMonitor} from './monitoring.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
 export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';
@@ -99,11 +100,12 @@ async function requireUnexpired(client: PoolClient, binding: ConnectionBinding) 
   if (!rows[0]?.valid) throw new RegistrationError('request_expired');
 }
 async function requirePermission(client: PoolClient, accountId: string, organisationId: string) {
-  const { rowCount } = await client.query(`SELECT a.id FROM cloud_accounts a
+  const { rows } = await client.query(`SELECT a.id, m.is_owner FROM cloud_accounts a
     JOIN organisation_memberships m ON m.account_id = a.id
     WHERE a.id = $1 AND m.organisation_id = $2 AND a.disabled_at IS NULL AND m.can_register_venues
     FOR SHARE OF a, m`, [accountId, organisationId]);
-  if (!rowCount) throw new RegistrationError('permission_denied');
+  if (!rows[0]) throw new RegistrationError('permission_denied');
+  return rows[0].is_owner === true;
 }
 function isUniqueViolation(error: unknown, constraints: readonly string[]): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
@@ -211,7 +213,7 @@ export class RegistrationStore {
           return row.result;
         }
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
-        await requirePermission(client, row.cloud_account_id, binding.organisationId);
+        const isOwner = await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
         // Only enrolled venues share the parent lock with service transitions.
         const enrolled = binding.venueId
@@ -231,16 +233,27 @@ export class RegistrationStore {
         }
         const { rows: installations } = await client.query('SELECT * FROM installations WHERE venue_id = $1 AND superseded_by IS NULL FOR UPDATE', [venue.id]);
         let installation = installations[0];
+        let replacementId: string | undefined;
         if (installation) {
-          if (installation.public_key !== binding.installationKey) throw new RegistrationError('registration_conflict');
-          if (installation.revoked_at) throw new RegistrationError('installation_unavailable');
-        } else {
+          if (installation.public_key === binding.installationKey) {
+            if (installation.revoked_at) throw new RegistrationError('installation_unavailable');
+          } else {
+            if (!installation.revoked_at) throw new RegistrationError('registration_conflict');
+            if (!isOwner) throw new RegistrationError('permission_denied');
+            replacementId = randomUUID();
+            // The deferred foreign key permits supersession before the unique current-row insert.
+            await client.query('UPDATE installations SET superseded_by=$2 WHERE id=$1', [installation.id, replacementId]);
+            installation = undefined;
+          }
+        }
+        if (!installation) {
           const inserted = await client.query('INSERT INTO installations (id, venue_id, public_key) VALUES ($1, $2, $3) RETURNING *',
-            [randomUUID(), venue.id, binding.installationKey]);
+            [replacementId ?? randomUUID(), venue.id, binding.installationKey]);
           installation = inserted.rows[0];
           await client.query(`INSERT INTO installation_services (installation_id, service, state)
             VALUES ($1, 'remote_access', 'unconfigured'), ($1, 'continuous_backup', 'unconfigured'), ($1, 'retained_snapshots', 'unconfigured'), ($1, 'content_translation', 'ready')`, [installation.id]);
         }
+        if (replacementId) await resetInstallationMonitor(client, venue.id);
         // A competing venue/installation insert may wait past expiry; roll back all writes then.
         await requireUnexpired(client, binding);
         const result: Registration = {
@@ -287,7 +300,7 @@ export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from 
 export {InstallationStore,installationView,type InstallationView,type DesiredService} from './installations.ts';
 export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
 
-export {MonitorWorker,suppressAlertEpisode,monitorStatus} from './monitoring.ts';
+export {MonitorWorker,suppressAlertEpisode,resetInstallationMonitor,monitorStatus} from './monitoring.ts';
 export type {ServiceAlert,ServiceAlertMailer,IncidentKind} from './service-alert.ts';
 export {HistoryCleanup, historyCleanupCategories, parseHistoryCleanupPolicy} from './history-cleanup.ts';
 export type {HistoryCleanupCategory, HistoryCleanupCategoryReport, HistoryCleanupPolicy, HistoryCleanupReport} from './history-cleanup.ts';

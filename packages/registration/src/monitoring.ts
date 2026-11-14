@@ -196,6 +196,16 @@ async function cancelEpisodeMail(client:PoolClient,episodeId:string,openOnly:boo
   if(!cancelled.rowCount)break;
  }
 }
+export async function resetInstallationMonitor(client:PoolClient,venueId:string){
+ // A replacement has not contacted Cloud yet; old disconnection alerts must not describe it.
+ // A monitor already holding the old installation can finish its venue foreign-key checks; later monitors skip this installation lock.
+ await client.query("UPDATE venue_monitors SET checked_at=NULL,contact_since=clock_timestamp(),next_check_at=clock_timestamp() WHERE venue_id=$1",[venueId]);
+ await client.query("UPDATE venue_incidents SET status='suppressed',revision=revision+1,changed_at=clock_timestamp() WHERE venue_id=$1 AND kind='disconnected' AND status='open'",[venueId]);
+ const episodes=(await client.query(`SELECT e.id FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND i.kind='disconnected' AND e.status<>'suppressed' ORDER BY e.opening_revision FOR UPDATE OF e`,[venueId])).rows;
+ const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+ for(const episode of episodes)await suppressAlertEpisode(client,episode.id,now);
+}
+
 export async function suppressAlertEpisode(client:PoolClient,episodeId:string,now:Date){
  await client.query("UPDATE venue_alert_episodes SET status='suppressed',recovery_revision=NULL,opening_processed_at=COALESCE(opening_processed_at,$2),recovery_complete=true WHERE id=$1",[episodeId,now]);
  const accounts=(await client.query('SELECT account_id FROM venue_alert_recipients WHERE episode_id=$1 ORDER BY account_id',[episodeId])).rows;

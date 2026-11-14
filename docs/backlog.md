@@ -3226,8 +3226,10 @@ implementation or production evidence.
   closure, hosting enrolment, supplier qualification and production billing remain open.
 - **Venue and node registration.** The agreed Waitron signup and connection journey uses
   Waitron's published signing formats locally. Planned handover, diagnostics, retention, key provisioning
-  and rotation, deployment qualification and production activation remain open;
-  see [the requirements and deliberate limits](backlog/venue-registration.md).
+  and rotation, deployment qualification and production activation remain open.
+  Qualify continuous writer withdrawal/rebinding together with the pairing continuous
+  restart journey; production replacement setup, box self-service and the A1018
+  retirement adapter remain separate. See [the requirements and deliberate limits](backlog/venue-registration.md).
 - **Provisioning and placement.** The owner approved the
   [production deployment design](superpowers/specs/2026-10-22-cloud-production-deployment-design.md)
   for local building and rehearsal. D110's
