@@ -26,7 +26,7 @@ export function installationScreen(app:PortalApp){
       ${i.services.map(s=>html`<dt>${labels[s.service]}</dt><dd>${states[s.state]} · ${health[!i.revokedAt&&s.observedAt&&Date.parse(s.observedAt)>Date.now()-300000?s.health:'unknown']}</dd>`)}</dl>
     ${i.overview?html`<dl><dt>${c.latestSnapshot}</dt><dd>${i.overview.latestSnapshotAt?date(i.overview.latestSnapshotAt):c.noSnapshot}</dd><dt>${c.verifiedSnapshot}</dt><dd>${i.overview.verifiedSnapshotAt?date(i.overview.verifiedSnapshotAt):c.noVerifiedSnapshot}</dd></dl>
       ${i.overview.verifiedSnapshotAt&&Date.parse(i.overview.verifiedSnapshotAt)<Date.now()-172800000?html`<p>${c.snapshotOld}</p>`:nothing}`:nothing}
-    ${i.canRevoke&&!i.revokedAt?remoteScreen(app,i.installationId):nothing}
+    ${i.canRevoke?remoteScreen(app,i.installationId):nothing}
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
     ${i.canRevoke?translationConsentScreen(app,i.venueId,i===controller.visible.find(venue=>venue.canRevoke)):nothing}

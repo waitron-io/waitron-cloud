@@ -382,14 +382,26 @@ until another publish; allowing sharing does not restore deleted pages.
 
 To start the reader alongside your account process, provide `GUEST_ORIGIN`,
 `GUEST_TLS_KEY_FILE` and `GUEST_TLS_CERT_FILE` in your local environment, then run
-`pnpm account:serve`. Use an HTTPS origin distinct from `CLOUD_PORTAL_ORIGIN` and a
-certificate from your local certificate authority. The key and certificate stay
-outside Git. `GUEST_HTTP_HOST` defaults to `127.0.0.1`; `GUEST_HTTP_PORT` defaults to
-3443. The public origin determines the accepted Host header independently of the
-listener's local port. Supplying only part of the configuration refuses startup.
+`pnpm account:serve`. Use an HTTPS origin distinct from `CLOUD_PORTAL_ORIGIN`, such as
+`https://menus.example.test:3443`, and a certificate from your local certificate
+authority. The key and certificate stay outside Git. `GUEST_HTTP_HOST` defaults to `127.0.0.1`; `GUEST_HTTP_PORT` defaults to
+3443. Include the exposed port in `GUEST_ORIGIN` unless you have a separate listener
+on port 443. The origin determines the accepted Host header; a browser opening
+port 3443 sends that port in its Host header. Supplying only part of the
+configuration refuses startup.
 
-For Compose, place your certificate files in the existing `/run/local-stack`
-volume and set those two paths plus `GUEST_ORIGIN` in the stack environment. The
+For Compose, copy your files through the bootstrap service, which has write access
+to the existing private configuration volume. These commands stream the files into
+one-off containers; they do not put a private key in the image or repository:
+
+```sh
+docker compose --env-file deploy/local-stack/local.env run --rm --no-deps -T --entrypoint sh bootstrap -c 'umask 077; cat > /run/local-stack/guest-key.pem' < /absolute/path/menu-key.pem
+docker compose --env-file deploy/local-stack/local.env run --rm --no-deps -T --entrypoint sh bootstrap -c 'umask 077; cat > /run/local-stack/guest-cert.pem' < /absolute/path/menu-cert.pem
+```
+
+Export `GUEST_TLS_KEY_FILE=/run/local-stack/guest-key.pem`,
+`GUEST_TLS_CERT_FILE=/run/local-stack/guest-cert.pem` and
+`GUEST_ORIGIN=https://menus.example.test:3443` in the stack environment. The
 account container listens on port 3443. Add the optional loopback port mapping
 when you upgrade your existing local stack:
 

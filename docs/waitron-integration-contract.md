@@ -2445,7 +2445,8 @@ The [guest-menu contract](superpowers/plans/2026-11-14-a670-cloud-guest-menu.md)
 separates stored public pages from live ordering. Its local reader serves
 `GUEST_ORIGIN/m/<venueUuid>` with optional `lang=en|es|ca|gl`, choosing the stored
 default when a supported translation is absent. GET and HEAD require the exact
-guest host; extra paths, query fields, request bodies and upgrades are refused.
+guest host; extra paths, duplicate or unsupported `lang`, request bodies and
+upgrades are refused. Unknown query parameters are ignored.
 HTML is limited to 2 MiB and sent with `no-store` and a content policy that denies
 scripts, external assets, forms and framing, while allowing inline styles.
 
@@ -2454,9 +2455,12 @@ They return `{venueId,version,url,revision,state,publication}` using the planned
 version-1 confirmation shape. Takedown commits `blocked` and removes the pages;
 Enable changes a blocked row to `off`. Both are idempotent. The reader rechecks the
 stored revision before releasing buffered HTML; bytes already sent cannot be
-recalled. It admits at most eight requests and two database passes, with no waiting
-queue, and applies the existing database-backed rate limiter at 120 requests per
-source per minute. Capacity refusal is 503, rate refusal 429.
+recalled. It admits at most eight active requests and shares the existing bounded
+account connection pool. Database work may wait for that pool. The existing
+database-backed rate limiter permits 120 requests per source per minute, using
+the same configured trusted-proxy address rules as the account server. Capacity refusal is 503, rate refusal 429. Browser refusals at 404/429/503
+show short EN/ES pages; 503 includes `Retry-After: 1`. Revoking an installation
+does not remove the stored copy; the owner can still reach takedown in the portal.
 
 `packages/account-http/test/guest-menu-runtime.test.ts` exercises the separate TLS
 listener; `guest-menu-server.test.ts` exercises the HTML, limits and delayed-takedown
