@@ -76,11 +76,12 @@ test('the exact bounded UTF-8 publication body must match its signed fingerprint
   const body=f.text(),fingerprint={version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)};
   for(const [signed,raw,want] of [
    [fingerprint,body+' ',/forbidden/],
+   [fingerprint,body.replace('Menú','Café'),/forbidden/],
    [{...fingerprint,bodyBytes:fingerprint.bodyBytes+1},body,/forbidden/],
    [{...fingerprint,expectedRevision:-1},body,/invalid_input/],
    [fingerprint,'\ud800',/forbidden/],
   ] as const)await assert.rejects(f.machine.execute('guest-menu-publish',f.proof('guest-menu-publish',signed),raw),want);
-  for(const value of [{defaultLanguage:'fr',pages:{fr:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},
+  for(const value of [{defaultLanguage:'fr',pages:{fr:'menu'}},{defaultLanguage:'es',pages:{en:'menu'}},{defaultLanguage:'en',pages:{en:5}},{defaultLanguage:'en',pages:{en:'menu\u0000text'}},{defaultLanguage:'en',pages:{en:'\ud800'}},
    {defaultLanguage:'en',pages:{en:'menu',fr:'menu'}},{defaultLanguage:'en',pages:{en:'menu'},venueId:f.box.venueId}])await assert.rejects(f.publish(JSON.stringify(value)),/invalid_input/);
   const overhead=Buffer.byteLength(f.text('')),exact=f.text('x'.repeat(2097152-overhead));assert.equal(Buffer.byteLength(exact),2097152);
   assert.equal((await f.publish(exact)).state,'current');

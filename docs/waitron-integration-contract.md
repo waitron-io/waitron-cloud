@@ -2475,7 +2475,8 @@ JSON string `{defaultLanguage,pages}`, where `pages` maps supported languages to
 self-contained public HTML. The signed body is
 `{version:1,expectedRevision,bodySha256,bodyBytes}`. Hash the exact bytes, including
 whitespace. The body limit is 2 MiB; outer JSON has a 12 MiB + 16 KiB limit to allow
-escaping. Publish has its own one-request slot and a 60-second read limit, leaving
+escaping. Publish has four request slots, at most one per canonical client IP, and a
+60-second read limit, leaving
 the eight general slots available. Encoded path aliases use the same admission.
 
 POST `/api/installations/guest-menu-status` and `/guest-menu-withdraw` use their

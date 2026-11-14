@@ -14,10 +14,12 @@
 
 ## Build in independently useful slices, each within three hours
 
-1. **Delivery and confirmation:** new `packages/remote-access/src/guest-menu.ts`, export, account `src/{guest-menu,app,server}.ts`, appended registration migration and `src/migrate.ts`, contract pins/lockfile. Publish uses a separate one-request slot and one per IP, 60-second bounded read, leaving eight general slots; server admission covers encoded aliases. Tests: each package's `test/guest-menu.test.ts` owns state/replay/isolation and HTTP/body bounds respectively. Forecast +200–280 code, +180–240 tests; support 0.
+1. **Delivery and confirmation:** new `packages/remote-access/src/guest-menu.ts`, export, account `src/{guest-menu,app,server}.ts`, appended registration migration and `src/migrate.ts`, contract pins/lockfile. Publish uses four separate request slots and at most one per canonical client IP, 60-second bounded read, leaving eight general slots; server admission covers encoded aliases. Tests: each package's `test/guest-menu.test.ts` owns state/replay/isolation and HTTP/body bounds respectively. Forecast +200–280 code, +180–240 tests; support 0.
 2. **Hosted link and takedown:** new account `src/guest-menu-server.ts`, local-stack runtime wiring; `apps/portal/src/remote-{controller,screen,types}.ts`/`locale.ts`. Guest listener: 120 requests/minute per source, eight active requests sharing the existing bounded account connection pool; saturation 429/503. The watcher’s 14 November 02:33 correction removes the two-operation counter and zero-wait promise; no new pool or account toggle limit. Tests: account `test/guest-menu-server.test.ts`, portal `test/guest-menu-browser.test.ts`, including delayed-response takedown. +200–280 code, +160–220 tests, +30–50 support.
 
-Update `docs/{waitron-integration-contract,backlog,local-deployment}.md` when built. Total forecast: +400–560 code, +340–460 tests, +30–50 support, 0–30 removed lines. Waitron slice 3 owns delivery retry and scheduled-publication checks.
+Update `docs/{waitron-integration-contract,backlog,local-deployment}.md` when built. The watcher cleared four publish slots instead of one on 14 November at 05:15, after one run-it reader reproduced a single unsigned request blocking every publisher. The eight general slots and 60-second read limit stay.
+
+Total forecast: +400–560 code, +340–460 tests, +30–50 support, 0–30 removed lines. Waitron slice 3 owns delivery retry and scheduled-publication checks.
 
 Run named database files with `node scripts/test-postgres.mjs exec pnpm --dir packages/<package> exec node --test test/<file>`, the portal browser file, types and migration checks; CI owns full suites. Inspect EN/ES, both themes, 390/1280. Local proof uses synthetic publications; production/mobile-phone access stays unqualified. Each slice follows finish-branch.
 

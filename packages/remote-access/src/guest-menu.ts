@@ -49,7 +49,7 @@ function publication(signed:string,body:string|undefined){
  if(!object(menu,['defaultLanguage','pages'])||typeof menu.defaultLanguage!=='string'||!languages.includes(menu.defaultLanguage)
   ||!menu.pages||typeof menu.pages!=='object'||Array.isArray(menu.pages))return fail('invalid_input');
  const pages=menu.pages as Record<string,unknown>;
- if(typeof pages[menu.defaultLanguage]!=='string'||Object.entries(pages).some(([lang,html])=>!languages.includes(lang)||typeof html!=='string'))return fail('invalid_input');
+ if(typeof pages[menu.defaultLanguage]!=='string'||Object.entries(pages).some(([lang,html])=>!languages.includes(lang)||typeof html!=='string'||!(html as string&{isWellFormed():boolean}).isWellFormed()||html.includes('\u0000')))return fail('invalid_input');
  return {revision:Number(value.expectedRevision),digest:value.bodySha256,defaultLanguage:menu.defaultLanguage,pages};
 }
 export class GuestMenuMachine {
