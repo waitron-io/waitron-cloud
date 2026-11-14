@@ -220,7 +220,10 @@ read-only status script. Set `peerAddresses` to the explicit IPv4 addresses of
 both new hosts and the retired CI host. These addresses join each guest's existing
 own-host/private-address refusal; external IPv6 remains refused.
 
-After landing, install and qualify the hosts while the old controller still serves:
+Before installing either a host recipe or a controller, follow the hosted-routing
+preflight in [Run the controller from the CI server](#run-the-controller-from-the-ci-server).
+Keep that window open through the native qualification checks. After landing, install
+and qualify the hosts while the old controller remains running:
 
 ```sh
 node scripts/disposable-tests/publish.mjs hosts /PRIVATE/publication.json
@@ -271,8 +274,25 @@ Use the same private publication manifest and add `controllerHost`, an absent
 `serverRelease` such as `/opt/waitron-disposable-controller-REVIEWED_SHA`, and a fresh
 `serverState` under `/var/lib/waitron-disposable-controller/states/`. Choose a new
 `configuration.hostGeneration`. Keep the already qualified host recipe and mapping.
-Publish from the landed source in a quiet-queue window. If lanes have CI work queued,
-postpone publication rather than starting a long serial drain. Then run:
+Publish from the landed source in a coordinated window. Before waiting for an empty
+server queue, save the existing routing mode and send new placements to GitHub:
+
+```sh
+previous_ci_mode=$(gh variable get DISPOSABLE_TESTS_MODE --repo clintongormley/waitron)
+gh variable set DISPOSABLE_TESTS_MODE --repo clintongormley/waitron --body hosted
+gh variable get DISPOSABLE_TESTS_MODE --repo clintongormley/waitron
+```
+
+Require the readback to say `hosted`. Let already server-labelled work finish before
+taking the exclusive publication locks; do not stop or move it. Keep hosted routing
+through host installation, controller replacement and the guest-tools, local-runtime
+and cancellation proofs. Those proofs run outside the publisher commands, so a switch
+inside either command alone would leave part of the window uncovered. A quiet queue
+before publication does not prevent new server-labelled work arriving while the locks
+are held. The three native proofs in the 14 November contract update took about
+320 seconds in total, longer than the health check's five-minute no-progress limit.
+
+Run the server replacement inside that window:
 
 ```sh
 node scripts/disposable-tests/publish.mjs server /PRIVATE/publication.json
@@ -294,6 +314,19 @@ take effect when the published release is used for a later update. On activation
 it attempts to drain the replacement before restoring the previous code under a fresh
 release, state and generation. A refused replacement drain stops publication before
 caller paths change. Keep the installed receipt for the next publication.
+
+Run the guest-tools, local-runtime and cancellation proofs against the installed release.
+Once the installed release and native proofs pass, release the exclusive locks, verify
+the pool is usable, then restore and read back the saved mode:
+
+```sh
+gh variable set DISPOSABLE_TESTS_MODE --repo clintongormley/waitron --body "$previous_ci_mode"
+gh variable get DISPOSABLE_TESTS_MODE --repo clintongormley/waitron
+```
+
+If publication or qualification fails, keep new placements hosted until the installed
+release or its recovery is qualified. Preserve concurrent per-run hosted-attempt markers
+and other routing settings. The publisher does not perform this mode switch for you.
 
 The manual helper still verifies your local checkout. A confirmed full remote pool refuses before capture; unknown status leaves admission
 to NEW. Upload reception holds no slot;
