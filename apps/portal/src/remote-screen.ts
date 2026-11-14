@@ -4,9 +4,9 @@ import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {PortalApp} from './app.ts';
 import {remoteReady,type RemoteKind,type ForwardCause} from './remote-types.ts';
 const forwardCopy:Record<ForwardCause,'forwardNon200'|'forwardTimeout'|'forwardLimit'|'forwardTransport'|'forwardInternal'>={upstream_non_200:'forwardNon200',upstream_timeout:'forwardTimeout',upstream_response_limit:'forwardLimit',upstream_transport:'forwardTransport',forward_internal:'forwardInternal'};
-export function remoteScreen(app:PortalApp,id:string){
+export function remoteScreen(app:PortalApp,id:string,revoked=false){
  const c=app.copy,r=app.remote;
- if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
+ if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${revoked?c.guestMenuTitle:c.remoteSetup}</wt-button>`;
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
