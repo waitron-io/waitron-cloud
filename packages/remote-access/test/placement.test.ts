@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID,randomBytes,generateKeyPairSync} from 'node:crypto';
 import {before,after,test} from 'node:test';
-import {SignupStore,RegistrationStore} from '@waitron-cloud/registration';
+import {SignupStore,RegistrationStore,advancePlanConfiguration,transaction} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {crypto} from 'acme-client';
 import {RemoteAccessStore} from '../src/placement.ts';
@@ -68,6 +68,8 @@ test('replacement reclaims its venue route with a new peer, retaining address an
  assert.deepEqual((await store.manifest(cell)).routes.map(r=>r.installationId),[current.installationId]);
  assert.equal((await db.pool.query('SELECT next_address FROM remote_cells WHERE id=$1',[cell])).rows[0].next_address,3);
  await assert.rejects(store.provision(old.installationId,cell,oldPeer),/revoked/);
+ await transaction(db.pool,client=>advancePlanConfiguration(client,owner.organisationId,true));
+ await store.provision(current.installationId,cell,peer);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[current.installationId]);
  const next={...input,operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:old.venueId};
  await registration.start(next);await registration.approveCloud(next,owner.accountId);await registration.approveLocal(next,randomUUID());const later=await registration.complete(next);

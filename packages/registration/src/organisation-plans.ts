@@ -103,11 +103,14 @@ export async function readVenuePlan(client: PoolClient, venueId: string, mode: P
 export async function advancePlanConfiguration(client: PoolClient, organisationId: string, downgrade: boolean): Promise<void> {
   const exclusion = await venueServiceAuthorityInstalled(client)
     ? ' AND NOT EXISTS (SELECT 1 FROM billing_service_authority a WHERE (a.organisation_id,a.legal_business_id,a.venue_id)=(v.organisation_id,v.legal_business_id,v.id))' : '';
-  const rows = (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id
+  const rows = (await client.query(`SELECT i.id,i.revoked_at FROM installations i JOIN venues v ON v.id=i.venue_id
     WHERE v.organisation_id=$1${exclusion} ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
   for (const row of rows) {
     await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1', [row.id]);
-    if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration='{}'
-      WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')`, [row.id]);
+    // Retired public tunnel keys must remain refused when a later box reclaims the route.
+    if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration=CASE
+      WHEN $2::boolean AND service='remote_access' AND configuration ? 'peerPublicKey'
+      THEN jsonb_build_object('peerPublicKey',configuration->'peerPublicKey') ELSE '{}'::jsonb END
+      WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')`, [row.id,row.revoked_at!==null]);
   }
 }

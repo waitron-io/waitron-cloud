@@ -25,10 +25,14 @@ function requireAdvance(row:Authority):void{
  if(Number(row.revision)>=maxRevision)throw new BillingError('billing_state_conflict');
 }
 async function installations(client:PoolClient,venueId:string,clear:boolean):Promise<void>{
- const rows=(await client.query('SELECT id FROM installations WHERE venue_id=$1 ORDER BY id FOR UPDATE',[venueId])).rows;
- for(const {id} of rows){
+ const rows=(await client.query('SELECT id,revoked_at FROM installations WHERE venue_id=$1 ORDER BY id FOR UPDATE',[venueId])).rows;
+ for(const {id,revoked_at} of rows){
   await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);
-  if(clear)await client.query("UPDATE installation_services SET state='unconfigured',configuration='{}' WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')",[id]);
+  // Keep only retired public tunnel keys so replacements cannot reuse them.
+  if(clear)await client.query(`UPDATE installation_services SET state='unconfigured',configuration=CASE
+   WHEN $2::boolean AND service='remote_access' AND configuration ? 'peerPublicKey'
+   THEN jsonb_build_object('peerPublicKey',configuration->'peerPublicKey') ELSE '{}'::jsonb END
+   WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots','remote_access')`,[id,revoked_at!==null]);
  }
 }
 async function save(client:PoolClient,scope:BillingScope,venueId:string,row:Authority|undefined,current:Facts,day:string,advance:boolean,expired:boolean):Promise<number>{
