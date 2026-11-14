@@ -151,7 +151,7 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
           'run', '--rm', '--name', container, '--label', `io.waitron.aws-inspection=${container}`,
           '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--user', '65532:65532',
           '--security-opt', 'no-new-privileges', '--read-only',
-          '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m,mode=1777', '--pids-limit', '128', '--memory', '1g', '--cpus', '2',
+          '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m,mode=1777', '--pids-limit', '128', '--memory', '4g', '--cpus', '2',
           '--mount', `type=bind,source=${scratch},target=/candidate,readonly`,
           image, 'python', '-I', '/candidate/run.py',
         ], { ...options, timeout: 300_000 });

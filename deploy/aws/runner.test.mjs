@@ -87,7 +87,7 @@ test('suite inspects and executes one immutable tracked candidate with no ambien
     }
     assert.ok(args.includes('--read-only'));
     const driver = args.at(-1) === '/candidate/run.py';
-    for (const [flag, value] of [['--memory', driver ? '1g' : '256m'], ['--cpus', driver ? '2' : '1'], ['--pids-limit', driver ? '128' : '64']]) {
+    for (const [flag, value] of [['--memory', driver ? '4g' : '256m'], ['--cpus', driver ? '2' : '1'], ['--pids-limit', driver ? '128' : '64']]) {
       assert.equal(args[args.indexOf(flag) + 1], value, flag);
     }
     assert.match(args[args.indexOf('--mount') + 1], /target=\/candidate,readonly$/);

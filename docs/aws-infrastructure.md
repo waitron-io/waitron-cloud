@@ -103,7 +103,7 @@ in a fresh temporary filesystem inside the container. OpenTofu receives a closed
 environment settings, including the mirror configuration and empty AWS configuration and
 credential paths, so ambient command flags cannot change initialization. A failed command
 stops the suite. Each command has a 90-second deadline; each suite container has a
-five-minute deadline and limits of 1 GiB memory, two CPUs, 128 processes and 512 MiB of
+five-minute deadline and limits of 4 GiB memory, two CPUs, 128 processes and 512 MiB of
 temporary storage. The source inspector has its separate smaller limits.
 
 The integration suite runs the global root and country root in separate containers.
@@ -123,8 +123,9 @@ The runner also restricts each child to at most two CPU cores, because a CPU
 quota alone leaves the host's larger core count visible to runtime worker pools.
 Suites with more than six independent plan cases run in groups of at most six,
 each in a fresh OpenTofu process. Expected-refusal plans can retain provider
-processes until OpenTofu exits; grouping releases them within the existing
-process and memory limits. Every group keeps the original shared mocks and
+processes until OpenTofu exits. The 4 GiB suite cap allows these retained
+providers to coexist; grouping releases them between batches while preserving
+the process limit. Every group keeps the original shared mocks and
 variables, must report every selected case passing, and stops the suite on a
 failure or incomplete count. The runner restores the original temporary test
 file and prints a clearly labelled aggregate only after all groups pass. Keep

@@ -697,7 +697,12 @@ order. Remote access matters most because Waitron's customer-facing features wai
    the unchanged handoff schema. Integration checks run each independent root in its
    own container under the original command and container deadlines. CI separates
    three guard-test shards from the full plan and formatting checks, keeping every
-   test file and the original job limits. These are mocked
+   test file and the original job limits. The historical database provider
+   startup failure in nightly 43495535547 (no initial plugin response) still
+   needs its cause established; passing later runs does not explain it.
+   Bring AWS jobs towards the four-minute feedback target without cutting checks.
+   Baseline run 43637939520 took 6:24 / 11:39 / 10:13 for the three guard shards
+   and 18:50 for the complete suites. These are mocked
    plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
