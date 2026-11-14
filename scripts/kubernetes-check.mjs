@@ -284,6 +284,17 @@ try {
         process.stderr.write('Kubernetes failure ' + resource + ' ' + output.slice(-16384) + '\n');
       } catch {}
     }
+    try {
+      const value=JSON.parse(await kube(['get','pod/cloud','-o','json','--request-timeout=5s'],undefined,probeFailure));
+      const storage=value.status?.containerStatuses?.find(row=>row.name==='storage');
+      const state=value=>value?.terminated?{exitCode:value.terminated.exitCode,signal:value.terminated.signal??null,reason:['Completed','Error','OOMKilled','ContainerCannotRun','StartError'].includes(value.terminated.reason)?value.terminated.reason:'OTHER'}:value?.running?{running:true}:{waitingReason:value?.waiting?.reason==='CrashLoopBackOff'?'CrashLoopBackOff':'OTHER'};
+      process.stderr.write('Kubernetes failure storage-state '+JSON.stringify({node:value.spec?.nodeName??null,restarts:storage?.restartCount??null,current:state(storage?.state),previous:state(storage?.lastState)})+'\n');
+    } catch {}
+    try {
+      const source='const fs=require("node:fs/promises"),crypto=require("node:crypto"),p="/run/local-stack/storage-authority/.controller.lock";Promise.all([fs.stat(p),fs.readFile(p)]).then(([s,v])=>console.log(JSON.stringify({ageMs:Math.max(0,Date.now()-s.mtimeMs),ownerSha256:crypto.createHash("sha256").update(v).digest("hex")}))).catch(e=>console.log(JSON.stringify({errorCode:/^[A-Z0-9_]{1,64}$/.test(e.code??"")?e.code:null})));';
+      const output=await kube(['exec','pod/cloud','-c','account','--request-timeout=5s','--','node','-e',source],undefined,probeFailure);
+      process.stderr.write('Kubernetes failure storage-lease '+output.slice(-1024)+'\n');
+    } catch {}
     for (const previous of [false, true]) {
       try {
         const output = await kube(['logs', 'pod/cloud', '-c', 'storage', '--tail=100', '--limit-bytes=16384', '--request-timeout=5s', ...(previous ? ['--previous'] : [])], undefined, probeFailure);

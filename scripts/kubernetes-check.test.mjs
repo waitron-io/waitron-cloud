@@ -101,6 +101,7 @@ async function commandFixture(t, mode) {
     }
     await rm(directory, {recursive: true, force: true});
   });
+  await writeFile(join(directory,'controller-lease'),'synthetic-controller-owner',{mode:0o600});
   const source = `#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]);
 const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.appendFileSync(log,JSON.stringify(row)+'\\n');
@@ -119,6 +120,8 @@ if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
  if(b[0]==='wait'&&((mode.startsWith('wait-cloud')&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
+ if(b[0]==='get'&&b[1]==='pod/cloud'){console.log(JSON.stringify({spec:{nodeName:'control-plane'},status:{containerStatuses:[{name:'storage',restartCount:2,state:{waiting:{reason:'CrashLoopBackOff',message:'PRIVATE_STATE_CANARY'}},lastState:{terminated:{exitCode:1,signal:0,reason:'Error',message:'PRIVATE_STATE_CANARY'}}}]}}));process.exit(0);}
+ if(b[0]==='exec'&&b.some(arg=>arg.includes('/run/local-stack/storage-authority/.controller.lock'))){const source=b[b.indexOf('-e')+1].replace('/run/local-stack/storage-authority/.controller.lock',${JSON.stringify(join(directory,'controller-lease'))});process.stdout.write(require('node:child_process').execFileSync(process.execPath,['-e',source]));process.exit(0);}
  if(b[0]==='get'&&b[1]==='events'){console.log('x'.repeat(20000)+'cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
  if(b[0]==='get'&&b[1]==='nodes'){console.log('worker2 NotReady');process.exit(0);}
  if(b[0]==='logs'&&b[1]==='pod/cloud'&&b.includes('storage')){console.log('x'.repeat(20000)+(b.includes('--previous')?'previous storage exit':'current storage startup'));process.exit(0);}
@@ -182,6 +185,12 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
     assert.equal(output.slice(('Kubernetes failure ' + label + ' ').length).length, 16384);
     assert.ok(output.endsWith(ending));
   }
+  const leaseLine=run.stderr.split('\n').find(line=>line.startsWith('Kubernetes failure storage-lease '));assert.ok(leaseLine,run.stderr);
+  const lease=JSON.parse(leaseLine.slice('Kubernetes failure storage-lease '.length));
+  assert.ok(lease.ageMs>=0&&lease.ageMs<10000);assert.equal(lease.ownerSha256,'fc32d28fa018a30be7a92c4e6162b5a1467cea5e7a15a4eae339d18f7aa0890d');
+  const stateLine=run.stderr.split('\n').find(line=>line.startsWith('Kubernetes failure storage-state '));assert.ok(stateLine,run.stderr);
+  assert.deepEqual(JSON.parse(stateLine.slice('Kubernetes failure storage-state '.length)),{node:'control-plane',restarts:2,current:{waitingReason:'CrashLoopBackOff'},previous:{exitCode:1,signal:0,reason:'Error'}});
+  assert.equal(run.stderr.includes('PRIVATE_STATE_CANARY'),false);assert.equal(run.stderr.includes('synthetic-controller-owner'),false);
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
   for (const previous of [false, true]) assert.ok(rows.some(row => row.name === 'kubectl'
     && JSON.stringify(row.args.slice(4)) === JSON.stringify(['logs', 'pod/cloud', '-c', 'storage', '--tail=100', '--limit-bytes=16384', '--request-timeout=5s', ...(previous ? ['--previous'] : [])])));

@@ -3264,7 +3264,10 @@ implementation or production evidence.
   application pods and events on Amazon as well as Kind. Storage startup failures
   retain fixed stage/error codes and provider exit codes or signals;
   `node --test deploy/test-cloud/storage-worker-diagnostics.test.mjs` checks those
-  refusals without printing private configuration. The controlled checks
+  refusals without printing private configuration and checks that a replacement waits
+  for a killed owner’s lease to expire while refusing a live owner. Failure snapshots
+  retain only the controller lease’s age/digest and the storage termination state.
+  The controlled checks
   run with `node --test scripts/kubernetes-check.test.mjs`. The fifth run's pods
   never started because Debian's containerd looked for network plugins in
   `/usr/lib/cni`; machine set-up now points it at `/opt/cni/bin` and refuses at once

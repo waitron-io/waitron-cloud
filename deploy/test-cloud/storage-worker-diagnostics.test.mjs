@@ -36,3 +36,26 @@ test('storage bootstrap refusal retains only stage and a fixed error code',{time
  assert.deepEqual(JSON.parse(diagnostic.slice('storage_failure='.length)),{stage:'bootstrap',code:'local_stack.configuration_invalid',child:null});
  assert.equal(failure.stderr.includes('PRIVATE_CONFIGURATION_CANARY'),false);
 });
+
+// The replacement must wait out its killed predecessor's heartbeat instead of refusing the restart.
+test('an immediate storage restart waits for its killed owner lease before starting the provider',{timeout:15000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'storage-restart-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const env={...process.env,LOCAL_STACK_CONFIG_DIR:directory,CLOUD_TEST_SERVICE_PLANS:'1'};delete env.NODE_TEST_CONTEXT;
+ const injection=action=>`import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+ const real=cp.spawn;cp.spawn=(binary,args,options)=>{if(binary==='weed'){${action}}return real(binary,args,options);};syncBuiltinESMExports();`;
+ const first=await execute(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(injection('process.kill(process.pid,"SIGKILL");')),worker],{env,timeout:12000}).catch(error=>error);
+ assert.equal(first.signal,'SIGKILL',first.stderr);
+ const restarted=await execute(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(injection('process.exit(73);')),worker],{env,timeout:12000}).catch(error=>error);
+ assert.equal(restarted.code,73,'replacement must reach the provider after the old lease expires: '+restarted.stderr);
+});
+
+test('storage restart refuses a live controller after a bounded wait without taking its lease',{timeout:12000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'storage-live-owner-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const {bootstrapStorageIssuer}=await import('./storage-issuer.mjs'),{claimLease}=await import('../local-stack/lease.mjs');
+ await bootstrapStorageIssuer(directory);const held=await claimLease(join(directory,'storage-authority/.controller.lock'));t.after(()=>held.release());
+ const env={...process.env,LOCAL_STACK_CONFIG_DIR:directory,CLOUD_TEST_SERVICE_PLANS:'1'};delete env.NODE_TEST_CONTEXT;
+ const started=performance.now(),failure=await execute(process.execPath,[worker],{env,timeout:9000}).catch(error=>error);
+ assert.equal(failure.code,1,failure.stderr);assert.ok(performance.now()-started>=4000,'replacement must allow its bounded lease wait');
+ assert.match(failure.stderr,/"stage":"controller-lease","code":"test_cloud.storage_busy"/);
+ await held.assertOwned();
+});
