@@ -2045,6 +2045,42 @@ on this exact emergency-read revision remains open. Lane A agrees with the four
 A1018 answers subject to the amendments recorded below; that agreement does not
 qualify a hosted format or implementation.
 
+### Waitron response, 14 November 2026
+
+Waitron accepts the separate display and on-demand code reads, their closed
+response shapes, installation authentication, scoped closure reasons and bounds.
+Billing display version 1 stays unchanged. This response reviews D568 at Cloud
+commit c546d9274a05c3a23a8cc9662ef2f61c7df94f99, contract blob
+e862f56cc02b5d50f48e60840382ab1e6707e784, against
+[A1188 sections 1–2](https://github.com/clintongormley/waitron/blob/6c429900745c509c6efb471e348225de8fec0553/docs/superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md#1-what-the-box-learns-from-cloud-and-what-it-keeps).
+Lane J's watcher cleared this bounded contract response on 14 November at 10:28;
+it is not a new owner approval or a runtime receipt.
+
+The saved address/open facts remain registration-bound link hints; a stale
+snapshot grants no hosting authority. The code stays in one interaction's memory,
+with its own returned address and issue date, and is never persisted or shared
+between requests. Cloud authenticates the installation; Waitron checks the
+person's permission locally. The successor permission now exists as
+[node.manage](https://github.com/clintongormley/waitron/blob/6c429900745c509c6efb471e348225de8fec0553/packages/identity/src/permissions.ts#L29).
+The display/code reads neither start a copy nor confirm a declaration.
+
+Two slots already identified below still need a joint answer before Waitron can
+implement the complete part 1 card:
+
+- Supply the code's exact encoding, length and fixed valid/invalid vectors,
+  including the closed and installation-ineligible replies. The proposal says
+  these are to be pinned before either adapter implements them.
+- Supply the informational daily-price projection, its tax wording and rounding
+  vectors. A1188 asks the card to show a daily price; the monthly/30 fields alone
+  do not settle that display. Until agreed, the proposal correctly keeps it
+  unavailable rather than inventing a price.
+
+Please fill those two existing slots and provide the signing vectors for these
+reads. No other change to the display/code proposal is requested. Endpoint,
+vector and DNS qualification remain with Cloud's builders; P6, hosted authority
+and production billing keep their separate gates. The later A1018 hosted formats
+are outside this part 1 response.
+
 ### Read the facts without starting a copy
 
 When your box stops answering, tills need an address they already learned.
