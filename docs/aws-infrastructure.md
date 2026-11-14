@@ -1131,3 +1131,55 @@ spending authority:
 
 D110 closes only after that run passes. D621 owns the remaining speed targets,
 database-host loss and production-mode checks. No production service is deployed.
+
+
+### Observe the same clients while C is stopped
+
+To measure recovery without replacing the clients between journeys, use
+`node scripts/amazon-run.mjs observe` in your owner-started session, with the
+same private configuration and prerequisites above. It keeps the signed-in
+session, venue process, staff certificate and routed peer through C's existing
+graceful stop and assisted replacement. The public-page browser check renews
+its five-minute cookie before expiry. Local behavior checks run with
+`node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`;
+this command has not yet qualified an Amazon observation.
+
+The observer starts only with an hour remaining before scheduled deletion,
+and limits baseline work, including target transfer, to 20 minutes so at least
+40 minutes remain before the fault. It records
+request failures, recovery times and longest gaps on A's clock, confirms at least
+900 seconds after EC2 reports C stopped, and completes another genuine backup
+verification before the existing withdrawal checks and cleanup. Stop and replacement
+durations are separate launcher measurements. Keep the private JSON result and
+bounded diagnostics; failure still requests deletion and confirms it.
+
+The opt-in three-node local reproducer is not a qualified check; no further full
+local run is planned. It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
+Use the same pinned Cloud and Waitron image variables as the other local checks,
+Kind 0.31.0 and kubectl 1.34.3. Allow 10 GiB of Docker memory and 30 GiB of disk.
+The corresponding opt-in assertion is
+`TEST_KUBERNETES_OBSERVER_LOSS=1 node --test --test-name-pattern='same signed-in clients' scripts/kubernetes-worker-loss.test.mjs`.
+This local check kills worker2 and retains the same clients. Full local P1
+qualification has **not passed**: the last run failed at the paid-remote fixture
+with HTTP 500 after worker replacement. On 14 November the owner chose to stop
+full local runs and move the remaining checks to the owner-started Amazon
+session (decision relayed by the watcher at 21:03). Amazon uses its existing
+graceful C stop; a local result does not qualify Amazon timing.
+
+Storage has an 800 MiB limit. The failed 14 November local run recorded a peak
+of 544,772,096 bytes (519.54 MiB), with no storage restart or memory events in
+213 samples under the 1 GiB trial limit. Peak plus 50% is 779.30 MiB, rounded
+up to 800 MiB. This sizes the next experiment; it does not qualify the complete
+run or production capacity. The private measurement is retained in Lane G's
+`receipts/d621/build/memory-cell-20261114/memory.jsonl`. Check the configured
+limit with `node -e 'const m=JSON.parse(require("node:fs").readFileSync("deploy/kubernetes/local-checks.yaml")); console.log(m.items.find(i=>i.metadata.name==="cloud").spec.containers.find(c=>c.name==="storage").resources.limits.memory)'`;
+it prints `800Mi`.
+
+The manifest worker reports ready only after its test cell is committed, so
+remote provisioning cannot race that startup transaction. You can check the
+held-transaction case with `node scripts/test-postgres.mjs exec node --test --test-name-pattern='manifest readiness' deploy/test-cloud/remote-runtime.test.mjs`.
+
+Repository repair is reported as unavailable. Abrupt loss of each original node,
+including database host A, and production-mode services remain open under
+[D621](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md). This command
+changes no production deployment or provider permission.

@@ -88,3 +88,52 @@ test('two demo Waitron venues pair free and paid signup accounts through trusted
   const text = JSON.stringify(receipt);
   for (const forbidden of ['BEGIN PRIVATE', 'token=', 'password', 'privateKey', 'payload', 'signature', 'lease', 'csrf', 'code', 'cookie']) assert.equal(text.includes(forbidden), false, forbidden);
 });
+
+// Observation must preserve the original cookie and process through the final probe.
+test('retained-client adapter checks sign-in responses, identity and process without replacing the client', async () => {
+  const {observeRetainedClients} = await load(); assert.equal(typeof observeRetainedClients, 'function');
+  for (const scenario of ['healthy', 'cache refreshed', 'session lost', 'restarted', 'identity changed', 'stream changed']) {
+    let reads = 0, observed = false;
+    const evidence = {registration: {venueId: 'synthetic'}, identitySha256: 'a', stateSha256: 'b', streamId: 'stream'};
+    const run = observeRetainedClients({paid: {id: 'original-client'}, browser: {cookie: 'original-session'},
+      api: async (path, body, headers) => {
+        assert.equal(headers.cookie, 'original-session');
+        assert.equal(path, '/api/account/session'); return {status: scenario === 'session lost' ? 401 : 200};
+      }, login: async () => ({status: 200}), signup: async () => ({status: 201}),
+      backup: async () => ({restored: true}), remote: async () => {},
+      docker: async args => {assert.equal(args.at(-1), 'original-client'); return scenario === 'restarted' && observed ? 'later' : 'initial';},
+      control: async (id, action) => {assert.equal(id, 'original-client'); assert.equal(action, 'evidence'); reads++; return {...evidence, ...(observed && scenario === 'cache refreshed' ? {stateSha256: 'later-cache'} : {}), ...(observed && scenario === 'identity changed' ? {identitySha256: 'changed'} : {}), ...(observed && scenario === 'stream changed' ? {streamId: 'changed'} : {})};},
+      observe: async probes => {await probes.session(); await probes.login(); await probes.signup(); await probes.backup(); await probes.remote(); observed = true; return {offMs: 900000};}});
+    if (scenario === 'healthy' || scenario === 'cache refreshed') {assert.deepEqual(await run, {offMs: 900000}); assert.equal(reads, 2);}
+    else await assert.rejects(run, scenario === 'session lost' ? /p1.session/ : scenario === 'restarted' ? /p1.venue_restarted/ : scenario === 'stream changed' ? /p1.venue_state:streamId/ : /p1.venue_state:identitySha256/);
+  }
+});
+
+test('observer password sign-in completes its real email challenge and retains it across a mail wait', async () => {
+  const {createObserverLogin} = await load(); assert.equal(typeof createObserverLogin, 'function');
+  const requests = []; let reads = 0;
+  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic password', cookie: 'recognised',
+    mailbox: async () => ({messages: [{ID: 'old'}]}),
+    readMail: async (email, seen) => {assert.equal(email, 'owner@example.test'); assert.ok(seen.has('old')); if (++reads === 1) throw Error('mail delayed'); return {Text: 'Your Waitron Cloud verification code\n\n123456\n'};},
+    api: async (path, body, headers) => {
+      requests.push(path);
+      if (path === '/api/account/login') {assert.equal(headers.cookie, 'recognised'); return {status: 202, body: {emailRequired: true, challengeToken: 'private-challenge'}};}
+      assert.equal(path, '/api/account/login/email'); assert.deepEqual(body, {challengeToken: 'private-challenge', code: '123456'}); return {status: 200};
+    }});
+  await assert.rejects(login(), /mail delayed/);
+  assert.deepEqual(await login(), {status: 200});
+  assert.deepEqual(requests, ['/api/account/login', '/api/account/login/email']);
+});
+
+test('a lost email-code submission reply starts a fresh sign-in instead of replaying the used code', async () => {
+  const {createObserverLogin} = await load(); let starts = 0, submissions = 0;
+  const login = createObserverLogin({email: 'owner@example.test', password: 'synthetic', cookie: 'recognised',
+    mailbox: async () => ({messages: []}), readMail: async () => ({Text: '\n123456\n'}),
+    api: async (path, body) => {
+      if (path === '/api/account/login') return {status: 202, body: {emailRequired: true, challengeToken: 'challenge-' + ++starts}};
+      assert.equal(body.challengeToken, 'challenge-' + starts);
+      if (++submissions === 1) throw Error('reply lost'); return {status: starts === 2 ? 200 : 400};
+    }});
+  await assert.rejects(login(), /reply lost/);
+  assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
+});

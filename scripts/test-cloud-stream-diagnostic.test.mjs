@@ -1,6 +1,32 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as integration from './test-cloud-integration.mjs';
+import {mkdtemp, writeFile, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
+test('paid remote command failure retains bounded stderr and its exit status', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'paid-remote-command-'));
+  const originalPath = process.env.PATH;
+  try {
+    await writeFile(join(directory, 'docker'), `#!${process.execPath}
+process.stderr.write('discarded-prefix'+'x'.repeat(9000)+'\\nAssertionError: integration.paid_remote_certificate_binding\\n');
+process.exitCode=23;
+`, {mode: 0o700});
+    process.env.PATH = directory + ':' + originalPath;
+    assert.equal(typeof integration.integrationCommand, 'function');
+    await assert.rejects(integration.integrationCommand(['exec', 'synthetic-client'], '', 'client-paid-remote'), error => {
+      assert.match(error.message, /integration.command_failed:client-paid-remote/);
+      assert.equal(error.diagnostic.exitCode, 23);
+      assert.equal(error.diagnostic.signal, null);
+      assert.match(error.diagnostic.stderr, /AssertionError: integration.paid_remote_certificate_binding/);
+      assert.equal(error.diagnostic.stderr.length, 8192);
+      assert.equal(error.diagnostic.stderr.includes('discarded-prefix'), false);
+      assert.equal(error.diagnostic.stderrTruncated, true);
+      return true;
+    });
+  } finally {process.env.PATH = originalPath; await rm(directory, {recursive: true, force: true});}
+});
 
 test('private stream failures reveal only a named invariant',()=>{
   assert.equal(typeof integration.streamCommandDiagnostic,'function','Filtered stream diagnostics are missing');

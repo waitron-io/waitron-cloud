@@ -4,7 +4,7 @@ import {generateKeyPairSync,randomUUID,X509Certificate,createHash,createPublicKe
 import {mkdtemp,readFile,writeFile,rm,stat,chmod} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {database} from '../../packages/account-http/test/fixtures.ts';
 import {OrganisationPlanStore} from '../../packages/registration/src/organisation-plans.ts';
 import {RemoteAccessStore} from '../../packages/remote-access/src/placement.ts';
@@ -67,4 +67,39 @@ test('remote startup rejects private-key mismatch, bad permissions, corrupt sign
  const wireguardFile=join(directory,'gateway-wireguard.key'),wg=await readFile(wireguardFile);await writeFile(wireguardFile,'short');await assert.rejects(openTestRemoteRuntime(options),/test_cloud.remote_state_invalid/);await writeFile(wireguardFile,wg);
  await assert.rejects(openTestRemoteRuntime({...options,mode:'invalid',directory:'/not-read'}),/test_cloud.plan_mode/);
  assert.equal((await openTestRemoteRuntime(options)).cellId,(await loadRuntime(directory)).gateway.cellId);
+});
+
+// A running process has not necessarily committed the cell that paid provisioning needs.
+test('manifest readiness waits for its cell transaction before allowing paid placement',{timeout:30000},async t=>{
+ const db=await database(),directory=await mkdtemp(join(tmpdir(),'cloud-remote-ready-'));let held,child,closed,transactionOpen=false;
+ t.after(async()=>{if(held){if(transactionOpen)await held.query('ROLLBACK');held.release();}if(child?.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await closed;await db.close();await rm(directory,{recursive:true,force:true});});
+ await bootstrapTestCloud(directory);const config=await loadRuntime(directory);
+ const organisationId=randomUUID(),business=randomUUID(),venueId=randomUUID(),installationId=randomUUID();
+ await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);
+ await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisationId]);
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venueId,organisationId,business]);
+ await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installationId,venueId,generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).toString('base64url')]);
+ await db.pool.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'remote_access')",[installationId]);
+ await new OrganisationPlanStore(db.pool).set(organisationId,'paid');
+ const store=new RemoteAccessStore(db.pool,'test-free-paid'),peer=generateKeyPairSync('x25519').publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
+ await assert.rejects(store.provision(installationId,config.gateway.cellId,peer),/cell_unavailable/);
+ held=await db.pool.connect();await held.query('BEGIN');transactionOpen=true;
+ await held.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('test_cloud_remote_cell'))");
+ const url=new URL(process.env.TEST_DATABASE_URL);url.searchParams.set('options','-c search_path='+db.schema);
+ const application='remote-ready-'+randomUUID();url.searchParams.set('application_name',application);
+ const env={...process.env,DATABASE_URL:url.href,LOCAL_STACK_CONFIG_DIR:directory,CLOUD_TEST_SERVICE_PLANS:'1',TMPDIR:directory};delete env.NODE_TEST_CONTEXT;
+ child=spawn(process.execPath,['deploy/test-cloud/remote-worker.mjs'],{env,stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',part=>{stderr+=part;});
+ closed=new Promise(resolve=>child.once('close',resolve));
+ const wait=async check=>{for(let n=0;n<400;n++){if(await check())return;await new Promise(resolve=>setTimeout(resolve,25));}assert.fail('remote startup did not reach its expected state: '+stderr);};
+ await wait(async()=>Boolean((await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event='advisory'",[application])).rowCount));
+ const manifest=JSON.parse(await readFile(new URL('../kubernetes/local-checks.yaml',import.meta.url),'utf8'));
+ const container=manifest.items.find(item=>item.metadata.name==='manifest').spec.template.spec.containers[0];
+ // Without a readiness probe Kubernetes accepts the running container immediately.
+ const probe=()=>container.readinessProbe?spawnSync(container.readinessProbe.exec.command[0],container.readinessProbe.exec.command.slice(1),{env}).status:0;
+ assert.equal(probe(),1,'a running manifest process must not be ready before its cell exists');
+ await held.query('COMMIT');transactionOpen=false;
+ await wait(()=>probe()===0);
+ assert.equal((await store.provision(installationId,config.gateway.cellId,peer)).cellId,config.gateway.cellId);
+ child.kill('SIGTERM');assert.equal(await closed,0,stderr);
+ assert.equal(probe(),1,'a stopped worker must not retain readiness');
 });

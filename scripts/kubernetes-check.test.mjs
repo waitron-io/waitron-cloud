@@ -101,6 +101,7 @@ async function commandFixture(t, mode) {
     }
     await rm(directory, {recursive: true, force: true});
   });
+  await writeFile(join(directory,'controller-lease'),'synthetic-controller-owner',{mode:0o600});
   const source = `#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]);
 const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.appendFileSync(log,JSON.stringify(row)+'\\n');
@@ -119,7 +120,11 @@ if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
  if(b[0]==='wait'&&((mode.startsWith('wait-cloud')&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
+ if(b[0]==='get'&&b[1]==='pod/cloud'){console.log(JSON.stringify({spec:{nodeName:'control-plane'},status:{containerStatuses:[{name:'storage',restartCount:2,state:{waiting:{reason:'CrashLoopBackOff',message:'PRIVATE_STATE_CANARY'}},lastState:{terminated:{exitCode:1,signal:0,reason:'Error',message:'PRIVATE_STATE_CANARY'}}}]}}));process.exit(0);}
+ if(b[0]==='exec'&&b.some(arg=>arg.includes('/run/local-stack/storage-authority/.controller.lock'))){const source=b[b.indexOf('-e')+1].replace('/run/local-stack/storage-authority/.controller.lock',${JSON.stringify(join(directory,'controller-lease'))});process.stdout.write(require('node:child_process').execFileSync(process.execPath,['-e',source]));process.exit(0);}
  if(b[0]==='get'&&b[1]==='events'){console.log('x'.repeat(20000)+'cloud FailedCreatePodSandBox synthetic event');process.exit(0);}
+ if(b[0]==='get'&&b[1]==='nodes'){console.log('worker2 NotReady');process.exit(0);}
+ if(b[0]==='logs'&&b[1]==='pod/cloud'&&b.includes('storage')){console.log('x'.repeat(20000)+(b.includes('--previous')?'previous storage exit':'current storage startup'));process.exit(0);}
  if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode!=='wait-cloud-slow-pods'){console.log('cloud 0/8 Pending');process.exit(0);}
  if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
  if(b[0]==='get'&&b.includes('app=verifier')&&mode==='wait-cloud-probe-fails'){process.stderr.write('synthetic optional verifier missing');process.exit(17);}
@@ -173,7 +178,22 @@ for (const [target, mode, resource, deadline, exitCode, signal] of [
   assert.match(run.stderr, /cloud 0\/8 Pending/); assert.match(run.stderr, /FailedCreatePodSandBox synthetic event/);
   const events = run.stderr.split('\n').find(line => line.startsWith('Kubernetes failure events '));
   assert.equal(events.slice('Kubernetes failure events '.length).length, 16384);
+  assert.match(run.stderr, /Kubernetes failure nodes worker2 NotReady/);
+  for (const [label, ending] of [['storage-current', 'current storage startup'], ['storage-previous', 'previous storage exit']]) {
+    const output = run.stderr.split('\n').find(line => line.startsWith('Kubernetes failure ' + label + ' '));
+    assert.ok(output, 'failure must retain ' + label);
+    assert.equal(output.slice(('Kubernetes failure ' + label + ' ').length).length, 16384);
+    assert.ok(output.endsWith(ending));
+  }
+  const leaseLine=run.stderr.split('\n').find(line=>line.startsWith('Kubernetes failure storage-lease '));assert.ok(leaseLine,run.stderr);
+  const lease=JSON.parse(leaseLine.slice('Kubernetes failure storage-lease '.length));
+  assert.ok(lease.ageMs>=0&&lease.ageMs<10000);assert.equal(lease.ownerSha256,'fc32d28fa018a30be7a92c4e6162b5a1467cea5e7a15a4eae339d18f7aa0890d');
+  const stateLine=run.stderr.split('\n').find(line=>line.startsWith('Kubernetes failure storage-state '));assert.ok(stateLine,run.stderr);
+  assert.deepEqual(JSON.parse(stateLine.slice('Kubernetes failure storage-state '.length)),{node:'control-plane',restarts:2,current:{waitingReason:'CrashLoopBackOff'},previous:{exitCode:1,signal:0,reason:'Error'}});
+  assert.equal(run.stderr.includes('PRIVATE_STATE_CANARY'),false);assert.equal(run.stderr.includes('synthetic-controller-owner'),false);
   const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  for (const previous of [false, true]) assert.ok(rows.some(row => row.name === 'kubectl'
+    && JSON.stringify(row.args.slice(4)) === JSON.stringify(['logs', 'pod/cloud', '-c', 'storage', '--tail=100', '--limit-bytes=16384', '--request-timeout=5s', ...(previous ? ['--previous'] : [])])));
   assert.equal(rows.some(row => row.name === 'kind' && row.args[0] === 'delete'), target === 'kind');
   assert.equal(rows.some(row => row.name === 'kind'), target === 'kind');
 });
@@ -460,4 +480,98 @@ test('manifest worker stays behind the actual image-transfer gate', {timeout: 50
   const first = await Promise.race([new Promise(resolve => child.stdout.once('data', part => resolve(String(part)))), closed.then(() => '')]);
   assert.equal(first.split('\n')[0], 'waiting'); assert.equal(output.includes('started'), false);
   await writeFile(ready, ''); assert.equal(await closed, 0); assert.ok(output.endsWith('started\n'));
+});
+
+// A retained observation needs the real backup restore and remote adapters.
+test('observer target refuses missing retained-client work before commands', async () => {
+  const cluster = 'd618-12345678-1234-4234-8234-123456789abc';
+  const target = {type: 'amazon', cluster, context: cluster, phase: 'before', address: '10.77.0.1', observer: true,
+    instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
+  const {assertAmazonBinding} = await import('./test-cloud-integration.mjs');
+  assertAmazonBinding(target);
+  await assert.rejects(runTestCloudClients({image: 'sha256:' + 'a'.repeat(64), waitronImage: 'sha256:' + 'b'.repeat(64),
+    kubernetes: {...target, amazon: target, namespace: 'default', account: 'kube-account', network: cluster,
+      proxyIp: '10.77.0.1', ca: 'test-ca', port: 3000, mailPort: 8025, exec: async () => {}, remote: {worker: async () => {}}}}), /integration.observer_binding/);
+});
+
+test('local observer confirms worker stop before signalling or moving its manifest', async () => {
+  const {loseKubernetesWorker} = await import('./kubernetes-check.mjs');
+  for (const running of ['false', 'true']) {
+    const calls = [];
+    const loss = loseKubernetesWorker({cluster: 'owned', manifest: 'old',
+      run: async (binary, args) => {calls.push(args[0]); return args[0] === 'inspect' ? running : '';},
+      onStopped: () => calls.push('confirmed'), kube: async args => {calls.push(args[0]);}});
+    if (running === 'true') {await assert.rejects(loss, /worker_still_running/); assert.deepEqual(calls, ['kill', 'inspect']);}
+    else {await loss; assert.deepEqual(calls, ['kill', 'inspect', 'confirmed', 'taint', 'wait', 'rollout']);}
+  }
+});
+
+// This drives the Amazon adapter's actual stdout/stdin and strict post-replacement placement.
+for (const failProbe of [null, 'p1.remote_after_recovery', 'integration.command_failed:remote-inspect-retained-snapshot', 'shutdown-during-setup']) test('Amazon observer emits ready first, reads its live input and finishes with JSON' + (failProbe ? ' or retains failed-probe diagnostics: ' + failProbe : ''), async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'p1-wire-')), ownedPids = join(directory, 'owned-pids');
+  t.after(async () => {
+    const pids = await readFile(ownedPids, 'utf8').catch(error => {if (error.code !== 'ENOENT') throw error; return '';});
+    for (const pid of pids.trim().split(/\s+/).filter(Boolean)) {try {process.kill(Number(pid), 'SIGKILL');} catch (error) {if (error.code !== 'ESRCH') throw error;}}
+    await rm(directory, {recursive: true, force: true});
+  });
+  await writeFile(join(directory, 'package.json'), JSON.stringify({type: 'commonjs'}));
+  const standalone = join(directory, 'standalone.mjs');
+  await writeFile(standalone, `import {registerHooks} from 'node:module'; registerHooks({resolve(specifier,context,next){if(!/^(node:|file:|\\.)/.test(specifier))throw Error('standalone.package_dependency:'+specifier);return next(specifier,context);}});`);
+  const {emailLoginPolicy} = await import('../packages/account-http/test/fixtures.ts');
+  const cluster = 'd618-12345678-1234-4234-8234-123456789abc', moved = join(directory, 'moved');
+  const target = {type: 'amazon', cluster, context: cluster, address: '10.77.0.1', phase: 'before', observer: true,
+    instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
+  const fake = `#!${process.execPath}
+const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]),cluster=${JSON.stringify(cluster)};
+if(name==='kubectl'){
+ const b=a[0]==='--context'?a.slice(4):a;
+ if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
+ if(b[0]==='apply'){const manifest=JSON.parse(fs.readFileSync(0,'utf8')),account=manifest.items.find(item=>item.metadata.name==='cloud').spec.containers.find(c=>c.name==='account');require('node:assert/strict').deepEqual(JSON.parse(account.env.find(e=>e.name==='CLOUD_FACTOR_POLICY').value),${JSON.stringify(emailLoginPolicy)});}
+ if(b[0]==='get'){
+  const role=b[b.indexOf('-l')+1]?.split('=')[1];
+  const suffix=role==='manifest'?(fs.existsSync(${JSON.stringify(moved)})?'-worker':'-worker2'):'-control-plane';
+  console.log(JSON.stringify({items:role==='verifier'?[]:[{metadata:{name:role},spec:{nodeName:cluster+suffix,containers:[{name:'account',image:cluster+':cloud'}]},status:{containerStatuses:[{state:{running:{startedAt:'2026-11-12T10:00:00Z'}}}]}}]}));
+ }
+ if(b[0]==='exec')console.log('synthetic-ca');
+ if(b[0]==='port-forward'){
+  fs.appendFileSync(${JSON.stringify(ownedPids)},process.pid+'\\n');
+  for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
+  setInterval(()=>{},1000);
+ }
+}
+`;
+  for (const name of ['docker', 'kubectl']) await writeFile(join(directory, name), fake, {mode: 0o700});
+  const code = `import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
+const result=await runKubernetesCheck(${JSON.stringify(target)},{
+ clients:async ({kubernetes:k})=>{if(${JSON.stringify(failProbe)}==='shutdown-during-setup'){process.emit('SIGTERM');await k.exec('account',['true']);}return {observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')};},
+ observer:async ({ready,stopped,replacement})=>{if(${JSON.stringify(failProbe)})throw Error(${JSON.stringify(failProbe)});ready();await stopped();await replacement();return {done:true};}
+});process.stdout.write(JSON.stringify(result)+'\\n');`;
+  const child = spawn(process.execPath, ['--import', standalone, '--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
+    TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}, stdio: ['pipe', 'pipe', 'pipe']});
+  let stdout = '', stderr = '', sent = false;
+  const closed = new Promise(resolve => child.once('close', resolve));
+  const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+  t.after(() => {clearTimeout(timer); child.kill('SIGKILL');});
+  child.stdout.on('data', part => {
+    stdout += part;
+    if (!sent && stdout.startsWith('P1_READY\n')) {
+      sent = true; void writeFile(moved, '').then(() => child.stdin.write('P1_STOPPED\nP1_REPLACEMENT_READY\n'));
+    }
+  }); child.stderr.on('data', part => {stderr += part;});
+  const exit = await closed;
+  if (failProbe === 'shutdown-during-setup') {
+    assert.equal(exit, 1, stderr);assert.match(stderr, /AbortError/);
+    assert.equal(stderr.includes('Kubernetes failure '), false, stderr);return;
+  }
+  if (failProbe) {
+    assert.equal(exit, 1, stderr);
+    for (const label of ['pods', 'events', 'nodes', 'storage-current', 'storage-previous']) assert.ok(stderr.includes('Kubernetes failure ' + label + ' '), label);
+    assert.ok(stderr.includes('Error: ' + failProbe), stderr); return;
+  }
+  assert.equal(exit, 0, stderr);
+  assert.equal(sent, true);
+  assert.deepEqual(stdout.trim().split('\n').map((line, index) => index ? JSON.parse(line) : line),
+    ['P1_READY', {observed: {done: true}, worker: '2026-11-12T10:00:00Z'}]);
 });

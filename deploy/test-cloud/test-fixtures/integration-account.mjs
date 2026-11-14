@@ -70,10 +70,12 @@ try {
       assert.ok(row);
       console.log(JSON.stringify(inspectIntegrationContinuousState(row, {requestId, venueId: rows[0].venue_id,
         organisationId, sourceNodeId, generation, recoverableAt}, desiredStatus)));
-    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback') {
+    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback' || phase === 'inspect-retained-snapshot') {
       assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
       const venueId = rows[0].venue_id, prefix = 'streams/' + venueId + '/';
-      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      // Observation reads must not reconcile IAM while captures are running.
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
+        ...(phase === 'inspect-retained-snapshot' ? {openStorage: async () => undefined} : {})});
       const location = {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + venueId, region: 'local'};
       const storage = new S3Client({...location, forcePathStyle: true, maxAttempts: 1,
         credentials: {accessKeyId: config.storage.accessKeyId, secretAccessKey: config.storage.secretAccessKey},
@@ -91,13 +93,18 @@ try {
         return objects;
       };
       const retained = async () => {
-        const point = (await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3', [pointId, installationId, venueId])).rows[0];
-        assert.ok(point);
-        inspectIntegrationRetainedSnapshot(point, await runtime.options.objects(location).read(point.object_key),
-          {pointId, installationId, venueId, sha256, bytes, sourceNodeId, attemptId});
+        // One process checks the retained set within the account container's memory limit.
+        for (const expected of phase === 'inspect-retained-snapshot' ? JSON.parse(input).points : [{pointId, sha256, bytes, sourceNodeId, attemptId}]) {
+          const point = (await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3', [expected.pointId, installationId, venueId])).rows[0];
+          assert.ok(point);
+          inspectIntegrationRetainedSnapshot(point, await runtime.options.objects(location).read(point.object_key),
+            {...expected, installationId, venueId});
+        }
       };
       try {
         await retained();
+        if (phase === 'inspect-retained-snapshot') console.log(JSON.stringify({retainedSnapshotUnchanged: true}));
+        else {
         if (phase === 'remove-test-stream') {
           assert.equal(Number((await pool.query("SELECT count(*) FROM backup_recoveries WHERE venue_id=$1 AND source_kind='continuous' AND status<>'closed'", [venueId])).rows[0].count), 0);
           const objects = await list(); assert.ok(objects.length > 0, 'integration.real_stream_required');
@@ -113,6 +120,7 @@ try {
         assert.equal(streamObjects, 0); assert.equal(pointerRows, 0);
         await retained();
         console.log(JSON.stringify({streamObjects, pointerRows, retainedSnapshotUnchanged: true}));
+        }
       } finally {storage.destroy(); runtime.close();}
     } else if (phase === 'inspect-stream') {
       const runtime=await openTestCaptureRuntime({pool,directory:'/run/local-stack',mode:'test-free-paid'});
@@ -176,7 +184,8 @@ try {
         console.log(JSON.stringify({...evidence, noSupersession: true}));
       }
     } else if (phase === 'provision-snapshot' || phase === 'inspect-snapshot') {
-      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
+        ...(phase === 'inspect-snapshot' ? {openStorage: async () => undefined} : {})});
       const location = {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + rows[0].venue_id, region: 'local'};
       try {
         if (phase === 'provision-snapshot') {
