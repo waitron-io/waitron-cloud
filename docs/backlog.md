@@ -700,8 +700,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    test file and the original job limits. The historical database provider
    startup failure in nightly 43495535547 (no initial plugin response) still
    needs its cause established; passing later runs does not explain it.
-   These are mocked
-   plans, not a deployment. Account/state
+   These are mocked plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
    Very deeply nested source remains subject to Python's limits; no exact boundary
