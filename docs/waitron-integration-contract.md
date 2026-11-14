@@ -2439,7 +2439,7 @@ No provider, deployment, publication/pause, customer-product, writer or fiscal
 permission follows. This edition raises no new owner decision; the proposed
 representation, reserve and permission/commit mappings need E/G engineering acceptance.
 
-## Hosted guest-menu copy: local reader and owner controls
+## Hosted guest-menu copy: signed delivery, local reader and owner controls
 
 The [guest-menu contract](superpowers/plans/2026-11-14-a670-cloud-guest-menu.md)
 separates stored public pages from live ordering. Its local reader serves
@@ -2465,6 +2465,32 @@ does not remove the stored copy; the owner can still reach takedown in the porta
 `packages/account-http/test/guest-menu-runtime.test.ts` exercises the separate TLS
 listener; `guest-menu-server.test.ts` exercises the HTML, limits and delayed-takedown
 boundaries. The portal browser test covers EN/ES, both themes and 390/1280 widths.
-These use synthetic stored pages. Signed box publish/status/withdraw and Waitron's
-sender remain unimplemented here, pending the shared three-action release; there
-is no public deployment, live forwarding, ordering, payments or table identity.
+These checks use synthetic publications. Waitron's sender and public deployment
+remain separate; no live forwarding, ordering, payments or table identity is built.
+
+You publish through POST `/api/installations/guest-menu-publish`, with no browser
+Origin. The version-1 installation proof uses the matching `guest-menu-publish`
+action and current lease. Send `{payload,signature,body}`; `body` is an exact UTF-8
+JSON string `{defaultLanguage,pages}`, where `pages` maps supported languages to
+self-contained public HTML. The signed body is
+`{version:1,expectedRevision,bodySha256,bodyBytes}`. Hash the exact bytes, including
+whitespace. The body limit is 2 MiB; outer JSON has a 12 MiB + 16 KiB limit to allow
+escaping. Publish has its own one-request slot and a 60-second read limit, leaving
+the eight general slots available. Encoded path aliases use the same admission.
+
+POST `/api/installations/guest-menu-status` and `/guest-menu-withdraw` use their
+matching actions, `{payload,signature}` and signed body `{version:1}`. All three
+return 200 `{version:1,url,revision,state,publication}` after the database commit.
+The states are `off`, `current` and `blocked`; `publication` is null or
+`{bodySha256,defaultLanguage,receivedAt}`. A matching current publication confirms
+unchanged even if its expected revision is old. Other stale publications return
+409/conflict. Each content or state change increments the venue revision once.
+Withdraw clears current pages and preserves an owner's block; only portal Enable
+removes that block. Every connected venue qualifies without a billing gate.
+
+Malformed bodies return 400/invalid_input, failed installation authority or digest
+binding returns 403/forbidden, excess bytes return 413/too_large, a blocked publish
+returns 423/blocked and database failure returns 503/unavailable. Existing host,
+query, method, media-type and rate refusals still apply. The remote-access
+`test/guest-menu.test.ts` exercises state, exact-byte binding, venue separation and
+real database waits; account-http's same-named test covers wire shapes and admission.

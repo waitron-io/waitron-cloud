@@ -366,11 +366,12 @@ and the separate reviewed deployment are complete.
 ## Exercise a stored guest-menu copy
 
 A hosted copy lets a guest read the menu while the venue's box is offline. The local
-reader and portal controls are implemented; signed delivery from Waitron and a
-public deployment remain separate. You can exercise a synthetic stored copy with:
+reader accepts signed box publications and keeps the portal takedown block until
+you choose Enable. Connecting Waitron’s sender and a public deployment remain
+separate. You can exercise a synthetic stored copy with:
 
 ```sh
-node scripts/test-postgres.mjs exec node --test packages/account-http/test/guest-menu-runtime.test.ts packages/account-http/test/guest-menu.test.ts
+node scripts/test-postgres.mjs exec node --test packages/remote-access/test/guest-menu.test.ts packages/account-http/test/guest-menu-runtime.test.ts packages/account-http/test/guest-menu.test.ts
 pnpm --dir apps/portal build
 node scripts/test-postgres.mjs exec node --test apps/portal/test/guest-menu-browser.test.ts
 ```

@@ -73,7 +73,7 @@ Prepare the reviewed private UI and signing packages on the Mac before copying s
 python3 scripts/disposable-tests/private-packages.py fetch /tmp/cloud-private-packages
 ```
 
-The package token stays in the Mac process. For each run, the helper reads `pnpm-lock.yaml` inside the captured source archive, downloads only the selected archives, and returns reviewed filenames: one UI release and, when present, `contract-0.2.9.tgz`. The UI archive keeps its existing `ui.tgz` name in manual uploads and host transfers; the signing archive uses `contract-0.2.9.tgz`. Old and new UI-only senders and receivers remain compatible, including historical captures. The Mac selector refuses missing UI, unknown pins and multiple versions of one package before preparation; captured files never supply an authenticated URL. The host checks `ui.tgz` against the approved UI digests and the signing archive against its own full SHA512 digest, so swapped or corrupt bytes refuse transfer. Each package remains bounded to 64 MiB; the complete bundle is bounded to 641 MiB.
+The package token stays in the Mac process. For each run, the helper reads `pnpm-lock.yaml` inside the captured source archive, downloads only the selected archives, and returns reviewed filenames: one UI release and, when present, `contract-<version>.tgz`. The UI archive keeps its existing `ui.tgz` name in manual uploads and host transfers; the signing archive uses `contract-<version>.tgz`. Old and new UI-only senders and receivers remain compatible, including historical captures. The Mac selector refuses missing UI, unknown pins and multiple versions of one package before preparation; captured files never supply an authenticated URL. The host checks `ui.tgz` against the approved UI digests and the signing archive against its own full SHA512 digest, so swapped or corrupt bytes refuse transfer. Each package remains bounded to 64 MiB; the complete bundle is bounded to 641 MiB.
 
 GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof stages both packages and exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence. Automatic CI retains its request-only transfer and existing job token.
 
@@ -87,7 +87,7 @@ To run the complete private command-path proof, first prepare the snapshot and r
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
   /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
-  /tmp/cloud-private-packages/contract-0.2.9.tgz
+  /tmp/cloud-private-packages/contract-0.2.14.tgz
 ```
 
 This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, each supplied private package’s integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
@@ -122,7 +122,7 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
   /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.1.tgz \
-  /tmp/cloud-private-packages/contract-0.2.9.tgz
+  /tmp/cloud-private-packages/contract-0.2.14.tgz
 ```
 
 Use a new absent private ledger path for each opt-in proof. Explicit bootstrap refuses a directory left by an earlier proof so it cannot forget an old lease.
