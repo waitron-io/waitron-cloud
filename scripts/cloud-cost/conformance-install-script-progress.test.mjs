@@ -80,12 +80,14 @@ for(const mode of ['headers-stall','body-stall','refused'])test('real native bui
   const body=readFileSync(join(root,'package.tgz')),integrity='sha512-'+createHash('sha512').update(body).digest('base64');
   let child,closed,installer,scratch,output='',headerRequests=0,archiveRequests=0;
   t.after(context=>{if(!context.passed)t.diagnostic(JSON.stringify({mode,elapsedMs:Math.round(performance.now()-started),requests,trace,output}));});
-  const server=createServer((request,response)=>{
+  const server=createServer(async(request,response)=>{
     requests.push({kind:request.url==='/package.tgz'?'package':'headers',elapsedMs:Math.round(performance.now()-started)});
     if(request.url==='/package.tgz'){archiveRequests++;response.end(body);return;}
     assert.match(request.url,/^\/v26\.[0-9]+\.[0-9]+\/node-v26\.[0-9]+\.[0-9]+-headers\.tar\.gz$/);
+    // Delay accounting so the clock must wait for this server as well as the progress log.
+    if(mode==='headers-stall')await delay(500);
     headerRequests++;
-    if(mode==='headers-stall')return;
+    if(mode==='headers-stall'){if(child.connected)child.send('headers-received',()=>{});return;}
     if(mode==='refused'){response.writeHead(404);response.end('generated-private-refusal');return;}
     response.writeHead(200,{'Content-Type':'application/octet-stream'});response.flushHeaders();
   });
@@ -106,12 +108,15 @@ if(a[0]==='init'){
 if(a.includes('rev-parse'))console.log('b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 `,{mode:0o700});
     const clock=`
-const timeout=setTimeout,clear=clearTimeout,interval=setInterval,write=process.stderr.write.bind(process.stderr),pending=new Map();let phase,fired=false;
+const timeout=setTimeout,clear=clearTimeout,interval=setInterval,write=process.stderr.write.bind(process.stderr),pending=new Map();let phase,fired=false,progressSeen=false,headersReceived=${mode!=='headers-stall'};
+// Only the server acknowledgement proves that the headers request reached this fixture.
+const expire=()=>{if(fired||!progressSeen||!headersReceived)return;fired=true;setImmediate(()=>{if(pending.size!==1)throw Error('Missing simulated install deadline');console.error('native_fixture_clock=5000');[...pending.values()][0]();});};
+${mode==='headers-stall'?"process.on('message',message=>{if(message==='headers-received'){headersReceived=true;expire();}});":''}
 globalThis.setTimeout=(fn,ms,...args)=>{
   if(ms===300000&&phase==='source-install'&&${mode!=='refused'}){const handle={};pending.set(handle,()=>fn(...args));return handle;}
   return timeout(fn,ms===300000?5000:ms,...args);
 };
-globalThis.clearTimeout=handle=>{if(!pending.delete(handle))clear(handle);};
+globalThis.clearTimeout=handle=>{if(pending.delete(handle)){if(process.connected)process.disconnect();}else clear(handle);};
 globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===10000?50:ms,...args);
 // Expire only after the real installer has reported the milestone this case inspects.
 process.stderr.write=(chunk,...args)=>{
@@ -119,19 +124,19 @@ process.stderr.write=(chunk,...args)=>{
   if(line.startsWith('conformance_setup=')){
     const record=JSON.parse(line.slice(18));phase=record.phase;
     if(${mode!=='refused'}&&!fired&&record.event==='install-progress'&&record.activeScripts.some(s=>s.lastMilestone?.step===${JSON.stringify(mode==='headers-stall'?'headers-request':'headers-response')}&&${mode==='headers-stall'?'true':'s.lastMilestone.httpStatus===200'})){
-      fired=true;setImmediate(()=>{if(pending.size!==1)throw Error('Missing simulated install deadline');console.error('native_fixture_clock=5000');[...pending.values()][0]();});
+      progressSeen=true;expire();
     }
   }
   return result;
 };`;
 
     child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(clock),new URL('./conformance.mjs',import.meta.url).pathname,'--only','cadence-conformance.test.mjs'],
-      {env:{...process.env,PATH:bin+':'+process.env.PATH},stdio:['ignore','pipe','pipe']});
+      {env:{...process.env,PATH:bin+':'+process.env.PATH},stdio:['ignore','pipe','pipe',...(mode==='headers-stall'?['ipc']:[])]});
     let buffered='';
     const collect=b=>{output+=b;buffered+=b;let end;
       while((end=buffered.indexOf('\n'))!==-1){
         const line=buffered.slice(0,end);buffered=buffered.slice(end+1);if(!line.startsWith('conformance_setup='))continue;
-        const r=JSON.parse(line.slice(18));trace.push({receivedAtMs:Math.round(performance.now()-started),...r});
+        let r;try{r=JSON.parse(line.slice(18));}catch{continue;}trace.push({receivedAtMs:Math.round(performance.now()-started),...r});
         if(r.phase==='source-install'&&r.event==='start')installer=r.pid;
         if(r.phase==='source-init'&&r.event==='start')scratch=join(r.args.at(-1),'..');
       }

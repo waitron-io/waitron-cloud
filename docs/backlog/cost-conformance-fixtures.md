@@ -88,14 +88,17 @@ reproduces both failures with 24 owned workers on one CPU. The image case spends
 at 9,248 ms, and hits the ten-second outer limit. Native setup expires at
 5,003 ms with no package request. The same pressure still fails both cases
 [one file at a time](https://github.com/waitron-io/waitron-cloud/actions/runs/43711203443),
-so two-file concurrency is not required to reproduce these failures. Ordinary
+so two-file concurrency is not required to reproduce these failures. The original ordinary
 and eight-worker hosted controls pass. These experiments identify fixture
 scheduling weaknesses; the original runner’s load remains unmeasured.
 
-The image fixture now substitutes the unrelated SDK compilation in its existing
-module hook. One existing successful-build case checks that boundary was used.
-Stalled native cases observe the real pnpm/node-gyp milestone before expiring
-the simulated supervisor timer; the real supervisor still kills its installer.
+Timed image cases substitute SDK compilation in the existing module hook; one
+checks that boundary was used. The existing untimed success case still compiles
+the real SDK, so a broken bundle still refuses preparation on pull requests.
+Stalled native cases wait for real pnpm/node-gyp progress before expiring the
+simulated supervisor timer. Headers-stall also waits for its server to record
+the request, with delayed handling in the existing case exercising that gate.
+The real supervisor still kills its installer.
 The refused case keeps its real five-second mapping and must finish without a
 timeout. Every original behavior assertion, the image ten-second limit, native
 ten-second race and twenty-second outer limit remain. Failure teardown retains
