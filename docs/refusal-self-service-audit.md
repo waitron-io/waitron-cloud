@@ -145,7 +145,7 @@ The [classifier](../apps/portal/src/body-refusal.ts#L3) requires `invalid_input`
 [message composition](../apps/portal/src/locale.ts#L10) owns the three causes.
 Account signup/reset, password and factor sign-in, sign-out, session revocation,
 authenticator changes, alerts, backups, diagnostics, installation revocation,
-recovery, remote access, consent and usage use these messages for their JSON requests.
+recovery, pairing inspection and approval, remote access, consent and usage use these messages for their JSON requests.
 Size and format guidance say that sending the same request again will not help.
 Only the distinct settings/list/status GET checks keep an action after those causes;
 JSON resubmissions do not. Consent shows its existing status refresh only at the
@@ -156,9 +156,9 @@ state and completed pending state (`node --test test/body-refusal.test.ts
 test/locale.test.ts` and the affected controller/session files from `apps/portal`).
 Existing browser files exercise each account form’s label, code verification,
 authenticator refresh, snapshots, the first recovery check, current-session sign-out,
-consent status refresh and sign-out focus using synthetic HTTP replies. These checks do not qualify a real server fault.
+consent status refresh, pairing inspection and approval, and sign-out focus using synthetic HTTP replies. These checks do not qualify a real server fault.
 GET reads and background session activity retain their handling. Malformed JSON
-(400), billing and pairing remain outside this change.
+(400) and billing remain open.
 
 ## Existing actions to preserve
 
