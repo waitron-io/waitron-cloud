@@ -98,14 +98,17 @@ test('first completion rechecks absolute session expiry after waiting for the ve
 
 test('browser approval rechecks proof freshness after waiting for permission',async()=>{
  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM organisation_memberships WHERE account_id=$1 FOR UPDATE',[owner.accountId]);
- await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '10 minutes'+interval '300 milliseconds' WHERE account_id=$1",[owner.accountId]);
+ // Slow approval entry must leave time to observe permission blocking before proof expires.
+ const expiresAt=(await db.pool.query("UPDATE cloud_sessions SET action_proved_at=clock_timestamp()-interval '10 minutes'+interval '5 seconds' WHERE account_id=$1 RETURNING action_proved_at+interval '10 minutes' AS expires_at",[owner.accountId])).rows[0].expires_at;
+ // Exercise a delayed approval entry before observing the permission wait.
+ await new Promise(r=>setTimeout(r,400));
  const pending=assert.rejects(approve(),/proof_required/);let waiting=false;
  try{
   for(let n=0;n<100;n++){
    if((await db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema])).rowCount){waiting=true;break;}
    await new Promise(r=>setTimeout(r,10));
   }
-  await new Promise(r=>setTimeout(r,350));
+  await db.secondPool.query("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM ($1::timestamptz-clock_timestamp())))+0.05)",[expiresAt]);
  }finally{await blocker.query('COMMIT');blocker.release();}
  await pending;assert.equal(waiting,true);
  assert.equal((await db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1',[claims.requestId])).rows[0].cloud_account_id,null);
