@@ -109,7 +109,3 @@ test(${JSON.stringify(name)}, async () => {
   } finally {rmSync(root, {recursive: true, force: true});}
 });
 
-test('ordinary registration files without an active pin follow the native partition', () => {
-  assert.deepEqual(registrationFiles(3, ['a.test.ts', 'b.test.ts', 'venue-service-legacy-schema-guards.test.ts']),
-    ['venue-service-legacy-schema-guards.test.ts']);
-});

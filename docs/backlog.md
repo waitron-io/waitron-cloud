@@ -1607,30 +1607,8 @@ implementation or production evidence.
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
   and rejects five- and seven-partition allocations. The
-  [registration runtime investigation (D576)](backlog/package-ci-runtime.md) records
-  the Linux measurements and the historical failures that remain unexplained. A Node subprocess
-  check partitions copies of every current registration filename plus a new
-  filename and requires each to execute exactly once. Its file workers run one
-  at a time; overlapping fixture bodies fail on a shared scratch-directory lock.
-  This checks file discovery; real package jobs must still report every test case.
-  The reminder-worker cases live in `email-reminders.test.ts`, with their complete
-  test bodies unchanged. The name places them before the worker-loop tests in
-  Node's file allocation. Each file prepares its own disposable schema; every
-  case and the 30-second deadline remain. Earlier five- and six-job layouts took
-  313 and 348 seconds respectively and were not adopted. A later six-job split
-  reached 259 seconds but used the same 23 rounded registration minutes as seven
-  jobs, and its backup job failed the strict native-memory OOM check. The start
-  ordering fix below addresses a reproduced mechanism for that failure.
-  Whole-file measurements guide the six-job allocation and three explicit
-  filename moves. The balanced Linux trial passes all 1,684 cases and runs every
-  one of the 139 files exactly once. Its slowest wrapper falls from 293.499 to
-  234.678 seconds, with every group within four minutes. These sequential Linux
-  runs do not establish concurrent hosted-job timing or explain the historical
-  cancellation.
-  Aim for about four minutes per registration job and require every exact-head
-  registration job within 300 seconds. Use observed wall times and complete case
-  counts rather than the retired rounded-minute budgets. Current-head CI and
-  post-merge verification remain required.
+  [original registration cancellation](backlog/package-ci-runtime.md#what-remains-unexplained)
+  remains unexplained; measured file allocation does not establish its cause.
 
   The relay-capacity test keeps its four SMTP deliveries open until all four
   competing worker attempts return without work. Its unchanged sending, queued
