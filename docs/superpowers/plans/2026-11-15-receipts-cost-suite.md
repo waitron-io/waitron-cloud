@@ -1,6 +1,6 @@
 # Receipts cost-suite concurrency
 
-**PLAN FOR APPROVAL — one Claude read and watcher clearance pending; no owner design approval claimed.**
+**Claude reviewed this plan on 15 November 2026; the watcher cleared it at 08:31. This is not an owner design approval.**
 Source: Lane G `queue.md`, RECEIPTS-COST-SUITE, watcher 15 November 08:19:
 > docs/backlog.md (near line 2745, 'at most five minutes per job'): run 43680322085 shows test:cloud-cost at 357 s; package.json runs node --test --test-concurrency=1 over 148 cost test files. First find why it runs one file at a time (git log -S on that flag, the commit and PR that added it); if the reason still holds, say so and stop. Otherwise measure the shortest safe concurrency. Plan in a few lines, one Claude read, PLAN FOR APPROVAL.
 

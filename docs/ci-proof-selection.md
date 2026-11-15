@@ -75,14 +75,15 @@ paths, without making PRs or rerunning workflows just to obtain measurements.
 
 `pnpm test:cloud-cost` runs two test files at once. The original serial flag was
 introduced with the suite in PR #279; its commit and PR description give no
-reason for it. The current files use owned scratch paths and loopback ports;
-the shared public build replaces files through unique temporary files and
-atomic renames. On one four-CPU Linux guest, running all 148 files serially took
-308 seconds, while two files at once took 155 and 147 seconds. Each run passed
-all 3,826 checks and public-artifact verification without changing the artifacts.
-Run the comparison with Git history and an ordinary user, as CI does.
-These local measurements do not establish hosted job duration. Read the
-complete current-head receipts job before qualifying the five-minute target.
+reason for it. Current files use owned scratch paths and loopback ports, and the
+shared public build replaces files through unique temporary files and atomic
+renames. Give new test files their own scratch folders and ports too.
+
+Run comparisons with Git history and an ordinary user, as CI does. CI also runs
+another receipt command beside this suite, which the standalone Linux comparisons
+do not cover. Read `Receipt test:cloud-cost: PASS (N ms)` for the command's own
+time, and the complete current-head receipts job for the five-minute target.
+Local timings alone do not qualify that target.
 
 ## Current proof selection
 
