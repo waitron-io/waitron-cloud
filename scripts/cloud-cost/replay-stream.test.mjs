@@ -48,7 +48,10 @@ test('replay cancellation retires settled sockets before collecting its writer',
 
 for (const operation of ['finish', 'close', 'cancel-finish']) test(`a frozen keep-alive writer cannot extend the ${operation} collection budget`, { timeout: 12000 }, async t => {
   const f = await fixture(t, 'reset-on-stop'), run = await open(t, f);
-  await upload(f);
+  // Freeze only after the writer has consumed both replies and schedules no more uploads.
+  for (let i = 0; i < 100 && !existsSync(f.database + '.uploads-complete'); i++) await wait(20);
+  assert.equal(existsSync(f.database + '.uploads-complete'), true);
+  assert.equal(f.uploaded(), 2);
   const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
   const writer = entries.find(row => row.kind === 'stream-process' && row.state === 'started' && row.operation === 'replicate');
   assert.ok(writer);
@@ -164,7 +167,10 @@ if (process.argv[2] === 'restore') {
 }
 if (mode === 'exit') process.exit(19);
 if (mode === 'hangup') process.kill(process.pid, 'SIGHUP');
-const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFileSync(c.path))).catch(()=>process.exit(18)); };
+let uploadsCompleted = 0;
+const upload = () => { if (!stopping) serial = serial.then(()=>send('PUT',readFileSync(c.path))).then(()=>{
+  if (mode === 'reset-on-stop' && ++uploadsCompleted === 2) writeFileSync(c.path + '.uploads-complete', 'ready');
+}).catch(()=>process.exit(18)); };
 if (mode === 'read-then-exit') { await send('GET', Buffer.alloc(0)); process.exit(19); }
 if (mode === 'read-before-upload') {
   await send('GET', Buffer.alloc(0));
@@ -475,8 +481,8 @@ test('cancellationDrainsAnAdmittedUploadBeforeSignallingAFastExitingWriter',asyn
 });
 
 
-// Later queued work can enter after the idle handoff; an interrupted reply cannot qualify as complete.
-test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter', { timeout: 10000 }, async t => {
+// Collect the real writer and listeners after a later upload receives only part of its reply.
+test('cancellationCollectsTheFastExitingWriterAfterAnInterruptedLaterUpload', { timeout: 10000 }, async t => {
   const f = await fixture(t, 'held-fast-stop', { interruptQueuedUpload: true }), abort = new AbortController(), trace = [];
   const listeners = [], listen = Server.prototype.listen;
   t.mock.method(Server.prototype, 'listen', function (...args) {
@@ -494,17 +500,15 @@ test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter
   const run = await open(t, { ...f, sdk: observedSdk, signal: abort.signal, onDiagnostic: event => trace.push(event) });
   const writerUrl = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
   await f.heldUpload; abort.abort();
-  const refused = assert.rejects(run.close(), bad, 'an interrupted later reply refuses successful close');
+  const collected = run.closeResources();
   await wait(150); f.releaseUpload();
-  await refused;
+  assert.deepEqual(await collected, { measurementValid: false });
   assert.equal(f.uploaded(), 3, 'retain the admitted upload and the later interrupted upload');
   assert.equal(existsSync(f.database + '.interrupted-reply'), true, 'the writer observes the partial reply before exiting');
   assert.equal(readFileSync(f.database + '.interrupted-reply', 'utf8'), 'x');
   assert.deepEqual(f.interruptedUpload(), { afterStop: true, requestComplete: true, responseFinished: false });
   assert.deepEqual(trace.filter(event => event.kind === 'native' && event.operation === 'replicate')
     .map(({ code, signal }) => ({ code, signal })), [{ code: 0, signal: null }], 'the writer exits itself before forced collection');
-  // Cancellation already prevents publication; close() above independently checks transfer refusal.
-  assert.deepEqual(await run.closeResources(), { measurementValid: false });
   await assert.rejects(run.finish({ expectedSales: 1 }), bad, 'interrupted cancellation cannot publish measurement');
   for (const url of [writerUrl, adminUrl])
     await assert.rejects(fetch(url), error => error.cause?.code === 'ECONNREFUSED', 'collect the actual session listeners');
