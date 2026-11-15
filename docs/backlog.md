@@ -3923,7 +3923,9 @@ with native controls for bounded retries, permanent refusals and cleanup. D135
 still needs fresh Docker-backed qualification on the acquisition repair. A bounded
 2026-11-04 attempt passed all 39 native acquisition and build controls; the test
 box was occupied, so real preparation did not run. The historical causes remain
-open; see the
+open. Keep the separate generated HTTP 408 and native fixture timings under
+[their scheduling investigation](backlog/cost-conformance-fixtures.md#cost-fixture-timing-under-ordinary-ci-load-d530);
+the original runner’s load remains unmeasured. See the
 [image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
 
 ### Litestream conformance transport-close refusal (D141)

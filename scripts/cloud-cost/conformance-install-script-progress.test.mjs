@@ -70,7 +70,8 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 // Real pnpm and its bundled node-gyp must distinguish waiting for response
 // headers, waiting after response headers and a refused header download.
-for(const mode of ['headers-stall','body-stall','refused'])test('real native build identifies '+mode+' through setup',{timeout:20000},async()=>{
+for(const mode of ['headers-stall','body-stall','refused'])test('real native build identifies '+mode+' through setup',{timeout:20000},async t=>{
+  const started=performance.now(),requests=[],trace=[];
   const root=realpathSync(mkdtempSync(join(tmpdir(),'cost-native-build-'))),bin=join(root,'bin');
   mkdirSync(bin);mkdirSync(join(root,'package'));
   writeFileSync(join(root,'package/package.json'),JSON.stringify({name:'native-build-probe',version:'1.0.0',scripts:{install:'node-gyp rebuild'}}));
@@ -78,7 +79,9 @@ for(const mode of ['headers-stall','body-stall','refused'])test('real native bui
   execFileSync('tar',['-czf',join(root,'package.tgz'),'-C',root,'package']);
   const body=readFileSync(join(root,'package.tgz')),integrity='sha512-'+createHash('sha512').update(body).digest('base64');
   let child,closed,installer,scratch,output='',headerRequests=0,archiveRequests=0;
+  t.after(context=>{if(!context.passed)t.diagnostic(JSON.stringify({mode,elapsedMs:Math.round(performance.now()-started),requests,trace,output}));});
   const server=createServer((request,response)=>{
+    requests.push({kind:request.url==='/package.tgz'?'package':'headers',elapsedMs:Math.round(performance.now()-started)});
     if(request.url==='/package.tgz'){archiveRequests++;response.end(body);return;}
     assert.match(request.url,/^\/v26\.[0-9]+\.[0-9]+\/node-v26\.[0-9]+\.[0-9]+-headers\.tar\.gz$/);
     headerRequests++;
@@ -102,14 +105,37 @@ if(a[0]==='init'){
 }
 if(a.includes('rev-parse'))console.log('b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 `,{mode:0o700});
-    const clock='const timeout=setTimeout,interval=setInterval;globalThis.setTimeout=(fn,ms,...args)=>timeout(fn,ms===300000?5000:ms,...args);globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===10000?50:ms,...args);';
+    const clock=`
+const timeout=setTimeout,clear=clearTimeout,interval=setInterval,write=process.stderr.write.bind(process.stderr),pending=new Map();let phase,fired=false;
+globalThis.setTimeout=(fn,ms,...args)=>{
+  if(ms===300000&&phase==='source-install'&&${mode!=='refused'}){const handle={};pending.set(handle,()=>fn(...args));return handle;}
+  return timeout(fn,ms===300000?5000:ms,...args);
+};
+globalThis.clearTimeout=handle=>{if(!pending.delete(handle))clear(handle);};
+globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===10000?50:ms,...args);
+// Expire only after the real installer has reported the milestone this case inspects.
+process.stderr.write=(chunk,...args)=>{
+  const result=write(chunk,...args),line=String(chunk);
+  if(line.startsWith('conformance_setup=')){
+    const record=JSON.parse(line.slice(18));phase=record.phase;
+    if(${mode!=='refused'}&&!fired&&record.event==='install-progress'&&record.activeScripts.some(s=>s.lastMilestone?.step===${JSON.stringify(mode==='headers-stall'?'headers-request':'headers-response')}&&${mode==='headers-stall'?'true':'s.lastMilestone.httpStatus===200'})){
+      fired=true;setImmediate(()=>{if(pending.size!==1)throw Error('Missing simulated install deadline');console.error('native_fixture_clock=5000');[...pending.values()][0]();});
+    }
+  }
+  return result;
+};`;
+
     child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(clock),new URL('./conformance.mjs',import.meta.url).pathname,'--only','cadence-conformance.test.mjs'],
       {env:{...process.env,PATH:bin+':'+process.env.PATH},stdio:['ignore','pipe','pipe']});
-    const collect=b=>{output+=b;for(const line of output.split('\n').filter(l=>l.startsWith('conformance_setup='))){
-      let r;try{r=JSON.parse(line.slice(18));}catch{continue;}
-      if(r.phase==='source-install'&&r.event==='start')installer=r.pid;
-      if(r.phase==='source-init'&&r.event==='start')scratch=join(r.args.at(-1),'..');
-    }};
+    let buffered='';
+    const collect=b=>{output+=b;buffered+=b;let end;
+      while((end=buffered.indexOf('\n'))!==-1){
+        const line=buffered.slice(0,end);buffered=buffered.slice(end+1);if(!line.startsWith('conformance_setup='))continue;
+        const r=JSON.parse(line.slice(18));trace.push({receivedAtMs:Math.round(performance.now()-started),...r});
+        if(r.phase==='source-install'&&r.event==='start')installer=r.pid;
+        if(r.phase==='source-init'&&r.event==='start')scratch=join(r.args.at(-1),'..');
+      }
+    };
     child.stdout.on('data',collect);child.stderr.on('data',collect);
     closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
     const result=await Promise.race([closed,delay(10000,null,{ref:false})]);

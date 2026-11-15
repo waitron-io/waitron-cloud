@@ -74,6 +74,35 @@ are unchanged. These successful downloads do not establish why the historical
 claiming an upstream repair.
 
 
+### Cost fixture timing under ordinary CI load (D530)
+
+On 15 November, [PR #1224’s receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/43706133990/job/132787577662)
+reports two unchanged fixture failures: a generated image-build HTTP 408 case
+exceeds its ten-second test limit (13.1 seconds including cancellation), and a
+native body-stall case reaches its shortened five-second install deadline before
+its package request. This is generated input, not a provider HTTP refusal.
+
+[Controlled pressure](https://github.com/waitron-io/waitron-cloud/actions/runs/43709685116)
+reproduces both failures with 24 owned workers on one CPU. The image case spends
+5,263 ms compiling an SDK bundle that fake Docker never reads, reaches cleanup
+at 9,248 ms, and hits the ten-second outer limit. Native setup expires at
+5,003 ms with no package request. The same pressure still fails both cases
+[one file at a time](https://github.com/waitron-io/waitron-cloud/actions/runs/43711203443),
+so two-file concurrency is not required to reproduce these failures. Ordinary
+and eight-worker hosted controls pass. These experiments identify fixture
+scheduling weaknesses; the original runner’s load remains unmeasured.
+
+The image fixture now substitutes the unrelated SDK compilation in its existing
+module hook. One existing successful-build case checks that boundary was used.
+Stalled native cases observe the real pnpm/node-gyp milestone before expiring
+the simulated supervisor timer; the real supervisor still kills its installer.
+The refused case keeps its real five-second mapping and must finish without a
+timeout. Every original behavior assertion, the image ten-second limit, native
+ten-second race and twenty-second outer limit remain. Failure teardown retains
+setup records and request arrival times. Check both complete files with
+`node --test --test-concurrency=2 scripts/cloud-cost/conformance-image-build.test.mjs scripts/cloud-cost/conformance-install-script-progress.test.mjs`.
+
+
 ### Header-progress fixture scheduling (D530)
 
 [D462's receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41306500809/job/124848167543)
