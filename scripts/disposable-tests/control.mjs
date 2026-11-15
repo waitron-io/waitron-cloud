@@ -143,7 +143,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   }
  }
  const selectionStarted=Date.now();
- const jobs=await read(()=>findAutomatic({api:pass?.api??api,policy,runs:pass?.runs,limit:free,exclude,hosted,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(60000)]):AbortSignal.timeout(60000)}));
+ const jobs=await read(()=>findAutomatic({api:pass?.api??api,policy,runs:pass?.runs,limit:free,exclude,hosted,signal,budgetSignal:AbortSignal.timeout(60000)}));
  // Each admission keeps a bounded diagnostic alongside the child's original stderr.
  runWorker??=(ci,admission)=>{
   let remaining=4096,pending=Buffer.alloc(0);

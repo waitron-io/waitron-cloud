@@ -32,6 +32,7 @@ and raw quota headers.
 A rate-limited GET before runner registration can grant one retry after the API client’s
 retry time and confirmed guest and runner removal; sent registration requests remain retired
 unless they receive the HTTP 5xx refusal described under A1473 below.
+Qualify the PR-skip diagnostics on the next matched controller release.
 The controller revalidates JSON bodies and shares recent checked admission; see the
 [controller guide](../deploy/disposable-tests/README.md) for timing and cache limits.
 For a replacement release, qualify a full busy hour below about 4,000 used requests

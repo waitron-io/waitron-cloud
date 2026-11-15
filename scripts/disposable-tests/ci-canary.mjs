@@ -439,10 +439,17 @@ export async function findOrdinary({api,policy,approvedHead,runId,jobId,automati
  const admittedPolicy=automatic?{...policy,workflowDigest:digest}:policy;
  return admitOrdinary(admittedPolicy,approvedHead,{repository,run,job:candidates[0],workflow,source,pull});
 }
-export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,untouched=false,onRefused,runs:observed}){
+export async function findAutomatic({api,policy,limit,signal,budgetSignal,exclude=new Set(),excludeRuns=new Set(),hosted={},onePerRun=false,untouched=false,onRefused,runs:observed}){
  assert.ok(Number.isSafeInteger(limit) && limit>=0 && limit<=16,'Invalid free-slot count');
  if(!limit)return [];
- const base=`/repos/${policy.repository}`,found=[];
+ const cancellation=signal;
+ if(budgetSignal)signal=signal?AbortSignal.any([signal,budgetSignal]):budgetSignal;
+ const base=`/repos/${policy.repository}`,found=[],diagnostics=[];
+ const waitingJob=(run,job)=>{
+  if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))return false;
+  const key=ordinaryKey(job.name,job.labels);
+  return ciJobKeyPattern.test(key) && job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`);
+ };
  const upstream=api,reads=new Map();
  api={get:async(path,options)=>{if(!reads.has(path))reads.set(path,upstream.get(path,options));return reads.get(path);}};
  const inventories=observed?[]:await Promise.all(['queued','in_progress'].map(status=>runInventory(upstream,`${base}/actions/workflows/${policy.workflowId}/runs?status=${status}&per_page=100`,signal)));
@@ -451,17 +458,23 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
- for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
+ pickup:for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
   if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt || hosted[run.id]===run.run_attempt+1)continue;
   let candidate;
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
    run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || !['queued','in_progress'].includes(run.status))continue;
+  let reason;
   if(run.event==='pull_request'){
-   if(run.pull_requests?.length!==1)continue;
-   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
-   if(pull.state!=='open' || pull.head?.sha!==run.head_sha || pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
+   if(!run.pull_requests?.length)reason='pr-link-missing';
+   else if(run.pull_requests.length!==1)reason='pr-link-ambiguous';
+   else{
+    const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+    reason=pull.state!=='open'?'pr-not-open':pull.head?.sha!==run.head_sha?'pr-head-mismatch':
+     pull.head.repo?.id!==policy.repositoryId?'pr-head-repo-mismatch':pull.base?.repo?.id!==policy.repositoryId?'pr-base-repo-mismatch':undefined;
+   }
   }
+  if(reason){diagnostics.push({run,reason});continue;}
   const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   if(untouched && inventory.jobs.some(startedWork))continue;
@@ -469,19 +482,37 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
    const first=Date.parse(a.created_at??a.started_at),second=Date.parse(b.created_at??b.started_at);
    return Number.isFinite(first)&&Number.isFinite(second)?first-second||a.id-b.id:0;
   })){
-   if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
+   if(!waitingJob(run,job))continue;
    const key=ordinaryKey(job.name,job.labels);
-   if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
    candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`};
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,requireHostedRouting:untouched,signal});
    if(ci)found.push(ci);
-   if(found.length===limit)return found;
+   if(found.length===limit)break pickup;
    if(ci && onePerRun)break;
   }
   }catch(error){signal?.throwIfAborted();if(error.status===401 || error.status===403 || Number.isFinite(error.retryAt))throw error;console.error(JSON.stringify({event:'automatic-ci-refused',runId:run.id,error:error.message}));
    if(candidate && error.code==='ERR_ASSERTION' && onRefused)try{await onRefused(candidate);}catch(fallbackError){
     signal?.throwIfAborted();console.error(JSON.stringify({event:'automatic-ci-refused-fallback-pending',runId:run.id,error:fallbackError.message}));
    }
+  }
+ }
+ const budgetEnded=()=>{
+  cancellation?.throwIfAborted();
+  if(!budgetSignal?.aborted)return false;
+  console.error(JSON.stringify({event:'automatic-ci-diagnostic-budget',message:'skip reasons not read: pass budget'}));return true;
+ };
+ for(const {run,reason} of diagnostics){
+  if(budgetEnded())break;
+  const skipped={event:'automatic-ci-skipped',repository:policy.repository,runId:run.id,attempt:run.run_attempt,reason};
+  try{
+   const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
+   assert.ok(inventory.jobs.every(job=>Number.isSafeInteger(job.id) && job.id>0 &&
+    job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Invalid diagnostic job identity');
+   if(untouched && inventory.jobs.some(startedWork))continue;
+   for(const job of inventory.jobs)if(waitingJob(run,job))console.error(JSON.stringify({...skipped,jobId:job.id}));
+  }catch(error){
+   if(budgetEnded())break;
+   console.error(JSON.stringify({...skipped,jobs:'unavailable'}));
   }
  }
  return found;

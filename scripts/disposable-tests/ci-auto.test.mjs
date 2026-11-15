@@ -176,6 +176,74 @@ test('automatic pickup admits each routed shard on the current same-repository P
  assert.deepEqual(jobs.map(j=>[j.jobId,j.jobKey]),[[901,'test-server-24'],[902,'test-heavy-3'],[903,'test-till-7'],[904,'test-ui-1'],[905,'test-dashboard-4']]);
  assert.ok(jobs.every(j=>j.sourceSha===head && j.runId===789 && j.attempt===1));
 });
+for(const [reason,links,changes] of [
+ ['pr-link-missing',undefined,{}],['pr-link-missing',[],{}],
+ ['pr-link-ambiguous',[{number:12},{number:13}],{}],
+ ['pr-not-open',[{number:12}],{state:'closed',head:{sha:'5'.repeat(40),repo:{id:999}},base:{repo:{id:999}}}],
+ ['pr-head-mismatch',[{number:12}],{head:{sha:'5'.repeat(40),repo:{id:999}},base:{repo:{id:999}}}],
+ ['pr-head-repo-mismatch',[{number:12}],{head:{sha:head,repo:{id:999}},base:{repo:{id:999}}}],
+ ['pr-base-repo-mismatch',[{number:12}],{base:{repo:{id:999}}}]
+])test(`automatic PR skip diagnostics: ${reason}, links=${links?.length}`,async t=>{
+ const f=fixture(),get=f.api.get,records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const pull={...await get('/repos/fixture/waitron/pulls/12'),...changes,title:'private title',user:{login:'private user'}};
+ f.run.pull_requests=links;
+ const good={...f.run,id:790,pull_requests:[{number:13}]};
+ const job={...f.jobs[0],id:911,run_id:790,labels:['self-hosted','dt-123-790-1-test-server-24']};
+ f.jobs[2].runner_id=42;f.jobs[3].labels=['ubuntu-latest'];f.jobs[4].name='unsupported';
+ f.jobs.push({...f.jobs[0],id:906});
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
+  if(path.endsWith('/pulls/12'))return pull;
+  if(path.endsWith('/pulls/13'))return {...await get('/repos/fixture/waitron/pulls/12'),number:13};
+  if(path.endsWith('/actions/runs/790'))return good;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  return get(path,options);
+ };
+ const selected=await controller.findAutomatic({api:f.api,policy,limit:6,exclude:new Set([906]),onRefused:()=>assert.fail('A PR skip must not start fallback')});
+ assert.deepEqual(selected.map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
+ assert.deepEqual(records,[901,902].map(jobId=>({event:'automatic-ci-skipped',repository:'fixture/waitron',runId:789,attempt:1,jobId,reason})));
+});
+for(const fault of ['http','identity','abort'])test(`automatic PR skip diagnostics: inventory ${fault}`,async t=>{
+ const f=fixture(),get=f.api.get,records=[],abort=new AbortController();t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const good={...f.run,id:790},job={...f.jobs[0],id:911,run_id:790,labels:['self-hosted','dt-123-790-1-test-server-24']};
+ f.run.pull_requests=[];
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
+  if(path.includes('/runs/789/attempts/1/jobs?')){
+   if(fault==='identity')return {total_count:1,jobs:[{...f.jobs[0],run_id:999}]};
+   if(fault==='abort')abort.abort(new Error('Diagnostic cancelled'));
+   throw Object.assign(new Error('private API body'),{status:403});
+  }
+  if(path.endsWith('/actions/runs/790'))return good;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  return get(path,options);
+ };
+ const selected=controller.findAutomatic({api:f.api,policy,limit:6,signal:abort.signal,budgetSignal:AbortSignal.timeout(1000),onRefused:()=>assert.fail('A diagnostic failure must not start fallback')});
+ if(fault==='abort'){await assert.rejects(selected,/Diagnostic cancelled/);assert.deepEqual(records,[]);}
+ else{
+  assert.deepEqual((await selected).map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
+  assert.deepEqual(records,[{event:'automatic-ci-skipped',repository:'fixture/waitron',runId:789,attempt:1,reason:'pr-link-missing',jobs:'unavailable'}]);
+ }
+});
+test('automatic PR skip diagnostics preserve selected jobs when the pass budget expires',async t=>{
+ const f=fixture(),get=f.api.get,records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const good={...f.run,id:790},job={...f.jobs[0],id:911,run_id:790,labels:['self-hosted','dt-123-790-1-test-server-24']};
+ f.run.pull_requests=[];let selectedBeforeDiagnostic=false;
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
+  if(path.includes('/runs/789/attempts/1/jobs?')){
+   assert.ok(selectedBeforeDiagnostic,'Valid selection must precede the extra diagnostic read');
+   await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,1000);options.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(options.signal.reason);},{once:true});});
+  }
+  if(path.endsWith('/actions/runs/790'))return good;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  if(path.endsWith('/commits/'+head))selectedBeforeDiagnostic=true;
+  return get(path,options);
+ };
+ const selected=await controller.findAutomatic({api:f.api,policy,limit:1,budgetSignal:AbortSignal.timeout(100)});
+ assert.deepEqual(selected.map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
+ assert.deepEqual(records,[{event:'automatic-ci-diagnostic-budget',message:'skip reasons not read: pass budget'}]);
+});
 test('an incomplete run inventory does not hold free capacity behind a still-running sibling',async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
