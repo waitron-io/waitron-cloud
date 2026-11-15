@@ -697,8 +697,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    the unchanged handoff schema. Integration checks run each independent root in its
    own container under the original command and container deadlines. CI separates
    three guard-test shards from the full plan and formatting checks, keeping every
-   test file and the original job limits. These are mocked
-   plans, not a deployment. Account/state
+   test file and the original job limits. The historical database provider
+   startup failure in nightly 43495535547 (no initial plugin response) still
+   needs its cause established; passing later runs does not explain it.
+   These are mocked plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
    Very deeply nested source remains subject to Python's limits; no exact boundary
@@ -1567,6 +1569,23 @@ implementation or production evidence.
   from the last observed record. Preserve run identity, final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
+
+- **AWS mocked-plan runtime.** Bring each AWS check job towards four minutes
+  without cutting checks or changing deadlines. Healthy execution times, in seconds:
+
+  | Job | [Baseline](https://github.com/waitron-io/waitron-cloud/actions/runs/43637939520) | Two other healthy executions | [PR #1216](https://github.com/waitron-io/waitron-cloud/actions/runs/43652509564) |
+  | --- | ---: | ---: | ---: |
+  | Guard group 1 | 384 | 329, 298 | 457 |
+  | Guard group 2 | 699 | 461, 444 | 682 |
+  | Guard group 3 | 613 | 694, 528 | 627 |
+  | Complete suites | 1,130 | 775, 870 | 1,061 |
+
+  Other executions: [12 November](https://github.com/waitron-io/waitron-cloud/actions/runs/43258377976)
+  and [10 November](https://github.com/waitron-io/waitron-cloud/actions/runs/42786611748),
+  plus guard group 2's completed success in [the later-cancelled run](https://github.com/waitron-io/waitron-cloud/actions/runs/43636984940).
+  The first group's 73-second increase above baseline is smaller than the earlier
+  86-second spread. The other jobs are below an earlier result. All compared
+  checkouts took 2–3 seconds, with no download HTTP 5xx or overlapping GitHub incident.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate.
