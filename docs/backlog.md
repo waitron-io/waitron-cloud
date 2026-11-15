@@ -3731,6 +3731,8 @@ attributing the initial signed-in timeout. See the [investigation and diagnostic
 
 ## Recovery and remote browser waits (D530)
 
+15 November 2026: [run 43694844056, portal job 132753088334](https://github.com/waitron-io/waitron-cloud/actions/runs/43694844056/job/132753088334) has one `account_without_registry es light 1280` sign-out timeout waiting four seconds for the sign-in heading (`fiscal-registry-removed-browser.test.ts:63`); no matching history was found, and the cause remains unknown. Preserve every assertion and deadline; a recurrence needs priority root-cause investigation.
+
 **Open; both historical causes remain unknown.** The two affected browser files
 pass 88 unchanged Linux checks. Recovery and remote-name failures now report their
 named step, bounded request progress and redacted panel state, while retaining
