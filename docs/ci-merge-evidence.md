@@ -100,7 +100,7 @@ a reusable invocation when its value is false. No PR-shaped event can narrow it.
 
 ## Keep the nightly backstop separate
 
-The [nightly run](ci-nightly.md) executes standard CI, cost, venue and all four
-AWS cells at the same revision, even on an unchanged tree. Its parent requires
+The [nightly run](ci-nightly.md) executes standard CI, cost, venue and all eight
+AWS check groups at the same revision, even on an unchanged tree. Its parent requires
 all four workflow families and its separate mutation-check job. Check its actual scheduled or manual main execution and final
 summary separately; a PR rehearsal does not qualify a successful night.
