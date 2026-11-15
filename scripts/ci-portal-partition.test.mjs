@@ -16,7 +16,7 @@ function prepareRunner(root) {
   writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
 }
 
-test('six portal partitions discover current and future files exactly once without overlapping fixtures', () => {
+test('six portal partitions discover current and future files exactly once', () => {
   const workspace = loadWorkspace();
   const rows = workPlan({full: false, packages: ['@waitron-cloud/portal']}, workspace).packages;
   assert.equal(rows.length, 6);

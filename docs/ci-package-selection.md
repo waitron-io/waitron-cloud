@@ -68,7 +68,10 @@ places the heaviest remaining file in the lightest group and runs those files ex
 New files use the mean weight of current measured files; removed names do not affect
 that mean. The JSON tables contain relative millisecond weights from hosted file summaries,
 which omit module loading and overlap under Node’s default concurrency. They do not predict
-a job’s elapsed time. Test deadlines remain 120 seconds for portal and 30 for registration.
+a job’s elapsed time. To refresh portal’s table, take the basename and `durationMs` from each
+`# File duration:` record in all six portal job logs of one healthy hosted run; the current
+table uses [run 43699590055](https://github.com/waitron-io/waitron-cloud/actions/runs/43699590055).
+Test deadlines remain 120 seconds for portal and 30 for registration.
 
 You can check discovery, future files and packing without running either package suite:
 
