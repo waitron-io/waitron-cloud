@@ -74,6 +74,20 @@ are unchanged. These successful downloads do not establish why the historical
 claiming an upstream repair.
 
 
+### Replay interrupted later-upload close (D530)
+
+[PR #1225’s receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/43719646426/job/132828722954)
+reports `replay-stream.test.mjs:499`: the interrupted later-upload cancellation
+case expects `close()` to reject, but it resolves. Cost checks pass 3,825 of 3,826;
+all 45 image/native fixture cases pass. The replay source and test are unchanged
+from base `e30473a29`; twelve focused repetitions on that main revision pass.
+This is the first recorded sighting of this assertion, distinct from the earlier
+frozen-close diagnostic failure. Its cause remains unknown; a clean later run
+is not a repair. Inspect another sighting before changing close or fixture rules.
+Run `node --test --test-name-pattern=^cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter$ scripts/cloud-cost/replay-stream.test.mjs`
+for the focused case. The complete failed job log is retained in Lane G’s
+`receipts/cost-fixture-timing/pr-receipts-failure.log`.
+
 ### Cost fixture timing under ordinary CI load (D530)
 
 On 15 November, [PR #1224’s receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/43706133990/job/132787577662)
