@@ -2,9 +2,21 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {PairingController} from '../src/pairing-controller.ts';
 import type {ApiResult} from '../src/api.ts';
+import {translations} from '../src/locale.ts';
 const requestId='12345678-1234-4234-8234-123456789abc';
 const business={organisationId:requestId,legalBusinessId:'22345678-1234-4234-8234-123456789abc',organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'};
 const view={requestId,venueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:new Date(Date.now()+600000).toISOString(),state:'awaiting_cloud'};
+for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['inspect','approve'] as const)
+test(`${action} explains request-body refusal ${status} and retains the entered pairing details`,async()=>{
+  const controller=new PairingController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:false,status,code:'invalid_input',retryAfterMs:0}));
+  controller.open(requestId);controller.account('owner');controller.code='12345678';controller.businesses=[business];controller.selected=business.legalBusinessId;controller.view={...view,environment:'test',state:'awaiting_cloud'};const prior=controller.view;
+  await controller[action]();
+  assert.equal(controller.error,`${action==='approve'?'pairingApprove':'pairing'}Request${cause}`);assert.equal(controller.pending,false);
+  assert.equal(controller.view,prior);assert.equal(controller.code,'12345678');assert.equal(controller.selected,business.legalBusinessId);
+  for(const locale of ['en','es'] as const){
+    const c=translations[locale];assert.equal(c[controller.error!],c[`requestBody${cause}`]+(status===408?` ${action==='approve'?c.pairApprove:c.pairInspect}.`:''));
+  }
+});
 test('inspection never approves; approval uses only an offered business and stays recoverable after a lost reply',async()=>{
   const calls:{path:string;body?:Record<string,unknown>}[]=[];let lose=false;
   const controller=new PairingController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{

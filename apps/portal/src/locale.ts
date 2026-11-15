@@ -11,7 +11,7 @@ const bodyRefusalActions = {
   account:'continue', accountCreate:'create', accountReset:'sendReset', accountPassword:'savePassword',
   factorSignIn:'login', factorVerify:'factorVerify', factor:'factorRefresh', sessionRevoke:'sessionRevoke', sessionSignOut:'sessionSignOut', logout:'signout',
   alerts:'alertsSave', snapshots:'latestSnapshots', diagnostic:'diagnosticDownload', installations:'refreshStatus',
-  recovery:'recoveryCheckRequest', recoveryInspect:'pairInspect', remote:'refreshStatus', translationConsent:'translationConsentRefresh', usage:'usageRefresh',
+  recovery:'recoveryCheckRequest', recoveryInspect:'pairInspect', pairing:'pairInspect', pairingApprove:'pairApprove', remote:'refreshStatus', translationConsent:'translationConsentRefresh', usage:'usageRefresh',
 } as const;
 type BodyRefusalCopyKey = `${keyof typeof bodyRefusalActions}Request${'Interrupted'|'Size'|'Format'}`;
 function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string> {
