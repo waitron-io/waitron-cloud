@@ -108,4 +108,3 @@ test(${JSON.stringify(name)}, async () => {
     assert.deepEqual(seen.sort(), files);
   } finally {rmSync(root, {recursive: true, force: true});}
 });
-
