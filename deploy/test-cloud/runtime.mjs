@@ -26,7 +26,7 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
  if(role!=='migrate'&&environment.DATABASE_URL)await checkConsumerDatabase(environment.DATABASE_URL,'/app');
  const args=role==='usage'?['--watch']:role==='reconcile'?['/run/reconciler/config.json']:[];
  const childEnvironment={PATH:process.env.PATH,HOME:'/tmp',LOCAL_STACK_CONFIG_DIR:directory,...environment};
- // Replacing the launcher leaves only the worker heap inside its memory limit.
+ // Replace the launcher to avoid retaining its heap beside the worker.
  if(['monitor','usage','probe','manifest'].includes(role)){
   process.chdir('/app');
   return process.execve(process.execPath,[process.execPath,command,...args],childEnvironment);
