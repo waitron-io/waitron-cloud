@@ -96,3 +96,23 @@ test('observer sign-in policy reaches only the explicit test account process', a
  for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation'])
   assert.equal(testRuntimeEnvironment(role,config,supplied).CLOUD_FACTOR_POLICY,undefined,role);
 });
+
+test('manifest worker replaces its launcher, retains its environment, exit status and termination handling',async t=>{
+ const {spawn}=await import('node:child_process');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));await bootstrap(dir);
+ for(const terminating of [false,true]){
+  const fixture=`import assert from 'node:assert/strict';import{launchTestRuntime}from${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)};
+   const before=process.pid,execve=process.execve;process.chdir=directory=>assert.equal(directory,'/app');
+   process.execve=(file,args,environment)=>{assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,'deploy/test-cloud/remote-worker.mjs']);
+    execve(file,[file,'-e',${JSON.stringify(`${terminating?"process.on('SIGTERM',()=>process.exit(23));":""}console.log(JSON.stringify({pid:process.pid,home:process.env.HOME,config:process.env.LOCAL_STACK_CONFIG_DIR,canary:process.env.NODE_AUTH_TOKEN}));${terminating?"setInterval(()=>{},1000)":"process.exit(37)"}`)}],environment);};
+   console.log('launcher='+before);await launchTestRuntime('manifest',${JSON.stringify(dir)});`;
+  const child=spawn(process.execPath,['--input-type=module','-e',fixture],{env:{...process.env,NODE_AUTH_TOKEN:'synthetic-canary'},stdio:['ignore','pipe','pipe']});
+  t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
+  let stdout='',stderr='',sent=false;child.stderr.on('data',chunk=>{stderr+=chunk;});
+  child.stdout.on('data',chunk=>{stdout+=chunk;if(terminating&&!sent&&stdout.includes('"pid":')){sent=true;child.kill('SIGTERM');}});
+  const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
+  assert.deepEqual(result,{code:terminating?23:37,signal:null},stderr);
+  const [launcher,line]=stdout.trim().split('\n'),worker=JSON.parse(line);
+  assert.equal(worker.pid,Number(launcher.split('=')[1]));assert.equal(worker.home,'/tmp');assert.equal(worker.config,'/run/local-stack');assert.equal(worker.canary,undefined);
+ }
+});
