@@ -48,6 +48,7 @@ test('a symlinked registration command executes selected tests and refuses inval
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-link-'));
   try {
     mkdirSync(join(root, 'scripts'));
+    cpSync('scripts/ci-measured-shards.mjs', join(root, 'scripts/ci-measured-shards.mjs'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
     cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
@@ -75,6 +76,7 @@ test('registration runner executes all current and future files exactly once wit
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-balanced-'));
   try {
     mkdirSync(join(root, 'scripts'));
+    cpSync('scripts/ci-measured-shards.mjs', join(root, 'scripts/ci-measured-shards.mjs'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
     cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
@@ -118,6 +120,7 @@ for (const empty of [true, false]) test(empty ? 'an empty registration shard ref
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-refusal-'));
   try {
     mkdirSync(join(root, 'scripts'));
+    cpSync('scripts/ci-measured-shards.mjs', join(root, 'scripts/ci-measured-shards.mjs'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
     cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));

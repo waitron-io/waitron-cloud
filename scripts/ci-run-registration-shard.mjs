@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {measuredShards} from './ci-measured-shards.mjs';
 import {readdirSync, realpathSync, readFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -7,20 +8,7 @@ const measuredDurations = JSON.parse(readFileSync(new URL('./ci-registration-dur
 
 export function registrationFiles(shard, files, durations = measuredDurations) {
   assert.ok(Number.isSafeInteger(shard) && shard >= 1 && shard <= 7, 'Invalid registration shard');
-  assert.ok(durations && typeof durations === 'object' && !Array.isArray(durations) && Object.values(durations).every(value => Number.isFinite(value) && value >= 0), 'Invalid registration duration');
-  const known = files.filter(file => Object.hasOwn(durations, file));
-  const mean = known.length ? known.reduce((sum, file) => sum + durations[file], 0) / known.length : 1;
-  const estimate = file => durations[file] ?? mean;
-  const ordered = [...files].sort((a, b) => estimate(b) - estimate(a) || (a < b ? -1 : a > b ? 1 : 0));
-  const groups = Array.from({length: 7}, () => []);
-  const totals = Array(7).fill(0);
-  for (const file of ordered) {
-    let lightest = 0;
-    for (let index = 1; index < 7; index++) if (totals[index] < totals[lightest]) lightest = index;
-    groups[lightest].push(file);
-    totals[lightest] += estimate(file);
-  }
-  return groups[shard - 1];
+  return measuredShards(files, durations, 7, 'registration')[shard - 1];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {

@@ -1606,7 +1606,7 @@ implementation or production evidence.
   records a job cancelled during cleanup after all 569 cases passed. Seven
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
-  and rejects five- and seven-partition allocations. The
+  and rejects six- and eight-partition allocations. The
   [original registration cancellation](backlog/package-ci-runtime.md#what-remains-unexplained)
   remains unexplained; measured file allocation does not establish its cause.
 

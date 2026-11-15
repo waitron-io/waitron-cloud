@@ -386,6 +386,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: matrix.package == '@waitron-cloud/portal'
         run: pnpm --filter ${{ matrix.package }} build
+      - if: matrix.package == '@waitron-cloud/portal'
+        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node ../../scripts/ci-run-portal-shard.mjs ${{ matrix.shard }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: matrix.package == '@waitron-cloud/registration'
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node ../../scripts/ci-run-registration-shard.mjs ${{ matrix.shard }}
         env:
@@ -394,8 +398,8 @@ jobs:
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node ../../scripts/ci-run-remote-shard.mjs ${{ matrix.shard }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - if: matrix.shards && matrix.package != '@waitron-cloud/registration' && matrix.package != '@waitron-cloud/remote-access'
-        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
+      - if: matrix.shards && matrix.package != '@waitron-cloud/registration' && matrix.package != '@waitron-cloud/remote-access' && matrix.package != '@waitron-cloud/portal'
+        run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Keep optional saving last so final runner cleanup collects its child processes.
