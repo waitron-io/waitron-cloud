@@ -2,6 +2,11 @@
 
 ## Outcome and boundary
 
+Watcher amendment, 15 November 03:38: build the baseline from current Cloud main
+and Waitron `8eed667ab0586a3144ed7911b57cf50fcb3b0766` (contract 0.2.16); keep
+that Waitron image unchanged across measurements. This qualifies the current
+workload, not #1213’s exact images, and replaces only the missing-input refusal.
+
 Measure `usage-reconciler`, `monitor-worker`, `remote-probe` and
 `gateway-manifest` in #1213’s Debian pairing-v2 `runTestCloudClients` workload;
 set limits from measured peaks with margin, or cut plainly wasteful launcher
