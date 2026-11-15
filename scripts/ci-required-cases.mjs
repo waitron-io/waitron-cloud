@@ -1,5 +1,5 @@
 import {readFileSync, realpathSync, statSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -57,7 +57,12 @@ function tracker(requirements, root) {
 export function createRequiredCaseReporter(requirements, {root}) {
   return async function* reporter(events) {
     const receipt = tracker(requirements, root);
-    for await (const event of events) receipt.observe(event);
+    for await (const event of events) {
+      receipt.observe(event);
+      if (event.type === 'test:summary' && event.data.file) {
+        yield `# File duration: ${JSON.stringify({file: relative(realpathSync(root), resolve(event.data.file)), durationMs: event.data.duration_ms})}\n`;
+      }
+    }
     const {count, failures} = receipt.finish();
     for (const failure of failures) {process.exitCode = 1; yield `# ${failure}\n`;}
     yield `# Required cases: ${count} passed\n`;

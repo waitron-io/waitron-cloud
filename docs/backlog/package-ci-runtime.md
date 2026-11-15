@@ -46,6 +46,11 @@ and elapsed milliseconds, then run the portable allocation checks:
 node --test scripts/ci-registration-shards.test.mjs scripts/ci-package-allocation.test.mjs
 ```
 
+The case reporter prints `# File duration:` JSON comments for each Node file
+summary, with a repository-relative filename and `durationMs`. These summaries
+can compare hosted test work; the calibration below shows they omit module
+loading, so they are not complete process elapsed times.
+
 Calibrate any alternate reporter first with a known module-level delay and a
 known test delay. Node 26.13.0's per-file summary omitted the module delay in the
 local control: it reported 508 milliseconds for 750 milliseconds of deliberate
