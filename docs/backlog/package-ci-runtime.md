@@ -47,9 +47,14 @@ node --test scripts/ci-registration-shards.test.mjs scripts/ci-package-allocatio
 ```
 
 The case reporter prints `# File duration:` JSON comments for each Node file
-summary, with a repository-relative filename and `durationMs`. These summaries
-can compare hosted test work; the calibration below shows they omit module
-loading, so they are not complete process elapsed times.
+summary, with a root-relative filename and `durationMs` (the default root is the
+repository). The 15 November 09:06 watcher-cleared hosted pass uses these test-summary
+weights instead of the complete-process procedure above. Select the
+`packages/registration/test/` records and use their basenames as table keys.
+The calibration below shows these summaries omit module loading. File workers
+also overlap and share runner resources, so their durations depend on contention
+and their sum is not job wall time. Every complete hosted job must still pass
+within 300 seconds.
 
 Calibrate any alternate reporter first with a known module-level delay and a
 known test delay. Node 26.13.0's per-file summary omitted the module delay in the
