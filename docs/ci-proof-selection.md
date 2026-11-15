@@ -71,6 +71,19 @@ the owner's later instruction keeps the work open for the proposed code-PR cuts.
 Check infrastructure and cost-input PRs as they arrive naturally for more slow
 paths, without making PRs or rerunning workflows just to obtain measurements.
 
+## Ordinary cost-suite file concurrency
+
+`pnpm test:cloud-cost` runs two test files at once. The original serial flag was
+introduced with the suite in PR #279; its commit and PR description give no
+reason for it. The current files use owned scratch paths and loopback ports;
+the shared public build replaces files through unique temporary files and
+atomic renames. On one four-CPU Linux guest, running all 148 files serially took
+308 seconds, while two files at once took 155 and 147 seconds. Each run passed
+all 3,826 checks and public-artifact verification without changing the artifacts.
+Run the comparison with Git history and an ordinary user, as CI does.
+These local measurements do not establish hosted job duration. Read the
+complete current-head receipts job before qualifying the five-minute target.
+
 ## Current proof selection
 
 Pull requests start a small venue-proof planner and run its test job only when

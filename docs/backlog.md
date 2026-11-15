@@ -2738,8 +2738,8 @@ implementation or production evidence.
   runner and its suite registry, because they now control execution. Changed or
   missing execution inputs retain the affected receipt. The five receipt commands
   and all their assertions stay intact. Compare observed job wall times and complete
-  case counts with the preceding five-job sample before claiming a saving; whole-run runtime and other grouping work remain
-  open. Each file runs once, with its original
+  case counts with the preceding five-job sample before claiming a saving. Package
+  allocation and the whole-run runtime target remain open. Each file runs once, with its original
   assertions and test deadline. The authenticator clock-rollover case has its own
   portal file so sharding can separate its two real clock waits from the main
   authenticator journey. All work jobs have an eight-minute limit; the target is
