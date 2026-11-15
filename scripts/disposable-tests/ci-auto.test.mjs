@@ -203,14 +203,15 @@ for(const [reason,links,changes] of [
  assert.deepEqual(selected.map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
  assert.deepEqual(records,[901,902].map(jobId=>({event:'automatic-ci-skipped',repository:'fixture/waitron',runId:789,attempt:1,jobId,reason})));
 });
-for(const aborted of [false,true])test(`automatic PR skip diagnostics: inventory failure ${aborted?'propagates abort':'cannot block a later run'}`,async t=>{
+for(const fault of ['http','identity','abort'])test(`automatic PR skip diagnostics: inventory ${fault}`,async t=>{
  const f=fixture(),get=f.api.get,records=[],abort=new AbortController();t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
  const good={...f.run,id:790},job={...f.jobs[0],id:911,run_id:790,labels:['self-hosted','dt-123-790-1-test-server-24']};
  f.run.pull_requests=[];
  f.api.get=async(path,options)=>{
   if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
   if(path.includes('/runs/789/attempts/1/jobs?')){
-   if(aborted)abort.abort(new Error('Diagnostic cancelled'));
+   if(fault==='identity')return {total_count:1,jobs:[{...f.jobs[0],run_id:999}]};
+   if(fault==='abort')abort.abort(new Error('Diagnostic cancelled'));
    throw Object.assign(new Error('private API body'),{status:403});
   }
   if(path.endsWith('/actions/runs/790'))return good;
@@ -218,7 +219,7 @@ for(const aborted of [false,true])test(`automatic PR skip diagnostics: inventory
   return get(path,options);
  };
  const selected=controller.findAutomatic({api:f.api,policy,limit:6,signal:abort.signal,onRefused:()=>assert.fail('A diagnostic failure must not start fallback')});
- if(aborted){await assert.rejects(selected,/Diagnostic cancelled/);assert.deepEqual(records,[]);}
+ if(fault==='abort'){await assert.rejects(selected,/Diagnostic cancelled/);assert.deepEqual(records,[]);}
  else{
   assert.deepEqual((await selected).map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
   assert.deepEqual(records,[{event:'automatic-ci-skipped',repository:'fixture/waitron',runId:789,attempt:1,reason:'pr-link-missing',jobs:'unavailable'}]);
