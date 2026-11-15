@@ -1,25 +1,35 @@
 # AWS check runtime implementation plan
 
-**Request:** “Bring each AWS check job towards four minutes without cutting checks or changing deadlines.” Recorded in `~/waitron-campaign-g/queue.md`, AWS-CHECK-TIME, from `docs/backlog.md`. Claude review and watcher clearance are required before building; neither is owner design approval. Implement inline with TDD.
+**Ask:** “Bring each AWS check job towards four minutes without cutting checks or changing deadlines.” Source: `~/waitron-campaign-g/queue.md`, AWS-CHECK-TIME; `docs/backlog.md`. Watcher 15 November 05:33 cleared this smaller route, pending one Claude reread; no owner design approval claimed.
 
-**Measured cause:** `~/waitron-campaign-g/receipts/aws-check-time/baseline-breakdown.json` records healthy run 43652509564, head `1597536eab19a79a1945e09e375de2d6d93cd345`: Check steps 457/682/627/1061 seconds; preparation 38.6–42.4 seconds; install 0.5–0.7. Serial guard execution totals 359 tests and 391.7/613.1/565.7 seconds. Composition/provider guards repeat every integration filter in both roots (369.85/294.71 seconds); custody takes 152. The complete-suite job serializes twelve suites. Buffered output cannot distinguish provider startup from individual plans or predict filter timings. The companion `../tofu-plugin-start/cap-pr-qualified-timing.json` qualifies spread, 2–3-second checkouts, no download 5xx and no overlapping incident.
+**Cause and finish line.** Healthy run [43652509564](https://github.com/waitron-io/waitron-cloud/actions/runs/43652509564) took 457/682/627/1,061 seconds per Check step. Preparation was 38.6–42.4 seconds; install 0.5–0.7. Serial guards took 391.7/613.1/565.7 seconds. Composition and binding tests each repeat the complete integration suite; `--all` repeats the real plans already executed by guards. Integration alone took 365.5 seconds; custody took 146.3 there and 152.1 in its guard. Buffered logs cannot separate provider startup from plans; health receipts qualify 2–3-second checkouts, no download 5xx or overlapping incident. Pinned CI must qualify every job’s execution against approximately 240 seconds, assertion counts and separate queue time.
 
-- [ ] **Fixed slices, existing isolation.** In `deploy/aws/check.mjs`, add closed suite names `bindings-global` and `bindings-country` (only that root’s integration filter), `composition` (both roots’ composition/edge/evidence filters), and `handoff` (both handoff filters). Keep separate root containers, immutable inspected snapshots, cleanup and `run.py` unchanged. Preserve `integration` and canonical twelve-suite `--all` without also traversing aliases. No infrastructure/provider changes, caches, framework, or deadline changes: retain 90-second commands, 300-second containers and 30-minute jobs, mocked-only inspection and every existing refusal.
-- [ ] **Assertion ownership.** Change `composition.test.mjs` to its slice; retain all twenty named occurrences, including the country-only permission refusal and global-only workload case. Move only the executable-plan test from `provider-bindings.test.mjs` into new `provider-global.test.mjs` and `provider-country.test.mjs`; retain static provider checks. Each new test requires aggregate `[29]`, one network-entry case, one foreign-operator refusal and all eight account/region refusals for its four aliases. This replaces `[29,29]` and two network occurrences across roots; the original 359 cases become 360 before new runner tests. Each root still executes 29 admission + 6 composition + 2 edge + 2 evidence + 2 handoff cases.
-- [ ] **Fixed workflow allocations.** In `.github/workflows/aws-infrastructure.yml`, use explicit matrix file/suite lists, serial Node explicit-file execution, fail-fast false, unchanged preparation/artifacts; format only in plans-1. Test stems below mean `deploy/aws/<stem>.test.mjs`.
+- [ ] **Reuse the runner.** Add only `integration-global` and `integration-country` aliases in `deploy/aws/check.mjs`, each explicitly mapped to that root’s existing five filters. Keep twelve-suite `--all` iteration separate. Preserve both-root integration, immutable inspection, separate root containers, cleanup, `run.py`, every safety flag and 90-second/300-second/30-minute limits. No caches, provider changes or new scheduling framework.
+- [ ] **Keep checks with their owner.** Replace `composition.test.mjs` and only the executable test in `provider-bindings.test.mjs` with `global-plans.test.mjs` and `country-plans.test.mjs`: one real full-root run each, retaining per-root aggregate `[29]`, network and foreign-operator cases, eight alias refusals and the ten applicable named composition occurrences. Static provider assertions stay. Two old tests become two root tests: baseline 359 remains, before new runner cases. Keep all 384 HCL cases, authority assertions and four exact handoff JSON/schema checks.
 
-| Cell | Allocation |
+**Removed cell ownership:** `verify (suites)` runs no unique assertion. Its twelve suite executions remain required through these current guards:
+
+| Suite | Guard file and line under `deploy/aws/` |
 | --- | --- |
-| guards-1/2/3/4 | custody / provider-global / provider-country / composition |
-| guards-5 | accounts,candidate,check,contracts,handoff,integration,modules-policy |
-| guards-6 | runner,runner-batches,scheduling |
-| guards-7 | database,locks,state |
-| guards-8 | cell,network,storage |
-| guards-9 | dns,ingress,observability,permissions,provider-bindings,replication-metrics,tools,topology |
-| plans-1/2/3/4 | custody+canary / database+state+accounts / storage+network+cell / observability+ingress+dns |
-| plans-5/6/7 | bindings-global / bindings-country / composition+handoff |
+| canary; accounts; state | `runner.test.mjs:182`; `locks.test.mjs:11`; `state.test.mjs:90` |
+| network; cell; database | `network.test.mjs:163`; `cell.test.mjs:8`; `database.test.mjs:84` |
+| storage; observability; ingress | `storage.test.mjs:86`; `observability.test.mjs:83`; `ingress.test.mjs:78` |
+| custody; dns | `custody.test.mjs:75`; `dns.test.mjs:85` |
+| integration, all five filters | `composition.test.mjs:7`, `provider-bindings.test.mjs:96` move into both root files; `handoff.test.mjs:59` retains stricter JSON checks |
 
-The four module allocations sum to 164.7/159.8/158.0/156.7 measured suite-seconds; new slices require CI timing.
+- [ ] **Eight fixed guard cells** in `.github/workflows/aws-infrastructure.yml`, each serial with explicit files; formatting stays in cell 8. Test stems below omit `.test.mjs`:
 
-- [ ] **TDD and consumers.** First watch `fixed slices preserve all CLI inventory` fail in `runner-batches.test.mjs` on unknown slices, using injected execution; then implement. Preserve existing behavioral checks. Update `integration.test.mjs` to execute every matrix shell, prove discovered-file/filter coverage exactly once, and retain failure/count/artifact checks. Update `scripts/ci-evidence.mjs` to require all sixteen verify names; update `scripts/{ci-evidence,ci-native-summary,ci-reuse-source,ci-plan-fallback}.test.mjs` inventories without weakening missing/duplicate/wrong-attempt refusals. Run focused tests: `node --test deploy/aws/integration.test.mjs scripts/{ci-evidence,ci-native-summary,ci-reuse-source,ci-plan-fallback}.test.mjs`; run runner-batches with `--test-name-pattern='fixed slices'`. No permanent self-mutation tests. CI owns full suites.
-- [ ] **Finish.** Update `docs/aws-infrastructure.md` and the backlog entry. Estimated production/workflow +120/−35 lines; tests/test-support +300/−120; guide/backlog +40/−20. On the current-head pinned AWS workflow, read every job and retained assertion count, confirm complete coverage and report each job’s elapsed time and Check-step time against approximately 240 seconds, including preparation. Explain remaining excess from measured logs before claiming delivery; preserve all deadlines. Claude reviews built work through finish-branch.
+| Cell | Files | Forecast Check seconds including preparation |
+| --- | --- | ---: |
+| 1 | custody | 195 |
+| 2; 3 | global-plans; country-plans | 225 each |
+| 4 | accounts,candidate,check,contracts,handoff,integration,modules-policy | 235 |
+| 5 | runner,runner-batches,scheduling | 210 |
+| 6 | database,locks,state | 205 |
+| 7 | cell,network,storage | 190 |
+| 8 | dns,ingress,observability,permissions,provider-bindings,replication-metrics,tools,topology | 230 |
+
+Forecast assumptions combine measured cases, preparation and startup allowance; root split/workflow-test growth remain unmeasured. Keep path triggers, failure propagation and artifacts. Require all eight names in `scripts/ci-evidence.mjs`; update inventories in `scripts/{ci-evidence,ci-native-summary,ci-reuse-source,ci-plan-fallback}.test.mjs`, retaining every missing/duplicate/wrong-attempt refusal.
+
+- [ ] **TDD:** new alias/batch and canonical `--all` inventory tests in `runner-batches.test.mjs` fail before implementation. Extend existing real-shell `integration.test.mjs` checks to cover every discovered guard file once, all cells, failures and artifacts; independently retain the literal 27 root/filter inventory independent of the alias table. Run named changed files locally, Docker cases via the shared helper; CI owns full suites. No permanent mutation harness.
+- [ ] **Finish:** update `docs/aws-infrastructure.md` and delete finished backlog text. Forecast production/workflow +85/−55; tests/support +260/−160; guide/backlog/plan +60/−30. Claude finish-branch review, exact-head pinned CI and every final job’s counts/timing precede landing.
