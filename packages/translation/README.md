@@ -228,11 +228,18 @@ pnpm quality:grading --set tuning --round r2 quality/results/tuning-*.json
 Repeat with `blind`. The trial accepts 1–10 repeats and an optional `--out <directory>`.
 It refuses ordinary settings before creating output. Explicit local proof uses a fake
 provider and synthetic key; it supplies no translation-quality measurement. Each output file records the set, prompt version,
-model, repeat, names, failed items, usage and estimated cost at the recorded model prices.
+model, house-style choice (or `null`), repeat, names, failed items, usage and estimated cost at the recorded model prices.
 Files have unique names and private permissions. The trial has no production venue budget;
 keep these manual runs small. It prints file paths, and exits unsuccessfully if a first pass
 or review failed. A failed review retains its first-pass names for diagnosis but cannot
 qualify a complete two-pass quality result.
+
+To rehearse Task 23 with tuning examples, run
+`pnpm quality:trial --set blind --runs 1 --house-style tuning-accepted` against the
+fake provider. It selects up to 300 products with shown, unmarked tuning names,
+choosing the most frequent text per language and the first text alphabetically on a tie.
+Venue-supplied names stay unchanged. The flag is refused with `--set tuning` so the
+comparison cannot reuse its own answers. These synthetic runs measure no quality.
 
 The page command writes `quality/grading-<set>.html` and its `-keys.json` companion. These
 are ignored local outputs. It rejects malformed, failed, wrong-set or repeated input files

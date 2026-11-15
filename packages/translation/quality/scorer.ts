@@ -7,6 +7,8 @@ export type SetName='tuning'|'blind';
 export const languages=['ca','es','en'] as const;
 export interface Product {id:string;internal:string;category:string|null;existing?:Record<string,string>;kind?:TranslationKind;family?:string}
 export interface GradedSet {products:Product[];grades:Map<string,'fix'|'wrong'>;shown:Set<string>}
+export type ShownName={pid:string;lang:string;text:string;runs:string[]};
+export function shownEntries(name:SetName):Record<string,ShownName>{return JSON.parse(readFileSync(new URL(`${name}-shown.json`,data),'utf8'));}
 export interface Score {names:number;fix:number;wrong:number;ungraded:number;ungradedNames:{pid:string;lang:string;text:string}[]}
 const data=new URL('./data/',import.meta.url);
 export function gradeKey(pid:string,lang:string,text:string){return createHash('sha1').update(`${pid}\u001f${lang}\u001f${text}`,'utf8').digest('hex').slice(0,16);}
@@ -17,7 +19,7 @@ export function loadSet(name:SetName):GradedSet{
   const g=JSON.parse(readFileSync(new URL(file,dir),'utf8')) as {pid:string;lang:string;text:string;verdict:'fix'|'wrong'};
   grades.set(gradeKey(g.pid,g.lang,g.text),g.verdict);
  }
- return {products,grades,shown:new Set(Object.keys(JSON.parse(readFileSync(new URL(`${name}-shown.json`,data),'utf8'))))};
+ return {products,grades,shown:new Set(Object.keys(shownEntries(name)))};
 }
 export function gradeRun(names:Record<string,Record<string,unknown>>,set:GradedSet):Score{
  const out:Score={names:0,fix:0,wrong:0,ungraded:0,ungradedNames:[]};

@@ -1,6 +1,6 @@
 # Offline translation house-style preparation
 
-The watcher queued TRANSLATE-REMAINING on 15 November at 23:23 in `~/waitron-campaign-g/queue.md`: build remaining translation parts that need no owner trial, provider key or production decision. Separate Sol/high drafted this plan; Claude reviewed it at `~/waitron-campaign-g/receipts/translation-remaining/plan-review.md`. Watcher clearance is still required. No owner approval of this plan is claimed.
+The watcher queued TRANSLATE-REMAINING on 15 November at 23:23 in `~/waitron-campaign-g/queue.md`: build remaining translation parts that need no owner trial, provider key or production decision. Separate Sol/high drafted this plan; Claude reviewed it at `~/waitron-campaign-g/receipts/translation-remaining/plan-review.md`. The watcher cleared this scope at 23:33 on 15 November in that lane’s `questions.md`. No owner approval of this plan is claimed.
 
 **Finish line.** Implement only [Task 23](2026-10-14-translate-all.md#task-23-owner-involved-needs-the-real-key-measure-the-house-style-examples) steps 1–2. You can rehearse the blind-set comparison with accepted tuning examples through the existing loopback-only trial. This measures no translation quality. Task 22 and Task 23 measurements/grading remain owner-only. Task 24 needs its private catalogue and a destination compatible with the public repository's no-real-data rule; build no empty set scaffolding.
 

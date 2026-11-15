@@ -8,7 +8,8 @@ import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test,mock} from 'node:test';
 import * as trial from './trial.ts';
-import {gradeRun,loadSet,type GradedSet} from './scorer.ts';
+import type {HouseStyleName} from '../src/index.ts';
+import {gradeKey,gradeRun,loadSet,shownEntries,type GradedSet} from './scorer.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from '../test/fake-openai.ts';
 
 function command(file:string,args:string[],env:NodeJS.ProcessEnv={}){
@@ -33,6 +34,26 @@ test('the trial preserves given names and kind/family, dropping items with all l
  ]});
  assert.equal(trial.trialJob(loadSet('tuning')).items.length,32);
 });
+test('accepted style chooses frequent unmarked names in product order without replacing venue names',()=>{
+ assert.equal(typeof trial.acceptedHouseStyle,'function','acceptedHouseStyle must exist');
+ const set:GradedSet={products:[{id:'b',internal:'TEA',category:null,existing:{en:'Venue tea'}},{id:'a',internal:'COFFEE',category:null}],
+  grades:new Map([[gradeKey('a','ca','Marked'),'wrong']]),shown:new Set()};
+ const entries=[['a','ca','Marked',5],['a','ca','Cafè',2],['a','ca','Cafeteria',1],['a','es','Zeta',2],['a','es','Alfa',2],
+  ['b','ca','Te',1],['b','en','Replacement',4],['a','fix','Correction',8],['unknown','ca','Ghost',9]] as const;
+ const shown=Object.fromEntries(entries.map(([pid,lang,text,count])=>[gradeKey(pid,lang,text),{pid,lang,text,runs:Array(count).fill('run')}]));
+ const before=structuredClone({set,shown});
+ const expected:HouseStyleName[]=[{kind:'product',staffName:'TEA',names:{en:'Venue tea',ca:'Te'}},{kind:'product',staffName:'COFFEE',names:{ca:'Cafè',es:'Alfa'}}];
+ assert.deepEqual(trial.acceptedHouseStyle(set,shown),expected);
+ assert.deepEqual(trial.acceptedHouseStyle(set,shown,1),expected.slice(0,1));
+ assert.deepEqual({set,shown},before);
+ const many:GradedSet={...set,grades:new Map(),products:Array.from({length:301},(_,i)=>({id:String(i),internal:'TEA '+i,category:null}))};
+ const all=Object.fromEntries(many.products.map(p=>[gradeKey(p.id,'ca','Te'),{pid:p.id,lang:'ca',text:'Te',runs:['run']}]));
+ const capped=trial.acceptedHouseStyle(many,all);
+ assert.equal(capped.length,300);assert.equal(capped.at(-1)?.staffName,'TEA 299');
+ assert.deepEqual(trial.acceptedHouseStyle(many,all,301),capped);
+ assert.deepEqual(trial.trialJob(set,expected).houseStyle,expected);
+ assert.equal(trial.trialJob(set,expected).items[0]?.existing.en,'Venue tea');
+});
 test('two real production-path trials write scorer inputs and count both passes',async()=>{
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
@@ -43,11 +64,13 @@ test('two real production-path trials write scorer inputs and count both passes'
   for(const [i,file] of files.entries()){
    const r=JSON.parse(readFileSync(file,'utf8'));
    assert.deepEqual([r.set,r.promptVersion,r.model,r.repeat,r.failed],['blind','translate-all-v1','gpt-6-luna',i+1,[]]);
+   assert.equal(r.houseStyle,null);
    assert.deepEqual(r.usage,{inputTokens:200,outputTokens:100});assert.equal(r.costUsd,0.00007);
    assert.equal(gradeRun(r.names,loadSet('blind')).ungraded,86);
    assert.equal(JSON.stringify(r).includes('test-only-key'),false);
   }
   assert.equal(fake.requests.length,4);
+  assert.ok(fake.requests.every(r=>!r.body.input.includes('Names this venue has saved:')));
   assert.deepEqual(fake.requests.map(r=>r.body.reasoning.effort),['low','medium','low','medium']);
   assert.ok(fake.requests.every(r=>r.body.model==='gpt-6-luna'&&r.body.store===false));
   assert.equal(readdirSync(dir).length,2);
@@ -64,6 +87,8 @@ test('invalid trial options fail before any provider request or output',async()=
  try{
   for(const runs of [0,11,1.5,NaN])await assert.rejects(trial.runTrial({set:'blind',runs,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/runs/);
   await assert.rejects(trial.runTrial({set:'blind',runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/CLOUD_OPENAI_API_KEY/);
+  for(const [set,houseStyle] of [['tuning','tuning-accepted'],['blind','unknown']] as const)
+   await assert.rejects(trial.runTrial({set,houseStyle:houseStyle as never,runs:1,outDir:pathToFileURL(dir+'/'),env:{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'test-key',CLOUD_OPENAI_BASE_URL:fake.baseUrl}}),/house.style/i);
   assert.equal(fake.requests.length,0);assert.deepEqual(readdirSync(dir),[]);
  }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
 });
@@ -84,14 +109,25 @@ test('the trial command is strict about options and prints written result paths'
  assert.equal(typeof trial.runTrial,'function','runTrial must exist');
  const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r)),dir=mkdtempSync(join(tmpdir(),'translation-trial-cli-'));
  try{
- for(const args of [[],['--set','blind','--runs','1','--unknown'],['--set','blind','--runs','1','--unknown','value'],['--set','blind','--runs','1','--runs','2'],['--set','blind','--runs','1','--out']]){
+ for(const args of [[],['--set','blind','--runs','1','--unknown'],['--set','blind','--runs','1','--unknown','value'],['--set','blind','--runs','1','--runs','2'],['--set','blind','--runs','1','--out'],['--set','blind','--runs','1','--house-style','unknown'],['--set','tuning','--runs','1','--house-style','tuning-accepted']]){
   const r=await command(cli,[...args,'--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.notEqual(r.code,0);assert.equal(r.stdout,'');assert.match(r.stderr,/usage:/);assert.ok(!r.stderr.includes('private-test-value'));
  }
+  assert.equal(fake.requests.length,0);assert.deepEqual(readdirSync(dir),[]);
   const r=await command(cli,['--set','blind','--runs','1','--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
   assert.equal(r.code,0,r.stderr);assert.equal(r.stderr,'');
   const file=r.stdout.trim();assert.ok(file.startsWith(dir+'/blind-'));assert.ok(file.endsWith('-1.json'));
   assert.equal(JSON.parse(readFileSync(file,'utf8')).failed.length,0);
+  assert.equal(JSON.parse(readFileSync(file,'utf8')).houseStyle,null);
+  const styled=await command(cli,['--set','blind','--runs','1','--house-style','tuning-accepted','--out',dir],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'private-test-value',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  assert.equal(styled.code,0,styled.stderr);assert.equal(styled.stderr,'');
+  const result=JSON.parse(readFileSync(styled.stdout.trim(),'utf8'));
+  assert.equal(result.houseStyle,'tuning-accepted');assert.deepEqual(result.failed,[]);
+  const expected=trial.acceptedHouseStyle(loadSet('tuning'),shownEntries('tuning')).map(({kind,staffName,names})=>({kind,internal:staffName,names}));
+  assert.equal(fake.requests.length,4);assert.deepEqual(fake.requests.slice(2).map(r=>r.body.reasoning.effort),['low','medium']);
+  const input=fake.requests[2]!.body.input;
+  assert.deepEqual(JSON.parse(input.slice(input.indexOf('\n')+1,input.indexOf('\n\n'))),expected);
+  assert.ok(!fake.requests[3]!.body.input.includes('Names this venue has saved:'));
  }finally{await fake.close();rmSync(dir,{recursive:true,force:true});}
 });
 
