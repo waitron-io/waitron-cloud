@@ -107,7 +107,7 @@ function parseYaml(source,fail) {
         while(end<rawLines.length && (!rawLines[end].trim() || rawLines[end].match(/^ */)[0].length>indent))end++;
         const content=rawLines.slice(row.line,end);
         while(content.length && !content.at(-1).trim())content.pop();
-        if(!content.length || content[0].match(/^ */)[0].length!==indent+2 || content.some(text=>!text.trim() || text.trimStart().startsWith('#') || / $/.test(text) || text.match(/^ */)[0].length<indent+2))
+        if(!content.length || content[0].match(/^ */)[0].length!==indent+2 || content.some(text=>!text.trim()))
           fail(`Unsupported literal deprecation at line ${row.line}`);
         // Read original rows so filtering comments/whitespace cannot change a warning's fingerprint.
         item=content.map(text=>text.slice(indent+2)).join('\n');

@@ -48,7 +48,7 @@ const literalAt=(path,content)=>{
       prefix+'\n'+render(entry,parts.slice(1),indent+'  ');
   }).join('');
   const value=fixture();value.packages['leaf@1.0.0'].deprecated='Old warning';
-  let parent=value;for(const key of path.slice(0,-1))parent=parent[key];
+  let parent=value;for(const key of path.slice(0,-1))parent=parent[key]??={};
   parent[path.at(-1)]='Old value';
   return render(value,path);
 };
@@ -61,15 +61,28 @@ test('literal deprecation preserves indentation and selects indirect consumers',
   assert.deepEqual(changedImporters(lock,changed).importers,['packages/consumer','packages/provider']);
 });
 
-for(const content of [['First line.','','Last line.'],['# Warning'],['Warning '],['  Warning'],['First line.',' Warning']])
+for(const warning of ['# Warning','Warning '])test(`literal deprecation preserves exact text ${JSON.stringify(warning)}`,()=>{
+  const lock=parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],[warning]));
+  assert.equal(lock.packages['leaf@1.0.0'].deprecated,warning);
+});
+
+for(const content of [['First line.','','Last line.'],['  Warning']])
 test(`literal deprecation refuses ambiguous or discarded content ${JSON.stringify(content)}`,()=>{
   assert.throws(()=>parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],content)),/Unsupported|Ambiguous/);
+});
+
+test('literal deprecation refuses odd indentation before interpreting its text',()=>{
+  assert.throws(()=>parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],['First line.',' Warning'])),/Ambiguous indentation/);
 });
 
 for(const path of [
   ['importers','packages/provider','dependencies','alpha','version'],
   ['snapshots','alpha@1.0.0','dependencies','leaf'],
   ['packages','leaf@1.0.0','resolution','tarball'],
+  ['importers','packages/provider','deprecated'],
+  ['snapshots','alpha@1.0.0','deprecated'],
+  ['packages','leaf@1.0.0','peerDependencies','deprecated'],
+  ['packages','leaf@1.0.0','hasBin'],
 ])test(`literal scalars remain refused outside deprecation: ${path.join('.')}`,()=>{
   assert.throws(()=>parseLock(literalAt(path,['1.0.0'])),/Unsupported scalar/);
 });
