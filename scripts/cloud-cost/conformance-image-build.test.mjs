@@ -53,8 +53,9 @@ try {console.log('PREPARED='+JSON.stringify(JSON.parse(fs.readFileSync(fixture.e
   const closed=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
   t.after(async context=>{
     if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}
-    const data=JSON.parse(await readFile(state,'utf8'));
-    if(!context.passed)t.diagnostic(JSON.stringify({elapsedMs:Math.round(performance.now()-started),scenario,output,arrivals,state:data}));
+    let data;
+    try{data=JSON.parse(await readFile(state,'utf8'));}
+    finally{if(!context.passed||data===undefined)t.diagnostic(JSON.stringify({elapsedMs:Math.round(performance.now()-started),scenario,output,arrivals,state:data??null}));}
     if(data.pid)try{process.kill(data.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
     await rm(root,{recursive:true,force:true});
   });
@@ -79,7 +80,6 @@ test('fixture build recovers from the observed Docker Hub metadata HTTP 502',{ti
   assert.equal(result.code,0,result.output);
   assert.match(result.output,/PREPARED=/);
   assert.match(result.output,/fixture-sdk-substitute/,'exercise the isolated SDK build boundary');
-
   assert.equal(result.builds.length,2);
   assert.match(result.output,/502 Bad Gateway/,'retain the original refusal');
 });
@@ -92,6 +92,7 @@ for(const status of [500,503,504])test('fixture build recovers from Docker Hub m
 test('successful fixture build needs one attempt',async t=>{
   const result=await prepare(t,{realSdk:true});
   assert.equal(result.code,0,result.output);assert.equal(result.builds.length,1);
+  assert.equal(result.output.includes('fixture-sdk-substitute'),false,'compile the real SDK');
   const prepared=JSON.parse(result.output.split('\n').find(line=>line.startsWith('PREPARED=')).slice(9));
   assert.equal(prepared.image,'sha256:'+'a'.repeat(64));
 });

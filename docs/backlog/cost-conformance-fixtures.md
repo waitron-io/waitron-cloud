@@ -102,7 +102,11 @@ The real supervisor still kills its installer.
 The refused case keeps its real five-second mapping and must finish without a
 timeout. Every original behavior assertion, the image ten-second limit, native
 ten-second race and twenty-second outer limit remain. Failure teardown retains
-setup records and request arrival times. Check both complete files with
+setup records and request arrival times. Under the controlled 24-worker, one-CPU
+load, the repaired native-install case still fails its unchanged ten-second limit
+because the package tool starts slowly on the busy machine. CI has not been
+measured at that load. On the next CI recurrence, time the package tool’s start
+inside CI; never raise the limit. Check both complete files with
 `node --test --test-concurrency=2 scripts/cloud-cost/conformance-image-build.test.mjs scripts/cloud-cost/conformance-install-script-progress.test.mjs`.
 
 

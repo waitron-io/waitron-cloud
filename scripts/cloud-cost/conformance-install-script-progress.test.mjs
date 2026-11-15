@@ -111,7 +111,7 @@ if(a.includes('rev-parse'))console.log('b1b0f10952a59eb59f7358bd681a3cdc94d9b61c
 const timeout=setTimeout,clear=clearTimeout,interval=setInterval,write=process.stderr.write.bind(process.stderr),pending=new Map();let phase,fired=false,progressSeen=false,headersReceived=${mode!=='headers-stall'};
 // Only the server acknowledgement proves that the headers request reached this fixture.
 const expire=()=>{if(fired||!progressSeen||!headersReceived)return;fired=true;setImmediate(()=>{if(pending.size!==1)throw Error('Missing simulated install deadline');console.error('native_fixture_clock=5000');[...pending.values()][0]();});};
-${mode==='headers-stall'?"process.on('message',message=>{if(message==='headers-received'){headersReceived=true;expire();}});":''}
+${mode==='headers-stall'?"process.on('message',message=>{if(message==='headers-received'){headersReceived=true;expire();}});process.channel.unref();":''}
 globalThis.setTimeout=(fn,ms,...args)=>{
   if(ms===300000&&phase==='source-install'&&${mode!=='refused'}){const handle={};pending.set(handle,()=>fn(...args));return handle;}
   return timeout(fn,ms===300000?5000:ms,...args);
