@@ -2,21 +2,39 @@
 
 ## Allocate work by elapsed file time
 
-The six registration jobs share files by their measured elapsed time in
+The six registration jobs share files using elapsed-time weights in
 [`ci-registration-durations.json`](../../scripts/ci-registration-durations.json).
 The runner puts the longest remaining file into the job with the least assigned
 work. Filename order and then job number settle ties. New files use the mean of
-the measured files still present; removed files affect neither discovery nor that
+the weighted files still present; removed files affect neither discovery nor that
 mean. Discovery owns the file list, so every current test still runs once.
 
-The table comes from 170 explicit file invocations on four-vCPU Debian with
+The original weights come from 170 explicit file invocations on four-vCPU Debian with
 three invocations at once. Each invocation uses Node 26.13.0 and the existing
 30-second test deadline, required-case reporter and disposable PostgreSQL/Mailpit
 launcher. All 2,234 cases pass across the successful measurements. The eight
 historical-release files needed the already approved UI 0.1.0 package cached in
 the guest before their existing installs could pass. No credential was copied.
-These are relative allocation weights, not hosted job durations.
+The values express relative work for allocation; they do not predict job wall time.
 
+The weights also include a one-time adjustment from hosted runs 43688610284
+and 43690119075. Their jobs took 269/224/274/290/289/249 and
+235/153/228/343/244/266 seconds. The proof-freshness case in job 4 grew from
+2.032 to 5.259 seconds; the other roughly 50 seconds of that job's increase remain
+unexplained. Before averaging, the first observation includes that additional
+3.228-second proof wait. Each old group's file weights are then multiplied by
+its mean observed job time in milliseconds divided by its old weight total, keeping their
+relative sizes. This spreads fixed setup across the files too, and assumes
+hosted work within each group follows those original file measurements. The adjusted values are allocation estimates,
+not new per-file elapsed measurements or a bound from two samples. The
+unchanged allocator redistributes them; current-head CI must still qualify
+all six jobs within 300 seconds. The six assigned weight totals are about
+255.6 seconds each; these are weights, not predicted job durations. In job 4,
+351 of the other 397 top-level cases also took longer, with summed case time
+rising from about 725 to 879 seconds across concurrent files. This locates
+additional measured work inside cases but does not explain the variability.
+
+A fresh measurement replaces this one-time calibration.
 To refresh the table, time each explicit file from process start until exit,
 including imports, fixtures and cleanup. Keep the same Node arguments as the
 runner; record available CPUs and the number of concurrent invocations. Retain
