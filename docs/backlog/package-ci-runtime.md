@@ -70,8 +70,7 @@ skips. The observer records every one of the 139 test files exactly once.
 | 6 | 185 | 239.193 | 245.136 |
 
 The slowest wrapper takes 293.499 seconds, so adding a partition alone does not
-meet the four-minute target. Earlier six-partition layouts also failed to
-establish a runtime saving. More partitions alone are not qualification.
+meet the four-minute target. More partitions alone are not qualification.
 
 The earlier runner assigned `monitoring.test.ts` to partition 1 and
 `support-grants.test.ts` to partition 2. Other files used sorted round-robin
