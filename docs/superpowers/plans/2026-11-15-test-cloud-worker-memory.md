@@ -19,14 +19,16 @@ saved receipts. Use an owned fresh Debian amd64 guest with Docker, Compose
 do not qualify a substitute or call the quarantined venue.
 
 The all-profile limits total 1,952 MiB (`deploy/test-cloud/compose.yaml`), leaving
-96 MiB below the existing 2,048 MiB limit. Four 96 MiB caps would not fit.
+96 MiB below the existing 2,048 MiB limit. Recorded peaks above 64 MiB would
+require four 96 MiB caps under the margin below, so raising caps alone cannot fit.
 `deploy/test-cloud/runtime.mjs` retains a Node launcher alongside each worker;
 its contribution is a measurement lead, not a proven cause.
 
 ## Measurement and change
 
 1. Run the same workload once with temporary, uncommitted headroom for only
-   these four workers. Use `scripts/test-cloud-integration.mjs`’s exported runner
+   these four workers, in a signed-off throwaway commit in the owned guest checkout
+   (never pushed), preserving clean-tree provenance. Use the exported runner
    with the recorded options; use its CLI only if the defaults match. Keep its
    measured aggregate 2 GiB guard, host floors, diagnostics and owned cleanup.
    Temporary configured headroom is not a change to the committed limit budget.
@@ -38,7 +40,9 @@ its contribution is a measurement lead, not a proven cause.
    overhead in `deploy/test-cloud/runtime.mjs` for these workers. Preserve its
    validated, narrowed environment, command/arguments, signals and exit status;
    leave unrelated roles and worker business logic alone. Use TDD for this change,
-   then repeat the headroom measurement. Otherwise retain the launcher.
+   then build one new immutable Cloud image from that revision and repeat the
+   measurement with it. Keep the Waitron image and all other inputs unchanged.
+   If the readings show too little removable waste to fit, report to the watcher.
 4. Set only the four `mem_limit` entries to peak × 1.25, rounded up to 16 MiB,
    retaining the committed all-profile total ≤2,048 MiB. If measured use still
    cannot fit, report the evidence to the watcher; weaken no guard or other cap.
@@ -56,5 +60,5 @@ on the approved test infrastructure, never directly through the Mac’s Docker.
 Preserve existing ownership, OOM, health and capacity-floor assertions.
 
 Add 15–25 lines to `docs/test-cloud.md` for dated peaks, caps, margin, invocation
-and scope; update its total and narrow `docs/backlog.md`. Including this plan,
-expect production/config +10–35/−5–20, tests +15–35/−0–5, docs +65–85/−3–6 lines.
+and scope; correct its stale limit total and narrow `docs/backlog.md`. Including this plan,
+expect production/config +10–35/−5–20, tests +15–35/−0–5, docs +80–95/−3–6 lines.
