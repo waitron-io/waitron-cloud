@@ -7,7 +7,7 @@ const measuredDurations = JSON.parse(readFileSync(new URL('./ci-registration-dur
 
 export function registrationFiles(shard, files, durations = measuredDurations) {
   assert.ok(Number.isSafeInteger(shard) && shard >= 1 && shard <= 6, 'Invalid registration shard');
-  assert.ok(Object.values(durations).every(value => Number.isFinite(value) && value >= 0), 'Invalid registration duration');
+  assert.ok(durations && typeof durations === 'object' && !Array.isArray(durations) && Object.values(durations).every(value => Number.isFinite(value) && value >= 0), 'Invalid registration duration');
   const known = files.filter(file => Object.hasOwn(durations, file));
   const mean = known.length ? known.reduce((sum, file) => sum + durations[file], 0) / known.length : 1;
   const estimate = file => durations[file] ?? mean;

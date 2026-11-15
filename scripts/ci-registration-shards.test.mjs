@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {registrationFiles} from './ci-run-registration-shard.mjs';
 
-test('measured packing keeps files that were heavy together within the average plus one file', () => {
+test('measured packing separates heavy files that shared the old name-order job', () => {
   const durations = {'a.test.ts': 600, 'b.test.ts': 10, 'c.test.ts': 10, 'd.test.ts': 10,
     'e.test.ts': 10, 'f.test.ts': 10, 'g.test.ts': 600, 'h.test.ts': 10};
   const files = Object.keys(durations);
@@ -26,6 +26,12 @@ test('new files use the live measured mean while stale names do not move work', 
   assert.deepEqual(registrationFiles(3, files, durations), ['b.test.ts']);
   assert.deepEqual(registrationFiles(1, ['b.test.ts', 'a.test.ts'], {}), ['a.test.ts']);
   assert.deepEqual(registrationFiles(2, ['b.test.ts', 'a.test.ts'], {}), ['b.test.ts']);
+});
+
+test('invalid timing data refuses allocation', () => {
+  for (const durations of [5, [], '5', null, {'a.test.ts': -1}, {'a.test.ts': Infinity}, {'a.test.ts': 'slow'}]) {
+    assert.throws(() => registrationFiles(1, ['a.test.ts'], durations), /Invalid registration duration/);
+  }
 });
 
 test('the measured duration table contains sorted, finite nonnegative millisecond weights', () => {
