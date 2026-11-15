@@ -102,8 +102,8 @@ test('manifest worker replaces its launcher, retains its environment, exit statu
  const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));await bootstrap(dir);
  for(const terminating of [false,true]){
   const fixture=`import assert from 'node:assert/strict';import{launchTestRuntime}from${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)};
-   const before=process.pid,execve=process.execve;process.chdir=directory=>assert.equal(directory,'/app');
-   process.execve=(file,args,environment)=>{assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,'deploy/test-cloud/remote-worker.mjs']);
+   const before=process.pid,execve=process.execve;let directory;process.chdir=value=>{directory=value;};
+   process.execve=(file,args,environment)=>{assert.equal(directory,'/app');assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,'deploy/test-cloud/remote-worker.mjs']);
     execve(file,[file,'-e',${JSON.stringify(`${terminating?"process.on('SIGTERM',()=>process.exit(23));":""}console.log(JSON.stringify({pid:process.pid,home:process.env.HOME,config:process.env.LOCAL_STACK_CONFIG_DIR,canary:process.env.NODE_AUTH_TOKEN}));${terminating?"setInterval(()=>{},1000)":"process.exit(37)"}`)}],environment);};
    console.log('launcher='+before);await launchTestRuntime('manifest',${JSON.stringify(dir)});`;
   const child=spawn(process.execPath,['--input-type=module','-e',fixture],{env:{...process.env,NODE_AUTH_TOKEN:'synthetic-canary'},stdio:['ignore','pipe','pipe']});

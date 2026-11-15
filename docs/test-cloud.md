@@ -147,9 +147,33 @@ if it recurs; no sampling bound or deadline has changed.
 
 Only the HTTPS proxy publishes to `192.168.10.10:3000`. It forwards to the unpublished account listener and accepts the exact canonical Host and, when present, Origin. It replaces forwarding headers and the account server trusts only its private address, `10.79.0.2`. Ordinary loopback deployment keeps `http://localhost:3000`.
 
-PostgreSQL uses loopback port 55432. This project's Mailpit uses loopback ports 1125 and 8125, leaving Waitron's 1025/8025 alone. Storage 8333 and gateway 8443/UDP 51820 also remain on loopback until their separate adapter proofs pass. The account backend keeps `10.79.0.3`, so replacing it preserves the proxy's destination without a proxy restart. The private Docker network is `10.79.0.0/24`; preflight refuses overlapping existing networks. All container memory limits, including dormant profiles, sum to 1,824 MiB. That limit is not a measurement of test-box headroom.
+PostgreSQL uses loopback port 55432. This project's Mailpit uses loopback ports 1125 and 8125, leaving Waitron's 1025/8025 alone. Storage 8333 and gateway 8443/UDP 51820 also remain on loopback until their separate adapter proofs pass. The account backend keeps `10.79.0.3`, so replacing it preserves the proxy's destination without a proxy restart. The private Docker network is `10.79.0.0/24`; preflight refuses overlapping existing networks. All container memory limits, including dormant profiles, sum to 2,032 MiB. That limit is not a measurement of test-box headroom.
 
 The explicit test email worker uses the existing account-mail templates and outbox. Its SMTP destination is fixed to loopback inside this project's Mailpit network namespace. The ordinary local and production mailers keep their origin restrictions.
+
+## Worker memory in the base pairing journey
+
+Use the limits in `deploy/test-cloud/compose.yaml` with the matching runtime.
+The four small workers replace their Node launcher after configuration and schema
+checks, so its heap does not remain beside the worker. The runtime process test
+checks the process ID, selected command, restricted environment, exit and signal.
+
+On 15 November 2026, a fresh Debian 13 amd64 guest ran `runTestCloudClients` with
+`sourceProvenance: true` and `measureCapacity: true`, using this Cloud runtime based on main
+`e88a75915` and Waitron `8eed667ab0586a3144ed7911b57cf50fcb3b0766` / contract 0.2.16.
+The same immutable Waitron image was kept across the measurements. This qualifies
+the current base workload, not #1213's exact images or a published release.
+
+| Worker | Peak after launcher replacement (MiB) | Limit (MiB) |
+| --- | ---: | ---: |
+| usage-reconciler | 46.75 | 64 |
+| monitor-worker | 54.14 | 80 |
+| remote-probe | 65.45 | 96 |
+| gateway-manifest | 65.43 | 96 |
+
+Each limit uses the measured peak plus 25%, rounded up to 16 MiB. All profiles
+sum to 2,032 MiB, below the existing 2,048 MiB budget. The initial temporary-headroom
+run measured 74.32–87.33 MiB per worker; process replacement reduced those peaks.
 
 ## Check free services locally
 
