@@ -176,7 +176,7 @@ the current base workload, not #1213's exact images or a published release.
 Each limit uses the measured peak plus 25%, rounded up to 16 MiB. All profiles
 sum to 2,032 MiB, below the existing 2,048 MiB budget. The initial temporary-headroom
 run measured 74.32–87.33 MiB per worker; process replacement reduced those peaks.
-The final run with these limits completed in 80.3 seconds with zero worker memory
+The final run with these limits completed in 68.6 seconds with zero worker memory
 kills or restarts, including counter reads immediately before owned cleanup.
 
 ## Check free services locally
