@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-for (const [phase, padded] of [['client-paid-remote', true], ['verification-target-read', true], ['verification-target-read', false]]) test(phase + ' command failure retains ' + (padded ? 'bounded' : 'short') + ' stderr and its exit status', async () => {
+for (const [phase, padded] of [['client-paid-remote', true], ['client-paid-remote', false], ['verification-target-read', true], ['verification-target-read', false]]) test(phase + ' command failure retains ' + (padded ? 'bounded' : 'short') + ' stderr and its exit status', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'paid-remote-command-'));
   const originalPath = process.env.PATH;
   const prefix = padded ? 'discarded-prefix'+'x'.repeat(9000) : '';
