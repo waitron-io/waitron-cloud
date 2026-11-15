@@ -1565,12 +1565,6 @@ implementation or production evidence.
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
 
-- **AWS mocked-plan runtime.** Qualify the eight guard groups and removal of repeated
-  plan execution against the four-minute target, without cutting checks or changing
-  deadlines. Exact-head pinned CI counts and job times remain pending. The
-  [healthy baseline](https://github.com/waitron-io/waitron-cloud/actions/runs/43652509564)
-  Check steps took 457, 682, 627 and 1,061 seconds.
-
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate.
 
