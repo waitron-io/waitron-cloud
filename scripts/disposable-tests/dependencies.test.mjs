@@ -192,6 +192,11 @@ test('package selection reads the captured lockfile and refuses unknown or mixed
   .replaceAll(`'@waitron-io/ui-core':\n        specifier: ${uiVersion}\n        version: ${uiVersion}(`,`'@waitron-io/ui-core':\n        specifier: ${version}\n        version: ${version}(`);
  const legacy=historicalUi('0.1.0','resolution: {integrity: sha512-MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.1.0/d2467965338838c9162336c791083d10d56522c9}');
  const previous=historicalUi('0.2.1','resolution: {integrity: sha512-SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==, tarball: https://npm.pkg.github.com/download/@waitron-io/ui-core/0.2.1/04b5f4e9e2d872e3b1e955211bc64290beb28f58}');
+ for(const [lock,version] of [[legacy,'0.1.0'],[previous,'0.2.1']]){
+  assert.ok(lock.includes(`'@waitron-io/ui-core@${version}':`),'historical package key must match its archive');
+  assert.ok(lock.includes(`'@waitron-io/ui-core@${version}(lit@3.3.3)':`),'historical snapshot must match its archive');
+  assert.equal(lock.split(`'@waitron-io/ui-core':\n        specifier: ${version}\n        version: ${version}(`).length-1,2,'both historical consumers must match their archive');
+ }
  for(const [id,lock,want] of [['historical',current.replace(contract.trim(),historical.trim()),[uiFile,'contract-0.2.9.tgz']],['mixed-contract',current+historical,null],['both',current+contract,[uiFile,'contract-0.2.16.tgz']],['contract-only',contract,null],['unknown-contract',current+contract.replace('/contract/0.2.16/','/contract/9.9.9/'),null],['current',current,[uiFile,'contract-0.2.16.tgz']],['ui-only',uiOnly,[uiFile]],['legacy',legacy,['ui-core-0.1.0.tgz']],['previous',previous,['ui-core-0.2.1.tgz']],['unknown',current.replaceAll(`/ui-core/${uiVersion}/`,'/ui-core/9.9.9/'),null],['mixed',legacy+'\n'+current,null],['missing','lockfileVersion: 9.0\n',null]]){
   const snapshot=join(root,id+'.tar');const make=spawnSync('python3',['-I','-B','-c',`import io,sys,tarfile
 with tarfile.open(sys.argv[1],'w',format=tarfile.USTAR_FORMAT) as archive:
