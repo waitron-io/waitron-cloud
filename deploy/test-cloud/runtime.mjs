@@ -25,7 +25,13 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment(role,config,process.env),command=testRuntimeCommand(role);
  if(role!=='migrate'&&environment.DATABASE_URL)await checkConsumerDatabase(environment.DATABASE_URL,'/app');
  const args=role==='usage'?['--watch']:role==='reconcile'?['/run/reconciler/config.json']:[];
- const child=spawn(process.execPath,[command,...args],{cwd:'/app',stdio:'inherit',env:{PATH:process.env.PATH,HOME:'/tmp',LOCAL_STACK_CONFIG_DIR:directory,...environment}});
+ const childEnvironment={PATH:process.env.PATH,HOME:'/tmp',LOCAL_STACK_CONFIG_DIR:directory,...environment};
+ // Replace the launcher to avoid retaining its heap beside the worker.
+ if(['monitor','usage','probe','manifest'].includes(role)){
+  process.chdir('/app');
+  return process.execve(process.execPath,[process.execPath,command,...args],childEnvironment);
+ }
+ const child=spawn(process.execPath,[command,...args],{cwd:'/app',stdio:'inherit',env:childEnvironment});
  const forward=signal=>child.kill(signal);process.once('SIGINT',forward);process.once('SIGTERM',forward);
  try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});}
  finally{process.removeListener('SIGINT',forward);process.removeListener('SIGTERM',forward);}
