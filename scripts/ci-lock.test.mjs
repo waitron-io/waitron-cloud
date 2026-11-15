@@ -40,6 +40,53 @@ test('deprecation metadata remains visible and selects every indirect consumer w
   assert.deepEqual(delta(before,after).importers,['packages/consumer','packages/provider']);
 });
 
+const literalAt=(path,content)=>{
+  const render=(value,parts,indent='')=>Object.entries(value).map(([key,entry])=>{
+    const prefix=indent+JSON.stringify(key)+':';
+    if(key!==parts[0])return prefix+' '+JSON.stringify(entry)+'\n';
+    return parts.length===1 ? prefix+' |-\n'+content.map(line=>indent+'  '+line).join('\n')+'\n' :
+      prefix+'\n'+render(entry,parts.slice(1),indent+'  ');
+  }).join('');
+  const value=fixture();value.packages['leaf@1.0.0'].deprecated='Old warning';
+  let parent=value;for(const key of path.slice(0,-1))parent=parent[key]??={};
+  parent[path.at(-1)]='Old value';
+  return render(value,path);
+};
+
+test('literal deprecation preserves indentation and selects indirect consumers',()=>{
+  const source=literalAt(['packages','leaf@1.0.0','deprecated'],['Use the patched release.', '  Review the old logs.']);
+  const lock=parseLock(source,'pnpm-lock.yaml');
+  assert.equal(lock.packages['leaf@1.0.0'].deprecated,'Use the patched release.\n  Review the old logs.');
+  const changed=parseLock(source.replace('patched release','new release'),'pnpm-lock.yaml');
+  assert.deepEqual(changedImporters(lock,changed).importers,['packages/consumer','packages/provider']);
+});
+
+for(const warning of ['# Warning','Warning '])test(`literal deprecation preserves exact text ${JSON.stringify(warning)}`,()=>{
+  const lock=parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],[warning]));
+  assert.equal(lock.packages['leaf@1.0.0'].deprecated,warning);
+});
+
+for(const content of [['First line.','','Last line.'],['  Warning']])
+test(`literal deprecation refuses ambiguous or discarded content ${JSON.stringify(content)}`,()=>{
+  assert.throws(()=>parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],content)),/Unsupported|Ambiguous/);
+});
+
+test('literal deprecation refuses odd indentation before interpreting its text',()=>{
+  assert.throws(()=>parseLock(literalAt(['packages','leaf@1.0.0','deprecated'],['First line.',' Warning'])),/Ambiguous indentation/);
+});
+
+for(const path of [
+  ['importers','packages/provider','dependencies','alpha','version'],
+  ['snapshots','alpha@1.0.0','dependencies','leaf'],
+  ['packages','leaf@1.0.0','resolution','tarball'],
+  ['importers','packages/provider','deprecated'],
+  ['snapshots','alpha@1.0.0','deprecated'],
+  ['packages','leaf@1.0.0','peerDependencies','deprecated'],
+  ['packages','leaf@1.0.0','hasBin'],
+])test(`literal scalars remain refused outside deprecation: ${path.join('.')}`,()=>{
+  assert.throws(()=>parseLock(literalAt(path,['1.0.0'])),/Unsupported scalar/);
+});
+
 for(const warning of [true,0,null,[],{},'','bad\0warning'])test(`deprecation metadata refuses malformed warning ${JSON.stringify(warning)}`,()=>{
   const value=fixture();value.packages['leaf@1.0.0'].deprecated=warning;
   assert.throws(()=>parse(value),/pnpm-lock.yaml: packages\.leaf@1\.0\.0\.deprecated: expected nonempty string/);

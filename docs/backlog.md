@@ -98,14 +98,12 @@ Main pushes, schedules and manual runs still require hand moves.
 
 ## Keep the private shared UI release current (D579)
 
-The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-still needs a newer-version automatic dependency PR covering both consumers and
-its authenticated CI install. Read the first scheduled check after publication,
-including its reason if no update is needed. With the manual `0.2.1` update
-already installed, proving a newer-version PR needs a later Waitron release.
-Review the actual generated PR before claiming that path is qualified. The
-[release guide](shared-ui-release.md) records publication and manual qualification.
-The package stays private; existing authenticated install and image paths remain.
+For each future Dependabot update, a person must verify the published source
+commit, update the smoke test's reviewed source hash, approve the immutable
+archive URL and digest, and publish matching test-host support before landing.
+Both consumers must install the same private release and pass authenticated CI.
+Follow the [release guide](shared-ui-release.md) for those continuing review and
+qualification steps. Version assertions read the consumer manifests.
 
 ## Shared storage-test seed downloads (D585)
 

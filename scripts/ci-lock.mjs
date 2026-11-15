@@ -16,7 +16,8 @@ const freeze=value=>{
 function parseYaml(source,fail) {
   if(typeof source!=='string' || Buffer.byteLength(source)>2*1024*1024)fail('Input size exceeds 2 MiB');
   if(source.includes('\0'))fail('Unsupported NUL');
-  const lines=source.split(/\r?\n/).map((text,index)=>{
+  const rawLines=source.split(/\r?\n/);
+  const lines=rawLines.map((text,index)=>{
     if(text.includes('\t'))fail(`Unsupported tab indentation at line ${index+1}`);
     const indent=text.match(/^ */)[0].length;
     if(indent%2)fail(`Ambiguous indentation at line ${index+1}`);
@@ -89,9 +90,9 @@ function parseYaml(source,fail) {
     const finish=()=>{
       whitespace();if(index<source.length && source[index]!=='#')fail(`Trailing unsupported input ${source.slice(index)}`);
     };
-    return {value:()=>value(depth),name,finish,empty:()=>{whitespace();return index===source.length || source[index]==='#';}};
+    return {value:()=>value(depth),name,finish,literal:()=>source.slice(index).trim()==='|-',empty:()=>{whitespace();return index===source.length || source[index]==='#';}};
   };
-  const block=(indent,depth)=>{
+  const block=(indent,depth,path=[])=>{
     if(depth>32)fail('Input depth exceeds 32');
     const sequence=lines[cursor]?.text.startsWith('- '),result=sequence?[]:Object.create(null);
     while(cursor<lines.length && lines[cursor].indent===indent) {
@@ -101,9 +102,19 @@ function parseYaml(source,fail) {
       const name=sequence?null:parser.name();
       if(!sequence && Object.hasOwn(result,name))fail(`Duplicate key ${name} at line ${row.line}`);
       let item;
-      if(parser.empty()) {
+      if(parser.literal() && path.length===2 && path[0]==='packages' && name==='deprecated') {
+        let end=row.line;
+        while(end<rawLines.length && (!rawLines[end].trim() || rawLines[end].match(/^ */)[0].length>indent))end++;
+        const content=rawLines.slice(row.line,end);
+        while(content.length && !content.at(-1).trim())content.pop();
+        if(!content.length || content[0].match(/^ */)[0].length!==indent+2 || content.some(text=>!text.trim()))
+          fail(`Unsupported literal deprecation at line ${row.line}`);
+        // Read original rows so filtering comments/whitespace cannot change a warning's fingerprint.
+        item=content.map(text=>text.slice(indent+2)).join('\n');
+        while(cursor<lines.length && lines[cursor].line<=end)cursor++;
+      }else if(parser.empty()) {
         if(!lines[cursor] || lines[cursor].indent!==indent+2)fail(`Missing value or ambiguous indentation at line ${row.line}`);
-        item=block(indent+2,depth+1);
+        item=block(indent+2,depth+1,[...path,name]);
       }else {item=parser.value();parser.finish();}
       if(sequence)result.push(item);else result[name]=item;
       if(lines[cursor]?.indent>indent)fail(`Ambiguous indentation at line ${lines[cursor].line}`);
