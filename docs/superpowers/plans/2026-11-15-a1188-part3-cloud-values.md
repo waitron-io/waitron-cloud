@@ -1,6 +1,6 @@
 # A1188 part 3: Cloud's four contract answers
 
-**Authority:** watcher’s A1188-P3-CLOUD-INPUTS, Lane G queue, 15 November 2026 15:20. Separate Sol/high drafted this plan; the driver shortened and checked it. Claude read it for 143 seconds; the driver incorporated the findings below. Watcher clearance is required before the amendment. No owner plan approval is claimed.
+**Authority:** watcher’s A1188-P3-CLOUD-INPUTS, Lane G queue, 15 November 2026 15:20. Separate Sol/high drafted this plan; the driver shortened and checked it. Claude read it for 143 seconds; the driver incorporated the findings below. The watcher cleared the corrected plan on 15 November at 16:39 CET for this docs-only amendment. No owner plan approval is claimed.
 
 **Finish:** Waitron's builders have Cloud's explicit answer to the four proposed values at [Waitron 7d34d21aea4ffd4740564467a052133ddf96445d](https://github.com/clintongormley/waitron/blob/7d34d21aea4ffd4740564467a052133ddf96445d/docs/superpowers/plans/2026-11-15-a1188-part3-locked-start.md). Accept items 1–4 for future implementation, with the placement clarification below. This settles technical values only; it supplies no endpoint, runnable copy or production qualification.
 
