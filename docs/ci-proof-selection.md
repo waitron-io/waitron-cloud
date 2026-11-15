@@ -71,6 +71,21 @@ the owner's later instruction keeps the work open for the proposed code-PR cuts.
 Check infrastructure and cost-input PRs as they arrive naturally for more slow
 paths, without making PRs or rerunning workflows just to obtain measurements.
 
+## Ordinary cost-suite file concurrency
+
+`pnpm test:cloud-cost` runs two test files at once. The original serial flag was
+introduced with the suite in PR #279; its commit and PR description give no
+reason for it. Current files use owned scratch paths and loopback ports, and the
+shared public build replaces files through unique temporary files and atomic
+renames. Give new test files their own scratch folders and ports too.
+
+Run comparisons with Git history and an ordinary user, as CI does. CI runs up to two
+selected receipt commands at once, which the standalone Linux comparisons do not
+cover. Read `Receipt test:cloud-cost: PASS (N ms)` for this command's elapsed time
+while sharing the runner, and the complete current-head receipts job for the
+five-minute target.
+Local timings alone do not qualify that target.
+
 ## Current proof selection
 
 Pull requests start a small venue-proof planner and run its test job only when
