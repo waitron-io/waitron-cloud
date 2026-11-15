@@ -5,11 +5,16 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
+
+const sdkModule=pathToFileURL(createRequire(new URL('../../packages/ui-smoke/package.json',import.meta.url)).resolve('esbuild')).href;
 
 const metadata='ERROR: failed to build: failed to solve: node:26.11.1-slim: failed to resolve source metadata for docker.io/library/node:26.11.1-slim: unexpected status from HEAD request to https://registry-1.docker.io/v2/library/node/manifests/26.11.1-slim: 502 Bad Gateway';
 
-// The preparer owns real child supervision; only network archives and external commands are substituted.
+// The untimed success case builds the SDK; timed cases isolate that cost from supervision.
 async function prepare(t,scenario={}) {
+  const started=performance.now(),arrivals=[];
   const root=await mkdtemp(join(tmpdir(),'cost-image-build-')),bin=join(root,'bin'),state=join(root,'state.json');
   await mkdir(bin);await writeFile(state,JSON.stringify({calls:[],failures:[],...scenario}));
   await writeFile(join(bin,'docker'),`#!${process.execPath}
@@ -32,6 +37,7 @@ const args=process.argv.slice(2);for(const name of ['litestream','weed'])writeFi
 import fs from 'node:fs';import {registerHooks,syncBuiltinESMExports} from 'node:module';
 registerHooks({load(url,context,next){
   if(url===${JSON.stringify(new URL('./conformance-archive.mjs',import.meta.url).href)})return {format:'module',shortCircuit:true,source:"import {writeFileSync} from 'node:fs';export async function downloadConformanceArchive(url,digest,path){writeFileSync(path,'generated');}"};
+  if(url===${JSON.stringify(sdkModule)}&&${!scenario.realSdk})return {format:'commonjs',shortCircuit:true,source:"const {writeFileSync}=require('node:fs');exports.build=async({outfile})=>{writeFileSync(outfile,'generated SDK fixture');console.error('fixture-sdk-substitute');};"};
   return next(url,context);
 }});
 const now=performance.now.bind(performance);let firstBuild;
@@ -45,15 +51,17 @@ try {console.log('PREPARED='+JSON.stringify(JSON.parse(fs.readFileSync(fixture.e
 `;
   const child=spawn(process.execPath,['--input-type=module','-e',program],{env:{...process.env,PATH:bin+':'+process.env.PATH,TMPDIR:root},stdio:['ignore','pipe','pipe']});
   const closed=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
-  t.after(async()=>{
+  t.after(async context=>{
     if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}
-    const data=JSON.parse(await readFile(state,'utf8'));
+    let data;
+    try{data=JSON.parse(await readFile(state,'utf8'));}
+    finally{if(!context.passed||data===undefined)t.diagnostic(JSON.stringify({elapsedMs:Math.round(performance.now()-started),scenario,output,arrivals,state:data??null}));}
     if(data.pid)try{process.kill(data.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
     await rm(root,{recursive:true,force:true});
   });
   let output='',interrupted=false;
   for(const stream of [child.stdout,child.stderr])stream.on('data',bytes=>{
-    output+=bytes;
+    output+=bytes;arrivals.push({receivedAtMs:Math.round(performance.now()-started),output:String(bytes)});
     if(scenario.interrupt&&!interrupted&&output.includes('retrying fixture image')){interrupted=true;child.kill(scenario.interrupt);}
   });
   const result=await closed,data=JSON.parse(await readFile(state,'utf8'));
@@ -71,6 +79,7 @@ test('fixture build recovers from the observed Docker Hub metadata HTTP 502',{ti
   const result=await prepare(t,{failures:[metadata]});
   assert.equal(result.code,0,result.output);
   assert.match(result.output,/PREPARED=/);
+  assert.match(result.output,/fixture-sdk-substitute/,'exercise the isolated SDK build boundary');
   assert.equal(result.builds.length,2);
   assert.match(result.output,/502 Bad Gateway/,'retain the original refusal');
 });
@@ -81,8 +90,9 @@ for(const status of [500,503,504])test('fixture build recovers from Docker Hub m
 });
 
 test('successful fixture build needs one attempt',async t=>{
-  const result=await prepare(t);
+  const result=await prepare(t,{realSdk:true});
   assert.equal(result.code,0,result.output);assert.equal(result.builds.length,1);
+  assert.equal(result.output.includes('fixture-sdk-substitute'),false,'compile the real SDK');
   const prepared=JSON.parse(result.output.split('\n').find(line=>line.startsWith('PREPARED=')).slice(9));
   assert.equal(prepared.image,'sha256:'+'a'.repeat(64));
 });
