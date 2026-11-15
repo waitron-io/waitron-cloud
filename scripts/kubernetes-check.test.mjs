@@ -309,17 +309,18 @@ for (const [label, target, controlled] of [
   ['Amazon before', 'before', true],
   ['Amazon after', 'after', false],
   ['default', 'kind', false],
-]) test('manifest placement reaches clients with standby scheduling restored: ' + label, async t => {
+]) test('manifest placement permits client startup: ' + label, async t => {
   const fixture = await commandFixture(t, 'placement-' + (target === 'kind' ? 'default' : target));
   const cluster = 'd618-12345678-1234-4234-8234-123456789abc';
   const input = ['before', 'after'].includes(target) ? {type: 'amazon', cluster, context: cluster, phase: target,
     address: '10.77.0.1', ...(target === 'before' ? {observer: true} : {}),
     instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
     nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)} : target;
-  const source = `import assert from 'node:assert/strict';import {appendFileSync} from 'node:fs';
+  const source = `import assert from 'node:assert/strict';import {appendFileSync, readFileSync} from 'node:fs';
     import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
     await runKubernetesCheck(${JSON.stringify(input)}, {clients: async ({kubernetes}) => {
       assert.equal(kubernetes.ca, 'synthetic-ca');
+      assert.equal(JSON.parse(readFileSync(${JSON.stringify(join(fixture.directory, 'placement'))}, 'utf8')).cordoned, false, 'standby must accept replacement before clients');
       appendFileSync(${JSON.stringify(fixture.log)}, JSON.stringify({clients:true})+'\\n');
       throw Error('synthetic client entry');
     }});`;

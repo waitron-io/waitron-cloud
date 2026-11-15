@@ -3232,10 +3232,11 @@ implementation or production evidence.
   target read before any fault, losing its inner stderr and exit status. The
   [diagnostic change and next-run plan](superpowers/plans/2026-11-15-d621-target-read-diagnostic.md)
   preserves those details; that cause remains unexplained. The second owner-run
-  failed earlier: the manifest landed on an allowed worker while the fixture
+  failed earlier: the manifest landed on an allowed worker while the check
   required worker2. The [placement fix](superpowers/plans/2026-11-15-d621-manifest-placement.md)
-  temporarily excludes the standby until worker2 placement is checked; focused
-  synthetic command tests run with `node --test scripts/kubernetes-check.test.mjs`.
+  temporarily prevents new scheduling on the other worker until worker2 placement
+  is checked. Run the focused synthetic command tests with
+  `node --test scripts/kubernetes-check.test.mjs`.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
