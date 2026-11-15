@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {reuseProof} from './fixtures/ci-evidence.mjs';
 
 const cases = [
-  ['aws-infrastructure', 'changes', 'verify', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']],
+  ['aws-infrastructure', 'changes', 'verify', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)', 'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)']],
   ['venue-services-proof', 'changes', 'service-receipts', ['service-receipts (venue)']],
   ['download-supervision-diagnostic', 'changes', 'linux-contention', ['linux-contention']],
 ];

@@ -45,7 +45,7 @@ test('contracts require exact scoped jobs and all unselected placeholders', () =
 test('siblings require independent complete native matrices and reject unknown or empty scope', () => {
   const range = {base: sha('a'), head: sha('b'), paths: ['deploy/aws/main.tf'], required: true};
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/aws-infrastructure.yml', range), {
-    required: ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)', 'summary'], skipped: []});
+    required: ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)', 'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)', 'summary'], skipped: []});
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/download-supervision-diagnostic.yml', range), {
     required: ['changes', 'linux-contention', 'summary'], skipped: []});
   assert.deepEqual(evidence.expectedJobContract('.github/workflows/venue-services-proof.yml', range), {

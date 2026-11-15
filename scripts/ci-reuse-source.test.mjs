@@ -99,7 +99,7 @@ const verify = f => findReuse(f.context, {api: f.api, git, now: f.now}, workflow
 const refusal = f => {const value = verify(f); assert.equal(value?.reuse, null, JSON.stringify(value)); assert.ok(value.reason.length > 0);};
 
 const siblingCases = [
-  ['aws-infrastructure', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']],
+  ['aws-infrastructure', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)', 'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)']],
   ['venue-services-proof', ['service-receipts (venue)']],
   ['cloud-cost', [
     ...['cadence', 'day', 'foreground'].map(name => `cost (${name}-conformance.test.mjs, 1/1)`),
@@ -870,7 +870,7 @@ test('full readback preserves an invalid range and still requires every native c
   const metadata = {id: 62, name: 'ci-decision-v1-aws-infrastructure-90-1', expired: false, size_in_bytes: content.length,
     digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
     workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}};
-  const names = ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)', 'summary'];
+  const names = ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)', 'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)', 'summary'];
   let currentJobs = names.map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
     head_sha: merge, status: 'completed', conclusion: 'success'}));
   const main = f.api.readRun(90);

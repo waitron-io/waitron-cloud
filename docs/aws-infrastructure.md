@@ -114,13 +114,15 @@ Both consume the same inspected source copy and the complete fixed filter list.
 Each root keeps the five-minute container deadline, and a failure prevents any later
 root from starting. You receive the combined output only after both roots pass.
 
-CI splits the guard test files into three groups, called shards. A fourth job runs
-the complete plan set and formatting. Each job keeps the same 30-minute limit, prepares its
+CI assigns guard files to eight fixed groups so expensive root checks do not wait for
+unrelated modules. The guard tests execute the real mocked plans, so CI runs each
+required check without a separate repeat of the complete suite set. The two full-root
+guards retain both binding refusals and composition assertions. The groups cover every
+test file exactly once; a new test file needs a workflow allocation and a matching expected row in
+`deploy/aws/integration.test.mjs`. Formatting runs
+after the eighth group's guards. Each job keeps its 30-minute limit, prepares its
 offline tools and saves its own diagnostic artifact, including after a failure.
-The shards cover every test file exactly once. The full plan job keeps `--all`;
-the project targets about four minutes per job for quick feedback, but this job
-cannot meet that target while the complete integration check alone
-takes about eight minutes on the test box.
+The target remains about four minutes per job for quick feedback.
 
 The runner also restricts each child to at most two CPU cores, because a CPU
 quota alone leaves the host's larger core count visible to runtime worker pools.
@@ -136,9 +138,12 @@ cases independent; a reference to a run in a different group cannot carry state
 between processes.
 
 You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
-`custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
-and root paths; the CLI accepts no custom command or directory. `--all` runs every suite
-in order and stops on a missing file or failed plan. A passing run checks the mocked
+`custody`, `observability`, `ingress`, `dns` or `integration`. The additional
+`integration-global` and `integration-country` names each run all five fixed filters
+for their own root, using the same inspection and container limits. Each name selects
+fixed module and root paths; the CLI accepts no custom command or directory. `--all`
+runs the twelve original suites in order, without repeating the two root aliases,
+and stops on a missing file or failed plan. A passing run checks the mocked
 configuration; live provider qualification remains separate.
 Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
@@ -161,8 +166,8 @@ Every job has repository read permission and retains no checkout credential. It 
 no AWS secret or identity-token permission.
 
 Each job prepares the pinned software image and installs the separate locked dependencies.
-Three jobs run the Node guard shards. The fourth runs all isolated mocked plans and
-checks formatting in an offline, read-only container. Each job keeps a 30-minute limit
+Eight jobs run the fixed guard groups, including their real mocked plans. The eighth
+also checks formatting in an offline, read-only container after its guards pass. Each job keeps a 30-minute limit
 alongside the runner's existing per-command limits. It retains command output, assertion
 counts and failure diagnostics for 14 days in an artifact named for the checked commit,
 attempt and matrix cell, the job's unique label.
@@ -829,8 +834,7 @@ role for each provider. The independent `global` and `country` roots check
 those bindings against all four provider identities and regions:
 
 ```sh
-node deploy/aws/check.mjs --suite integration
-node --test deploy/aws/provider-bindings.test.mjs
+node --test --test-concurrency=1 deploy/aws/provider-bindings.test.mjs deploy/aws/global-plans.test.mjs deploy/aws/country-plans.test.mjs
 ```
 
 Each root runs 29 mocked plans: the 27 original admission cases, a two-cell
@@ -915,7 +919,7 @@ backup references, but those references do not prove that secret values have
 been populated or recovered.
 
 ```sh
-node --test deploy/aws/composition.test.mjs deploy/aws/topology.test.mjs
+node --test --test-concurrency=1 deploy/aws/global-plans.test.mjs deploy/aws/country-plans.test.mjs deploy/aws/topology.test.mjs
 ```
 
 The integration suite runs 41 cases per root: 29 admission, six composition,

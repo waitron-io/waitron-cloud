@@ -108,9 +108,15 @@ const suites = new Map([
   ['dns', ['modules/dns', 'roots/delegation']],
   ['integration', ['roots/global', 'roots/country']],
 ]);
+const rootAliases = new Map([
+  ['integration-global', 'roots/global'],
+  ['integration-country', 'roots/country'],
+]);
 
 export async function runSuite(name, { directory = fileURLToPath(new URL('.', import.meta.url)), execute = runProcess } = {}) {
-  if (!suites.has(name)) throw new Error('Unknown infrastructure suite');
+  const aliasRoot = rootAliases.get(name);
+  const suite = aliasRoot ? 'integration' : name;
+  if (!suites.has(suite)) throw new Error('Unknown infrastructure suite');
   const options = { timeout: 30_000, maxBuffer: 4 * 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
   let image;
   try {
@@ -123,13 +129,14 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
   const scratch = await mkdtemp(join(tmpdir(), 'cloud-aws-suite-'));
   try {
     await copyTrackedSources(directory, join(scratch, 'source'));
-    const plan = suites.get(name).map((directory) => ({ directory, filter: `tests/${name}.tftest.hcl` }));
-    if (name === 'integration') {
+    let plan = suites.get(suite).map((directory) => ({ directory, filter: `tests/${suite}.tftest.hcl` }));
+    if (suite === 'integration') {
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/composition.tftest.hcl' })));
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/edge.tftest.hcl' })));
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/evidence.tftest.hcl' })));
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/handoff.tftest.hcl' })));
     }
+    if (aliasRoot) plan = plan.filter(entry => entry.directory === aliasRoot);
     for (const entry of plan) {
       try {
         if (!(await lstat(join(scratch, 'source', entry.directory, entry.filter))).isFile()) throw new Error('Not a file');
@@ -141,7 +148,7 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
     const driver = await readFile(new URL('./run.py', import.meta.url));
     const output = [];
     // Each independent root keeps the existing driver budget; all filters still run.
-    for (const batch of name === 'integration' ? ['roots/global', 'roots/country'] : [null]) {
+    for (const batch of suite === 'integration' ? (aliasRoot ? [aliasRoot] : ['roots/global', 'roots/country']) : [null]) {
       const container = `cloud-aws-suite-${randomUUID()}`;
       await writeFile(join(scratch, 'suite.json'), JSON.stringify(plan), { mode: 0o644 });
       await writeFile(join(scratch, 'batch.json'), JSON.stringify(batch), { mode: 0o644 });

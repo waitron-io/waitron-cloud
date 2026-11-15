@@ -106,7 +106,8 @@ export function expectedJobContract(workflowPath, selection) {
       add(selection.required, ['service-receipts (venue)'], ['service-receipts (${{ matrix.receipt }})']);
     } else if (workflowPath.endsWith('/aws-infrastructure.yml')) {
       assert.ok(selection.required || selection.reuse, 'AWS source must run its checks');
-      add(selection.required, ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)'], ['verify (${{ matrix.cell }})']);
+      add(selection.required, ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)',
+        'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)'], ['verify (${{ matrix.cell }})']);
     } else {
       assert.ok(selection.required || selection.reuse, 'Diagnostic source must run its checks');
       add(selection.required, ['linux-contention']);
