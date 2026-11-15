@@ -3231,8 +3231,14 @@ implementation or production evidence.
   Amazon session on 14 November. The 15 November owner-run failed at the baseline
   target read before any fault, losing its inner stderr and exit status. The
   [diagnostic change and next-run plan](superpowers/plans/2026-11-15-d621-target-read-diagnostic.md)
-  preserves those details; the cause, actual Amazon observation, original A/all-node
-  loss, real-service and repository repair checks remain open. The three-node
+  preserves those details; that cause remains unexplained. The second owner-run
+  failed earlier: the manifest landed on an allowed worker while the check
+  required worker2. The [placement fix](superpowers/plans/2026-11-15-d621-manifest-placement.md)
+  temporarily prevents new scheduling on the other worker until worker2 placement
+  is checked. Run the synthetic command tests with
+  `node --test scripts/kubernetes-check.test.mjs`.
+  Actual Amazon observation, original A/all-node loss, real-service and repository
+  repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
   across 15 modules, with the manifest worker replaced after its host stopped,
