@@ -20,16 +20,15 @@ existing authenticated setup below. Image builds still pass `NODE_AUTH_TOKEN`
 as the BuildKit `npm_token` secret; follow the existing
 [local image build instructions](local-deployment.md).
 
-For a UI update, expect an unedited version-update PR to fail CI because its smoke-test
-expectations still describe the previous release.
+For a UI update, expect an unedited version-update PR to fail CI until you review its source expectation and approve its archive bytes.
 Before merging:
 
 1. Verify the published version and its `waitronSource.commit`.
 2. Confirm that `apps/portal/package.json`, `packages/ui-smoke/package.json`
-   and both lockfile entries use the same release. The smoke test checks only
-   its own package's pin.
-3. Update the smoke test's version and source expectations while retaining
-   its assertions and browser checks.
+   and both lockfile entries use the same release. The smoke test compares
+   both exact manifest versions with the installed package.
+3. Update the smoke test's reviewed source-commit expectation while retaining
+   its assertions and browser checks. Version checks read the consumer manifests.
 4. Update the reviewed tarball URL and integrity in
    `scripts/disposable-tests/private-packages.py` and the host’s accepted UI SHA512
    digests in `deploy/disposable-tests/session.py`. Keep older approved tarballs
@@ -45,8 +44,9 @@ Before merging:
 
 The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
 authenticated to the private registry and found only `0.1.0`, so it opened no
-update PR. The first newer-version automatic PR remains unproved. The current consumer
-update was prepared manually using the same review steps.
+update PR. [Dependabot PR #1211](https://github.com/waitron-io/waitron-cloud/pull/1211)
+subsequently proposed `0.2.10` for both consumers and the lockfile. Review its
+published source, archive pins and current-head authenticated CI using the steps above.
 
 ## Keep Cloud within seven days of a release
 
@@ -146,7 +146,7 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.2.1` and Lit `3.3.3` in `apps/portal`,
+Cloud pins `@waitron-io/ui-core@0.2.10` and Lit `3.3.3` in `apps/portal`,
 `packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
 then run:
 
@@ -156,17 +156,19 @@ pnpm test:ui
 pnpm typecheck
 ```
 
-The test checks the exact dependency version and recorded Waitron source, bundles
+The test checks both exact consumer versions against the installed version and the
+reviewed Waitron source commit, bundles
 from installed JavaScript, renders controls in Chromium and verifies input names,
 autocomplete, button interaction and light/dark tokens. Its declaration check keeps
 `skipLibCheck` disabled. A local file dependency fails the version check. The normal
 `pnpm test` includes this fixture; it is test infrastructure, not an account screen.
 
-Version `0.2.1` records Waitron source
-`47dda656b641794051c64d3752937ea7f2929f51`. Its installed `dist/LICENSE` and
+Version `0.2.10` records Waitron source
+`ae8f3a799b45e89348691abe2647ad7dfcbf9bbf`, matching
+[publication run 42849632838](https://github.com/clintongormley/waitron/actions/runs/42849632838). Its installed `dist/LICENSE` and
 `dist/LICENSE-GRANTS.md` match that source commit byte for byte. The source
 package's own version remains `0.1.0`; publication assigns the registry version
-without changing the source manifest. Local qualification used the GitHub CLI
+without changing the source manifest. The earlier `0.2.1` local qualification used the GitHub CLI
 token helper, the smoke browser and declaration checks, `pnpm typecheck`, and the
 portal's four English/Spanish, light/dark accessibility cases. Screens were also
 inspected at 390 and 1280 pixels. CI must install with its own temporary
