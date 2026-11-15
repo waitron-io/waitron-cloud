@@ -1,15 +1,55 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
+import {registrationFiles} from './ci-run-registration-shard.mjs';
+
+test('measured packing separates heavy files that shared the old name-order job', () => {
+  const durations = {'a.test.ts': 600, 'b.test.ts': 10, 'c.test.ts': 10, 'd.test.ts': 10,
+    'e.test.ts': 10, 'f.test.ts': 10, 'g.test.ts': 600, 'h.test.ts': 10};
+  const files = Object.keys(durations);
+  const groups = Array.from({length: 7}, (_, index) => registrationFiles(index + 1, files, durations));
+  const totals = groups.map(group => group.reduce((sum, file) => sum + durations[file], 0));
+  assert.deepEqual(groups.flat().sort(), files);
+  assert.ok(Math.max(...totals) <= 180 + 600, `Heavy files still share a job: ${totals}`);
+  assert.deepEqual(groups, Array.from({length: 7}, (_, index) => registrationFiles(index + 1, [...files].reverse(), durations)),
+    'Input order must not change the seven assignments');
+});
+
+test('new files use the live measured mean while stale names do not move work', () => {
+  const files = ['a.test.ts', 'b.test.ts', 'new.test.ts'];
+  const durations = {'a.test.ts': 600, 'b.test.ts': 300, 'deleted.test.ts': 99999};
+  assert.deepEqual(registrationFiles(1, files, durations), ['a.test.ts']);
+  assert.deepEqual(registrationFiles(2, files, durations), ['new.test.ts']);
+  assert.deepEqual(registrationFiles(3, files, durations), ['b.test.ts']);
+  assert.deepEqual(registrationFiles(1, ['b.test.ts', 'a.test.ts'], {}), ['a.test.ts']);
+  assert.deepEqual(registrationFiles(2, ['b.test.ts', 'a.test.ts'], {}), ['b.test.ts']);
+});
+
+test('invalid timing data refuses allocation', () => {
+  for (const durations of [5, [], '5', null, {'a.test.ts': -1}, {'a.test.ts': Infinity}, {'a.test.ts': 'slow'}]) {
+    assert.throws(() => registrationFiles(1, ['a.test.ts'], durations), /Invalid registration duration/);
+  }
+});
+
+test('the measured duration table contains sorted, finite nonnegative millisecond weights', () => {
+  const durations = JSON.parse(readFileSync(new URL('./ci-registration-durations.json', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(durations), Object.keys(durations).sort());
+  assert.ok(Object.keys(durations).length > 0);
+  for (const [file, duration] of Object.entries(durations)) {
+    assert.match(file, /^[^/]+\.test\.ts$/);
+    assert.ok(Number.isFinite(duration) && duration >= 0, file);
+  }
+});
 
 test('a symlinked registration command executes selected tests and refuses invalid partitions', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-link-'));
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
     writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     mkdirSync(join(root, 'packages/registration/test'), {recursive: true});
@@ -31,11 +71,12 @@ test('a symlinked registration command executes selected tests and refuses inval
   } finally {rmSync(root, {recursive: true, force: true});}
 });
 
-test('registration runner moves the two configured files and executes all current and future files exactly once', () => {
+test('registration runner executes all current and future files exactly once with measured packing', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-balanced-'));
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
     writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     const directory = join(root, 'packages/registration/test');
@@ -52,7 +93,7 @@ test('registration runner moves the two configured files and executes all curren
     const env = {...process.env};
     delete env.NODE_TEST_CONTEXT;
     const groups = [];
-    for (let shard = 1; shard <= 6; shard++) {
+    for (let shard = 1; shard <= 7; shard++) {
       const result = spawnSync(process.execPath, ['scripts/ci-run-registration-shard.mjs', String(shard)],
         {cwd: root, env, encoding: 'utf8', timeout: 30_000});
       assert.equal(result.status, 0, result.stderr + result.stdout);
@@ -60,20 +101,11 @@ test('registration runner moves the two configured files and executes all curren
       assert.ok(selected.length > 0, `Empty shard ${shard}`);
       const parents = [...result.stdout.matchAll(/D576_PARENT (\d+)/g)].map(match => Number(match[1]));
       assert.deepEqual(parents, selected.map(() => result.pid), 'The runner must become the Node test process');
-      const original = spawnSync(process.execPath, ['--test', '--test-timeout=30000', `--test-shard=${shard}/6`,
-        ...files.map(file => `test/${file}`)], {cwd: join(root, 'packages/registration'), env, encoding: 'utf8', timeout: 30_000});
-      assert.equal(original.status, 0, original.stderr + original.stdout);
-      const originallySelected = [...original.stdout.matchAll(/D576_FILE ([\w.-]+\.test\.ts)/g)].map(match => match[1]);
-      const unmoved = file => !['monitoring.test.ts', 'support-grants.test.ts'].includes(file);
-      assert.deepEqual(selected.filter(unmoved).sort(), originallySelected.filter(unmoved).sort(),
-        'Files outside the two configured moves must keep Node\'s original partition');
       groups.push(selected);
     }
     assert.deepEqual(groups.flat().sort(), files);
-    assert.ok(groups[0].includes('monitoring.test.ts'));
     assert.equal(groups.flat().includes('venue-service-legacy-schema-guards.test.ts'), false);
-    assert.ok(groups[1].includes('support-grants.test.ts'));
-    for (const shard of ['', '0', '7', '1.5', 'invalid']) {
+    for (const shard of ['', '0', '8', '1.5', 'invalid']) {
       const result = spawnSync(process.execPath, ['scripts/ci-run-registration-shard.mjs', shard],
         {cwd: root, env, encoding: 'utf8', timeout: 10_000});
       assert.notEqual(result.status, 0);
@@ -87,6 +119,7 @@ for (const empty of [true, false]) test(empty ? 'an empty registration shard ref
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync('scripts/ci-registration-durations.json', join(root, 'scripts/ci-registration-durations.json'));
     cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
     writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     const directory = join(root, 'packages/registration/test');

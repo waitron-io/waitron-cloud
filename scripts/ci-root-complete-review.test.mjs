@@ -37,7 +37,7 @@ test('a complete candidate preserves full work, inherited events and exact root 
     const workspace = entries.filter(row => /^(apps|packages)\/[^/]+\/package\.json$/.test(row.path))
       .map(row => ({...JSON.parse(git('show', `${fullHead}:${row.path}`)), directory: row.path.slice(0, -'/package.json'.length)}));
     const full = createPlan({pull_request: {base: {sha: base}, head: {sha: fullHead}}}, {}, workspace, git);
-    assert.equal(full.packages.length, 29);
+    assert.equal(full.packages.length, 30);
     assert.equal(full.receipts.length, 6);
     assert.equal(full.rootInputs, undefined);
     assert.doesNotThrow(() => assertRootInputWork(full, {base: base, head: fullHead, git}));

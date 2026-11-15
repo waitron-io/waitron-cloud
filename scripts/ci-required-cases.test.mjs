@@ -28,9 +28,18 @@ export default createRequiredCaseReporter(${JSON.stringify(requirements)}, {root
 }
 
 test('required cases accept a real passing test alongside unrelated optional skips', async t => {
-  const result = await fixture(t, "test('lease expiry refuses access',()=>{});test.skip('optional platform check',()=>{});");
+  const result = await fixture(t, '', [], {
+    directories: ['nested'],
+    extraFiles: {'nested/behavior.test.mjs': "test('lease expiry refuses access',()=>{});test.skip('optional platform check',()=>{});"},
+    requirements: {'nested/behavior.test.mjs': ['^lease expiry refuses access$']},
+    selectedFiles: ['nested/behavior.test.mjs'],
+  });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Required cases: 1 passed/);
+  const timings = [...result.stdout.matchAll(/^# File duration: (.+)$/gm)].map(match => JSON.parse(match[1]));
+  assert.equal(timings.length, 1);
+  assert.equal(timings[0].file, 'nested/behavior.test.mjs');
+  assert.ok(Number.isFinite(timings[0].durationMs) && timings[0].durationMs >= 0);
 });
 for (const [label, body, args] of [
   ['missing', "test('another refusal',()=>{});", []],

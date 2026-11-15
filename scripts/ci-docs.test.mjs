@@ -52,7 +52,7 @@ test('a changed reader keeps mixed work full while later prose uses ordinary rev
   put('docs/backlog.md', '# Updated\n');
   const head = commit();
   assert.equal(plan(head, reader).packages.length, 0);
-  assert.equal(plan(head, base).packages.length, 29);
+  assert.equal(plan(head, base).packages.length, 30);
 }));
 
 test('earlier source changes do not invalidate a later prose-only range', () => {
@@ -69,7 +69,7 @@ test('package Markdown, document data and unknown paths preserve their existing 
     fixture(({put, commit, plan}) => {
       put(path, '{}\n');
       const selected = plan(commit());
-      assert.equal(selected.packages.length, path.startsWith('packages/identity/') ? 1 : 29, path);
+      assert.equal(selected.packages.length, path.startsWith('packages/identity/') ? 1 : 30, path);
       assert.equal(selected.receipts.length, 6, path);
     });
   }
@@ -105,7 +105,7 @@ test('document command reads exact immutable blobs and rejects invalid UTF-8, NU
   unlinkSync(join(root, 'docs/backlog.md'));
   symlinkSync('../README.md', join(root, 'docs/backlog.md'));
   const linked = plan(commit());
-  assert.equal(linked.packages.length, 29, 'linked Markdown cannot earn the exemption');
+  assert.equal(linked.packages.length, 30, 'linked Markdown cannot earn the exemption');
 }));
 
 test('document command accepts deletions and prose after a reader change', () => fixture(({root, put, commit, plan}) => {
@@ -260,7 +260,7 @@ test('explicit full execution overrides a real ordinary prose PR without changin
   const full = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head, full: true}, workspace, git);
   assert.match(full.reason, /Explicit full run/);
   assert.equal(full.typecheck, true);
-  assert.equal(full.packages.length, 29);
+  assert.equal(full.packages.length, 30);
   assert.equal(full.documentation, undefined);
   assert.equal(full.reuse, null);
   assert.deepEqual(full.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);

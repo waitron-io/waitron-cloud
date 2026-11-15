@@ -59,9 +59,9 @@ test('backend-only changes omit the unchanged pure milestone receipt and preserv
   fixture(({plan, git, base, head}) => {
     const result = plan();
     assert.deepEqual(result.receipts, ['test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt','test:cloud-cost']);
-    assert.equal(result.packages.length, 6);
+    assert.equal(result.packages.length, 7);
     assert.ok(result.packages.every(row => row.package === '@waitron-cloud/registration'));
-    assert.equal(defaultPlan(base, head, workspace, git).packages.length, 29);
+    assert.equal(defaultPlan(base, head, workspace, git).packages.length, 30);
     assert.equal(result.typecheck, true);
     assert.match(result.reason, /unchanged audited milestone inputs/i);
   });
@@ -92,7 +92,7 @@ test('mixed input changes and unknown diffs preserve every receipt', () => {
     const head = git('rev-parse', 'HEAD').trim();
     const result = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {});
     assert.deepEqual(result.receipts, receiptSuites);
-    assert.equal(result.packages.length, 29);
+    assert.equal(result.packages.length, 30);
     const missing = (...args) => args[0] === 'ls-tree' ? (() => { throw Error('Missing tree'); })() : git(...args);
     assert.deepEqual(createPlan({pull_request: {base: {sha: base}, head: {sha: git('rev-parse', 'HEAD^').trim()}}}, {}, workspace, missing, () => {}).receipts, receiptSuites);
   });

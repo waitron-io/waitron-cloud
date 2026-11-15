@@ -98,7 +98,7 @@ test('one committed baseline admits isolated docs and scripts while unresolved l
     git('reset', '--hard', base);
     for (const path of paths) appendFileSync(join(root, path), path === unknownPath ? ' ' : '\n// Mixed input\n');
     const {selected} = plan(commit());
-    assert.equal(selected.packages.length, 29, paths.join(','));
+    assert.equal(selected.packages.length, 30, paths.join(','));
     assert.equal(selected.typecheck, true); assert.deepEqual(selected.receipts, receipts);
     assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
   }

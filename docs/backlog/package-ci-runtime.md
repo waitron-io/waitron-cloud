@@ -1,4 +1,86 @@
-# Package CI runtime (D576)
+# Registration CI runtime
+
+## Allocate work by elapsed file time
+
+The seven registration jobs share files using elapsed-time weights in
+[`ci-registration-durations.json`](../../scripts/ci-registration-durations.json).
+The runner puts the longest remaining file into the job with the least assigned
+work. Filename order and then job number settle ties. New files use the mean of
+the weighted files still present; removed files affect neither discovery nor that
+mean. Discovery owns the file list, so every current test still runs once.
+
+The original weights come from 170 explicit file invocations on four-vCPU Debian with
+three invocations at once. Each invocation uses Node 26.13.0 and the existing
+30-second test deadline, required-case reporter and disposable PostgreSQL/Mailpit
+launcher. All 2,234 cases pass across the successful measurements. The eight
+historical-release files needed the already approved UI 0.1.0 package cached in
+the guest before their existing installs could pass. No credential was copied.
+The values express relative work for allocation; they do not predict job wall time.
+
+The weights also include a one-time adjustment from hosted runs 43688610284
+and 43690119075. Their jobs took 269/224/274/290/289/249 and
+235/153/228/343/244/266 seconds. The proof-freshness case in job 4 grew from
+2.032 to 5.259 seconds; the other roughly 50 seconds of that job's increase remain
+unexplained. Before averaging, the first observation includes that additional
+3.228-second proof wait. Each old group's file weights are then multiplied by
+its mean observed job time in milliseconds divided by its old weight total, keeping their
+relative sizes. This spreads fixed setup across the files too, and assumes
+hosted work within each group follows those original file measurements. The adjusted values are allocation estimates,
+not new per-file elapsed measurements or a bound from two samples. The
+unchanged allocator redistributes them; current-head CI must still qualify
+all seven jobs within 300 seconds. The original six assigned weight totals are about
+255.6 seconds each; these are weights, not predicted job durations. In job 4,
+351 of the other 397 top-level cases also took longer, with summed case time
+rising from about 725 to 879 seconds across concurrent files. This locates
+additional measured work inside cases but does not explain the variability.
+
+A fresh measurement replaces this one-time calibration.
+To refresh the table, time each explicit file from process start until exit,
+including imports, fixtures and cleanup. Keep the same Node arguments as the
+runner; record available CPUs and the number of concurrent invocations. Retain
+complete Git history for release tests and prepare their pinned dependencies.
+Use only passing files with complete case counts, write sorted basename keys
+and elapsed milliseconds, then run the portable allocation checks:
+
+```sh
+node --test scripts/ci-registration-shards.test.mjs scripts/ci-package-allocation.test.mjs
+```
+
+The case reporter prints `# File duration:` JSON comments for each Node file
+summary, with a root-relative filename and `durationMs` (the default root is the
+repository). The 15 November 09:06 watcher-cleared hosted pass captures these summaries
+instead of complete-process timings. To use them for a future table, select the
+`packages/registration/test/` records and use their basenames as table keys.
+The calibration below shows these summaries omit module loading. File workers
+also overlap and share runner resources, so their durations depend on contention
+and their sum is not job wall time. Every complete hosted job must still pass
+within 300 seconds.
+
+The watcher cleared retaining the six-job allocation at 09:47. With the same
+table, hosted runs 43692050000 and 43694844056 take
+227/240/145/318/161/216 and 251/250/296/223/285/300 seconds respectively.
+The watcher attributes this spread to machine variance; the second sample meets
+the registration limit with little margin. Its separate portal sign-out timeout
+is recorded under D530. The final six-job run 43696443978 passes all 2,234
+cases but takes 285/199/304/219/307/279 seconds, missing the limit in two jobs.
+
+The watcher cleared seven jobs at 10:06 on 15 November, using the same weights
+and packing. Every case, concurrency setting and deadline stays unchanged.
+Qualification requires one exact-head run with all seven jobs within 300 seconds
+and all selected work passing. This qualifies that observation; it does not
+enforce a 300-second deadline on future runs.
+
+Calibrate any alternate reporter first with a known module-level delay and a
+known test delay. Node 26.13.0's per-file summary omitted the module delay in the
+local control: it reported 508 milliseconds for 750 milliseconds of deliberate
+delays, while process elapsed time exceeded 750 milliseconds.
+
+Aim for about four minutes per registration job and require every exact-head
+job within 300 seconds before qualifying an allocation. Read each job's elapsed
+time and complete case count. The eight-minute job cap stays unchanged; timing
+predictions do not qualify a pull request or its merge.
+
+## Earlier allocation investigation
 
 Registration file allocation can put much more work in one job than another.
 On the Linux test box, the unchanged five-partition layout at
@@ -6,15 +88,16 @@ On the Linux test box, the unchanged five-partition layout at
 352.332 seconds and 305 cases in partition 4 in 185.491 seconds. The first is
 1.90 times slower. These runs do not reproduce the historical cancellation.
 
-The planner and final CI check now require six registration partitions.
+The earlier planner and final CI check required six registration partitions.
 Each partition discovers current `.test.ts` filenames in the test directory and
 gives Node an explicit file list with the existing 30-second test deadline.
 The eight-minute job limit stays unchanged. Portable
 checks run every current filename and a future filename exactly once through
-Node, reject each missing partition and reject the old five-partition allocation.
+Node and reject each missing partition. The current seven-job contract also
+rejects the earlier five- and six-partition allocations.
 Account HTTP and the other package allocations stay unchanged.
 
-## Linux qualification
+### Earlier Linux qualification
 
 The count-only six-partition control uses the same registration tree, PostgreSQL
 launcher and lockfile. All 1,684 cases pass without failures, cancellations or
@@ -30,12 +113,10 @@ skips. The observer records every one of the 139 test files exactly once.
 | 6 | 185 | 239.193 | 245.136 |
 
 The slowest wrapper takes 293.499 seconds, so adding a partition alone does not
-meet the four-minute target. Earlier six-partition layouts also failed to
-establish a runtime saving; their historical observations remain in the
-[CI execution budget](../backlog.md). More partitions alone are not qualification.
+meet the four-minute target. More partitions alone are not qualification.
 
-The runner assigns `monitoring.test.ts` to partition 1 and
-`support-grants.test.ts` to partition 2. Other files use the sorted round-robin
+The earlier runner assigned `monitoring.test.ts` to partition 1 and
+`support-grants.test.ts` to partition 2. Other files used sorted round-robin
 assignment. The historical balanced Linux trial below also assigned
 `venue-service-legacy-schema-guards.test.ts` to partition 1. D591 retired that
 wrapper, so these figures do not measure the current file set. The trial at
@@ -61,8 +142,9 @@ runner takes 228.112 seconds.
 
 The portable runner checks preserve all-file discovery, reject invalid and empty
 partitions, forward test failures and keep the same Node test-process identity.
-They exclude non-test files and nested fixtures, compare every unmoved file with
-Node's original partition, and execute both file and directory symlink commands.
+They exclude non-test files and nested fixtures and execute both file and
+directory symlink commands. The packing tests own allocation; the package
+allocation check owns discovery, not the former fixed moves.
 
 Aim for about four minutes per registration job, and require each exact-head job
 to finish within 300 seconds. The workflow's eight-minute cap stays unchanged.
@@ -93,7 +175,7 @@ Keep the database launcher, migration behavior, assertions and deadlines intact.
 The run-it review observed both the original and new Node commands still running
 after 42 seconds when a test retained a live timer. The 30-second test deadline
 does not establish process termination in that case; the existing eight-minute
-job cap remains the outer limit. This branch does not change that behavior.
+job cap remains the outer limit. Measured allocation does not change that behavior.
 
 The [recorded account HTTP event](https://github.com/waitron-io/waitron-cloud/actions/runs/41859910075/job/126686634772)
 is separate: runner setup takes about 402 seconds,

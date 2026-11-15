@@ -151,7 +151,7 @@ export function scopeForPaths(paths, workspace, {direct = false, ownersOnly = fa
 }
 
 export const receiptSuites = ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost'];
-const shards = {'@waitron-cloud/registration':6, '@waitron-cloud/account-http':3, '@waitron-cloud/backups':7, '@waitron-cloud/portal':6, '@waitron-cloud/remote-access':4};
+const shards = {'@waitron-cloud/registration':7, '@waitron-cloud/account-http':3, '@waitron-cloud/backups':7, '@waitron-cloud/portal':6, '@waitron-cloud/remote-access':4};
 export function workPlan(scope, workspace, root = process.cwd(), receiptScope = scope, testFilesByPackage) {
   const packages = [];
   for (const name of scope.packages) {

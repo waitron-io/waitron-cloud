@@ -87,7 +87,7 @@ The AWS row is updated to the current workflow; the other rows retain that inspe
 | `kubernetes-proof.yml`: `setup-controls` | Stay hosted, 5. D570's narrow disposable EC2 full-proof path remains separate. | `kubernetes-proof.yml:17`; `2026-11-04-kubernetes-weekly-proof.md:5` |
 | `nightly.yml`: calls `standard`, `cost`, `venue`, `aws`; `summary` named `nightly-summary` | Calls inherit the placements above and retain full work/prefixes; parent summary stays hosted, 2. | `nightly.yml:21`, `:26`, `:31`, `:36`, `:41` |
 
-Workflow receipts above are under `.github/workflows/`. Current ordinary package allocation has registration 6, account-http 3, backups 7, portal 6 and remote-access 4 shards; identity plus operations share a row when both are selected; translation and ui-smoke remain individual rows. Selection can produce a smaller matrix. Do not hard-code an inferred full job count: retain discovery and the immutable selected plan (`scripts/ci-scope.mjs:152`, `scripts/ci-package-groups.mjs:3`).
+Workflow receipts above are under `.github/workflows/`. Current ordinary package allocation has registration 7, account-http 3, backups 7, portal 6 and remote-access 4 shards; identity plus operations share a row when both are selected; translation and ui-smoke remain individual rows. Selection can produce a smaller matrix. Do not hard-code an inferred full job count: retain discovery and the immutable selected plan (`scripts/ci-scope.mjs:152`, `scripts/ci-package-groups.mjs:3`).
 
 ## Consumer audit before changing a guard
 

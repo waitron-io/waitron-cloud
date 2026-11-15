@@ -18,12 +18,12 @@ test('PR planner uses exact SHAs and NUL paths, preserving spaces and both renam
 test('every direct, multi-commit, unknown and failed-evidence push falls back to the full package plan', () => {
   for (const event of [{}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before,commits:[{}]}]) {
     const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,()=>before,api);
-    assert.equal(plan.packages.length,29);
+    assert.equal(plan.packages.length,30);
     assert.equal(plan.receipts.length,6);
     assert.equal(plan.reuse,null);
   }
   const plan=createPlan({pull_request:{head:{sha:head},base:{sha:base}}},{sha:head,repository,branch:'main'},workspace,()=>{throw Error('missing base');},api);
-  assert.equal(plan.packages.length,29);
+  assert.equal(plan.packages.length,30);
 });
 
 test('every main push runs full work even when equal-tree PR evidence is green',()=>{
@@ -34,7 +34,7 @@ test('every main push runs full work even when equal-tree PR evidence is green',
   const observed = path => {apiCalls++; return green(path);};
   for (const event of [{}, {before,commits:[{}]}, {before,commits:[{},{}]}, {before,commits:[{}],forced:true}, {before:'f'.repeat(40),commits:[{}]}]) {
     const plan=createPlan(event,{sha:head,repository,branch:'main'},workspace,git,observed);
-    assert.equal(plan.reuse,null);assert.equal(plan.packages.length,29);
+    assert.equal(plan.reuse,null);assert.equal(plan.packages.length,30);
     assert.equal(plan.typecheck,true);
     assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
   }

@@ -60,7 +60,7 @@ test('gateway caller, published evidence, new readers and installation changes r
     put(helper, 'export const result = 1; // changed validator\n');
     const head = commit();
     for (const base of [undefined, changed]) {
-      assert.equal(plan(head, base).packages.length, base === changed ? 0 : 29, path);
+      assert.equal(plan(head, base).packages.length, base === changed ? 0 : 30, path);
       assert.match(plan(head, base).reason, path === '.gitattributes' && !base ? /Root ownership refused/ : /verify-gateway-reconnection-receipt.mjs/);
     }
   });
@@ -77,7 +77,7 @@ test('gateway work checks real targets and complete inventories', () => fixture(
       }
       return git(...args);
     };
-    assert.equal(plan(head, base, read).packages.length, ['truncated', 'omitted-reader'].includes(kind) ? 29 : 0, `${sha}: ${kind}`);
+    assert.equal(plan(head, base, read).packages.length, ['truncated', 'omitted-reader'].includes(kind) ? 30 : 0, `${sha}: ${kind}`);
   }
 }));
 
@@ -86,13 +86,13 @@ test('missing or nonregular gateway targets in either revision retain full check
     if (kind === 'executable') chmodSync(join(root, path), 0o755);
     else {unlinkSync(join(root, path)); if (kind === 'linked') symlinkSync('gateway-reconnection-receipt.mjs', join(root, path));}
     const changed = commit();
-    if (side === 'head') assert.equal(plan(changed).packages.length, 29, `${path}: ${kind}`);
+    if (side === 'head') assert.equal(plan(changed).packages.length, 30, `${path}: ${kind}`);
     else {
       if (kind === 'linked') unlinkSync(join(root, path));
       put(path, path === helper ? 'export const result = 1;\n' : 'import "./verify-gateway-reconnection-receipt.mjs";\n');
       chmodSync(join(root, path), 0o644);
       const head = commit();
-      assert.equal(plan(head, changed).packages.length, 29, `${path}: ${kind}`);
+      assert.equal(plan(head, changed).packages.length, 30, `${path}: ${kind}`);
     }
   });
 });

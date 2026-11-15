@@ -45,7 +45,7 @@ test('the configured root preflight accepts full actual work without review reco
   writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
   ok(node('scripts/ci-plan.mjs', [], {GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head}));
   const plan = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
-  assert.equal(plan.packages.length, 29); assert.equal(plan.receipts.length, 6); assert.equal(plan.typecheck, true);
+  assert.equal(plan.packages.length, 30); assert.equal(plan.receipts.length, 6); assert.equal(plan.typecheck, true);
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const rootJob = workflow.split('\n  root:\n')[1].split(/\n  [\w-]+:\n/)[0];
   const command = /run: (node scripts\/ci-root-inputs.mjs --check)/.exec(rootJob)?.[1];
@@ -68,7 +68,7 @@ test('a complete changed selector publishes its full plan within the job output 
   const text = readFileSync(output, 'utf8');
   const values = Object.fromEntries(text.trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
   const plan = JSON.parse(values.plan);
-  assert.equal(plan.packages.length, 29);
+  assert.equal(plan.packages.length, 30);
   assert.deepEqual(plan.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
   assert.equal(plan.typecheck, true); assert.equal(plan.reuse, null);
   assert.equal(values.packages, 'true'); assert.equal(values.receipts, 'true'); assert.equal(values.typecheck, 'true');

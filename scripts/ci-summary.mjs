@@ -12,7 +12,7 @@ import {assertCurrentReuse} from './ci-reuse.mjs';
 import {bindRuntimeWorkflow, completeMissingMainDecision, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export const packageShards = Object.freeze({
-  '@waitron-cloud/registration': 6,
+  '@waitron-cloud/registration': 7,
   '@waitron-cloud/account-http': 3,
   '@waitron-cloud/backups': 7,
   '@waitron-cloud/portal': 6,
