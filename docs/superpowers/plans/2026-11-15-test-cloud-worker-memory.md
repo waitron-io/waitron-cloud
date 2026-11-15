@@ -55,4 +55,4 @@ Read executed counts; these checks supplement the measured run.
 Only after measurement, add dated peaks, limits, margin, invocation and scope to
 `docs/test-cloud.md`; update its aggregate total and narrow `docs/backlog.md`.
 Expected added/removed lines: code/configuration +4/−4; tests +0/−0;
-docs (including this plan) +65–90/−3–6. No runtime change is planned.
+docs (including this plan) +65–90/−3–6. No worker logic change is planned.
