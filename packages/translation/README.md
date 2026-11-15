@@ -234,10 +234,18 @@ keep these manual runs small. It prints file paths, and exits unsuccessfully if 
 or review failed. A failed review retains its first-pass names for diagnosis but cannot
 qualify a complete two-pass quality result.
 
-To rehearse Task 23 with tuning examples, run
-`pnpm quality:trial --set blind --runs 1 --house-style tuning-accepted` against the
-fake provider. It selects up to 300 products with shown, unmarked tuning names,
-choosing the most frequent text per language and the first text alphabetically on a tie.
+To rehearse Task 23 against the fake provider, keep the two comparison groups
+in separate output directories so the scorer cannot combine them:
+
+```sh
+pnpm quality:trial --set blind --runs 1 --out quality/results/blind-plain
+pnpm quality:trial --set blind --runs 1 --house-style tuning-accepted --out quality/results/blind-style
+pnpm quality:score --set blind quality/results/blind-plain/*.json
+pnpm quality:score --set blind quality/results/blind-style/*.json
+```
+
+The style option selects up to 300 products with shown, unmarked tuning names,
+choosing the most frequent text per language; ties use character-code order.
 Venue-supplied names stay unchanged. The flag is refused with `--set tuning` so the
 comparison cannot reuse its own answers. These synthetic runs measure no quality.
 

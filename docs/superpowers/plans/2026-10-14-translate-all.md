@@ -4486,13 +4486,15 @@ The bar, from the spec: "Before release, the harness must show that the template
 
 ### Task 23 (OWNER-INVOLVED, needs the real key): Measure the house-style examples
 
-**Owner-only after 2026-11-02.** The commands below are preserved, not authorized for autonomous execution.
+Offline steps 1–2 are implemented under the [15 November preparation plan](2026-11-15-translation-house-style-preparation.md), cleared by the watcher at 23:33. The implementation excludes every venue-supplied language and refuses house style on the tuning set. Use the [separate comparison directories](../../../packages/translation/README.md#quality-harness) when rehearsing; steps 3 onward still require the owner's quality trial and the existing provider gates. The code below records the original proposal.
+
+**Measurements remain owner-only after 2026-11-02.** The real-provider commands below are preserved, not authorized for autonomous execution.
 
 The spec: "The fair test is to give the blind set's run the names the owner accepted from the tuning set, and to count the Catalan vocabulary errors. Neither has been measured."
 
 **Files:** Modify `packages/translation/quality/scorer.ts` (`shownEntries`), `quality/trial.ts` (`acceptedHouseStyle`, the `--house-style` option), `quality/trial.test.ts`.
 
-- [ ] **Step 1: Write the failing test.** Append to `quality/trial.test.ts` (add `acceptedHouseStyle` to the `./trial.ts` import and `gradeKey`, `shownEntries` to the `./scorer.ts` one):
+- [x] **Step 1: Write the failing test.** Append to `quality/trial.test.ts` (add `acceptedHouseStyle` to the `./trial.ts` import and `gradeKey`, `shownEntries` to the `./scorer.ts` one):
 
 ```ts
 test('the tuning house style is the same on every call, holds no marked name, stays within its limit, and reaches the job',()=>{
@@ -4510,7 +4512,7 @@ test('the tuning house style is the same on every call, holds no marked name, st
 
 Run `pnpm --dir packages/translation quality:test` and watch it fail (missing exports).
 
-- [ ] **Step 2: Implement.** In `quality/scorer.ts`:
+- [x] **Step 2: Implement.** In `quality/scorer.ts`:
 
 ```ts
 export type ShownName={pid:string;lang:string;text:string;runs:string[]};
