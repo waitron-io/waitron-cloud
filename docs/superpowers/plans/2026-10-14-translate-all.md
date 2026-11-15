@@ -4486,13 +4486,15 @@ The bar, from the spec: "Before release, the harness must show that the template
 
 ### Task 23 (OWNER-INVOLVED, needs the real key): Measure the house-style examples
 
-**Owner-only after 2026-11-02.** The commands below are preserved, not authorized for autonomous execution.
+Offline steps 1–2 are implemented under the [15 November preparation plan](2026-11-15-translation-house-style-preparation.md), cleared by the watcher at 23:33. The implementation excludes every venue-supplied language and refuses house style on the tuning set. Use the [separate comparison directories](../../../packages/translation/README.md#quality-harness) for rehearsal and the later measurement; steps 3 onward still require the owner's quality trial and the existing provider gates. The code below records the original proposal.
+
+**Measurements remain owner-only after 2026-11-02.** The real-provider commands below are preserved, not authorized for autonomous execution.
 
 The spec: "The fair test is to give the blind set's run the names the owner accepted from the tuning set, and to count the Catalan vocabulary errors. Neither has been measured."
 
 **Files:** Modify `packages/translation/quality/scorer.ts` (`shownEntries`), `quality/trial.ts` (`acceptedHouseStyle`, the `--house-style` option), `quality/trial.test.ts`.
 
-- [ ] **Step 1: Write the failing test.** Append to `quality/trial.test.ts` (add `acceptedHouseStyle` to the `./trial.ts` import and `gradeKey`, `shownEntries` to the `./scorer.ts` one):
+- [x] **Step 1: Write the failing test.** Append to `quality/trial.test.ts` (add `acceptedHouseStyle` to the `./trial.ts` import and `gradeKey`, `shownEntries` to the `./scorer.ts` one):
 
 ```ts
 test('the tuning house style is the same on every call, holds no marked name, stays within its limit, and reaches the job',()=>{
@@ -4510,7 +4512,7 @@ test('the tuning house style is the same on every call, holds no marked name, st
 
 Run `pnpm --dir packages/translation quality:test` and watch it fail (missing exports).
 
-- [ ] **Step 2: Implement.** In `quality/scorer.ts`:
+- [x] **Step 2: Implement.** In `quality/scorer.ts`:
 
 ```ts
 export type ShownName={pid:string;lang:string;text:string;runs:string[]};
@@ -4536,7 +4538,7 @@ export function acceptedHouseStyle(set:GradedSet,shown:Record<string,ShownName>,
 ```
 
 and in `runTrial` accept `houseStyle?:'tuning-accepted'` in its options, building the job as `trialJob(loadSet(options.set),options.houseStyle?acceptedHouseStyle(loadSet('tuning'),shownEntries('tuning')):[])` and recording `houseStyle:options.houseStyle??null` in each file; `main` reads `--house-style`, which accepts only `tuning-accepted`. Rerun `pnpm --dir packages/translation quality:test`.
-- [ ] **Step 3:** From `packages/translation`, run the blind set three times with and three times without the house style (`pnpm quality:trial --set blind --runs 3 --house-style tuning-accepted`, and without the flag); score both; have the owner grade any ungraded names as in Task 22.
+- [ ] **Step 3:** From `packages/translation`, run `pnpm quality:trial --set blind --runs 3 --out quality/results/blind-plain` and `pnpm quality:trial --set blind --runs 3 --house-style tuning-accepted --out quality/results/blind-style`. Score each folder separately with `pnpm quality:score --set blind quality/results/blind-plain/*.json` and `pnpm quality:score --set blind quality/results/blind-style/*.json`; have the owner grade any ungraded names as in Task 22. Keep existing mixed-folder files out of this comparison.
 - [ ] **Step 4:** List every Catalan name marked "needs work" or "wrong" in both arms and ask the owner which are vocabulary errors (a Spanish word in Catalan spelling, the error rule 4 targets); the marks carry no reason, so this count needs the owner.
 - [ ] **Step 5:** Record both arms' scores and the vocabulary-error counts in the PR description and commit the code, the grades and the shown keys.
 

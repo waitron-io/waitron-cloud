@@ -2,24 +2,37 @@ import {randomUUID} from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {createLoopbackOpenAiClient,ProviderError,parseJob,planBatches,translateBatch,translationModel,translationPromptVersion,type BatchHooks,type ItemResult,type ParsedJob} from '../src/index.ts';
-import {languages,loadSet,type GradedSet,type SetName} from './scorer.ts';
+import {createLoopbackOpenAiClient,ProviderError,parseJob,planBatches,translateBatch,translationModel,translationPromptVersion,type BatchHooks,type ItemResult,type ParsedJob,type HouseStyleName} from '../src/index.ts';
+import {languages,loadSet,shownEntries,type GradedSet,type SetName,type ShownName} from './scorer.ts';
 
-export function trialJob(set:GradedSet):ParsedJob{
+export function acceptedHouseStyle(set:GradedSet,shown:Record<string,ShownName>,limit=300):HouseStyleName[]{
+ const best=new Map<string,{text:string;runs:number}>();
+ for(const [key,v] of Object.entries(shown)){
+  const product=set.products.find(p=>p.id===v.pid);
+  if(v.lang==='fix'||set.grades.has(key)||!product||Object.hasOwn(product.existing??{},v.lang))continue;
+  const slot=`${v.pid}\u001f${v.lang}`,current=best.get(slot);
+  if(!current||v.runs.length>current.runs||(v.runs.length===current.runs&&v.text<current.text))best.set(slot,{text:v.text,runs:v.runs.length});
+ }
+ const chosen=new Map<string,Record<string,string>>();
+ for(const [slot,{text}] of best){const [pid,lang]=slot.split('\u001f') as [string,string];chosen.set(pid,{...chosen.get(pid),[lang]:text});}
+ return set.products.filter(p=>chosen.has(p.id)).slice(0,Math.min(300,limit)).map(p=>({kind:'product',staffName:p.internal,names:{...p.existing,...chosen.get(p.id)}}));
+}
+export function trialJob(set:GradedSet,houseStyle:HouseStyleName[]=[]):ParsedJob{
  const items=set.products.map(p=>({ref:p.id,kind:p.kind??'product',family:p.family??p.id,category:p.category,staffName:p.internal,existing:p.existing??{},
   missing:languages.filter(l=>!Object.hasOwn(p.existing??{},l))})).filter(item=>item.missing.length>0);
- return parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:[...languages]},items,houseStyle:[]}));
+ return parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'ca',enabled:[...languages]},items,houseStyle}));
 }
 export function namesFrom(results:readonly ItemResult[]):Record<string,Record<string,unknown>>{
  return Object.fromEntries(results.map(r=>[r.ref,{...r.names,placeholder:r.placeholder,corrections:r.corrections}]));
 }
-export async function runTrial(options:{set:SetName;runs:number;outDir:URL;env:NodeJS.ProcessEnv}):Promise<URL[]>{
+export async function runTrial(options:{set:SetName;houseStyle?:'tuning-accepted';runs:number;outDir:URL;env:NodeJS.ProcessEnv}):Promise<URL[]>{
+ if(options.houseStyle!==undefined&&(options.houseStyle!=='tuning-accepted'||options.set!=='blind'))throw new Error('Invalid house style: use tuning-accepted with blind only');
  if(!Number.isInteger(options.runs)||options.runs<1||options.runs>10)throw new Error('--runs takes 1 to 10');
  const apiKey=options.env.CLOUD_OPENAI_API_KEY;
  if(!apiKey?.trim())throw new Error('CLOUD_OPENAI_API_KEY is required');
  if(options.set!=='tuning'&&options.set!=='blind')throw new Error('Invalid graded set');
  if(options.env.CLOUD_TRANSLATION_LOCAL_PROOF!=='1')throw new ProviderError('refused');
- const client=createLoopbackOpenAiClient({apiKey,baseUrl:options.env.CLOUD_OPENAI_BASE_URL??''}),job=trialJob(loadSet(options.set)),batches=planBatches(job.items);
+ const client=createLoopbackOpenAiClient({apiKey,baseUrl:options.env.CLOUD_OPENAI_BASE_URL??''}),job=trialJob(loadSet(options.set),options.houseStyle?acceptedHouseStyle(loadSet('tuning'),shownEntries('tuning')):[]),batches=planBatches(job.items);
  mkdirSync(options.outDir,{recursive:true});
  // A unique stamp and exclusive creation preserve earlier paid trial evidence.
  const stamp=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomUUID(),written:URL[]=[];
@@ -37,23 +50,25 @@ export async function runTrial(options:{set:SetName;runs:number;outDir:URL;env:N
   // Recorded migration 039 prices, USD per million tokens; this is an estimate, not a bill.
   const costUsd=(usage.inputTokens*0.10+usage.outputTokens*0.50)/1e6;
   const file=new URL(`${options.set}-${stamp}-${repeat}.json`,outDir);
-  writeFileSync(file,JSON.stringify({set:options.set,promptVersion:translationPromptVersion,model:translationModel,repeat,names:namesFrom(results),failed,usage,costUsd},null,1)+'\n',{flag:'wx',mode:0o600});
+  writeFileSync(file,JSON.stringify({set:options.set,promptVersion:translationPromptVersion,model:translationModel,houseStyle:options.houseStyle??null,repeat,names:namesFrom(results),failed,usage,costUsd},null,1)+'\n',{flag:'wx',mode:0o600});
   written.push(file);
  }
  return written;
 }
 async function main(args:string[]){
- const usage='usage: node quality/trial.ts --set tuning|blind --runs N [--out <dir>]';
+ const usage='usage: node quality/trial.ts --set tuning|blind --runs N [--out <dir>] [--house-style tuning-accepted]';
  const flags=new Map<string,string>();
  for(let i=0;i<args.length;i+=2){
   const key=args[i]!,value=args[i+1];
-  if(!['--set','--runs','--out'].includes(key)||flags.has(key)||!value||value.startsWith('--'))throw new Error(usage);
+  if(!['--set','--runs','--out','--house-style'].includes(key)||flags.has(key)||!value||value.startsWith('--'))throw new Error(usage);
   flags.set(key,value);
  }
  const set=flags.get('--set'),n=flags.get('--runs');
  if((set!=='tuning'&&set!=='blind')||!n||!/^([1-9]|10)$/.test(n))throw new Error(usage);
+ const houseStyle=flags.get('--house-style');
+ if(houseStyle!==undefined&&(houseStyle!=='tuning-accepted'||set!=='blind'))throw new Error(usage);
  const out=flags.get('--out'),outDir=out?pathToFileURL(out.replace(/\/$/,'')+'/'):new URL('./results/',import.meta.url);
- const files=await runTrial({set,runs:Number(n),outDir,env:process.env});
+ const files=await runTrial({set,houseStyle,runs:Number(n),outDir,env:process.env});
  for(const file of files)console.log(fileURLToPath(file));
  if(files.some(file=>JSON.parse(readFileSync(file,'utf8')).failed.length))process.exitCode=1;
 }

@@ -941,10 +941,6 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
-See [the retention cadence and native transport checks](backlog/translation.md#retention-cadence-and-additional-http-boundaries)
-for completed local qualification and the production limits it retains.
-
-The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
 are complete; preserve the approved cap, admission, consent and paging rules in the

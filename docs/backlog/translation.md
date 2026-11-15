@@ -407,6 +407,7 @@ Remaining work:
   closing currently stops waiting and subsequent machine execution, while callbacks
   must stop their own work. Bundle-marker preflight checks required UI strings;
   the actual bell check remains mandatory.
+- Task 23 steps 1–2 now support offline house-style preparation through the loopback-only trial; measurements and owner grading remain open.
 - **Owner quality trials:** Tasks 22–24 remain owner-only after **2026-11-02**, using their
   preserved commands. Templated-prompt non-regression on both graded sets, house-style effects
   and the other kinds of name still need measurement and owner grading. Run no real-key trials
