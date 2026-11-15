@@ -67,15 +67,15 @@ function command(args, input = '', phase = args[0], env = {}) {
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; diagnosticSize += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'client-paid-remote') diagnostic=(diagnostic+part).slice(-8192); else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start' || phase === 'client-start') diagnostic=(diagnostic+part).slice(-4096);});
+    child.stderr.on('data', part => {size += part.length; diagnosticSize += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'client-paid-remote' || phase === 'verification-target-read') diagnostic=(diagnostic+part).slice(-8192); else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh' || phase === 'client-build' || phase === 'client-stream-start' || phase === 'client-start') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', (code, childSignal) => {
       clearTimeout(timer); signal?.removeEventListener('abort', stop);
       if (invalid || code !== 0) {
         const error = new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-stream-start' || phase === 'client-start' ? streamStartCommandDiagnostic(diagnostic, code, childSignal) : '') + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '') + (phase === 'client-build' && /legacy builder/i.test(diagnostic) && /buildx/i.test(diagnostic) ? ':integration.client_build_used_legacy_builder' : ''));
-        // This fixture uses synthetic venues; retain its terminal error without command input or stdout.
-        if (phase === 'client-paid-remote') error.diagnostic = {phase, exitCode: code, signal: childSignal,
+        // These fixture phases use synthetic venues or verifier metadata; retain stderr without command input or stdout.
+        if (phase === 'client-paid-remote' || phase === 'verification-target-read') error.diagnostic = {phase, exitCode: code, signal: childSignal,
           stderr: diagnostic, stderrTruncated: diagnosticSize > 8192};
         reject(error);
       }

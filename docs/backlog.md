@@ -3228,7 +3228,10 @@ implementation or production evidence.
   `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`.
   Full local qualification has not passed (paid-remote fixture HTTP 500 after
   worker replacement); the owner moved the remaining checks to the owner-started
-  Amazon session on 14 November. Actual Amazon observation, original A/all-node
+  Amazon session on 14 November. The 15 November owner-run failed at the baseline
+  target read before any fault, losing its inner stderr and exit status. The
+  [diagnostic and next-run plan](superpowers/plans/2026-11-15-d621-target-read-diagnostic.md)
+  preserves those details; the cause, actual Amazon observation, original A/all-node
   loss, real-service and repository repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
