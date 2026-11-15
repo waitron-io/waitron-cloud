@@ -2389,19 +2389,86 @@ signs someone in or authorises activation.
 
 ### Disposition of A1188's remaining Cloud requests
 
-Cloud proposes the following reconciliation of A1188 section 9. These are
-design boundaries for later joint formats and tests, not implemented effects.
+The following reconciles A1188 section 9. The part 3 agreement below settles
+requests 4–7 and 9 for future build; none of these are implemented effects.
 
 | A1188 request | Cloud response |
 | --- | --- |
 | 1: facts; 2: code and issue date | Separate reads above. Billing display v1 remains closed. |
 | 3: addresses | Follow owner-approved A1188 section 13 items 5–6: separate emergency name, separate code-entry origin, never locally pointed at the box. No staff password enters the code-entry page; the copy itself still runs on Cloud's machines. |
-| 4: locked restore | Follow item 13: M2 has its own new node identity, no source private node key and no fiscal authority before declaration. This requires an explicit restore amendment and A947/A1018 qualification; today's source-identity restore is unchanged. Cloud starts the locked copy from the venue's live stream with the backup key it already holds, and asks nobody for the node recovery key. Until Cloud confirms the declaration, the copy can only read the venue's bucket; write access for its own new generation is granted only after confirmation (A1188 section 9 item 8). |
-| 5: copy identity/certificate | A fresh Cloud installation is required. Production certificates and issuance for the emergency name need a separately agreed certificate/lease profile; do not widen staff certificate v1 implicitly. |
-| 6: still open; 7: box last heard | Require a new authenticated copy-operation read of current eligibility and the original box's observed heartbeat time, including explicit unknown. These display facts cannot supply it or replace the two-minute refusal in A1188 section 13 item 9. |
+| 4: locked restore | Agreed part 3 item 1 below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Fresh-node placement still waits for A1425 part 3 / Waitron part 0 and A947/A1018 qualification. |
+| 5: copy identity/certificate | Agreed part 3 item 2 below: launcher-delivered certificate/key PEM for the same emergency hostname, with Waitron terminating TLS and a copy-deadline lease cap. Staff certificate v1 stays unchanged; issuance, key cleanup and production qualification remain open. |
+| 6: still open; 7: box last heard | Agreed part 3 item 3 below: authenticated copy-operation status, current eligibility and the bound source installation's last accepted control contact, or explicit null. These facts cannot replace a fresh declaration read or its two-minute refusal. |
 | 8: declaration confirmation | Bind one durable operation to the actor, selected copy and exact declaration. Same inputs replay the stored result; changed inputs conflict. Later implementation must coordinate charging, owner mail, source-service withdrawal and the new backup generation without inventing a second operation after an uncertain reply. |
-| 9: stop and repeated starts | Follow A1188 section 5, "The time limit", and section 9 item 9, approved with the design on 29 October: the 30-minute stop ends only when Cloud confirms the declaration. Sign-in does not cancel it. The limit on how often valid codes start copies, and its durable counters, are agreed before Waitron builds A1188 part 3, because the copy's own count of wrong sign-ins restarts with every copy. |
+| 9: stop and repeated starts | Agreed part 3 items 2 and 4 below: only declaration confirmation cancels the fixed 30-minute stop. One active locked copy and three admitted launch attempts per venue per rolling hour; durable reservation precedes launch, and failed launches count. |
 | 10: returning box | A separate narrow authenticated read must remain possible after service withdrawal. A positive move result keeps the box restricted; it grants no activation, trusted membership key or general service access. Its format/revocation policy remains a joint prerequisite. |
+
+### Agreed part 3 values, 15 November 2026
+
+Cloud accepts items 1–4 of Waitron's
+[four-value proposal at 7d34d21aea4ffd4740564467a052133ddf96445d](https://github.com/clintongormley/waitron/blob/7d34d21aea4ffd4740564467a052133ddf96445d/docs/superpowers/plans/2026-11-15-a1188-part3-locked-start.md)
+for future implementation, with the clarifications below. The watcher cleared
+this docs-only answer at 16:39 CET on 15 November, after Claude's plan read.
+This is a technical agreement, not owner approval of a new design or a runnable
+emergency start. The pinned proposal supplies the exact fields and bounds.
+
+1. **Fresh-node locked placement:** accept the immutable `copyOperationId`
+   binding, distinct source/copy identities, selected stream, placed files and
+   launcher inputs. Never import the source `node.db` or its private node key.
+   Cloud uses its held backup key; only TOTP opens the account secret. Before
+   declaration, start no workers and grant no fiscal authority or database writes.
+   Cloud's read-only placement reader fetches and places files; the locked copy
+   holds no bucket credential before confirmation. Real placement still waits
+   for A1425 part 3 / Waitron part 0; the existing source-identity restore is unchanged.
+2. **Emergency TLS and lease:** accept launcher-delivered certificate/key PEM
+   files, Waitron TLS termination and the same emergency hostname across operations.
+   The code-entry origin stays separate; staff-certificate-v1 stays unchanged.
+   Reuse the control lease's origin/installation/venue/environment/public-key
+   bindings and one-hour maximum, capped at the copy deadline. This shortening
+   is future work, not today's fixed one-hour lease. Before confirmation, allow
+   only lease renewal (`control`) and `emergency-copy-status`; other machine-v1
+   actions return 403 `emergency_hosting_installation_ineligible`, retaining
+   existing invalid-proof and revoked refusals. Check the bindings, certificate,
+   key, hostname, validity and current eligibility before exposure or re-exposure.
+   Failure, revocation or expiry withdraws the route and stops the copy.
+   `expiresAt = startedAt + 30 minutes` is fixed; sign-in and restart cannot extend
+   it. Only declaration confirmation cancels that stop. Browser trust, certificate
+   issuance/reuse and key-file cleanup still need qualification; this agreement
+   fixes hostname and delivery, not a per-operation issuance policy. Lane J owns
+   the companion dated correction to A1188 design section 9 item 5, as the watcher
+   assigned at 16:29; Lane G changes only Cloud's contract.
+3. **Copy status read:** accept the proposal's exact signed
+   `emergency-copy-status` request, closed response and copy-only access. IDs and
+   dates match the stored operation; a fresh proof request UUID differs from
+   `copyOperationId`. Retain the exact eligibility variants, known-closure
+   precedence, authentication, post-lock revalidation, errors, shared rate budgets
+   and size/time bounds in item 3 of the pinned proposal. `sourceLastHeardAt` is
+   the bound source installation row's `last_contact_at`, updated by accepted,
+   distinct control calls (`packages/registration/src/installations.ts:113–134`).
+   Retain that timestamp while the row exists, including when revoked or
+   superseded; return null when no timestamp is known. The inspected Waitron
+   worker sleeps 60 seconds between passes (`apps/server/src/cloud-worker.ts:20–23`
+   at `592651f2ddf4014ca0f2ec686d598fbff9f8617c`); that is no delivery guarantee
+   or proof the box stopped. Unknown contact alone does not forbid declaration;
+   the unplugged/no-parallel-recovery/missing-minutes statements still apply.
+   Later declaration requires a fresh read: closed/unavailable eligibility or a
+   failed read refuses, source contact age of 0–120 seconds inclusive refuses,
+   and future contact is unavailable. There is no cached authority, sale-path
+   read or declaration endpoint in this agreement.
+4. **Repeated starts:** accept one active locked copy and three admitted launch
+   attempts per venue per rolling 60 minutes, reserved atomically and durably
+   before launch. Active-copy reuse adds zero attempts; same-operation retries
+   count once and retain their binding/deadline. Counters survive crashes,
+   restarts and code rotation. Failed launches count and end the operation
+   immediately; expired operations never relaunch. Wrong-code attempts and
+   status reads do not count. Cloud shows when the next allowance opens; add
+   no Waitron startup-response format, owner reset flow or charge before confirmation.
+
+Pin both repository revisions and shared binding/isolation/heartbeat/expiry/budget
+vectors before qualification. Cloud still has to build and qualify placement,
+leases, routes and counters; Waitron still has to qualify its locked entry's lack
+of writes. Declaration, charging, return and writer generation remain parts 4–6.
+A947/A1018, P6 and provider/production gates remain open.
 
 ### A1018: answers to Lane A's four questions
 
@@ -2497,9 +2564,10 @@ Cloud runtime receipt or agreement to the whole emergency-read proposal.
 
 ### Agreement and implementation gates
 
-Waitron's 14 November response accepts the read boundaries. The exact code
-format and daily-price projection still need joint agreement before the complete
-part 1 card can be implemented. Pin both repository revisions and shared
+Waitron's 14 November response accepts the read boundaries. Cloud's part 1
+agreement settles the code format and daily-price projection; the part 3 agreement
+settles the four values above for future build. Runtime qualification remains open.
+Pin both repository revisions and shared
 request/signature, closed-response, URL and code-format vectors, including the independent code-read
 rate budget. Then qualify both adapters with
 same-venue/sibling isolation, post-wait revocation/key changes, stale out-of-order
