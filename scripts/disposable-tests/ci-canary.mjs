@@ -457,12 +457,25 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
   try{
   if(!['pull_request','push','schedule','workflow_dispatch'].includes(run.event) || !Number.isSafeInteger(run.run_attempt) || run.run_attempt<1 || run.repository?.id!==policy.repositoryId || run.head_repository?.id!==policy.repositoryId ||
    run.workflow_id!==policy.workflowId || run.path!==policy.workflowPath || !['queued','in_progress'].includes(run.status))continue;
+  let reason,inventory;
   if(run.event==='pull_request'){
-   if(run.pull_requests?.length!==1)continue;
-   const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
-   if(pull.state!=='open' || pull.head?.sha!==run.head_sha || pull.head.repo?.id!==policy.repositoryId || pull.base?.repo?.id!==policy.repositoryId)continue;
+   if(!run.pull_requests?.length)reason='pr-link-missing';
+   else if(run.pull_requests.length!==1)reason='pr-link-ambiguous';
+   else{
+    const pull=await api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal});
+    reason=pull.state!=='open'?'pr-not-open':pull.head?.sha!==run.head_sha?'pr-head-mismatch':
+     pull.head.repo?.id!==policy.repositoryId?'pr-head-repo-mismatch':pull.base?.repo?.id!==policy.repositoryId?'pr-base-repo-mismatch':undefined;
+   }
   }
-  const inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
+  const skipped={event:'automatic-ci-skipped',repository:policy.repository,runId:run.id,attempt:run.run_attempt,reason};
+  try{
+   inventory=await jobInventory(api,`${base}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`,signal);
+   if(reason)assert.ok(inventory.jobs.every(job=>Number.isSafeInteger(job.id) && job.id>0 &&
+    job.run_id===run.id && job.run_attempt===run.run_attempt && job.head_sha===run.head_sha),'Invalid diagnostic job identity');
+  }catch(error){
+   if(!reason)throw error;
+   signal?.throwIfAborted();console.error(JSON.stringify({...skipped,jobs:'unavailable'}));continue;
+  }
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,'Incomplete automatic job inventory');
   if(untouched && inventory.jobs.some(startedWork))continue;
   for(const job of [...inventory.jobs].sort((a,b)=>{
@@ -472,6 +485,7 @@ export async function findAutomatic({api,policy,limit,signal,exclude=new Set(),e
    if(exclude.has(job.id) || job.status!=='queued' || job.runner_id || !ordinaryKey(job.name,job.labels) || job.labels?.length!==2 || !job.labels.includes('self-hosted'))continue;
    const key=ordinaryKey(job.name,job.labels);
    if(!ciJobKeyPattern.test(key) || !job.labels.includes(`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`))continue;
+   if(reason){console.error(JSON.stringify({...skipped,jobId:job.id}));continue;}
    candidate={runId:run.id,jobId:job.id,name:job.name,label:`dt-${policy.repositoryId}-${run.id}-${run.run_attempt}-${key}`};
    const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId:run.id,jobId:job.id,automatic:true,requireHostedRouting:untouched,signal});
    if(ci)found.push(ci);

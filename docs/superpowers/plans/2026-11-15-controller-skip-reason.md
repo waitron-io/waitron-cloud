@@ -1,6 +1,6 @@
 # Controller skip reason implementation plan
 
-Separate GPT-6.1 Sol/high drafted this plan; Claude’s read took 149 seconds. Corrections below need watcher clearance before build. No owner design approval or deployed-controller change is claimed.
+Separate GPT-6.1 Sol/high drafted this plan; Claude’s read took 149 seconds. The watcher cleared the corrected plan on 15 November at 14:49, after requiring the cost-fixture repair to land first (now #1225). No owner design approval or deployed-controller change is claimed.
 
 **Request, verbatim:** `/Users/clintongormley/waitron-campaign-g/queue.md`, CONTROLLER-SKIP-REASON, “Ask (watcher)”:
 
