@@ -55,7 +55,6 @@ jobs rather than 28. Its consumers really are broad. An unshared registration
 test selects its five existing partitions. These historical counts describe the earlier PR policy, retained for main
 pushes; current PR source changes run only registration's own partitions.
 
-After the sixth registration partition lands, the same registration source
-change selects 28 jobs from the full plan's 29. An unshared registration test
-selects all six registration partitions. The historical sample above keeps
+The same registration source change now selects 29 jobs from the full plan's
+30. An unshared registration test selects all seven registration partitions. The historical sample above keeps
 its original five-partition counts.

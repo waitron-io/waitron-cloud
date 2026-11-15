@@ -1601,7 +1601,7 @@ implementation or production evidence.
 
   The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses six partitions, account HTTP uses three, portal uses six
+  counts. Registration uses seven partitions, account HTTP uses three, portal uses six
   and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
   records a job cancelled during cleanup after all 569 cases passed. Seven
   partitions separate its five expensive guard files while preserving every assertion

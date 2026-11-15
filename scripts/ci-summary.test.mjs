@@ -87,7 +87,7 @@ test('ordinary reader refuses malformed page totals and invalid job identities',
 
 test('ordinary reader accepts complete single and multiple pages before checking job results', async t => {
   const skippedNames = [
-    ...Array.from({length: 6}, (_, i) => `package (@waitron-cloud/registration, shard ${i + 1}/6)`),
+    ...Array.from({length: 7}, (_, i) => `package (@waitron-cloud/registration, shard ${i + 1}/7)`),
     ...Array.from({length: 3}, (_, i) => `package (@waitron-cloud/account-http, shard ${i + 1}/3)`),
     ...Array.from({length: 7}, (_, i) => `package (@waitron-cloud/backups, shard ${i + 1}/7)`),
     ...Array.from({length: 4}, (_, i) => `package (@waitron-cloud/remote-access, shard ${i + 1}/4)`),
@@ -786,7 +786,7 @@ test('an API process ignoring termination cannot hold the read beyond its allowa
 
 test('live summary preserves every surviving package shard after registry retirement', () => {
   assert.deepEqual(summary.packageShards, {
-    '@waitron-cloud/registration': 6, '@waitron-cloud/account-http': 3, '@waitron-cloud/backups': 7,
+    '@waitron-cloud/registration': 7, '@waitron-cloud/account-http': 3, '@waitron-cloud/backups': 7,
     '@waitron-cloud/portal': 6, '@waitron-cloud/identity': 1, '@waitron-cloud/operations': 1,
     '@waitron-cloud/remote-access': 4, '@waitron-cloud/translation': 1, '@waitron-cloud/ui-smoke': 1,
   });

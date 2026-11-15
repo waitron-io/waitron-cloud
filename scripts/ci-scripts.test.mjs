@@ -60,12 +60,12 @@ test('changed consumers, installation, new readers and incomplete inventories re
     const changed = commit();
     put(helper, 'export const result = 1; // edited\n');
     const head = commit();
-    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, before === base ? 29 : 0, `${path} at ${before}`);
+    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, before === base ? 30 : 0, `${path} at ${before}`);
   });
   fixture(({put, commit, plan, git}) => {
     put(helper, 'export const result = 1; // edited\n');
     const head = commit();
-    assert.equal(plan(head, undefined, (...args) => args[0] === 'ls-tree' ? git(...args).replace(/\0$/, '') : git(...args)).packages.length, 29);
+    assert.equal(plan(head, undefined, (...args) => args[0] === 'ls-tree' ? git(...args).replace(/\0$/, '') : git(...args)).packages.length, 30);
   });
 });
 
@@ -78,7 +78,7 @@ test('mixed paths, missing checks, symbolic links and executable modes cannot ea
     if (change === 'link') {unlinkSync(join(root, helper)); symlinkSync('consumer.mjs', join(root, helper));}
     if (change === 'executable') {git('add', '-A'); git('update-index', '--chmod=+x', helper); git('commit', '-sm', 'Executable input');}
     const head = change === 'executable' ? git('rev-parse', 'HEAD').trim() : commit();
-    assert.equal(plan(head).packages.length, 29, change);
+    assert.equal(plan(head).packages.length, 30, change);
   });
 });
 
@@ -144,9 +144,9 @@ test('old-only stale evidence and forged incomplete inventories cannot omit cons
   const head = commit();
   assert.equal(plan(head, stale).packages.length, 0, 'the actual range retains its owning script check');
   for (const transform of [text => text.replace(/[^\0]*\tscripts\/identity-upstream.test.mjs\0/, ''), text => text + 'malformed\0']) {
-    assert.equal(plan(head, stale, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 29);
+    assert.equal(plan(head, stale, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 30);
   }
-  assert.equal(plan(head, base).packages.length, 29, 'mixed diff');
+  assert.equal(plan(head, base).packages.length, 30, 'mixed diff');
 }));
 
 test('missing or nonregular base helpers cannot hide behind a restored regular head', () => {
@@ -161,7 +161,7 @@ test('missing or nonregular base helpers cannot hide behind a restored regular h
     put(helper, 'export const result = 1; // restored regular helper\n');
     chmodSync(join(root, helper), 0o644);
     const head = commit();
-    assert.equal(plan(head, base).packages.length, 29, kind);
+    assert.equal(plan(head, base).packages.length, 30, kind);
   });
 });
 

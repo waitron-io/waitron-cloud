@@ -2,7 +2,7 @@
 
 ## Allocate work by elapsed file time
 
-The six registration jobs share files using elapsed-time weights in
+The seven registration jobs share files using elapsed-time weights in
 [`ci-registration-durations.json`](../../scripts/ci-registration-durations.json).
 The runner puts the longest remaining file into the job with the least assigned
 work. Filename order and then job number settle ties. New files use the mean of
@@ -28,7 +28,7 @@ relative sizes. This spreads fixed setup across the files too, and assumes
 hosted work within each group follows those original file measurements. The adjusted values are allocation estimates,
 not new per-file elapsed measurements or a bound from two samples. The
 unchanged allocator redistributes them; current-head CI must still qualify
-all six jobs within 300 seconds. The six assigned weight totals are about
+all seven jobs within 300 seconds. The original six assigned weight totals are about
 255.6 seconds each; these are weights, not predicted job durations. In job 4,
 351 of the other 397 top-level cases also took longer, with summed case time
 rising from about 725 to 879 seconds across concurrent files. This locates
@@ -56,12 +56,19 @@ also overlap and share runner resources, so their durations depend on contention
 and their sum is not job wall time. Every complete hosted job must still pass
 within 300 seconds.
 
-The watcher cleared retaining the current allocation at 09:47. With the same
+The watcher cleared retaining the six-job allocation at 09:47. With the same
 table, hosted runs 43692050000 and 43694844056 take
 227/240/145/318/161/216 and 251/250/296/223/285/300 seconds respectively.
 The watcher attributes this spread to machine variance; the second sample meets
 the registration limit with little margin. Its separate portal sign-out timeout
-is recorded under D530. A final exact-head run must pass all selected work.
+is recorded under D530. The final six-job run 43696443978 passes all 2,234
+cases but takes 285/199/304/219/307/279 seconds, missing the limit in two jobs.
+
+The watcher cleared seven jobs at 10:06 on 15 November, using the same weights
+and packing. Every case, concurrency setting and deadline stays unchanged.
+Qualification requires one exact-head run with all seven jobs within 300 seconds
+and all selected work passing. This qualifies that observation; it does not
+enforce a 300-second deadline on future runs.
 
 Calibrate any alternate reporter first with a known module-level delay and a
 known test delay. Node 26.13.0's per-file summary omitted the module delay in the
@@ -81,12 +88,13 @@ On the Linux test box, the unchanged five-partition layout at
 352.332 seconds and 305 cases in partition 4 in 185.491 seconds. The first is
 1.90 times slower. These runs do not reproduce the historical cancellation.
 
-The planner and final CI check now require six registration partitions.
+The earlier planner and final CI check required six registration partitions.
 Each partition discovers current `.test.ts` filenames in the test directory and
 gives Node an explicit file list with the existing 30-second test deadline.
 The eight-minute job limit stays unchanged. Portable
 checks run every current filename and a future filename exactly once through
-Node, reject each missing partition and reject the old five-partition allocation.
+Node and reject each missing partition. The current seven-job contract also
+rejects the earlier five- and six-partition allocations.
 Account HTTP and the other package allocations stay unchanged.
 
 ### Earlier Linux qualification

@@ -10,12 +10,12 @@ test('measured packing separates heavy files that shared the old name-order job'
   const durations = {'a.test.ts': 600, 'b.test.ts': 10, 'c.test.ts': 10, 'd.test.ts': 10,
     'e.test.ts': 10, 'f.test.ts': 10, 'g.test.ts': 600, 'h.test.ts': 10};
   const files = Object.keys(durations);
-  const groups = Array.from({length: 6}, (_, index) => registrationFiles(index + 1, files, durations));
+  const groups = Array.from({length: 7}, (_, index) => registrationFiles(index + 1, files, durations));
   const totals = groups.map(group => group.reduce((sum, file) => sum + durations[file], 0));
   assert.deepEqual(groups.flat().sort(), files);
-  assert.ok(Math.max(...totals) <= 210 + 600, `Heavy files still share a job: ${totals}`);
-  assert.deepEqual(groups, Array.from({length: 6}, (_, index) => registrationFiles(index + 1, [...files].reverse(), durations)),
-    'Input order must not change the six assignments');
+  assert.ok(Math.max(...totals) <= 180 + 600, `Heavy files still share a job: ${totals}`);
+  assert.deepEqual(groups, Array.from({length: 7}, (_, index) => registrationFiles(index + 1, [...files].reverse(), durations)),
+    'Input order must not change the seven assignments');
 });
 
 test('new files use the live measured mean while stale names do not move work', () => {
@@ -93,7 +93,7 @@ test('registration runner executes all current and future files exactly once wit
     const env = {...process.env};
     delete env.NODE_TEST_CONTEXT;
     const groups = [];
-    for (let shard = 1; shard <= 6; shard++) {
+    for (let shard = 1; shard <= 7; shard++) {
       const result = spawnSync(process.execPath, ['scripts/ci-run-registration-shard.mjs', String(shard)],
         {cwd: root, env, encoding: 'utf8', timeout: 30_000});
       assert.equal(result.status, 0, result.stderr + result.stdout);
@@ -105,7 +105,7 @@ test('registration runner executes all current and future files exactly once wit
     }
     assert.deepEqual(groups.flat().sort(), files);
     assert.equal(groups.flat().includes('venue-service-legacy-schema-guards.test.ts'), false);
-    for (const shard of ['', '0', '7', '1.5', 'invalid']) {
+    for (const shard of ['', '0', '8', '1.5', 'invalid']) {
       const result = spawnSync(process.execPath, ['scripts/ci-run-registration-shard.mjs', shard],
         {cwd: root, env, encoding: 'utf8', timeout: 10_000});
       assert.notEqual(result.status, 0);
