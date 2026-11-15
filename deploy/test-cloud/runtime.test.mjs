@@ -97,22 +97,36 @@ test('observer sign-in policy reaches only the explicit test account process', a
   assert.equal(testRuntimeEnvironment(role,config,supplied).CLOUD_FACTOR_POLICY,undefined,role);
 });
 
-test('manifest worker replaces its launcher, retains its environment, exit status and termination handling',async t=>{
+for(const [role,command,args,replace,hasDatabase,mode,refused]of [
+ ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,false,'0',false],
+ ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,true,'1',false],
+ ['monitor','packages/registration/src/monitor-cli.ts',[],true,true,'0',false],
+ ['usage','packages/registration/src/usage-reconcile-cli.ts',['--watch'],true,true,'0',false],
+ ['probe','packages/remote-access/src/probe-cli.ts',[],true,true,'0',false],
+ ['reconcile','packages/remote-access/src/reconciler-cli.ts',['/run/reconciler/config.json'],false,true,'0',false],
+ ['usage','packages/registration/src/usage-reconcile-cli.ts',['--watch'],true,true,'0',true],
+])test(`test Cloud ${role} mode ${mode} ${refused?'refuses an incompatible schema':'preserves its launch, exit and signal contract'}`,async t=>{
  const {spawn}=await import('node:child_process');
  const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));await bootstrap(dir);
- for(const terminating of [false,true]){
-  const fixture=`import assert from 'node:assert/strict';import{launchTestRuntime}from${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)};
-   const before=process.pid,execve=process.execve;let directory;process.chdir=value=>{directory=value;};
-   process.execve=(file,args,environment)=>{assert.equal(directory,'/app');assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,'deploy/test-cloud/remote-worker.mjs']);
-    execve(file,[file,'-e',${JSON.stringify(`${terminating?"process.on('SIGTERM',()=>process.exit(23));":""}console.log(JSON.stringify({pid:process.pid,home:process.env.HOME,config:process.env.LOCAL_STACK_CONFIG_DIR,canary:process.env.NODE_AUTH_TOKEN}));${terminating?"setInterval(()=>{},1000)":"process.exit(37)"}`)}],environment);};
-   console.log('launcher='+before);await launchTestRuntime('manifest',${JSON.stringify(dir)});`;
-  const child=spawn(process.execPath,['--input-type=module','-e',fixture],{env:{...process.env,NODE_AUTH_TOKEN:'synthetic-canary'},stdio:['ignore','pipe','pipe']});
+ for(const terminating of refused?[false]:[false,true]){
+  const worker=`${terminating?"process.on('SIGTERM',()=>process.exit(23));":""}console.log(JSON.stringify({pid:process.pid,home:process.env.HOME,config:process.env.LOCAL_STACK_CONFIG_DIR,canary:process.env.NODE_AUTH_TOKEN}));${terminating?"setInterval(()=>{},1000)":"process.exit(37)"}`;
+  const fixture=`import assert from 'node:assert/strict';import{mock}from'node:test';import cp from'node:child_process';import{syncBuiltinESMExports}from'node:module';
+   const base=await import(${JSON.stringify(new URL('../local-stack/runtime.mjs',import.meta.url).href)});let checked=false,directory;
+   mock.module(${JSON.stringify(new URL('../local-stack/runtime.mjs',import.meta.url).href)},{namedExports:{...base,checkConsumerDatabase:async(url,root)=>{assert.equal(root,'/app');checked=true;if(${refused})throw Error('synthetic-schema-refusal');}}});
+   const before=process.pid,execve=process.execve,spawn=cp.spawn;process.chdir=value=>{directory=value;};
+   process.execve=(file,args,environment)=>{assert.equal(${replace},true);assert.equal(checked,${hasDatabase});assert.equal(directory,'/app');assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,...${JSON.stringify([command,...args])}]);execve(file,[file,'-e',${JSON.stringify(worker)}],environment);};
+   cp.spawn=(file,args,options)=>{assert.equal(${replace},false);assert.equal(checked,${hasDatabase});assert.equal(file,process.execPath);assert.deepEqual(args,${JSON.stringify([command,...args])});assert.equal(options.cwd,'/app');return spawn(file,['-e',${JSON.stringify(worker)}],{...options,cwd:${JSON.stringify(dir)}});};syncBuiltinESMExports();
+   const {launchTestRuntime}=await import(${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)});console.log('launcher='+before);
+   try{process.exitCode=await launchTestRuntime(${JSON.stringify(role)},${JSON.stringify(dir)});}catch(error){if(${refused}&&error.message==='synthetic-schema-refusal')process.exitCode=29;else throw error;}`;
+  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode},stdio:['ignore','pipe','pipe']});
   t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
   let stdout='',stderr='',sent=false;child.stderr.on('data',chunk=>{stderr+=chunk;});
   child.stdout.on('data',chunk=>{stdout+=chunk;if(terminating&&!sent&&stdout.includes('"pid":')){sent=true;child.kill('SIGTERM');}});
   const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
-  assert.deepEqual(result,{code:terminating?23:37,signal:null},stderr);
-  const [launcher,line]=stdout.trim().split('\n'),worker=JSON.parse(line);
-  assert.equal(worker.pid,Number(launcher.split('=')[1]));assert.equal(worker.home,'/tmp');assert.equal(worker.config,'/run/local-stack');assert.equal(worker.canary,undefined);
+  assert.deepEqual(result,{code:refused?29:terminating?23:37,signal:null},stderr);
+  const [launcher,line]=stdout.trim().split('\n');if(refused){assert.equal(line,undefined);continue;}
+  const workerState=JSON.parse(line),launcherPid=Number(launcher.split('=')[1]);
+  if(replace)assert.equal(workerState.pid,launcherPid);else assert.notEqual(workerState.pid,launcherPid);
+  assert.equal(workerState.home,'/tmp');assert.equal(workerState.config,role==='manifest'&&mode==='0'?'/run/local-stack':dir);assert.equal(workerState.canary,undefined);
  }
 });

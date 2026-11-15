@@ -155,8 +155,10 @@ The explicit test email worker uses the existing account-mail templates and outb
 
 Use the limits in `deploy/test-cloud/compose.yaml` with the matching runtime.
 The four small workers replace their Node launcher after configuration and schema
-checks, so its heap does not remain beside the worker. The runtime process test
-checks the process ID, selected command, restricted environment, exit and signal.
+checks, so its heap does not remain beside the worker. This uses the experimental
+`process.execve` API in the measured Node 26 image. The process tests cover all four
+commands, schema-check ordering and refusal, the restricted environment, exit and
+signal, and the existing child-process path for the reconciliation role.
 
 On 15 November 2026, a fresh Debian 13 amd64 guest ran `runTestCloudClients` with
 `sourceProvenance: true` and `measureCapacity: true`, using this Cloud runtime based on main
