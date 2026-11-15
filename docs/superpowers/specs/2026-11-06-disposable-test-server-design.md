@@ -78,7 +78,7 @@ The inventory below was inspected at `dbbc755706fc90198bd9bc753a32f0b27105bd03`.
 | `ci.yml`: `root` shards 1–8, `typecheck`, `receipts`, `packages` selected matrix | Move in stages, 8 each. Keep names, eight root partitions, selected receipts and all package partitions. | `ci.yml:115`, `:181`, `:234`, `:296` |
 | `cloud-cost.yml`: `discover`, `conformance` named `cost (file, group)`, `summary` | Stay hosted, 2/8/2; matrix remains exactly `conformanceMatrix()`. | `cloud-cost.yml:22`, `:67`, `:127`; `scripts/ci-evidence.mjs:100` |
 | `venue-services-proof.yml`: `changes`, `service-receipts` legacy/venue, `summary` | Stay hosted, 2/8/2, both independent receipts. | `venue-services-proof.yml:22`, `:66`, `:137` |
-| `aws-infrastructure.yml`: `changes`, `verify` guards-1/guards-2/guards-3/suites, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:23`, `:67`, `:127` |
+| `aws-infrastructure.yml`: `changes`, `verify` guards-1 through guards-8, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:23`, `:67`, `:127` |
 | `download-supervision-diagnostic.yml`: `changes`, `linux-contention`, `summary` | Stay hosted, 2/4/2. | `download-supervision-diagnostic.yml:21`, `:65`, `:116` |
 | `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | Stay hosted, 12; preserve diagnostic workload meaning. | `browser-reconnect-diagnostic.yml:13` |
 | `password-derivation-diagnostic.yml`: `linux-observation`; `relay-counter-diagnostic.yml`: `linux-counter-rollover` | Stay hosted, 6 and 8 respectively. | First file `:11`; second `:15` |

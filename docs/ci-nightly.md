@@ -9,7 +9,7 @@ delay scheduled work; the configured time is not a completion guarantee.
 The run calls standard CI, Cloud cost conformance, Venue service proof and
 AWS infrastructure workflows from the same revision. It runs every package partition, compiler
 and root check, all six standard receipt suites, the complete cost matrix and the
-venue receipt, plus all four AWS guard and plan cells. It always executes the full work, even when the source tree
+venue receipt, plus all eight AWS guard groups. It always executes the full work, even when the source tree
 has not changed since the previous successful night. The selected product assertions and time limits stay in force.
 
 A separate `nightly-mutations` job retains the two remote-wait checks, billing

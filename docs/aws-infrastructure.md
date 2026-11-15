@@ -118,7 +118,8 @@ CI assigns guard files to eight fixed groups so expensive root checks do not wai
 unrelated modules. The guard tests execute the real mocked plans, so CI runs each
 required check without a separate repeat of the complete suite set. The two full-root
 guards retain both binding refusals and composition assertions. The groups cover every
-test file exactly once; a new test file needs a workflow allocation. Formatting runs
+test file exactly once; a new test file needs a workflow allocation and a matching expected row in
+`deploy/aws/integration.test.mjs`. Formatting runs
 after the eighth group's guards. Each job keeps its 30-minute limit, prepares its
 offline tools and saves its own diagnostic artifact, including after a failure.
 The target remains about four minutes per job for quick feedback.
@@ -165,8 +166,8 @@ Every job has repository read permission and retains no checkout credential. It 
 no AWS secret or identity-token permission.
 
 Each job prepares the pinned software image and installs the separate locked dependencies.
-Three jobs run the Node guard shards. The fourth runs all isolated mocked plans and
-checks formatting in an offline, read-only container. Each job keeps a 30-minute limit
+Eight jobs run the fixed guard groups, including their real mocked plans. The eighth
+also checks formatting in an offline, read-only container after its guards pass. Each job keeps a 30-minute limit
 alongside the runner's existing per-command limits. It retains command output, assertion
 counts and failure diagnostics for 14 days in an artifact named for the checked commit,
 attempt and matrix cell, the job's unique label.

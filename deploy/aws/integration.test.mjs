@@ -10,46 +10,14 @@ import { parse } from 'yaml';
 const execute = promisify(execFile);
 const path = new URL('../../.github/workflows/aws-infrastructure.yml', import.meta.url);
 const cells = [
-  {
-    "cell": "guards-1",
-    "files": "deploy/aws/custody.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-2",
-    "files": "deploy/aws/global-plans.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-3",
-    "files": "deploy/aws/country-plans.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-4",
-    "files": "deploy/aws/accounts.test.mjs deploy/aws/candidate.test.mjs deploy/aws/check.test.mjs deploy/aws/contracts.test.mjs deploy/aws/handoff.test.mjs deploy/aws/integration.test.mjs deploy/aws/modules-policy.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-5",
-    "files": "deploy/aws/runner.test.mjs deploy/aws/runner-batches.test.mjs deploy/aws/scheduling.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-6",
-    "files": "deploy/aws/database.test.mjs deploy/aws/locks.test.mjs deploy/aws/state.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-7",
-    "files": "deploy/aws/cell.test.mjs deploy/aws/network.test.mjs deploy/aws/storage.test.mjs",
-    "format": false
-  },
-  {
-    "cell": "guards-8",
-    "files": "deploy/aws/dns.test.mjs deploy/aws/ingress.test.mjs deploy/aws/observability.test.mjs deploy/aws/permissions.test.mjs deploy/aws/provider-bindings.test.mjs deploy/aws/replication-metrics.test.mjs deploy/aws/tools.test.mjs deploy/aws/topology.test.mjs",
-    "format": true
-  }
+  { cell: 'guards-1', files: 'deploy/aws/custody.test.mjs', format: false },
+  { cell: 'guards-2', files: 'deploy/aws/global-plans.test.mjs', format: false },
+  { cell: 'guards-3', files: 'deploy/aws/country-plans.test.mjs', format: false },
+  { cell: 'guards-4', files: 'deploy/aws/accounts.test.mjs deploy/aws/candidate.test.mjs deploy/aws/check.test.mjs deploy/aws/contracts.test.mjs deploy/aws/handoff.test.mjs deploy/aws/integration.test.mjs deploy/aws/modules-policy.test.mjs', format: false },
+  { cell: 'guards-5', files: 'deploy/aws/runner.test.mjs deploy/aws/runner-batches.test.mjs deploy/aws/scheduling.test.mjs', format: false },
+  { cell: 'guards-6', files: 'deploy/aws/database.test.mjs deploy/aws/locks.test.mjs deploy/aws/state.test.mjs', format: false },
+  { cell: 'guards-7', files: 'deploy/aws/cell.test.mjs deploy/aws/network.test.mjs deploy/aws/storage.test.mjs', format: false },
+  { cell: 'guards-8', files: 'deploy/aws/dns.test.mjs deploy/aws/ingress.test.mjs deploy/aws/observability.test.mjs deploy/aws/permissions.test.mjs deploy/aws/provider-bindings.test.mjs deploy/aws/replication-metrics.test.mjs deploy/aws/tools.test.mjs deploy/aws/topology.test.mjs', format: true },
 ];
 async function workflow() {
   try { return parse(await readFile(path, 'utf8')); }
