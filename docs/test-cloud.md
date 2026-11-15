@@ -154,7 +154,7 @@ The explicit test email worker uses the existing account-mail templates and outb
 ## Worker memory in the base pairing journey
 
 Use the limits in `deploy/test-cloud/compose.yaml` with the matching runtime.
-The four small workers replace their Node launcher after configuration and schema
+The four small workers replace their Node launcher after configuration and any required schema
 checks, so its heap does not remain beside the worker. This uses the experimental
 `process.execve` API in the measured Node 26 image. The process tests cover all four
 commands, schema-check ordering and refusal, the restricted environment, exit and

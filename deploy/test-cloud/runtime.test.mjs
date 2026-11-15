@@ -107,19 +107,20 @@ for(const [role,command,args,replace,hasDatabase,mode,refused]of [
  ['usage','packages/registration/src/usage-reconcile-cli.ts',['--watch'],true,true,'0',true],
 ])test(`test Cloud ${role} mode ${mode} ${refused?'refuses an incompatible schema':'preserves its launch, exit and signal contract'}`,async t=>{
  const {spawn}=await import('node:child_process');
- const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));await bootstrap(dir);
+ const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
  for(const terminating of refused?[false]:[false,true]){
   const worker=`${terminating?"process.on('SIGTERM',()=>process.exit(23));":""}console.log(JSON.stringify({pid:process.pid,home:process.env.HOME,config:process.env.LOCAL_STACK_CONFIG_DIR,canary:process.env.NODE_AUTH_TOKEN}));${terminating?"setInterval(()=>{},1000)":"process.exit(37)"}`;
   const fixture=`import assert from 'node:assert/strict';import{mock}from'node:test';import cp from'node:child_process';import{syncBuiltinESMExports}from'node:module';
    const base=await import(${JSON.stringify(new URL('../local-stack/runtime.mjs',import.meta.url).href)});let checked=false,directory;
-   mock.module(${JSON.stringify(new URL('../local-stack/runtime.mjs',import.meta.url).href)},{namedExports:{...base,checkConsumerDatabase:async(url,root)=>{assert.equal(root,'/app');checked=true;if(${refused})throw Error('synthetic-schema-refusal');}}});
+   mock.module(${JSON.stringify(new URL('../local-stack/runtime.mjs',import.meta.url).href)},{namedExports:{...base,checkConsumerDatabase:async(url,root)=>{assert.equal(url,${JSON.stringify(`postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`)});assert.equal(root,'/app');checked=true;if(${refused})throw Error('synthetic-schema-refusal');}}});
    const before=process.pid,execve=process.execve,spawn=cp.spawn;process.chdir=value=>{directory=value;};
    process.execve=(file,args,environment)=>{assert.equal(${replace},true);assert.equal(checked,${hasDatabase});assert.equal(directory,'/app');assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,...${JSON.stringify([command,...args])}]);execve(file,[file,'-e',${JSON.stringify(worker)}],environment);};
    cp.spawn=(file,args,options)=>{assert.equal(${replace},false);assert.equal(checked,${hasDatabase});assert.equal(file,process.execPath);assert.deepEqual(args,${JSON.stringify([command,...args])});assert.equal(options.cwd,'/app');return spawn(file,['-e',${JSON.stringify(worker)}],{...options,cwd:${JSON.stringify(dir)}});};syncBuiltinESMExports();
    const {launchTestRuntime}=await import(${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)});console.log('launcher='+before);
    try{process.exitCode=await launchTestRuntime(${JSON.stringify(role)},${JSON.stringify(dir)});}catch(error){if(${refused}&&error.message==='synthetic-schema-refusal')process.exitCode=29;else throw error;}`;
-  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode},stdio:['ignore','pipe','pipe']});
-  t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');});
+  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode},stdio:['ignore','pipe','pipe'],detached:true});
+  let cleaned=false;const cleanup=()=>{if(cleaned||!child.pid)return;cleaned=true;try{process.kill(-child.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}};
+  child.once('exit',cleanup);t.after(cleanup);
   let stdout='',stderr='',sent=false;child.stderr.on('data',chunk=>{stderr+=chunk;});
   child.stdout.on('data',chunk=>{stdout+=chunk;if(terminating&&!sent&&stdout.includes('"pid":')){sent=true;child.kill('SIGTERM');}});
   const result=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));});
