@@ -59,10 +59,12 @@ For PRs, keep merge-base to exact head. For main pushes, validate `event.after =
 
 That selector retains audited Markdown, mixed prose, package/revision/lock readers, root-script plans and receipt selection. Unknown inputs and stale evidence retain existing full work. Audit v2's policy is frozen and its records are per-path: review changed readers, renew only owning docs records; never renew identity/gateway/lock peers merely to recover selection.
 
+The AWS row follows the current eight-cell contract in `scripts/ci-evidence.mjs`; the other rows retain this proposal’s original scope.
+
 | Workflow | Independent source and fallback |
 | --- | --- |
 | CI | Exact `ci.yml` PR plan and strict job contract; otherwise common range selection or full on uncertainty |
-| AWS | Own `aws-infrastructure.yml` PR run; all four `verify` cells (guards-1/2/3, suites) required; otherwise existing four-cell verification |
+| AWS | Own `aws-infrastructure.yml` PR run; all eight `verify` cells (guards-1 through guards-8) required; otherwise complete eight-cell verification |
 | Cost / venue | Each own PR run and native matrix/selection. Integrate H part 4's `proofInputPlan` through a real range interface, preserving its conservative fallback; never infer these from CI receipts or CI reuse |
 | Download diagnostic | When its existing main path trigger fires, use its own PR run and `linux-contention` evidence through the same contract; preserve the bounded 32-case command and triggers |
 

@@ -72,13 +72,15 @@ No workflow or variable is changed in this docs-only PR. The watcher reviews the
 
 The inventory below was inspected at `dbbc755706fc90198bd9bc753a32f0b27105bd03`. All executing jobs at that revision use `ubuntu-latest`; reusable nightly calls have no runner of their own. “Move” means eligibility after the gates, not a change in this task. Start with `typecheck`, then one package row, then other ordinary CI work. Keep sibling proof and diagnostic moves outside this plan.
 
+The AWS row is updated to the current workflow; the other rows retain that inspected snapshot.
+
 | Workflow and exact job IDs / matrix | Proposed placement and existing minutes | Receipt |
 | --- | --- | --- |
 | `ci.yml`: `changes`, `documentation`, `scripts`, `summary` | Stay hosted, 2 each; they keep selection/evidence visible. Existing candidate-reading planners are not privileged admission. | `ci.yml:24`, `:79`, `:96`, `:384` |
 | `ci.yml`: `root` shards 1–8, `typecheck`, `receipts`, `packages` selected matrix | Move in stages, 8 each. Keep names, eight root partitions, selected receipts and all package partitions. | `ci.yml:115`, `:181`, `:234`, `:296` |
 | `cloud-cost.yml`: `discover`, `conformance` named `cost (file, group)`, `summary` | Stay hosted, 2/8/2; matrix remains exactly `conformanceMatrix()`. | `cloud-cost.yml:22`, `:67`, `:127`; `scripts/ci-evidence.mjs:100` |
 | `venue-services-proof.yml`: `changes`, `service-receipts` legacy/venue, `summary` | Stay hosted, 2/8/2, both independent receipts. | `venue-services-proof.yml:22`, `:66`, `:137` |
-| `aws-infrastructure.yml`: `changes`, `verify` guards-1 through guards-8, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:23`, `:67`, `:127` |
+| `aws-infrastructure.yml`: `changes`, `verify` guards-1 through guards-8, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:37`, `:81`, `:155` |
 | `download-supervision-diagnostic.yml`: `changes`, `linux-contention`, `summary` | Stay hosted, 2/4/2. | `download-supervision-diagnostic.yml:21`, `:65`, `:116` |
 | `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | Stay hosted, 12; preserve diagnostic workload meaning. | `browser-reconnect-diagnostic.yml:13` |
 | `password-derivation-diagnostic.yml`: `linux-observation`; `relay-counter-diagnostic.yml`: `linux-counter-rollover` | Stay hosted, 6 and 8 respectively. | First file `:11`; second `:15` |

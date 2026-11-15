@@ -834,8 +834,7 @@ role for each provider. The independent `global` and `country` roots check
 those bindings against all four provider identities and regions:
 
 ```sh
-node deploy/aws/check.mjs --suite integration
-node --test deploy/aws/provider-bindings.test.mjs
+node --test --test-concurrency=1 deploy/aws/provider-bindings.test.mjs deploy/aws/global-plans.test.mjs deploy/aws/country-plans.test.mjs
 ```
 
 Each root runs 29 mocked plans: the 27 original admission cases, a two-cell
@@ -920,7 +919,7 @@ backup references, but those references do not prove that secret values have
 been populated or recovered.
 
 ```sh
-node --test deploy/aws/composition.test.mjs deploy/aws/topology.test.mjs
+node --test --test-concurrency=1 deploy/aws/global-plans.test.mjs deploy/aws/country-plans.test.mjs deploy/aws/topology.test.mjs
 ```
 
 The integration suite runs 41 cases per root: 29 admission, six composition,
