@@ -204,11 +204,14 @@ try {
   const proxy = (await readFile(new URL('../deploy/test-cloud/proxy.cfg', import.meta.url), 'utf8'))
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
   manifest.items.push({apiVersion: 'v1', kind: 'ConfigMap', metadata: {name: 'proxy'}, data: {'proxy.cfg': proxy}});
+  // Initial placement must reach the host that will stop, while affinity still permits replacement.
+  if (threeNodes || amazon?.phase === 'before') await kube(['cordon', cluster + '-worker']);
   await kube(['apply', '-f', '-'], JSON.stringify(manifest));
   await kube(['wait', '--for=condition=Ready', 'pod/cloud', '--timeout=180s']);
   await kube(['rollout', 'status', 'deployment/manifest', '--timeout=120s']);
   await kube(['wait', '--for=condition=Ready', 'pod/gateway', '--timeout=120s']);
   await pod('manifest');
+  if (threeNodes || amazon?.phase === 'before') await kube(['uncordon', cluster + '-worker']);
   const core = await pod('cloud');
   assert.ok(core.spec.containers.filter(row => row.name !== 'mailpit').every(row => row.image === tag), 'kubernetes.image_binding');
   const ports = await forward('cloud', [3443, 8025]), gatewayPorts = await forward('gateway', [443]);

@@ -105,6 +105,8 @@ async function commandFixture(t, mode) {
   const source = `#!${process.execPath}
 const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').basename(process.argv[1]);
 const log=${JSON.stringify(log)},mode=${JSON.stringify(mode)},record=row=>fs.appendFileSync(log,JSON.stringify(row)+'\\n');
+const placement=mode.startsWith('placement-'),stateFile=${JSON.stringify(join(directory, 'placement'))};
+const state=placement&&fs.existsSync(stateFile)?JSON.parse(fs.readFileSync(stateFile,'utf8')):{cordoned:false};
 record({name,args:a});
 if(name==='docker'&&a[0]==='save'&&mode==='load-fails'){record({exporter:process.pid});process.stdout.on('error',()=>{});process.on('SIGTERM',()=>{});setInterval(()=>process.stdout.write(Buffer.alloc(1024)),25);}
 if(name==='docker'&&a[0]==='save'&&mode==='load-exit'){record({exporter:process.pid});process.stdout.write('archive');}
@@ -118,6 +120,7 @@ if(name==='docker'&&a[0]==='volume'&&a[1]==='ls')console.log(a.find(v=>v.startsW
 if(name==='docker'&&a[0]==='inspect')console.log(JSON.stringify([{NetworkSettings:{Networks:{kind:{IPAddress:'172.18.0.2'}}}}]));
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
+ if(placement&&['cordon','uncordon'].includes(b[0])){state.cordoned=b[0]==='cordon';fs.writeFileSync(stateFile,JSON.stringify(state));}
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
  if(b[0]==='wait'&&((mode.startsWith('wait-cloud')&&b.includes('pod/cloud'))||(mode==='wait-gateway'&&b.includes('pod/gateway')))){process.stderr.write('x'.repeat(10000)+'synthetic wait refusal');if(mode==='wait-gateway')process.kill(process.pid,'SIGTERM');else process.exit(23);}
  if(b[0]==='get'&&b[1]==='pod/cloud'){console.log(JSON.stringify({spec:{nodeName:'control-plane'},status:{containerStatuses:[{name:'storage',restartCount:2,state:{waiting:{reason:'CrashLoopBackOff',message:'PRIVATE_STATE_CANARY'}},lastState:{terminated:{exitCode:1,signal:0,reason:'Error',message:'PRIVATE_STATE_CANARY'}}}]}}));process.exit(0);}
@@ -126,18 +129,20 @@ if(name==='kubectl'){
  if(b[0]==='get'&&b[1]==='nodes'){console.log('worker2 NotReady');process.exit(0);}
  if(b[0]==='logs'&&b[1]==='pod/cloud'&&b.includes('storage')){console.log('x'.repeat(20000)+(b.includes('--previous')?'previous storage exit':'current storage startup'));process.exit(0);}
  if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode!=='wait-cloud-slow-pods'){console.log('cloud 0/8 Pending');process.exit(0);}
- if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(mode==='apply-fails')process.exit(17);});}
+ if(b[0]==='apply'){let text='';process.stdin.on('data',v=>text+=v);process.stdin.on('end',()=>{record({manifest:JSON.parse(text)});if(placement){const cluster=a[1].replace(/^kind-/, '');state.node=cluster+(mode==='placement-default'?'-control-plane':mode==='placement-after'||!state.cordoned?'-worker':'-worker2');fs.writeFileSync(stateFile,JSON.stringify(state));}if(mode==='apply-fails')process.exit(17);});}
  if(b[0]==='get'&&b.includes('app=verifier')&&mode==='wait-cloud-probe-fails'){process.stderr.write('synthetic optional verifier missing');process.exit(17);}
  if(b[0]==='get'&&b[1]==='pods'&&!b.includes('-l')&&mode==='wait-cloud-slow-pods'){record({forward:process.pid});setTimeout(()=>console.log('slow pods'),20000);return;}
  if(b[0]==='get'){
-  const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=a[1].slice(5);
-  console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:cluster+'-control-plane',containers:[{name:'account',image:cluster+':cloud'}]},status:role==='verifier'&&mode==='signal'?{containerStatuses:[{name:'verifier',state:{terminated:{reason:'Error',exitCode:137}}}]}:undefined}]}));
+  const role=b[b.indexOf('-l')+1]?.split('=')[1],cluster=placement?a[1].replace(/^kind-/, ''):a[1].slice(5);
+  const node=placement?(role==='manifest'?state.node:cluster+(role==='verifier'&&mode!=='placement-default'?'-worker':'-control-plane')):cluster+'-control-plane';
+  console.log(JSON.stringify({items:[{metadata:{name:role},spec:{nodeName:node,containers:[{name:'account',image:cluster+':cloud'}]},status:role==='verifier'&&mode==='signal'?{containerStatuses:[{name:'verifier',state:{terminated:{reason:'Error',exitCode:137}}}]}:undefined}]}));
  }
  if(b[0]==='port-forward'){
   process.on('SIGTERM',()=>{});record({forward:process.pid});
   for(const port of b.filter(v=>/^:\\d+$/.test(v)))console.log('Forwarding from 127.0.0.1:41000 -> '+port.slice(1));
   setInterval(()=>{},1000);
  }
+ if(placement&&b[0]==='exec'&&b.includes('/run/local-stack/lan/ca.pem')){console.log('synthetic-ca');return;}
  if(b[0]==='exec'&&mode==='retry-exhausted'){if(b.includes('/run/local-stack/lan/ca.pem'))console.log('synthetic-ca');else{process.stderr.write('last retry stderr');process.exit(23);}return;}
  if(b[0]==='exec'){if(mode==='load-exit'){process.stdin.resume();process.stdin.on('end',()=>{process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);});}else if(mode==='load-fails'){const refuse=()=>{if(fs.readFileSync(log,'utf8').includes('\"exporter\":')){process.stderr.write('PRIVATE_IMAGE_LOAD_CANARY');process.exit(17);}setTimeout(refuse,5);};refuse();}else process.kill(process.ppid,'SIGTERM');}
 }
@@ -296,6 +301,50 @@ test('three-node target rejects a manifest worker on the data node', async t => 
   assert.deepEqual(affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions, [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker', cluster + '-worker2']}]);
   assert.deepEqual(affinity.preferredDuringSchedulingIgnoredDuringExecution[0], {weight: 100, preference: {matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'In', values: [cluster + '-worker2']}]}});
   assert.deepEqual(rows.filter(row => row.name === 'docker' && row.args[0] === 'exec').map(row => row.args[1]), [cluster + '-control-plane', cluster + '-worker', cluster + '-worker2']);
+});
+
+// Without the temporary cordon, an allowed standby placement fails the strict initial binding.
+for (const [label, target, controlled] of [
+  ['local three-node', 'kind-worker-loss', true],
+  ['Amazon before', 'before', true],
+  ['Amazon after', 'after', false],
+  ['default', 'kind', false],
+]) test('manifest placement reaches clients with standby scheduling restored: ' + label, async t => {
+  const fixture = await commandFixture(t, 'placement-' + (target === 'kind' ? 'default' : target));
+  const cluster = 'd618-12345678-1234-4234-8234-123456789abc';
+  const input = ['before', 'after'].includes(target) ? {type: 'amazon', cluster, context: cluster, phase: target,
+    address: '10.77.0.1', ...(target === 'before' ? {observer: true} : {}),
+    instances: ['i-' + '1'.repeat(17), 'i-' + '2'.repeat(17), 'i-' + '3'.repeat(17)],
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)} : target;
+  const source = `import assert from 'node:assert/strict';import {appendFileSync} from 'node:fs';
+    import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
+    await runKubernetesCheck(${JSON.stringify(input)}, {clients: async ({kubernetes}) => {
+      assert.equal(kubernetes.ca, 'synthetic-ca');
+      appendFileSync(${JSON.stringify(fixture.log)}, JSON.stringify({clients:true})+'\\n');
+      throw Error('synthetic client entry');
+    }});`;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', source], {env: fixture.env, encoding: 'utf8', timeout: 10000});
+  assert.equal(run.status, 1, run.stderr);
+  assert.match(run.stderr.slice(-2500), /synthetic client entry/);
+  const rows = (await readFile(fixture.log, 'utf8')).trim().split('\n').map(JSON.parse);
+  const commands = rows.map(row => row.name === 'kubectl' ? row.args.slice(4) : []);
+  const cordon = commands.findIndex(args => args[0] === 'cordon');
+  const uncordon = commands.findIndex(args => args[0] === 'uncordon');
+  const apply = commands.findIndex(args => args[0] === 'apply');
+  const client = rows.findIndex(row => row.clients);
+  assert.ok(client > apply);
+  if (controlled) {
+    const bound = commands.findIndex(args => args[0] === 'get' && args.includes('app=manifest'));
+    const ready = commands.findIndex(args => args[0] === 'wait' && args.includes('pod/gateway'));
+    const creation = rows.find(row => row.name === 'kind' && row.args[0] === 'create')?.args;
+    const standby = (creation ? creation[creation.indexOf('--name') + 1] : cluster) + '-worker';
+    assert.deepEqual(commands[cordon], ['cordon', standby]);
+    assert.deepEqual(commands[uncordon], ['uncordon', commands[cordon][1]]);
+    assert.ok(cordon < apply && apply < ready && ready < bound && bound < uncordon && uncordon < client);
+    assert.ok(uncordon < commands.findIndex(args => args[0] === 'port-forward'));
+  } else {
+    assert.equal(cordon, -1); assert.equal(uncordon, -1);
+  }
 });
 
 test('an unsupported Kubernetes target reaches no external commands', async t => {
