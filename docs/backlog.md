@@ -1606,7 +1606,7 @@ implementation or production evidence.
   records a job cancelled during cleanup after all 569 cases passed. Seven
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
-  and rejects five- and seven-partition allocations. The
+  and rejects six- and eight-partition allocations. The
   [original registration cancellation](backlog/package-ci-runtime.md#what-remains-unexplained)
   remains unexplained; measured file allocation does not establish its cause.
 
@@ -2659,7 +2659,7 @@ implementation or production evidence.
   Independent controls catch activity and creation-time rewrites. This test
   still does not cover activity updates delayed by sixty seconds or changes to
   absolute session expiry; those limits also existed in the original test.
-  **Nested package authentication (D530).** All five package-test entry points
+  **Nested package authentication (D530).** All six package-test entry points
   and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the

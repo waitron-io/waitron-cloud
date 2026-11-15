@@ -58,3 +58,23 @@ pushes; current PR source changes run only registration's own partitions.
 The same registration source change now selects 29 jobs from the full plan's
 30. An unshared registration test selects all seven registration partitions. The historical sample above keeps
 its original five-partition counts.
+
+## Keep slow files apart
+
+Filename order can put several slow browser tests in one job. Portal uses six groups
+and registration uses seven, filled by the same measured packing function
+(`scripts/ci-measured-shards.mjs`). Each wrapper discovers its current test files,
+places the heaviest remaining file in the lightest group and runs those files explicitly.
+New files use the mean weight of current measured files; removed names do not affect
+that mean. The JSON tables contain relative millisecond weights from hosted file summaries,
+which omit module loading and overlap under Node’s default concurrency. They do not predict
+a job’s elapsed time. To refresh portal’s table, take the basename and `durationMs` from each
+`# File duration:` record in all six portal job logs of one healthy hosted run; the current
+table uses [run 43699590055](https://github.com/waitron-io/waitron-cloud/actions/runs/43699590055).
+Test deadlines remain 120 seconds for portal and 30 for registration.
+
+You can check discovery, future files and packing without running either package suite:
+
+```sh
+node --test scripts/ci-portal-partition.test.mjs scripts/ci-registration-shards.test.mjs
+```
