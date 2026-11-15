@@ -170,13 +170,13 @@ for(const setupPause of [0,600])test('request freshness and owner session expiry
   let blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
   if(setupPause)await new Promise(r=>setTimeout(r,setupPause));
   const pending=assert.rejects(clockStore.execute('renew',request(a,'renew',undefined,{},randomUUID(),Date.now()-59750)),/invalid_proof/);
-  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();}await pending;
+  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([pending]);}await pending;
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
   blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
   await db.pool.query('UPDATE cloud_sessions SET absolute_expires_at=$1',[new Date(time+250)]);
   if(setupPause)await new Promise(r=>setTimeout(r,setupPause));
   const expired=assert.rejects(clockStore.revokeWithSession(session.token,session.csrfToken,a.installationId),/session_expired/);
-  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();}await expired;
+  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([expired]);}await expired;
   assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[a.installationId])).rows[0].revoked_at,null);
   assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0].count,'0');
 });
@@ -217,7 +217,7 @@ test('leases bind the venue, environment and stored key; renewal and revocation 
 test('proof expiry during the final configuration read rolls back all writes',async()=>{
   const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('LOCK TABLE installation_services IN ACCESS EXCLUSIVE MODE');
   const expired=assert.rejects(store.execute('renew',request(a,'renew',undefined,{},randomUUID(),Date.now()-59500)),/invalid_proof/);
-  try{await waitForLock();await new Promise(r=>setTimeout(r,600));}finally{await blocker.query('COMMIT');blocker.release();}
+  try{await waitForLock();await new Promise(r=>setTimeout(r,600));}finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([expired]);}
   await expired;assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
   assert.equal((await db.pool.query('SELECT lease_expires_at FROM installations WHERE id=$1',[a.installationId])).rows[0].lease_expires_at,null);
 });
