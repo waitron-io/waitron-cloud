@@ -3235,7 +3235,7 @@ implementation or production evidence.
   failed earlier: the manifest landed on an allowed worker while the check
   required worker2. The [placement fix](superpowers/plans/2026-11-15-d621-manifest-placement.md)
   temporarily prevents new scheduling on the other worker until worker2 placement
-  is checked. Run the focused synthetic command tests with
+  is checked. Run the synthetic command tests with
   `node --test scripts/kubernetes-check.test.mjs`.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
