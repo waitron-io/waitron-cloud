@@ -42,7 +42,7 @@ Each row gives the current English/Spanish wording, the cause and the action to
 implement or clarify. R1, R4, R8 and R10 are implemented. R11's guidance and owner-check
 documentation are implemented; its repair controls remain open. R2's shared-400,
 browser-duplicate, generic-failure and 408/413/415 passkey guidance are implemented.
-Malformed JSON (400), billing/pairing request-body feedback and the remaining
+Malformed JSON (400), billing request-body feedback and the remaining
 rows stay open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
