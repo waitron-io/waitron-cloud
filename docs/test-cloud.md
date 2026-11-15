@@ -166,7 +166,7 @@ the current base workload, not #1213's exact images or a published release.
 
 | Worker | Peak after launcher replacement (MiB) | Limit (MiB) |
 | --- | ---: | ---: |
-| usage-reconciler | 46.75 | 64 |
+| usage-reconciler | 46.97 | 64 |
 | monitor-worker | 54.14 | 80 |
 | remote-probe | 65.45 | 96 |
 | gateway-manifest | 65.43 | 96 |
@@ -174,6 +174,8 @@ the current base workload, not #1213's exact images or a published release.
 Each limit uses the measured peak plus 25%, rounded up to 16 MiB. All profiles
 sum to 2,032 MiB, below the existing 2,048 MiB budget. The initial temporary-headroom
 run measured 74.32–87.33 MiB per worker; process replacement reduced those peaks.
+The final run with these limits completed in 80.3 seconds with zero worker memory
+kills or restarts, including counter reads immediately before owned cleanup.
 
 ## Check free services locally
 
