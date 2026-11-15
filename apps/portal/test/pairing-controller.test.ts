@@ -7,7 +7,7 @@ const requestId='12345678-1234-4234-8234-123456789abc';
 const business={organisationId:requestId,legalBusinessId:'22345678-1234-4234-8234-123456789abc',organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'};
 const view={requestId,venueId:'32345678-1234-4234-8234-123456789abc',environment:'test',expiresAt:new Date(Date.now()+600000).toISOString(),state:'awaiting_cloud'};
 for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)for(const action of ['inspect','approve'] as const)
-test(`${action} explains request-body refusal ${status} and retains the pairing for another attempt`,async()=>{
+test(`${action} explains request-body refusal ${status} and retains the entered pairing details`,async()=>{
   const controller=new PairingController(()=>{},async<T>():Promise<ApiResult<T>>=>({ok:false,status,code:'invalid_input',retryAfterMs:0}));
   controller.open(requestId);controller.account('owner');controller.code='12345678';controller.businesses=[business];controller.selected=business.legalBusinessId;controller.view={...view,environment:'test',state:'awaiting_cloud'};const prior=controller.view;
   await controller[action]();
