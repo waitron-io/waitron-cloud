@@ -79,10 +79,11 @@ reason for it. Current files use owned scratch paths and loopback ports, and the
 shared public build replaces files through unique temporary files and atomic
 renames. Give new test files their own scratch folders and ports too.
 
-Run comparisons with Git history and an ordinary user, as CI does. CI also runs
-another receipt command beside this suite, which the standalone Linux comparisons
-do not cover. Read `Receipt test:cloud-cost: PASS (N ms)` for the command's own
-time, and the complete current-head receipts job for the five-minute target.
+Run comparisons with Git history and an ordinary user, as CI does. CI runs up to two
+selected receipt commands at once, which the standalone Linux comparisons do not
+cover. Read `Receipt test:cloud-cost: PASS (N ms)` for this command's elapsed time
+while sharing the runner, and the complete current-head receipts job for the
+five-minute target.
 Local timings alone do not qualify that target.
 
 ## Current proof selection
