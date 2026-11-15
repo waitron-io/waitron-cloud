@@ -218,12 +218,31 @@ for(const fault of ['http','identity','abort'])test(`automatic PR skip diagnosti
   if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
   return get(path,options);
  };
- const selected=controller.findAutomatic({api:f.api,policy,limit:6,signal:abort.signal,onRefused:()=>assert.fail('A diagnostic failure must not start fallback')});
+ const selected=controller.findAutomatic({api:f.api,policy,limit:6,signal:abort.signal,budgetSignal:AbortSignal.timeout(1000),onRefused:()=>assert.fail('A diagnostic failure must not start fallback')});
  if(fault==='abort'){await assert.rejects(selected,/Diagnostic cancelled/);assert.deepEqual(records,[]);}
  else{
   assert.deepEqual((await selected).map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
   assert.deepEqual(records,[{event:'automatic-ci-skipped',repository:'fixture/waitron',runId:789,attempt:1,reason:'pr-link-missing',jobs:'unavailable'}]);
  }
+});
+test('automatic PR skip diagnostics preserve selected jobs when the pass budget expires',async t=>{
+ const f=fixture(),get=f.api.get,records=[];t.mock.method(console,'error',line=>records.push(JSON.parse(line)));
+ const good={...f.run,id:790},job={...f.jobs[0],id:911,run_id:790,labels:['self-hosted','dt-123-790-1-test-server-24']};
+ f.run.pull_requests=[];let selectedBeforeDiagnostic=false;
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?'))return {total_count:path.includes('status=queued')?0:2,workflow_runs:path.includes('status=queued')?[]:[f.run,good]};
+  if(path.includes('/runs/789/attempts/1/jobs?')){
+   assert.ok(selectedBeforeDiagnostic,'Valid selection must precede the extra diagnostic read');
+   await new Promise((resolve,reject)=>{const timer=setTimeout(resolve,1000);options.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(options.signal.reason);},{once:true});});
+  }
+  if(path.endsWith('/actions/runs/790'))return good;
+  if(path.includes('/runs/790/attempts/1/jobs?'))return {total_count:1,jobs:[job]};
+  if(path.endsWith('/commits/'+head))selectedBeforeDiagnostic=true;
+  return get(path,options);
+ };
+ const selected=await controller.findAutomatic({api:f.api,policy,limit:1,budgetSignal:AbortSignal.timeout(100)});
+ assert.deepEqual(selected.map(ci=>[ci.runId,ci.jobId]),[[790,911]]);
+ assert.deepEqual(records,[{event:'automatic-ci-diagnostic-budget',message:'skip reasons not read: pass budget'}]);
 });
 test('an incomplete run inventory does not hold free capacity behind a still-running sibling',async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
