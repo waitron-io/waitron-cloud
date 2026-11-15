@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, access, cp, mkdtemp, mkdir, chmod, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runSuite } from './check.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -11,10 +13,10 @@ const image = `sha256:${'a'.repeat(64)}`;
 const roots = ['roots/global', 'roots/country'];
 const filters = ['integration', 'composition', 'edge', 'evidence', 'handoff'];
 
-async function observe(failAt) {
+async function observe(failAt, suite = 'integration') {
   const batches = [], cleaned = [];
   let copy;
-  const output = await runSuite('integration', { execute: async (file, args, options) => {
+  const output = await runSuite(suite, { execute: async (file, args, options) => {
     assert.equal(file, 'docker');
     if (args[0] === 'image') return { stdout: JSON.stringify([{ Id: image }]) };
     if (args[0] === 'container') {
@@ -35,9 +37,87 @@ async function observe(failAt) {
     await writeFile(`${copy}/suite.json`, '[]');
     return { stdout: `root-${batches.length}\n` };
   } }).then(value => ({ value }), error => ({ error }));
-  await assert.rejects(access(copy), { code: 'ENOENT' });
+  if (copy) await assert.rejects(access(copy), { code: 'ENOENT' });
   return { ...output, batches, cleaned };
 }
+
+for (const scope of ['global', 'country']) {
+  test(`fixed ${scope} alias executes every filter in only its own bounded root`, async () => {
+    const result = await observe(undefined, `integration-${scope}`);
+    assert.ifError(result.error);
+    assert.equal(result.batches.length, 1);
+    const [batch] = result.batches;
+    assert.equal(batch.batch, `roots/${scope}`);
+    assert.equal(batch.timeout, 300_000);
+    assert.deepEqual(batch.plan, filters.map(name => ({ directory: `roots/${scope}`, filter: `tests/${name}.tftest.hcl` })));
+    assert.ok(result.cleaned.includes(batch.name));
+    assert.equal(result.value, 'root-1\n');
+  });
+
+  test(`fixed ${scope} alias collects a failed root without reporting success`, async () => {
+    const result = await observe(1, `integration-${scope}`);
+    assert.match(result.error?.message ?? '', /root assertion failed/);
+    assert.equal(result.batches.length, 1);
+    assert.equal(result.batches[0].batch, `roots/${scope}`);
+    assert.ok(result.cleaned.includes(result.batches[0].name));
+    assert.equal(result.value, undefined);
+  });
+}
+
+test('all CLI inventory executes the canonical 27 root and filter pairs without aliases', async t => {
+  const repo = await mkdtemp(join(tmpdir(), 'cloud-aws-all-inventory-'));
+  t.after(() => rm(repo, { recursive: true, force: true }));
+  const directory = join(repo, 'deploy/aws');
+  await cp(new URL('.', import.meta.url), directory, {
+    recursive: true,
+    filter: path => !path.split('/').some(part => ['node_modules', '.terraform', '.aws'].includes(part)),
+  });
+  await execute('git', ['init', '--quiet', repo]);
+  await execute('git', ['-C', repo, 'add', 'deploy/aws']);
+  const bin = join(repo, 'bin'), trace = join(repo, 'calls.jsonl');
+  await mkdir(bin);
+  await writeFile(join(bin, 'docker'), `#!${process.execPath}
+import { appendFileSync, readFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === 'image' && args[1] === 'inspect') {
+  console.log(JSON.stringify([{Id: '${image}'}]));
+} else if (args[0] === 'container' && args[1] === 'inspect') {
+  console.error('No such container: ' + args[2]); process.exitCode = 1;
+} else if (args[0] === 'run' && args.includes('/candidate/inspect.py')) {
+  console.log('inspected');
+} else if (args[0] === 'run' && args.at(-1) === '/candidate/run.py') {
+  const copy = args[args.indexOf('--mount') + 1].match(/source=([^,]+),/)[1];
+  const plan = JSON.parse(readFileSync(copy + '/suite.json'));
+  const batch = JSON.parse(readFileSync(copy + '/batch.json'));
+  appendFileSync(${JSON.stringify(trace)}, JSON.stringify({plan, batch}) + '\\n');
+  console.log('completed canonical allocation');
+} else { throw new Error('Unexpected Docker operation: ' + JSON.stringify(args)); }
+`);
+  await chmod(join(bin, 'docker'), 0o755);
+  await execute(process.execPath, [join(directory, 'check.mjs'), '--all'], {
+    timeout: 15_000, env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  const calls = (await readFile(trace, 'utf8')).trim().split('\n').map(JSON.parse);
+  const pairs = calls.flatMap(({ plan, batch }) => plan.filter(entry => batch === null || entry.directory === batch)
+    .map(entry => `${entry.directory}/${entry.filter}`));
+  const expected = [
+    'canary/tests/canary.tftest.hcl',
+    'modules/accounts/tests/accounts.tftest.hcl', 'roots/accounts/tests/accounts.tftest.hcl',
+    'modules/state/tests/state.tftest.hcl', 'roots/state/tests/state.tftest.hcl',
+    'modules/network/tests/network.tftest.hcl', 'modules/cell/tests/cell.tftest.hcl',
+    'modules/database/tests/database.tftest.hcl', 'modules/storage/tests/storage.tftest.hcl',
+    'modules/observability/tests/observability.tftest.hcl', 'modules/ingress/tests/ingress.tftest.hcl',
+    'modules/custody/tests/custody.tftest.hcl', 'modules/workload-permissions/tests/custody.tftest.hcl',
+    'modules/scope-permissions/tests/custody.tftest.hcl', 'fixtures/custody/tests/custody.tftest.hcl',
+    'modules/dns/tests/dns.tftest.hcl', 'roots/delegation/tests/dns.tftest.hcl',
+    'roots/global/tests/integration.tftest.hcl', 'roots/country/tests/integration.tftest.hcl',
+    'roots/global/tests/composition.tftest.hcl', 'roots/country/tests/composition.tftest.hcl',
+    'roots/global/tests/edge.tftest.hcl', 'roots/country/tests/edge.tftest.hcl',
+    'roots/global/tests/evidence.tftest.hcl', 'roots/country/tests/evidence.tftest.hcl',
+    'roots/global/tests/handoff.tftest.hcl', 'roots/country/tests/handoff.tftest.hcl',
+  ];
+  assert.deepEqual(pairs.sort(), expected.sort());
+});
 
 // Combining both roots makes independent plans compete for one driver deadline.
 test('integration executes both complete roots in separate bounded containers', async () => {

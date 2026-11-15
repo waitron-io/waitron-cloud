@@ -99,7 +99,7 @@ for (const key of ['ci', 'aws-infrastructure']) {
     assert.equal(planned.outputs.mode, 'full'); assert.equal(planned.outputs.decision_artifact, undefined);
     const names = key === 'ci' ? ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
       'package (@waitron-cloud/operations)', 'receipts', 'summary', 'scripts', 'documentation']
-      : ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)', 'summary'];
+      : ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (guards-4)', 'verify (guards-5)', 'verify (guards-6)', 'verify (guards-7)', 'verify (guards-8)', 'summary'];
     const jobs = names.map((name, i) => ({id: i + 1, name, run_id: 42, run_attempt: 1, head_sha: f.head,
       status: name === 'summary' ? 'in_progress' : 'completed', conclusion: name === 'summary' ? null : ['scripts', 'documentation'].includes(name) ? 'skipped' : 'success'}));
     const jobFile = join(f.root, '.git/jobs.json'), jobPages = join(f.root, '.git/job-pages.json');

@@ -10,10 +10,46 @@ import { parse } from 'yaml';
 const execute = promisify(execFile);
 const path = new URL('../../.github/workflows/aws-infrastructure.yml', import.meta.url);
 const cells = [
-  { cell: 'guards-1', shard: 1 },
-  { cell: 'guards-2', shard: 2 },
-  { cell: 'guards-3', shard: 3 },
-  { cell: 'suites', shard: 0 },
+  {
+    "cell": "guards-1",
+    "files": "deploy/aws/custody.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-2",
+    "files": "deploy/aws/global-plans.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-3",
+    "files": "deploy/aws/country-plans.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-4",
+    "files": "deploy/aws/accounts.test.mjs deploy/aws/candidate.test.mjs deploy/aws/check.test.mjs deploy/aws/contracts.test.mjs deploy/aws/handoff.test.mjs deploy/aws/integration.test.mjs deploy/aws/modules-policy.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-5",
+    "files": "deploy/aws/runner.test.mjs deploy/aws/runner-batches.test.mjs deploy/aws/scheduling.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-6",
+    "files": "deploy/aws/database.test.mjs deploy/aws/locks.test.mjs deploy/aws/state.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-7",
+    "files": "deploy/aws/cell.test.mjs deploy/aws/network.test.mjs deploy/aws/storage.test.mjs",
+    "format": false
+  },
+  {
+    "cell": "guards-8",
+    "files": "deploy/aws/dns.test.mjs deploy/aws/ingress.test.mjs deploy/aws/observability.test.mjs deploy/aws/permissions.test.mjs deploy/aws/provider-bindings.test.mjs deploy/aws/replication-metrics.test.mjs deploy/aws/tools.test.mjs deploy/aws/topology.test.mjs",
+    "format": true
+  }
 ];
 async function workflow() {
   try { return parse(await readFile(path, 'utf8')); }
@@ -82,7 +118,7 @@ test('AWS checks use the exact candidate with read-only repository permission', 
   }
 });
 
-test('AWS verification partitions guards and plans without cancelling other cells', async () => {
+test('AWS verification balances every guard file without cancelling other cells', async () => {
   const value = await workflow();
   assert.deepEqual(value.jobs.verify.strategy, { 'fail-fast': false, matrix: { include: cells } });
   assert.equal(value.jobs.verify.name, 'verify (${{ matrix.cell }})');
@@ -101,7 +137,7 @@ async function runCommands(t, fail = '', cell = cells[0], realGuards = false) {
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'bin'));
   await mkdir(join(root, 'deploy/aws'), { recursive: true });
-  const files = realGuards ? (await readdir(new URL('.', import.meta.url))).filter(name => name.endsWith('.test.mjs')).sort() : ['fixture.test.mjs'];
+  const files = (await readdir(new URL('.', import.meta.url))).filter(name => name.endsWith('.test.mjs')).sort();
   for (const name of files) await writeFile(join(root, 'deploy/aws', name), `import { test } from 'node:test';\ntest(${JSON.stringify(name)}, () => console.log('AWS_FILE ' + ${JSON.stringify(name)}));\n`);
   const probe = `#!${process.execPath}
 import { appendFileSync } from 'node:fs';
@@ -111,12 +147,12 @@ const args = process.argv.slice(2);
 const command = basename(process.argv[1]);
 appendFileSync(process.env.TRACE, JSON.stringify([command, ...args]) + '\\n');
 const stage = args[0] === 'scripts/ci-setup-pnpm.mjs' ? 'setup' : command === 'pnpm' ? 'install' : command === 'docker' ? 'format'
-  : args.includes('--prepare-tools') ? 'prepare' : args.includes('--all') ? 'suites' : 'guards';
+  : args.includes('--prepare-tools') ? 'prepare' : 'guards';
 if (${realGuards} && stage === 'guards') {
   execFileSync(${JSON.stringify(process.execPath)}, args, { stdio: 'inherit' });
   process.exit(0);
 }
-console.log(stage === 'guards' ? '# tests 3\\n# pass 3\\n# fail 0' : stage === 'suites' ? 'Success! 2 passed, 0 failed.' : stage);
+console.log(stage === 'guards' ? '# tests 3\\n# pass 3\\n# fail 0' : stage);
 process.exit(process.env.FAIL_STAGE === stage ? 7 : 0);
 `;
   for (const name of ['node', 'pnpm', 'docker']) {
@@ -129,7 +165,7 @@ process.exit(process.env.FAIL_STAGE === stage ? 7 : 0);
   for (const step of steps) {
     assert.equal(step.shell, 'bash');
     try {
-      const script = step.run.replaceAll('${{ matrix.shard }}', String(cell.shard));
+      const script = step.run.replaceAll('${{ matrix.files }}', cell.files).replaceAll('${{ matrix.format }}', String(cell.format));
       await execute('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
         cwd: root, timeout: 10_000, maxBuffer: 1024 * 1024,
         env: { PATH: `${join(root, 'bin')}:/usr/bin:/bin`, TRACE: join(root, 'trace'), FAIL_STAGE: fail },
@@ -156,31 +192,24 @@ test('AWS shell verifies the package manager before infrastructure work and stop
 });
 
 // Execute the workflow's actual shell; replace only the external tool boundary.
-test('AWS shell prepares and installs each cell, shards all guards and runs every plan and format once', async t => {
+test('AWS shell prepares each cell, executes its explicit guards and formats once', async t => {
   for (const cell of cells) {
     const { root, status, calls } = await runCommands(t, '', cell);
     assert.equal(status, 0);
     assert.deepEqual(calls, [
       ['node', 'deploy/aws/check.mjs', '--prepare-tools'],
       ['pnpm', '--dir', 'deploy/aws', 'install', '--ignore-workspace', '--frozen-lockfile'],
-      ...(cell.shard ? [['node', '--test', '--test-concurrency=1', `--test-shard=${cell.shard}/3`, 'deploy/aws/fixture.test.mjs']] : [
-      ['node', 'deploy/aws/check.mjs', '--all'],
-      ['docker', 'run', '--rm', '--pull', 'never', '--network', 'none', '--user', '65532:65532',
+      ['node', '--test', '--test-concurrency=1', ...cell.files.split(' ')],
+      ...(cell.format ? [['docker', 'run', '--rm', '--pull', 'never', '--network', 'none', '--user', '65532:65532',
         '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--read-only',
         '--memory', '256m', '--cpus', '1', '--pids-limit', '32',
         '--mount', `type=bind,source=${root}/deploy/aws,target=/source,readonly`,
-        'waitron-cloud-aws-tools:1.13.2-aws6.70.0', 'tofu', 'fmt', '-check', '-recursive', '/source'],
-      ]),
+        'waitron-cloud-aws-tools:1.13.2-aws6.70.0', 'tofu', 'fmt', '-check', '-recursive', '/source']] : []),
     ]);
-    if (cell.shard) {
-      assert.match(await readFile(join(root, '.aws-check-logs/guards.log'), 'utf8'), /# tests 3\n# pass 3\n# fail 0/);
-      await assert.rejects(readFile(join(root, '.aws-check-logs/suites.log')), { code: 'ENOENT' });
-      await assert.rejects(readFile(join(root, '.aws-check-logs/format.log')), { code: 'ENOENT' });
-    } else {
-      assert.match(await readFile(join(root, '.aws-check-logs/suites.log'), 'utf8'), /Success! 2 passed, 0 failed/);
-      await assert.rejects(readFile(join(root, '.aws-check-logs/guards.log')), { code: 'ENOENT' });
-      assert.equal(await readFile(join(root, '.aws-check-logs/format.log'), 'utf8'), 'format\n');
-    }
+    assert.match(await readFile(join(root, '.aws-check-logs/guards.log'), 'utf8'), /# tests 3\n# pass 3\n# fail 0/);
+    await assert.rejects(readFile(join(root, '.aws-check-logs/suites.log')), { code: 'ENOENT' });
+    if (cell.format) assert.equal(await readFile(join(root, '.aws-check-logs/format.log'), 'utf8'), 'format\n');
+    else await assert.rejects(readFile(join(root, '.aws-check-logs/format.log')), { code: 'ENOENT' });
     for (const stage of ['prepare', 'install']) {
       assert.equal(await readFile(join(root, `.aws-check-logs/${stage}.log`), 'utf8'), `${stage}\n`);
     }
@@ -194,19 +223,18 @@ test('AWS guard matrix executes every discovered test file exactly once with the
   for (const cell of value.jobs.verify.strategy.matrix.include) {
     const result = await runCommands(t, '', cell, true);
     assert.equal(result.status, 0);
-    if (!cell.shard) continue;
     const log = await readFile(join(result.root, '.aws-check-logs/guards.log'), 'utf8');
     scheduled.push(...[...log.matchAll(/^(?:# )?AWS_FILE (.+)$/gm)].map(match => match[1]));
   }
   assert.deepEqual(scheduled.sort(), expected);
 });
 
-for (const [index, stage] of ['prepare', 'install', 'guards', 'suites', 'format'].entries()) {
+for (const [index, stage] of ['prepare', 'install', 'guards', 'format'].entries()) {
   test(`AWS shell propagates ${stage} failure through tee and stops later tools`, async t => {
-    for (const cell of cells.filter(cell => ['prepare', 'install'].includes(stage) || (cell.shard ? stage === 'guards' : ['suites', 'format'].includes(stage)))) {
+    for (const cell of cells.filter(cell => stage !== 'format' || cell.format)) {
       const { root, status, calls } = await runCommands(t, stage, cell);
       assert.equal(status, 7);
-      assert.equal(calls.length, index + 1 - (index >= 3 ? 1 : 0));
+      assert.equal(calls.length, index + 1);
       assert.ok((await readFile(join(root, `.aws-check-logs/${stage}.log`), 'utf8')).length > 0);
     }
   });
@@ -224,5 +252,5 @@ test('AWS assertion counts and diagnostics are retained after failure', async ()
   assert.ok(upload[0].with['retention-days'] > 0 && upload[0].with['retention-days'] <= 30);
   assert.equal(upload[0].with['if-no-files-found'], 'error');
   const names = cells.map(cell => upload[0].with.name.replaceAll('${{ matrix.cell }}', cell.cell));
-  assert.equal(new Set(names).size, 4);
+  assert.equal(new Set(names).size, 8);
 });

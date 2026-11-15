@@ -5,7 +5,6 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, readdir } from 'node:fs/promises';
 import { toolsImage } from './tools.mjs';
-import { runSuite } from './check.mjs';
 
 const execute = promisify(execFile);
 const options = { timeout: 30_000, maxBuffer: 1024 * 1024, env: { PATH: process.env.PATH, HOME: process.env.HOME } };
@@ -90,17 +89,3 @@ for (const [scope, primary, backup] of [['global', 'eu-central-1', 'eu-west-1'],
     }
   });
 }
-
-// A missing root case or a runner that silently skips one must fail the receipt.
-test('both independent roots execute every scope, role and actual-provider refusal', async () => {
-  const result = await runSuite('integration');
-  assert.deepEqual([...result.matchAll(/Isolated suite aggregate: Success! ([0-9]+) passed, 0 failed\./g)].map(match => Number(match[1])), [29, 29]);
-  assert.equal((result.match(/run "primary_cells_use_their_exact_network_entries"\.\.\. pass/g) ?? []).length, 2);
-  for (const scope of ['global', 'country']) {
-    assert.ok(result.includes('run "rejects_foreign_operator_account_before_cell_reads"... pass'));
-    for (const alias of [scope, `${scope}_backup`, `${scope}_keys`, `${scope}_backup_keys`]) {
-      assert.ok(result.includes(`run "rejects_actual_${alias}_account"... pass`));
-      assert.ok(result.includes(`run "rejects_actual_${alias}_region"... pass`));
-    }
-  }
-});

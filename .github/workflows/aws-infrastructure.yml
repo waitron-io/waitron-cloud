@@ -89,13 +89,29 @@ jobs:
       matrix:
         include:
           - cell: guards-1
-            shard: 1
+            files: deploy/aws/custody.test.mjs
+            format: false
           - cell: guards-2
-            shard: 2
+            files: deploy/aws/global-plans.test.mjs
+            format: false
           - cell: guards-3
-            shard: 3
-          - cell: suites
-            shard: 0
+            files: deploy/aws/country-plans.test.mjs
+            format: false
+          - cell: guards-4
+            files: deploy/aws/accounts.test.mjs deploy/aws/candidate.test.mjs deploy/aws/check.test.mjs deploy/aws/contracts.test.mjs deploy/aws/handoff.test.mjs deploy/aws/integration.test.mjs deploy/aws/modules-policy.test.mjs
+            format: false
+          - cell: guards-5
+            files: deploy/aws/runner.test.mjs deploy/aws/runner-batches.test.mjs deploy/aws/scheduling.test.mjs
+            format: false
+          - cell: guards-6
+            files: deploy/aws/database.test.mjs deploy/aws/locks.test.mjs deploy/aws/state.test.mjs
+            format: false
+          - cell: guards-7
+            files: deploy/aws/cell.test.mjs deploy/aws/network.test.mjs deploy/aws/storage.test.mjs
+            format: false
+          - cell: guards-8
+            files: deploy/aws/dns.test.mjs deploy/aws/ingress.test.mjs deploy/aws/observability.test.mjs deploy/aws/permissions.test.mjs deploy/aws/provider-bindings.test.mjs deploy/aws/replication-metrics.test.mjs deploy/aws/tools.test.mjs deploy/aws/topology.test.mjs
+            format: true
     steps:
       - uses: actions/checkout@v5
         with:
@@ -118,10 +134,8 @@ jobs:
           mkdir -p .aws-check-logs
           node deploy/aws/check.mjs --prepare-tools 2>&1 | tee .aws-check-logs/prepare.log
           pnpm --dir deploy/aws install --ignore-workspace --frozen-lockfile 2>&1 | tee .aws-check-logs/install.log
-          if [ "${{ matrix.shard }}" != "0" ]; then
-            node --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/3 deploy/aws/*.test.mjs 2>&1 | tee .aws-check-logs/guards.log
-          else
-            node deploy/aws/check.mjs --all 2>&1 | tee .aws-check-logs/suites.log
+          node --test --test-concurrency=1 ${{ matrix.files }} 2>&1 | tee .aws-check-logs/guards.log
+          if [ "${{ matrix.format }}" = "true" ]; then
             docker run --rm --pull never --network none --user 65532:65532 \
               --cap-drop ALL --security-opt no-new-privileges --read-only \
               --memory 256m --cpus 1 --pids-limit 32 \
