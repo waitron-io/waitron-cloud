@@ -1,9 +1,9 @@
-# Operations timeout: proposed investigative slice
+# Operations timeout: investigative slice
 
 Queued ask, verbatim, in `/Users/clintongormley/waitron-campaign-g/queue.md`, OPERATIONS-SCALE-TIMEOUT:
 > find what the scale case waited on (PostgreSQL lock, connection pool, runner load), using the stage timestamps and blocker samples; fix the cause, not the timeout. Prove it with the evidence the fix addresses. Write the one-page plan first; one PR.
 
-**Decision pending:** the watcher must clear a **separate diagnostic PR**, changing the immediate finish line and the ask's one-PR route. It must land before normal CI can observe a natural recurrence. The original cause, repair and proof of repair stay open. Claude reviewed the draft; the driver accepted its simplifications. No owner approval is claimed. The review also calls the changed finish line UNVERIFIED; only watcher clearance can settle that proposal.
+**Cleared investigative slice:** Claude reviewed the draft (172 seconds); the driver accepted its simplifications. The watcher cleared the separate diagnostic PR on 16 November 2026 at 07:57 in Lane G's questions.md: “Yes: land the small diagnostic PR so normal CI keeps the stage timestamps and PostgreSQL wait/blocker samples when the timeout recurs naturally, then fix the cause from that evidence.” This settles the review's UNVERIFIED changed finish line. The original cause, repair and proof of repair stay open. No owner approval of this design is claimed.
 
 The supplied [diagnosis receipt](/Users/clintongormley/waitron-campaign-g/receipts/operations-scale-timeout/diagnosis.md) records no stage/wait samples for run 43811109636, attempt 1, job 133112892997. Passing probes include [43818550816](https://github.com/waitron-io/waitron-cloud/actions/runs/43818550816): identity 12, operations 63, 15 samples without blockers. These passes do not reproduce or attribute the original timeout.
 

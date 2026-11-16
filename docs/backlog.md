@@ -1836,6 +1836,16 @@ and genuine restore or recovery. Native transport and elapsed retry checks pass;
 they grant no activation or stop-proof authority.
 See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qualification).
 
+## Operations scale-test timeout
+
+**Open.** Find and fix what the scale case waited on in
+[run 43811109636, attempt 1](https://github.com/waitron-io/waitron-cloud/actions/runs/43811109636/attempts/1).
+Its 30-second cancellation and three subsequent status setup failures remain
+unexplained. Read the next natural failure's `cloud-test-setup-waits` report
+before choosing a repair; passing probes have not reproduced the cause.
+The [diagnostic scope and limits](superpowers/plans/2026-11-16-operations-timeout-diagnostics.md)
+identify the observed stages and gaps. Preserve all assertions and deadlines.
+
 ## Monitoring shutdown fixture migration timeout (D530)
 
 **Open.** Registration shard 1 fails during migration 013 under its unchanged
