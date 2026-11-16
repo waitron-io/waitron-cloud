@@ -194,6 +194,15 @@ private review of cause, detection, phone delivery, acknowledgment, customer
 communications, recovery evidence and follow-up owners. Record unknown causes as
 unknown; later success alone is not a fix.
 
+Before you close the private write-up, name at least one improvement: a sharper
+check that would have detected the problem sooner, an action that could have
+repaired it, or a procedure for the part you cannot automate. Record each
+improvement in the relevant backlog bundle with an owner and a next action.
+Changing a repair from “ask first” to “act and report” requires an owner-made
+repository change citing the incidents; acknowledging an alarm grants no repair
+authority. The country action catalogue at `/operator/actions` currently shows
+policy only. Requests, approvals, notices and execution are not available yet.
+
 ## Qualify before launch
 
 On the owner-authorised production setup, record exact page URLs, account and

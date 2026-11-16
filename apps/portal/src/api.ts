@@ -1,3 +1,4 @@
+import {translations} from './locale.ts';
 import {validPasswordLogin,validFactorStatus,validFactorEnrolment,validFactorChange} from './authenticator-types.ts';
 import {validRecoveryView} from './recovery-types.ts';
 import {validRemoteView,validRemoteDns,validGuestMenuView} from './remote-types.ts';
@@ -12,6 +13,11 @@ import {validBillingView,validMethodPresentation,validMethodResult} from './bill
 export const enrollmentRequiredEvent = 'cloud-enrollment-required';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown, status: number): boolean {
+  if(path==='/operator/actions'){
+    const actions=(value as {actions?:unknown}|null)?.actions;
+    return status===200&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
+      a&&typeof a.id==='string'&&Object.hasOwn(translations.en,`cloudAction_${a.id}`)&&['ask-first','act-and-report'].includes(a.policy)&&a.available===false);
+  }
   if(path==='/security/email')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
   if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
@@ -64,7 +70,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = path==='/operator/actions' || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;

@@ -47,6 +47,41 @@ After a password reset forgets every browser, a password-only account needs that
 Use `localhost` for the API probes. The server rejects a different `Host` authority, even
 when it resolves to the same loopback interface.
 
+## Inspect the country action catalogue
+
+Create a synthetic operator account through the local portal’s sign-up page and
+finish verification with the link captured in Mailpit. Signup also creates a
+synthetic customer organisation; that membership supplies no operator permission.
+Sign in and read your account UUID from the same-origin session endpoint:
+
+```js
+await (await fetch('/api/account/session')).json()
+// {accountId: "11111111-1111-4111-8111-111111111111", expiresAt: "…"}
+```
+
+Export `CLOUD_OPERATOR_ACCOUNT_ID` in your shell using that `accountId`, then
+recreate only the account service so it receives the setting:
+
+```sh
+export CLOUD_OPERATOR_ACCOUNT_ID=11111111-1111-4111-8111-111111111111
+docker compose --env-file deploy/local-stack/local.env up -d --no-deps --force-recreate account
+```
+
+Open **Cloud actions** from Account, or visit `/operator/actions`. Only the
+configured signed-in account can read `GET /api/account/operator/actions`.
+An absent or empty setting denies every account; an invalid UUID refuses account
+server startup. Customer ownership, support permissions and worldwide admin
+sign-in grant no country operator access. Choosing a real production operator
+remains an operating decision.
+
+Every row shows its policy and **Execution unavailable**. The two initiation
+exceptions concern a failed Cloud workload restarted in place and the start of
+failed-machine replacement. They grant no hosted writer authority. There are no
+approval, notification or execution controls yet. Later P4 slices add those with
+synthetic LAN effects; real services and providers remain unavailable. Routine
+workers keep their existing rules. See the [incident procedure](incident-response.md#restore-verify-and-close)
+for the private write-up and backlog step after a repair.
+
 ## Know what stays on your machine
 
 ### Inspect the test organisation plan

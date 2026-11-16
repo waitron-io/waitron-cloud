@@ -1,3 +1,4 @@
+import {cloudActionsScreen} from './cloud-actions-screen.ts';
 import {accountActionProofScreen} from './account-action-proof-screen.ts';
 import {billingScreen} from './billing-screen.ts';
 import {rememberBrowserChoice,authenticatorAccountScreen,authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
@@ -32,6 +33,7 @@ export function screen(app: PortalApp) {
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
   if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
+  else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
   else if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
   else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);
@@ -39,7 +41,7 @@ export function screen(app: PortalApp) {
   else if (app.notice && !['signedOut', 'sessionExpired','factorChanged','factorRemoved','factorChangeUncertain'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
-      ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
+      ? html`<p>${c.accountIntro}</p><p>${link('/operator/actions',c.cloudActionsTitle)}</p>${accountSecurityScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
       : html`<p role="status">${app.session.state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
           ${app.session.state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
   } else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {

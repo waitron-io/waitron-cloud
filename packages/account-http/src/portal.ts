@@ -18,7 +18,7 @@ export async function loadPortalAssets(directory: string): Promise<PortalAssets>
   }
   return assets;
 }
-const documents = new Set(['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/connect', '/recover']);
+const documents = new Set(['/operator/actions', '/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/connect', '/recover']);
 const errors = {
   en: {
     400: ['Invalid address', 'This address is not valid. Check the link and try again.'],
