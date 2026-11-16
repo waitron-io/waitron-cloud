@@ -10,7 +10,7 @@ let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});
 after(async()=>db?.close());
 beforeEach(async()=>{
- await resetSchema(db.pool);
+ console.error(JSON.stringify({event:'status-reset-start',at:Date.now()}));await resetSchema(db.pool);console.error(JSON.stringify({event:'status-reset-end',at:Date.now()}));
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=clock_timestamp(),caught_up_at=clock_timestamp()');
 });
 

@@ -1,0 +1,22 @@
+name: Scratch operations timeout
+on:
+  push:
+    branches: [debug/d638-operations-timeout]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: node scripts/test-postgres.mjs exec node scripts/debug/operations-timeout.mjs
