@@ -239,7 +239,7 @@ docker build --platform linux/amd64 \
 
 The SeaweedFS checksum above is the amd64 value pinned in `compose.yaml`. Record the resulting **image ID**, for example `sha256:…`. The deployment driver accepts only a complete image ID and verifies `linux/amd64` before startup. A manifest-list digest or mutable tag is not an image ID.
 
-Transfer only `compose.yaml`, `deploy/test-cloud/compose.yaml`, `deploy/test-cloud/test.env` and `scripts/test-cloud-deploy.mjs` into an isolated deployment directory with the same relative paths. The runtime, proxy and bootstrap are already inside the image. Set no build token on the box. From that directory, the driver supports:
+Transfer `compose.yaml`, `deploy/test-cloud/compose.yaml`, `deploy/test-cloud/test.env`, `scripts/test-cloud-deploy.mjs` and `scripts/test-cloud-project-lock.mjs` into an isolated deployment directory with the same relative paths. The runtime, proxy and bootstrap are already inside the image. Set no build token on the box. From that directory, the driver supports:
 
 ```sh
 node scripts/test-cloud-deploy.mjs preflight sha256:<64-hex-image-id>
@@ -330,11 +330,34 @@ No supported procedure here renews that internal CA; without further maintenance
 work this test deployment expires after a year. Do not delete the configuration
 volume, which also holds the account's keys.
 
-This configuration does not extend `scripts/test-cloud-deploy.mjs` to Amazon.
-Its home-network capacity and bind checks remain unchanged. The next slice must
-measure image size, free RAM and disk before creating the authorised machine, then
-qualify public certificates and pairing there. Paid DNS resources and production
-sending access still need their separate owner answers.
+The deployment driver accepts an explicit `amazon` target. Include
+`deploy/test-cloud/compose.amazon.yaml` among the transferred files and set the
+two HTTPS settings above before `up`:
+
+```sh
+node scripts/test-cloud-deploy.mjs preflight sha256:<reviewed-image-id> amazon
+node scripts/test-cloud-deploy.mjs load sha256:<reviewed-image-id> amazon
+node scripts/test-cloud-deploy.mjs up sha256:<reviewed-image-id> amazon
+node scripts/test-cloud-deploy.mjs status sha256:<reviewed-image-id> amazon
+```
+
+`load` still takes the image stream on standard input. The target selects only
+the checked-in override and explicit settings; ambient Compose files, profiles,
+build tokens and bind overrides remain excluded. Its initial-account admission
+requires 2,048 MiB available RAM and 8 GiB free disk, and an unused port 443.
+Monitoring aborts after three consecutive readings below 512 MiB or 4 GiB.
+Owned out-of-memory events and protected Waitron regressions retain their original
+refusal. The LAN command and its stricter original thresholds are unchanged.
+
+These are chosen margins for the initial account stack, not a capacity proof.
+The local amd64 images measured about 783 MB for Cloud, 433 MB for PostgreSQL and
+60 MB for Mailpit; one idle configured-stack sample used 584.43 MiB across eleven
+containers. No four-GiB Amazon machine or twenty-GiB disk has been measured here,
+and backup verification and the later workflows remain unqualified.
+
+The [owner’s Amazon access steps](test-cloud-amazon-access.md) are still required.
+There is no dedicated launch profile yet. Do not substitute the staging or D618
+profile, create the paid DNS zone or request production sending access.
 
 ## Trust the public CA
 

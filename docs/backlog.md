@@ -1028,9 +1028,12 @@ implementation or production evidence.
 
   The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
   is cleared by the watcher for staged implementation. Configurable HTTPS reuses
-  the test runtime and internal CA trust. The actual machine, public certificate
-  issuance, pairing and email qualification remain open; no Amazon deployment is
-  established by this configuration slice.
+  the test runtime and internal CA trust. The explicit Amazon driver target has
+  local admission and rendered-configuration checks, with measured image sizes and
+  an idle-stack observation. The actual machine, its OS/disk/CPU headroom, public
+  certificate issuance, pairing and email qualification remain open. Dedicated
+  launch access awaits the [owner setup](test-cloud-amazon-access.md); no Amazon
+  deployment is established by these local checks.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings

@@ -1,7 +1,7 @@
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
 import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
-import {dirname,resolve} from 'node:path';
+import {dirname,resolve,isAbsolute} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {freemem} from 'node:os';
 import {isIP} from 'node:net';
@@ -9,31 +9,51 @@ import {withTestCloudProjectLock} from './test-cloud-project-lock.mjs';
 const exec=promisify(execFile),root=fileURLToPath(new URL('../',import.meta.url));
 const project='waitron-cloud-test',idPattern=/^[0-9a-f]{64}$/,imagePattern=/^sha256:[0-9a-f]{64}$/;
 const ports=new Set([3000,55432,1125,8125,8333,8443,51820]);
-export function validatePreflight(value,{image,ownedIds=[]}={}){
+// The transferred driver has no dependency on the source checkout.
+function canonicalHttpsOrigin(origin){
+ try{const url=new URL(origin);if(url.protocol!=='https:'||url.port||url.origin!==origin||url.username||url.password)throw Error();return origin;}catch{throw new Error('test_cloud.origin');}
+}
+function targetLimits(target){
+ if(target==='lan')return{availableMiB:4096,freeGiB:20,floorMiB:2048,floorGiB:15,ports};
+ if(target==='amazon')return{availableMiB:2048,freeGiB:8,floorMiB:512,floorGiB:4,ports:new Set([443])};
+ throw new Error('test_cloud.target');
+}
+export function validatePreflight(value,{image,ownedIds=[],target='lan'}={}){
+ const limits=targetLimits(target);
  if(!imagePattern.test(image??''))throw new Error('test_cloud.image');
  const version=/^(\d+)\.(\d+)\.(\d+)/.exec(value?.composeVersion??'');
  const supported=version&&(Number(version[1])>2||Number(version[1])===2&&(Number(version[2])>24||Number(version[2])===24&&Number(version[3])>=4));
- if(!supported||value.architecture!=='amd64'||!Number.isFinite(value.availableMiB)||value.availableMiB<4096||!Number.isFinite(value.freeGiB)||value.freeGiB<20||!Array.isArray(value.containers)||!Array.isArray(value.networks)||!Array.isArray(value.listeners))throw new Error('test_cloud.preflight');
+ if(!supported||value.architecture!=='amd64'||!Number.isFinite(value.availableMiB)||value.availableMiB<limits.availableMiB||!Number.isFinite(value.freeGiB)||value.freeGiB<limits.freeGiB||!Array.isArray(value.containers)||!Array.isArray(value.networks)||!Array.isArray(value.listeners))throw new Error('test_cloud.preflight');
  if(value.containers.some(c=>c.project===project&&!ownedIds.includes(c.id)))throw new Error('test_cloud.preflight_project');
- if(!ownedIds.length&&value.listeners.some(p=>ports.has(Number(p.port))))throw new Error('test_cloud.preflight_ports');
+ if(!ownedIds.length&&value.listeners.some(p=>limits.ports.has(Number(p.port))))throw new Error('test_cloud.preflight_ports');
  // Any overlapping network can route a trusted-proxy address to the wrong peer.
  if(value.networks.some(network=>{const [ip,prefix]=network.split('/');const bits=Number(prefix);if(isIP(ip)===6&&Number.isInteger(bits)&&bits>=0&&bits<=128)return false;if(isIP(ip)!==4||!Number.isInteger(bits)||bits<0||bits>32)return true;const numeric=s=>s.split('.').reduce((v,n)=>(v*256+Number(n))>>>0,0);const mask=bits===0?0:(0xffffffff<<(32-bits))>>>0;return (numeric(ip)&mask)===(numeric('10.79.0.0')&mask)||bits>24&&(numeric(ip)&0xffffff00)===(numeric('10.79.0.0')&0xffffff00);} )&&!ownedIds.length)throw new Error('test_cloud.preflight_network');
  return{ready:true};
 }
-export function validateDeployment(value,{image}){
- const services=value?.services;
+export function validateDeployment(value,{image,target='lan',origin,certificateSource}){
+ targetLimits(target);const amazon=target==='amazon',services=value?.services;
+ if(amazon&&(!isAbsolute(certificateSource??'')||canonicalHttpsOrigin(origin)!==origin))throw new Error('test_cloud.rendered');
  if(value?.name!==project||!services?.account||!services?.proxy||!services?.postgres||!services?.mailpit)throw new Error('test_cloud.rendered');
  for(const [name,service] of Object.entries(services)){
-  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind')||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
+  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
   for(const port of service.ports??[]){
-   if(name==='proxy'){if(port.host_ip!=='192.168.10.10'||String(port.published)!=='3000'||port.target!==3000)throw new Error('test_cloud.rendered');}
-   else if(port.host_ip!=='127.0.0.1'||name==='account')throw new Error('test_cloud.rendered');
+   if(name==='proxy'){if(port.host_ip!==(amazon?'0.0.0.0':'192.168.10.10')||String(port.published)!==(amazon?'443':'3000')||port.target!==3000)throw new Error('test_cloud.rendered');}
+   else if(port.host_ip!=='127.0.0.1'||(amazon?['account','postgres','mailpit','storage','gateway'].includes(name):name==='account'))throw new Error('test_cloud.rendered');
   }
+ }
+ if(amazon){
+  const bundle=services.bootstrap?.volumes?.find(v=>v.target==='/run/proxy-certificate');
+  if(bundle?.type!=='volume'||bundle.source!=='test-cloud-public-certificate'||bundle.read_only===true||!services.proxy.volumes?.some(v=>v.source===bundle.source&&v.target==='/run/proxy-certificate'&&v.read_only===true)||!services.bootstrap.volumes.some(v=>v.type==='bind'))throw new Error('test_cloud.rendered');
+  for(const[name,service]of Object.entries(services)){
+   if(!['bootstrap','proxy'].includes(name)&&service.volumes?.some(v=>v.source===bundle.source))throw new Error('test_cloud.rendered');
+   if(service.environment?.CLOUD_TEST_SERVICE_PLANS!==undefined&&(service.environment.CLOUD_TEST_SERVICE_PLANS!=='0'||service.environment.CLOUD_VENUE_SERVICE_LEVELS!=='test'))throw new Error('test_cloud.rendered');
+  }
+  for(const name of ['bootstrap','account','email-worker'])if(services[name]?.environment?.TEST_CLOUD_ORIGIN!==origin)throw new Error('test_cloud.rendered');
  }
  if(Object.values(services).reduce((sum,service)=>sum+Number(service.mem_limit),0)>2048*1024*1024)throw new Error('test_cloud.rendered');
  if(services.proxy.ports?.length!==1||services.account.ports?.length)throw new Error('test_cloud.rendered');
  for(const [name,expected] of [['postgres',[['55432',5432]]],['mailpit',[['1125',1025],['8125',8025]]]]){
-  const actual=(services[name].ports??[]).map(p=>[String(p.published),p.target]);if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error('test_cloud.rendered');
+  const actual=(services[name].ports??[]).map(p=>[String(p.published),p.target]);if(JSON.stringify(actual)!==JSON.stringify(amazon?[]:expected))throw new Error('test_cloud.rendered');
  }
  return{ready:true};
 }
@@ -72,18 +92,22 @@ export async function inventory(run=execute){
  return {composeVersion:compose.trim().replace(/^v/,''),architecture:['x86_64','amd64'].includes(JSON.parse(engine))?'amd64':JSON.parse(engine),availableMiB,freeGiB:Number(fields[3])/1048576,listeners,networks:subnets,containers:rows.map(row=>({id:row.ID,project:/(?:^|,)com\.docker\.compose\.project=([^,]+)/.exec(row.Labels??'')?.[1]??'',name:row.Names,state:row.State,...details.find(value=>value.id===row.ID)}))};
 }
 
-export function resourceGuard(baseline,sample,below=0){
+export function resourceGuard(baseline,sample,below=0,{target='lan'}={}){
+ const limits=targetLimits(target);
  if(sample.containers.some(c=>c.project===project&&c.oom))throw new Error('test_cloud.oom');
  for(const before of baseline.containers.filter(c=>['waitron-app-1','waitron-print-agent-1','waitron-mailpit-1'].includes(c.name))){
   const after=sample.containers.find(c=>c.id===before.id);
   if(!after||after.state!==before.state||before.health==='healthy'&&after.health!=='healthy')throw new Error('test_cloud.waitron_health');
  }
- if(!Number.isFinite(sample.availableMiB)||!Number.isFinite(sample.freeGiB)||sample.availableMiB<2048||sample.freeGiB<15){if(++below>=3)throw new Error('test_cloud.resource_floor');return below;}
+ if(!Number.isFinite(sample.availableMiB)||!Number.isFinite(sample.freeGiB)||sample.availableMiB<limits.floorMiB||sample.freeGiB<limits.floorGiB){if(++below>=3)throw new Error('test_cloud.resource_floor');return below;}
  return 0;
 }
 function assertState(state){if(!state||state.project!==project||!imagePattern.test(state.image)||!Array.isArray(state.ids)||!state.ids.every(id=>idPattern.test(id))||new Set(state.ids).size!==state.ids.length)throw new Error('test_cloud.ownership');return state;}
 function assertOwned(state,current){assertState(state);if(current.containers.some(c=>c.project===project&&!state.ids.includes(c.id)))throw new Error('test_cloud.ownership');for(const id of state.ids)if(!current.containers.some(c=>c.id===id&&c.project===project))throw new Error('test_cloud.ownership');}
 export async function deploy(mode,options){
+ const target=options.target??'lan';targetLimits(target);
+ let origin,certificateSource;
+ if(mode==='up'&&target==='amazon'){origin=canonicalHttpsOrigin(options.origin);if(!isAbsolute(options.certificateSource??''))throw new Error('test_cloud.certificate_source');certificateSource=resolve(options.certificateSource);}
  if(!['preflight','load','up','status','stop'].includes(mode))throw new Error('test_cloud.mode');
  if(options.signal?.aborted)throw new Error('test_cloud.cancelled');
  const run=options.execute??execute,inspect=options.inventory??(()=>inventory(run)),readState=options.readState??(async()=>null),saveState=options.saveState??(async()=>{});
@@ -93,7 +117,7 @@ export async function deploy(mode,options){
  if(mode==='stop'){assertOwned(previous,current);if(previous.ids.length)await run('docker',['stop','--time','15',...previous.ids]);return{stopped:previous.ids};}
  if(mode==='status'){if(previous)assertOwned(previous,current);else if(current.containers.some(c=>c.project===project))throw new Error('test_cloud.ownership');return{project,containers:current.containers.filter(c=>previous?.ids.includes(c.id))};}
  if(previous)assertOwned(previous,current);
- validatePreflight(current,{image:options.image,ownedIds:previous?.ids??[]});
+ validatePreflight(current,{image:options.image,ownedIds:previous?.ids??[],target});
  if(mode==='preflight')return{ready:true};
  if(mode==='load'){
   if(!options.input)throw new Error('test_cloud.image_stream_required');
@@ -106,13 +130,15 @@ export async function deploy(mode,options){
  if(candidate.Id!==options.image||candidate.Architecture!=='amd64'||candidate.Os!=='linux')throw new Error('test_cloud.image_platform');
  const state={project,image:options.image,ids:previous?.ids??[]};
  const compose=['compose','--project-name',project,'--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml'];
- const rendered=JSON.parse(await run('docker',[...compose,'--profile','*','config','--format','json'],{environment:{TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0'}}));
- validateDeployment(rendered,{image:options.image});await saveState(state);
+ if(target==='amazon')compose.push('-f','deploy/test-cloud/compose.amazon.yaml');
+ const environment={TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0',...(target==='amazon'?{CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource}:{})};
+ const rendered=JSON.parse(await run('docker',[...compose,'--profile','*','config','--format','json'],{environment}));
+ validateDeployment(rendered,{image:options.image,target,origin,certificateSource});await saveState(state);
  let failure,monitorFailure,below=0,busy=false,activeSample=Promise.resolve();const abort=new AbortController();const cancel=()=>abort.abort();options.signal?.addEventListener('abort',cancel,{once:true});if(options.signal?.aborted)cancel();
- const sample=async()=>{const value=await inspect();below=resourceGuard(current,value,below);};
+ const sample=async()=>{const value=await inspect();below=resourceGuard(current,value,below,{target});};
  const pause=()=>new Promise(resolve=>{const done=()=>{clearTimeout(timer);abort.signal.removeEventListener('abort',done);resolve();};const timer=setTimeout(done,5000);abort.signal.addEventListener('abort',done,{once:true});if(abort.signal.aborted)done();});
  const monitor=setInterval(()=>{if(busy)return;busy=true;activeSample=sample().catch(error=>{monitorFailure=error;abort.abort();}).finally(()=>{busy=false;});},5000);
- try{await run('docker',[...compose,'up','--no-build','--pull','never','--detach','--wait','--wait-timeout','120'],{environment:{TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0'},signal:abort.signal});
+ try{await run('docker',[...compose,'up','--no-build','--pull','never','--detach','--wait','--wait-timeout','120'],{environment,signal:abort.signal});
   if(options.signal?.aborted)throw new Error('test_cloud.cancelled');
   for(let n=0;n<(options.settledSamples??12);n++){await pause();if(options.signal?.aborted)throw new Error('test_cloud.cancelled');if(monitorFailure)throw monitorFailure;}
  }
@@ -143,13 +169,13 @@ export async function deploy(mode,options){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  const [mode,image]=process.argv.slice(2);if(process.argv.length!==4)throw Error();
+  const [mode,image,target='lan']=process.argv.slice(2);if(![4,5].includes(process.argv.length))throw Error();
   const path=resolve(root,'.local-stack/test-cloud-state.json');
   const readState=async()=>{try{return JSON.parse(await readFile(path,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}};
   const saveState=async value=>{await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(path+'.tmp',JSON.stringify(value)+'\n',{mode:0o600});await rename(path+'.tmp',path);};
   await withTestCloudProjectLock(async()=>{
   const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
-  try{console.log(JSON.stringify(await deploy(mode,{image,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
+  try{console.log(JSON.stringify(await deploy(mode,{image,target,origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
   finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
   });
  }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud operation refused or failed; check image, capacity, ports and recorded ownership');process.exitCode=1;}

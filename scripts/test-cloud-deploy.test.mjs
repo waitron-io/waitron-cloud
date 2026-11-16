@@ -138,3 +138,59 @@ test('Linux listener parsing keeps IPv4, IPv6 and interface-qualified local port
  assert.deepEqual(parseLinuxListeners('udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:*\ntcp LISTEN 0 4096 [::]:3000 [::]:*\n'),[{address:'127.0.0.53%lo',port:53,protocol:'udp'},{address:'[::]',port:3000,protocol:'tcp'}]);
  assert.throws(()=>parseLinuxListeners('unreadable listener row'),/test_cloud.inventory/);
 });
+
+test('Amazon admission uses its own headroom and HTTPS port while retaining LAN limits',async()=>{
+ const {validatePreflight,resourceGuard}=await api(),host={...good,availableMiB:2500,freeGiB:12};
+ assert.equal(validatePreflight(host,{image,target:'amazon'}).ready,true);
+ assert.throws(()=>validatePreflight(host,{image}),/test_cloud.preflight/);
+ for(const change of [{availableMiB:2047},{freeGiB:7.9},{listeners:[{address:'0.0.0.0',port:443,protocol:'tcp'}]}])assert.throws(()=>validatePreflight({...host,...change},{image,target:'amazon'}),/test_cloud.preflight/);
+ assert.equal(validatePreflight({...host,listeners:[{address:'127.0.0.1',port:3000,protocol:'tcp'}]},{image,target:'amazon'}).ready,true);
+ assert.throws(()=>validatePreflight(host,{image,target:'other'}),/test_cloud.target/);
+ assert.equal(resourceGuard(host,{...host,availableMiB:1024,freeGiB:6},2,{target:'amazon'}),0);
+ assert.throws(()=>resourceGuard(host,{...host,availableMiB:511},2,{target:'amazon'}),/test_cloud.resource_floor/);
+ assert.throws(()=>resourceGuard(host,{...host,freeGiB:3.9},2,{target:'amazon'}),/test_cloud.resource_floor/);
+});
+
+function amazonDeployment(){
+ const mode={CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_ORIGIN:'https://cloud.example.test'},base={image,mem_limit:67108864,environment:mode};
+ return{name:'waitron-cloud-test',services:{
+  bootstrap:{...base,volumes:[{type:'bind',source:'/private/certificates',target:'/run/public-certificate',read_only:true},{type:'volume',source:'test-cloud-public-certificate',target:'/run/proxy-certificate'}]},
+  proxy:{...base,ports:[{host_ip:'0.0.0.0',published:'443',target:3000}],volumes:[{type:'volume',source:'test-cloud-public-certificate',target:'/run/proxy-certificate',read_only:true}]},
+  account:base,'email-worker':base,postgres:{mem_limit:67108864},mailpit:{mem_limit:67108864}
+ }};
+}
+
+test('Amazon rendered admission keeps private services and the certificate source private',async()=>{
+ const {validateDeployment}=await api(),options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates'};
+ assert.equal(validateDeployment(amazonDeployment(),options).ready,true);
+ for(const change of [v=>v.services.postgres.ports=[{host_ip:'127.0.0.1',published:'55432',target:5432}],v=>v.services.proxy.ports[0].host_ip='192.168.10.10',v=>v.services.bootstrap.volumes[0].read_only=false,v=>v.services.account={...v.services.account,volumes:[{type:'volume',source:'test-cloud-public-certificate',target:'/leaked'}]},v=>v.services.account={...v.services.account,environment:{...v.services.account.environment,CLOUD_VENUE_SERVICE_LEVELS:'0'}}]){
+  const value=amazonDeployment();change(value);assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ }
+});
+
+test('Amazon up selects only the explicit override and settings, refusing bad inputs before commands',async()=>{
+ const {deploy}=await api(),id='c'.repeat(64),calls=[],states=[];let reads=0;
+ const execute=async(command,args,options)=>{calls.push({command,args,environment:options?.environment});return args.includes('config')?JSON.stringify(amazonDeployment()):args[0]==='image'?JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'}):'';};
+ await deploy('up',{image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',settledSamples:0,inventory:async()=>({...good,availableMiB:2500,freeGiB:12,containers:reads++===0?[]:[{id,project:'waitron-cloud-test'}]}),execute,saveState:async s=>states.push(structuredClone(s))});
+ const startup=calls.find(c=>c.args.includes('up'));assert.ok(startup.args.includes('deploy/test-cloud/compose.amazon.yaml'));assert.equal(startup.environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');assert.equal(startup.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/private/certificates');assert.equal(startup.environment.CLOUD_VENUE_SERVICE_LEVELS,'test');assert.equal(startup.environment.CLOUD_TEST_SERVICE_PLANS,'0');assert.deepEqual(states.at(-1).ids,[id]);
+ for(const extra of [{target:'other'},{origin:'http://cloud.example.test'},{origin:'https://cloud.example.test:8443'},{origin:'https://cloud.example.test/path'},{certificateSource:'relative/certificates'}]){
+  let touched=false;await assert.rejects(deploy('up',{image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',...extra,inventory:async()=>{touched=true;return good;},execute}));assert.equal(touched,false);
+ }
+});
+
+test('the deployment driver imports from its two transferred script files without a source checkout',async t=>{
+ const{mkdtemp,copyFile,rm}=await import('node:fs/promises'),{join}=await import('node:path'),{tmpdir}=await import('node:os'),{pathToFileURL}=await import('node:url'),{execFileSync}=await import('node:child_process');
+ const directory=await mkdtemp(join(tmpdir(),'cloud-deploy-transfer-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ for(const name of ['test-cloud-deploy.mjs','test-cloud-project-lock.mjs'])await copyFile(new URL(name,import.meta.url),join(directory,name));
+ const script=`const{validatePreflight}=await import(${JSON.stringify(pathToFileURL(join(directory,'test-cloud-deploy.mjs')).href)});console.log(JSON.stringify(validatePreflight(${JSON.stringify({...good,availableMiB:2500,freeGiB:12})},{image:${JSON.stringify(image)},target:'amazon'})));`;
+ assert.deepEqual(JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8'})),{ready:true});
+});
+
+test('Amazon startup monitoring retains a healthy small host for all three samples',async t=>{
+ const {deploy}=await api(),id='d'.repeat(64);let reads=0,began;const started=new Promise(resolve=>began=resolve);
+ t.mock.timers.enable({apis:['setInterval','setTimeout']});
+ const work=deploy('up',{image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',settledSamples:3,inventory:async()=>({...good,availableMiB:reads===0?2500:1024,freeGiB:reads++===0?12:6,containers:reads===1?[]:[{id,project:'waitron-cloud-test'}]}),execute:async(_command,args)=>{if(args.includes('config'))return JSON.stringify(amazonDeployment());if(args[0]==='image')return JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'});if(args.includes('up'))began();return '';} });
+ const outcome=work.then(value=>({value}),error=>({error}));await started;await new Promise(setImmediate);
+ for(let n=0;n<3;n++){t.mock.timers.tick(5000);await new Promise(setImmediate);}
+ const result=await outcome;assert.equal(result.error,undefined);assert.deepEqual(result.value.ids,[id]);
+});
