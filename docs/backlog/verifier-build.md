@@ -35,8 +35,15 @@ failed two unchanged `Worker.Dockerfile` setup builds near 120 seconds:
 `container-worker.test.ts` reported `ETIMEDOUT`; `plan-permissions.test.ts` reported
 exit 255. Their hooks retained no build progress or Docker service state. The
 watcher assigned this recurrence to D636 alongside D312. One cleared retry passed
-150/150; it does not identify or repair the cause. Retain progress and bounded
-service evidence in these callers before waiting for another natural stall.
+150/150; it does not identify or repair the cause.
+
+The two observed Worker builds now retain plain progress in an 8 MiB command
+buffer. A failure prints its command, elapsed time, original exit fields and the
+last 8 KiB of stderr before bounded host, Docker-client and hosted service/socket
+samples. Exit 255 stays distinct from a timeout. Run
+`node --test scripts/ci-docker-build-diagnostics.test.mjs packages/backups/test/worker-build-diagnostics.test.ts`
+for the reporter and real-hook controls. The third Worker helper remains unchanged;
+a job cancelled before failure reporting can still lose progress.
 
 Inspect the next recurrence's immediate build report before changing the fixture.
 Keep the original verifier assertions, 120-second build limit, 150-second setup

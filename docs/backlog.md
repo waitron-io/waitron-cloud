@@ -1999,8 +1999,9 @@ an ID is returned and a child created by a separate host remain outside this res
 **Open.** The current image builds on the Linux test box, but the historical CI
 timeout remains unexplained. Three later PostgreSQL image inspections also time out
 before package tests, and a backup-worker fixture build fails at the same limit.
-Inspection timeouts retain bounded host and Docker-client diagnostics; hosted Linux
-also records service state, monotonic timestamps and a direct socket ping.
+Inspection timeouts and the two observed Worker build failures retain bounded host
+and Docker-client diagnostics; hosted Linux also records service state, monotonic
+timestamps and a direct socket ping. Worker failures retain plain build progress.
 These do not repair the stall; capture a recurrence before choosing a repair.
 A shared cause is unproved.
 See [the evidence and remaining investigation](backlog/verifier-build.md#bound-verifier-fixture-build-timeout-d312).

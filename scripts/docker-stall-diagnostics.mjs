@@ -45,7 +45,7 @@ function decodeServices(output) {
 }
 
 // Probe only service responsiveness; daemon output can contain host configuration.
-export function reportDockerInspectionStall({image, elapsedMs}) {
+function sampleDockerState() {
   const observedMonotonicMs = Number(process.hrtime.bigint()) / 1e6;
   const host = {
     uptimeSeconds: uptime(), loadAverage: loadavg(),
@@ -76,7 +76,25 @@ export function reportDockerInspectionStall({image, elapsedMs}) {
         output => ({status: output === 'OK' ? 'responsive' : 'unrecognized'})),
     };
   }
+  return {host, daemon, ...hosted};
+}
+
+export function reportDockerInspectionStall({image, elapsedMs}) {
   console.error('docker_stall=' + JSON.stringify({
-    operation: 'image-inspect', image, error: 'ETIMEDOUT', elapsedMs, host, daemon, ...hosted,
+    operation: 'image-inspect', image, error: 'ETIMEDOUT', elapsedMs, ...sampleDockerState(),
   }));
+}
+
+export function reportDockerBuildFailure({command, elapsedMs, error}) {
+  try {
+    const stderr = Buffer.from(String(error.stderr ?? ''));
+    let start = Math.max(0, stderr.length - 8192);
+    while ((stderr[start] & 0xc0) === 0x80) start++;
+    // Keep the original failure visible even if a later probe cannot complete.
+    console.error('docker_build_failure=' + JSON.stringify({
+      command, elapsedMs, status: error.status, signal: error.signal, code: error.code,
+      killed: error.killed, stderrTail: stderr.subarray(start).toString(),
+    }));
+    console.error('docker_stall=' + JSON.stringify({operation: 'build', ...sampleDockerState()}));
+  } catch {}
 }

@@ -23,6 +23,8 @@ import {ReplacementStore,replacementPayload} from '../src/replacement.ts';
 import {receipt} from '../src/storage.ts';
 import {BackupWorker} from '../src/worker.ts';
 import {createAccountApp} from '../../account-http/src/app.ts';
+// @ts-expect-error shared Docker diagnostics are JavaScript
+import {reportDockerBuildFailure} from '../../../scripts/docker-stall-diagnostics.mjs';
 const mode='test-free-paid',origin='https://cloud.test',password='a long enough plan test password';
 const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 const vault=new BackupKeyVault(randomBytes(32));
@@ -61,7 +63,12 @@ async function snapshot(days=0){
  const metadata={...receipt(bytes),capturedAt:new Date(Date.now()-days*86400000).toISOString(),retention:'daily' as const,sourceNodeId:randomUUID(),modules:{core:1}};
  const point=await catalogue().publish(a.installationId,reserved.id,metadata);await verifyPointFixture(db.pool,catalogue(),point.id);return {point,metadata};
 }
-before(async()=>{db=await database();plans=new OrganisationPlanStore(db.pool);await execute('docker',['build','-q','-t',workerImage,'-f','packages/backups/test/container-fixture/Worker.Dockerfile','.'],{cwd:root,timeout:120000});workerImageBuilt=true;},{timeout:150000});
+before(async()=>{
+ db=await database();plans=new OrganisationPlanStore(db.pool);
+ const args=['build','--progress=plain','-t',workerImage,'-f','packages/backups/test/container-fixture/Worker.Dockerfile','.'],started=performance.now();
+ try{await execute('docker',args,{cwd:root,timeout:120000,maxBuffer:8*1024*1024});workerImageBuilt=true;}
+ catch(error){reportDockerBuildFailure({command:['docker',...args],elapsedMs:Math.round(performance.now()-started),error});throw error;}
+},{timeout:150000});
 after(async()=>{try{if(workerImageBuilt)await execute('docker',['image','rm',workerImage],{timeout:30000});}finally{await db?.close();}});
 beforeEach(async()=>{await resetSchema(db.pool);objects.clear();grants=0;provisions=0;wait=undefined;removeWait=undefined;a=await installed('plan-a');b=await installed('plan-b');});
 
