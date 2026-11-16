@@ -326,7 +326,8 @@ Keep those messages and sign-in links out of logs and pull requests. For a fresh
 public-name deployment the internal leaf lasts 365 days, matching the private CA's
 one-year maintenance window. The LAN setting retains its thirty-day leaf. Expiry
 still refuses bootstrap; automatic internal certificate rotation is not built.
-Plan maintenance before the year ends rather than deleting the configuration
+No supported procedure here renews that internal CA; without further maintenance
+work this test deployment expires after a year. Do not delete the configuration
 volume, which also holds the account's keys.
 
 This configuration does not extend `scripts/test-cloud-deploy.mjs` to Amazon.

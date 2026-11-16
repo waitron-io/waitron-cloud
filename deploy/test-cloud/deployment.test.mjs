@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import test from 'node:test';
-import {existsSync} from 'node:fs';
+import {existsSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 const root=new URL('../../',import.meta.url).pathname;
 test('LAN override replaces ports, isolates private state and keeps independent launch gates off',async()=>{
  assert.ok(existsSync(new URL('compose.yaml',import.meta.url)),'LAN override is missing');
@@ -53,7 +55,13 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
   assert.ok(!service.volumes?.some(v=>v.source?.includes('docker.sock')),name);
   assert.notEqual(service.environment?.CLOUD_TRANSLATION,'1');
  }
- assert.ok(value.services.proxy.command.some(v=>v.includes('/app/deploy/test-cloud/proxy.cfg')));
+ const proxy=value.services.proxy,temporary=mkdtempSync(join(tmpdir(),'cloud-proxy-environment-'));
+ try{
+  writeFileSync(join(temporary,'haproxy'),`#!${process.execPath}\nconsole.log(JSON.stringify({host:process.env.TEST_CLOUD_HOST,origin:process.env.TEST_CLOUD_ORIGIN,certificate:process.env.TEST_CLOUD_CERTIFICATE}));\n`,{mode:0o700});
+  // Compose serializes dollars escaped; container creation removes that escape.
+  const actual=JSON.parse(execFileSync(proxy.command[0],proxy.command.slice(1).map(v=>v.replaceAll('$$','$')),{encoding:'utf8',env:{...proxy.environment,PATH:temporary+':'+process.env.PATH}}));
+  assert.deepEqual(actual,{host:'cloud.example.test',origin:'https://cloud.example.test',certificate:'/run/proxy-certificate/proxy.pem'});
+ }finally{rmSync(temporary,{recursive:true,force:true});}
  const bundle=value.services.bootstrap.volumes.find(v=>v.target==='/run/proxy-certificate');assert.equal(bundle.type,'volume');assert.notEqual(bundle.read_only,true);
  assert.ok(value.services.proxy.volumes.some(v=>v.source===bundle.source&&v.read_only));
  for(const[name,service]of Object.entries(value.services))if(!['bootstrap','proxy'].includes(name))assert.ok(!service.volumes?.some(v=>v.source===bundle.source),name+' must not read the public private key');
