@@ -1,6 +1,6 @@
 // Observe successful native exchanges without replacing transport, signatures or responses.
 import assert from 'node:assert/strict';
-import {fixtureFailureDiagnostic} from './integration-renewal.mjs';
+import {fixtureFailureDiagnostic} from '/proof/integration-renewal.mjs';
 import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
