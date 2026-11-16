@@ -1478,8 +1478,8 @@ implementation or production evidence.
   at `99c265981ba98f1afd0e5fc822624a9a91822ad2`, alongside D499's supported
   generated authority, routes, assets and storage identity-port handoff. Replay
   measurements retain their original source. The
-  [Linux investigation](backlog/browser-reconnect.md) keeps the bounded observation
-  groups, six original fault controls and earlier cancellation traces. A native
+  [Linux investigation](backlog/browser-reconnect.md) retains the earlier
+  cancellation traces after the bounded observation groups qualified. A native
   Chromium/TLS reproduction identifies an unloading page's error refresh as one
   source of late reads; historical Linux socket-reset attribution remains open.
   No cancelled bytes, failed samples, accounting checks or deadlines are excused.
@@ -1581,8 +1581,7 @@ implementation or production evidence.
 - **CI execution budget.** Keep the remaining qualifications and unknown causes
   below; delivered allocation, selection and fixture repairs are not open work.
 
-  Requalify the [browser-reconnect observation](backlog/browser-reconnect.md)
-  before retiring it; hosted qualification separately owns the retained apt-only setup.
+  Hosted browser qualification still owns removal of the retained apt-only setup.
   Record D614's first natural proof-only PR hosted selection; its policy-change
   PR keeps full work. D613's accepted timing sample does not close these gates.
 
