@@ -1026,6 +1026,11 @@ implementation or production evidence.
   Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
   protected Waitron containers are never adopted.
 
+  The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
+  is cleared by the watcher for staged implementation. Configurable HTTPS, the
+  actual machine and each workflow still need their slice checks; no Amazon
+  deployment or real email qualification is claimed.
+
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
   exchange freshly after rollback; all 533 resource readings pass the original
