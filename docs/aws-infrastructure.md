@@ -1118,6 +1118,13 @@ spending authority:
    `aws ec2 describe-images --image-ids "$IMAGE_ID" --region "$REGION"`; require official Debian 13, amd64 and root device `/dev/xvda`.
 5. Read month-to-date spend with `aws ce get-cost-and-usage --time-period Start=YYYY-MM-01,End=YYYY-MM-DD --granularity MONTHLY --metrics UnblendedCost`
    (end is exclusive), then re-read the plan’s linked Stockholm prices.
+   Before building, check that your installed CLI supports bypassing guest shutdown:
+   `aws ec2 stop-instances --generate-cli-skeleton input | grep '"SkipOsShutdown"'`.
+   This offline command must print the field; upgrade the CLI if it does not.
+   The checked-in `StopExperimentWorker` statement in
+   `deploy/kubernetes/bounded-amazon/setup/launcher-policy.json` allows
+   `ec2:StopInstances` on D618-tagged instances, with no shutdown-parameter condition.
+   Reading that policy does not verify the deployed role.
 6. Start with `node scripts/amazon-run.mjs start`. Keep its JSON result and stderr privately.
    If it fails, [inspect the failed stack's events](d618-account-setup.md#inspect-a-failed-stack).
    An unhandled Kubernetes command failure records its stage, journey phase,
@@ -1127,6 +1134,9 @@ spending authority:
    keeping the last 16,384 characters of each. Keep this output private with the
    result; it may identify your machines. It preserves the existing time limits
    and does not establish why an earlier run failed.
+   Both `start` and `observe` stop C with `--skip-os-shutdown`, bypassing guest
+   shutdown to simulate pulling its plug. They still wait for EC2 to confirm C
+   stopped before assisted replacement. This request does not establish stop latency.
    It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
@@ -1146,8 +1156,8 @@ database-host loss and production-mode checks. No production service is deployed
 To measure recovery without replacing the clients between journeys, use
 `node scripts/amazon-run.mjs observe` in your owner-started session, with the
 same private configuration and prerequisites above. It keeps the signed-in
-session, venue process, staff certificate and routed peer through C's existing
-graceful stop and assisted replacement. The public-page browser check renews
+session, venue process, staff certificate and routed peer through C's abrupt
+stop and assisted replacement. The public-page browser check renews
 its five-minute cookie before expiry. Local behavior checks run with
 `node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`;
 this command has not yet qualified an Amazon observation.
@@ -1171,8 +1181,9 @@ This local check kills worker2 and retains the same clients. Full local P1
 qualification has **not passed**: the last run failed at the paid-remote fixture
 with HTTP 500 after worker replacement. On 14 November the owner chose to stop
 full local runs and move the remaining checks to the owner-started Amazon
-session (decision relayed by the watcher at 21:03). Amazon uses its existing
-graceful C stop; a local result does not qualify Amazon timing.
+session (decision relayed by the watcher at 21:03). Amazon now requests C's stop
+without guest shutdown; the observer's 90-second bound is unchanged. A local
+result does not qualify Amazon timing.
 
 Storage has an 800 MiB limit. The failed 14 November local run recorded a peak
 of 544,772,096 bytes (519.54 MiB), with no storage restart or memory events in

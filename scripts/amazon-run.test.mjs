@@ -351,7 +351,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   assert.equal(result.removed, true);
   const imports = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("'ctr' '-n' 'k8s.io' 'images' 'import'"));
   assert.deepEqual(imports.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
-  assert.deepEqual(calls.find(row => row[1] === 'stop-instances'), ['ec2', 'stop-instances', '--instance-ids', output.C]);
+  assert.deepEqual(calls.find(row => row[1] === 'stop-instances'), ['ec2', 'stop-instances', '--skip-os-shutdown', '--instance-ids', output.C]);
   const stopped = calls.findIndex(row => row[1] === 'wait' && row[2] === 'instance-stopped');
   const taint = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'taint'"));
   assert.ok(stopped >= 0 && stopped < taint);
