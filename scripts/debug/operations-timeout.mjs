@@ -19,7 +19,13 @@ const timer=setInterval(()=>{
   }catch(error){console.error(JSON.stringify({event:'observer-refusal',class:error.constructor.name,at:Date.now()}));}
  })().finally(()=>{pending=undefined;});
 },2000);
-const child=spawn('pnpm',['--filter','@waitron-cloud/operations','test'],{stdio:'inherit'});
-const result=await new Promise(resolve=>{child.once('error',error=>resolve({status:1,error:error.constructor.name}));child.once('close',(status,signal)=>resolve({status,signal}));});
+let result;
+for(let attempt=1;attempt<=6;attempt++){
+ console.error(JSON.stringify({event:'diagnostic-attempt',attempt,at:Date.now()}));
+ const child=spawn('pnpm',['--filter','@waitron-cloud/operations','test'],{stdio:'inherit'});
+ result=await new Promise(resolve=>{child.once('error',error=>resolve({status:1,error:error.constructor.name}));child.once('close',(status,signal)=>resolve({status,signal}));});
+ console.error(JSON.stringify({event:'diagnostic-attempt-exit',attempt,...result,at:Date.now()}));
+ if(result.status!==0)break;
+}
 stopped=true;clearInterval(timer);await pending;await pool.end();
 console.error(JSON.stringify({event:'diagnostic-exit',...result}));process.exitCode=result.status??1;
