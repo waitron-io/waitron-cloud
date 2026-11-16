@@ -61,11 +61,13 @@ function observed(sha=revision,value='candidate') {
   };
 }
 // A Ready condition alone must not qualify an old revision, an old pod or a late response.
-for(const mismatch of ['source','applied','pod','late','controller']) test('revision observation refuses '+mismatch+' evidence',async()=>{
+for(const mismatch of ['source','applied','pod','late','controller','deployment-generation','root-generation']) test('revision observation refuses '+mismatch+' evidence',async()=>{
   let clock=0;const values=observed();
   if(mismatch==='source')values.gitrepository.status.artifact.revision='main@sha1:'+oldRevision;
   if(mismatch==='pod')values.pods.items[0].metadata.annotations[annotation]='old';
   if(mismatch==='applied')values.kustomization.status.lastAppliedRevision='main@sha1:'+oldRevision;
+  if(mismatch==='deployment-generation')values.deployment.status.observedGeneration=2;
+  if(mismatch==='root-generation')values.kustomization.status.observedGeneration=0;
   await assert.rejects(api.waitFluxRevision({sha:revision,value:'candidate',worker:'box-worker',...(mismatch==='controller'?{sourceUid:'replacement'}:{}),deadline:3000,now:()=>clock,
     sleep:async ms=>{clock+=ms;},kube:async args=>{if(mismatch==='late')clock+=1000;return JSON.stringify(values[args[1]]);}}),/flux.revision_timeout/);
 });
@@ -100,11 +102,13 @@ test('bootstrap puts the Deployment only in Git and leaves replica scaling outsi
   const directory=await mkdtemp(join(tmpdir(),'flux-bootstrap-test-'));t.after(()=>rm(directory,{recursive:true,force:true}));
   const path=join(directory,'flux.json');await writeFile(path,JSON.stringify({apiVersion:'v1',kind:'List',items:[]}));
   const workload=JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml',import.meta.url),'utf8')).items.find(row=>row.kind==='Deployment');
-  const applied=[];let published,closed=0;
+  const applied=[],applyArgs=[];let published,closed=0;
   const values=observed(revision,'baseline');values.pods.items[0].spec.nodeName='box-worker2';
   const result=await api.installFlux({name:'box',image:'waitron:test',deployment:workload,controllersPath:path,
     mirror:async()=>({url:'http://10.77.0.1:53123/run.git',publish:async text=>{published=JSON.parse(text);return revision;},close:async()=>{closed++;}}),
-    kube:async(args,input)=>{if(args[0]==='apply')applied.push(JSON.parse(input));return args[0]==='get'?JSON.stringify(values[args[1]]):'';}});
+    kube:async(args,input)=>{if(args[0]==='apply'){applied.push(JSON.parse(input));applyArgs.push(args);}return args[0]==='get'?JSON.stringify(values[args[1]]):'';}});
+  assert.equal(applyArgs[0][applyArgs[0].indexOf('-n')+1],'flux-system','controller apply must override the wrapper’s default namespace');
+  assert.equal(published.metadata.namespace,'default');
   assert.equal(published.spec.replicas,undefined);assert.equal(workload.spec.replicas,1);
   assert.deepEqual(published.spec.strategy,{type:'RollingUpdate',rollingUpdate:{maxUnavailable:0,maxSurge:1}});
   assert.equal(published.spec.template.metadata.annotations[annotation],'baseline');
@@ -141,4 +145,19 @@ test('repair measures command time, drift, cache refetch and rejected-render ret
   assert.deepEqual(result,{revisionMs:2000,driftMs:2000,refetchMs:5000,refusalMs:2000,restoreMs:2000,
     appliedRevision:'4'.repeat(40),attemptedRevision:'3'.repeat(40)});
   assert.equal(publishes.length,4);assert.equal(JSON.parse(publishes.at(-1)).spec.template.metadata.annotations[annotation],'refetched');
+});
+
+// A missing workload must not hide the source/controller evidence that explains its absence.
+test('timeout diagnostics keep partial revisions and controller apply/fetch refusal',async t=>{
+  const events=[];t.mock.method(process.stderr,'write',value=>{events.push(String(value));return true;});
+  for(const [reason,missing] of [['ReconciliationFailed',true],['ReconciliationFailed',false],['ArtifactFailed',false]]){
+    let clock=0;const values=observed(oldRevision,'candidate');values.gitrepository.status.artifact.revision='main@sha1:'+revision;
+    values.kustomization.status.lastAttemptedRevision='main@sha1:'+revision;
+    values.kustomization.status.conditions=[{type:'Ready',status:'False',reason}];
+    await assert.rejects(api.waitFluxRevision({sha:revision,value:'candidate',worker:'box-worker',deadline:3000,now:()=>clock,sleep:async ms=>{clock+=ms;},
+      kube:async args=>{if(missing&&args[1]==='deployment')throw Error('missing workload');return JSON.stringify(values[args[1]]);}}),/flux.revision_timeout/);
+    const last=JSON.parse(events.at(-1).slice('Flux revision observation '.length));
+    assert.equal(last.source,revision);assert.equal(last.applied,oldRevision);assert.equal(last.attempted,revision);assert.equal(last.reason,reason);
+    if(missing)assert.deepEqual(last.unavailable,['deployment']);
+  }
 });

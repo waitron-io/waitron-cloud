@@ -51,15 +51,18 @@ export async function waitFluxRevision({kube,sha,applied=sha,value,worker,reject
     try {
       const read=args=>kube(['get',...args,'-o','json','--request-timeout=5s'],undefined,false,
         AbortSignal.any([signal,AbortSignal.timeout(Math.max(1,Math.ceil(deadline-now())))].filter(Boolean))).then(JSON.parse);
-      const [source,root,deployment,pods,controllers]=await Promise.all([
+      const reads=await Promise.allSettled([
         read(['gitrepository','p1']),read(['kustomization','p1']),read(['deployment','manifest']),read(['pods','-l','app=manifest']),
         sourceUid?read(['pods','-n','flux-system','-l','app=source-controller']):undefined,
       ]);
+      const [source,root,deployment,pods,controllers]=reads.map(row=>row.status==='fulfilled'?row.value:{});
+      const unavailable=reads.flatMap((row,index)=>row.status==='rejected'?['gitrepository','kustomization','deployment','pods','controller'][index]:[]);
       const condition=root.status?.conditions?.find(row=>row.type==='Ready');
       last={source:shaOf(source.status?.artifact?.revision),applied:shaOf(root.status?.lastAppliedRevision),
-        attempted:shaOf(root.status?.lastAttemptedRevision),reason:['BuildFailed','ReconciliationSucceeded','HealthCheckFailed','GitOperationFailed'].includes(condition?.reason)?condition.reason:'OTHER'};
+        attempted:shaOf(root.status?.lastAttemptedRevision),reason:['BuildFailed','ReconciliationSucceeded','HealthCheckFailed','GitOperationFailed','ReconciliationFailed','ArtifactFailed'].includes(condition?.reason)?condition.reason:'OTHER',
+        ...(unavailable.length?{unavailable}:{})};
       const pod=pods.items?.length===1?pods.items[0]:undefined;
-      const healthy=deployment.status?.observedGeneration===deployment.metadata.generation&&
+      const healthy=!unavailable.length&&deployment.status?.observedGeneration===deployment.metadata.generation&&
         deployment.spec.template.metadata.annotations?.[releaseAnnotation]===value&&pod&&!pod.metadata.deletionTimestamp&&
         pod.metadata.annotations?.[releaseAnnotation]===value&&pod.spec.nodeName===worker&&
         pod.status?.conditions?.some(row=>row.type==='Ready'&&row.status==='True');
@@ -105,12 +108,12 @@ git rev-parse HEAD`],text,false,signal);
 
 export async function installFlux({name,image,run,kube,deployment,controllersPath='/tmp/d618-flux.json',signal,mirror=startFluxMirror}) {
   const source=await mirror({name,image,run});
-  const managed=structuredClone(deployment);delete managed.spec.replicas;
+  const managed=structuredClone(deployment);managed.metadata.namespace='default';delete managed.spec.replicas;
   managed.spec.strategy={type:'RollingUpdate',rollingUpdate:{maxUnavailable:0,maxSurge:1}};
   managed.spec.template.metadata.annotations={...managed.spec.template.metadata.annotations,[releaseAnnotation]:'baseline'};
   try {
     const sha=await source.publish(JSON.stringify(managed));
-    await kube(['apply','-f','-'],await readFile(controllersPath,'utf8'));
+    await kube(['apply','-n','flux-system','-f','-'],await readFile(controllersPath,'utf8'));
     await kube(['wait','--for=condition=Established','crd/gitrepositories.source.toolkit.fluxcd.io','crd/kustomizations.kustomize.toolkit.fluxcd.io','--timeout=180s']);
     for(const [role] of controllers)await kube(['rollout','status','deployment/'+role,'-n','flux-system','--timeout=180s']);
     await kube(['apply','-f','-'],JSON.stringify({apiVersion:'v1',kind:'List',items:[
