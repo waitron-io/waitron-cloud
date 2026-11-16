@@ -17,11 +17,15 @@ import {createBoundContainerWaitronVerifier,type DataRestoreVerifier} from '../s
 import {configureVerification} from './fixtures/verification.ts';
 // @ts-expect-error deployment controller is JavaScript
 import {openVerifierController} from '../../../deploy/test-cloud/verifier-controller.mjs';
+// @ts-expect-error shared Docker diagnostics are JavaScript
+import {reportDockerBuildFailure} from '../../../scripts/docker-stall-diagnostics.mjs';
 
 const owner='worker-'+randomUUID(),image='cloud-verifier-test:'+owner,root=fileURLToPath(new URL('../../../',import.meta.url)),docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
 // Image preparation has the Docker command's own budget before the worker deadline starts.
 before(()=>{
- docker('build','-q','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Worker.Dockerfile'),root);
+ const args=['build','--progress=plain','-t',image,'-f',join(root,'packages/backups/test/container-fixture/Worker.Dockerfile'),root],started=performance.now();
+ try{execFileSync('docker',args,{encoding:'utf8',timeout:120000,maxBuffer:8*1024*1024,stdio:['pipe','pipe','pipe']});}
+ catch(error){reportDockerBuildFailure({command:['docker',...args],elapsedMs:Math.round(performance.now()-started),error});throw error;}
 },{timeout:150000});
 after(()=>{const ids=docker('ps','-aq','--filter','label=cloud.backup-verifier.owner='+owner).split(/\s+/).filter(Boolean);if(ids.length)docker('rm','-f',...ids);docker('image','rm',image);});
 

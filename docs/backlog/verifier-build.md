@@ -30,6 +30,22 @@ their command, elapsed time, failure reason and the last 8 KiB of output before
 the test summary. Failed-build cleanup attempts only its unique tag, with a
 one-second limit, and always removes temporary files.
 
+On 16 November, [PR #1239 CI 43878424883, job 133337689541](https://github.com/waitron-io/waitron-cloud/actions/runs/43878424883/job/133337689541)
+failed two unchanged `Worker.Dockerfile` setup builds near 120 seconds:
+`container-worker.test.ts` reported `ETIMEDOUT`; `plan-permissions.test.ts` reported
+exit 255. Their hooks retained no build progress or Docker service state. The
+watcher assigned this recurrence to D636 alongside D312. One cleared retry passed
+150/150; it does not identify or repair the cause.
+
+The two observed Worker builds now retain plain progress in an 8 MiB command
+buffer. A failure prints its command, elapsed time, original exit fields and the
+last 8 KiB of stderr before bounded host, Docker-client and hosted service/socket
+samples. Exit 255 alone does not identify the cause; read `status`, `code`,
+`signal` and `killed` (when present) together. Run
+`node --test scripts/ci-docker-build-diagnostics.test.mjs packages/backups/test/worker-build-diagnostics.test.ts`
+for the reporter and real-hook controls. The third Worker helper remains unchanged;
+a job cancelled before failure reporting can still lose progress.
+
 Inspect the next recurrence's immediate build report before changing the fixture.
 Keep the original verifier assertions, 120-second build limit, 150-second setup
 limit and CI job limit. A passing reproduction or CI run does not close this item.
