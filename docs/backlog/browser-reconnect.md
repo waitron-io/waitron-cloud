@@ -9,7 +9,8 @@ recurrence; a passing retry is not a repair.
 Both CPU groups in [run 42296821904](https://github.com/waitron-io/waitron-cloud/actions/runs/42296821904)
 completed all 24 samples and the six original fault controls. The separate
 observation workflow and its private instrumentation are retired under D638.
-The ordinary cost-conformance journey and all eight current fault variants remain.
+The ordinary cost-conformance journey and all eight current fault variants remain
+in nightly and manual runs; this retirement removes their separate PR observation.
 
 ## Retained refusing traces
 
@@ -17,6 +18,7 @@ The ordinary cost-conformance journey and all eight current fault variants remai
 | --- | --- |
 | [40920925400](https://github.com/waitron-io/waitron-cloud/actions/runs/40920925400) | First browser-facing reset trace; sample and cancelled route were not identified in this record. |
 | [40922185069](https://github.com/waitron-io/waitron-cloud/actions/runs/40922185069) | Ordinary sample 13: live-stream cancellation; single-CPU sample 9: API cancellation around reload. |
+| [40926773548](https://github.com/waitron-io/waitron-cloud/actions/runs/40926773548) | Ordinary sample 12 and single-CPU sample 5: explained late-read drain failure; four old-page reads remained at the three-second deadline, with no relay error. |
 | [40988995366](https://github.com/waitron-io/waitron-cloud/actions/runs/40988995366) | Single-CPU sample 4: cancelled API request around navigation; endpoint and initiating document unproved. |
 | [40990548906](https://github.com/waitron-io/waitron-cloud/actions/runs/40990548906) | Single-CPU sample 22: application closes a connecting live stream before drain/reload. |
 | [41023281681](https://github.com/waitron-io/waitron-cloud/actions/runs/41023281681) | Single-CPU sample 8: API reset in the navigation gap; initiating document unproved. |

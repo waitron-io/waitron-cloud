@@ -54,7 +54,7 @@ Run the two changed root test files, `scripts/cloud-cost/browser-readiness.test.
 and `scripts/ci-docs.test.mjs`; check changed local links and `git diff --check`.
 Search all tracked files, including `.github`, for remaining executable references.
 Finish with Claude's whole-branch review, exact-head CI and merge evidence.
-Expected: about 900 removed lines, fewer than 100 added (including this plan);
+Expected: about 900 removed lines, fewer than 150 added (including this plan);
 production instrumentation about 250 removed, tests about 260 removed plus two
 list entries, workflow about 120 removed, documentation about 250 removed.
 No new helper, test suite, workflow, deployment, provider access or timing change.
