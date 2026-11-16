@@ -1777,21 +1777,24 @@ implementation or production evidence.
   operations, deployment, spending, production schema and live email retain their
   separate authority gates.
 - **Repair actions and Cloud controller (P4).** The approved production design's
-  action-by-action automation is described in the
-  [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
-  This is planning only. The catalogue, durable requests, operator approvals,
-  console, notifications and controller are not built. Plan approval and P1's
-  country-cell build remain required before implementation. D113's fresh plan read
-  uses one configured operator account signed in on Spain's site with explicit
-  country permissions; worldwide health/deploy sign-in grants no P4 authority.
-  No P3 offline worldwide-authority handoff remains. Any new database
-  migration must recheck active reservations and the inventory after migration 043.
-  C39 supplies observations without
-  granting action or activation authority. P5 release waves, P6 hosted placement
-  and revised A1018 handover, P7 regional failover and all production enablement
-  gates remain separate. P4's historical external-proof writer-admission tasks
-  require amendment against the revised shared contract before build. No provider
-  operation, spending or live mail is authorised.
+  [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
+  is refreshed against `b059f62f1` and the 16 November independent-country direction.
+  This is a plan refresh only: no P4 catalogue, durable requests, approvals,
+  console, notifications or controller is built. Four PR slices cover a signed-in
+  country catalogue, requests/decisions, local notification/controller outcomes,
+  then monitoring facts and the incident write-up procedure. The owner's 19:33
+  build go-ahead stands; the refreshed plan still needs the driver's Claude read
+  and watcher clearance. One configured operator account on Spain's site needs
+  a new explicit platform permission; customer ownership, support grants and
+  worldwide health/deploy sign-in grant no P4 authority. No worldwide permit or
+  country-to-country exchange is required. Allocate migrations against the current
+  manifest and active reservations at build; this refresh reserves none. C39 and
+  P4 can build independently, with observations supplying no action/activation
+  authority. P1's remaining real-service/fault qualification, P5 release waves,
+  P6 hosted placement and revised A1018 formats/qualification, P7 failover and
+  production enablement remain separate. Real hosted actions stay unavailable;
+  local synthetic rehearsal authorises no provider operation, spending, deployment
+  or live mail.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential
