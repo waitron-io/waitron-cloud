@@ -1690,8 +1690,13 @@ implementation or production evidence.
   `node --test scripts/build-backup-verifier.test.mjs scripts/ci-verifier-build-refusals.test.mjs scripts/ci-verifier-source-isolation.test.mjs`.
   The failed image's actual modes and the first run's cause remain unconfirmed.
   The fourth and fifth D621 owner-runs reached late stop confirmations; the launcher
-  now requests C’s stop with `--skip-os-shutdown`, but its timing and the cause of
-  those delays remain unqualified.
+  now requests C’s stop with `--skip-os-shutdown`. Run 6 received confirmation in
+  18,088.6 ms, then failed at paid-remote withdrawal. The saved replay expires during
+  the observer hold in a local reproduction; its fixture now refreshes authentication
+  without changing the saved operation. Run that check with
+  `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`.
+  This defect fits run 6 by source inference; its inner error and the earlier
+  stop delays' cause remain unconfirmed. Full qualification has not passed.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`

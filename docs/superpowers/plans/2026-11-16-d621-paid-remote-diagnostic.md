@@ -1,6 +1,6 @@
 # D621: refresh authentication when replaying saved configuration
 
-**Status:** proposed fix; the driver obtains Claude review and watcher clearance before implementation.
+**Status:** Claude reviewed the plan in one 181-second read; the watcher cleared it on 16 November at 14:00 in `~/waitron-campaign-g/questions.md`. No owner plan approval is claimed. Implementation follows that clearance; run 7 still needs the owner's separate authority.
 **Exact ask:** watcher, `~/waitron-campaign-g/questions.md`, 2026-11-16 13:46: “Receipt ~/waitron-campaign-g/receipts/d621-run6-20261116-1245.md, full redacted log beside it. Find why the client-paid-remote fixture was refused (log line 234 and the kubectl:exec failures at 232-233, which runs 4 and 5 also had), and write the next step as a plan. No run 7 until the owner is asked.”
 
 **Demonstrated defect:** supplied `~/waitron-campaign-g/receipts/d621-paid-remote-diagnostic/expired-replay-reproduction.mjs` and `.log` run the unchanged real withdrawn client with installed `verifyMachine` and a controlled clock: 30-second-old proof passes; 900-second-old proof gives `invalid_proof`, HTTP 401 and the first expected-200 assertion fails. The contract rejects `abs(now-issuedAt)>60000`. Responses and the current unconfigured view are synthetic; no Amazon response or run-6 inner exception was recovered.
