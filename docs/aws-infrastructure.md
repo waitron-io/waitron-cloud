@@ -1137,7 +1137,7 @@ spending authority:
    Both `start` and `observe` stop C with `--skip-os-shutdown`, bypassing guest
    shutdown to simulate pulling its plug. They still wait for EC2 to confirm C
    stopped before assisted replacement. This request does not establish stop latency.
-   It repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
+   `start` repeats the real checks after EC2 confirms C stopped, then waits for scheduled deletion
    at 90 minutes, allowing five more minutes for deletion. A timeout reports
    `amazon.deletion_late`, requests deletion immediately and allows five minutes
    to confirm that cleanup, while keeping the run failed. To stop early,
