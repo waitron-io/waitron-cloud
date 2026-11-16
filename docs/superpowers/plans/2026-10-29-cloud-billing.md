@@ -1171,6 +1171,8 @@ author's session.
 
 ### Coordination and file map
 
+**P3 correction, 2026-11-16:** Task 15a’s country/worldwide app split is retired; there is no P3 app to wait for or mount in. This supersedes the P3 assembly and reservation notes below for J, D and E. D604 is un-parked and moves to lane K.
+
 Put pure rules/types in new registration `src/billing-display.ts`, transactional
 machine reads in new `src/billing-display-machine.ts`, and the HTTP adapter and
 explicit country/calendar options in new account-http `src/billing-display.ts`.

@@ -118,7 +118,7 @@ something goes wrong it affects just a subset of customers and it is quick to so
 moving just that small group."
 
 **Country boundary, 2026-11-16.** The owner's direction is “each country is an
-independent unit”. His later choice keeps a small worldwide admin console with its
+independent unit”. The owner’s later choice keeps a small worldwide admin console with its
 own sign-in. The [replacement P3](../plans/2026-10-22-cloud-global-country-split.md)
 records the words, times and campaign sources. This supersedes the former worldwide
 operator authority, optional worldwide billing and linked-database split design.

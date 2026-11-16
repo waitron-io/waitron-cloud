@@ -501,7 +501,7 @@ existing final snapshot names and verify retained copies and keys. Reusing the
 same final snapshot name can prevent deletion; removing a resource's configuration
 also removes its lifecycle guard. No retirement or restore runs here.
 
-A Multi-AZ failover can interrupt existing connections. P1 and P3 must rehearse
+A Multi-AZ failover can interrupt existing connections. P1 must rehearse
 reconnection and transaction retries; these mocked plans make no promise of zero
 interruption. P7 owns the separately authorised regional recovery procedure and
 new credentials for a restored database. An administrator-secret reference in the

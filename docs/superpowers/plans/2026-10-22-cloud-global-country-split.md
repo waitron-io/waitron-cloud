@@ -3,7 +3,7 @@
 **Direction, 2026-11-16:** at 19:47 the owner said, “the worldwide operator layer just
 needs to monitor and deploy the country-specific installations i think. no passing
 messages from one country to another. each country is an independent unit”. At 19:55:
-“the worldwide layer still needs login for the waitron admins”; at 19:56 he chose
+“the worldwide layer still needs login for the waitron admins”; at 19:56 the owner chose
 “Small admin console (Recommended)”. Source: `~/waitron-campaign-g/questions.md`,
 19:48/19:57 watcher entries, and `~/waitron-campaign-g/queue.md`, D112-S.
 The console choice narrows 19:51’s answer: no servers beyond this console.
