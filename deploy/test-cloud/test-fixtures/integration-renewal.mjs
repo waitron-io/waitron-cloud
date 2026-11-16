@@ -4,6 +4,26 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 
+const fixtureCodes = ['cloud.busy', 'cloud.unavailable', 'cloud.binding_conflict', 'ERR_ASSERTION', 'ENOENT', 'EACCES'];
+const fixtureLabels = ['integration.remote_replay_status', 'integration.remote_certificate_refusal_status',
+  'integration.remote_configuration_status', 'integration.remote_upstream_status', 'integration.paid_remote_exchange',
+  'integration.remote_replay_state', 'integration.remote_replay_configuration',
+  'integration.remote_paid_configuration_required', 'integration.paid_remote_certificate_pending'];
+
+export function fixtureFailureDiagnostic(error) {
+  const code = fixtureCodes.includes(error?.code) ? error.code : 'unknown';
+  // Explicit assertion labels still carry comparisons on later lines; none of those values may leave the venue.
+  const first = typeof error?.message === 'string' ? error.message.split('\n', 1)[0] : '';
+  const label = fixtureLabels.includes(first) && (code !== 'ERR_ASSERTION' || error.generatedMessage === false) ? first : 'redacted';
+  return 'integration.fixture_error:' + code + ':' + label;
+}
+
+export function fixtureRefusalDiagnostic(text) {
+  const found = /integration\.fixture_error:([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+)/.exec(text);
+  return found && (fixtureCodes.includes(found[1]) || found[1] === 'unknown') &&
+    (fixtureLabels.includes(found[2]) || found[2] === 'redacted') ? ':' + found[0] : '';
+}
+
 export function rollbackRefusalDiagnostic(text) {
   const found = /integration\.rollback_refused:(drain|prepare|renew):(cloud\.(?:busy|unavailable|binding_conflict)|ERR_ASSERTION|ENOENT|EACCES|unknown)(?![A-Za-z0-9_.-])/.exec(text);
   return found ? ':' + found[0] : '';

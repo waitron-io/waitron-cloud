@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {request} from 'node:http';
-import {rollbackRefusalDiagnostic} from './integration-renewal.mjs';
+import {rollbackRefusalDiagnostic, fixtureRefusalDiagnostic} from './integration-renewal.mjs';
 const root = process.env.CLOUD_TEST_ROOT;
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
@@ -27,7 +27,7 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
       let text = ''; res.on('data', part => text += part);
       res.once('end', () => {try {
-        assert.equal(res.statusCode, 200, 'integration.fixture_refused' + (phase === 'rollback-refresh' ? rollbackRefusalDiagnostic(text) : ''));
+        assert.equal(res.statusCode, 200, 'integration.fixture_refused' + (phase === 'rollback-refresh' ? rollbackRefusalDiagnostic(text) : '') + fixtureRefusalDiagnostic(text));
         resolve(JSON.parse(text));
       } catch (error) {reject(error);}});
     });

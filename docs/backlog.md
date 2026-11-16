@@ -1696,6 +1696,8 @@ implementation or production evidence.
   the observer hold in a local reproduction; its fixture now refreshes authentication
   without changing the saved operation. Run that check with
   `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`.
+  The private fixture now reports fixed inner error codes and message labels,
+  redacting other text; run `node --test deploy/test-cloud/integration-rollback-diagnostic.test.mjs deploy/test-cloud/integration-rollback-control.test.mjs`.
   This defect fits run 6 by source inference; its inner error and the earlier
   stop delays' cause remain unconfirmed. Full qualification has not passed.
   Actual Amazon observation, original A/all-node loss, real-service and repository
