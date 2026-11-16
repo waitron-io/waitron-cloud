@@ -13,9 +13,10 @@ import {validBillingView,validMethodPresentation,validMethodResult} from './bill
 export const enrollmentRequiredEvent = 'cloud-enrollment-required';
 export type ApiResult<T> = {ok: true; value: T} | {ok: false; status: number; code: string; retryAfterMs: number};
 function validResult(path: string, value: unknown, status: number): boolean {
+  if(path==='/operator/actions/requests'||path==='/operator/actions/decide')return [200,201].includes(status)&&validCloudActionRequest(value);
   if(path==='/operator/actions'){
     const actions=(value as {actions?:unknown}|null)?.actions;
-    return status===200&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
+    return status===200&&Array.isArray((value as any).requests)&&(value as any).requests.length<=50&&(value as any).requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
       a&&typeof a.id==='string'&&Object.hasOwn(translations.en,`cloudAction_${a.id}`)&&['ask-first','act-and-report'].includes(a.policy)&&a.available===false);
   }
   if(path==='/security/email')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';
@@ -62,7 +63,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
+  if (path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || path === '/installations/revoke' || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {
     const name = location.protocol === 'https:' ? '__Host-cloud_csrf' : 'cloud_csrf';
     const values = document.cookie.split(';').map(v => v.trim()).filter(v => v.startsWith(`${name}=`));
     headers['X-CSRF-Token'] = values.length === 1 ? values[0]!.slice(name.length + 1) : '';
@@ -70,7 +71,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = path==='/operator/actions' || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;
@@ -79,6 +80,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
     if(path==='/security/password'&&response.status===503)codes.push('password_screening_unavailable');
+    if(path.startsWith('/operator/actions/')&&response.status===409)codes.push('conflict');
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active');
     if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
@@ -106,4 +108,16 @@ function validTranslationConsents(value:unknown):boolean{
   seen.add(c.venueId);
   return typeof c.consented==='boolean'&&(c.consented?typeof c.consentedAt==='string'&&Number.isFinite(Date.parse(c.consentedAt)):c.consentedAt===null);
  });
+}
+
+function validCloudActionRequest(value:unknown):boolean{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,any>,uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+ return uuid.test(row.id)&&uuid.test(row.effectId)&&Number.isSafeInteger(row.version)&&row.version>0&&row.available===false
+  &&Object.hasOwn(translations.en,`cloudAction_${row.actionId}`)&&['ask-first','act-and-report'].includes(row.policy)
+  &&['pending','approved','rejected','superseded'].includes(row.state)
+  &&['occurrence','cell','target','proposal','evidence'].every(key=>typeof row[key]==='string'&&row[key].length>0&&row[key].length<=1000)
+  &&typeof row.createdAt==='string'&&Number.isFinite(Date.parse(row.createdAt))
+  &&[row.decidedAt,row.approvalExpiresAt].every(time=>time===null||typeof time==='string'&&Number.isFinite(Date.parse(time)))
+  &&Array.isArray(row.events)&&row.events.length<=5&&row.events.every((event:any)=>event&&['proposed','approved','rejected','superseded','notice'].includes(event.kind)&&typeof event.at==='string'&&Number.isFinite(Date.parse(event.at)));
 }

@@ -21,7 +21,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/login')){signedIn=true;return r.fulfill({json:{accountId:'operator'}});}
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill(signedIn?{json:session}:{status:401,json:{error:'unauthenticated'}});
    if(path.endsWith('/installations'))return r.fulfill({json:{installations:[]}});
-   if(path.endsWith('/operator/actions')){reads++;assert.equal(r.request().method(),'GET');return r.fulfill(refused?{status:403,json:{error:'permission_denied'}}:{json:{actions}});}
+   if(path.endsWith('/operator/actions')){reads++;assert.equal(r.request().method(),'GET');return r.fulfill(refused?{status:403,json:{error:'permission_denied'}}:{json:{actions,requests:[]}});}
    return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
   await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
@@ -45,5 +45,50 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.getByRole('link',{name:title,exact:true}).count(),0);
   await page.evaluate(()=>(window as any).app.navigate('/operator/actions'));
   await page.getByRole('alert').waitFor();assert.equal(reads,3);
+ }finally{await browser.close();}
+});
+
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: exact proposals and lost-decision replies remain visible`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
+  const proposed={id:'11111111-1111-4111-8111-111111111111',version:1,occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',
+   actionId:'machine_drain',policy:'ask-first',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure',state:'pending',effectId:'22222222-2222-4222-8222-222222222222',
+   available:false,createdAt:'2026-11-16T19:00:00Z',decidedAt:null as string|null,approvalExpiresAt:null as string|null,events:[{kind:'proposed',at:'2026-11-16T19:00:00Z'}]};
+  let requests:(typeof proposed)[]=[],decisions=0;
+  await page.route('https://portal.test/operator/actions',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',r=>{
+   const path=new URL(r.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill({json:session});
+   if(path.endsWith('/action-proof'))return r.fulfill({json:{methods:['email'],freshUntil:'2099-01-01T00:00:00Z'}});
+   if(path.endsWith('/operator/actions/requests')){
+    assert.deepEqual(r.request().postDataJSON(),{occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',actionId:'machine_drain',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure'});
+    assert.equal(r.request().headers()['x-csrf-token'],'synthetic-csrf');requests=[proposed];return r.fulfill({status:201,json:proposed});
+   }
+   if(path.endsWith('/operator/actions/decide')){
+    decisions++;assert.deepEqual(r.request().postDataJSON(),{requestId:proposed.id,version:1,decision:'approved'});
+    requests=[{...proposed,state:'approved',decidedAt:'2026-11-16T19:01:00Z',approvalExpiresAt:'2026-11-16T19:16:00Z',events:[...proposed.events,{kind:'approved',at:'2026-11-16T19:01:00Z'}]}];
+    return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+   }
+   if(path.endsWith('/operator/actions'))return r.fulfill({json:{actions,requests}});
+   return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+  });
+  await page.context().addCookies([{name:'__Host-cloud_csrf',value:'synthetic-csrf',url:'https://portal.test',secure:true}]);
+  await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  const form=page.locator('#cloud-proposal');await form.waitFor();
+  assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
+  assert.equal(await page.locator('.cloud-actions > wt-form-actions').evaluate(row=>getComputedStyle(row).position),'static');
+  for(const [name,value] of Object.entries({occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure'}))await form.locator(`wt-input[name=${name}] input`).fill(value);
+  await form.locator('select[name=actionId]').selectOption('machine_drain');
+  await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();
+  const proposal=page.getByRole('article');await proposal.getByText('Drain the synthetic worker',{exact:true}).waitFor();
+  assert.match(await proposal.innerText(),/synthetic-cell/);assert.match(await proposal.innerText(),/synthetic-worker/);assert.match(await proposal.innerText(),/Synthetic health failure/);
+  await proposal.getByRole('button',{name:locale==='en'?'Approve this proposal':'Aprobar esta propuesta',exact:true}).click();
+  await proposal.getByText(locale==='en'?'Approved':'Aprobada',{exact:true}).first().waitFor();assert.equal(decisions,1);assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
+  assert.equal(await proposal.getByRole('button').count(),0);assert.match(await proposal.innerText(),locale==='en'?/Approval expires/:/La aprobación caduca/);
+  assert.equal(await page.getByRole('button',{name:/execute|ejecutar/i}).count(),0);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.addScriptTag({content:axe.source});assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
+  if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/decision-${locale}-${theme}-${width}.png`,fullPage:true});}
  }finally{await browser.close();}
 });

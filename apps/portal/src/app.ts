@@ -1,3 +1,4 @@
+import type {CloudActionRequest} from './cloud-actions-controller.ts';
 import {CloudActionsController} from './cloud-actions-controller.ts';
 import {AccountActionProofController} from './account-action-proof-controller.ts';
 import {bodyRefusal} from './body-refusal.ts';
@@ -318,6 +319,7 @@ export class PortalApp {
     this.draw();
   }
   async submit() {
+    if(this.path==='/operator/actions'){await this.proposeCloudAction();return;}
     if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}
     if(this.path==='/login' && this.factorCodes.length)return;
     if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
@@ -414,6 +416,8 @@ export class PortalApp {
     await this.session.check();
     if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
   }
+  async proposeCloudAction(){if(await this.#requireActionProof())await this.cloudActions.propose();}
+  async decideCloudAction(request:CloudActionRequest,decision:'approved'|'rejected'){if(await this.#requireActionProof())await this.cloudActions.decide(request,decision);}
   async #requireActionProof(){
     const route=this.#route,account=this.session.state.kind==='authenticated'?this.session.state.accountId:undefined;
     if(await this.actionProof.ensure()&&route===this.#route)return true;

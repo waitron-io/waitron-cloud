@@ -1,4 +1,5 @@
 import {CloudActions} from '@waitron-cloud/registration';
+import {CloudActionError} from '@waitron-cloud/registration';
 import {cloudActionsResponse} from './cloud-actions.ts';
 import {GuestMenuMachine} from '@waitron-cloud/remote-access/guest-menu';
 import {guestMenuDeliveryResponse,guestMenuResponse} from './guest-menu.ts';
@@ -67,6 +68,7 @@ function protect(c: Context) {
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
+  if(error instanceof CloudActionError)return new AccountHttpError(error.code==='conflict'?409:400,error.code);
   if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
   if(error instanceof AccountSecurityError)return new AccountHttpError(400,'link_unavailable');
   if (error instanceof IdentityError) {
@@ -164,7 +166,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(['/api/installations/guest-menu-publish','/api/installations/guest-menu-status','/api/installations/guest-menu-withdraw'].includes(c.req.path))return guestMenuDeliveryResponse(c,guestMenus);
     if(c.req.path.startsWith('/api/account/guest-menu/'))return guestMenuResponse(c,{pool,origin:config.portalOrigin,guestOrigin:options.guestOrigin});
-    if(c.req.path.startsWith('/api/account/operator/'))return cloudActionsResponse(c,cloudActions,secure);
+    if(c.req.path.startsWith('/api/account/operator/'))return cloudActionsResponse(c,cloudActions,{pool,secure,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});

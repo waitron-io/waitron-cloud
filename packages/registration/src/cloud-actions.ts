@@ -1,4 +1,6 @@
-import type {Pool} from 'pg';
+import type {Pool,PoolClient} from 'pg';
+import {accountActionSession,requireAccountActionProof} from './account-action-proof.ts';
+import {CloudActionError,readCloudActionRequests,proposeCloudAction,decideCloudAction,validateCloudActionProposal,type CloudActionProposal,type CloudActionDecision} from './cloud-action-store.ts';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 
@@ -16,11 +18,28 @@ export class CloudActions{
   if(operatorAccountId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(operatorAccountId))throw Error('cloud_operator_account_invalid');
   this.#pool=pool;this.#operator=operatorAccountId||undefined;
  }
+ async #write<T>(token:string,csrfToken:string,write:(client:PoolClient,actor:string)=>Promise<T>){
+  return transaction(this.#pool,async client=>{
+   const session=await accountActionSession(client,token,csrfToken);
+   if(!this.#operator||session.accountId!==this.#operator)throw new IdentityError('permission_denied');
+   const result=await write(client,session.accountId);
+   // Storage locks may wait; no decision commits on the strength of an earlier proof check.
+   await requireAccountActionProof(client,token,csrfToken);return result;
+  });
+ }
+ async propose(token:string,csrfToken:string,input:CloudActionProposal){
+  validateCloudActionProposal(input);const action=cloudActionCatalogue.find(action=>action.id===input.actionId);
+  if(!action)throw new CloudActionError('invalid_input');
+  return this.#write(token,csrfToken,(client,actor)=>proposeCloudAction(client,input,action.policy,actor));
+ }
+ async decide(token:string,csrfToken:string,input:CloudActionDecision){
+  return this.#write(token,csrfToken,(client,actor)=>decideCloudAction(client,input,actor));
+ }
  async read(token:string){
   return transaction(this.#pool,async client=>{
    const session=await resolveSession(client,token,{touch:false});
    if(!this.#operator||session.accountId!==this.#operator)throw new IdentityError('permission_denied');
-   return {actions:cloudActionCatalogue};
+   return {actions:cloudActionCatalogue,requests:await readCloudActionRequests(client)};
   });
  }
 }
