@@ -156,3 +156,18 @@ test('abort reports a still-blocked stage and closes only its observer before wo
   await pool.end();await admin.end();
  }
 });
+
+test('abort retains timer lateness even when the current stage has no database pool',async t=>{
+ const controller=new AbortController(),lines:string[]=[];
+ t.mock.method(console,'error',(line:string)=>lines.push(line));
+ await observeSetup(undefined,async observation=>{
+  observation.mark('cli-read');
+  const until=performance.now()+200;while(performance.now()<until){}
+  await delay(0);controller.abort();return 29;
+ },{signal:controller.signal});
+ assert.equal(lines.length,1);
+ const report=JSON.parse(lines[0]!);
+ assert.deepEqual(report.samples,[]);assert.equal(report.stage,'cli-read');
+ assert.ok(report.maxLateness?.latenessMs>=50,'retain a delayed timer without a database row');
+ assert.ok(report.maxLateness.elapsedMs>=200);
+});

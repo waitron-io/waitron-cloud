@@ -45,9 +45,11 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
   pool?.removeListener('acquire',acquire);pids.clear();pool=next;pool.on('acquire',acquire);
  };
  if(pool)attach(pool);
- let nextTick=performance.now()+100;
+ let nextTick=performance.now()+100,maxLateness={elapsedMs:0,latenessMs:0};
  const timer=setInterval(()=>{
-  const now=performance.now();sample(Math.max(0,Math.round(now-nextTick)));nextTick=now+100;
+  const now=performance.now(),latenessMs=Math.max(0,Math.round(now-nextTick));
+  if(latenessMs>=maxLateness.latenessMs)maxLateness={elapsedMs:elapsed(),latenessMs};
+  sample(latenessMs);nextTick=now+100;
  },100);
  const stop=()=>closing??=(async()=>{
   stopped=true;clearInterval(timer);pool?.removeListener('acquire',acquire);
@@ -57,7 +59,7 @@ export async function observeSetup<T>(pool:Pool|undefined,setup:(observation:Obs
  const report=()=>{
   if(reported)return;reported=true;
   try{console.error(JSON.stringify({event:'cloud-test-setup-waits',unavailable,samples,
-   stage:stages.at(-1)?.stage,stages,elapsedMs:elapsed(),loadAverage:loadavg(),
+   stage:stages.at(-1)?.stage,stages,elapsedMs:elapsed(),loadAverage:loadavg(),maxLateness,
    pool:pool?{total:pool.totalCount,idle:pool.idleCount,waiting:pool.waitingCount}:undefined}));}catch{}
  };
  // A test timeout can abort while its SQL or child process remains pending.
