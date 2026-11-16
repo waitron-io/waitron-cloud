@@ -36,8 +36,9 @@ The watcher brings this to you before any console or provider change.
    its new private key beside it, mode0600; it never leaves the Mac. In the
    machine’s security group, allow SSH only from the operator’s current address,
    and HTTPS on port 443. When K prepares public certificate issuance, also
-   allow port 80 for Certbot’s standalone HTTP-01 listener. The Cloud containers
-   do not publish port 80. Remote-access ports remain closed until their service
+   allow port 80 for Certbot’s standalone HTTP-01 listener and retain that ingress
+   rule for every renewal. Certbot opens its listener only while issuing or
+   renewing; the Cloud containers do not publish port 80. Remote-access ports remain closed until their service
    slice is qualified.
 
 SES sending is still a later gate: grant only the test sender’s existing email

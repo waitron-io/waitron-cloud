@@ -250,7 +250,7 @@ node scripts/test-cloud-deploy.mjs status sha256:<64-hex-image-id>
 node scripts/test-cloud-deploy.mjs stop sha256:<64-hex-image-id>
 ```
 
-These are the implemented operator commands, not permission to deploy before the remaining proofs. `load` reads the image stream on standard input; `up` uses `--no-build --pull never`. Preflight requires Compose 2.24.4 or later, x86-64 Docker, at least 4,096 MiB available RAM and 20 GiB free disk, unused selected ports and no unrecorded test-project containers. It rejects a changed image for an existing deployment; schema upgrades need the later coordinated private backup/restore procedure.
+These are the implemented operator commands, not permission to deploy before the remaining proofs. `load` reads the image stream on standard input; `up` uses `--no-build --pull never`. For the default home-network target, preflight requires Compose 2.24.4 or later, x86-64 Docker, at least 4,096 MiB available RAM and 20 GiB free disk, unused selected ports and no unrecorded test-project containers. It rejects a changed image for an existing deployment; schema upgrades need the later coordinated private backup/restore procedure.
 
 For the home-network target, the driver samples resources and the three existing Waitron containers every five seconds through startup and a sixty-second settled window. An owned out-of-memory event, Waitron health regression, or three consecutive readings below 2,048 MiB available RAM or 15 GiB free disk abort startup and stop recorded Cloud containers. It leaves volumes in place. If a full host-inventory read fails during rollback, the driver checks only project-labelled Docker IDs and still attempts the stop. A failed state write also cannot bypass that stop. If Docker itself cannot be reached, cleanup is explicitly incomplete and you must keep the state for inspection. Sampling ends when the command completes; continuous deployment supervision and the actual box capacity proof remain later work.
 
@@ -339,9 +339,13 @@ node scripts/test-cloud-deploy.mjs preflight sha256:<reviewed-image-id> amazon
 node scripts/test-cloud-deploy.mjs load sha256:<reviewed-image-id> amazon
 node scripts/test-cloud-deploy.mjs up sha256:<reviewed-image-id> amazon
 node scripts/test-cloud-deploy.mjs status sha256:<reviewed-image-id> amazon
+node scripts/test-cloud-deploy.mjs stop sha256:<reviewed-image-id> amazon
 ```
 
-Name `amazon` explicitly after the image ID on each Amazon command. The state
+Name `amazon` explicitly after the image ID on Amazon `preflight`, `load` and
+`up` commands. `status` and `stop` identify containers from their recorded IDs and
+need neither the target argument nor HTTPS settings. `stop` stops Cloud containers;
+the Amazon machine stays running. The state
 file keeps its existing format and does not remember this choice. On the
 currently authorised 4 GiB machine, an omitted target cannot meet the LAN
 requirement for 4,096 MiB available RAM. Revisit that assumption before changing
