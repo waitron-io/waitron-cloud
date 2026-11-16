@@ -372,12 +372,13 @@ export class PortalApp {
     }
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
+  #signedInPath(){return this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account';}
   async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean) {
-    if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+    if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.#signedInPath());return;}
     if(result==='reconcile'){
       this.session.dispose();this.session=this.#session();await this.session.check();
       if(route!==this.#route)return;
-      if(previouslyAnonymous&&this.session.state.kind==='authenticated'){this.navigate(this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+      if(previouslyAnonymous&&this.session.state.kind==='authenticated'){this.navigate(this.#signedInPath());return;}
     }
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
@@ -409,7 +410,7 @@ export class PortalApp {
     const result = await this.passkeys.signIn(autofill);
     if (route !== this.#route || !result) return;
     this.session.dispose(); this.session = this.#session();
-    if (result === 'authenticated') { this.navigate(this.#operatorSignin ? '/operator/actions' : this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
+    if (result === 'authenticated') { this.navigate(this.#signedInPath()); return; }
     await this.session.check();
     if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
   }
