@@ -1554,9 +1554,11 @@ implementation or production evidence.
   abort. Only that callback is controlled; HTTP, SQLite,
   native children and other timers remain real. The existing 4.01-second opening
   and idle controls, drainage assertions and all runtime timers remain unchanged.
-  Run `node --test scripts/cloud-cost/replay-stream.test.mjs` for these controls
-  and the bounded opening diagnostics. The historical Linux startup stage and
-  underlying delay remain unknown; this repairs the reproduced test assumption.
+  Run `node --test scripts/cloud-cost/replay-stream.test.mjs` for these controls,
+  bounded opening diagnostics and per-phase upload witnesses. The historical Linux
+  startup stage and underlying delay remain unknown, as does the failing phase in
+  [CI 43971423269](https://github.com/waitron-io/waitron-cloud/actions/runs/43971423269).
+  The checks cover reproduced test assumptions.
 
   **Remaining work and observations.** To complete the operating total, establish
   the missing inventory quantities and regional billing terms, representative
