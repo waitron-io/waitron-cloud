@@ -81,7 +81,7 @@ class GuestTools(unittest.TestCase):
                 self.assertEqual(inventory.returncode,0,inventory.stderr.decode())
                 self.assertIn(b'docker-cli=26.1.5+dfsg1-9+deb13u1',inventory.stdout)
                 self.assertEqual(guest('mkdir -p /work/source /work/private /opt/waitron-disposable').returncode,0)
-                for path,target in [(SOURCE,'/work/source.tar'),(PRIVATE/'ui-core-0.2.11.tgz','/work/private/ui.tgz'),(PRIVATE/'contract-0.2.16.tgz','/work/private/contract-0.2.16.tgz'),(RECIPE/'snapshot.py','/opt/waitron-disposable/snapshot.py'),(RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
+                for path,target in [(SOURCE,'/work/source.tar'),(PRIVATE/'ui-core-0.2.30.tgz','/work/private/ui.tgz'),(PRIVATE/'contract-0.2.16.tgz','/work/private/contract-0.2.16.tgz'),(RECIPE/'snapshot.py','/opt/waitron-disposable/snapshot.py'),(RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
                     self.assertEqual(guest('cat > '+shlex.quote(target),path.read_bytes(),timeout=90).returncode,0)
                 extracted=guest('python3 /opt/waitron-disposable/snapshot.py extract /work/source.tar '+shlex.quote(DIGEST)+' /work/source',timeout=30)
                 self.assertEqual(extracted.returncode,0,extracted.stderr.decode())

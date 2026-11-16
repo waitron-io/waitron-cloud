@@ -98,16 +98,11 @@ Main pushes, schedules and manual runs still require hand moves.
 
 ## Keep the private shared UI release current (D579)
 
-For releases after `0.2.11`, you must verify the published source
-commit, update the smoke test's reviewed source hash, approve the immutable
-archive URL and digest, and publish matching test-host support before landing.
-Both consumers must install the same private release and pass authenticated CI.
-Follow the [release guide](shared-ui-release.md) for those continuing review and
-qualification steps. Version assertions read the consumer manifests. The registry metadata
-checked on 16 November already includes newer releases through `0.2.30`. With
-`0.2.11`, the seven-day check first refuses at 20 November 2026, 20:37:58.001 UTC,
-using the publication time of `0.2.12` (run `node scripts/ci-ui-lag.mjs` with
-package-read authentication to check the current window).
+For future UI releases, verify the published source, review actual Cloud consumers,
+approve the immutable archive and publish matching test-host support before adoption.
+Both consumers must install the same release and pass authenticated CI. Follow the
+[release guide](shared-ui-release.md); source/archive review and host publication
+remain human work.
 
 ## Shared storage-test seed downloads (D585)
 
