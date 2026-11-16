@@ -1027,9 +1027,10 @@ implementation or production evidence.
   protected Waitron containers are never adopted.
 
   The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
-  is cleared by the watcher for staged implementation. Configurable HTTPS, the
-  actual machine and each workflow still need their slice checks; no Amazon
-  deployment or real email qualification is claimed.
+  is cleared by the watcher for staged implementation. Configurable HTTPS reuses
+  the test runtime and internal CA trust. The actual machine, public certificate
+  issuance, pairing and email qualification remain open; no Amazon deployment is
+  established by this configuration slice.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
@@ -1892,6 +1893,11 @@ updates delayed by sixty seconds and changes to absolute session expiry remain
 outside this test's coverage, as they were before this repair.
 
 ## Service-proof failure diagnostics (D530)
+
+A 16 November Linux run of `deploy/test-cloud/https-proof.test.mjs` returned
+503 at its final restart-readiness assertion. Other runs of the same image pass;
+a diagnostic run records overlapping proxy-health refusals. The cause of that
+particular response remains unknown; a passing run is not a repair.
 
 The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
 failed after 231 seconds with only `Free-service proof failed`. Its later passing

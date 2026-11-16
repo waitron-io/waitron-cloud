@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
-import {loadRuntime,runtimeEnvironment,checkConsumerDatabase} from '../local-stack/runtime.mjs';
+import {loadRuntime,runtimeEnvironment,checkConsumerDatabase,canonicalHttpsOrigin} from '../local-stack/runtime.mjs';
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
 import {allowanceOptionsFromEnv} from '../../packages/registration/src/billing-allowance-rules.ts';
 const commands={migrate:'packages/registration/src/migrate-cli.ts',account:'deploy/test-cloud/account-worker.mjs',storage:'deploy/test-cloud/storage-worker.mjs',email:'deploy/test-cloud/email-worker.mjs',monitor:'packages/registration/src/monitor-cli.ts',usage:'packages/registration/src/usage-reconcile-cli.ts',probe:'packages/remote-access/src/probe-cli.ts',backup:'deploy/test-cloud/backup-worker.mjs',gateway:'packages/remote-access/src/gateway-cli.ts',manifest:'deploy/test-cloud/remote-worker.mjs',reconcile:'packages/remote-access/src/reconciler-cli.ts',translation:'packages/translation/src/worker-cli.ts'};
@@ -11,7 +11,8 @@ export function testRuntimeEnvironment(role,config,environment={}){
  let mode;try{mode=parsePlanMode(flag,venueFlag);}catch{throw new Error('test_cloud.plan_mode');}
  let allowances;try{allowances=allowanceOptionsFromEnv(environment,mode);}catch{throw new Error('test_cloud.allowance_mode');}
  const enabled=mode!=='existing';
- const result=runtimeEnvironment(role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY}:{},'https://waitron.local:3000');result.CLOUD_TEST_SERVICE_PLANS=flag;
+ const result=runtimeEnvironment(role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY}:{},canonicalHttpsOrigin(environment.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));result.CLOUD_TEST_SERVICE_PLANS=flag;
+ if(environment.TEST_CLOUD_ORIGIN!==undefined)result.TEST_CLOUD_ORIGIN=environment.TEST_CLOUD_ORIGIN;
  if(venueFlag!==undefined)result.CLOUD_VENUE_SERVICE_LEVELS=venueFlag;
  if(allowances&&['account','translation'].includes(role)){result.CLOUD_TEST_ALLOWANCES='1';result.CLOUD_ALLOWANCE_CALENDAR=allowances.calendar;}
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';

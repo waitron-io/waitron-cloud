@@ -1,0 +1,70 @@
+# Apply after the ordinary test-Cloud override. The certificate directory is
+# operator supplied; no database, mail inbox or internal service is published.
+x-amazon-environment: &amazon-environment
+  TEST_CLOUD_ORIGIN: ${TEST_CLOUD_ORIGIN:?Set the canonical HTTPS account origin}
+  CLOUD_TEST_SERVICE_PLANS: "0"
+  CLOUD_VENUE_SERVICE_LEVELS: test
+
+services:
+  bootstrap:
+    environment:
+      <<: *amazon-environment
+      TEST_CLOUD_CERTIFICATE_SOURCE: /run/public-certificate
+    volumes:
+      - type: bind
+        source: ${TEST_CLOUD_CERTIFICATE_SOURCE:?Set the certificate directory}
+        target: /run/public-certificate
+        read_only: true
+        bind:
+          create_host_path: false
+      - test-cloud-public-certificate:/run/proxy-certificate
+  migrate:
+    environment: *amazon-environment
+  storage:
+    environment: *amazon-environment
+    ports: !reset []
+  account:
+    environment: *amazon-environment
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get('http://localhost:3000/api/health/ready',{headers:{host:new URL(process.argv[1]).host}},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))", "${TEST_CLOUD_ORIGIN}"]
+  email-worker:
+    environment: *amazon-environment
+  monitor-worker:
+    environment: *amazon-environment
+  usage-reconciler:
+    environment: *amazon-environment
+  remote-probe:
+    environment: *amazon-environment
+  gateway-manifest:
+    environment: *amazon-environment
+  gateway:
+    environment: *amazon-environment
+    ports: !reset []
+  backup-worker:
+    environment: *amazon-environment
+  remote-reconciler:
+    environment: *amazon-environment
+  translation-worker:
+    environment: *amazon-environment
+  postgres:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+  proxy:
+    environment:
+      TEST_CLOUD_ORIGIN: ${TEST_CLOUD_ORIGIN}
+      TEST_CLOUD_CERTIFICATE: /run/proxy-certificate/proxy.pem
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export TEST_CLOUD_HOST="$${TEST_CLOUD_ORIGIN#https://}"
+        exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg
+    volumes: !override
+      - test-cloud-public-certificate:/run/proxy-certificate:ro
+    ports: !override ["0.0.0.0:443:3000"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--connect-to", "::127.0.0.1:3000", "${TEST_CLOUD_ORIGIN}/api/health/ready"]
+
+volumes:
+  test-cloud-public-certificate:

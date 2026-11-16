@@ -4,7 +4,7 @@ import {lstat,mkdir,readFile,rename,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {StorageAuthority} from '../../packages/backups/src/storage.ts';
-import {bootstrapTestCloud} from './bootstrap.mjs';
+import {bootstrapTestCloudIdentity} from './bootstrap.mjs';
 import {atomicPrivateFile} from './storage-authority.mjs';
 import {claimLease} from '../local-stack/lease.mjs';
 const issuer='https://waitron.local:8444',audience='cloud-storage',keyId='test-cloud-storage-v1';
@@ -32,7 +32,7 @@ async function load(directory){
 }
 function publicIdentity(value){return {version:1,issuer,keyId,keySha256:digest(value.privateKey)};}
 export async function bootstrapStorageIssuer(directory){
- await bootstrapTestCloud(directory);const found=await load(directory);if(found)return publicIdentity(found);
+ await bootstrapTestCloudIdentity(directory);const found=await load(directory);if(found)return publicIdentity(found);
  let held;for(let n=0;n<200&&!held;n++){held=await claimLease(join(directory,'.storage-issuer.lock'));if(!held)await delay(25);}if(!held)throw Error('test_cloud.storage_issuer_busy');
  const scratch=join(directory,'.storage-issuer-'+randomUUID());
  try{

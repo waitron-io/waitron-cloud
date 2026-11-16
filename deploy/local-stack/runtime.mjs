@@ -30,8 +30,12 @@ const commands={
  reconcile:['packages/remote-access/src/reconciler-cli.ts','/run/reconciler/config.json'],translation:['packages/translation/src/worker-cli.ts']
 };
 function databaseUrl(config){return `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`;}
+export function canonicalHttpsOrigin(value){
+ try{const url=new URL(value);if(url.protocol!=='https:'||url.origin!==value||url.username||url.password)throw Error();return value;}
+ catch{throw new Error('local_stack.origin_invalid');}
+}
 export function runtimeEnvironment(role,config,environment={},origin='http://localhost:3000'){
- if(!['http://localhost:3000','https://waitron.local:3000'].includes(origin))throw new Error('local_stack.origin_invalid');
+ if(origin!=='http://localhost:3000')canonicalHttpsOrigin(origin);
  const DATABASE_URL=databaseUrl(config),email={DATABASE_URL,CLOUD_EMAIL_ACTIVE_KEY_ID:config.email.activeKeyId,CLOUD_EMAIL_KEYS:JSON.stringify(config.email.keys)};
  const roles={
   migrate:{DATABASE_URL},
