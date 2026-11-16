@@ -223,7 +223,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         await copy(0, 'target.json', '/tmp/d618-target.json');
         return JSON.parse(await ssh(0, ['sudo', 'sh', '-ec', 'cd /opt/d618 && TEST_CLOUD_INTEGRATION_IMAGE=' + quote(ids[cloud]) + ' TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=' + quote(ids[waitron]) + ' node scripts/kubernetes-check.mjs --amazon /tmp/d618-target.json'], undefined, 1200000));
       },
-      stopWorker: () => aws('ec2', ['stop-instances', '--instance-ids', outputs.C]),
+      stopWorker: () => aws('ec2', ['stop-instances', '--skip-os-shutdown', '--instance-ids', outputs.C]),
       waitStopped: () => aws('ec2', ['wait', 'instance-stopped', '--instance-ids', outputs.C]),
       replace: async () => {
         const old = await kube(['get', 'pods', '-l', 'app=manifest', '-o', 'jsonpath={.items[0].metadata.name}']);
