@@ -27,12 +27,23 @@ them. Remove only this workflow's entries from `scripts/ci-pnpm-diagnostics.test
 and `scripts/ci-cache-location.test.mjs`; preserve every retained workflow assertion.
 This intentionally deletes an observation check and its private instrumentation
 tests. List those deletions under **Changed test checks** in the pull request;
-the watcher's clearance of this explicit plan authorises that named removal.
+name the lost 24-sample repetition, single-CPU coverage and automatic browser-edit
+trigger, plus the retained conformance journey/eight faults and readiness checks.
+The queue explicitly says: "Deleting the job deletes a check, so under THE RULE's
+changed-test-checks clause the plan names it, the watcher's plan read is the
+go-ahead, and the PR lists it under 'Changed test checks'." Execution waits for
+the watcher's explicit clearance of this named removal.
 
 Reduce `docs/backlog/browser-reconnect.md` to its open historical reset attribution,
 retained waits/accounting/privacy rules and links to active readiness checks.
-Delete only the reconnect-retirement sentence in `docs/backlog.md`, keeping the
-apt-only qualification. Correct present-tense observation references in
+Keep the refusing runs 40920925400, 40922185069, 40988995366, 40990548906,
+41023281681 and 41028304505 with their sample/route categories, and the distinct
+historical replay pin `fbadd15785464e59747e697c11048bfbc6e4938f`. This scoped
+pruning supersedes the older replay-design instruction to leave that prose intact.
+Remove the dead navigation-evidence test command. Delete the reconnect-retirement
+sentence in `docs/backlog.md`, preserving apt-only qualification, and change its
+earlier claim that the observation groups are still kept to historical wording.
+Correct present-tense observation references in
 `docs/backlog/ci-cache-saving.md` and annotate the historical workflow row in
 `docs/superpowers/specs/2026-11-06-disposable-test-server-design.md` as retired.
 Leave the real browser, its fixtures, pin, fault controls and APT setup unchanged.
@@ -44,6 +55,6 @@ and `scripts/ci-docs.test.mjs`; check changed local links and `git diff --check`
 Search all tracked files, including `.github`, for remaining executable references.
 Finish with Claude's whole-branch review, exact-head CI and merge evidence.
 Expected: about 900 removed lines, fewer than 100 added (including this plan);
-production instrumentation about 300 removed, tests about 220 removed plus two
+production instrumentation about 250 removed, tests about 260 removed plus two
 list entries, workflow about 120 removed, documentation about 250 removed.
 No new helper, test suite, workflow, deployment, provider access or timing change.
