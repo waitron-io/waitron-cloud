@@ -25,8 +25,8 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
-  cloudActionsTitle:'Cloud actions',cloudActionsHelp:'Country repair policy. Initiation exceptions grant no hosted writer authority. Policy changes require an owner-made repository change citing incidents.',
-  cloudActionsAsk:'Ask first',cloudActionsReport:'Act and report',cloudActionsUnavailable:'Execution unavailable',cloudActionsDenied:'This account is not the configured country operator. Return to Account overview and sign in with the operator account.',
+  cloudActionsTitle:'Cloud actions',cloudActionsHelp:'Repair policy for this country. These policies grant no permission to start a hosted venue server. The owner changes policies in the repository, citing incidents.',
+  cloudActionsAsk:'Ask first',cloudActionsReport:'Act and report',cloudActionsUnavailable:'Execution unavailable',cloudActionsDenied:'This account is not the configured country operator. Return to Account overview, sign out, then sign in with the operator account.',
   cloudAction_cloud_restart:'Restart a failed Cloud workload in place',cloudAction_machine_replace:'Initiate replacement of a failed machine',
   cloudAction_machine_drain:'Drain a machine',cloudAction_machine_add:'Add a machine',cloudAction_machine_resize:'Resize a machine',
   cloudAction_hosted_restart:'Restart a hosted venue',cloudAction_hosted_move:'Move a hosted venue',cloudAction_cell_create:'Create a cell',cloudAction_country_failover:'Fail over a country',
@@ -321,8 +321,8 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
-  cloudActionsTitle:'Acciones de Cloud',cloudActionsHelp:'Política de reparación del país. Las excepciones de inicio no autorizan a activar un servidor de un local alojado. Cambiar la política requiere un cambio del propietario en el repositorio que cite incidentes.',
-  cloudActionsAsk:'Preguntar primero',cloudActionsReport:'Actuar e informar',cloudActionsUnavailable:'Ejecución no disponible',cloudActionsDenied:'Esta cuenta no es la del operador configurado para el país. Vuelve al resumen de la cuenta e inicia sesión con la cuenta del operador.',
+  cloudActionsTitle:'Acciones de Cloud',cloudActionsHelp:'Política de reparación del país. Estas políticas no autorizan a iniciar el servidor de un local alojado. El propietario cambia las políticas en el repositorio, citando incidentes.',
+  cloudActionsAsk:'Preguntar primero',cloudActionsReport:'Actuar e informar',cloudActionsUnavailable:'Ejecución no disponible',cloudActionsDenied:'Esta cuenta no es la del operador configurado para el país. Vuelve al resumen de la cuenta, cierra sesión y entra con la cuenta del operador.',
   cloudAction_cloud_restart:'Reiniciar una carga de Cloud fallida sin moverla',cloudAction_machine_replace:'Iniciar la sustitución de una máquina fallida',
   cloudAction_machine_drain:'Vaciar una máquina',cloudAction_machine_add:'Añadir una máquina',cloudAction_machine_resize:'Cambiar el tamaño de una máquina',
   cloudAction_hosted_restart:'Reiniciar un local alojado',cloudAction_hosted_move:'Mover un local alojado',cloudAction_cell_create:'Crear una celda',cloudAction_country_failover:'Conmutar un país a la región de reserva',

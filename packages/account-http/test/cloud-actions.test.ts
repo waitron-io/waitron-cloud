@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import {before,after,test} from 'node:test';
 import {createSession} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
@@ -32,4 +33,13 @@ test('country catalogue route requires a valid configured session and remains re
 test('direct operator navigation serves the portal document',async()=>{
  const assets=new Map([['/index.html',{body:Buffer.from('<title>Cloud</title>'),contentType:'text/html'}]]);
  assert.equal(portalResponse(new Request(origin+'/operator/actions'),assets).status,200);
+});
+
+
+test('a bad operator setting explains the startup refusal',()=>{
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options',`-c search_path=${db.schema}`);
+ const result=spawnSync(process.execPath,['src/server-cli.ts'],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:10000,
+  env:{...process.env,NODE_ENV:'test',DATABASE_URL:url.toString(),CLOUD_PORTAL_ORIGIN:origin,CLOUD_HTTP_RATE_KEY:db.rateKey,
+   CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_OPERATOR_ACCOUNT_ID:'not-an-id'}});
+ assert.equal(result.status,1);assert.match(result.stderr,/requires a lowercase UUID in CLOUD_OPERATOR_ACCOUNT_ID/);
 });

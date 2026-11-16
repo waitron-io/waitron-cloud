@@ -56,6 +56,7 @@ export class PortalApp {
   diagnostics: DiagnosticController;
   cloudActions:CloudActionsController;
   #route = 0;
+  #operatorSignin=false;
   #passkeyOffered = false;
   #enrollmentRestricted = false;
   #signOutCheck: PortalSession | undefined;
@@ -160,6 +161,7 @@ export class PortalApp {
     if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
     if ((['/', '/account', '/connect', '/recover', '/operator/actions'].includes(this.path)) && state.kind === 'anonymous') {
       const signedOut = this.#signOutCheck === this.session;
+      if(this.path==='/operator/actions')this.#operatorSignin=true;
       this.navigate('/login');
       if (state.expired || signedOut) { this.notice = state.expired ? 'sessionExpired' : 'signedOut'; this.draw(); }
     }
@@ -217,6 +219,7 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
+    if(path!=='/login')this.#operatorSignin=false;
     this.cloudActions.account(undefined);
     this.billing.fence();
     if (path === '/login') this.passkeyFirst = this.passkeys.preferred;
@@ -370,11 +373,11 @@ export class PortalApp {
     this.draw(); if (this.error || Object.keys(this.errors).length) this.#focusErrors(); else this.focusHeading();
   }
   async #factorLoginResult(result:'authenticated'|'factor'|'reconcile'|false,route:number,previouslyAnonymous:boolean) {
-    if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+    if(result==='authenticated'){this.session.dispose();this.session=this.#session();this.navigate(this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
     if(result==='reconcile'){
       this.session.dispose();this.session=this.#session();await this.session.check();
       if(route!==this.#route)return;
-      if(previouslyAnonymous&&this.session.state.kind==='authenticated'){this.navigate(this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
+      if(previouslyAnonymous&&this.session.state.kind==='authenticated'){this.navigate(this.#operatorSignin?'/operator/actions':this.recovery.requestId?'/recover':this.pairing.requestId?'/connect':'/account');return;}
     }
     this.draw();if(this.authenticator.error)this.#focusErrors();else this.focusHeading();
   }
@@ -406,7 +409,7 @@ export class PortalApp {
     const result = await this.passkeys.signIn(autofill);
     if (route !== this.#route || !result) return;
     this.session.dispose(); this.session = this.#session();
-    if (result === 'authenticated') { this.navigate(this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
+    if (result === 'authenticated') { this.navigate(this.#operatorSignin ? '/operator/actions' : this.recovery.requestId ? '/recover' : this.pairing.requestId ? '/connect' : '/account'); return; }
     await this.session.check();
     if (route === this.#route && this.session.state.kind !== 'authenticated') this.draw();
   }

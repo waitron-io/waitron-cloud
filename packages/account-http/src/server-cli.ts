@@ -90,7 +90,9 @@ try {
     await stopped;
   }
 } catch(error) {
-  console.error(error instanceof Error&&error.message==='backup.installation_issuer_required'
+  console.error(error instanceof Error&&error.message==='cloud_operator_account_invalid'
+    ?'Account server requires a lowercase UUID in CLOUD_OPERATOR_ACCOUNT_ID'
+    :error instanceof Error&&error.message==='backup.installation_issuer_required'
     ?'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured'
     :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
 } finally {

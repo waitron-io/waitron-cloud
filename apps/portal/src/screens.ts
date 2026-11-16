@@ -41,7 +41,7 @@ export function screen(app: PortalApp) {
   else if (app.notice && !['signedOut', 'sessionExpired','factorChanged','factorRemoved','factorChangeUncertain'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
-      ? html`<p>${c.accountIntro}</p><p>${link('/operator/actions',c.cloudActionsTitle)}</p>${accountSecurityScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
+      ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
       : html`<p role="status">${app.session.state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
           ${app.session.state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
   } else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {

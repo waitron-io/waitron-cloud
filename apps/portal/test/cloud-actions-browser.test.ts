@@ -15,7 +15,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(4000);
   let signedIn=false,refused=false,reads=0;
-  await page.route('https://portal.test/login',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
+  await page.route(/^https:\/\/portal.test\/(login|operator\/actions)$/,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',r=>{
    const path=new URL(r.request().url()).pathname;
    if(path.endsWith('/login')){signedIn=true;return r.fulfill({json:{accountId:'operator'}});}
@@ -24,12 +24,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/operator/actions')){reads++;assert.equal(r.request().method(),'GET');return r.fulfill(refused?{status:403,json:{error:'permission_denied'}}:{json:{actions}});}
    return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/login');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.locator('wt-input[name=email] input').fill('operator@example.test');
   await page.locator('wt-input[name=password] input').fill('Synthetic operator password');
   await page.locator('#submit').click();
   const title=locale==='en'?'Cloud actions':'Acciones de Cloud';
-  await page.getByRole('link',{name:title,exact:true}).click();
   await page.getByRole('heading',{name:title,level:1}).waitFor();
   await page.getByRole('listitem').filter({hasText:locale==='en'?'Restart a failed Cloud workload in place':'Reiniciar una carga de Cloud fallida sin moverla'}).waitFor();
   assert.equal(await page.getByRole('listitem').count(),16);
@@ -43,5 +42,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.getByRole('alert').waitFor();assert.equal(await page.getByRole('listitem').count(),0);assert.equal(reads,2);
   await page.getByRole('link',{name:locale==='en'?'Account overview':'Resumen de la cuenta',exact:true}).click();
   assert.equal(new URL(page.url()).pathname,'/account');
+  assert.equal(await page.getByRole('link',{name:title,exact:true}).count(),0);
+  await page.evaluate(()=>(window as any).app.navigate('/operator/actions'));
+  await page.getByRole('alert').waitFor();assert.equal(reads,3);
  }finally{await browser.close();}
 });

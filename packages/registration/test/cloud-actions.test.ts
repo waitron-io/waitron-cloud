@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {Pool} from 'pg';
 import {createSession} from '@waitron-cloud/identity';
@@ -30,7 +30,11 @@ test('configuredCountryOperatorOnly: customer ownership supplies no country gran
   const actor=await registration.transaction(pool,c=>createSession(c,operator));
   const customer=await registration.transaction(pool,c=>createSession(c,owner));
   const actions=new registration.CloudActions(pool,operator);
+  const hash=createHash('sha256').update(actor.token).digest('hex');
+  await pool.query("UPDATE cloud_sessions SET last_seen_at=clock_timestamp()-interval '5 minutes' WHERE token_hash=$1",[hash]);
+  const before=(await pool.query('SELECT last_seen_at FROM cloud_sessions WHERE token_hash=$1',[hash])).rows[0].last_seen_at;
   assert.equal((await actions.read(actor.token)).actions.length,16);
+  assert.deepEqual((await pool.query('SELECT last_seen_at FROM cloud_sessions WHERE token_hash=$1',[hash])).rows[0].last_seen_at,before);
   const denied=(p:Promise<unknown>)=>assert.rejects(p,e=>e instanceof Error&&'code'in e&&e.code==='permission_denied');
   await denied(actions.read(customer.token));
   await denied(new registration.CloudActions(pool).read(actor.token));

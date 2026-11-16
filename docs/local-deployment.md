@@ -67,9 +67,9 @@ export CLOUD_OPERATOR_ACCOUNT_ID=11111111-1111-4111-8111-111111111111
 docker compose --env-file deploy/local-stack/local.env up -d --no-deps --force-recreate account
 ```
 
-Open **Cloud actions** from Account, or visit `/operator/actions`. Only the
+Visit `/operator/actions`; if you are signed out, sign in to return to this page. Only the
 configured signed-in account can read `GET /api/account/operator/actions`.
-An absent or empty setting denies every account; an invalid UUID refuses account
+An absent or empty setting denies every account; a noncanonical or invalid UUID refuses account
 server startup. Customer ownership, support permissions and worldwide admin
 sign-in grant no country operator access. Choosing a real production operator
 remains an operating decision.
