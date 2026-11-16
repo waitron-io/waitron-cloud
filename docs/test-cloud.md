@@ -284,7 +284,10 @@ pairings retain their origin.
 
 The override publishes only port 443. PostgreSQL, Mailpit, storage and the gateway
 have no host ports. Only bootstrap mounts your certificate directory, read-only;
-the proxy reads its imported bundle from the private configuration volume. Account
+the proxy reads its imported bundle from a separate proxy-only volume. Account,
+storage and workers cannot mount that volume. HAProxy keeps its security rules
+in the read-only image and reads the configured name and certificate path from
+its environment. Account
 links still go to the captured inbox, with your configured HTTPS origin. No real
 mail is sent by this setting. Venue service levels use test mode; translation and
 the unavailable workers keep their existing restrictions.
@@ -302,6 +305,29 @@ docker compose --env-file deploy/test-cloud/test.env \
   -f compose.yaml -f deploy/test-cloud/compose.yaml \
   -f deploy/test-cloud/compose.amazon.yaml restart proxy
 ```
+
+Read captured mail privately over SSH, without publishing Mailpit. From the
+same deployment directory and with the same settings, list messages through the
+account container's internal network, then read the selected message:
+
+```sh
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml exec -T account \
+  curl --fail --silent http://mailpit:8025/api/v1/messages
+# Use the returned message ID privately:
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml exec -T account \
+  curl --fail --silent http://mailpit:8025/api/v1/message/MESSAGE_ID
+```
+
+Keep those messages and sign-in links out of logs and pull requests. For a fresh
+public-name deployment the internal leaf lasts 365 days, matching the private CA's
+one-year maintenance window. The LAN setting retains its thirty-day leaf. Expiry
+still refuses bootstrap; automatic internal certificate rotation is not built.
+Plan maintenance before the year ends rather than deleting the configuration
+volume, which also holds the account's keys.
 
 This configuration does not extend `scripts/test-cloud-deploy.mjs` to Amazon.
 Its home-network capacity and bind checks remain unchanged. The next slice must

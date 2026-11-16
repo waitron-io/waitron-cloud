@@ -21,7 +21,7 @@ async function existing(directory,origin){
   return value;
  }catch{throw new Error('test_cloud.identity_invalid');}
 }
-// Internal issuers validate private trust without rewriting the public proxy.
+// Internal issuers validate private trust without importing public proxy keys.
 export async function bootstrapTestCloudIdentity(directory,origin){
  await bootstrap(directory);
  const target=join(directory,'lan');const found=await existing(target,origin);if(found)return found;
@@ -33,7 +33,7 @@ export async function bootstrapTestCloudIdentity(directory,origin){
   await execute('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'ca-key.pem'),'-out',join(scratch,'ca.pem'),'-days','365','-subj','/CN=Waitron Cloud LAN test CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign'],{timeout:30000});
   await execute('openssl',['req','-new','-newkey','rsa:2048','-nodes','-keyout',join(scratch,'key.pem'),'-out',join(scratch,'leaf.csr'),'-subj','/CN=waitron.local'],{timeout:30000});
   await writeFile(join(scratch,'leaf.ext'),'subjectAltName=DNS:waitron.local,IP:192.168.10.10\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n',{mode:0o600});
-  await execute('openssl',['x509','-req','-in',join(scratch,'leaf.csr'),'-CA',join(scratch,'ca.pem'),'-CAkey',join(scratch,'ca-key.pem'),'-set_serial','0x'+randomUUID().replaceAll('-',''),'-out',join(scratch,'cert.pem'),'-days','30','-extfile',join(scratch,'leaf.ext')],{timeout:30000});
+  await execute('openssl',['x509','-req','-in',join(scratch,'leaf.csr'),'-CA',join(scratch,'ca.pem'),'-CAkey',join(scratch,'ca-key.pem'),'-set_serial','0x'+randomUUID().replaceAll('-',''),'-out',join(scratch,'cert.pem'),'-days',origin&&origin!=='https://waitron.local:3000'?'365':'30','-extfile',join(scratch,'leaf.ext')],{timeout:30000});
   const ca=await readFile(join(scratch,'ca.pem')),cert=await readFile(join(scratch,'cert.pem')),key=await readFile(join(scratch,'key.pem'));
   const value={version:1,origin:origin??'https://waitron.local:3000',caSha256:digest(ca),certificateSha256:digest(cert)};
   await writeFile(join(scratch,'proxy.pem'),Buffer.concat([key,cert]),{mode:0o600});await writeFile(join(scratch,'identity.json'),JSON.stringify(value),{mode:0o600});
@@ -42,11 +42,10 @@ export async function bootstrapTestCloudIdentity(directory,origin){
   await lease.assertOwned();await rename(scratch,target);return await existing(target,origin);
  }finally{await rm(scratch,{recursive:true,force:true});await lease.release();}
 }
-export async function bootstrapTestCloud(directory,{origin='https://waitron.local:3000',certificateSource}={}){
+export async function bootstrapTestCloud(directory,{origin='https://waitron.local:3000',certificateSource,certificateDirectory}={}){
  canonicalHttpsOrigin(origin);
- if(origin!=='https://waitron.local:3000'&&!certificateSource)throw new Error('test_cloud.certificate_source');
+ if(origin!=='https://waitron.local:3000'&&(!certificateSource||!certificateDirectory))throw new Error('test_cloud.certificate_source');
  const identity=await bootstrapTestCloudIdentity(directory,origin);
- let certificate='/run/local-stack/lan/proxy.pem';
  if(certificateSource){
   let bundle;
   try{
@@ -54,16 +53,16 @@ export async function bootstrapTestCloud(directory,{origin='https://waitron.loca
    if(leaf.ca||!leaf.checkHost(new URL(origin).hostname)||Date.parse(leaf.validFrom)>Date.now()||Date.parse(leaf.validTo)<=Date.now()||!leaf.publicKey.equals(createPublicKey(createPrivateKey(key))))throw Error();
    bundle=Buffer.concat([key,chain]);
   }catch{throw new Error('test_cloud.certificate_invalid');}
-  await writeFile(join(directory,'lan/public-proxy.pem.tmp'),bundle,{mode:0o600});
-  await rename(join(directory,'lan/public-proxy.pem.tmp'),join(directory,'lan/public-proxy.pem'));
-  certificate='/run/local-stack/lan/public-proxy.pem';
+  if(!certificateDirectory)throw new Error('test_cloud.certificate_source');
+  await mkdir(certificateDirectory,{recursive:true,mode:0o700});await chmod(certificateDirectory,0o700);
+  const scratch=join(certificateDirectory,'.proxy-'+randomUUID());
+  try{await writeFile(scratch,bundle,{mode:0o600});await rename(scratch,join(certificateDirectory,'proxy.pem'));}
+  finally{await rm(scratch,{force:true});}
  }
- const template=await readFile(new URL('./proxy.cfg',import.meta.url),'utf8');
- const config=template.replaceAll('https://waitron.local:3000',origin).replaceAll('waitron.local:3000',new URL(origin).host).replace('/run/local-stack/lan/proxy.pem',certificate);
- await writeFile(join(directory,'proxy.cfg.tmp'),config,{mode:0o600});await rename(join(directory,'proxy.cfg.tmp'),join(directory,'proxy.cfg'));
+
  return identity;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- try{await bootstrapTestCloud(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',{origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE});console.log('{"status":"ready"}');}
+ try{await bootstrapTestCloud(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',{origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,certificateDirectory:'/run/proxy-certificate'});console.log('{"status":"ready"}');}
  catch{console.error('Test Cloud bootstrap failed; inspect its private volume');process.exitCode=1;}
 }

@@ -17,6 +17,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - test-cloud-public-certificate:/run/proxy-certificate
   migrate:
     environment: *amazon-environment
   storage:
@@ -50,6 +51,20 @@ services:
   mailpit:
     ports: !reset []
   proxy:
+    environment:
+      TEST_CLOUD_ORIGIN: ${TEST_CLOUD_ORIGIN}
+      TEST_CLOUD_CERTIFICATE: /run/proxy-certificate/proxy.pem
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export TEST_CLOUD_HOST="$${TEST_CLOUD_ORIGIN#https://}"
+        exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg
+    volumes: !override
+      - test-cloud-public-certificate:/run/proxy-certificate:ro
     ports: !override ["0.0.0.0:443:3000"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--connect-to", "::127.0.0.1:3000", "${TEST_CLOUD_ORIGIN}/api/health/ready"]
+
+volumes:
+  test-cloud-public-certificate:

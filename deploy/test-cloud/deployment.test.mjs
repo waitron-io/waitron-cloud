@@ -53,7 +53,10 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
   assert.ok(!service.volumes?.some(v=>v.source?.includes('docker.sock')),name);
   assert.notEqual(service.environment?.CLOUD_TRANSLATION,'1');
  }
- assert.ok(value.services.proxy.command.includes('/run/local-stack/proxy.cfg'));
+ assert.ok(value.services.proxy.command.some(v=>v.includes('/app/deploy/test-cloud/proxy.cfg')));
+ const bundle=value.services.bootstrap.volumes.find(v=>v.target==='/run/proxy-certificate');assert.equal(bundle.type,'volume');assert.notEqual(bundle.read_only,true);
+ assert.ok(value.services.proxy.volumes.some(v=>v.source===bundle.source&&v.read_only));
+ for(const[name,service]of Object.entries(value.services))if(!['bootstrap','proxy'].includes(name))assert.ok(!service.volumes?.some(v=>v.source===bundle.source),name+' must not read the public private key');
  assert.ok(value.services.account.healthcheck.test.includes('https://cloud.example.test'));
  assert.ok(value.services.proxy.healthcheck.test.some(v=>v.includes('cloud.example.test')));
 });

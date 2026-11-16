@@ -66,24 +66,32 @@ test('an expired CA is refused even while a correctly signed longer-lived leaf r
 test('configured bootstrap imports a renewable certificate while retaining its private backend CA',async t=>{
  const {bootstrapTestCloud}=await api(),dir=await root(),source=await root(),origin='https://cloud.example.test';
  const issue=(host='cloud.example.test')=>execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(source,'privkey.pem'),'-out',join(source,'fullchain.pem'),'-days','2','-subj','/CN='+host,'-addext','subjectAltName=DNS:'+host,'-addext','basicConstraints=critical,CA:FALSE'],{stdio:'ignore'});
- issue();const options={origin,certificateSource:source};
+ issue();const options={origin,certificateSource:source,certificateDirectory:join(dir,'proxy-only')};
  const value=await bootstrapTestCloud(dir,options);
  assert.equal(value.origin,origin);
  const internalCA=await readFile(join(dir,'lan/ca.pem')),internalKey=await readFile(join(dir,'lan/ca-key.pem'));
  const {createHash}=await import('node:crypto');assert.equal(value.caSha256,createHash('sha256').update(internalCA).digest('hex'));
  assert.equal(new X509Certificate(await readFile(join(dir,'lan/cert.pem'))).checkHost('waitron.local'),'waitron.local');
- const first=await readFile(join(dir,'lan/public-proxy.pem'));
+ const first=await readFile(join(dir,'proxy-only/proxy.pem'));
  assert.deepEqual(first,Buffer.concat([await readFile(join(source,'privkey.pem')),await readFile(join(source,'fullchain.pem'))]));
- assert.equal((await stat(join(dir,'lan/public-proxy.pem'))).mode&0o777,0o600);
- assert.equal((await stat(join(dir,'proxy.cfg'))).mode&0o777,0o600);
+ assert.equal((await stat(join(dir,'proxy-only/proxy.pem'))).mode&0o777,0o600);
+ await assert.rejects(stat(join(dir,'proxy.cfg')),error=>error.code==='ENOENT');
  issue();await bootstrapTestCloud(dir,options);
- assert.notDeepEqual(await readFile(join(dir,'lan/public-proxy.pem')),first);
+ assert.notDeepEqual(await readFile(join(dir,'proxy-only/proxy.pem')),first);
  assert.deepEqual(await readFile(join(dir,'lan/ca.pem')),internalCA);assert.deepEqual(await readFile(join(dir,'lan/ca-key.pem')),internalKey);
- await assert.rejects(bootstrapTestCloud(dir,{origin:'https://other.example.test',certificateSource:source}),/test_cloud.identity_invalid/);
+ await assert.rejects(bootstrapTestCloud(dir,{origin:'https://other.example.test',certificateSource:source,certificateDirectory:options.certificateDirectory}),/test_cloud.identity_invalid/);
  await writeFile(join(source,'privkey.pem'),await readFile(join(dir,'lan/key.pem')));
  await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
  issue('other.example.test');
  await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
  await assert.rejects(bootstrapTestCloud(await root(),{origin}),/test_cloud.certificate_source/);
  issue();t.mock.timers.enable({apis:['Date'],now:Date.now()+3*86400000});await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
+});
+
+test('public-only internal leaf permits day61 renewal and retains the existing one-year CA limit',async t=>{
+ const {bootstrapTestCloud}=await api(),dir=await root(),source=await root(),options={origin:'https://cloud.example.test',certificateSource:source,certificateDirectory:join(dir,'proxy-only')};
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(source,'privkey.pem'),'-out',join(source,'fullchain.pem'),'-days','90','-subj','/CN=cloud.example.test','-addext','subjectAltName=DNS:cloud.example.test','-addext','basicConstraints=critical,CA:FALSE'],{stdio:'ignore'});
+ const identity=await bootstrapTestCloud(dir,options),now=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:now+61*86400000});assert.deepEqual(await bootstrapTestCloud(dir,options),identity);
+ t.mock.timers.setTime(now+366*86400000);await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.identity_invalid/);
 });

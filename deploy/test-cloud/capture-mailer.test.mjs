@@ -44,3 +44,26 @@ test('explicitly configured public origin changes captured links without changin
  assert.throws(()=>createTestCaptureMailer({origin:'https://other.example.test',port},origin),/test_cloud.mail_configuration/);
  assert.throws(()=>createTestCaptureMailer({origin:'http://cloud.example.test',port},'http://cloud.example.test'),/origin_invalid/);
 });
+
+test('email worker uses the operator origin and refuses a different runtime origin before sending',async t=>{
+ const {spawn}=await import('node:child_process'),{port,messages}=await sink(t);
+ const here=relative=>JSON.stringify(new URL(relative,import.meta.url).href);
+ const run=async corrupt=>{
+  const script=`import{mock}from'node:test';import{EventEmitter}from'node:events';import{createRequire}from'node:module';
+   const realRuntime=await import(${here('./runtime.mjs')}),local=await import(${here('../local-stack/runtime.mjs')});
+   const {mkdtemp,rm}=await import('node:fs/promises');const{tmpdir}=await import('node:os');const{join}=await import('node:path');
+   const directory=await mkdtemp(join(tmpdir(),'cloud-mail-worker-'));const{bootstrap}=await import(${here('../local-stack/bootstrap.mjs')});await bootstrap(directory);
+   mock.module(${here('../local-stack/runtime.mjs')},{namedExports:{...local,checkConsumerDatabase:async()=>{}}});
+   mock.module(${here('./runtime.mjs')},{namedExports:{...realRuntime,testRuntimeEnvironment:(...args)=>{const value=realRuntime.testRuntimeEnvironment(...args);if(${corrupt})value.CLOUD_PORTAL_ORIGIN='https://other.example.test';return value;}}});
+   const pg=createRequire(${here('../../packages/registration/package.json')}).resolve('pg');mock.module(pg,{namedExports:{Pool:class extends EventEmitter{async end(){}}}});
+   const outbox=await import(${here('../../packages/registration/src/email-outbox.ts')});
+   mock.module(${here('../../packages/registration/src/email-outbox.ts')},{namedExports:{...outbox,EmailWorker:class{constructor(pool,outbox,mailer){this.mailer=mailer;}async runOnce(){await this.mailer.sendVerification({email:'owner@example.test',token:'x'.repeat(43),expiresAt:'2030-01-01T00:00:00Z',locale:'en'});}}}});
+   const capture=await import(${here('./capture-mailer.mjs')});mock.module(${here('./capture-mailer.mjs')},{namedExports:{...capture,createTestCaptureMailer:(options,origin)=>capture.createTestCaptureMailer({...options,port:${port}},origin)}});
+   try{const{runTestEmailWorker}=await import(${here('./email-worker.mjs')});await runTestEmailWorker({directory,once:true});console.log('accepted');}catch(error){if(error.message!=='test_cloud.mail_configuration')throw error;console.log('refused');}finally{await rm(directory,{recursive:true,force:true});}`;
+  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',script],{env:{PATH:process.env.PATH,TEST_CLOUD_ORIGIN:'https://cloud.example.test'},stdio:['ignore','pipe','pipe']});let stdout='',stderr='';child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
+  const code=await new Promise((yes,no)=>{child.once('error',no);child.once('close',yes);});assert.equal(code,0,stderr);return stdout.trim();
+ };
+ assert.equal(await run(false),'accepted');const refused=await run(true);
+ assert.equal(messages.length,1,'the completed worker must not deliver the misconfigured link');
+ assert.match(messages[0],/https:\/\/cloud\.example\.test\/signup#token=/);assert.equal(refused,'refused');
+});

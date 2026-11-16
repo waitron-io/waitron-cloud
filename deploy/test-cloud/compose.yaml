@@ -196,7 +196,7 @@ services:
     init: true
     read_only: true
     tmpfs: [/tmp:mode=0700]
-    command: ["haproxy", "-W", "-db", "-f", "/run/local-stack/proxy.cfg"]
+    command: ["haproxy", "-W", "-db", "-f", "/app/deploy/test-cloud/proxy.cfg"]
     volumes:
       - local-stack-config:/run/local-stack:ro
     ports: !override ["${TEST_CLOUD_BIND:-192.168.10.10}:3000:3000"]
