@@ -239,6 +239,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
         if (args.at(-1) === 'index.json') return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.index.v1+json',manifests:savedTags.map(tag => ({
           annotations:{'io.containerd.image.name':'docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)},platform:{os:'linux',architecture:'amd64'},digest:'sha256:' + 'b'.repeat(64)}))});
         if (args.at(-1) === 'blobs/sha256/' + 'b'.repeat(64)) return JSON.stringify({schemaVersion:2,mediaType:'application/vnd.oci.image.manifest.v1+json',config:{digest:'sha256:' + hashes},layers:[{digest:'sha256:' + 'c'.repeat(64)}]});
+        if (args.at(-1) === 'blobs/sha256/' + hashes) return JSON.stringify({os:'linux',architecture:'amd64'});
         return JSON.stringify(savedTags.map(tag => ({Config:'blobs/sha256/' + hashes,RepoTags:['docker.io/' + (tag.includes('/') ? tag : 'library/' + tag)]})));
       }
       if (binary === 'wg') return 'A'.repeat(43) + '=';
@@ -433,6 +434,32 @@ test('saved tar requires the selected amd64 manifest, config and every layer', a
   pack(); await api.checkAmazonArchive(archive,['synthetic:local'],run);
   await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected,platform:{os:'linux',architecture:'arm64'}}]}));
   pack(); await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run), /amazon.archive_platform/);
+  await t.test('direct manifest requires configuration-proved linux/amd64',async()=>{
+    await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,digest:selected.digest}]}));
+    pack();await api.checkAmazonArchive(archive,['synthetic:local'],run);
+    await writeFile(join(directory,blob('3')),JSON.stringify({os:'linux',architecture:'arm64'}));pack();
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),/amazon.archive_platform/);
+    await writeFile(join(directory,blob('3')),files[blob('3')]);
+  });
+  await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected}]}));
+  for(const config of [{os:'linux'},{architecture:'amd64'},{os:'linux',architecture:'arm64'},
+    {os:'linux',architecture:'unknown'},{os:'windows',architecture:'amd64'}])await t.test('configuration refuses '+JSON.stringify(config),async()=>{
+    await writeFile(join(directory,blob('3')),JSON.stringify(config));pack();
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),/amazon.archive_platform/);
+  });
+  await t.test('malformed configuration cannot supply platform evidence',async()=>{
+    await writeFile(join(directory,blob('3')),'{broken');pack();
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),SyntaxError);
+  });
+  await writeFile(join(directory,blob('3')),files[blob('3')]);
+  for(const platform of [{os:'linux'},{os:'linux',architecture:'arm64'}])await t.test('outer metadata refuses '+JSON.stringify(platform),async()=>{
+    await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,platform}]}));pack();
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),/amazon.archive_platform/);
+  });
+  await writeFile(join(directory,'index.json'),files['index.json']);pack();
+  await assert.rejects(api.checkAmazonArchive(archive,['wrong:local'],run),/amazon.archive_image/);
+  await writeFile(join(directory,blob('1')),JSON.stringify({manifests:[{...selected,platform:{os:'linux',architecture:'arm64'}}]}));pack();
+  await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),/amazon.archive_platform/);
 });
 
 // The observer owns the retained clients; no second journey may replace them.
