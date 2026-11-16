@@ -17,11 +17,11 @@ try{
  // Archive only committed source: local credentials and untracked venue data never enter the image.
  execFileSync('git',['-C',checkout,'archive','--format=tar','-o',join(context,'waitron.tar'),revision]);
  execFileSync('tar',['-xf',join(context,'waitron.tar'),'-C',join(context,'waitron')]);await rm(join(context,'waitron.tar'));
- for(const name of ['container-entry.mjs','waitron-verifier.ts','waitron-verify-child.mjs','verify-process.ts','verification-protocol.ts','verification-transport.ts','waitron-data-verify-child.mjs'])await copyFile(join(root,'packages/backups/src',name),join(context,'verifier',name));
+ for(const name of ['container-entry.mjs','waitron-verifier.ts','waitron-verify-child.mjs','verify-process.ts','verification-protocol.ts','verification-transport.ts','waitron-data-verify-child.mjs'])await writeFile(join(context,'verifier',name),await readFile(join(root,'packages/backups/src',name)));
  const {generateHourRelease}=await import(pathToFileURL(join(context,'waitron/scripts/generate-hour-release.mjs')).href);
  await mkdir(join(context,'waitron/build'),{recursive:true});
  await writeFile(join(context,'waitron/build/hour-release.json'),JSON.stringify(generateHourRelease({cwd:checkout,source:revision})));
- await copyFile(join(root,'deploy/backup-verifier/target.json'),join(context,'verifier/target.json'));
+ await writeFile(join(context,'verifier/target.json'),await readFile(join(root,'deploy/backup-verifier/target.json')));
  await copyFile(join(root,'deploy/backup-verifier/Dockerfile'),join(context,'Dockerfile'));
  execFileSync('docker',['build','--secret','id=npm_token,env=NODE_AUTH_TOKEN','--label','cloud.waitron-revision='+revision,'-t',image,context],{stdio:'inherit',timeout:600000});
 }finally{await rm(context,{recursive:true,force:true});}
