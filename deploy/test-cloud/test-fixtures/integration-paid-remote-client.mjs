@@ -36,7 +36,12 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   const remoteService = value => value.services.find(service => service.service === 'remote_access');
   if (phase === 'withdrawn') {
     const saved = JSON.parse(await readFile(directory + '/configuration-envelope.json', 'utf8'));
-    const replayed = await exchange('configuration', saved);
+    const payload = JSON.parse(Buffer.from(saved.payload, 'base64url').toString('utf8'));
+    payload[5] = Date.now();
+    payload[6] = JSON.stringify(state.lifecycle.lease);
+    const bytes = Buffer.from(JSON.stringify(payload));
+    const replayed = await exchange('configuration', {payload: bytes.toString('base64url'),
+      signature: sign(null, bytes, key).toString('base64url')});
     assert.equal(replayed.status, 200);
     const remote = remoteService(await replayed.json());
     assert.equal(remote.state, 'unconfigured', 'integration.remote_replay_state');

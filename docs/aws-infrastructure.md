@@ -1185,6 +1185,12 @@ session (decision relayed by the watcher at 21:03). Amazon now requests C's stop
 without guest shutdown; the observer's 90-second bound is unchanged. A local
 result does not qualify Amazon timing.
 
+The local replay regression, `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`,
+fails on the synthetic server's 401 against fixture revision `4fbb31cd6`;
+it passes with refreshed authentication. The fixture now re-signs
+the saved operation with current authentication; production expiry stays unchanged.
+This fits the local HTTP 500 by source inference, not a recovered inner error.
+
 Storage has an 800 MiB limit. The failed 14 November local run recorded a peak
 of 544,772,096 bytes (519.54 MiB), with no storage restart or memory events in
 213 samples under the 1 GiB trial limit. Peak plus 50% is 779.30 MiB, rounded
