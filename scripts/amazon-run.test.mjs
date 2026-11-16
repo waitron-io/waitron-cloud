@@ -437,6 +437,9 @@ test('saved tar requires the selected amd64 manifest, config and every layer', a
   await t.test('direct manifest accepts configuration-proved linux/amd64',async()=>{
     await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,digest:selected.digest}]}));
     pack();await api.checkAmazonArchive(archive,['synthetic:local'],run);
+    await writeFile(join(directory,blob('3')),JSON.stringify({os:'linux',architecture:'arm64'}));pack();
+    await assert.rejects(api.checkAmazonArchive(archive,['synthetic:local'],run),/amazon.archive_platform/);
+    await writeFile(join(directory,blob('3')),files[blob('3')]);
   });
   await writeFile(join(directory,'index.json'),JSON.stringify({manifests:[{...root,...selected}]}));
   for(const config of [{os:'linux'},{architecture:'amd64'},{os:'linux',architecture:'arm64'},
