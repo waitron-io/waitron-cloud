@@ -429,12 +429,15 @@ record the scope. Close D88's duplicate design-approval gate: the approved produ
 design settles per-venue gVisor runtimes on shared machines, country cells, cold
 recovery, Spain/Paris, per-action automation, per-cell releases and quiet-hour moves.
 The owner's 24 October decisions put accounts/sign-in/recovery in-country with one
-owner per customer per country, no invitations or manager accounts. Global keeps
-the operator console and apex routing, optionally billing. Country billing is a
-recommendation for later design; global reporting needs later privacy/data scope.
+owner per customer per country, no invitations or manager accounts. D112-S's
+16 November direction keeps countries independent, including billing and customer
+email. Worldwide is limited to a planned small admin passkey console for health
+and deploy starts, plus the apex/Spain redirect, without country customer data or
+operator authority.
 Future owner transfer must be country-scoped verified transfer/recovery, without a
 second owner or automatic support takeover. No D88 owner question is ready now;
-P6/D115 owns runtime/build delivery with P1/P3/P4/P7, A951 and D101 dependencies.
+P6/D115 owns runtime/build delivery with P1/P4/P7, existing country owner
+checks/D608, A951 and D101 dependencies.
 Production local build/rehearsal authority stands; this reconciliation adds none.
 Reliability promises and pricing await measurements at launch. A1018's design,
 both examples and retained defaults are approved at Waitron
@@ -701,7 +704,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    production schema changes need a separate go-ahead (its section 12). Its section 3 replaces
    the statements in C39, C41 and the hosting proposal that put the owner's approval on every
    step. The build is [seven plans](superpowers/plans/2026-10-22-cloud-production-deployment.md),
-   each written when its turn comes: P1 can start now; P3 waits for the migration slot.
+   each written when its turn comes; D112-S replaces the old P3 migration programme.
    P2 now provides the [AWS layer](aws-infrastructure.md): independent global and Spain
    roots, three-zone primary cells, encrypted cold copies, separate key authority,
    scoped workload permissions, ingress, DNS and infrastructure signals. Its offline
@@ -722,7 +725,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    refresh. Database recovery grants still belong to P7's qualification.
    The owner approved gVisor for P6 and running Spain from Paris for P7 on
    2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
-   (A1018); P7 still waits for P3. Neither answer grants live/provider authority.
+   (A1018) and existing country owner checks/D608. P7 recovers a self-contained
+   country without P3 permits; P2 and legal/provider gates remain. Neither answer
+   grants live/provider authority.
    Cloud agrees the [revised A1018 direction](waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
    at Waitron `d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`, including the owner’s
    15:37 correction: after controlled or emergency takeover M2 alone handles AEAT.
@@ -811,11 +816,11 @@ order. Remote access matters most because Waitron's customer-facing features wai
    cleared the [build plan](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md)
    for publication on 11 November; the owner authorised building it at 14:05 with
    “10-min window; build (Recommended)”. Slice 1 remembers passkey-first sign-in locally.
-   Later handover and lost-owner recovery need their actual interfaces.
-   Billing account pages stay parked.
-   The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
-   supplies the boundary; ownership grants no support takeover, operator, fiscal or
-   activation permission.
+   D608's handover slices 12–13 build the exactly-one-owner database rule and
+   swap-owner function on existing country ownership data; they no longer wait for
+   P3's owner/revision interface. Lost-owner recovery retains its lifecycle gates.
+   Billing account pages stay parked. Ownership grants no support takeover,
+   operator, fiscal or activation permission.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
    reflects the owner's 2026-11-08 paired-box reporting, automatic sending with exact Sent
    reports, country feature lists and standard 24-hour support access choices. Box forms,
@@ -1756,29 +1761,30 @@ implementation or production evidence.
   expired storage credentials are refused, recovery restores management access and a fresh
   manifest removes a revoked route. Repeat the drill with the selected deployment database,
   gateway reconciler and provider-native storage before setting an availability promise.
-- **Global and country separation (P3).** The
-  [revised implementation plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
-  follows the owner's 24 October decisions: customer accounts, credentials, factors,
-  sessions, profiles, plans, alerts, quotas and account/box recovery stay in-country,
-  with one owner per customer organisation per country and no invitations or managers.
-  Fresh sign-in, account recovery, new box recovery and venue services must work with
-  global absent. Global keeps the separate worldwide operator console and apex routing,
-  with no customer or venue copies. Country billing is recommended, not implemented or
-  approved; global reporting needs a later privacy decision. This is planning only,
-  pending owner PLAN re-approval after landing, then separate P3 build
-  authority. Isolation, cutover and real outage acceptance remain unbuilt and unproved.
-  Every migration task must reconcile reservations, including 043, and the actual
-  manifest before reallocating provisional later names. P1's shared database remains
-  transitional; P1 owns isolated deployment and P4 country action/approval adapters.
-  Priority 5 separately designs verified owner handover and lost-owner recovery.
-  Production schema, provider resources, deployment, spending and live mail retain
-  their separate authority gates.
+- **Independent countries and the worldwide admin console (P3 / D112-S).** The
+  [replacement P3](superpowers/plans/2026-10-22-cloud-global-country-split.md) leaves
+  two implementation PRs: configure Spain's country and refuse foreign-business
+  signup (`Waitron Cloud isn't available in <country> yet`); then plan and build
+  the small worldwide admin console by reusing/shrinking P2's global setup, with
+  its own admin passkey sign-in, health/deploy starts, apex DNS and Spain redirect.
+  Retire the global customer sign-in, portal and registration worker in that code
+  PR, and shrink its database to console admins only. No country customer/venue
+  copies or country operator authority belong worldwide. Each country owns its
+  billing, customer email, logs/alarms, keys/secrets, backups and second region;
+  the email provider is unchosen. Each pulls reviewed repository releases started
+  from the console, with no messages between countries. D608 handover owns the
+  one-owner rule and swap-owner function. P7 owns the outside checker. Provider
+  operations, deployment, spending, production schema and live email retain their
+  separate authority gates.
 - **Repair actions and Cloud controller (P4).** The approved production design's
   action-by-action automation is described in the
   [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
   This is planning only. The catalogue, durable requests, operator approvals,
   console, notifications and controller are not built. Plan approval and P1's
-  country-cell build remain required before implementation; any new database
+  country-cell build remain required before implementation. D113's fresh plan read
+  uses one configured operator account signed in on Spain's site with explicit
+  country permissions; worldwide health/deploy sign-in grants no P4 authority.
+  No P3 offline worldwide-authority handoff remains. Any new database
   migration must recheck active reservations and the inventory after migration 043.
   C39 supplies observations without
   granting action or activation authority. P5 release waves, P6 hosted placement
@@ -2272,8 +2278,9 @@ The [ownership map](documentation-ownership.md) records what remains in Waitron.
   is closed; no owner question is ready now. A1018's examples and retained defaults
   are approved at Waitron `060966c2b3e9203acf0849042814997307cae463`.
   Exact formats, compatible A947 amendments, separate A1018 build authority,
-  implementation and runtime/provider qualification remain open, with P1/P3/P4,
-  A951 and D101 dependencies. Reliability promises and pricing follow measurements.
+  implementation and runtime/provider qualification remain open, with P1/P4,
+  existing country owner checks/D608, A951 and D101 dependencies. Reliability
+  promises and pricing follow measurements.
   The old managed-Postgres framing
   is historical; Waitron targets SQLite and Litestream.
 - **Production object-store proof.** The executable local SeaweedFS 4.47 contract admits
@@ -2770,7 +2777,7 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   five-minute visibility and 30-second batching. Visitors retain neutral bilingual
   guidance with no upstream details. Refresh reads stored evidence without probing
   or repairing; Account clears it on expiry and navigation. Gateway/collector
-  container mounts, primary-only reads and P1/P3 backup integration still need
+  container mounts, primary-only reads and P1 country backup integration still need
   deployment qualification. Reporting stays disabled in deployments. See the
   [collection and Account guide](local-monitoring.md#private-gateway-forwarding-collection).
   The invalid equal-timestamp fixture uses one captured observation; its owning

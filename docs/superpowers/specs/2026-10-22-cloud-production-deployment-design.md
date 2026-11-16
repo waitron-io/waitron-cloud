@@ -102,7 +102,7 @@ replaces them:
 | [C41](2026-10-22-cloud-release-upgrade-design.md) | (summary) the owner approves each stage; "If you are unavailable, pause expansion" | Release waves widen by themselves while health holds, starting slow and loosening with a clean record (section 8). |
 | C41 | "initially, one disruptive venue operation globally" | At most one disruptive operation per cell at launch (our call); per country and cell, never global. |
 | C41 | waves of "min(20, max(1, ceil(10% of the frozen eligible population)), remaining venues)", each meeting "24 continuous healthy hours" | Starting values, not limits: they loosen automatically (section 8). |
-| [Hosting proposal](2026-10-21-cloud-hosted-venue-design.md) | (summary) one shared Cloud for all venues, with country packs choosing storage regions only | Each country runs as its own Cloud under one global layer (section 4). |
+| [Hosting proposal](2026-10-21-cloud-hosted-venue-design.md) | (summary) one shared Cloud for all venues, with country packs choosing storage regions only | Each country runs independently; worldwide monitors health and starts deploys (section 4). |
 
 The owner's 2026-10-23 handover model replaces the hosting proposal's universal
 external stop-proof rule (section 9). The cold recovery choice and D101's data rules
@@ -117,27 +117,40 @@ countries at the same time." "Deployments should be relatively small clusters so
 something goes wrong it affects just a subset of customers and it is quick to solve by
 moving just that small group."
 
-- **A country** runs as its own Cloud: its own cells, its own copy of the country's
-  services (remote-access gateways, backup storage and verification, monitoring, hosted
-  venues), customer accounts and sign-in, its own DNS records and its own second region
-  for failover. Spain is the first. Nothing a country needs for customer flows depends
-  on the global layer, including fresh sign-in, account recovery and box recovery.
+**Country boundary, 2026-11-16.** The owner's direction is “each country is an
+independent unit”. His later choice keeps a small worldwide admin console with its
+own sign-in. The [replacement P3](../plans/2026-10-22-cloud-global-country-split.md)
+records the words, times and campaign sources. This supersedes the former worldwide
+operator authority, optional worldwide billing and linked-database split design.
+It records the target design; this documentation change deploys nothing.
+
+- **A country** runs its own Cloud: cells, customer accounts and sign-in, remote
+  access, backup storage and verification, monitoring and hosted venues. Billing,
+  customer email (sign-in, recovery and alerts), logs, alarms, keys, secrets and
+  backups belong to that country, as does its second region. The email provider
+  is not chosen. Customer flows, including fresh sign-in and account/box recovery,
+  do not depend on worldwide availability. No messages pass between countries.
 - **A customer account belongs to one country (owner, 2026-10-24 11:07).** Marta
   signs in at `es.waitron.io`; Spain owns her credentials, sessions, account security,
-  recovery, organisation and venues. A Frankfurt outage is invisible to her customer
-  flows. The same human operating in two countries has two separate accounts. Each
-  customer organisation has **one Cloud account owner per country**, with no invitations,
-  manager accounts or concurrent second owner. This replaces the earlier delegated
-  starting line, "organisations and their members", and global customer sign-in tokens.
-  It does not change staff roles inside Waitron or grant fiscal/activation permission.
-- **The global layer** keeps the owner's worldwide operator console and the
-  `waitron.io` apex routing people to their country, optionally billing. It holds no
-  venue data under this design. It runs in its own AWS account in Frankfurt
-  (`eu-central-1`), failing over to another EU region, so neither a Spain outage nor a
-  Paris one takes it down. **It is separated from Spain before launch** (owner,
-  2026-10-22). Customer access through a country's name cannot require the apex to
-  answer or global to issue/refresh authority. Operator-console loss may delay
-  ask-first operations; ordinary customer work and recovery remain country-local.
+  recovery, organisation and venues. The same human operating in two countries has
+  two separate accounts. Each customer organisation has **one Cloud account owner
+  in its country**, with no invitations, manager accounts or concurrent second owner.
+  Spain's site will refuse a business from another country:
+  `Waitron Cloud isn't available in <country> yet` (owner's 2026-11-16 19:52 choice). D112-S's next code
+  PR adds that guard; this is not a claim that signup already refuses it.
+  These boundaries do not change Waitron staff roles or grant fiscal/activation permission.
+- **The worldwide side** has one small admin web app, server and database outside
+  every country. Its own admins sign in by passkey on the console's own origin.
+  Its database holds console admins only. Worldwide retains only its necessary
+  admin identity/security state and health/deployment metadata, never country logs,
+  customer or venue copies. The console can read country health and start deploys;
+  it cannot perform or approve country operator actions or issue country authority.
+  Worldwide also owns the `waitron.io` apex DNS and front-page redirect to
+  `es.waitron.io`. Direct country access works without the apex or console.
+- **A country operator** signs in separately inside that country. P4 uses one
+  configured operator account in Spain with explicit country permissions, independently
+  of the worldwide admin sign-in. Console loss cannot remove that local authority.
+  Customer ownership supplies no operator, support, fiscal or activation permission.
 - **A cell** is a small group of machines in one country and region, with its own
   remote-access gateway, operated and recovered together (the hosting proposal's
   definition). A cell is the unit that fails, upgrades and moves. The current code caps a
@@ -145,51 +158,27 @@ moving just that small group."
   starting cap and revisit it from measurements.
 - **A machine** runs many venues' workloads side by side (section 5).
 
-**Billing recommendation, not approved implementation.** Put customer billing and
-its self-service path in the country so global loss cannot block them. The later
-billing design decides provider, records and processing scope; optional global
-billing must still meet the no-customer-dependency rule. Worldwide aggregated
-reporting needs a later privacy/data-scope agreement before any export or storage.
-It cannot become a dependency of a country customer path.
+**Remaining work and dependencies.** D112-S replaces the former P3 migration,
+permit/revocation and cutover programme. Its remaining implementation is Spain's
+country configuration/signup guard, then a separately planned small worldwide console
+and DNS/redirect. Reuse and shrink P2's Frankfurt setup: its customer sign-in,
+portal, registration worker and database still need that implementation change
+(source read: `deploy/aws/roots/global/data.tf:19` and `workloads.tf:9`).
+They are not retired by these docs. The console plan
+chooses exact interfaces without exporting country data or granting country authority.
 
-**Owner transfer is future work.** A country-scoped verified transfer/recovery
-must replace the single owner without an invitation, concurrent second owner or
-automatic support takeover. Lost-owner recovery needs its own evidence and abuse
-controls; this document supplies no transfer endpoint or support permission.
-
-**P3 dependencies and Lane G follow-up.** One migration chain currently holds
-accounts and venue services together; P1's database is transitional. G owns the
-P3/P4 plans and launch priority 5, and must revise, review and re-ask P3 plan
-approval against the owner's decisions. The affected boundaries are:
-
-- P3's data classification, schema ownership and copies: keep customer identity,
-  credentials/factors, sessions, organisation/sole owner, legal-business profiles,
-  plan/service state, security audit and account mail/recovery in the country;
-  remove global customer profiles, membership copies and invitation assumptions.
-- P3's signed global customer permits, offline trust, revocation and actor adapters:
-  replace the global customer issuer dependency with country-owned authentication,
-  permission and final rechecks. Keep global operator authority separately scoped;
-  customer ownership never confers operator or Waitron activation authority.
-  G must reconcile its proposed `ControlScope`/`ControlClaims`, `ControlTrust`,
-  session exchange, revocation barrier and `HumanAuthority`/`CountryControl`
-  interfaces; this document accepts no new encoding or permission contract.
-- P3's API/portal routing, cookies, factor/signup/reset mail and customer recovery:
-  make every journey country-local, including starting a new box recovery during
-  global loss. Reconcile plan/entitlement and account allowance handling with the
-  country boundary; billing remains a later design.
-- P3's cutover, keys, migration, backup/restore and failure acceptance: separate
-  customer and operator custody, preserve IDs and security/fiscal assertions, and
-  prove fresh customer sign-in and both account/box recovery with global absent.
-- P4's P3 authentication/approval and notification dependencies: distinguish the
-  worldwide operator from the sole country customer owner, keeping action records
-  and checks in the country. Global loss supplies no emergency declaration.
-- Launch priority 5's roles/invitations scope: replace multiple Cloud users with
-  the single-owner lifecycle and future verified transfer/recovery above. G also
-  owns the coordinated canonical A1018 status notice; preserve historical pins
-  while recording the 24 October design approval and remaining format/build gates.
+D608's handover slices 12–13 own the exactly-one-owner database rule and swap-owner
+function, using the existing country ownership data. Verified handover and lost-owner
+recovery stay within that lifecycle, without automatic support takeover. P6 uses
+existing country owner checks and D608, not a new P3 customer-authority interface.
+D113's fresh P4 plan read reconciles the remaining implementation and operational
+details with the configured country operator. P7 recovers a self-contained country
+and owns the outside checker; it needs no P3 permits or linked-database recovery.
+P1/P2 deployment, independent security checks, A1018, D101 and provider gates remain.
 
 **Names (owner, 2026-10-22).** One domain, `waitron.io`, with one subdomain per country.
-Every venue keeps one stable public name under its country's subdomain
+Worldwide holds the apex and redirect; each country holds its own DNS records under
+its subdomain. Every venue keeps one stable public name under its country's subdomain
 (`<venue>.es.waitron.io` is our guess at the format) that never changes when the venue
 moves between machines, cells or regions. "Most venues will end up using their own custom
 domains": a venue points its own domain at its Waitron name, and Cloud obtains and renews
@@ -258,8 +247,8 @@ become less hands on."
   a failed backup, updating a gateway's routes) keeps happening by itself. The list covers
   repairs and changes that carry risk.
 - **On launch day (our call)** the action list exists in code with every repair action ask
-  first, Cloud asks through the console and a notification, and releases widen one wave at a
-  time on the owner's say. The self-widening waves of section 8 and the trend checks follow,
+  first, Cloud asks through the country's operator console and a notification, and
+  releases widen one wave at a time on the owner's say. The self-widening waves of section 8 and the trend checks follow,
   in that order, as the first automations; they are the plan's second milestone, not a
   condition of launch.
 - Moving an action to act and report is a recorded change in this repository, made by the
@@ -271,7 +260,7 @@ become less hands on."
   growing, a machine's load creeping up, a certificate nearing expiry) and acts, or asks,
   while there is still time, not when the limit is hit.
 
-The action list lives in one place, in code, and the owner's console shows it.
+The action list lives in one place, in code, and the country's operator console shows it.
 
 ## 7. Every problem leaves the system better
 
@@ -290,8 +279,10 @@ gains this step.
 **Owner, 2026-10-22:** "We need initially slow rollouts of new versions, but that can scale
 more quickly as we gain experience."
 
-- A release goes out in waves: first one cell's test venues, then a few real venues, then
-  wider.
+- The worldwide admin console starts a deployment of a reviewed repository release;
+  each country pulls and applies its own release. The console does not approve
+  country repair actions. A release goes out in waves: first one cell's test venues,
+  then a few real venues, then wider.
 - Wave size and the wait between waves are **settings that change themselves**: they widen
   after releases go cleanly and narrow again after one that does not. C41's 20-venue,
   24-hour wave is the starting setting.
@@ -349,8 +340,9 @@ A1018 build authority and runtime acceptance remain required.
 ## 10. How it is built (our call, all of it)
 
 - **AWS to start, without depending on it.** Spain runs in AWS (`eu-south-2`, already
-  chosen). Each country, and the global layer, gets its own AWS account under the existing
-  AWS Organization, so a mistake or failure in one account cannot reach another country.
+  chosen). Each country gets its own AWS account under the existing AWS Organization.
+  The small worldwide console stays outside those country accounts; its later plan
+  reuses/shrinks P2's Frankfurt setup. This keeps each country's authority separate.
   Everything AWS-specific stays in one layer, so a country whose law needs a local provider
   can use one.
 - **Kubernetes, AWS's managed version (EKS).** It places workloads on machines, restarts
@@ -360,9 +352,10 @@ A1018 build authority and runtime acceptance remain required.
 - **OpenTofu** describes every account, network, cluster, machine group and DNS record in
   this repository.
 - **Releases come from the repository.** A release is a change in the repository; a tool in
-  each cluster applies it (Argo CD or Flux, the builder's choice), and a release controller
+  each country's cluster pulls and applies it (Argo CD or Flux, the builder's choice),
+  after a deploy start from the worldwide console. A country release controller
   drives the waves of section 8.
-- **Cloud's own controller** decides placement, moves, wave progress and failover, and runs
+- **Each country's controller** decides placement, moves, wave progress and failover, and runs
   the action list of section 6. This is where Cloud's accumulated automation lives.
 - **Machines:** start with 4 GiB general-purpose machines (t3.medium), three per cell, one
   in each of the region's three data centres. A cell's remote-access gateways, backup
@@ -380,7 +373,7 @@ A1018 build authority and runtime acceptance remain required.
 ## 11. Day one, and what it costs
 
 At launch: Spain only, **one cell** **(our call)** of three machines across three data
-centres; the global layer separate; Paris failover kept **cold** (backups copied there
+centres; the small worldwide admin console separate; Paris failover kept **cold** (backups copied there
 continuously, servers rebuilt from the repository's files when needed). A second cell is
 created when the first passes half its cap; moving venues between cells is rehearsed on the
 LAN test Cloud before that.
@@ -396,16 +389,17 @@ Estimate, AWS list prices in US dollars before tax, from Cloud's own
 | Spain: outbound internet gateway | $35 |
 | Spain: load balancer for remote access and public addresses | $37 |
 | Spain: logs, metrics, alarms, keys, secrets, DNS, backups, disks | $47 |
-| Global layer | about $130 |
+| Small worldwide admin console | not yet sized or priced |
 | Paris, kept cold | about $5–10 |
-| **Total** | **about $460** |
+| **Total** | **to be recalculated after sizing the console** |
 
 Each venue beyond the first machines' capacity adds about $6 a month. A warm Paris
-standby would add about $140. The total is an estimate, not a ceiling: an outbound
-gateway in each data centre adds about $70, and machines will grow once measured. The
-builder resizes within about twice this total and tells the owner beyond that **(our
-call)**. The owner accepted this starting size on 2026-10-22 ("That
-sounds fine").
+standby would add about $140. These are historical country estimates: an outbound
+gateway in each data centre adds about $70, and machines will grow once measured.
+The owner accepted the former starting size on 2026-10-22 ("That sounds fine").
+The former worldwide estimate and roughly $460 combined total do not price the
+replacement console. Recalculate before using a total or sizing allowance; these
+figures grant no spending authority.
 
 Measured inputs and gaps: one Waitron server (`ghcr.io/clintongormley/waitron:main`,
 pulled 2026-10-22) settled at about 191 MiB, idle, in setup mode with no venue set up, run
@@ -430,8 +424,8 @@ adds, per month, at the same list prices:
 | Rota solver | Not measured. If one weekly solve takes a minute on 2 processors and 4 GB, run only when asked, it costs about $0.002 | a few cents |
 
 So an on-prem venue adds roughly **$1–2.50 a month**, plus its share of the fixed platform
-(about $460 a month for the whole of Spain at launch). Inputs: the requests for a day's sales
-are Cloud's own measurement of a replayed day of 207 sales on Litestream 0.5.17
+(section 11's combined launch estimate needs recalculation for the smaller console).
+Inputs: the requests for a day's sales are Cloud's own measurement of a replayed day of 207 sales on Litestream 0.5.17
 ([usage projection](../../cost-model/usage-projection.json)); the owner session is the
 measured [browser journey](../../cost-model/remote-owner-browser.json); everything else is
 an assumption named in the table.
@@ -452,8 +446,10 @@ counts. The billing design (launch item 3) turns these into prices.
 ## 12. What approving this design allows, and what is left open
 
 **Approval allows building and rehearsing locally** (owner, 2026-10-22): the
-infrastructure files, the split of the global layer, Cloud's controller and the action
-list, all rehearsed on the LAN test Cloud. Opening AWS accounts, spending money and
+infrastructure files, country deployment, Cloud's controller and the action list,
+all rehearsed on the LAN test Cloud. The 16 November country/console boundary in
+section 4 replaces the former P3 split programme; the console implementation needs
+its own plan first. Opening AWS accounts, spending money and
 production schema changes wait for a separate go-ahead from the owner once the rehearsal
 works.
 
@@ -469,9 +465,10 @@ or approving an automation never supplies missing venue evidence or fiscal permi
 - No duplicate D88 or A1018 design question remains ready now. A1018's examples
   and retained defaults are approved on 2026-10-24; gVisor and Spain-from-Paris
   were approved on 2026-10-23. Existing local build/rehearsal authority stands.
-- Later billing design, any global reporting privacy/data scope and country-specific
+- Later country billing design, the unchosen email provider and country-specific
   legal/provider qualification remain separate. Customer account data belongs to
   its country, including future non-EU countries; Frankfurt is not its default.
+  Worldwide monitoring exports no country logs, customer or venue copies.
 
 **For the builder**
 
@@ -482,8 +479,10 @@ or approving an automation never supplies missing venue evidence or fiscal permi
 - The revised handover's final-copy/local-state inventory, actor binding, per-chain
   filing ownership and same-M2 retry format, jointly with Waitron before build.
 - Measuring a trading venue's memory and the remote-access traffic, then re-pricing.
-- Reconcile P3/P4 and launch priority 5 as listed in section 4. P6/D115 carries
-  D88's runtime/build delivery after P1/P4 and joint protocol acceptance; A951,
-  D101, P3 and P7 retain their separate access, data, account and recovery gates.
+- Follow D112-S's remaining country guard and planned console work in section 4;
+  D113 reviews P4's country operator design and D608 owns the one-owner lifecycle.
+  P6/D115 carries D88's runtime/build delivery after P1/P4 and joint protocol
+  acceptance; existing country owner checks/D608, A951, D101 and P7 retain their
+  separate account, access, data and recovery gates.
   Reliability promises and pricing follow measurements at launch, not a new
   blanket design-approval gate.
