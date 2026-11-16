@@ -25,8 +25,9 @@ Owner plan/build approval remains closed; this note is not a replacement build p
 
 **2026-11-16 country boundary:** [replacement P3](2026-10-22-cloud-global-country-split.md)
 retires the worldwide operator handoff. One configured operator account signed in
-on Spain's site is the final country design, using `OperatorConfig.ownerAccountId`,
-existing session/platform checks and explicit `cloud.actions.owner` permission.
+on Spain's site is the starting direction for D113's fresh plan read. That read
+rechecks the existing `OperatorConfig.ownerAccountId`, session/platform checks and
+explicit `cloud.actions.owner` permission in this plan.
 This grants no organisation member a new permission. Worldwide has its own admin
 passkey sign-in for health and deploy starts only; it cannot approve a P4 action
 or grant country authority. D113's later fresh plan read handles the full task
@@ -331,8 +332,8 @@ halt ordinary on-prem trading.
 
 `OperatorAuthority` uses that country's account/session/platform tables and
 explicit country grants, with `OperatorConfig.ownerAccountId` selecting the operator.
-These are the final country authority boundary, not a transitional adapter waiting
-for P3. The former offline worldwide sign-in/permit handoff is retired and is no
+D113 starts from this country-local direction and rechecks the interfaces;
+no adapter waits for P3. The former offline worldwide sign-in/permit handoff is retired and is no
 launch gate. Country operators authenticate separately; global admin credentials
 supply no local permission. No global customer identity, organisation-member grant,
 new exchange API or global heartbeat is introduced.

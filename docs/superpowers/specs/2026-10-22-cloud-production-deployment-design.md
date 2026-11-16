@@ -141,9 +141,8 @@ It records the target design; this documentation change deploys nothing.
   These boundaries do not change Waitron staff roles or grant fiscal/activation permission.
 - **The worldwide side** has one small admin web app, server and database outside
   every country. Its own admins sign in by passkey on the console's own origin.
-  Its database holds console admins only. Worldwide retains only its necessary
-  admin identity/security state and health/deployment metadata, never country logs,
-  customer or venue copies. The console can read country health and start deploys;
+  Its database is for console admins, never country logs, customer or venue copies.
+  Its later plan chooses how to handle its own security, health and deployment state. The console can read country health and start deploys;
   it cannot perform or approve country operator actions or issue country authority.
   Worldwide also owns the `waitron.io` apex DNS and front-page redirect to
   `es.waitron.io`. Direct country access works without the apex or console.

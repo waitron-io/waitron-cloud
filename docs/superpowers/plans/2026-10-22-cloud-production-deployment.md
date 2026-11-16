@@ -52,9 +52,9 @@ Reliability promises and pricing await measurements as later launch decisions.
 
 D112-S keeps each country independent: billing, customer email, logs/alarms,
 keys, secrets, backups and a second region stay in-country. The email provider
-is unchosen. Worldwide keeps only its own admin identity/security, health and
-deploy metadata, plus the apex and Spain redirect. Its database is for console
-admins only. P2's current global customer runtime still needs shrinking; these
+is unchosen. Worldwide keeps the apex and Spain redirect; its database is for console
+admins only. The console plan chooses how to handle its own security, health
+and deployment state, without country data copies. P2's current global customer runtime still needs shrinking; these
 docs do not change it. Country operators sign in locally; worldwide sign-in
 confers no P4 authority. Releases come from the reviewed repository, started
 from the admin console and pulled by each country. Nothing passes between

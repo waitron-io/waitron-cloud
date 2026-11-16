@@ -210,7 +210,8 @@ digests and runtime deployment; OpenTofu consumes no image reference. Its
 [country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md) maps migrations,
 mail, usage, probes and operations to `registration-worker`, and manifest publication
 to `remote-reconciler`. Translation stays disabled behind its separate production gate.
-The global namespace is reserved until P3 supplies the global/country split. Agreement
+The global namespace is reserved for D112-S’s planned small worldwide admin console;
+its separate implementation must shrink P2’s existing global customer runtime. Agreement
 on these names and ports does not qualify AWS permissions, ingress or secret delivery.
 
 The remaining resource suites follow the
