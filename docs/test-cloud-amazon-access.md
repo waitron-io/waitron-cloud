@@ -4,8 +4,9 @@ The one Spain machine is already authorised. These steps supply access that does
 not exist yet; they create no production Cloud and do not reuse D618’s one-run role.
 The watcher brings this to you before any console or provider change.
 
-1. In the Amazon console, select Europe (Spain), eu-south-2, and an existing public
-   subnet. The machine must have no NAT gateway, load balancer, managed database,
+1. In Account → AWS Regions, check Europe (Spain), eu-south-2. If it is not
+   enabled, [enable it](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html)
+   and wait for its status to become Enabled. Then select an existing public subnet. The machine must have no NAT gateway, load balancer, managed database,
    extra disk or paid DNS zone. If there is no suitable subnet, K reports that
    missing input before creating anything outside the authorised machine.
 2. In IAM, create a dedicated IAM user named waitron-test-cloud with no console
@@ -14,26 +15,30 @@ The watcher brings this to you before any console or provider change.
    examples to require cloud.campaign=TEST-CLOUD-AWS on created instances and
    their volumes, restrict launches to t3.medium in eu-south-2 and the chosen
    Debian image/subnet/security group, and allow management only for matching
-   resources. Restrict the root disk to one encrypted 20 GiB gp3 disk. Permit
-   one tagged public address, with no Route 53 or IAM administration permission.
+   resources. Restrict the root disk to one encrypted 20 GiB gp3 disk. Limit public-address permissions to this workload’s tagged addresses, with no Route 53 or IAM administration permission.
    Discovery uses the read-only Describe calls needed to check these resources.
-   A tag restriction identifies this workload; it does not itself prove that
-   only one machine exists. K checks that no test machine exists and requests
-   exactly one. CPU credits use standard mode, avoiding paid unlimited credits.
+   Tag restrictions identify this workload; they do not cap the number of
+   machines or addresses. K checks for existing tagged resources and requests
+   exactly one machine and one address. At launch K must explicitly select
+   [standard CPU credits](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-performance-instances-how-to.html)
+   (`--credit-specification CpuCredits=standard` with the CLI). Do not rely on
+   the account default or the permission policy to prevent unlimited-credit charges.
 3. In Billing, create a monthly USD50 cost budget with actual-cost alerts at 80%
    and 100%, addressed to your own mailbox. Confirm the verification email.
    A budget reports delayed costs; it is not a spending cap or an automatic stop.
 4. Create a CLI access key for that user, then on the Mac run
    `aws configure --profile waitron-test-cloud`, selecting eu-south-2. Enter the
    key only in that private interactive prompt, never in chat or a command line. Keep the
-   account and role details in your private AWS files, never in this repository
+   account and user details in your private AWS files, never in this repository
    or campaign notes. Tell the watcher the profile name when it is ready.
 5. In EC2 → Key pairs → Import key pair, choose name waitron-test-cloud-k and
    import only ~/.config/waitron-cloud/test-cloud-aws/ssh/id_ed25519.pub. K created
    its new private key beside it, mode0600; it never leaves the Mac. In the
    machine’s security group, allow SSH only from the operator’s current address,
-   and HTTPS443 plus HTTP80 for certificate challenges. Remote-access ports
-   remain closed until their service slice is qualified.
+   and HTTPS on port 443. When K prepares public certificate issuance, also
+   allow port 80 for Certbot’s standalone HTTP-01 listener. The Cloud containers
+   do not publish port 80. Remote-access ports remain closed until their service
+   slice is qualified.
 
 SES sending is still a later gate: grant only the test sender’s existing email
 permissions once D102’s sender, region and feedback checks are settled. Do not

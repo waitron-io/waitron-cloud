@@ -163,7 +163,7 @@ function amazonDeployment(){
 test('Amazon rendered admission keeps private services and the certificate source private',async()=>{
  const {validateDeployment}=await api(),options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates'};
  assert.equal(validateDeployment(amazonDeployment(),options).ready,true);
- for(const change of [v=>v.services.postgres.ports=[{host_ip:'127.0.0.1',published:'55432',target:5432}],v=>v.services.proxy.ports[0].host_ip='192.168.10.10',v=>v.services.bootstrap.volumes[0].read_only=false,v=>v.services.account={...v.services.account,volumes:[{type:'volume',source:'test-cloud-public-certificate',target:'/leaked'}]},v=>v.services.account={...v.services.account,environment:{...v.services.account.environment,CLOUD_VENUE_SERVICE_LEVELS:'0'}}]){
+ for(const change of [v=>v.services.postgres.ports=[{host_ip:'127.0.0.1',published:'55432',target:5432}],v=>v.services.proxy.ports[0].host_ip='192.168.10.10',v=>v.services.bootstrap.volumes[0].read_only=false,v=>v.services.proxy.volumes[0].read_only=false,v=>v.services.account={...v.services.account,environment:{...v.services.account.environment,TEST_CLOUD_ORIGIN:'https://other.example.test'}},v=>v.services.bootstrap.volumes[1].source='local-stack-config',v=>v.services.storage={...v.services.account,ports:[{host_ip:'127.0.0.1',published:'8333',target:8333}]},v=>v.services.gateway={...v.services.account,ports:[{host_ip:'127.0.0.1',published:'8443',target:443}]},v=>v.services.account={...v.services.account,volumes:[{type:'volume',source:'test-cloud-public-certificate',target:'/leaked'}]},v=>v.services.account={...v.services.account,environment:{...v.services.account.environment,CLOUD_VENUE_SERVICE_LEVELS:'0'}}]){
   const value=amazonDeployment();change(value);assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
  }
 });
@@ -172,7 +172,7 @@ test('Amazon up selects only the explicit override and settings, refusing bad in
  const {deploy}=await api(),id='c'.repeat(64),calls=[],states=[];let reads=0;
  const execute=async(command,args,options)=>{calls.push({command,args,environment:options?.environment});return args.includes('config')?JSON.stringify(amazonDeployment()):args[0]==='image'?JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'}):'';};
  await deploy('up',{image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',settledSamples:0,inventory:async()=>({...good,availableMiB:2500,freeGiB:12,containers:reads++===0?[]:[{id,project:'waitron-cloud-test'}]}),execute,saveState:async s=>states.push(structuredClone(s))});
- const startup=calls.find(c=>c.args.includes('up'));assert.ok(startup.args.includes('deploy/test-cloud/compose.amazon.yaml'));assert.equal(startup.environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');assert.equal(startup.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/private/certificates');assert.equal(startup.environment.CLOUD_VENUE_SERVICE_LEVELS,'test');assert.equal(startup.environment.CLOUD_TEST_SERVICE_PLANS,'0');assert.deepEqual(states.at(-1).ids,[id]);
+ const startup=calls.find(c=>c.args.includes('up'));assert.ok(startup.args.includes('deploy/test-cloud/compose.amazon.yaml'));assert.equal(startup.environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');assert.equal(startup.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/private/certificates');assert.equal(startup.environment.CLOUD_TEST_SERVICE_PLANS,'0');assert.deepEqual(states.at(-1).ids,[id]);assert.equal(states.at(-1).target,'amazon');
  for(const extra of [{target:'other'},{origin:'http://cloud.example.test'},{origin:'https://cloud.example.test:8443'},{origin:'https://cloud.example.test/path'},{certificateSource:'relative/certificates'}]){
   let touched=false;await assert.rejects(deploy('up',{image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',...extra,inventory:async()=>{touched=true;return good;},execute}));assert.equal(touched,false);
  }
@@ -193,4 +193,16 @@ test('Amazon startup monitoring retains a healthy small host for all three sampl
  const outcome=work.then(value=>({value}),error=>({error}));await started;await new Promise(setImmediate);
  for(let n=0;n<3;n++){t.mock.timers.tick(5000);await new Promise(setImmediate);}
  const result=await outcome;assert.equal(result.error,undefined);assert.deepEqual(result.value.ids,[id]);
+});
+
+test('up refuses a different recorded target before inventory while legacy LAN state remains valid',async()=>{
+ const{deploy}=await api(),id='e'.repeat(64);
+ for(const [saved,target]of [[{project:'waitron-cloud-test',image,ids:[id]},'amazon'],[{project:'waitron-cloud-test',image,ids:[id],target:'amazon'},'lan']]){
+  let inspected=false,executed=false;
+  await assert.rejects(deploy('up',{image,target,origin:'https://cloud.example.test',certificateSource:'/private/certificates',settledSamples:0,readState:async()=>saved,inventory:async()=>{inspected=true;return{...good,containers:[{id,project:'waitron-cloud-test'}]};},execute:async(_command,args)=>{executed=true;return args.includes('config')?JSON.stringify(amazonDeployment()):args[0]==='image'?JSON.stringify({Id:image,Architecture:'amd64',Os:'linux'}):'';}}),/test_cloud.target_change/);
+  assert.equal(inspected,false);assert.equal(executed,false);
+ }
+ const saved={project:'waitron-cloud-test',image,ids:[id],target:'amazon'};
+ assert.deepEqual((await deploy('status',{image,readState:async()=>saved,inventory:async()=>({...good,containers:[{id,project:'waitron-cloud-test'}]})})).containers,[{id,project:'waitron-cloud-test'}]);
+ const stopped=[];await deploy('stop',{image,readState:async()=>saved,inventory:async()=>({...good,containers:[{id,project:'waitron-cloud-test'}]}),execute:async(_command,args)=>{stopped.push(args);}});assert.deepEqual(stopped,[['stop','--time','15',id]]);
 });
