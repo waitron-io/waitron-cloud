@@ -456,12 +456,9 @@ enrolment and environment-backed settings still need joint formats and tests.
 ### Cloud
 
 - **Billing records, payment state and invoices live in the country's own part of Cloud**
-  (Spain for now). This adopts the recommendation that billing stays country-local, so
-  customer billing self-service survives the loss of the global layer
-  (`docs/superpowers/specs/2026-10-22-cloud-production-deployment-design.md:148-153`).
-  It also keeps the plan country-local, as the country split requires
-  (`docs/superpowers/plans/2026-10-22-cloud-global-country-split.md:17,144`)
-  (driver's call).
+  (Spain for now), following the [country boundary](2026-10-22-cloud-production-deployment-design.md#4-the-shape-countries-a-global-layer-cells-machines).
+  Customer billing self-service must survive worldwide loss; it does not depend on
+  the retired P3 country split.
 - SumUp and Stripe each need a row in the processing register and a qualified country flow
   before any live data reaches them (`docs/cloud-data-processing-register.md:48,60`;
   `docs/country-policy.md:3-6,21-25`).
