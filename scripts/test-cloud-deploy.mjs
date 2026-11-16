@@ -111,7 +111,7 @@ export async function deploy(mode,options){
  if(options.signal?.aborted)throw new Error('test_cloud.cancelled');
  const run=options.execute??execute,inspect=options.inventory??(()=>inventory(run)),readState=options.readState??(async()=>null),saveState=options.saveState??(async()=>{});
  if(!imagePattern.test(options.image??''))throw new Error('test_cloud.image');
- const previous=await readState();if(previous){assertState(previous);if(previous.image!==options.image)throw new Error('test_cloud.image_change_requires_upgrade');if(mode==='up'&&(previous.target??'lan')!==target)throw new Error('test_cloud.target_change_requires_new_deployment');}
+ const previous=await readState();if(previous){assertState(previous);if(previous.image!==options.image)throw new Error('test_cloud.image_change_requires_upgrade');}
  const current=await inspect();
  if(mode==='stop'){assertOwned(previous,current);if(previous.ids.length)await run('docker',['stop','--time','15',...previous.ids]);return{stopped:previous.ids};}
  if(mode==='status'){if(previous)assertOwned(previous,current);else if(current.containers.some(c=>c.project===project))throw new Error('test_cloud.ownership');return{project,containers:current.containers.filter(c=>previous?.ids.includes(c.id))};}
@@ -127,7 +127,7 @@ export async function deploy(mode,options){
  }
  const candidate=JSON.parse(await run('docker',['image','inspect',options.image,'--format','{"Id":{{json .Id}},"Architecture":{{json .Architecture}},"Os":{{json .Os}}}']));
  if(candidate.Id!==options.image||candidate.Architecture!=='amd64'||candidate.Os!=='linux')throw new Error('test_cloud.image_platform');
- const state={project,image:options.image,ids:previous?.ids??[],...(target==='amazon'?{target}:{})};
+ const state={project,image:options.image,ids:previous?.ids??[]};
  const compose=['compose','--project-name',project,'--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml'];
  if(target==='amazon')compose.push('-f','deploy/test-cloud/compose.amazon.yaml');
  const environment={TEST_CLOUD_IMAGE:options.image,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_TRANSLATION:'0',...(target==='amazon'?{TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource}:{})};
@@ -177,5 +177,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   try{console.log(JSON.stringify(await deploy(mode,{image,target,origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
   finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
   });
- }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud refused or failed; check target, HTTPS origin, certificate folder, image, capacity, ports and recorded ownership');process.exitCode=1;}
+ }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud refused or failed; check target, HTTPS origin, certificate folder, image, capacity, ports and recorded ownership. Amazon commands require an explicit amazon argument after the image ID.');process.exitCode=1;}
 }

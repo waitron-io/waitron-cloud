@@ -254,7 +254,7 @@ These are the implemented operator commands, not permission to deploy before the
 
 For the home-network target, the driver samples resources and the three existing Waitron containers every five seconds through startup and a sixty-second settled window. An owned out-of-memory event, Waitron health regression, or three consecutive readings below 2,048 MiB available RAM or 15 GiB free disk abort startup and stop recorded Cloud containers. It leaves volumes in place. If a full host-inventory read fails during rollback, the driver checks only project-labelled Docker IDs and still attempts the stop. A failed state write also cannot bypass that stop. If Docker itself cannot be reached, cleanup is explicitly incomplete and you must keep the state for inspection. Sampling ends when the command completes; continuous deployment supervision and the actual box capacity proof remain later work.
 
-The driver records project, image and container IDs in `.local-stack/test-cloud-state.json`, plus `target: "amazon"` for an Amazon start. An absent target retains the existing LAN meaning. `up` refuses a different recorded target before inspecting the host or running Docker; use a separate deployment rather than retargeting the existing state. `status` and `stop` still use the recorded IDs without HTTPS settings. Keep that file with this deployment; stopping requires those IDs and matching Compose labels. `status` and `stop` refuse unrecorded project containers, including an interrupted startup whose last state still lists no IDs. A lock file serialises commands. After an interrupted driver, inspect its recorded IDs and the project before removing a stale lock. If an unrecorded container exists, audit its creation and project label before recording or stopping it manually. A hard kill can prevent the driver from finishing its journal; an empty status is never treated as proof that the project is stopped. Do not clear state, prune Docker or use Waitron's Compose commands to make preflight pass.
+The driver records only project, image and container IDs in `.local-stack/test-cloud-state.json`. Keep that file with this deployment; stopping requires those IDs and matching Compose labels. `status` and `stop` refuse unrecorded project containers, including an interrupted startup whose last state still lists no IDs. A lock file serialises commands. After an interrupted driver, inspect its recorded IDs and the project before removing a stale lock. If an unrecorded container exists, audit its creation and project label before recording or stopping it manually. A hard kill can prevent the driver from finishing its journal; an empty status is never treated as proof that the project is stopped. Do not clear state, prune Docker or use Waitron's Compose commands to make preflight pass.
 
 ## Configure a separate HTTPS test name
 
@@ -340,6 +340,12 @@ node scripts/test-cloud-deploy.mjs load sha256:<reviewed-image-id> amazon
 node scripts/test-cloud-deploy.mjs up sha256:<reviewed-image-id> amazon
 node scripts/test-cloud-deploy.mjs status sha256:<reviewed-image-id> amazon
 ```
+
+Name `amazon` explicitly after the image ID on each Amazon command. The state
+file keeps its existing format and does not remember this choice. On the
+currently authorised 4 GiB machine, an omitted target cannot meet the LAN
+requirement for 4,096 MiB available RAM. Revisit that assumption before changing
+the machine size.
 
 `load` still takes the image stream on standard input. The target selects only
 the checked-in override and explicit settings; ambient Compose files, profiles,
