@@ -1781,12 +1781,12 @@ implementation or production evidence.
   is refreshed against `b059f62f1` and the 16 November independent-country direction.
   This is a plan refresh only: no P4 catalogue, durable requests, approvals,
   console, notifications or controller is built. Four PR slices cover a signed-in
-  country catalogue, requests/decisions, local notification/controller outcomes,
-  then monitoring facts and the incident write-up procedure. The owner's 19:33
+  country catalogue and incident procedure, requests/notifications/decisions,
+  the automatic restart demo, then the approved-action/recovery demo. The owner's 19:33
   build go-ahead stands; the refreshed plan still needs the driver's Claude read
   and watcher clearance. One configured operator account on Spain's site needs
-  a new explicit platform permission; customer ownership, support grants and
-  worldwide health/deploy sign-in grant no P4 authority. No worldwide permit or
+  its account ID configured as the explicit grant; customer ownership, support
+  grants and worldwide health/deploy sign-in grant no P4 authority. No worldwide permit or
   country-to-country exchange is required. Allocate migrations against the current
   manifest and active reservations at build; this refresh reserves none. C39 and
   P4 can build independently, with observations supplying no action/activation
