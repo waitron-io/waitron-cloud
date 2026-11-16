@@ -20,7 +20,7 @@ test('the pinned registry package renders and responds in a real browser', { tim
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   assert.equal(manifest.name, '@waitron-io/ui-core');
   assert.equal(manifest.version, version);
-  assert.equal(manifest.waitronSource.commit, 'ae8f3a799b45e89348691abe2647ad7dfcbf9bbf');
+  assert.equal(manifest.waitronSource.commit, '8125b5f8011cfbbf8a4782739b7daa39082161be');
   assert((await realpath(manifestPath)).includes('/node_modules/.pnpm/'), 'must use an installed package');
   const output = await build({ absWorkingDir: root, entryPoints: ['src/fixture.ts'], bundle: true, format: 'esm', platform: 'browser', write: false, metafile: true });
   assert(Object.keys(output.metafile.inputs).some(path => path.includes('@waitron-io/ui-core/dist/')));

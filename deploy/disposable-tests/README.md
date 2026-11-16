@@ -86,7 +86,7 @@ To run the complete private command-path proof, first prepare the snapshot and r
 ```sh
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.10.tgz \
+  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.11.tgz \
   /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 
@@ -121,7 +121,7 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 ```sh
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.10.tgz \
+  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.11.tgz \
   /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 

@@ -98,7 +98,7 @@ Main pushes, schedules and manual runs still require hand moves.
 
 ## Keep the private shared UI release current (D579)
 
-For each future Dependabot update, a person must verify the published source
+For releases after `0.2.11`, you must verify the published source
 commit, update the smoke test's reviewed source hash, approve the immutable
 archive URL and digest, and publish matching test-host support before landing.
 Both consumers must install the same private release and pass authenticated CI.
