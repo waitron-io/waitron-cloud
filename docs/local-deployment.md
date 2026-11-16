@@ -47,7 +47,7 @@ After a password reset forgets every browser, a password-only account needs that
 Use `localhost` for the API probes. The server rejects a different `Host` authority, even
 when it resolves to the same loopback interface.
 
-## Inspect the country action catalogue
+## Review country repair proposals
 
 Create a synthetic operator account through the local portal’s sign-up page and
 finish verification with the link captured in Mailpit. Signup also creates a
@@ -68,7 +68,7 @@ docker compose --env-file deploy/local-stack/local.env up -d --no-deps --force-r
 ```
 
 Visit `/operator/actions`; if you are signed out, sign in to return to this page. Only the
-configured signed-in account can read `GET /api/account/operator/actions`.
+configured signed-in account can inspect, propose and decide repairs.
 An absent or empty setting denies every account; an uppercase or invalid UUID refuses account
 server startup. Customer ownership, support permissions and worldwide admin
 sign-in grant no country operator access. Choosing a real production operator
@@ -76,10 +76,27 @@ remains an operating decision.
 
 Every row shows its policy and **Execution unavailable**. The two initiation
 exceptions concern a failed Cloud workload restarted in place and the start of
-failed-machine replacement. They grant no hosted writer authority. There are no
-approval, notification or execution controls yet. Later P4 slices add those with
-synthetic LAN effects; real services and providers remain unavailable. Routine
-workers keep their existing rules. See the [incident procedure](incident-response.md#restore-verify-and-close)
+failed-machine replacement. They grant no hosted writer authority. Execution and
+notifications remain unavailable; later P4 slices add Mailpit notices and synthetic
+LAN effects. Routine workers keep their existing rules.
+
+To rehearse a decision, enter `synthetic-incident-1` as the incident ID,
+`synthetic-cell` as the cell and `synthetic-worker` as the target. Choose **Drain a
+machine** and describe a synthetic repair and its evidence. Select **Save proposal**
+and complete the existing fresh sign-in check if prompted, then save again. Review
+the saved target, proposal and evidence before choosing **Approve this proposal**
+or **Reject this proposal**. Both saving and deciding require the configured operator,
+a current session and the ten-minute fresh sign-in window.
+
+Pending proposals wait indefinitely. An exact approval lasts fifteen minutes from
+its saved decision; refreshing or retrying never extends it. Changing any binding
+under the same incident ID saves a new pending version and supersedes the earlier
+one. Replaying an old observation returns its original record without reviving it.
+Use a new incident ID to propose a previously superseded repair as a new attempt.
+After a lost reply, refresh to read the saved decision before trying again. The page
+shows all pending proposals plus the latest fifty history entries. No decision runs a repair.
+The [store tests](../packages/registration/test/cloud-action-store.test.ts) cover
+these local database boundaries; they do not qualify real services or providers. See the [incident procedure](incident-response.md#restore-verify-and-close)
 for the private write-up and backlog step after a repair.
 
 ## Know what stays on your machine

@@ -71,3 +71,6 @@ button:disabled { cursor: default; opacity: .6; }
 billing-card { display: block; margin-block: 1rem; }
 billing-card iframe { max-width: 100%; }
 
+
+.cloud-actions { --wt-form-actions-in-place: true; }
+.cloud-actions wt-form-actions { position: static; }
