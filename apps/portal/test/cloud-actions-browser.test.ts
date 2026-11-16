@@ -62,6 +62,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill({json:session});
    if(path.endsWith('/action-proof'))return r.fulfill({json:{methods:['email'],freshUntil:'2099-01-01T00:00:00Z'}});
    if(path.endsWith('/operator/actions/requests')){
+    if(!r.request().postDataJSON().occurrence)return r.fulfill({status:400,json:{error:'invalid_input'}});
     assert.deepEqual(r.request().postDataJSON(),{occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',actionId:'machine_drain',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure'});
     assert.equal(r.request().headers()['x-csrf-token'],'synthetic-csrf');requests=[proposed];return r.fulfill({status:201,json:proposed});
    }
@@ -78,6 +79,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const form=page.locator('#cloud-proposal');await form.waitFor();
   assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
   assert.equal(await page.locator('.cloud-actions > wt-form-actions').evaluate(row=>getComputedStyle(row).position),'static');
+  await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();
+  await page.getByRole('alert').getByText(locale==='en'?'Check the proposal fields.':'Revisa los campos de la propuesta.',{exact:true}).waitFor();
   for(const [name,value] of Object.entries({occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure'}))await form.locator(`wt-input[name=${name}] input`).fill(value);
   await form.locator('select[name=actionId]').selectOption('machine_drain');
   await form.getByRole('button',{name:locale==='en'?'Save proposal':'Guardar propuesta',exact:true}).click();
@@ -86,6 +89,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await proposal.getByRole('button',{name:locale==='en'?'Approve this proposal':'Aprobar esta propuesta',exact:true}).click();
   await proposal.getByText(locale==='en'?'Approved':'Aprobada',{exact:true}).first().waitFor();assert.equal(decisions,1);assert.equal(await form.locator('select[name=actionId]').inputValue(),'machine_drain');
   assert.equal(await proposal.getByRole('button').count(),0);assert.match(await proposal.innerText(),locale==='en'?/Approval expires/:/La aprobación caduca/);
+  const approved=requests[0]!;requests=[{...approved,state:'superseded'}];
+  await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();await proposal.getByText(locale==='en'?'Superseded':'Sustituida',{exact:true}).waitFor();
+  assert.doesNotMatch(await proposal.innerText(),locale==='en'?/Approval expires/:/La aprobación caduca/);
+  requests=[approved];await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();await proposal.getByText(locale==='en'?'Approved':'Aprobada',{exact:true}).first().waitFor();
   assert.equal(await page.getByRole('button',{name:/execute|ejecutar/i}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.addScriptTag({content:axe.source});assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);

@@ -25,9 +25,9 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
-  cloudActionsRequests:'Repair proposals',cloudActionsRecent:'Latest 50 proposals. Pending work waits for a decision.',cloudActionsEmpty:'No proposals yet.',
+  cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All pending proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
   cloudActionsOccurrence:'Incident ID',cloudActionsCell:'Cell',cloudActionsTarget:'Target',cloudActionsProposal:'Proposed repair',cloudActionsEvidence:'Evidence',
-  cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save and review a proposal. No action can run yet. Use synthetic identifiers only.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
+  cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save a synthetic proposal. No repair runs yet. Use a new incident ID for a new attempt.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
   cloudActionsApprove:'Approve this proposal',cloudActionsReject:'Reject this proposal',cloudActionsExpires:'Approval expires',cloudActionsPolicies:'Repair policies',
   cloudActionsConflict:'The proposal changed. Review its latest version.',cloudActionsProofRequired:'Verify your sign-in, then try again.',
   cloudActionState_pending:'Pending',cloudActionState_proposed:'Proposed',cloudActionState_approved:'Approved',cloudActionState_rejected:'Rejected',cloudActionState_superseded:'Superseded',
@@ -327,9 +327,9 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
-  cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Últimas 50 propuestas. Las pendientes esperan una decisión.',cloudActionsEmpty:'No hay propuestas.',
+  cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas pendientes y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
   cloudActionsOccurrence:'ID del incidente',cloudActionsCell:'Celda',cloudActionsTarget:'Destino',cloudActionsProposal:'Reparación propuesta',cloudActionsEvidence:'Pruebas',
-  cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda y revisa una propuesta. Ninguna acción puede ejecutarse aún. Usa solo identificadores de prueba.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',
+  cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda una propuesta de prueba. Aún no se ejecutan reparaciones. Usa otro ID de incidente para un nuevo intento.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',
   cloudActionsApprove:'Aprobar esta propuesta',cloudActionsReject:'Rechazar esta propuesta',cloudActionsExpires:'La aprobación caduca',cloudActionsPolicies:'Políticas de reparación',
   cloudActionsConflict:'La propuesta ha cambiado. Revisa la última versión.',cloudActionsProofRequired:'Verifica tu acceso e inténtalo de nuevo.',
   cloudActionState_pending:'Pendiente',cloudActionState_proposed:'Propuesta',cloudActionState_approved:'Aprobada',cloudActionState_rejected:'Rechazada',cloudActionState_superseded:'Sustituida',

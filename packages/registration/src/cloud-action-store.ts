@@ -10,7 +10,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const binding=['occurrence','actionId','cell','target','proposal','evidence'] as const;
 export function validateCloudActionProposal(input:CloudActionProposal){
  if(!input||typeof input!=='object'||Object.keys(input).length!==binding.length||binding.some(key=>
-  typeof input[key]!=='string'||!input[key].trim()||input[key].length>(key==='proposal'||key==='evidence'?1000:160)))throw new CloudActionError('invalid_input');
+  typeof input[key]!=='string'||!input[key].trim()||input[key].includes('\0')||input[key].length>(key==='proposal'||key==='evidence'?1000:160)))throw new CloudActionError('invalid_input');
 }
 function view(row:any,events:any[]=[]){return {
  id:row.id,occurrence:row.occurrence,version:row.version,actionId:row.action_id,policy:row.policy as 'ask-first'|'act-and-report',cell:row.cell,target:row.target,
@@ -26,8 +26,12 @@ export async function readCloudActionRequest(client:PoolClient,id:string){
  return view(row,(await client.query('SELECT kind,created_at FROM cloud_action_events WHERE request_id=$1 ORDER BY created_at,id',[id])).rows);
 }
 export async function readCloudActionRequests(client:PoolClient){
- const rows=(await client.query('SELECT id FROM cloud_action_requests ORDER BY created_at DESC,id DESC LIMIT 50')).rows;
- const result:CloudActionRequest[]=[];for(const row of rows)result.push(await readCloudActionRequest(client,row.id));return result;
+ const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE state='pending' OR id IN
+  (SELECT id FROM cloud_action_requests WHERE state<>'pending' ORDER BY created_at DESC,id DESC LIMIT 50)
+  ORDER BY (state='pending') DESC,created_at DESC,id DESC`)).rows;
+ if(!rows.length)return [];
+ const events=(await client.query('SELECT request_id,kind,created_at FROM cloud_action_events WHERE request_id=ANY($1::uuid[]) ORDER BY created_at,id',[rows.map(row=>row.id)])).rows;
+ return rows.map(row=>view(row,events.filter(event=>event.request_id===row.id)));
 }
 async function event(client:PoolClient,requestId:string,kind:string,actor:string){
  await client.query('INSERT INTO cloud_action_events(id,request_id,kind,actor_account_id) VALUES($1,$2,$3,$4)',[randomUUID(),requestId,kind,actor]);

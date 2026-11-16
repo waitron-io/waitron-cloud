@@ -92,8 +92,9 @@ Pending proposals wait indefinitely. An exact approval lasts fifteen minutes fro
 its saved decision; refreshing or retrying never extends it. Changing any binding
 under the same incident ID saves a new pending version and supersedes the earlier
 one. Replaying an old observation returns its original record without reviving it.
+Use a new incident ID to propose a previously superseded repair as a new attempt.
 After a lost reply, refresh to read the saved decision before trying again. The page
-shows the latest fifty proposals and their decision history. No decision runs a repair.
+shows all pending proposals plus the latest fifty history entries. No decision runs a repair.
 The [store tests](../packages/registration/test/cloud-action-store.test.ts) cover
 these local database boundaries; they do not qualify real services or providers. See the [incident procedure](incident-response.md#restore-verify-and-close)
 for the private write-up and backlog step after a repair.

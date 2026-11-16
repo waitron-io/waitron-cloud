@@ -11,7 +11,7 @@ export class CloudActionsController{
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
-  this.error=result.code==='proof_required'?'cloudActionsProofRequired':result.status===403?'cloudActionsDenied':result.status===401?'pairSession':result.status===429?'limited':'unavailable';
+  this.error=result.status===400&&result.code==='invalid_input'?'cloudActionsInvalid':result.code==='proof_required'?'cloudActionsProofRequired':result.status===403?'cloudActionsDenied':result.status===401?'pairSession':result.status===429?'limited':'unavailable';
   if(result.status===401||result.status===403&&result.code!=='proof_required')this.view=undefined;
  }
  async load(){

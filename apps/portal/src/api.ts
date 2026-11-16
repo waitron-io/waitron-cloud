@@ -16,7 +16,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/operator/actions/requests'||path==='/operator/actions/decide')return [200,201].includes(status)&&validCloudActionRequest(value);
   if(path==='/operator/actions'){
     const actions=(value as {actions?:unknown}|null)?.actions;
-    return status===200&&Array.isArray((value as any).requests)&&(value as any).requests.length<=50&&(value as any).requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
+    return status===200&&Array.isArray((value as any).requests)&&(value as any).requests.every(validCloudActionRequest)&&Array.isArray(actions)&&actions.length>0&&actions.length<=16&&new Set(actions.map(a=>a?.id)).size===actions.length&&actions.every(a=>
       a&&typeof a.id==='string'&&Object.hasOwn(translations.en,`cloudAction_${a.id}`)&&['ask-first','act-and-report'].includes(a.policy)&&a.available===false);
   }
   if(path==='/security/email')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';

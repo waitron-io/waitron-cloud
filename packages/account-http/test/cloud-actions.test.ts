@@ -56,6 +56,7 @@ test('operator proposal and decision routes preserve exact identity and reject c
  const proposed=await post('/requests',body);assert.equal(proposed.status,201);
  const request=await proposed.json() as {id:string;version:number;state:string;available:boolean};assert.equal(request.state,'pending');assert.equal(request.available,false);
  assert.equal((await post('/requests',{...body,unexpected:true})).status,400);
+ assert.equal((await post('/requests',{...body,target:'bad\0target'})).status,400);
  assert.equal((await post('/requests',body,{origin:'https://other.example.test'})).status,403);
  assert.equal((await post('/requests',body,{'x-csrf-token':''})).status,403);
  const decision={requestId:request.id,version:request.version,decision:'approved'};
