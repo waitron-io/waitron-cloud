@@ -1776,22 +1776,20 @@ implementation or production evidence.
   one-owner rule and swap-owner function. P7 owns the outside checker. Provider
   operations, deployment, spending, production schema and live email retain their
   separate authority gates.
-- **Repair actions and Cloud controller (P4).** The approved production design's
-  action-by-action automation is described in the
-  [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
-  This is planning only. The catalogue, durable requests, operator approvals,
-  console, notifications and controller are not built. Plan approval and P1's
-  country-cell build remain required before implementation. D113's fresh plan read
-  uses one configured operator account signed in on Spain's site with explicit
-  country permissions; worldwide health/deploy sign-in grants no P4 authority.
-  No P3 offline worldwide-authority handoff remains. Any new database
-  migration must recheck active reservations and the inventory after migration 043.
-  C39 supplies observations without
-  granting action or activation authority. P5 release waves, P6 hosted placement
-  and revised A1018 handover, P7 regional failover and all production enablement
-  gates remain separate. P4's historical external-proof writer-admission tasks
-  require amendment against the revised shared contract before build. No provider
-  operation, spending or live mail is authorised.
+- **Repair actions and Cloud controller (P4).** The [refreshed plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
+  follows the 16 November independent-country direction. No P4 product code is
+  built. Five slices cover the country action list and incident procedure,
+  requests/decisions, local operator notices, automatic synthetic restart, then
+  approved-action/recovery rehearsal. The owner's 19:33 build go-ahead stands;
+  Claude read the replacement twice; the watcher cleared it and sent the change
+  list to the owner on 16 November at 21:45. One configured Spanish account ID supplies operator authority;
+  customer ownership, support grants and worldwide sign-in supply none. Local
+  signup creates an organisation but membership never grants operator access.
+  Requests wait without automatic expiry; changed evidence requires a fresh
+  decision. Allocate migrations against the live manifest/reservations. C39's
+  future fact feed, real executors, P1's remaining qualification, release waves,
+  hosted handover and regional failover remain open. Local synthetic/Mailpit
+  rehearsal authorises no provider operation, spending, deployment or live mail.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential
