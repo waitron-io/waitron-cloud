@@ -41,3 +41,23 @@ subsequent exact-main and feature single-case checks passed. Its cause remains
 unattributed. If it recurs, capture its process and step timings before changing
 that separate fixture's bound; this change claims no macOS supervisor fix.
 
+## Browser-source qualification still open
+
+Retire retained apt-only setup only after hosted browser qualification. A source
+change needs two consecutive full exact-head runs and its independent merge run,
+with one install attempt and every portal/UI-smoke case executed. Controlled
+signed-archive checks alone do not qualify a public mirror's availability.
+
+The Azure/primary archive slowness, kernel.org refusal, Princeton connection and
+expired-chain failures remain unexplained. Keep TLS, signed release/index/package
+verification and bounded fallback; never trust an expired certificate. The
+historical Microsoft publication mismatch, compressed-index update timeout and
+later index-hash timeout remain unattributed. The temporary-configuration warning's
+relation to the timeout is unknown; retain labelled request/stage evidence.
+
+Compact Deb822 URI fields, capitalised hostnames and ARM archive locations remain
+unqualified. Confirm a changed runner source format before widening support.
+Unreadable-source preflight does not make subsequent writes atomic. A warning
+for an unchanged inventory is not qualification of an unfamiliar source format.
+The separate registry manifest 502 and IPv6 Mailpit pull route failure retain
+unknown outside causes; acquisition retries do not establish provider recovery.
