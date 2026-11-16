@@ -5,6 +5,8 @@ import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 const checkout=process.env.WAITRON_CHECKOUT,image=process.env.CLOUD_VERIFIER_IMAGE??'waitron-backup-verifier:local';
 if(!checkout||!process.env.NODE_AUTH_TOKEN)throw Error('Set WAITRON_CHECKOUT and NODE_AUTH_TOKEN before building the verifier');
+// Public source must remain readable by the unprivileged image user under a private caller mask.
+process.umask(0o022);
 const root=fileURLToPath(new URL('../',import.meta.url)),context=await mkdtemp(join(tmpdir(),'cloud-verifier-build-'));
 try{
  const target=JSON.parse(await readFile(join(root,'deploy/backup-verifier/target.json'),'utf8'));

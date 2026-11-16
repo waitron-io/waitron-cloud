@@ -3233,6 +3233,12 @@ implementation or production evidence.
   temporarily prevents new scheduling on the other worker until worker2 placement
   is checked. Run the synthetic command tests with
   `node --test scripts/kubernetes-check.test.mjs`.
+  The third owner-run reached target read and reported a missing module after the
+  root build import passed. The standalone builder now stages image-readable source
+  under a private caller mask, and the image checks target equality as user 1000.
+  Run its permission and source checks with
+  `node --test scripts/build-backup-verifier.test.mjs scripts/ci-verifier-build-refusals.test.mjs scripts/ci-verifier-source-isolation.test.mjs`.
+  The failed image's actual modes and the first run's cause remain unconfirmed.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
