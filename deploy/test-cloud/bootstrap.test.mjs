@@ -61,3 +61,29 @@ test('an expired CA is refused even while a correctly signed longer-lived leaf r
  value.certificateSha256=createHash('sha256').update(cert).digest('hex');await writeFile(join(lan,'identity.json'),JSON.stringify(value),{mode:0o600});await writeFile(join(lan,'proxy.pem'),Buffer.concat([key,cert]),{mode:0o600});
  t.mock.timers.enable({apis:['Date'],now:Date.now()+366*86400000});await assert.rejects(bootstrapTestCloud(dir),/test_cloud.identity_invalid/);
 });
+
+// Losing either the configured name or imported certificate must break public HTTPS.
+test('configured bootstrap imports a renewable certificate while retaining its private backend CA',async t=>{
+ const {bootstrapTestCloud}=await api(),dir=await root(),source=await root(),origin='https://cloud.example.test';
+ const issue=(host='cloud.example.test')=>execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(source,'privkey.pem'),'-out',join(source,'fullchain.pem'),'-days','2','-subj','/CN='+host,'-addext','subjectAltName=DNS:'+host,'-addext','basicConstraints=critical,CA:FALSE'],{stdio:'ignore'});
+ issue();const options={origin,certificateSource:source};
+ const value=await bootstrapTestCloud(dir,options);
+ assert.equal(value.origin,origin);
+ const internalCA=await readFile(join(dir,'lan/ca.pem')),internalKey=await readFile(join(dir,'lan/ca-key.pem'));
+ const {createHash}=await import('node:crypto');assert.equal(value.caSha256,createHash('sha256').update(internalCA).digest('hex'));
+ assert.equal(new X509Certificate(await readFile(join(dir,'lan/cert.pem'))).checkHost('waitron.local'),'waitron.local');
+ const first=await readFile(join(dir,'lan/public-proxy.pem'));
+ assert.deepEqual(first,Buffer.concat([await readFile(join(source,'privkey.pem')),await readFile(join(source,'fullchain.pem'))]));
+ assert.equal((await stat(join(dir,'lan/public-proxy.pem'))).mode&0o777,0o600);
+ assert.equal((await stat(join(dir,'proxy.cfg'))).mode&0o777,0o600);
+ issue();await bootstrapTestCloud(dir,options);
+ assert.notDeepEqual(await readFile(join(dir,'lan/public-proxy.pem')),first);
+ assert.deepEqual(await readFile(join(dir,'lan/ca.pem')),internalCA);assert.deepEqual(await readFile(join(dir,'lan/ca-key.pem')),internalKey);
+ await assert.rejects(bootstrapTestCloud(dir,{origin:'https://other.example.test',certificateSource:source}),/test_cloud.identity_invalid/);
+ await writeFile(join(source,'privkey.pem'),await readFile(join(dir,'lan/key.pem')));
+ await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
+ issue('other.example.test');
+ await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
+ await assert.rejects(bootstrapTestCloud(await root(),{origin}),/test_cloud.certificate_source/);
+ issue();t.mock.timers.enable({apis:['Date'],now:Date.now()+3*86400000});await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.certificate_invalid/);
+});

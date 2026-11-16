@@ -131,3 +131,19 @@ for(const [role,command,args,replace,hasDatabase,mode,refused]of [
   assert.equal(workerState.home,'/tmp');assert.equal(workerState.config,role==='manifest'&&mode==='0'?'/run/local-stack':dir);assert.equal(workerState.canary,undefined);
  }
 });
+
+test('configured HTTPS account and captured-mail origins preserve private service trust',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-public-origin-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ for(const role of ['account','email']){
+  const value=testRuntimeEnvironment(role,config,{TEST_CLOUD_ORIGIN:'https://cloud.example.test',CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0'});
+  assert.equal(value.CLOUD_PORTAL_ORIGIN,'https://cloud.example.test');
+  assert.equal(value.TEST_CLOUD_ORIGIN,'https://cloud.example.test','nested launchers retain the explicit origin');
+  assert.equal(value.CLOUD_TEST_SERVICE_PLANS,'0');assert.equal(value.CLOUD_VENUE_SERVICE_LEVELS,'test');
+ }
+ assert.equal(testRuntimeEnvironment('account',config,{TEST_CLOUD_ORIGIN:'https://cloud.example.test'}).NODE_EXTRA_CA_CERTS,'/run/local-stack/lan/ca.pem');
+ assert.equal(runtimeEnvironment('email',config,{},'https://cloud.example.test').CLOUD_PORTAL_ORIGIN,'https://cloud.example.test');
+ for(const origin of ['', 'http://cloud.example.test','https://cloud.example.test/','https://user:pass@cloud.example.test','https://cloud.example.test/path','https://cloud.example.test?next=evil','https://cloud.example.test#secret','https://cloud.example.test\n']){
+  assert.throws(()=>testRuntimeEnvironment('account',config,{TEST_CLOUD_ORIGIN:origin}),/origin_invalid/,JSON.stringify(origin));
+ }
+});

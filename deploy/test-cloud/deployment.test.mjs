@@ -40,3 +40,20 @@ test('unavailable backup profile has its own writable controller volume and read
  assert.equal(config.read_only,true);assert.ok(state,'backup controller has no writable private state');assert.equal(state.type,'volume');assert.notEqual(state.source,config.source);assert.notEqual(state.read_only,true);assert.ok(worker.profiles.includes('unavailable'));
  for(const [name,service] of Object.entries(value.services))if(name!=='backup-worker')assert.ok(!service.volumes?.some(v=>v.source===state.source),name+' can access private verifier state');
 });
+
+test('Amazon override configures HTTPS without publishing database, mail or internal storage',()=>{
+ const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'}}));
+ assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['0.0.0.0','443',3000]]);
+ for(const name of ['account','postgres','mailpit','storage','gateway'])assert.equal(value.services[name].ports,undefined,name);
+ for(const name of ['bootstrap','account','email-worker'])assert.equal(value.services[name].environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');
+ assert.equal(value.services.bootstrap.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/run/public-certificate');
+ assert.ok(value.services.bootstrap.volumes.some(v=>v.type==='bind'&&v.source==='/tmp/synthetic-certificates'&&v.target==='/run/public-certificate'&&v.read_only));
+ for(const [name,service]of Object.entries(value.services)){
+  if(name!=='bootstrap')assert.ok(!service.volumes?.some(v=>v.type==='bind'),name);
+  assert.ok(!service.volumes?.some(v=>v.source?.includes('docker.sock')),name);
+  assert.notEqual(service.environment?.CLOUD_TRANSLATION,'1');
+ }
+ assert.ok(value.services.proxy.command.includes('/run/local-stack/proxy.cfg'));
+ assert.ok(value.services.account.healthcheck.test.includes('https://cloud.example.test'));
+ assert.ok(value.services.proxy.healthcheck.test.some(v=>v.includes('cloud.example.test')));
+});

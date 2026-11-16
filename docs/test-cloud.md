@@ -256,6 +256,59 @@ The driver samples resources and the three existing Waitron containers every fiv
 
 The driver records only project, image and container IDs in `.local-stack/test-cloud-state.json`. Keep that file with this deployment; stopping requires those IDs and matching Compose labels. `status` and `stop` refuse unrecorded project containers, including an interrupted startup whose last state still lists no IDs. A lock file serialises commands. After an interrupted driver, inspect its recorded IDs and the project before removing a stale lock. If an unrecorded container exists, audit its creation and project label before recording or stopping it manually. A hard kill can prevent the driver from finishing its journal; an empty status is never treated as proof that the project is stopped. Do not clear state, prune Docker or use Waitron's Compose commands to make preflight pass.
 
+## Configure a separate HTTPS test name
+
+You can rehearse the account service at another HTTPS name without changing your
+home-network deployment. Apply `deploy/test-cloud/compose.amazon.yaml` after the
+ordinary test override, and supply the origin and a private certificate directory:
+
+```sh
+export TEST_CLOUD_ORIGIN=https://cloud.example.test
+export TEST_CLOUD_CERTIFICATE_SOURCE=/absolute/private/certificate-directory
+export TEST_CLOUD_IMAGE=sha256:<reviewed-image-id>
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml config
+```
+
+The directory contains `fullchain.pem` and `privkey.pem`. Use regular copies in
+this dedicated directory: [Certbot’s live files](https://eff-certbot.readthedocs.io/en/stable/using.html#where-are-my-certificates)
+are symbolic links into its archive, whose targets would be outside this mount.
+Your renewal hook refreshes both copies before running bootstrap. Bootstrap checks the
+certificate's name, dates and matching key before importing its proxy bundle. It
+keeps the private backend CA and LAN certificate for internal services. In
+`lan/identity.json`, the origin names the account service; `caSha256` and
+`certificateSha256` still describe that internal CA and certificate. Changing the
+account origin requires a fresh deployment and a new pairing, because existing
+pairings retain their origin.
+
+The override publishes only port 443. PostgreSQL, Mailpit, storage and the gateway
+have no host ports. Only bootstrap mounts your certificate directory, read-only;
+the proxy reads its imported bundle from the private configuration volume. Account
+links still go to the captured inbox, with your configured HTTPS origin. No real
+mail is sent by this setting. Venue service levels use test mode; translation and
+the unavailable workers keep their existing restrictions.
+
+On an authorised machine, use Certbot to obtain and renew the public certificate.
+Its HTTP-01 challenge proves the name by serving a temporary response on port 80.
+After successful renewal, run bootstrap with these same Compose files and settings,
+then restart the proxy so it reads the new bundle:
+
+```sh
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml run --rm bootstrap
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml restart proxy
+```
+
+This configuration does not extend `scripts/test-cloud-deploy.mjs` to Amazon.
+Its home-network capacity and bind checks remain unchanged. The next slice must
+measure image size, free RAM and disk before creating the authorised machine, then
+qualify public certificates and pairing there. Paid DNS resources and production
+sending access still need their separate owner answers.
+
 ## Trust the public CA
 
 Bootstrap generates the account keys, database password, local CA and leaf private keys inside the private configuration volume. No generated secret is written into the host deployment directory. Restart keeps the same identity; partial state, changed certificates and weakened permissions fail closed.

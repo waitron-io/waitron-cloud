@@ -34,3 +34,13 @@ test('test capture delivers email-change verification and notices through the lo
  assert.equal(messages.length,2);assert.match(messages[0],/https:\/\/waitron\.local:3000\/account#change=x{43}/);
  assert.match(messages[1],/Your Waitron Cloud email changed/);assert.doesNotMatch(messages[1],/x{43}/);
 });
+
+test('explicitly configured public origin changes captured links without changing the loopback transport',async t=>{
+ const {createTestCaptureMailer}=await api(),{port,messages}=await sink(t);
+ const origin='https://cloud.example.test',mailer=createTestCaptureMailer({origin,port},origin);
+ await mailer.sendVerification({email:'owner@example.test',token:'x'.repeat(43),expiresAt:'2030-01-01T00:00:00Z',locale:'en'});
+ await mailer.sendPasswordReset({email:'owner@example.test',token:'y'.repeat(43),expiresAt:'2030-01-01T00:00:00Z',locale:'es'});
+ assert.equal(messages.length,2);assert.match(messages[0],/https:\/\/cloud\.example\.test\/signup#token=/);assert.match(messages[1],/https:\/\/cloud\.example\.test\/reset-password#token=/);
+ assert.throws(()=>createTestCaptureMailer({origin:'https://other.example.test',port},origin),/test_cloud.mail_configuration/);
+ assert.throws(()=>createTestCaptureMailer({origin:'http://cloud.example.test',port},'http://cloud.example.test'),/origin_invalid/);
+});

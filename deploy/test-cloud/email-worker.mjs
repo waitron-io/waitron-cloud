@@ -13,7 +13,7 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
  const stop=new AbortController(),abort=()=>stop.abort();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();pool.on('error',abort);
  try{
   const outbox=new EmailOutbox({activeKeyId:config.email.activeKeyId,keys:config.email.keys});
-  const worker=new EmailWorker(pool,outbox,createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025}));
+  const worker=new EmailWorker(pool,outbox,createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},environment.CLOUD_PORTAL_ORIGIN));
   if(once)return await worker.runOnce();
   await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
  }finally{signal?.removeEventListener('abort',abort);await pool.end();}
