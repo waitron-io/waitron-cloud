@@ -1691,7 +1691,8 @@ implementation or production evidence.
   The failed image's actual modes and the first run's cause remain unconfirmed.
   The fourth and fifth D621 owner-runs reached late stop confirmations; the launcher
   now requests C’s stop with `--skip-os-shutdown`. Run 6 received confirmation in
-  18,088.6 ms, then failed at paid remote; source places it in withdrawal. The saved replay expires during
+  18,088.6 ms, then failed at paid remote; source places it in the withdrawn replay.
+  The saved replay expires during
   the observer hold in a local reproduction; its fixture now refreshes authentication
   without changing the saved operation. Run that check with
   `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`.
