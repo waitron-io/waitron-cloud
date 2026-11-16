@@ -1776,20 +1776,14 @@ implementation or production evidence.
   one-owner rule and swap-owner function. P7 owns the outside checker. Provider
   operations, deployment, spending, production schema and live email retain their
   separate authority gates.
-- **Repair actions and Cloud controller (P4).** The [refreshed plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
-  follows the 16 November independent-country direction. No P4 product code is
-  built. Five slices cover the country action list and incident procedure,
-  requests/decisions, local operator notices, automatic synthetic restart, then
-  approved-action/recovery rehearsal. The owner's 19:33 build go-ahead stands;
-  Claude read the replacement twice; the watcher cleared it and sent the change
-  list to the owner on 16 November at 21:45. One configured Spanish account ID supplies operator authority;
-  customer ownership, support grants and worldwide sign-in supply none. Local
-  signup creates an organisation but membership never grants operator access.
-  Requests wait without automatic expiry; changed evidence requires a fresh
-  decision. Allocate migrations against the live manifest/reservations. C39's
-  future fact feed, real executors, P1's remaining qualification, release waves,
-  hosted handover and regional failover remain open. Local synthetic/Mailpit
-  rehearsal authorises no provider operation, spending, deployment or live mail.
+- **Repair actions and Cloud controller (P4).** The [country-local plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
+  still needs durable requests/decisions, local operator notices, automatic
+  synthetic restart and approved-action/recovery rehearsal. C39's future fact
+  feed, real executors, P1's remaining qualification, release waves, hosted
+  handover and regional failover remain open. Allocate migrations against the
+  live manifest/reservations. Production operator selection and provider
+  delivery remain operating decisions; local synthetic/Mailpit rehearsal
+  authorises no provider operation, spending, deployment or live mail.
 - **Provider integration.** Storage, compute, email, notifications, jobs, keys and
   telemetry, with AWS and Google implementations where needed. The local SeaweedFS
   storage contract now covers venue-scoped access, live key rotation, issued-credential

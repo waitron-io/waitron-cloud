@@ -65,7 +65,7 @@ try {
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
     if (translation) await sweepTranslationJobs(pool);
-    running = await startAccountServer({guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,guestOrigin:guestOptions?.origin,localMetrics,planMode,allowances,billingAccount,billingMethods,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     if(guestOptions&&!stopRequested)guest=await startGuestMenuServer({...guestOptions,pool,rateKey:config.rateKey});
@@ -90,7 +90,9 @@ try {
     await stopped;
   }
 } catch(error) {
-  console.error(error instanceof Error&&error.message==='backup.installation_issuer_required'
+  console.error(error instanceof Error&&error.message==='cloud_operator_account_invalid'
+    ?'Account server requires a lowercase UUID in CLOUD_OPERATOR_ACCOUNT_ID'
+    :error instanceof Error&&error.message==='backup.installation_issuer_required'
     ?'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured'
     :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
 } finally {

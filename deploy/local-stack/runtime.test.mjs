@@ -9,6 +9,14 @@ import {loadRuntime,runtimeEnvironment} from './runtime.mjs';
 const roots=[];test.afterEach(async()=>Promise.all(roots.splice(0).map(path=>rm(path,{recursive:true,force:true}))));
 async function configured(){const path=await mkdtemp(join(tmpdir(),'cloud-runtime-'));roots.push(path);return {path,config:await bootstrap(path)};}
 
+test('operatorSettingReachesAccountOnly',async()=>{
+ const {config}=await configured(),settings={CLOUD_OPERATOR_ACCOUNT_ID:'11111111-1111-4111-8111-111111111111'};
+ assert.equal(runtimeEnvironment('account',config,settings).CLOUD_OPERATOR_ACCOUNT_ID,settings.CLOUD_OPERATOR_ACCOUNT_ID);
+ assert.equal(runtimeEnvironment('account',config).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+ for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation'])
+  assert.equal(runtimeEnvironment(role,config,settings).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+});
+
 test('guest menu settings reach only the account runtime',async()=>{
  const {config}=await configured(),settings={GUEST_ORIGIN:'https://menus.example.test',GUEST_TLS_KEY_FILE:'/run/local-stack/guest-key.pem',GUEST_TLS_CERT_FILE:'/run/local-stack/guest-cert.pem',GUEST_HTTP_PORT:'3443',GUEST_HTTP_HOST:'0.0.0.0'};
  const account=runtimeEnvironment('account',config,settings);
