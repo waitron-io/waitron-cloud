@@ -28,7 +28,7 @@ else if(args[0]==='info'){process.stderr.write('PRIVATE_PROBE_ERROR');process.ex
   assert.match(report.command[report.command.indexOf('-t')+1],/^cloud-verifier-test:worker-/);assert.equal(report.command.at(-1),root);
   assert.equal(report.code,'ETIMEDOUT');assert.equal(report.signal,'SIGTERM');assert.match(report.stderrTail,/registry-tail-marker/);
   assert(output.indexOf('docker_build_failure=')<output.indexOf('docker_stall='));assert(output.indexOf('docker_stall=')<output.indexOf('# tests '));
-  assert.match(output,/hookFailed/);assert.match(output,/ETIMEDOUT/);assert.match(output,/"operation":"build"/);assert.match(output,/"status":"exit-error"/);
+  assert.match(output,/hookFailed/);assert.match(output.split('\n').filter(line=>!line.includes('docker_build_failure=')).join('\n'),/error: 'spawnSync docker ETIMEDOUT'/);assert.match(output,/"operation":"build"/);assert.match(output,/"status":"exit-error"/);
   assert.doesNotMatch(output,/PRIVATE_PROBE_ERROR/);
   const invocations=(await readFile(calls,'utf8')).trim().split('\n').map(line=>JSON.parse(line) as string[]);
   assert.equal(invocations.filter(args=>args[0]==='build').length,1);

@@ -40,7 +40,8 @@ watcher assigned this recurrence to D636 alongside D312. One cleared retry passe
 The two observed Worker builds now retain plain progress in an 8 MiB command
 buffer. A failure prints its command, elapsed time, original exit fields and the
 last 8 KiB of stderr before bounded host, Docker-client and hosted service/socket
-samples. Exit 255 stays distinct from a timeout. Run
+samples. Exit 255 alone does not identify the cause; read `killed`, `code` and
+`signal` together. Run
 `node --test scripts/ci-docker-build-diagnostics.test.mjs packages/backups/test/worker-build-diagnostics.test.ts`
 for the reporter and real-hook controls. The third Worker helper remains unchanged;
 a job cancelled before failure reporting can still lose progress.
