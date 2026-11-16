@@ -86,13 +86,16 @@ export async function checkAmazonArchive(archive, images, run) {
     let descriptor = index.manifests.find(row => [image, canonical].includes(row.annotations?.['io.containerd.image.name']));
     assert.ok(descriptor, 'amazon.archive_image');
     let manifest = await read(blob(descriptor));
-    while (manifest.manifests) {
+    while (true) {
+      if (descriptor.platform !== undefined) assert.ok(descriptor.platform?.os === 'linux' && descriptor.platform.architecture === 'amd64', 'amazon.archive_platform');
+      if (!manifest.manifests) break;
       // Other platforms and attestations need not be bundled for the selected runtime.
       descriptor = manifest.manifests.find(row => row.platform?.os === 'linux' && row.platform.architecture === 'amd64');
       assert.ok(descriptor, 'amazon.archive_platform');
       manifest = await read(blob(descriptor));
     }
-    assert.ok(descriptor.platform?.os === 'linux' && descriptor.platform.architecture === 'amd64', 'amazon.archive_platform');
+    const config = await read(blob(manifest.config));
+    assert.ok(config?.os === 'linux' && config.architecture === 'amd64', 'amazon.archive_platform');
     for (const part of [manifest.config, ...manifest.layers]) present(blob(part));
   }
 }
