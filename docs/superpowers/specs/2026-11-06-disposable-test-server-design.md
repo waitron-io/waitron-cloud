@@ -82,7 +82,7 @@ The AWS row is updated to the current workflow; the other rows retain that inspe
 | `venue-services-proof.yml`: `changes`, `service-receipts` legacy/venue, `summary` | Stay hosted, 2/8/2, both independent receipts. | `venue-services-proof.yml:22`, `:66`, `:137` |
 | `aws-infrastructure.yml`: `changes`, `verify` guards-1 through guards-8, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:37`, `:81`, `:155` |
 | `download-supervision-diagnostic.yml`: `changes`, `linux-contention`, `summary` | Stay hosted, 2/4/2. | `download-supervision-diagnostic.yml:21`, `:65`, `:116` |
-| `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | Stay hosted, 12; preserve diagnostic workload meaning. | `browser-reconnect-diagnostic.yml:13` |
+| Retired `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | D638 retires this historical observation after both hosted groups qualify. | [Retained reset investigation](../../backlog/browser-reconnect.md) |
 | `password-derivation-diagnostic.yml`: `linux-observation`; `relay-counter-diagnostic.yml`: `linux-counter-rollover` | Stay hosted, 6 and 8 respectively. | First file `:11`; second `:15` |
 | `kubernetes-proof.yml`: `setup-controls` | Stay hosted, 5. D570's narrow disposable EC2 full-proof path remains separate. | `kubernetes-proof.yml:17`; `2026-11-04-kubernetes-weekly-proof.md:5` |
 | `nightly.yml`: calls `standard`, `cost`, `venue`, `aws`; `summary` named `nightly-summary` | Calls inherit the placements above and retain full work/prefixes; parent summary stays hosted, 2. | `nightly.yml:21`, `:26`, `:31`, `:36`, `:41` |

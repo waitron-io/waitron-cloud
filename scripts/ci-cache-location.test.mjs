@@ -9,7 +9,6 @@ const consumers = [
   ['ci.yml', 'root'], ['ci.yml', 'typecheck'], ['ci.yml', 'receipts'], ['ci.yml', 'packages'],
   ['venue-services-proof.yml', 'service-receipts'],
   ['cloud-cost.yml', 'conformance'],
-  ['browser-reconnect-diagnostic.yml', 'socket-observation'],
 ];
 
 function locateScript(file, name) {
