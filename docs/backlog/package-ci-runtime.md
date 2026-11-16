@@ -183,3 +183,26 @@ then image inspection reaches its 120-second limit before any package test runs.
 Six registration partitions do not repair that event. Capture the slow operation
 and runner timings if either historical failure recurs. Current-head CI and the
 merge's own CI remain required before claiming a qualified landing.
+
+## Other fixture causes still unknown
+
+Keep the reproduced mechanisms separate from the historical runs, which did not
+capture the timing or state needed to attribute their failures:
+
+- Relay capacity's exact host delay; the worker fixture still holds all four SMTP
+  deliveries until competing claims finish.
+- The local usage-privacy false alarm's identifier, and pairing membership/session
+  expiry scheduling; retain the owned-identifier and actual-blocker evidence.
+- Portal's first authenticator sign-in response and consumed periods, HTTP and
+  registration replay periods, registration enrolment activation, server startup
+  timing and one-second relay admission window timestamps.
+- Local PostgreSQL `53200` capacity under unsplit schema migration work, and the
+  exact handles behind the relay-control and relay-operator-stop process holds.
+  The two-file command and failed-setup cleanup do not identify those handles.
+- The passive audit-read fixture does not cover delayed activity updates or
+  absolute session-expiry changes; its clock-default repair did not add that coverage.
+
+On recurrence, retain the named case, response, verifier/consumed periods,
+observed database blocker or open-handle evidence before changing a fixture.
+Other pairing expiry fixtures' generic lock waits do not prove membership-lock
+waits. Do not change authority, privacy, replay, rollback or deadline assertions.

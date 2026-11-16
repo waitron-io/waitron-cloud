@@ -206,3 +206,13 @@ Run `node --test --test-name-pattern='^hang is stopped within each attempt' scri
 to select this case. On recurrence, retain both supervisor attempt labels and
 installer-entry records before choosing a repair; the original failing
 assertion did not print those records.
+
+## Root-fixture stress boundaries
+
+The historical 35-second npm-bootstrap observer and 60-second dependency worker
+still have unexplained timeouts under overlapping root checks and qualification.
+Batching source reads and serialising discovery fixtures did not establish their
+historical causes. Preserve both limits and capture startup, request and worker
+stages on recurrence; avoid overlapping full qualification to measure them.
+The controlled five-second npm-start delay demonstrates a mechanism, not the
+original failure's cause. Missing historical npm timeout output remains unattributed.
