@@ -18,8 +18,8 @@ The watcher brings this to you before any console or provider change.
    resources. Restrict the root disk to one encrypted 20 GiB gp3 disk. Limit public-address permissions to this workload’s tagged addresses, with no Route 53 or IAM administration permission.
    Discovery uses the read-only Describe calls needed to check these resources.
    Tag restrictions identify this workload; they do not cap the number of
-   machines or addresses. K checks for existing tagged resources and requests
-   exactly one machine and one address. At launch K must explicitly select
+   machines, disks or addresses. K checks for existing tagged resources and requests
+   exactly one machine, one disk and one address. At launch K must explicitly select
    [standard CPU credits](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-performance-instances-how-to.html)
    (`--credit-specification CpuCredits=standard` with the CLI). Do not rely on
    the account default or the permission policy to prevent unlimited-credit charges.
