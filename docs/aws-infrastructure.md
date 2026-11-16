@@ -1186,7 +1186,7 @@ without guest shutdown; the observer's 90-second bound is unchanged. A local
 result does not qualify Amazon timing.
 
 The local replay regression, `node --test deploy/test-cloud/integration-paid-remote-replay.test.mjs`,
-reproduces expired authentication after the 900-second hold. The fixture now re-signs
+fails against the old fixture with HTTP 401 and guards the refreshed replay. The fixture now re-signs
 the saved operation with current authentication; production expiry stays unchanged.
 This fits the local HTTP 500 by source inference, not a recovered inner error.
 
