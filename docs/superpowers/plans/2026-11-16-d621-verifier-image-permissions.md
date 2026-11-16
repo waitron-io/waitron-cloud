@@ -15,10 +15,13 @@ in Lane G's `receipts/d621-verifier-image-transfer/diagnosis.md`.
 
 - [ ] In `scripts/build-backup-verifier.test.mjs`, extend the existing real
   script/git/tar capture fixture to launch the builder under caller mask `077`.
-  At the Docker boundary, require unprivileged traversal of archived source,
-  generated `build/` and `verifier/`, and reading of source, release stamp,
-  target and entry files. Keep the temporary context root `700` and all existing
-  source-exclusion, pin, digest, refusal and cleanup assertions. Observe red.
+  Set the test caller's mask around the child invocation and restore it in
+  `finally`. Have the Docker stub stat the actual context before copying it;
+  assert its root is `700`. Walk its `waitron/` and `verifier/` trees: directories
+  require other-read and other-execute (`(mode & 0o005) === 0o005`); files require
+  other-read (`(mode & 0o004) === 0o004`). This includes generated stamp, target
+  and entry files. Keep every source-exclusion, pin, digest, refusal and cleanup
+  assertion. Observe red; checking copied modes or owner access is insufficient.
 - [ ] In standalone `scripts/build-backup-verifier.mjs`, set `process.umask(0o022)`
   before staging inputs. The parent's private mask stays unchanged; keep the
   private temporary root and cleanup. Move `deploy/backup-verifier/Dockerfile`'s
@@ -30,10 +33,8 @@ in Lane G's `receipts/d621-verifier-image-transfer/diagnosis.md`.
   exports, Waitron source and target pin unchanged; add no helper, recursive
   chmod, logger or protocol. No provider access or another Amazon run.
 
-**Size:** production about `+2`, tests `+25/-3`, Dockerfile `+1/-1`, docs including
+**Size:** production about `+2`, tests `+25/-2` (replace two setup lines, no checks),
+Dockerfile `+1/-1`, docs including
 this plan about `+40/-4`, support zero: about 76 changed lines; stop above 114.
 After review, landing and exact-merge checks, hand off merged Cloud and unchanged
-Waitron with the existing private configuration, $300 cumulative budget, $10
-deny-launch backstop, independent deletion and 90-minute teardown. Only the
-watcher launches on the owner's word. A pass requires exit 0 and nonempty valid
-result JSON satisfying the existing checks; wider P1 qualification stays open.
+Waitron to the watcher. Existing owner-run authority and P1 qualification gates stay.
