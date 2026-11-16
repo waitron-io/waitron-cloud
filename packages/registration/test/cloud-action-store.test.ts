@@ -33,6 +33,7 @@ test('lostDecisionReplyKeepsIdentity: retry and polling preserve the exact appro
  const decided=await actions.decide(actor.token,actor.csrfToken,decision(request));
  assert.equal(decided.state,'approved');assert.equal(decided.effectId,request.effectId);
  assert.equal(Date.parse(decided.approvalExpiresAt!)-Date.parse(decided.decidedAt!),900000);
+ await assert.rejects(pool.query("UPDATE cloud_action_requests SET decided_at=decided_at+interval '1 minute',approval_expires_at=approval_expires_at+interval '1 minute' WHERE id=$1",[request.id]),/immutable/);
  assert.deepEqual(await actions.decide(actor.token,actor.csrfToken,decision(request)),decided);
  const view=await new CloudActions(pool,operator).read(actor.token);
  assert.deepEqual(view.requests,[decided]);
@@ -54,6 +55,10 @@ test('changedProposalNeedsDecision: changed target/evidence creates a pending ve
  assert.deepEqual((await pool.query('SELECT kind FROM cloud_action_events ORDER BY created_at,id')).rows.map(r=>r.kind),['proposed','approved','superseded','proposed','rejected']);
  await assert.rejects(pool.query("UPDATE cloud_action_requests SET target='rewritten' WHERE id=$1",[next.id]),/immutable/);
  await assert.rejects(pool.query("UPDATE cloud_action_events SET actor_account_id=NULL WHERE request_id=$1 AND kind='rejected'",[next.id]),/immutable/);
+ const unanswered=await propose({...proposal,occurrence:'synthetic-unanswered'});
+ await propose({...proposal,occurrence:'synthetic-unanswered',target:'synthetic-worker-3'});
+ await assert.rejects(pool.query(`WITH moment AS(SELECT clock_timestamp() AS now) UPDATE cloud_action_requests
+  SET decided_at=moment.now,approval_expires_at=moment.now+interval '15 minutes' FROM moment WHERE id=$1`,[unanswered.id]),/immutable/);
 });
 
 test('authorityRecheckedAfterWait: revoked session cannot decide after waiting for its account lock',async()=>{
@@ -109,6 +114,15 @@ test('pending proposals remain reachable beyond a full page of newer incidents',
  const view=await actions.read(actor.token);
  assert.ok(view.requests.some(request=>request.id===old.id));
  assert.equal(view.requests.filter(request=>request.state==='pending').length,52);
+ let oldestHistory:string|undefined;
+ for(let i=0;i<51;i++){
+  const request=await propose({...proposal,occurrence:'synthetic-resolved-'+i});oldestHistory??=request.id;
+  await actions.decide(actor.token,actor.csrfToken,decision(request,'rejected'));
+ }
+ const page=(await actions.read(actor.token)).requests;
+ assert.equal(page.filter(request=>request.state!=='pending').length,50);
+ assert.ok(page.slice(0,52).every(request=>request.state==='pending'));
+ assert.equal(page.some(request=>request.id===oldestHistory),false);
 });
 
 test('delivery cleanup keeps immutable notice identity without retaining the expired outbox row',async()=>{
@@ -135,4 +149,13 @@ test('fresh sign-in expiring during a request-row wait cannot commit a decision'
   assert.equal((await pool.query('SELECT state FROM cloud_action_requests WHERE id=$1',[request.id])).rows[0].state,'pending');
   assert.equal((await pool.query("SELECT count(*) FROM cloud_action_events WHERE request_id=$1 AND kind='approved'",[request.id])).rows[0].count,'0');
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+test('stored decision shape refuses an expiry on pending or rejected inserts',async()=>{
+ const request=await propose();
+ for(const state of ['pending','rejected'])await assert.rejects(pool.query(`WITH moment AS(SELECT clock_timestamp() AS now)
+  INSERT INTO cloud_action_requests(id,occurrence,version,action_id,policy,cell,target,proposal,evidence,effect_id,state,decided_at,approval_expires_at)
+  SELECT $2,occurrence||$4,1,action_id,policy,cell,target,proposal,evidence,$3,$4,
+   CASE WHEN $4='rejected' THEN moment.now END,moment.now+interval '15 minutes'
+  FROM cloud_action_requests CROSS JOIN moment WHERE id=$1`,[request.id,randomUUID(),randomUUID(),state]),/check constraint/);
 });

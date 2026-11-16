@@ -43,7 +43,8 @@ BEGIN
  END IF;
  IF (NEW.state<>OLD.state AND NOT (OLD.state='pending' AND NEW.state IN ('approved','rejected','superseded')
   OR OLD.state IN ('approved','rejected') AND NEW.state='superseded'))
-  OR (OLD.decided_at IS NOT NULL AND ROW(NEW.decided_at,NEW.approval_expires_at) IS DISTINCT FROM ROW(OLD.decided_at,OLD.approval_expires_at)) THEN
+  OR (ROW(NEW.decided_at,NEW.approval_expires_at) IS DISTINCT FROM ROW(OLD.decided_at,OLD.approval_expires_at)
+   AND NOT (OLD.state='pending' AND NEW.state IN ('approved','rejected'))) THEN
   RAISE EXCEPTION 'cloud_action_decision_immutable';
  END IF;
  RETURN NEW;

@@ -10,6 +10,9 @@ const bundle=await build({stdin:{contents:`import {applyTokens} from '@waitron-i
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 const session={accountId:'operator',expiresAt:'2099-01-01T00:00:00Z'};
 const actions=cloudActionCatalogue;
+const proposalFixture={id:'11111111-1111-4111-8111-111111111111',version:1,occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',
+   actionId:'machine_drain',policy:'ask-first',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure',state:'pending',effectId:'22222222-2222-4222-8222-222222222222',
+   available:false,createdAt:'2026-11-16T19:00:00Z',decidedAt:null as string|null,approvalExpiresAt:null as string|null,events:[{kind:'proposed',at:'2026-11-16T19:00:00Z'}]};
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: catalogueVisibleAfterSignin`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
@@ -52,9 +55,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
-  const proposed={id:'11111111-1111-4111-8111-111111111111',version:1,occurrence:'synthetic-incident',cell:'synthetic-cell',target:'synthetic-worker',
-   actionId:'machine_drain',policy:'ask-first',proposal:'Drain the synthetic worker',evidence:'Synthetic health failure',state:'pending',effectId:'22222222-2222-4222-8222-222222222222',
-   available:false,createdAt:'2026-11-16T19:00:00Z',decidedAt:null as string|null,approvalExpiresAt:null as string|null,events:[{kind:'proposed',at:'2026-11-16T19:00:00Z'}]};
+  const proposed=proposalFixture;
   let requests:(typeof proposed)[]=[],decisions=0;
   await page.route('https://portal.test/operator/actions',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',r=>{
@@ -97,5 +98,22 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.addScriptTag({content:axe.source});assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
   if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/decision-${locale}-${theme}-${width}.png`,fullPage:true});}
+ }finally{await browser.close();}
+});
+
+test('response validation admits every pending proposal beyond fifty',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();page.setDefaultTimeout(4000);
+  const requests=Array.from({length:52},(_,i)=>({...proposalFixture,id:'11111111-1111-4111-8111-'+String(i).padStart(12,'0'),occurrence:'synthetic-incident-'+i}));
+  await page.route('https://portal.test/operator/actions',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Cloud</title><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',r=>{
+   const path=new URL(r.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill({json:session});
+   if(path.endsWith('/operator/actions'))return r.fulfill({json:{actions,requests}});
+   return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+  });
+  await page.goto('https://portal.test/operator/actions');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.getByRole('article').nth(51).waitFor();assert.equal(await page.getByRole('article').count(),52);
  }finally{await browser.close();}
 });
