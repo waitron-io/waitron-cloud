@@ -1781,8 +1781,8 @@ implementation or production evidence.
   built. Five slices cover the country action list and incident procedure,
   requests/decisions, local operator notices, automatic synthetic restart, then
   approved-action/recovery rehearsal. The owner's 19:33 build go-ahead stands;
-  the replacement needs Claude's read, the owner-facing change list and watcher
-  clearance. One configured Spanish account ID supplies operator authority;
+  Claude read the replacement twice; the watcher cleared it and sent the change
+  list to the owner on 16 November at 21:45. One configured Spanish account ID supplies operator authority;
   customer ownership, support grants and worldwide sign-in supply none. Local
   signup creates an organisation but membership never grants operator access.
   Requests wait without automatic expiry; changed evidence requires a fresh
