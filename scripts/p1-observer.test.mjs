@@ -158,9 +158,12 @@ test('a timed-out final backup fails at its deadline even when it ignores cancel
   assert.equal(clock, 1200000);
 });
 
-test('stop confirmation past the sign-in bound reports the stop rather than an application outage', async () => {
+test('stop confirmation past the sign-in bound reports the stop rather than an application outage', async t => {
+  const diagnostics = [];
+  t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); return true;});
   let clock = 0;
   await assert.rejects(api.observeP1({probes: Object.fromEntries(['session', 'remote', 'login', 'backup', 'signup'].map(name => [name, async () => true])),
     now: () => clock, ready: () => {}, stopped: async () => {clock = 92000;}, replacement: async () => {},
     sleep: async ms => {clock += ms; await new Promise(setImmediate);}}), /p1.stop_slower_than_bound/);
+  assert.deepEqual(diagnostics.filter(row => row.startsWith('P1 timing ')), ['P1 timing observer stopped-received 92000\n']);
 });

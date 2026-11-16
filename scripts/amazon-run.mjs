@@ -251,7 +251,10 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         signal, timeout: 3600000, onReady: async send => {
           assert.ok(now() - baselineStarted <= 1200000, 'amazon.observer_baseline_late');
           const before = now();
-          await operations.stopWorker(); await operations.waitStopped();
+          await operations.stopWorker();
+          process.stderr.write('P1 timing launcher stop-request-complete ' + (now() - before) + '\n');
+          await operations.waitStopped();
+          process.stderr.write('P1 timing launcher stop-wait-complete ' + (now() - before) + '\n');
           stopMs = now() - before; send('P1_STOPPED');
           const replacement = now(); await operations.replace();
           replacementMs = now() - replacement; send('P1_REPLACEMENT_READY');

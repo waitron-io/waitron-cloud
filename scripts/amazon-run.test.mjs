@@ -186,7 +186,9 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async () => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+  const diagnostics = [];
+  if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -201,12 +203,17 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       assert.equal(target.observer, true); assert.ok(args.at(-1).includes('kubernetes-check.mjs'));
       if (scenario === 'observer copy baseline') time += 1200000;
       if (scenario === 'observer late baseline') time += 1200001;
-      const messages = []; await onReady(value => messages.push(value));
+      const messages = []; await onReady(value => {messages.push(value); if (scenario === 'observer failed after stop') calls.push(['signal', value]);});
       assert.deepEqual(messages, ['P1_STOPPED', 'P1_REPLACEMENT_READY']);
+      if (scenario === 'observer failed after stop') throw Error('synthetic observer stop failure');
       time += 900000; return {continuous: true};
     },
     aws: async (service, args) => {
       calls.push([service, ...args]);
+      if (scenario === 'observer failed after stop') {
+        if (args[0] === 'stop-instances') time += 12000;
+        if (args[0] === 'wait' && args[1] === 'instance-stopped') time += 81000;
+      }
       if (args[0] === 'create-stack' && scenario === 'failed creation') throw Error('creation failed');
       if (args[0] === 'delete-stack') deleting = true;
       if (args[0] === 'wait' && args[1] === 'stack-delete-complete' && scenario === 'late deletion' && !deleting) throw Object.assign(Error('timeout'), {code: 'ETIMEDOUT'});
@@ -294,7 +301,16 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
     assert.ok(calls.findLastIndex(row => row[0] === 'ssh' && row.includes('-O')) > calls.findLastIndex(row => row[0] === 'ssh' && !row.includes('-O')));
   }
   if (expectedError) {
-    if (scenario.startsWith('observer')) assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault with insufficient expiry');
+    if (scenario === 'observer failed after stop') {
+      assert.deepEqual(diagnostics.filter(row => row.startsWith('P1 timing ')), [
+        'P1 timing launcher stop-request-complete 12000\n',
+        'P1 timing launcher stop-wait-complete 93000\n',
+      ]);
+      const stopped = calls.findIndex(row => row[1] === 'wait' && row[2] === 'instance-stopped');
+      const sent = calls.findIndex(row => row[0] === 'signal' && row[1] === 'P1_STOPPED');
+      const replacement = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'jsonpath={.items[0].metadata.name}'"));
+      assert.ok(stopped >= 0 && stopped < sent && sent < replacement, 'confirm stop and send STOPPED before replacement');
+    } else if (scenario.startsWith('observer')) assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault with insufficient expiry');
     const created = calls.find(row => row[1] === 'create-stack'), name = created[created.indexOf('--stack-name') + 1];
     assert.match(name, /^d618-[a-f0-9-]{36}$/);
     assert.equal(calls.find(row => row[1] === 'delete-stack')?.at(-1), name);

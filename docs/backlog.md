@@ -1689,6 +1689,7 @@ implementation or production evidence.
   Run its permission and source checks with
   `node --test scripts/build-backup-verifier.test.mjs scripts/ci-verifier-build-refusals.test.mjs scripts/ci-verifier-source-isolation.test.mjs`.
   The failed image's actual modes and the first run's cause remain unconfirmed.
+  The fourth owner-run reached a late stop confirmation; its cause remains unknown.
   Actual Amazon observation, original A/all-node loss, real-service and repository
   repair checks remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
