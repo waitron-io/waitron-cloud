@@ -399,7 +399,7 @@ Logical backups must use `--exclude-table-data=*.remote_forward_observations`.
 The schema-upgrade backup driver shares this exclusion with the dump/restore test.
 Reporter authority and ordering cursors remain durable, while cause rows use an
 unlogged table whose contents are lost on crash recovery. Before enabling reporting
-in P1/P3 deployments, qualify the gateway/collector mounts, primary-only reads and
+in P1 deployments, qualify the gateway/collector mounts, primary-only reads and
 backup exclusion in that deployment. No deployment is enabled by this change;
 reporting remains disabled in deployments.
 

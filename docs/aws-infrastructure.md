@@ -210,7 +210,8 @@ digests and runtime deployment; OpenTofu consumes no image reference. Its
 [country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md) maps migrations,
 mail, usage, probes and operations to `registration-worker`, and manifest publication
 to `remote-reconciler`. Translation stays disabled behind its separate production gate.
-The global namespace is reserved until P3 supplies the global/country split. Agreement
+The global namespace is reserved for D112-S’s planned small worldwide admin console;
+its separate implementation must shrink P2’s existing global customer runtime. Agreement
 on these names and ports does not qualify AWS permissions, ingress or secret delivery.
 
 The remaining resource suites follow the
@@ -479,9 +480,10 @@ Storage uses encrypted gp3 disks, starts at 20 GiB and may grow to at most 100 G
 
 RDS creates and manages the administrator password in Secrets Manager using the
 primary encryption key. OpenTofu publishes the secret's reference, never its
-value. This module creates no application users, tables or migrations. P3 owns
-the separate schemas and restricted application users; P1 and P3 must connect
-applications with those users rather than the administrator secret.
+value. This module creates no application users, tables or migrations. Country
+application deployment still needs restricted users and runtime credentials;
+P1 must connect applications with those users rather than the administrator
+secret. D112-S's console plan owns the separate admin-only global reduction.
 
 Primary and destination automated backups retain seven days by default. Spain
 copies snapshots and transaction logs to Paris; global copies them from Frankfurt
@@ -499,7 +501,7 @@ existing final snapshot names and verify retained copies and keys. Reusing the
 same final snapshot name can prevent deletion; removing a resource's configuration
 also removes its lifecycle guard. No retirement or restore runs here.
 
-A Multi-AZ failover can interrupt existing connections. P1 and P3 must rehearse
+A Multi-AZ failover can interrupt existing connections. P1 must rehearse
 reconnection and transaction retries; these mocked plans make no promise of zero
 interruption. P7 owns the separately authorised regional recovery procedure and
 new credentials for a restored database. An administrator-secret reference in the
@@ -544,8 +546,8 @@ noncurrent versions have no expiration or storage-class transition. The existing
 catalogue selects daily snapshots for 30 days, monthly snapshots for 12 calendar
 months and protects the last verified snapshot; bucket age alone cannot make
 that decision. These declarations enable neither Object Lock nor automatic
-venue deletion. D101 owns the exit policy, P1 owns worker wiring and P3 owns the
-country catalogue schema.
+venue deletion. D101 owns the exit policy; P1 must qualify worker wiring to the
+country's existing snapshot catalogue. No retired P3 schema split is required.
 
 The custody fixture now attaches scoped replication and workload policies after
 the bucket, database and key references exist. Bucket policies themselves only
@@ -613,9 +615,9 @@ references refuse. Portal has no AWS grants. Other roles read only their named
 application secrets through the primary secrets key. The backup worker can read,
 write and delete current snapshot objects for catalogue retention; the verifier
 can only read them. Neither receives permanent object-version deletion or the
-RDS administrator secret. P3 owns restricted database users and their runtime
-credentials; these declarations do not make the RDS administrator an application
-user.
+RDS administrator secret. Application deployment still needs restricted database
+users and runtime credentials; these declarations do not make the RDS administrator
+an application user. The console's admin-only database reduction belongs to D112-S.
 
 S3's replication shell trusts only the source account's exact source buckets.
 Its attached policy reads source metadata and versions, writes only the matching

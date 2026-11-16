@@ -99,12 +99,11 @@ remain separate; Cloud ownership alone supplies no activation authority. Future
 owner transfer needs a country-scoped, verified transfer/recovery design. It must
 replace the owner, never create a second owner or automatic support takeover.
 
-Global keeps the worldwide operator console and apex country routing only,
-optionally billing. Recommend country billing so customer billing self-service
-also survives global loss. This is a proposal for the later billing design,
-not approved billing implementation. Global aggregated reporting needs a later
-privacy/data-scope agreement and cannot become a customer-path dependency.
-Production section 4 names the P3 interface changes and G-owned follow-up work.
+The [country boundary](2026-10-22-cloud-production-deployment-design.md#4-the-shape-countries-a-global-layer-cells-machines)
+keeps billing and customer services in each country. Worldwide has its own small
+admin console for health and deploy starts, plus apex routing; country operators
+sign in separately. D608 owns the one-owner rule and swap-owner function, without
+support takeover. D112-S replaces the former P3 split programme.
 
 ```mermaid
 flowchart LR
@@ -383,11 +382,11 @@ and staff paths and A951 retain their own contract and qualification gates.
 | Remaining delivery | Owner / dependency |
 | --- | --- |
 | Hosted runtime, placement, lifecycle, quiet-hour moves and recovery adapters | P6/D115, after P1 packaging, P4 action interfaces and jointly accepted A1018 formats/consumers; separate A1018 build authority still applies. |
-| Customer identity, single-owner account model and outage-independent recovery | P3/D112; Lane G revises its data split, trust, migration and customer flows, then obtains plan review and re-approval. P1's shared database remains transitional. |
-| Action permissions and country-local decisions; release progression | P4, with G reconciling P3 authority dependencies; P5 owns release waves under production sections 6 and 8. |
+| Customer identity, single-owner account model and outage-independent recovery | Existing country owner checks and D608's one-owner lifecycle; D112-S adds country signup configuration, not a data/trust cutover. |
+| Action permissions and country-local decisions; release progression | P4, using country-local operator authority; P5 owns release waves under production sections 6 and 8. |
 | `.local`, staff/public access and device integration | A951 and the shared acceptance matrix; D123/D130/D132/D136 dispositions, actual consumer pins, device and provider proof stay separate. |
 | Data location, support, exit and legal qualification | D101's slice-specific authority and remaining legal/provider/privacy gates, including Spain-from-Paris amendment. |
-| Regional infrastructure rebuild, usable keys/databases and outside monitor | P7, after P2/P3 and legal/provider qualification; no regional event supplies venue activation authority. |
+| Regional infrastructure rebuild, usable keys/databases and outside monitor | P7, using P2 and self-contained country recovery, with legal/provider qualification; no regional event supplies venue activation authority. |
 
 Measurement-based reliability promises, recovery bounds, packages and pricing
 remain later launch decisions, after representative hosting/recovery measurements

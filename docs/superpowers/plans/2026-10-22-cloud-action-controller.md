@@ -4,7 +4,7 @@
 
 **Goal:** You can see what Cloud proposes, approve one precisely scoped action, and see its durable outcome without an alert, retry or lost reply granting broader authority.
 
-**Architecture:** Keep one code catalogue and a country-owned PostgreSQL ledger for proposals, decisions, commands and operator notifications. The console reads and submits decisions to that authority; it never owns a second command ledger. Separate permission to initiate an action from the evidence and executor capability required to perform it. P4 supplies a working local controller with a synthetic executor and explicit unavailable production adapters.
+**Architecture:** Keep one code catalogue and a country-owned PostgreSQL ledger for proposals, decisions, commands and operator notifications. The country's operator console reads and submits decisions to that authority; it never owns a second command ledger. Separate permission to initiate an action from the evidence and executor capability required to perform it. P4 supplies a working local controller with a synthetic executor and explicit unavailable production adapters.
 
 **Tech stack:** Existing Node >=26, TypeScript, pnpm 9.15.0, PostgreSQL, Hono, Lit, node:test, Playwright and local Mailpit. Reuse installed dependencies; add no provider SDK or service.
 
@@ -23,11 +23,22 @@ temporary per-chain apply pauses and unresolved filing-case holds. P4 supplies n
 automatic declaration.
 Owner plan/build approval remains closed; this note is not a replacement build plan.
 
+**2026-11-16 country boundary:** [replacement P3](2026-10-22-cloud-global-country-split.md)
+retires the worldwide operator handoff. One configured operator account signed in
+on Spain's site is the starting direction for D113's fresh plan read. That read
+rechecks the existing `OperatorConfig.ownerAccountId`, session/platform checks and
+explicit `cloud.actions.owner` permission in this plan.
+This grants no organisation member a new permission. Worldwide has its own admin
+passkey sign-in for health and deploy starts only; it cannot approve a P4 action
+or grant country authority. D113's later fresh plan read handles the full task
+backlog, current migration reservations and operational details. This correction
+changes only the dependency and boundary, not those implementation instructions.
+
 ## Global constraints
 
 - **Build waits for P1 landing and owner plan/build approval.** [P1’s reviewed plan](https://github.com/waitron-io/waitron-cloud/blob/12bdfca6288946c37b02bdf04711dc8049e0e72e/docs/superpowers/plans/2026-10-22-cloud-country-cell.md) in PR #302 at `12bdfca6288946c37b02bdf04711dc8049e0e72e` is reviewed, unlanded planning, not an available runtime. Reconcile its landed interfaces before coding. This author changes only this plan.
 - Local synthetic resources only. No production schema, accounts, provider operations, spending, live DNS/ACME/email, fiscal records, golden files or instruction-file changes. Production design section 12 does not authorise those operations.
-- D79 holds migration slot 043 at parked `7939a27`. Allocate no migration number now. Do not create or execute the new migration until the driver records release of that slot and allocates the next name against the actual manifest. P3 and C39 must coordinate their own independent schema work.
+- D79 holds migration slot 043 at parked `7939a27`. Allocate no migration number now. Do not create or execute the new migration until the driver records release of that slot and allocates the next name against the actual manifest. Any other schema work must coordinate its independent reservation; the retired P3 country split adds none.
 - P1 reserves `deploy/kubernetes/`, `scripts/kubernetes-*` and `.github/workflows/kubernetes.yml`. P4 prescribes no changes there. Its eight roles remain `api, portal, registration-worker, backup-worker, backup-verifier, remote-gateway, remote-reconciler, monitor-worker`; logical images remain `runtime` and `backup-verifier`. Packaging is a coordinated follow-up under existing identities, not a ninth role.
 - Every repair begins `ask-first` except the spec's failed **Cloud** workload restart in place and failed machine replacement initiation. Neither exception admits a hosted writer. Every other promotion or reversion requires an owner-recorded repository change with incident evidence. A console approval applies to one proposal and never edits catalogue policy.
 - A monitor result, notification, dead endpoint, timeout, ordinary action approval or expired lease supplies neither a controlled final copy nor the authorised emergency declaration. Missing scenario-specific evidence waits. The revised A1018 direction is not owner-approved wire format or runtime qualification; the rejected external-proof profiles are historical.
@@ -281,7 +292,7 @@ CLI `node packages/registration/src/cloud-actions/cli.ts [--once|--status]` has 
 
 - [ ] Write `disabledControllerDoesNothing`, `localConfigCannotAdmitProductionTargets`, `allConsumersRequireExactSchema` and `runtimeHasNoImplicitPrivilege`. Invalid files/config/schema refuse before a child/transport starts and redact values. Missing mail or C39 adapters is visible waiting, never fallback. A restored schema or stale binary with wrong policy digest cannot dispatch.
 - [ ] RED: `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/cloud-actions-runtime.test.ts`. Implement minimal loop/config/schema wiring. GREEN reruns and `node --test packages/registration/test/worker-loop.test.ts`; run `pnpm typecheck` after cross-package wiring.
-- [ ] Record a packaging handoff in this plan's eventual implementation receipt: CLI path/flags, schemas, explicit settings, DB/policy gates, owner/recipient custody and absent production executors. P1 owners must agree a later patch under an existing least-privilege role, runtime image and API injection, including RBAC/secret/network/HA tests. Do not claim this local CLI is deployed or add P1 file edits to this task. P3 must later bind country authority/offline sign-in without duplicating command state.
+- [ ] Record a packaging handoff in this plan's eventual implementation receipt: CLI path/flags, schemas, explicit settings, DB/policy gates, owner/recipient custody and absent production executors. P1 owners must agree a later patch under an existing least-privilege role, runtime image and API injection, including RBAC/secret/network/HA tests. Do not claim this local CLI is deployed or add P1 file edits to this task. Country operator sign-in and permission checks stay local; no later P3 authority handoff is required.
 - [ ] Omit explicit-mode, synthetic-inventory, schema and digest gates separately in scratch; require named failures. Commit `git commit -s -m "feat: wire disabled and local Cloud controller entrypoints"`.
 
 ### Task 11: Execute the local race, outage and recovery receipt (45–65 calls)
@@ -296,7 +307,7 @@ CLI `node packages/registration/src/cloud-actions/cli.ts [--once|--status]` has 
 - [ ] Write/run `consoleLossPreservesCountryLedger` and `restoredUnknownNeverRedispatches`. RED/GREEN: `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/cloud-actions-recovery.test.ts`. Use real processes/locks and Mailpit, not mocked SQL. Stop only the recorded console child, lose notification/decision/executor replies separately, restart workers, and restore a DB containing pending approval, queued/reverted policy, sending notice and unknown command. Identities/history survive; unknown reconciles before further execution; no automatic approval, healthy assertion or notification-driven command. Routine monitor/backup/route fixtures continue, and no hosted process is stopped.
 - [ ] Run `node scripts/test-postgres.mjs exec node scripts/cloud-actions-receipt.mjs /tmp/cloud-actions-receipt.json --old <recorded-pre-M-SHA> --new <clean-candidate-SHA>`, then `node scripts/verify-cloud-actions-receipt.mjs /tmp/cloud-actions-receipt.json`. Use a new installed export/owned schemas and external fixture effect ledger. Prove old dump restore+upgrade separately from new populated restore; preserve pre/post legacy digests and matching custody. Failure at decision/command/event/outbox/terminal-result insert rolls back all related DB changes. A durable external effect does not roll back with Cloud, so reconciliation must find it.
 - [ ] Re-run each critical guard omission in an installed disposable checkout, with its original named test and intended failure. Include policy/evidence/proof checks on both controller and recipient sides, semantic uniqueness, cell race, stale claim and notification independence. Keep logs/SHAs/resources private; restore each omission before the next. Do not count a test skipped for unavailable PostgreSQL/Mailpit as passing.
-- [ ] The console-loss check disconnects a client while the country ledger stays available. It is **not** proof of P3's global-DB isolation: today's shared DB cannot simulate that split honestly. Record that limitation and the absent Kubernetes/provider/hosted profile. Cleanup exact owned PIDs/schema/directories in finally; nonzero leftovers fail. Commit remaining focused corrections with `git commit -s -m "test: prove local action restart and recovery boundaries"`; rerun the real receipt at the new clean head if production/receipt code changed.
+- [ ] The console-loss check disconnects a country operator client while the country ledger stays available. It does not qualify the separate worldwide admin console or P2 runtime reduction. Record the absent Kubernetes/provider/hosted profile. Cleanup exact owned PIDs/schema/directories in finally; nonzero leftovers fail. Commit remaining focused corrections with `git commit -s -m "test: prove local action restart and recovery boundaries"`; rerun the real receipt at the new clean head if production/receipt code changed.
 
 ### Task 12: Make incident closure create recorded improvement work (30–50 calls)
 
@@ -311,11 +322,30 @@ CLI `node packages/registration/src/cloud-actions/cli.ts [--once|--status]` has 
 
 ## Country availability and integration handoff
 
-The country ledger is the sole authority for a request, decision and command. A global console may aggregate observations with their source/time/unavailable marker, but writes go to the named country's authority and reads never establish a second actionable copy. Global console loss leaves requests and command identities intact. Unknown country authority blocks new admission; it does not revoke a venue already admitted by Waitron or halt ordinary on-prem trading.
+The country ledger is the sole authority for a request, decision and command.
+The country's own operator console reads and writes there. The worldwide admin
+console reads health and starts deploys only; it does not receive action bodies,
+logs, customer data or a second actionable copy. Losing it leaves country operator
+sign-in, requests and command identities independent. Unknown country authority
+blocks new admission; it does not revoke a venue already admitted by Waitron or
+halt ordinary on-prem trading.
 
-During this transitional build, `OperatorAuthority` uses existing account/session/platform tables plus explicit country grants in the shared DB. It cannot claim to survive loss of a separately hosted global DB that does not yet exist. P3 must provide offline-verifiable sign-in/current operator authority and independent country storage before launch. Fail closed if that adapter is unavailable; keep existing country services/routine reconciliation independent. P4 introduces no global heartbeat into venue execution and no second database pretending to be P3.
+`OperatorAuthority` uses that country's account/session/platform tables and
+explicit country grants, with `OperatorConfig.ownerAccountId` selecting the operator.
+D113 starts from this country-local direction and rechecks the interfaces;
+no adapter waits for P3. The former offline worldwide sign-in/permit handoff is retired and is no
+launch gate. Country operators authenticate separately; global admin credentials
+supply no local permission. No global customer identity, organisation-member grant,
+new exchange API or global heartbeat is introduced.
 
-Production integration still needs coordinated P1 packaging/secret/RBAC/replica tests, P3 authority/storage boundaries, an authenticated C39 adapter with the exact contract, D101 operator metadata/location qualification, D102 live delivery and D104 independent owner reachability. These are explicit follow-ups, not claims this local receipt satisfies them. P5 consumes catalogue decisions for exact waves later; P6/P7 supply their own qualified executors and writer/failover evidence. Do not add stubs that return success for unavailable capabilities.
+Production integration still needs coordinated P1 packaging/secret/RBAC/replica
+tests, an authenticated C39 adapter with the exact contract, D101 operator
+metadata/location qualification, D102 live delivery and D104 independent owner
+reachability. These are explicit follow-ups, not claims this local receipt satisfies
+them. P5 consumes country catalogue decisions for exact waves later; P6/P7 supply
+their own qualified executors and writer/failover evidence. D113's fresh plan read
+reconciles current implementation details. Do not add stubs that return success
+for unavailable capabilities.
 
 ## Verification, readiness and self-review
 
@@ -323,12 +353,12 @@ Run focused owning behavioral files during implementation, `pnpm typecheck` afte
 
 For the future production-code branch, the driver runs `finish-branch` after readiness is announced. After its initial rebase, obtain **one** whole-branch Claude run-it review through `~/workspace/tools/claude-seat.sh review-run` in an installed throwaway checkout containing the complete candidate, including uncommitted work. Triage findings in the feature checkout. A later rebase alone does not require another full review. This plan author runs no review subprocess, commit, push or PR.
 
-Self-review against the spec: section 3/C39 correction maps to Tasks 1/4/7/12; section 6's single code catalogue, two explicit exceptions, routine-work boundary, repository changes, console+notification and safe waiting map to Tasks 1/3/5–10; section 7 maps to Task 12; section 9 and A1018 map to Tasks 1/5/6/11; section 12 and P1/P3/P5/P6/P7 ownership are hard prerequisites/handoffs above. Section 8's later self-widening and section 5's placement/trends remain outside P4, with unavailable catalogue entries rather than duplicate implementations.
+Self-review against the spec: section 3/C39 correction maps to Tasks 1/4/7/12; section 6's single code catalogue, two explicit exceptions, routine-work boundary, repository changes, console+notification and safe waiting map to Tasks 1/3/5–10; section 7 maps to Task 12; section 9 and A1018 map to Tasks 1/5/6/11; section 12 and P1/P5/P6/P7 ownership are hard prerequisites/handoffs above. Section 8's later self-widening and section 5's placement/trends remain outside P4, with unavailable catalogue entries rather than duplicate implementations.
 
 Types: later tasks preserve Task 1's `Proposal, Evidence, Scope, DecisionInput, ExecutionResult`; Task 6 explicitly extends `Command` with its immutable dispatch-authorisation reference. C39's `at` stays eligibility time, independent of `Evidence.observedAt`. SQL proposal revisions preserve old decisions while the current revision changes. Notifications have their own IDs/claims and cannot become approvals. Safety summaries are local reader contracts, not wire stop proofs. Each of the five Review Focus failures has named owning tests and guard-omission checks.
 
 Proportion: twelve bounded implementation tasks, no implementation bodies, no automatic per-task agents/review cycle. Schema is one gated migration with eleven tables; interface fixtures permit independent C39/P4 builds. This plan reserves P4 paths and does not allocate P1 edits or a migration number.
 
-Actual assumptions to recheck at build: P1 lands with the reviewed roles/runtime contract; the driver can release/allocate the migration slot and pin a clean predecessor; local PostgreSQL/Mailpit/browser fixtures remain available; the owner can explicitly identify an existing operator account and install narrow country grants. A production country-authority adapter, C39 feed, backlog-confirmation adapter, notification route and writer/provider profiles are **not assumed to exist**. If one is unavailable, the corresponding action/closure stays blocked and visibly explains why.
+Actual assumptions to recheck at build: P1 lands with the reviewed roles/runtime contract; the driver can release/allocate the migration slot and pin a clean predecessor; local PostgreSQL/Mailpit/browser fixtures remain available; the owner can explicitly identify an existing operator account and install narrow country grants. The configured country operator, C39 feed, backlog-confirmation adapter, notification route and writer/provider profiles still need their own implementation/qualification; none is supplied by worldwide sign-in. If one is unavailable, the corresponding action/closure stays blocked and visibly explains why.
 
 The plan is ready for driver review. Implementation remains blocked on P1 landing, owner plan/build approval and, for Task 2 onward, migration-slot release. No package test, database experiment, visual check or runtime rehearsal ran while authoring it.

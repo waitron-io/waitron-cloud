@@ -45,18 +45,17 @@ Use one gVisor-isolated runtime per venue on shared machines in country cells,
 with owner-selected cold recovery and the qualified Spain/Paris direction.
 Country accounts, fresh sign-in and account/box recovery must work without global;
 each customer has one owner per country, no invitations or manager accounts.
-Global keeps the operator console and apex routing, optionally billing. Recommend
-country billing for outage independence, as a proposal for later billing design
-only. Future owner transfer is verified country-scoped transfer/recovery, without
-a concurrent second owner or automatic support takeover. Global reporting waits
-for its privacy/data scope and cannot be a customer dependency.
+The [country boundary](../specs/2026-10-22-cloud-production-deployment-design.md#4-the-shape-countries-a-global-layer-cells-machines)
+keeps billing and customer services in each country. Worldwide has its own small
+admin console for health and deploy starts, plus apex routing; country operators
+sign in separately. D608 builds the one-owner rule and swap-owner function;
+verified transfer/recovery permits no concurrent second owner or support takeover.
 
-P1 supplies packaging; P3/D112 supplies country identity; P4 supplies per-action
-permissions; P5 supplies per-cell release waves; P6/D115 supplies hosted delivery;
-P7 supplies regional rebuild. A951 and D101 retain separate access and data gates.
-Production section 4 lists G's P3 data-copy, trust, API/mail/recovery, cutover,
-P4 authority and priority-5 revisions. G owns their plan review/re-approval and
-canonical status reconciliation; this outline changes none of those files.
+P1 supplies packaging; existing country owner checks and D608 supply ownership;
+P4 supplies country action permissions; P5 supplies release waves; P6/D115 supplies
+hosted delivery; P7 supplies self-contained country rebuild. A951 and D101 retain
+separate access and data gates. D112-S retires the old P3 data-copy, trust and
+cutover dependencies. Canonical A1018 status reconciliation remains separate.
 
 1. **Joint contract agreement, documentation only.** Record the approved revised A1018 design and both publication pins, then obtain jointly accepted formats and separate A1018 build authority before adapters. Include initial identity binding, store/pointer versions, signed membership, complete snapshot/local inventory, controlled copy acceptance and filing assignment, emergency declaration, source restriction and sole M2 AEAT assignment, fiscal-only return with all received outcomes and uncertainties, activation outcome and same-M2 retries. Local-to-local needs no Cloud. Promotion preparation and external-vault compatibility remain separate gates.
    Include the public access/A951 section: pin exact Waitron paths/assets and method
