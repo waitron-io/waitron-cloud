@@ -15,7 +15,9 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
   ready();
   let stoppedAt, replacementReady = false, signalFailure;
   Promise.resolve().then(stopped).then(() => {
-    stoppedAt = now(); for (const state of Object.values(states)) if (!state.recovered) state.next = 0;
+    stoppedAt = now();
+    process.stderr.write('P1 timing observer stopped-received ' + (stoppedAt - faultAt) + '\n');
+    for (const state of Object.values(states)) if (!state.recovered) state.next = 0;
   }, error => {signalFailure = error;});
   Promise.resolve().then(replacement).then(() => {replacementReady = true;}, error => {signalFailure = error;});
   const launch = name => {
