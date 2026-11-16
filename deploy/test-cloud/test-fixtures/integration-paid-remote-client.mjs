@@ -42,14 +42,14 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
     const bytes = Buffer.from(JSON.stringify(payload));
     const replayed = await exchange('configuration', {payload: bytes.toString('base64url'),
       signature: sign(null, bytes, key).toString('base64url')});
-    assert.equal(replayed.status, 200);
+    assert.equal(replayed.status, 200, 'integration.remote_replay_status');
     const remote = remoteService(await replayed.json());
     assert.equal(remote.state, 'unconfigured', 'integration.remote_replay_state');
     assert.deepEqual(remote.configuration, {}, 'integration.remote_replay_configuration');
     assert.equal(remoteService(state.lifecycle.view).state, 'unconfigured');
     assert.deepEqual(remoteService(state.lifecycle.view).configuration, {});
     const refused = await exchange('staff-certificate-status', envelope('staff-certificate-status', {version: 1, requestId}));
-    assert.equal(refused.status, 403); assert.deepEqual(await refused.json(), {error: 'permission_denied'});
+    assert.equal(refused.status, 403, 'integration.remote_certificate_refusal_status'); assert.deepEqual(await refused.json(), {error: 'permission_denied'});
     return {cachedConfigurationMasked: true, signedCertificateRefused: true};
   }
   assert.equal(phase, 'certificate');
@@ -58,7 +58,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   const csr = await createStaffCsr(root, placement.staffHostname);
   const saved = envelope('configuration', {servicesVersion: 2});
   const configured = await exchange('configuration', saved);
-  assert.equal(configured.status, 200);
+  assert.equal(configured.status, 200, 'integration.remote_configuration_status');
   assert.ok(Object.keys(remoteService(await configured.json()).configuration).length > 0, 'integration.remote_paid_configuration_required');
   await writeFile(directory + '/configuration-envelope.json', JSON.stringify(saved), {mode: 0o600, flag: 'wx'});
   const submitted = await send('staff-certificate-submit', {version: 1, hostname: placement.staffHostname,
@@ -83,7 +83,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
       response.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.remote_upstream_large'));});
       response.once('error', reject);
       response.once('end', () => {
-        try {assert.equal(response.statusCode, 200); resolve(JSON.parse(text));} catch (error) {reject(error);}
+        try {assert.equal(response.statusCode, 200, 'integration.remote_upstream_status'); resolve(JSON.parse(text));} catch (error) {reject(error);}
       });
     });
     req.setTimeout(5000, () => req.destroy(Error('integration.remote_upstream_timeout')));

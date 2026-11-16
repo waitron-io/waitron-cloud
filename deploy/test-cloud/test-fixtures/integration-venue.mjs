@@ -1,5 +1,6 @@
 // Observe successful native exchanges without replacing transport, signatures or responses.
 import assert from 'node:assert/strict';
+import {fixtureFailureDiagnostic} from './integration-renewal.mjs';
 import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
@@ -151,6 +152,7 @@ const control = createServer(async (req, res) => {
     const observed = lines.filter(value => value.path === '/api/installations/backup-reserve').at(-1);
     assert.deepEqual(observed, {path: '/api/installations/backup-reserve', status: 403, error: 'permission_denied', grantIssued: false});
     res.end(JSON.stringify({status: 'proved', httpStatus: observed.status, error: observed.error, grantIssued: observed.grantIssued}));
-  } catch {res.statusCode = 500; res.end(JSON.stringify({error: 'fixture_refused', ...(diagnostic ? {diagnostic} : {})}));}
+  } catch (error) {res.statusCode = 500; res.end(JSON.stringify({error: 'fixture_refused',
+    diagnostic: (diagnostic ? diagnostic + ':' : '') + fixtureFailureDiagnostic(error)}));}
 });
 await new Promise(resolve => control.listen(socket, resolve)); await chmod(socket, 0o600);
