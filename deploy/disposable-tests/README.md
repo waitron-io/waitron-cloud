@@ -77,7 +77,7 @@ The package token stays in the Mac process. For each run, the helper reads `pnpm
 
 GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof stages both packages and exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence. Automatic CI retains its request-only transfer and existing job token.
 
-Before updating the signing package, publish the matched controller and host recipe through the [existing installer](#run-the-controller-from-the-ci-server), with lane I's operator. Then run guest-tools, local-runtime and cancellation proofs against that release. A support-only capture qualifies archive seeding; use an adoption capture whose lockfile imports the contract to qualify actual frozen and offline installation before landing. Portable tests do not qualify an installed release. Never patch a frozen recipe in place.
+Before landing a private UI or signing-package adoption, publish its matched controller and host recipe through the [existing installer](#run-the-controller-from-the-ci-server), with lane I's operator. The installer drains work and takes its existing locks. Replace `VERSION` below with the reviewed UI release. Then run guest-tools, local-runtime and cancellation proofs against that release. A support-only capture qualifies archive seeding; use an adoption capture whose lockfile imports the contract to qualify actual frozen and offline installation before landing. Portable tests do not qualify an installed release. Never patch a frozen recipe in place.
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 
@@ -86,7 +86,7 @@ To run the complete private command-path proof, first prepare the snapshot and r
 ```sh
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-0.2.10.tgz \
+  /tmp/cloud-proof-ledger /tmp/cloud-private-packages/ui-core-VERSION.tgz \
   /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 
@@ -121,7 +121,7 @@ Run the opt-in Mac cancellation proof with the same source and package inputs as
 ```sh
 node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
   /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
-  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-0.2.10.tgz \
+  /tmp/cloud-cancel-ledger /tmp/cloud-private-packages/ui-core-VERSION.tgz \
   /tmp/cloud-private-packages/contract-0.2.16.tgz
 ```
 
@@ -274,7 +274,9 @@ Use the same private publication manifest and add `controllerHost`, an absent
 `serverRelease` such as `/opt/waitron-disposable-controller-REVIEWED_SHA`, and a fresh
 `serverState` under `/var/lib/waitron-disposable-controller/states/`. Choose a new
 `configuration.hostGeneration`. Keep the already qualified host recipe and mapping.
-Publish from the landed source in a coordinated window. Before waiting for an empty
+Normally publish from landed source; the private-package adoption exception above
+qualifies reviewed candidate support before landing. Use a coordinated window.
+Before waiting for an empty
 server queue, save the existing routing mode and send new placements to GitHub:
 
 ```sh

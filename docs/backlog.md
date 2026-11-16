@@ -98,12 +98,11 @@ Main pushes, schedules and manual runs still require hand moves.
 
 ## Keep the private shared UI release current (D579)
 
-For each future Dependabot update, a person must verify the published source
-commit, update the smoke test's reviewed source hash, approve the immutable
-archive URL and digest, and publish matching test-host support before landing.
-Both consumers must install the same private release and pass authenticated CI.
-Follow the [release guide](shared-ui-release.md) for those continuing review and
-qualification steps. Version assertions read the consumer manifests.
+For future UI releases, verify the published source, review actual Cloud consumers,
+approve the immutable archive and publish matching test-host support before adoption.
+Both consumers must install the same release and pass authenticated CI. Follow the
+[release guide](shared-ui-release.md); source/archive review and host publication
+remain human work.
 
 ## Shared storage-test seed downloads (D585)
 

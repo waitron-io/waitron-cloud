@@ -23,7 +23,10 @@ as the BuildKit `npm_token` secret; follow the existing
 For a UI update, expect an unedited version-update PR to fail CI until you review its source expectation and approve its archive bytes.
 Before merging:
 
-1. Verify the published version and its `waitronSource.commit`.
+1. Verify the published version and its `waitronSource.commit` in the installed
+   `package.json` or SHA512-verified tarball. Registry metadata omits that source field.
+   `pnpm view` delegates to npm and does not run pnpm’s token helper; use the
+   authenticated installation below to inspect the package.
 2. Confirm that `apps/portal/package.json`, `packages/ui-smoke/package.json`
    and both lockfile entries use the same release. The smoke test compares
    both exact manifest versions with the installed package.
@@ -40,7 +43,11 @@ Before merging:
 5. Review the changed dependencies and their actual test owners using the
    [root ownership](ci-root-input-ownership.md) and
    [documentation selection](ci-documentation-audit.md) guides.
-6. Push the reviewed changes and wait for normal CI on that final commit.
+6. Publish matching controller and host support through the
+   [existing installer](../deploy/disposable-tests/README.md#run-the-controller-from-the-ci-server)
+   before landing the adoption. Read back the installed pins and run the guest-tools,
+   local-runtime and cancellation proofs with the adoption capture. Then push the
+   reviewed changes and wait for normal CI on that final commit.
 
 The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
 authenticated to the private registry and found only `0.1.0`, so it opened no
@@ -146,7 +153,7 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.2.10` and Lit `3.3.3` in `apps/portal`,
+Cloud pins `@waitron-io/ui-core@0.2.30` and Lit `3.3.3` in `apps/portal`,
 `packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
 then run:
 
@@ -163,9 +170,9 @@ autocomplete, button interaction and light/dark tokens. Its declaration check ke
 `skipLibCheck` disabled. A local file dependency fails the version check. The normal
 `pnpm test` includes this fixture; it is test infrastructure, not an account screen.
 
-Version `0.2.10` records Waitron source
-`ae8f3a799b45e89348691abe2647ad7dfcbf9bbf`, matching
-[publication run 42849632838](https://github.com/clintongormley/waitron/actions/runs/42849632838). Its installed `dist/LICENSE` and
+Version `0.2.30` records Waitron source
+`c1ebdfed92f6d13d7e48dae191d2f9eacfc55972`, matching
+[publication run 43903273329](https://github.com/clintongormley/waitron/actions/runs/43903273329). Its installed `dist/LICENSE` and
 `dist/LICENSE-GRANTS.md` match that source commit byte for byte. The source
 package's own version remains `0.1.0`; publication assigns the registry version
 without changing the source manifest. The earlier `0.2.1` local qualification used the GitHub CLI

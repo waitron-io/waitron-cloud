@@ -42,6 +42,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    });
    await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    const signOut=page.getByRole('button',{name:c.signout,exact:true});
+   await signOut.waitFor();await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
    await signOut.scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>scrollY>500),true,'the button starts well below the summary');
    const waitForHandler=()=>t.waitFor(()=>{assert.equal(handlerEntered,true,'the first logout route handler must enter');},{timeout:4000});
    if(handler==='missing'){

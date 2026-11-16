@@ -8,8 +8,8 @@ Lit rather than `@waitron/shared`. A built tarball installs outside the workspac
 passes declaration, Chromium form, theme and accessibility checks. Both UI packages
 retain coverage and weekly mutation gates. The [approved design](../superpowers/specs/2026-09-23-shared-ui-extraction-design.md)
 and [execution plan](../superpowers/plans/2026-09-23-shared-ui-extraction.md) record the boundary.
-The [Waitron publisher](../shared-ui-release.md) published private `@waitron-io/ui-core@0.2.10`
-from Waitron `ae8f3a799b45e89348691abe2647ad7dfcbf9bbf`. Cloud pins it in its
+The [Waitron publisher](../shared-ui-release.md) published private `@waitron-io/ui-core@0.2.30`
+from Waitron `c1ebdfed92f6d13d7e48dae191d2f9eacfc55972`. Cloud pins it in its
 manifest and lockfile; a Chromium fixture checks the installed controls and themes,
 and declaration checking uses `skipLibCheck: false`. Local installs use GitHub CLI
 authentication; CI uses its package-read token. The portal now uses these controls for signup, login and recovery. Read the first weekly mutation scores
