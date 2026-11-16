@@ -1623,7 +1623,6 @@ implementation or production evidence.
   Preserve the [35-second bootstrap and 60-second dependency-worker limits](backlog/ci-pnpm-setup.md#root-fixture-stress-boundaries) on recurrence; avoid overlapping full qualification.
   Retain complete TAP, test name, child error/signal and output if the unnamed null child-status assertion recurs; its cause is unknown.
   Keep D586's [job-page race and historical readback timeout](backlog/ci-job-record-publication.md) unproved; do not retry contradictory job evidence.
-  Reproduce the [extra relay admission](backlog/relay-contention-extra-admission.md) through PostgreSQL without changing its allowance or ownership checks.
   Capture [local database handles, capacity and fixture timing evidence](backlog/package-ci-runtime.md#other-fixture-causes-still-unknown); more time is not a diagnosis.
   Keep the schema-upgrade lifecycle checkout cause unattributed; retain its fixed release/operation labels and bounded exit facts.
   Investigate [storage acquisition and competing socket owners](backlog/storage-cache-fixture.md); a passing retry does not identify either cause.

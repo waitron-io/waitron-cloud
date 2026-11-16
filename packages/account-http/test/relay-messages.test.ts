@@ -136,7 +136,8 @@ test('queued expiry clears payload and retry returns the expired tombstone with 
  assert.equal((await f.db.pool.query('SELECT payload FROM relay_messages WHERE message_id=$1',[a.body.messageId])).rows[0].payload,null);
 });
 test('account contention across installations admits only the explicit fixture allowance',async()=>{
- const a=await f.venue(),b=await f.venue(a),other=await f.venue(),config={...f.relay,grants:{...f.grants,policy:{...f.grants.policy,version:'small-fixture',units:2}}};
+ // The concurrent burst must share one allowance period.
+ const a=await f.venue(),b=await f.venue(a),other=await f.venue(),config={...f.relay,grants:{...f.grants,policy:{...f.grants.policy,version:'small-fixture',units:2,periodSeconds:366*86400}}};
  try{
   await f.restart(config);
   const results=await Promise.all(Array.from({length:6},(_,i)=>{const v=i%2?a:b;return submit(v,{...v.body,messageId:randomUUID()});}));
