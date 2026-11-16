@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
 import {Pool} from 'pg';
 import {migrationNames} from '../src/migrate.ts';
@@ -38,7 +39,7 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
   const sample=report.samples.find((row:any)=>row.blockers.includes(blockerPid));
   assert.ok(sample,'the waiting backend identifies its real blocker');
   assert.equal(sample.waitType,'Lock');
-  assert.deepEqual(Object.keys(sample).sort(),['blockers','locks','pid','waitEvent','waitType']);
+  assert.deepEqual(Object.keys(sample).sort(),['blockers','elapsedMs','latenessMs','locks','pid','waitEvent','waitType']);
   assert.ok(sample.locks.some((lock:any)=>lock.granted===false));
   assert.equal(sample.locks.length,1,'held locks do not displace the waiting lock');
   assert.ok(sample.locks.every((lock:any)=>lock.granted===false));
@@ -53,7 +54,7 @@ for(const known of [false,true])test(`setup timeout retains real locks and ${kno
 });
 
 test('successful setup stays silent and releases its observer',async t=>{
- const pool=new Pool({connectionString:url});const lines:unknown[]=[];
+ const pool=new Pool({connectionString:url});const lines:unknown[]=[];const controller=new AbortController();
  const observerPids:number[]=[];
  const emit=Pool.prototype.emit;
  t.mock.method(Pool.prototype,'emit',function(this:Pool,event:string|symbol,...args:any[]){
@@ -62,7 +63,8 @@ test('successful setup stays silent and releases its observer',async t=>{
  });
  t.mock.method(console,'error',(...args:unknown[])=>lines.push(args));
  try{
-  assert.equal(await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');return 17;}),17);
+  assert.equal(await observeSetup(pool,async()=>{await pool.query('SELECT pg_sleep(0.2)');return 17;},{signal:controller.signal}),17);
+  controller.abort();await delay(0);
   assert.deepEqual(lines,[]);assert.equal(pool.listenerCount('acquire'),0);
   assert.ok(observerPids.length>0,'observe the real connections owned by this setup');
   assert.equal((await pool.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=ANY($1::int[])',[observerPids])).rows[0].n,0);
@@ -103,4 +105,69 @@ test('unavailable observer and throwing reporter cannot replace a setup failure'
   assert.equal(JSON.parse(lines[0]!).unavailable,true);
   assert.equal(pool.listenerCount('acquire'),0);
  }finally{process.env.TEST_DATABASE_URL=previous;await pool.end();}
+});
+
+
+test('abort reports a still-blocked stage and closes only its observer before work settles',async t=>{
+ const admin=new Pool({connectionString:url}),pool=new Pool({connectionString:url,max:1});
+ const blocker=await admin.connect(),controller=new AbortController(),lines:string[]=[],observerPids:number[]=[];
+ const emit=Pool.prototype.emit;
+ t.mock.method(Pool.prototype,'emit',function(this:Pool,event:string|symbol,...args:any[]){
+  if(event==='connect'&&this.options.application_name==='cloud-test-setup-observer')observerPids.push(args[0].processID);
+  return emit.call(this,event,...args);
+ });
+ let reported!:()=>void;const reportReady=new Promise<void>(resolve=>{reported=resolve;});
+ t.mock.method(console,'error',(line:string)=>{lines.push(line);reported();});
+ let work:Promise<number>|undefined,settled=false;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT pg_advisory_xact_lock(784,19)');
+  const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  const target=(await pool.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  work=observeSetup(undefined,async observation=>{
+   observation.mark('database');observation.attach(pool);observation.mark('bulk-insert');
+   await pool.query("SELECT 'private abort value', pg_advisory_xact_lock(784,19)");
+   settled=true;return 23;
+  },{signal:controller.signal});
+  // The callback remains pending on a real lock when the test deadline signal arrives.
+  for(let i=0;i<100;i++){
+   const row=(await admin.query('SELECT pg_blocking_pids($1) AS blockers',[target])).rows[0];
+   if(row.blockers.includes(blockerPid))break;
+   assert.ok(i<99,'work must reach its real database wait');await delay(10);
+  }
+  await delay(150);controller.abort();
+  await Promise.race([reportReady,delay(1000)]);
+  assert.equal(lines.length,1,'abort must report without waiting for the blocked workload');
+  assert.equal(settled,false);assert.equal(pool.listenerCount('acquire'),0);
+  const report=JSON.parse(lines[0]!);
+  assert.equal(report.stage,'bulk-insert');assert.ok(report.elapsedMs>=0);
+  assert.deepEqual(report.stages.map((mark:any)=>mark.stage),['database','bulk-insert']);
+  assert.ok(report.stages.every((mark:any)=>mark.elapsedMs>=0));
+  assert.deepEqual(report.pool,{total:1,idle:0,waiting:0});
+  assert.equal(report.loadAverage.length,3);assert.ok(report.loadAverage.every(Number.isFinite));
+  const sample=report.samples.find((row:any)=>row.pid===target&&row.blockers.includes(blockerPid));
+  assert.ok(sample,'abort retains the real blocker before the query can reject');
+  assert.equal(sample.waitType,'Lock');assert.ok(sample.elapsedMs>=0);assert.ok(sample.latenessMs>=0);
+  assert.ok(observerPids.length>0);
+  assert.equal((await admin.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=ANY($1::int[])',[observerPids])).rows[0].n,0);
+  assert.ok(lines.join('').length<24000);assert.equal(lines.join('').includes('private abort value'),false);
+  await blocker.query('ROLLBACK');assert.equal(await work,23);assert.equal(lines.length,1);
+ }finally{
+  await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});
+  await pool.end();await admin.end();
+ }
+});
+
+test('abort retains timer lateness even when the current stage has no database pool',async t=>{
+ const controller=new AbortController(),lines:string[]=[];
+ t.mock.method(console,'error',(line:string)=>lines.push(line));
+ await observeSetup(undefined,async observation=>{
+  observation.mark('cli-read');
+  const until=performance.now()+200;while(performance.now()<until){}
+  await delay(0);controller.abort();return 29;
+ },{signal:controller.signal});
+ assert.equal(lines.length,1);
+ const report=JSON.parse(lines[0]!);
+ assert.deepEqual(report.samples,[]);assert.equal(report.stage,'cli-read');
+ assert.ok(report.maxLateness?.latenessMs>=50,'retain a delayed timer without a database row');
+ assert.ok(report.maxLateness.elapsedMs>=200);
 });

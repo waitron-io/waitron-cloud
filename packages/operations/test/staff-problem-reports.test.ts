@@ -1,3 +1,4 @@
+import {observeSetup} from '../../registration/test/fixtures/setup-waits.ts';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -75,13 +76,16 @@ test('the local reader refuses an implicit environment and extra arguments befor
  }
 });
 
-test('the grouped reader stays within its database deadline with 200000 reports and 800 selected codes',{timeout:30000},async()=>{
- const db=await database();try{
+test('the grouped reader stays within its database deadline with 200000 reports and 800 selected codes',{timeout:30000},async t=>{
+ await observeSetup(undefined,async observation=>{
+ observation.mark('database');
+ const db=await database();observation.attach(db.pool);try{
   const org=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID();
   await db.pool.query("INSERT INTO organisations(id,name) VALUES($1,'Synthetic scale organisation')",[org]);
   await db.pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Synthetic scale business','ES')",[business,org]);
   await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,org,business]);
   await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'synthetic-scale-key')",[installation,venue]);
+  observation.mark('bulk-insert');
   await db.pool.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,code,source,version_major,version_minor,version_patch,reported_at,occurrences,logs)
    SELECT $1,gen_random_uuid(),'test',$2,'storage.disk_full','packages/storage/src/archive.ts#write',1,2,3,'2026-11-07T10:00:00Z',1,'[]'
    FROM generate_series(1,200000)`,[installation,'a'.repeat(64)]);
@@ -89,11 +93,13 @@ test('the grouped reader stays within its database deadline with 200000 reports 
   await db.pool.query(`INSERT INTO installation_error_reports(installation_id,operation_id,environment,digest,kind,version_major,version_minor,version_patch,reported_at,logs,details)
    SELECT $1,r.id,'test',$2,'staff',1,2,3,'2026-11-07T10:00:00Z',r.logs,$4 FROM jsonb_to_recordset($3::jsonb) AS r(id uuid,logs jsonb)`,
   [installation,'b'.repeat(64),JSON.stringify(rows),JSON.stringify({device:'unknown',equipment:[],upgradedAt:null,hosting:'unknown'})]);
+  observation.mark('cli-read');
   const result=await command(['--environment','test'],{...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,PGOPTIONS:`-c search_path=${db.schema}`});
   assert.equal(result.status,0,result.stderr);assert.equal(result.stderr,'');const value=JSON.parse(result.stdout);
   assert.equal(value.reports.length,100);assert.equal(value.groups.length,800);
   assert.deepEqual(value.groups.find((g:{code:string})=>g.code==='storage.disk_full'),{code:'storage.disk_full',version:'1.2.3',automaticOccurrences:'200000',staffReports:1});
   assert(value.groups.every((g:{staffReports:number})=>g.staffReports===1));
   assert.equal(value.groups.filter((g:{automaticOccurrences:string})=>g.automaticOccurrences==='0').length,799);
- }finally{await db.close();}
+ }finally{observation.mark('cleanup');await db.close();}
+ },{signal:t.signal});
 });

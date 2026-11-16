@@ -1,3 +1,4 @@
+import {observeSetup} from '../../registration/test/fixtures/setup-waits.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -9,9 +10,13 @@ import {operationsStatus} from '../src/status.ts';
 let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});
 after(async()=>db?.close());
-beforeEach(async()=>{
+beforeEach(async context=>{
+ await observeSetup(db.pool,async observation=>{
+ observation.mark('reset-schema');
  await resetSchema(db.pool);
+ observation.mark('reconciliation-update');
  await db.pool.query('UPDATE usage_reconciliation_sources SET last_attempted_at=clock_timestamp(),caught_up_at=clock_timestamp()');
+ },{signal:context.signal});
 });
 
 async function healthServer(handler:(request:import('node:http').IncomingMessage,response:import('node:http').ServerResponse)=>void){
