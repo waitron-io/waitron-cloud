@@ -188,7 +188,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
 });
 for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [];
-  if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); return true;});
+  if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
@@ -309,7 +309,11 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       const stopped = calls.findIndex(row => row[1] === 'wait' && row[2] === 'instance-stopped');
       const sent = calls.findIndex(row => row[0] === 'signal' && row[1] === 'P1_STOPPED');
       const replacement = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'jsonpath={.items[0].metadata.name}'"));
-      assert.ok(stopped >= 0 && stopped < sent && sent < replacement, 'confirm stop and send STOPPED before replacement');
+      const requested = calls.findIndex(row => row[1] === 'stop-instances');
+      const requestLine = calls.findIndex(row => row[0] === 'stderr' && row[1].startsWith('P1 timing launcher stop-request-complete '));
+      const waitLine = calls.findIndex(row => row[0] === 'stderr' && row[1].startsWith('P1 timing launcher stop-wait-complete '));
+      assert.ok(requested >= 0 && requested < requestLine && requestLine < stopped, 'report stop request before waiting');
+      assert.ok(stopped >= 0 && stopped < waitLine && waitLine < sent && sent < replacement, 'report confirmed stop and send STOPPED before replacement');
     } else if (scenario.startsWith('observer')) assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault with insufficient expiry');
     const created = calls.find(row => row[1] === 'create-stack'), name = created[created.indexOf('--stack-name') + 1];
     assert.match(name, /^d618-[a-f0-9-]{36}$/);
