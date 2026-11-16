@@ -21,8 +21,30 @@ test('verifier build archives the pinned committed source and supplies its gener
   await writeFile(join(candidate,'deploy/backup-verifier/target.json'),JSON.stringify({runtime:{revision:pinned},digest:'a'.repeat(64)}));
   await writeFile(join(source,'tracked'),'later');git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-s','-qm','later fixture');
   await writeFile(join(source,'private-untracked'),'must stay out');
-  const wrapper=join(bin,'docker');await writeFile(wrapper,`#!${process.execPath}\nconst fs=require('node:fs');const args=process.argv.slice(2);fs.cpSync(args.at(-1),${JSON.stringify(capture)},{recursive:true});`);await chmod(wrapper,0o700);
-  execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs')],{env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+  await chmod(join(candidate,'packages/backups/src/container-entry.mjs'),0o600);
+  await chmod(join(candidate,'deploy/backup-verifier/target.json'),0o600);
+  const modes=join(root,'modes.json');
+  const wrapper=join(bin,'docker');await writeFile(wrapper,`#!${process.execPath}
+const fs=require('node:fs'),path=require('node:path'),context=process.argv.at(-1),entries=[];
+function walk(name){
+ const mode=fs.statSync(path.join(context,name)).mode;
+ const directory=fs.statSync(path.join(context,name)).isDirectory();
+ entries.push({name,mode:mode&0o777,directory});
+ if(directory)for(const child of fs.readdirSync(path.join(context,name)))walk(path.join(name,child));
+}
+walk('waitron');walk('verifier');
+fs.writeFileSync(${JSON.stringify(modes)},JSON.stringify({root:fs.statSync(context).mode&0o777,entries}));
+fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wrapper,0o700);
+  const callerMask=process.umask(0o077);
+  try{
+   execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs')],{env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+  }finally{process.umask(callerMask);}
+  const staged=JSON.parse(await readFile(modes,'utf8'));
+  assert.equal(staged.root,0o700,'the build context stays private');
+  for(const {name,mode,directory} of staged.entries){
+   const required=directory?0o005:0o004;
+   assert.equal(mode&required,required,name+' must be readable by the image user');
+  }
   assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'pinned');
   await assert.rejects(readFile(join(capture,'waitron/private-untracked')),{code:'ENOENT'});
   assert.deepEqual(JSON.parse(await readFile(join(capture,'waitron/build/hour-release.json'),'utf8')),{sourceCommit:pinned,fixture:'real-generator-boundary'});
