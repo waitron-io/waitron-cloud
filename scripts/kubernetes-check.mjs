@@ -14,6 +14,7 @@ import {pathToFileURL} from 'node:url';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {observeP1, readP1Signals} from './p1-observer.mjs';
+import {installFlux} from './kubernetes-git.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
@@ -85,7 +86,7 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
   return {stopped, replacement};
 }
 
-export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1} = {}) {
+export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 const amazon = typeof target === 'object' ? target : undefined;
 if (amazon) assertAmazonBinding(amazon);
 else assert.ok(['kind', 'kind-worker-loss', 'kind-worker-observer'].includes(target), 'kubernetes.target');
@@ -98,7 +99,7 @@ const env = {...process.env, KUBECONFIG: amazon ? '/etc/kubernetes/admin.conf' :
 const tag = cluster + ':cloud', image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
 let created = false, tagged = false, result;
 const recentFailures = [];
-let sharedVolume, observerSignals, shutdownRequested = false;
+let sharedVolume, observerSignals, managed, shutdownRequested = false;
 const roleNodes = Object.fromEntries(['cloud', 'gateway', 'manifest', 'verifier'].map(role => [role,
   cluster + ((threeNodes || amazon) && ['manifest', 'verifier'].includes(role) ? role === 'manifest' && amazon?.phase !== 'after' ? '-worker2' : '-worker' : '-control-plane')]));
 const stop = new AbortController(), shutdown = () => {shutdownRequested = true; stop.abort();};
@@ -206,7 +207,11 @@ try {
   manifest.items.push({apiVersion: 'v1', kind: 'ConfigMap', metadata: {name: 'proxy'}, data: {'proxy.cfg': proxy}});
   // Initial placement must reach the host that will stop, while affinity still permits replacement.
   if (threeNodes || amazon?.phase === 'before') await kube(['cordon', cluster + '-worker']);
+  const deployment=manifest.items.find(item=>item.kind==='Deployment'&&item.metadata.name==='manifest');
+  if(amazon?.observer)manifest.items=manifest.items.filter(item=>item!==deployment);
   await kube(['apply', '-f', '-'], JSON.stringify(manifest));
+  if(amazon?.observer)managed=await flux({name:cluster,image:process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
+    run,kube,deployment,signal:stop.signal});
   await kube(['wait', '--for=condition=Ready', 'pod/cloud', '--timeout=180s']);
   await kube(['rollout', 'status', 'deployment/manifest', '--timeout=120s']);
   await kube(['wait', '--for=condition=Ready', 'pod/gateway', '--timeout=120s']);
@@ -233,6 +238,7 @@ try {
     observerSignals.replacement.then(() => {roleNodes.manifest = cluster + '-worker';}).catch(() => {});
     observe = async (probes, checkBudget) => {
       try {return await observer({probes, signal: stop.signal,
+        reconcile: managed.reconcile,
         ready: () => {checkBudget(); process.stdout.write('P1_READY\n');},
         stopped: () => observerSignals.stopped, replacement: () => observerSignals.replacement});}
       catch (error) {stop.abort(error); throw error;}
@@ -311,6 +317,7 @@ try {
   if (created || amazon) await verifierDiagnostics(kube, pod);
   for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
   try {
+    if(managed)await managed.close();
     if (created) {
       await run('kind', ['delete', 'cluster', '--name', cluster], undefined, true);
       assert.equal(await run('docker', ['ps', '-aq', '--filter', 'label=io.x-k8s.kind.cluster=' + cluster], undefined, true), '', 'kubernetes.node_remains');

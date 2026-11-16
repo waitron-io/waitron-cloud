@@ -1159,8 +1159,8 @@ same private configuration and prerequisites above. It keeps the signed-in
 session, venue process, staff certificate and routed peer through C's abrupt
 stop and assisted replacement. The public-page browser check renews
 its five-minute cookie before expiry. Local behavior checks run with
-`node --test scripts/p1-observer.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`;
-this command has not yet qualified an Amazon observation.
+`node --test scripts/p1-observer.test.mjs scripts/kubernetes-git.test.mjs scripts/amazon-run.test.mjs scripts/test-cloud-integration.test.mjs scripts/kubernetes-check.test.mjs`;
+these checks do not qualify a real Amazon repair.
 
 The observer starts only with an hour remaining before scheduled deletion,
 and limits baseline work, including target transfer, to 20 minutes so at least
@@ -1204,7 +1204,26 @@ The manifest worker reports ready only after its test cell is committed, so
 remote provisioning cannot race that startup transaction. You can check the
 held-transaction case with `node scripts/test-postgres.mjs exec node --test --test-name-pattern='manifest readiness' deploy/test-cloud/remote-runtime.test.mjs`.
 
-Repository repair is reported as unavailable. Abrupt loss of each original node,
-including database host A, and production-mode services remain open under
-[D621](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md). This command
-changes no production deployment or provider permission.
+Amazon `observe` now prepares checksum-verified Flux 2.8.0 controllers before
+creating machines. The builder also needs kubectl 1.34.3. It renders JSON locally,
+adds the two pinned x86 images to the offline archive, and checks their imported
+image identities. The existing `start` mode and ARM Kind observer stay unchanged;
+the latter still reports reconciliation as unavailable.
+
+Only the manifest worker Deployment is managed from Git. A private mirror on A
+serves generated, signed-off rehearsal commits; it accepts no network pushes.
+Its template fields belong to Flux, while direct worker scaling stays outside
+that inventory. While C is off, the observer measures a Git revision, deliberate
+template drift, refetch after source-controller replacement, and rejection of an
+invalid render with the last working workload retained. Each operation has the
+existing 180-second bound and runs beside the retained client probes. The
+`p1.reconciliation` result records timings and applied/attempted revisions;
+an unexpected failure refuses the run and retains bounded diagnostics.
+Rejection before apply does not prove rollback of an unhealthy applied release.
+
+This repair path needs a separately authorised owner-started Amazon run. No
+new paid run has qualified it. Losing the node that hosts Flux, original
+A/all-node loss, database redundancy and production-mode services remain open
+under [D621](superpowers/plans/2026-11-10-d621-remaining-p1-checks.md) and its
+[repair plan](superpowers/plans/2026-11-16-d621-flux-repair.md). This changes no
+production deployment or provider permission.

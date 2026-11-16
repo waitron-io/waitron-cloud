@@ -167,3 +167,26 @@ test('stop confirmation past the sign-in bound reports the stop rather than an a
     sleep: async ms => {clock += ms; await new Promise(setImmediate);}}), /p1.stop_slower_than_bound/);
   assert.deepEqual(diagnostics.filter(row => row.startsWith('P1 timing ')), ['P1 timing observer stopped-received 92000\n']);
 });
+
+// Repair cannot replace client sampling or report success before its real observation ends.
+test('repository repair starts after replacement and is retained beside the same client probes', async () => {
+  let clock=0,repairAt,finishRepair;const calls=[];
+  const stop=Promise.withResolvers(),replacement=Promise.withResolvers();
+  const report={revisionMs:2000,driftMs:3000,refetchMs:4000};
+  const probes=Object.fromEntries(['session','remote','login','backup','signup'].map(name=>[name,async()=>{calls.push([name,clock]);}]));
+  const result=await api.observeP1({probes,now:()=>clock,ready:()=>{},stopped:()=>stop.promise,replacement:()=>replacement.promise,
+    reconcile:async()=>{repairAt=clock;await new Promise(resolve=>{finishRepair=resolve;});return report;},
+    sleep:async ms=>{clock+=ms;if(clock>=1000)stop.resolve();if(clock>=10000)replacement.resolve();
+      if(clock<10000)assert.equal(repairAt,undefined);if(clock>=910000)finishRepair?.();await new Promise(setImmediate);}});
+  assert.ok(repairAt>=10000&&repairAt<20000);assert.ok(clock>=910000);
+  assert.ok(calls.some(([name,at])=>name==='session'&&at>repairAt&&at<20000));
+  assert.deepEqual(result.reconciliation,report);
+  assert.ok(result.offMs>=900000);assert.equal(result.backupsAfterStop,2);
+});
+
+test('an unexpected repository repair refusal fails the observation rather than returning client success', async () => {
+  let clock=0;
+  const probes=Object.fromEntries(['session','remote','login','backup','signup'].map(name=>[name,async()=>{}]));
+  await assert.rejects(api.observeP1({probes,now:()=>clock,ready:()=>{},stopped:async()=>{},replacement:async()=>{},
+    reconcile:async()=>{throw Error('flux.revision_timeout');},sleep:async ms=>{clock+=ms;await new Promise(setImmediate);}}),/flux.revision_timeout/);
+});

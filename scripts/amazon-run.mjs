@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
+import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
@@ -96,7 +97,7 @@ export async function checkAmazonArchive(archive, images, run) {
   }
 }
 
-export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal, observe = observerCommand}) {
+export async function startAmazon(config, {run, aws, sleep = delay, now = Date.now, signal, observe = observerCommand, prepareFlux = prepareFluxBundle}) {
   assert.match(config.region ?? '', /^[a-z]{2}-[a-z]+-\d$/, 'Set an explicit AWS region');
   const identity = JSON.parse(await aws('sts', ['get-caller-identity']));
   assert.ok(identity.Account === config.account && !identity.Arn.endsWith(':root'), 'amazon.identity');
@@ -120,11 +121,21 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     ownedImages.push(waitron);
     await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
       process.execPath, 'scripts/build-backup-verifier.mjs'], undefined, false, 900000);
+    let fluxBundle;
+    if(config.observer) {
+      await run('docker',['run','--rm','--entrypoint','sh',waitron,'-ec','git --version && test -x "$(git --exec-path)/git-http-backend"']);
+      fluxBundle=await prepareFlux(directory,name,{run});
+    }
     const manifest = JSON.parse(await readFile(new URL('../deploy/kubernetes/local-checks.yaml', import.meta.url), 'utf8'));
     const images = [...new Set(JSON.stringify(manifest).match(/"image":"([^"]+)"/g)?.map(row => JSON.parse('{' + row + '}').image) ?? [])].filter(image => image !== 'CLOUD_IMAGE');
     for (const image of images) {
       try {await run('docker', ['image', 'inspect', image]);} catch {ownedImages.push(image);}
       await run('docker', ['pull', '--platform', 'linux/amd64', image]);
+    }
+    if(config.observer)for(const {upstream,tag} of fluxImages(name)) {
+      try {await run('docker',['image','inspect',upstream]);}catch{ownedImages.push(upstream);}
+      await run('docker',['pull','--platform','linux/amd64',upstream]);
+      ownedImages.push(tag);await run('docker',['tag',upstream,tag]);images.push(tag);
     }
     for (const image of [cloud, waitron, ...images]) {
       const [row] = JSON.parse(await run('docker', ['image', 'inspect', image]));
@@ -183,6 +194,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           await copy(index, 'source.tar', '/tmp/d618-source.tar');
           await ssh(index, ['sudo', 'mkdir', '-p', '/opt/d618']);
           await ssh(index, ['sudo', 'tar', '-xf', '/tmp/d618-source.tar', '-C', '/opt/d618']);
+          if(index===0&&fluxBundle)await copy(0,'flux.json','/tmp/d618-flux.json');
           await bootstrap(index, 'prepare', [target.nodes[index], '10.77.0.' + (index + 1)]);
         }
         for (let index = 0; index < 3; index++) {

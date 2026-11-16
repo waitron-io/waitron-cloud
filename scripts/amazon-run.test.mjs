@@ -197,6 +197,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   const output = {A: 'i-00000000000000001', B: 'i-00000000000000002', C: 'i-00000000000000003',
     AddressA: '203.0.113.1', AddressB: '203.0.113.2', AddressC: '203.0.113.3', PrivateA: '10.78.0.10', PrivateB: '10.78.0.11', PrivateC: '10.78.0.12'};
   const running = api.startAmazon({...config, observer: scenario.startsWith('observer')}, {now: () => time, sleep: async ms => {time += ms;},
+    prepareFlux: async directory => {calls.push(['flux-prepare']);return directory+'/flux.json';},
     observe: async (binary, args, {onReady, timeout}) => {
       assert.equal(binary, 'ssh'); assert.equal(timeout, 3600000);
       assert.equal(calls.some(row => row[1] === 'stop-instances'), false, 'no fault before observer ready');
@@ -343,6 +344,9 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   const removal=calls.findIndex(row=>row[0]==='ssh'&&row.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
   assert.ok(removal>calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'cp'"))&&removal<calls.findIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'ctr'")));
   if (scenario === 'observer') {
+    assert.ok(calls.findIndex(row=>row[0]==='flux-prepare')>=0&&calls.findIndex(row=>row[0]==='flux-prepare')<calls.findIndex(row=>row[1]==='create-stack'),'prepare offline controllers before machines');
+    assert.equal(savedTags.filter(tag=>/:(source|kustomize)-controller$/.test(tag)).length,2);
+    assert.equal(transports.filter(row=>row.binary==='scp'&&row.args.at(-2).endsWith('/flux.json')).length,1);
     assert.deepEqual(phases, []); assert.deepEqual(result.observation, {continuous: true, stopMs: 0, replacementMs: 0});
   } else {
     assert.deepEqual(phases, ['before', 'after']);
