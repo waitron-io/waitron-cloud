@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // All times belong to A; transport and stop delays count against recovery.
-export async function observeP1({probes, ready, stopped, replacement, signal,
+export async function observeP1({probes, ready, stopped, replacement, reconcile, signal,
   now = () => performance.now(), sleep = ms => delay(ms, undefined, {signal})}) {
   const names = ['session', 'remote', 'login', 'backup', 'signup'];
   const samples = [], states = Object.fromEntries(names.map(name => [name, {next: 0, count: 0}]));
@@ -13,7 +13,7 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
   signal?.throwIfAborted();
   const faultAt = now();
   ready();
-  let stoppedAt, replacementReady = false, signalFailure;
+  let stoppedAt, replacementReady = false, signalFailure, repair;
   Promise.resolve().then(stopped).then(() => {
     stoppedAt = now();
     process.stderr.write('P1 timing observer stopped-received ' + (stoppedAt - faultAt) + '\n');
@@ -33,6 +33,13 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
       signal?.throwIfAborted();
       if (signalFailure) throw signalFailure;
       const at = now();
+      if (reconcile && stoppedAt !== undefined && replacementReady && !repair) {
+        repair = {};
+        Promise.resolve().then(() => reconcile(signal)).then(result => {repair.result = result; repair.done = true;}, error => {
+          process.stderr.write('P1 reconciliation failed ' + JSON.stringify({samples: samples.slice(-10)}) + '\n');
+          signalFailure = error;
+        });
+      }
       assert.ok(at - faultAt < 2100000, 'p1.leg_timeout');
       if (stoppedAt === undefined) assert.ok(at - faultAt < 300000, 'p1.stop_timeout');
       else assert.ok(stoppedAt - faultAt <= 90000, 'p1.stop_slower_than_bound');
@@ -73,8 +80,8 @@ export async function observeP1({probes, ready, stopped, replacement, signal,
         if (name === 'backup' && state.recovered && (state.finalBackup || at < stoppedAt + 900000)) continue;
         launch(name);
       }
-      if (replacementReady && states.backup.finalBackup && names.every(name => states[name].recovered && !states[name].pending)) {
-        return {samples, backupsAfterStop: states.backup.count, reconciliation: 'unavailable',
+      if (replacementReady && (!reconcile || repair?.done) && states.backup.finalBackup && names.every(name => states[name].recovered && !states[name].pending)) {
+        return {samples, backupsAfterStop: states.backup.count, reconciliation: reconcile ? repair.result : 'unavailable',
           stoppedMs: stoppedAt - faultAt, offMs: at - stoppedAt, recovery: Object.fromEntries(names.map(name => [name, {withinMs: states[name].withinMs, longestGapMs: states[name].longestGapMs}]))};
       }
       await sleep(1000);

@@ -1698,8 +1698,9 @@ implementation or production evidence.
   redacting other text; run `node --test deploy/test-cloud/integration-rollback-diagnostic.test.mjs deploy/test-cloud/integration-rollback-control.test.mjs`.
   This defect fits run 6 by source inference; its inner error and the earlier
   stop delays' cause remain unconfirmed. Full qualification has not passed.
-  Actual Amazon observation, original A/all-node loss, real-service and repository
-  repair checks remain open. The three-node
+  Qualify the [Amazon-only repository repair](superpowers/plans/2026-11-16-d621-flux-repair.md),
+  including real Git application, drift repair, refetch and last-good retention.
+  Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
   across 15 modules, with the manifest worker replaced after its host stopped,

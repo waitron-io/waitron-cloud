@@ -318,7 +318,7 @@ for (const [label, target, controlled] of [
     nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)} : target;
   const source = `import assert from 'node:assert/strict';import {appendFileSync, readFileSync} from 'node:fs';
     import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
-    await runKubernetesCheck(${JSON.stringify(input)}, {clients: async ({kubernetes}) => {
+    await runKubernetesCheck(${JSON.stringify(input)}, {flux: async () => ({close:async()=>{},reconcile:async()=>({})}), clients: async ({kubernetes}) => {
       assert.equal(kubernetes.ca, 'synthetic-ca');
       assert.equal(JSON.parse(readFileSync(${JSON.stringify(join(fixture.directory, 'placement'))}, 'utf8')).cordoned, false, 'standby must accept replacement before clients');
       appendFileSync(${JSON.stringify(fixture.log)}, JSON.stringify({clients:true})+'\\n');
@@ -578,7 +578,7 @@ const fs=require('node:fs'),a=process.argv.slice(2),name=require('node:path').ba
 if(name==='kubectl'){
  const b=a[0]==='--context'?a.slice(4):a;
  if(b[0]==='version')console.log(JSON.stringify({clientVersion:{gitVersion:'v1.34.3'}}));
- if(b[0]==='apply'){const manifest=JSON.parse(fs.readFileSync(0,'utf8')),account=manifest.items.find(item=>item.metadata.name==='cloud').spec.containers.find(c=>c.name==='account');require('node:assert/strict').deepEqual(JSON.parse(account.env.find(e=>e.name==='CLOUD_FACTOR_POLICY').value),${JSON.stringify(emailLoginPolicy)});}
+ if(b[0]==='apply'){const manifest=JSON.parse(fs.readFileSync(0,'utf8'));require('node:assert/strict').equal(manifest.items.some(item=>item.kind==='Deployment'),false,'observer must create its Deployment from Git');const account=manifest.items.find(item=>item.metadata.name==='cloud').spec.containers.find(c=>c.name==='account');require('node:assert/strict').deepEqual(JSON.parse(account.env.find(e=>e.name==='CLOUD_FACTOR_POLICY').value),${JSON.stringify(emailLoginPolicy)});}
  if(b[0]==='get'){
   const role=b[b.indexOf('-l')+1]?.split('=')[1];
   const suffix=role==='manifest'?(fs.existsSync(${JSON.stringify(moved)})?'-worker':'-worker2'):'-control-plane';
@@ -593,11 +593,12 @@ if(name==='kubectl'){
 }
 `;
   for (const name of ['docker', 'kubectl']) await writeFile(join(directory, name), fake, {mode: 0o700});
-  const code = `import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
-const result=await runKubernetesCheck(${JSON.stringify(target)},{
+  const code = `import assert from 'node:assert/strict';import {runKubernetesCheck} from './scripts/kubernetes-check.mjs';
+let mirrorClosed=false;const result=await runKubernetesCheck(${JSON.stringify(target)},{
+ flux:async ({deployment})=>{if(deployment.metadata.name!=='manifest')throw Error('wrong Git inventory');return {reconcile:async()=>({measured:true}),close:async()=>{mirrorClosed=true;}};},
  clients:async ({kubernetes:k})=>{if(${JSON.stringify(failProbe)}==='shutdown-during-setup'){process.emit('SIGTERM');await k.exec('account',['true']);}return {observed:await k.observe({},()=>{}),worker:await k.remote.worker('time')};},
- observer:async ({ready,stopped,replacement})=>{if(${JSON.stringify(failProbe)})throw Error(${JSON.stringify(failProbe)});ready();await stopped();await replacement();return {done:true};}
-});process.stdout.write(JSON.stringify(result)+'\\n');`;
+ observer:async ({ready,stopped,replacement,reconcile})=>{if(${JSON.stringify(failProbe)})throw Error(${JSON.stringify(failProbe)});ready();await stopped();await replacement();assert.deepEqual(await reconcile(),{measured:true});return {done:true};}
+});if(!mirrorClosed)throw Error('mirror was not cleaned');process.stdout.write(JSON.stringify(result)+'\\n');`;
   const child = spawn(process.execPath, ['--import', standalone, '--input-type=module', '-e', code], {env: {...process.env, PATH: directory + ':' + process.env.PATH,
     TEST_CLOUD_INTEGRATION_IMAGE: 'sha256:' + 'a'.repeat(64), TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: 'sha256:' + 'b'.repeat(64)}, stdio: ['pipe', 'pipe', 'pipe']});
   let stdout = '', stderr = '', sent = false;
