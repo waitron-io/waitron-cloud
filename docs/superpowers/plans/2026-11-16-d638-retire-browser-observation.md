@@ -40,6 +40,7 @@ Keep the refusing runs 40920925400, 40922185069, 40988995366, 40990548906,
 41023281681 and 41028304505 with their sample/route categories, and the distinct
 historical replay pin `fbadd15785464e59747e697c11048bfbc6e4938f`. This scoped
 pruning supersedes the older replay-design instruction to leave that prose intact.
+Review also retained the explained drain-failure run 40926773548.
 Remove the dead navigation-evidence test command. Delete the reconnect-retirement
 sentence in `docs/backlog.md`, preserving apt-only qualification, and change its
 earlier claim that the observation groups are still kept to historical wording.
@@ -54,7 +55,10 @@ Run the two changed root test files, `scripts/cloud-cost/browser-readiness.test.
 and `scripts/ci-docs.test.mjs`; check changed local links and `git diff --check`.
 Search all tracked files, including `.github`, for remaining executable references.
 Finish with Claude's whole-branch review, exact-head CI and merge evidence.
-Expected: about 900 removed lines, fewer than 150 added (including this plan);
+Expected: about 900 removed lines, fewer than 100 added (including this plan);
 production instrumentation about 250 removed, tests about 260 removed plus two
 list entries, workflow about 120 removed, documentation about 250 removed.
 No new helper, test suite, workflow, deployment, provider access or timing change.
+
+Review measured 123 added and 913 removed before wording fixes: the added-line
+estimate was exceeded, while total change stayed below the 1.5× stop.
