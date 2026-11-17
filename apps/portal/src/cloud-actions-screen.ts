@@ -19,10 +19,10 @@ export function cloudActionsScreen(app:PortalApp){
       <dt>${c.cloudActionsOccurrence}</dt><dd>${request.occurrence} (${request.version})</dd>
       <dt>${c.cloudActionsCell}</dt><dd>${request.cell}</dd><dt>${c.cloudActionsTarget}</dt><dd>${request.target}</dd>
       <dt>${c.cloudActionsProposal}</dt><dd>${request.proposal}</dd><dt>${c.cloudActionsEvidence}</dt><dd>${request.evidence}</dd>
-     </dl><p>${c.cloudActionsUnavailable}</p>
+     </dl><p>${request.outcome?.status==='confirmed'?c.cloudActionsConfirmed:request.dispatchStartedAt?c.cloudActionsUnknown:c.cloudActionsUnavailable}</p>
      ${request.state==='approved'&&request.approvalExpiresAt?html`<p>${c.cloudActionsExpires}: ${date(request.approvalExpiresAt)}</p>`:nothing}
      ${request.events.map(event=>html`<p>${event.kind==='notice'?notice(event.noticeStatus??'unknown'):state(event.kind)} · ${date(event.at)}</p>`)}
-     ${request.state==='pending'?html`<wt-form-actions><wt-button .disabled=${disabled} @click=${()=>{void app.decideCloudAction(request,'approved');}}>${c.cloudActionsApprove}</wt-button>
+     ${request.state==='pending'&&!request.dispatchStartedAt?html`<wt-form-actions><wt-button .disabled=${disabled} @click=${()=>{void app.decideCloudAction(request,'approved');}}>${c.cloudActionsApprove}</wt-button>
       <wt-button .disabled=${disabled} @click=${()=>{void app.decideCloudAction(request,'rejected');}}>${c.cloudActionsReject}</wt-button></wt-form-actions>`:nothing}
     </article>`)}
    </section>

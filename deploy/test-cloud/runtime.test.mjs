@@ -147,3 +147,14 @@ test('configured HTTPS account and captured-mail origins preserve private servic
   assert.throws(()=>testRuntimeEnvironment('account',config,{TEST_CLOUD_ORIGIN:origin}),/origin_invalid/,JSON.stringify(origin));
  }
 });
+
+test('demoModeOffByDefault: only an explicit LAN demo passes the operator to the account process',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-action-env-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const operator='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ assert.equal(testRuntimeEnvironment('account',config,{CLOUD_OPERATOR_ACCOUNT_ID:operator}).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+ const enabled={CLOUD_ACTION_DEMO:'1',CLOUD_OPERATOR_ACCOUNT_ID:operator};
+ assert.equal(testRuntimeEnvironment('account',config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,operator);
+ for(const role of ['email','monitor','storage'])assert.equal(testRuntimeEnvironment(role,config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...enabled,NODE_ENV:'production'}),/demo/);
+});

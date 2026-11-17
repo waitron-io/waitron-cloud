@@ -1,3 +1,5 @@
+import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-action-worker.ts';
+import {startCloudActionDemo} from './cloud-action-demo.mjs';
 import {openTestCaptureRuntime} from './service-runtime.mjs';
 import {createRequire} from 'node:module';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
@@ -6,7 +8,7 @@ import { accountHttpConfig, passwordScreeningFromEnv, factorConfigFromEnv } from
 import { AccountRateLimiter } from '../../packages/account-http/src/rate-limit.ts';
 import { loadPortalAssets } from '../../packages/account-http/src/portal.ts';
 import { startAccountServer } from '../../packages/account-http/src/server.ts';
-let captures;
+let captures;let actionDemo;
 let pool;
 let running;
 let cleanup;
@@ -24,6 +26,7 @@ const stop = () => {
 process.once('SIGINT', stop); process.once('SIGTERM', stop);
 try {
   if (process.argv.length !== 2 || !process.env.DATABASE_URL || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
+  const actionDemoEnabled=cloudActionDemoEnabled(process.env);
   const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
   const allowances=allowanceOptionsFromEnv(process.env,planMode);
   const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
@@ -46,7 +49,8 @@ try {
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
-    running = await startAccountServer({planMode,allowances,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));
@@ -65,7 +69,7 @@ try {
     :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
 } finally {
   stop();
-  try {await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
+  try {await actionDemo?.close();await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
   clearInterval(cleanup); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }

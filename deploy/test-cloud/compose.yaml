@@ -60,6 +60,7 @@ services:
         condition: service_healthy
     volumes: !override
       - local-stack-config:/run/local-stack
+      - test-cloud-action-demo:/run/cloud-action-demo
     networks:
       default:
         ipv4_address: 10.79.0.3
@@ -71,6 +72,8 @@ services:
     image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
     command: ["node", "deploy/test-cloud/runtime.mjs", "account"]
     environment:
+      CLOUD_ACTION_DEMO: ${CLOUD_ACTION_DEMO:-0}
+      CLOUD_OPERATOR_ACCOUNT_ID: ${CLOUD_OPERATOR_ACCOUNT_ID:-}
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
     ports: !reset []
     healthcheck:
@@ -224,4 +227,5 @@ networks:
 secrets: !reset {}
 
 volumes:
+  test-cloud-action-demo:
   test-backup-verifier-state:

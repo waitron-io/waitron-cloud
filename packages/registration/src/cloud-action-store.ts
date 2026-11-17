@@ -16,6 +16,8 @@ export function validateCloudActionProposal(input:CloudActionProposal){
 function view(row:any,events:any[]=[]){return {
  id:row.id,occurrence:row.occurrence,version:row.version,actionId:row.action_id,policy:row.policy as 'ask-first'|'act-and-report',cell:row.cell,target:row.target,
  proposal:row.proposal,evidence:row.evidence,state:row.state as 'pending'|'approved'|'rejected'|'superseded',effectId:row.effect_id,available:false as const,
+ dispatchStartedAt:row.dispatch_started_at?.toISOString()??null as string|null,
+ outcome:row.outcome as {status:'confirmed'}|null,
  createdAt:row.created_at.toISOString() as string,decidedAt:row.decided_at?.toISOString()??null as string|null,
  approvalExpiresAt:row.approval_expires_at?.toISOString()??null as string|null,
  events:events.map(event=>({kind:event.kind as string,at:event.created_at.toISOString() as string,...(event.kind==='notice'?{noticeStatus:(event.delivery_status??'unknown') as keyof EmailDeliveryStatus['counts']|'unknown'}:{})})),
