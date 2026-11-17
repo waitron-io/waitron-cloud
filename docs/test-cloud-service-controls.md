@@ -114,7 +114,8 @@ The shared fixture policy has three units per hour, version `local-v1` and
 epoch `2026-01-01T00:00:00.000Z`, refusing excess and retaining debits.
 Approval only validates this policy; it reserves no allowance and sends no mail.
 Test relay startup uses these same settings when reserving sends. You can send
-three box emails per hour per approved grant; Cloud account mail uses its own queue.
+three box emails per hour per Cloud account, shared across its boxes and grants;
+Cloud account mail uses its own queue.
 You cannot choose a policy through this command.
 
 The statement must already have completed the signed configuration exchange.
@@ -139,13 +140,33 @@ layout leaves the relay unavailable. After approval, the paired box submits to
 `POST /v1/installations/email/submit`, and the email process delivers to Mailpit.
 Read the private inbox as described in the [test Cloud guide](test-cloud.md).
 
-Keep `relay-keys.json` from the private configuration volume with your saved runtime
-configuration. It contains separate encryption, replay, suppression and recipient-counter
-keys and stays outside database backups. Startup creates it only when no relay history
-exists. If it is missing after a database restore, the relay refuses work; restore
-the saved file with mode `0600`, then restart the account and email processes.
+Save the account container's entire `/run/local-stack` directory alongside your
+database backup, outside the checkout. It contains the runtime configuration and
+`relay-keys.json`, with separate encryption, replay, suppression and recipient-counter
+keys. For the same configured layout, copy it into a private directory:
+
+```sh
+umask 077
+mkdir -p /private/test-cloud-config
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml cp \
+  account:/run/local-stack/. /private/test-cloud-config/
+```
+
+Keep that directory private and restore it together with its matching database
+backup. The relay keys stay outside database backups. Startup creates the file only
+when no relay history exists. If it is missing after a database restore, the relay
+refuses work; restore the saved file with mode `0600`, then restart the account and email processes.
 An invalid or unreadable file is also refused. Account access and Cloud account mail
 remain available while relay startup is refused.
+
+`relay-status` reports the owner's sending switch, not whether the relay started
+successfully. If the switch is on but submissions are unavailable, read the account
+and email process logs with the same Compose files and `logs account email-worker`.
+The email process can report a relay failure while waiting for the account process
+to create the shared key file. If it persists, correct the private configuration and
+restart both processes; the account process tries relay startup once.
 
 Real SES delivery, its feedback and suppression qualification, the joint box workflow
 and the Amazon machine remain separate work.
