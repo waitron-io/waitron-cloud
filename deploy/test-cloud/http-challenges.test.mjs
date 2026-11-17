@@ -41,3 +41,15 @@ test('refuses wrong authority, token, method and path without disclosing or chan
  const duplicate=await f.send(zone,'/.well-known/acme-challenge/account-token','GET',['Host',zone,'Host','evil.example.test']);assert.ok([400,404].includes(duplicate.status));
  assert.deepEqual(await f.send(staff),{status:200,body:'remote-token.remote-key'});
 });
+
+test('standalone process serves account challenges and shuts down without any Cloud services',async t=>{
+ const {spawn}=await import('node:child_process'),root=await mkdtemp(join(tmpdir(),'cloud-http-process-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await mkdir(join(root,'.well-known/acme-challenge'),{recursive:true});await writeFile(join(root,'.well-known/acme-challenge/account-token'),'account proof');
+ const child=spawn(process.execPath,['deploy/test-cloud/http-challenges.mjs'],{env:{PATH:process.env.PATH,TEST_CLOUD_ORIGIN:'https://'+zone,TEST_CLOUD_REMOTE_ZONE:zone,TEST_CLOUD_ACCOUNT_WEBROOT:root,TEST_CLOUD_CHALLENGE_DIR:join(root,'remote'),TEST_CLOUD_HTTP_PORT:'0'},stdio:['ignore','pipe','pipe']});
+ const exited=new Promise(resolve=>child.once('close',resolve));t.after(async()=>{if(child.exitCode===null)child.kill('SIGTERM');await exited;});
+ const ready=await Promise.race([new Promise(resolve=>{let out='';child.stdout.on('data',part=>{out+=part;if(out.includes('\n'))resolve(JSON.parse(out.split('\n')[0]));});}),exited.then(code=>({exited:code}))]);
+ assert.equal(ready.status,'listening','the independent challenge command must stay up');assert.ok(ready.port>0);
+ // node:http preserves the explicit Host; Node26 fetch derives it from the URL.
+ const response=await new Promise((resolve,reject)=>{const req=request({host:'127.0.0.1',port:ready.port,path:'/.well-known/acme-challenge/account-token',headers:{host:zone}},res=>{let body='';res.on('data',part=>body+=part);res.on('end',()=>resolve({status:res.statusCode,body}));});req.on('error',reject);req.end();});assert.deepEqual(response,{status:200,body:'account proof'});
+ child.kill('SIGTERM');assert.equal(await exited,0);
+});

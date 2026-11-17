@@ -2,12 +2,24 @@ import {createServer} from 'node:http';
 import {mkdir,readFile,writeFile,rename,rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {join,isAbsolute} from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {isHostname,isUuid} from '../../packages/remote-access/src/manifest.ts';
 
 const tokenPattern=/^[A-Za-z0-9_-]{1,128}$/;
 function challengePath(directory,hostname,token){
  if(!isHostname(hostname)||!tokenPattern.test(token))throw Error('test_cloud.http_challenge');
  return join(directory,hostname,token);
+}
+
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ try{
+  const origin=new URL(process.env.TEST_CLOUD_ORIGIN),port=Number(process.env.TEST_CLOUD_HTTP_PORT??8080);
+  if(origin.origin!==process.env.TEST_CLOUD_ORIGIN||origin.protocol!=='https:'||origin.port||!Number.isInteger(port)||port<0||port>65535)throw Error();
+  const server=createHttpChallengeServer({accountHostname:origin.hostname,zone:process.env.TEST_CLOUD_REMOTE_ZONE,accountWebroot:process.env.TEST_CLOUD_ACCOUNT_WEBROOT,remoteDirectory:process.env.TEST_CLOUD_CHALLENGE_DIR});
+  server.on('error',()=>{console.error('Test Cloud HTTP challenge listener failed');process.exitCode=1;});
+  for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{server.close();server.closeAllConnections();});
+  server.listen(port,'0.0.0.0',()=>console.log(JSON.stringify({status:'listening',port:server.address().port})));
+ }catch{console.error('Test Cloud HTTP challenge settings are invalid');process.exitCode=1;}
 }
 export async function presentHttpChallenge(directory,hostname,token,value){
  const target=challengePath(directory,hostname,token),temporary=target+'.'+randomUUID();
