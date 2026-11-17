@@ -1050,12 +1050,14 @@ implementation or production evidence.
   Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
   protected Waitron containers are never adopted.
 
+  Public test-venue HTTPS remains unbuilt; its [short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md)
+  has the watcher's 17 November clearance. Pairing and the owner's mobile-data check remain separate gates.
   The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
   is cleared by the watcher for staged implementation. Configurable HTTPS reuses
   the test runtime and internal CA trust. The explicit Amazon driver target has
   local admission and rendered-configuration checks, with measured image sizes and
-  an idle-stack observation. Application readiness, sustained Amazon OS/disk/CPU
-  headroom, pairing and email qualification remain open. Driver inventory's
+  an idle-stack observation. Sustained Amazon OS/disk/CPU headroom, pairing and
+  email qualification remain open. Driver inventory's
   optional health handling is checked through Docker itself by
   `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
   relay-grant hint without advancing service configuration. The test-only private-origin
