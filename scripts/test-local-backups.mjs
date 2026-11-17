@@ -591,11 +591,13 @@ try {
     const retained = await transaction(f.db.pool, c => pointMetadata(c, recovered.id));
     assert(retained);
     assert((await storage.read(retained.objectKey)).equals(bytes), 'The recovered point must retain the exact upload');
+    const idle = await captureClient(item.venue.root,'schedule',{ca:s3.ca});
+    assert.equal(idle.created,0,'Restart before the next due time must not make another copy');
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
     await worker(target,'restore',{recoveryKey:grant.recoveryKey,sourceNodeId:recovered.sourceNodeId,modules:recovered.modules,expectedVenue:item.captured.venueName});
   }
-  record('scheduled backups publish the original upload after a crash, make one due capture, stay idle before the next due time, and restore the recovered archive independently');
+  record('scheduled backups publish the original upload after a crash, make one due capture, keep both same-process and restart passes idle before the next due time, and restore the recovered archive independently');
   const streamViews = [];
   for (const [index, snapshot] of snapshots.entries()) {
     const envPath = join(snapshot.venue.root, "fixture-env.json"),
