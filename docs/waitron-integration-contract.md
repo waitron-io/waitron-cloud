@@ -2490,21 +2490,20 @@ leases, routes and counters; Waitron still has to qualify its locked entry's lac
 of writes. Declaration, charging, return and writer generation remain parts 4–6.
 A947/A1018, P6 and provider/production gates remain open.
 
-
 #### TOTP purpose-key input amendment, 17 November 2026
 
 Cloud accepts Waitron’s published [proposal](https://github.com/clintongormley/waitron/blob/16aec8456ec082cb2b1e546fa7839ee2bd09b084/docs/superpowers/plans/2026-11-17-a1188-locked-totp-purpose-keys.md) and [shared examples](https://github.com/clintongormley/waitron/blob/16aec8456ec082cb2b1e546fa7839ee2bd09b084/docs/superpowers/plans/2026-11-17-a1188-locked-totp-examples.md) for the future locked reader. The watcher cleared this agreement-first amendment on 17 November at 17:40; it is not owner approval of a new design or a runnable start.
 `WAITRON_LOCKED_TOTP_KEYS` is closed JSON `{current:{version,key},previous:{version,key}|null}`; each entry has exactly those fields. Keys are canonical base64 for 32 bytes. Versions are distinct positive safe integers, preserving the source numbers without an ordering requirement; a previous key needs its own nonempty version.
-Resolve the selected backup’s `secrets.env`, `trading.env` and optional `backup.env` through `loadKeyRing(resolveBackupKeyInputs(...))`, then derive `purposeKey(entry,"totp")` once for each entry. Later files override earlier ones; absent/empty current version defaults to 1, never the previous version. Missing secrets/trading entries or unsafe source versions refuse before spawning.
-A retry uses the same immutable bound backup and original versions. This replaces the old proposal’s account-key launcher input and decision 5; no `WAITRON_ACCOUNT_KEY` fallback is accepted.
+Resolve the selected backup’s `secrets.env`, `trading.env` and optional `backup.env` through `loadKeyRing(resolveBackupKeyInputs(...))`, then derive `purposeKey(entry,"totp")` once for each entry. Later values override earlier ones, variable by variable; absent/empty current version defaults to 1, never the previous version. Cloud’s future launcher refuses missing secrets/trading entries before calling these helpers, and refuses any loaded version that is not a safe integer before building the handover.
+When the effective source ring has no previous entry, send `previous:null`; stored secrets on an unavailable version cannot open. A retry uses the same immutable bound backup and original versions. This replaces the old proposal’s account-key launcher input and decision 5; no `WAITRON_ACCOUNT_KEY` fallback is accepted.
 
 The future Cloud launcher derives before spawning the Waitron child. It passes only this purpose payload, never source vault variables or source secrets/trading/backup env files into the child’s state; the child’s placement creates a separate fresh ring.
 Cloud drops transient source-ring/payload references and its temporary child environment after spawn returns or fails. Store no handoff payload in files, arguments, database, logs or receipts.
 The child validates and removes the inherited payload on success or failure before venue locking/placement, retaining decoded purpose keys only until exit on startup failure, locked stop or fixed expiry. After confirmed declaration cancels that stop, lifetime belongs to parts 4–6 and is not agreed here.
-While Cloud retains that backup generation and its existing held backup key, it can re-read the archived ring and re-derive the keys. Existing backup retention is unchanged; this promises no physical RAM erasure or new cleanup protocol.
+While Cloud retains that backup generation and its existing held backup key, it can re-read the archived ring and re-derive the keys. Existing [snapshot retention](../packages/backups/src/retention.ts) and [historical-backup keys](local-backups.md) are unchanged. This promises neither physical RAM erasure nor absence of observability, including OS startup-environment records that may remain visible until process exit, and adds no cleanup protocol.
 
 The published examples cover original versions 7/3, no previous key, absent/empty current version 1 and wrong-key/purpose/version refusal. Missing/malformed payload refusals are prospective startup cases; neither the new reader nor Cloud delivery is qualified by those examples.
-The copy binding and fixed start-plus-30-minute deadline remain unchanged. Cloud’s supplier remains unbuilt until the real selected-backup-to-launch consumer exists; this agreement unblocks J’s reader, not P6 hosting or activation.
+The copy binding and fixed start-plus-30-minute deadline remain unchanged. Cloud’s supplier remains unbuilt until the real selected-backup-to-launch consumer exists; this agreement unblocks lane J’s reader, not P6 hosting or activation.
 
 ### A1018: answers to Lane A's four questions
 
