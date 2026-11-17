@@ -52,6 +52,51 @@ checks to complete while still fencing policy readers. Keep organisation writes 
 the setter: two shared policy readers that both try to update that organisation
 can deadlock while upgrading their locks.
 
+## Use disk stages for the local publication trial
+
+Use disk stages when a backup would put pressure on the process's RAM-backed
+temporary directory. The test account in venue-level mode and the local backup
+worker each use a separate disk filesystem. Each file is private, and
+publication checks the exact length and SHA-256 before making the retained copy.
+A retry may need two files at once while it compares a retained object.
+
+Create one image for each service on a disposable Linux host that has space
+for both filesystems. Run these commands as a user who can mount a loop
+filesystem.
+
+```sh
+stages=$(mktemp -d "$PWD/backup-stages.XXXXXX")
+for service in account worker; do
+  mkdir "$stages/$service"
+  fallocate -l 5G "$stages/$service.ext4"
+  mkfs.ext4 -q -m 0 "$stages/$service.ext4"
+  sudo mount -o loop,nodev,nosuid,noexec "$stages/$service.ext4" "$stages/$service"
+  sudo install -d -m 0700 "$stages/$service/work"
+done
+export TEST_CLOUD_ACCOUNT_BACKUP_STAGE="$stages/account/work"
+export LOCAL_BACKUP_WORKER_STAGE="$stages/worker/work"
+```
+
+The 5 GiB images limit total disk writes even during simultaneous staging. Use
+the container process's UID for the private directory if it runs as a different
+user. Append `-f deploy/test-cloud/compose.backup-stage.yaml` to the local Compose
+command so it mounts those existing directories. Use the venue-level fixture
+settings for the test account and its storage service. The override supplies
+disk paths. After the trial, stop the services using the mounts before
+unmounting the two filesystems. Remove only the stage directory you created.
+
+Run the signed TLS publication and retry proof.
+
+```sh
+node scripts/test-postgres.mjs exec node --test deploy/test-cloud/backup-publication.test.mjs
+```
+
+For a near-2 GiB measurement, use a disposable checkout with just the shared
+object ceiling set to 2 GiB. Run the same proof with
+`TEST_CLOUD_PUBLISH_BYTES=2146435072` and
+`TEST_CLOUD_PUBLISH_STAGE` set to the account's private disk stage. It also checks
+that publication in the test free/paid mode refuses an archive over 512 MiB.
+
 ## Run the proof
 
 Install both repositories with their frozen pnpm lockfiles. Use Node 26 with network permission support for the restore verifier (tested with

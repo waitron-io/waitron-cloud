@@ -49,7 +49,7 @@ try {
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
-    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
+    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
     let relay;
     try{relay=await openTestRelayRuntime({pool,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
     catch{console.error('Test relay startup failed; restore private keys and check schema');}

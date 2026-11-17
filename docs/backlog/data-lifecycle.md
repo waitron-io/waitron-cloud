@@ -45,7 +45,12 @@ The [clean-commit measurement](../receipts/backup-capacity-2026-09-30.json) ran 
 sizes; the guide records the observed times and resource peaks. Provider policies
 and real Waitron archive assembly remain outside this fixture.
 Next: measure deployment uplink bandwidth, spool volume and real database/
-encryption shutdown latency, stream Waitron archive assembly/restoration before reconsidering the current 512 MiB bound,
+encryption shutdown latency and qualify the large bound verifier and genuine
+M6 recovery before raising the current 512 MiB bound. The plan uses Lane M's
+compact 3.31 GB one-year database. At the same growth rate a venue reaches the
+planned 4 GiB expanded limit after about 15–16 months. At that limit the new
+Cloud capture should report failure and preserve the last retained copy.
+Other open work includes
 production master-key custody/rewrapping and production-host verifier hardening. The
 process verifier denies network, subprocesses, native addons, host reads and outside
 writes. The container adapter adds a disposable container around the deployed

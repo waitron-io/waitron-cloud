@@ -1,4 +1,4 @@
-import { MAX_OBJECT_BYTES } from '../packages/backups/src/object-transfer.ts';
+import { MAX_LEGACY_BACKUP_BYTES } from '../packages/backups/src/object-transfer.ts';
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { runCapacityFixture, preflight } from './backup-capacity-fixture.mjs';
@@ -7,7 +7,7 @@ const sizes = [32,128,512].map(n => n * 1024 * 1024);
 const receipt = {
   version:2,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
   cloudDirty:Boolean(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()),
-  profile:'controlled-tls-capacity',ceilingBytes:MAX_OBJECT_BYTES,
+  profile:'controlled-tls-capacity',ceilingBytes:MAX_LEGACY_BACKUP_BYTES,
   environment:{platform:process.platform,arch:process.arch,node:process.version,samplingMs:20},fixtures:[],
   cleanup:null,
 };

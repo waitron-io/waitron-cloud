@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-export const MAX_OBJECT_BYTES = 512 * 1024 * 1024;
+export const MAX_LEGACY_BACKUP_BYTES = 512 * 1024 * 1024;
+export const MAX_OBJECT_BYTES = MAX_LEGACY_BACKUP_BYTES;
 
 export interface ObjectReceipt {
   digest: string;
@@ -59,10 +60,12 @@ export async function stageReadable(
   }
 
   const directory = await mkdtemp(
-      join(options.temporaryRoot ?? tmpdir(), "cloud-backup-object-"),
-    ),
-    path = join(directory, "object"),
-    hash = createHash("sha256");
+    join(options.temporaryRoot ?? tmpdir(), "cloud-backup-object-"),
+  ).catch((error: unknown) => {
+    body.destroy();
+    throw error;
+  });
+  const path = join(directory, "object"), hash = createHash("sha256");
   let size = 0,
     disposed = false;
   const deadline = AbortSignal.timeout(options.timeoutMs ?? 30000),

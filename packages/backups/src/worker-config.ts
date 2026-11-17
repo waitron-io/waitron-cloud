@@ -10,7 +10,7 @@ export function workerObjects(env:Record<string,string|undefined>,ca?:string){
    // Operator credentials never follow an endpoint or region chosen by a catalogue row.
    validateLocation(location);
    if(new URL(location.endpoint).href!==new URL(endpoint).href||location.region!==region)throw Error('backup.storage_configuration');
-   const client=new BackupObjects(location,{accessKeyId,secretAccessKey,...(env.CLOUD_BACKUP_SESSION_TOKEN?{sessionToken:env.CLOUD_BACKUP_SESSION_TOKEN}:{})},ca);clients.push(client);return client;
+   const client=new BackupObjects(location,{accessKeyId,secretAccessKey,...(env.CLOUD_BACKUP_SESSION_TOKEN?{sessionToken:env.CLOUD_BACKUP_SESSION_TOKEN}:{})},ca,env.CLOUD_BACKUP_STAGE_ROOT);clients.push(client);return client;
   },
   close(){for(const client of clients.splice(0))client.close();},
  };
