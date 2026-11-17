@@ -1,11 +1,25 @@
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {EmailOutbox,EmailWorker} from '../../packages/registration/src/email-outbox.ts';
+import {createLeaseIssuer} from '../../packages/registration/src/installation-proof.ts';
 import {runWorkerLoop} from '../../packages/registration/src/worker-loop.ts';
 import {createTestCaptureMailer} from './capture-mailer.mjs';
 import {checkConsumerDatabase,loadRuntime} from '../local-stack/runtime.mjs';
 import {testRuntimeEnvironment} from './runtime.mjs';
+import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
+export async function runTestEmailQueues({account,relay,signal,once=false}){
+ if(once){
+  const results=await Promise.allSettled([Promise.resolve().then(()=>account.runOnce()),...(relay?[Promise.resolve().then(()=>relay.runOnce())]:[])]);
+  const failure=results.find(result=>result.status==='rejected');if(failure)throw failure.reason;
+  return results.some(result=>result.value);
+ }
+ const stop=new AbortController(),combined=AbortSignal.any([signal,stop.signal]);
+ const loops=[runWorkerLoop({signal:combined,concurrency:relay?3:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>account.runOnce()}).finally(()=>stop.abort())];
+ if(relay)loops.push(runWorkerLoop({signal:combined,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>relay.runOnce(),
+  onError:()=>console.error('Test relay worker failed; check private configuration and schema')}).finally(()=>stop.abort()));
+ const results=await Promise.allSettled(loops),failure=results.find(result=>result.status==='rejected');if(failure)throw failure.reason;
+}
 export async function runTestEmailWorker({directory='/run/local-stack',root='/app',signal,once=false}={}){
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment('email',config,process.env);
  await checkConsumerDatabase(environment.DATABASE_URL,root);
@@ -14,8 +28,13 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
  try{
   const outbox=new EmailOutbox({activeKeyId:config.email.activeKeyId,keys:config.email.keys});
   const worker=new EmailWorker(pool,outbox,createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));
-  if(once)return await worker.runOnce();
-  await runWorkerLoop({signal:stop.signal,concurrency:4,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
+  const mode=parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS);let relayRuntime;
+  const relay=mode==='test-venue-levels'?{async runOnce(){
+   const {openTestRelayRuntime}=await import('./relay-runtime.mjs');
+   relayRuntime??=await openTestRelayRuntime({pool,directory,issuer:createLeaseIssuer(config.installation.issuerKey),origin:environment.CLOUD_PORTAL_ORIGIN,mode});
+   return relayRuntime.worker.runOnce();
+  }}:undefined;
+  return await runTestEmailQueues({account:worker,relay,signal:stop.signal,once});
  }finally{signal?.removeEventListener('abort',abort);await pool.end();}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
