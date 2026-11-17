@@ -553,3 +553,34 @@ test('required enrollment reads current passkey authority after an account-lock 
     assert.equal((await run(client => resolveSession(client,session.token))).accountId,accountId,'request policy must not leak to another context');
   } finally {await blocker.query('ROLLBACK');blocker.release();await completion?.catch(()=>{});}
 });
+
+test('recovered accounts require enrollment even outside the country middleware and keep their organisation restriction on login', async () => {
+  await pool.query('ALTER TABLE cloud_accounts ADD COLUMN IF NOT EXISTS recovery_organisation_id uuid');
+  await pool.query('UPDATE cloud_accounts SET recovery_organisation_id=$2 WHERE id=$1',[accountId,organisationId]);
+  const session=await signIn();
+  await expectCode(run(client=>resolveSession(client,session.token)), 'enrollment_required');
+  const enrollment=await withEnrollmentPolicy({required:false,allowEnrollment:true},()=>run(client=>resolveSession(client,session.token)));
+  assert.equal(enrollment.enrollmentRequired,true);
+  await pool.query('INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,\'ciphertext\')',[accountId,randomUUID()]);
+  assert.equal((await run(client=>resolveSession(client,session.token))).accountId,accountId);
+  assert.equal((await pool.query('SELECT recovery_organisation_id FROM cloud_accounts WHERE id=$1',[accountId])).rows[0].recovery_organisation_id,organisationId);
+});
+
+test('recovered owner can approve A but cannot approve B despite retained membership', async () => {
+  await pool.query('ALTER TABLE cloud_accounts ADD COLUMN IF NOT EXISTS recovery_organisation_id uuid');
+  const b=randomUUID(),businessB=randomUUID();
+  await pool.query('INSERT INTO organisations(id) VALUES($1)',[b]);
+  await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[businessB,b]);
+  await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)',[accountId,b]);
+  const session=await signIn();
+  await pool.query('INSERT INTO cloud_authenticator_factors(account_id,version,secret_generation,secret_envelope) VALUES($1,1,$2,\'ciphertext\')',[accountId,randomUUID()]);
+  await pool.query('UPDATE cloud_accounts SET recovery_organisation_id=$2 WHERE id=$1',[accountId,organisationId]);
+  const store=new RegistrationStore(pool);
+  for(const [organisation,legalBusiness] of [[organisationId,legalBusinessId],[b,businessB]]){
+    const input={operationId:randomUUID(),installationKey:`key:${randomUUID()}`,venueId:'',environment:'test',organisationId:organisation!,legalBusinessId:legalBusiness!};
+    await store.start(input);
+    if(organisation===organisationId)await store.approveCloudWithSession(input,session.token,session.csrfToken);
+    else await expectCode(store.approveCloudWithSession(input,session.token,session.csrfToken),'permission_denied');
+  }
+  assert.equal((await pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1',[accountId])).rows[0].count,'2');
+});

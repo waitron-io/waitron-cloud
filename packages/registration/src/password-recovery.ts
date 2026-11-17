@@ -57,7 +57,7 @@ export class PasswordRecoveryStore {
     const tokenHash = digest(token);
     await transaction(this.#pool, async client => {
       const candidate = (await client.query(`SELECT account_id FROM password_reset_requests
-        WHERE token_hash = $1 AND account_id IS NOT NULL AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash])).rows[0];
+        WHERE purpose='password_reset' AND token_hash = $1 AND account_id IS NOT NULL AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash])).rows[0];
       if (!candidate) throw new PasswordRecoveryError('reset_unavailable');
       const screening = await screenPassword(this.#screening, password);
       if (screening === 'compromised') throw new PasswordRecoveryError('password_compromised');
@@ -69,7 +69,7 @@ export class PasswordRecoveryStore {
       const credential = (await client.query('SELECT email, password_hash, email_verified_at FROM cloud_credentials WHERE account_id = $1 FOR UPDATE', [candidate.account_id])).rows[0];
       const request = (await client.query('SELECT * FROM password_reset_requests WHERE token_hash = $1 FOR UPDATE', [tokenHash])).rows[0];
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-      if (!request || request.consumed_at || request.expires_at <= now || request.account_id !== candidate.account_id
+      if (!request || request.purpose!=='password_reset' || request.consumed_at || request.expires_at <= now || request.account_id !== candidate.account_id
         || !credential?.email_verified_at || !credential.password_hash || credential.email !== request.email
         || digest(credential.password_hash) !== request.password_fingerprint) throw new PasswordRecoveryError('reset_unavailable');
       await cancelOwnerTransfers(client,candidate.account_id,this.#outbox);

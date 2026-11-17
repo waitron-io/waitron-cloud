@@ -4,3 +4,5 @@ export { createSession, IdentityError, IDLE_TIMEOUT_MS, listAccountSessions, log
 export type { AccountSessionRevocation, AccountSessionSummary, Session, SessionCredentials } from './sessions.ts';
 export {matchedTotpSteps, encryptFactorSecret, decryptFactorSecret} from './authenticator-crypto.ts';
 export type {FactorKeys, FactorBinding} from './authenticator-crypto.ts';
+
+export {organisationScopeSql,requireOrganisationScope} from './organisation-scope.ts';

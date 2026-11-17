@@ -2,7 +2,7 @@ export {CloudActionError,type CloudActionProposal,type CloudActionDecision,type 
 export {CloudActions,cloudActionCatalogue} from './cloud-actions.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { resolveSession } from '@waitron-cloud/identity';
+import { resolveSession, organisationScopeSql } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
 import {resetInstallationMonitor} from './monitoring.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
@@ -104,7 +104,7 @@ async function requireUnexpired(client: PoolClient, binding: ConnectionBinding) 
 async function requirePermission(client: PoolClient, accountId: string, organisationId: string) {
   const { rows } = await client.query(`SELECT a.id, m.is_owner FROM cloud_accounts a
     JOIN organisation_memberships m ON m.account_id = a.id
-    WHERE a.id = $1 AND m.organisation_id = $2 AND a.disabled_at IS NULL AND m.can_register_venues
+    WHERE a.id = $1 AND m.organisation_id = $2 AND a.disabled_at IS NULL AND m.can_register_venues AND ${organisationScopeSql('a.id','m.organisation_id')}
     FOR SHARE OF a, m`, [accountId, organisationId]);
   if (!rows[0]) throw new RegistrationError('permission_denied');
   return rows[0].is_owner === true;
