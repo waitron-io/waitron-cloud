@@ -25,6 +25,8 @@ WITH changed AS (
  JOIN remote_hostnames staff ON staff.venue_id=p.venue_id AND staff.kind='staff'
  JOIN remote_hostnames public ON public.venue_id=p.venue_id AND public.kind='public'
  WHERE s.installation_id=p.installation_id AND s.service='remote_access'
+ -- Empty or retired-key-only settings must not become partial service configurations.
+ AND s.configuration ? 'staffHostname'
  AND (s.configuration->>'staffHostname' IS DISTINCT FROM staff.hostname
    OR s.configuration->>'publicHostname' IS DISTINCT FROM public.hostname)
  RETURNING s.installation_id
