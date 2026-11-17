@@ -700,6 +700,24 @@ keys unchanged, and qualify public access. Public DNS, production certificates a
 open. Every venue connected to Cloud qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
 exclude live forwarding, which belongs to Waitron A509 online ordering.
 
+## Custom domains with one record, and names that follow the venue
+
+**Designed and approved (2026-11-17); queued to the campaign lanes, unbuilt.** The
+[design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md) covers five changes:
+
+- An owner's own domain needs one CNAME.
+- Cloud's gateway answers Let's Encrypt's TLS-ALPN-01 check on port 443.
+- Every venue's names sit in the country zone, so a move or failover to another cell changes no
+  owner record and no QR link.
+- Certificates are issued, renewed and installed with nobody acting, and owners get no
+  certificate-expiry email.
+- When an owner's record stops pointing at Cloud, they are told in their own language.
+
+The [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md) has eight pull requests.
+Waitron's part (the box takes its staff name from Cloud) is a separate plan in Waitron, after Cloud
+PR 1. Live Let's Encrypt, Route 53, production keys and multi-gateway coordination stay production
+gates.
+
 ## Launch platform work, in priority order
 
 Ordered at the owner's request on 2026-10-22. The order follows what stops the first real
