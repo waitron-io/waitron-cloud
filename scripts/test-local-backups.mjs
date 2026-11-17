@@ -32,7 +32,7 @@ import { BackupWorker } from '../packages/backups/src/worker.ts';
 import { createWaitronVerifier } from '../packages/backups/src/waitron-verifier.ts';
 import {openTestBackupVerifier} from '../deploy/test-cloud/backup-worker.mjs';
 import {setVerificationPolicy} from '../packages/backups/src/verification-admission.ts';
-import { BackupCatalogue } from "../packages/backups/src/catalogue.ts";
+import { BackupCatalogue, pointMetadata } from "../packages/backups/src/catalogue.ts";
 import {
   BackupRecovery,
   recoveryPayload,
@@ -364,7 +364,16 @@ try {
   s3 = await startBackupStorage();
   const litestreamPlatform=process.platform==='darwin'?`linux-${execFileSync('docker',['info','--format','{{.Architecture}}'],{encoding:'utf8'}).trim()==='aarch64'?'arm64':'x64'}`:undefined;
   const litestream=await trustedLitestream(await localLitestreamBinary(s3.root,litestreamPlatform));
-  f = await startPortalFixture({vault,objects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca),managedStreams:s3.managedStreams});
+  const captureGrants = [];
+  f = await startPortalFixture({
+    vault,
+    objects,
+    grant(location, scope) {
+      if (scope.kind === 'capture') captureGrants.push(scope.scope);
+      return s3.authority.grant(location, scope, s3.ca);
+    },
+    managedStreams: s3.managedStreams,
+  });
   const signup = new SignupStore(f.db.pool, f.db.outbox),
     email = "backups-" + randomUUID() + "@example.test",
     password = "Cloud backup integration password";
@@ -559,24 +568,34 @@ try {
   for (const item of snapshots) await stop(item.venue.server);
   for (const item of snapshots) {
     // The fixture owns the stopped venue exclusively, then exits before publication.
-    await assert.rejects(captureClient(item.venue.root, 'schedule', {ca:s3.ca,crashAfterUpload:true}), /Waitron capture client failed/);
-    const pending = JSON.parse(await readFile(join(item.venue.root,'cloud-snapshots/state.json'),'utf8')).pending;
+    await assert.rejects(captureClient(item.venue.root, 'schedule', {ca:s3.ca,crashAfterUpload:true}), {code:'ERR_ASSERTION',actual:17});
+    const snapshotDir = join(item.venue.root, 'cloud', 'snapshots');
+    const pending = JSON.parse(await readFile(join(snapshotDir, 'state.json'), 'utf8')).pending;
     assert(pending?.metadata);
-    const bytes = await readFile(join(item.venue.root,'cloud-snapshots/archive.enc'));
+    const bytes = await readFile(join(snapshotDir, 'archive.enc'));
     assert.deepEqual(receipt(bytes),{digest:pending.metadata.digest,size:pending.metadata.size});
     const grant = await captureClient(item.venue.root,'reserve',{id:pending.id});
+    const storage = objects(item.venue.location);
+    assert((await storage.read(grant.incomingKey)).equals(bytes), 'The crash must leave the exact upload in Cloud storage');
+    const grantStart = captureGrants.length;
     const resumed = await captureClient(item.venue.root,'schedule',{ca:s3.ca});
-    assert.equal(resumed.created,0,'Restart must reuse the persisted ciphertext');
-    assert.equal(resumed.point.id,pending.id);
-    assert.equal(resumed.point.digest,pending.metadata.digest);
-    assert.equal(resumed.point.retention,'monthly');
-    const idle = await captureClient(item.venue.root,'schedule',{ca:s3.ca});
-    assert.equal(idle.created,0,'Restart before the next due time must not make another copy');
+    assert.equal(resumed.created, 1, 'The due pass must make one fresh capture');
+    assert.equal(resumed.idleCreated, 0, 'A pass before the next due time must be idle');
+    assert.equal(resumed.points.length, 2);
+    const [recovered, fresh] = resumed.points;
+    assert.equal(recovered.id, pending.id);
+    assert.equal(recovered.digest, pending.metadata.digest);
+    assert.equal(recovered.retention, 'monthly');
+    assert.notEqual(fresh.id, pending.id);
+    assert.deepEqual(captureGrants.slice(grantStart), ['incoming/' + fresh.id], 'Only the fresh capture needs an upload grant');
+    const retained = await transaction(f.db.pool, c => pointMetadata(c, recovered.id));
+    assert(retained);
+    assert((await storage.read(retained.objectKey)).equals(bytes), 'The recovered point must retain the exact upload');
     const target = await root();
     await writeFile(join(target,'input.backup.enc'),bytes,{mode:0o600});
-    await worker(target,'restore',{recoveryKey:grant.recoveryKey,sourceNodeId:resumed.point.sourceNodeId,modules:resumed.point.modules,expectedVenue:item.captured.venueName});
+    await worker(target,'restore',{recoveryKey:grant.recoveryKey,sourceNodeId:recovered.sourceNodeId,modules:recovered.modules,expectedVenue:item.captured.venueName});
   }
-  record('scheduled production archives survive a process crash after upload, resume byte-for-byte without recapture and restore independently');
+  record('scheduled backups publish the original upload after a crash, make one due capture, stay idle before the next due time, and restore the recovered archive independently');
   const streamViews = [];
   for (const [index, snapshot] of snapshots.entries()) {
     const envPath = join(snapshot.venue.root, "fixture-env.json"),
