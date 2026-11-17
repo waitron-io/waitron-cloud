@@ -1996,7 +1996,9 @@ switch state, or null when current authority is unavailable. Replaying the same
 configuration request reads the current hint. It does not enable delivery or approve
 a grant. The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
 defines the one-submit and status-only recovery rule. The test-only private-origin
-approval core is described below. Service commands and SES startup remain unfinished.
+approval core is described below. The [local owner commands](test-cloud-service-controls.md)
+control guest pages, box relay grants and the relay-wide sending switch. Remote
+and backup switches and SES startup remain unfinished.
 
 ## Rehearse synthetic Cloud actions
 
@@ -2087,6 +2089,7 @@ with owner relay consent, without the HTTPS origin challenge; production refuses
 
 The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
 names the signed request and the internal approval call. This core has synthetic
-database checks in `packages/registration/test/installations.test.ts`; the owner
-command, box-side statement and SES startup are still to be composed. Approval
-is not evidence that the origin is publicly reachable.
+database checks in `packages/registration/test/installations.test.ts`. Use the
+[owner command](test-cloud-service-controls.md) to approve its private input.
+The box handoff and SES startup still need joint qualification. Approval is not
+evidence that the origin is publicly reachable.
