@@ -32,10 +32,10 @@ try{
  const config:unknown=JSON.parse(await readFile(configFile,'utf8'));validate(config);
  const artifacts=new FileReconcilerArtifacts({routes:config.routes,certificates:config.certificates}),keys=new Map<string,KeyObject>();
  for(const route of config.routes){const key=createPrivateKey(await readFile(route.signingKeyFile));if(key.asymmetricKeyType!=='ed25519')throw new Error();keys.set(route.cellId,key);}
- const dns: DnsChallengeProvider=(await import(pathToFileURL(config.acme.dnsModule).href)).default;if(typeof dns?.present!=='function'||typeof dns?.remove!=='function')throw new Error();
+ const dns: DnsChallengeProvider=(await import(pathToFileURL(config.acme.dnsModule).href)).default;if(typeof dns?.present!=='function'||typeof dns?.remove!=='function'||typeof dns?.point!=='function')throw new Error();
  const accountKey=await readFile(config.acme.accountKeyFile);pool=new Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:5000,statement_timeout:10000});pool.on('error',()=>console.error('Remote configuration database connection failed; retrying'));
  await pool.query('SELECT claim_id,lease_until FROM remote_configuration_jobs LIMIT 0');
- const worker=new RemoteConfigurationReconciler(pool,{planMode,staffExchange:config.staffExchange,forwardReports:config.forwardReports,artifacts,signingKeyForCell:async cellId=>{const key=keys.get(cellId);if(!key)throw new Error('route_mapping_missing');return key;},
+ const worker=new RemoteConfigurationReconciler(pool,{planMode,staffExchange:config.staffExchange,forwardReports:config.forwardReports,artifacts,pointName:(name,target,signal)=>dns.point(name,target,signal),signingKeyForCell:async cellId=>{const key=keys.get(cellId);if(!key)throw new Error('route_mapping_missing');return key;},
   issueCertificate:target=>issueCertificate({directoryUrl:config.acme.directoryUrl,accountKey,email:config.acme.email,csr:target.csr,hostname:target.hostname,dnsName:target.dnsName,dns,signal:target.signal})});
  if(mode==='--status')console.log(JSON.stringify(await remoteConfigurationStatus(pool)));
  else if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await remoteConfigurationStatus(pool)));}

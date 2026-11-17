@@ -709,7 +709,6 @@ Stored country-zone names and certificate-check names now survive a cell move;
 `packages/remote-access/test/installation-configuration-names.test.ts` cover the
 stored names and signed reply. Remaining work:
 
-- Move each assigned name’s DNS record to the current cell.
 - Reduce an owner’s custom name to one CNAME, with the gateway answering
   Let’s Encrypt’s TLS-ALPN-01 check on port 443.
 - Issue, renew and install every certificate automatically, removing owner

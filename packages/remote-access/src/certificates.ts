@@ -21,8 +21,8 @@ export async function verifyDelegation(custom:string,assigned:string,resolve:typ
  try{for(const record of dnsInstructions(custom,assigned)){const values=await resolve(record.name);if(values.length!==1||values[0]!.replace(/\.$/,'').toLowerCase()!==record.value)throw Error();}}
  catch{throw new Error('dns_not_verified');}
 }
-export interface DnsChallengeProvider {present:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;remove:(name:string,value:string,signal?:AbortSignal)=>Promise<void>}
-export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:DnsChallengeProvider;signal?:AbortSignal}):Promise<string>{
+export interface DnsChallengeProvider {present:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;remove:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;point:(name:string,target:string,signal?:AbortSignal)=>Promise<void>}
+export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:Pick<DnsChallengeProvider,'present'|'remove'>;signal?:AbortSignal}):Promise<string>{
  options.signal?.throwIfAborted();
  validateCsr(options.csr,options.hostname);
  if(!options.dnsName.startsWith('_acme-challenge.')||!isHostname(options.dnsName.slice('_acme-challenge.'.length)))throw new Error('invalid_dns_name');
