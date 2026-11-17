@@ -15,7 +15,7 @@ for(const withRelay of [false,true])test(`email loops bound active handoffs and 
   }).finally(()=>active--);
  }});
  const running=runTestEmailQueues({account:queue('account'),relay:withRelay?queue('relay'):undefined,signal:stop.signal});
- void running.catch(()=>{});
+ let settled=false;void running.then(()=>{settled=true;},()=>{settled=true;});
  try{
   await ready;
   assert.deepEqual(calls,{account:withRelay?3:4,relay:withRelay?1:0});
@@ -23,6 +23,7 @@ for(const withRelay of [false,true])test(`email loops bound active handoffs and 
   for(const entry of held)if(entry!==account&&entry.kind==='account')entry.resolve(true);
   // Let the account loop observe its complete failed batch before releasing the relay handoff.
   await new Promise(resolve=>setImmediate(resolve));
+  if(withRelay)assert.equal(settled,false,'worker completion must wait for the held relay handoff');
   for(const entry of held)if(entry.kind==='relay')entry.resolve(true);
   await assert.rejects(running,/account queue refused/);
   assert.equal(active,0,'worker completion must wait for every started handoff');
