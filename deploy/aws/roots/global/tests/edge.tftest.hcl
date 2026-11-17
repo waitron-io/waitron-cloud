@@ -91,6 +91,10 @@ run "one_cell_keep_exact_ingress_and_scope_dns" {
     condition     = output.edge_topology.dns.zone_id == "ZGLOBAL" && output.edge_topology.dns.name == "waitron.io" && toset(output.edge_topology.dns.name_servers) == toset(["ns-1.synthetic.invalid", "ns-2.synthetic.invalid", "ns-3.synthetic.invalid", "ns-4.synthetic.invalid"])
     error_message = "COMPOSED_SCOPE_DNS: the complete zone handoff must belong only to this scope"
   }
+  assert {
+    condition     = toset(keys(aws_route53_record.console)) == toset(["waitron.io", "console.waitron.io"]) && alltrue([for name, record in aws_route53_record.console : record.name == name && record.zone_id == "ZGLOBAL" && record.type == "A" && one(record.alias).name == "global-01.eu-central-1.elb.synthetic.invalid" && one(record.alias).zone_id == "ZLB1" && one(record.alias).evaluate_target_health])
+    error_message = "CONSOLE_DNS: apex and console must alias only the first global cell's ingress"
+  }
 }
 run "two_cells_keep_exact_ingress_and_scope_dns" {
   command = plan
@@ -152,5 +156,9 @@ run "two_cells_keep_exact_ingress_and_scope_dns" {
   assert {
     condition     = output.edge_topology.dns.zone_id == "ZGLOBAL" && output.edge_topology.dns.name == "waitron.io" && toset(output.edge_topology.dns.name_servers) == toset(["ns-1.synthetic.invalid", "ns-2.synthetic.invalid", "ns-3.synthetic.invalid", "ns-4.synthetic.invalid"])
     error_message = "COMPOSED_SCOPE_DNS: the complete zone handoff must belong only to this scope"
+  }
+  assert {
+    condition     = toset(keys(aws_route53_record.console)) == toset(["waitron.io", "console.waitron.io"]) && alltrue([for name, record in aws_route53_record.console : record.name == name && record.zone_id == "ZGLOBAL" && record.type == "A" && one(record.alias).name == "global-01.eu-central-1.elb.synthetic.invalid" && one(record.alias).zone_id == "ZLB1" && one(record.alias).evaluate_target_health])
+    error_message = "CONSOLE_DNS: apex and console must alias only the first global cell's ingress"
   }
 }

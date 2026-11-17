@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: waitron-cloud-global
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api
+  namespace: waitron-cloud-global
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worldwide-console
+  namespace: waitron-cloud-global
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: worldwide-console}
+  template:
+    metadata:
+      labels: {app: worldwide-console}
+    spec:
+      serviceAccountName: api
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+      containers:
+        - name: api
+          image: waitron-cloud-worldwide:qualification
+          command: [node, packages/account-http/src/worldwide/server-cli.ts]
+          env:
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: worldwide-console, key: database-url}}
+            - name: CONSOLE_RATE_KEY
+              valueFrom: {secretKeyRef: {name: worldwide-console, key: rate-key}}
+            - {name: CLOUD_PORTAL_ASSETS_DIR, value: /app/apps/portal/dist}
+            - {name: CONSOLE_ORIGIN, value: 'https://console.waitron.io'}
+            - {name: CONSOLE_COUNTRIES, value: '{"ES":"https://es.waitron.io"}'}
+          ports: [{name: api, containerPort: 3000}]
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: api
+              httpHeaders: [{name: Host, value: console.waitron.io}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: '1', memory: 512Mi}}
+        - name: tls
+          image: waitron-cloud-worldwide:qualification
+          command: [haproxy, -W, -db, -f, /run/proxy/proxy.cfg]
+          ports: [{name: https, containerPort: 8443}]
+          volumeMounts:
+            - {name: proxy, mountPath: /run/proxy, readOnly: true}
+            - {name: tls, mountPath: /run/console, readOnly: true}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 50m, memory: 32Mi}, limits: {cpu: 500m, memory: 128Mi}}
+      volumes:
+        - name: proxy
+          configMap: {name: worldwide-proxy}
+        - name: tls
+          secret: {secretName: worldwide-tls, defaultMode: 0440}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worldwide-console
+  namespace: waitron-cloud-global
+spec:
+  type: NodePort
+  selector: {app: worldwide-console}
+  ports:
+    - {name: https, port: 443, targetPort: https, nodePort: 30443}
+    - {name: health, port: 3000, targetPort: api, nodePort: 30999}

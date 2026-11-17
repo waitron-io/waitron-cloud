@@ -116,18 +116,6 @@ run "one_cell_complete_handoff" {
     values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-api" }
   }
   override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["portal"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["registration-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["monitor-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" }
-  }
-  override_resource {
     target = module.ingress["global-01"].aws_lb_target_group.service["https"]
     values = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/global-01-https/1111111111111111" }
   }
@@ -234,18 +222,6 @@ run "two_cells_complete_handoff" {
     values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-api" }
   }
   override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["portal"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["registration-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-01"].aws_iam_role.workload["monitor-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" }
-  }
-  override_resource {
     target = module.ingress["global-01"].aws_lb_target_group.service["https"]
     values = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/global-01-https/1111111111111111" }
   }
@@ -256,18 +232,6 @@ run "two_cells_complete_handoff" {
   override_resource {
     target = module.workload_permissions["global-02"].aws_iam_role.workload["api"]
     values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-api" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-02"].aws_iam_role.workload["portal"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-portal" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-02"].aws_iam_role.workload["registration-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-registration-worker" }
-  }
-  override_resource {
-    target = module.workload_permissions["global-02"].aws_iam_role.workload["monitor-worker"]
-    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-monitor-worker" }
   }
   override_resource {
     target = module.ingress["global-02"].aws_lb_target_group.service["https"]

@@ -163,14 +163,14 @@ run "independent_global_permissions" {
     scope             = "global"
     namespace         = "waitron-cloud-global"
     oidc_issuer       = "https://oidc.eks.eu-central-1.amazonaws.com/id/0123456789ABCDEF0123456789ABCDEF"
-    role_names        = { api = "api", portal = "portal", registration-worker = "registration-worker", monitor-worker = "monitor-worker" }
+    role_names        = { api = "api" }
     recovery_role_arn = "arn:aws:iam::222222222222:role/waitron-global-recovery"
     storage_refs      = null
     custody_refs      = { kms = { storage = "arn:aws:kms:eu-central-1:222222222222:key/44444444-4444-4444-4444-444444444444", database = "arn:aws:kms:eu-central-1:222222222222:key/66666666-6666-6666-6666-666666666666", secrets = "arn:aws:kms:eu-central-1:222222222222:key/77777777-7777-7777-7777-777777777777", logs = "arn:aws:kms:eu-central-1:222222222222:key/88888888-8888-8888-8888-888888888888" }, backup_kms = { storage = "arn:aws:kms:eu-west-1:222222222222:key/55555555-5555-5555-5555-555555555555", database = "arn:aws:kms:eu-west-1:222222222222:key/66666666-6666-6666-6666-666666666666", secrets = "arn:aws:kms:eu-west-1:222222222222:key/77777777-7777-7777-7777-777777777777", logs = "arn:aws:kms:eu-west-1:222222222222:key/88888888-8888-8888-8888-888888888888" }, secrets = { "email-key-ring" = "arn:aws:secretsmanager:eu-central-1:222222222222:secret:waitron-global/email-key-ring-ABCDEF", "sign-in-signing" = "arn:aws:secretsmanager:eu-central-1:222222222222:secret:waitron-global/sign-in-signing-ABCDEF" }, backup_secret_refs = { "email-key-ring" = "arn:aws:secretsmanager:eu-west-1:222222222222:secret:waitron-global/email-key-ring-ABCDEF", "sign-in-signing" = "arn:aws:secretsmanager:eu-west-1:222222222222:secret:waitron-global/sign-in-signing-ABCDEF" }, replication_role_arn = null }
     database_refs     = { endpoint = "waitron-global.synthetic.invalid", port = 5432, name = "cloud_global", admin_secret_ref = "arn:aws:secretsmanager:eu-central-1:222222222222:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-central-1:222222222222:key/66666666-6666-6666-6666-666666666666", backup_ref = "arn:aws:rds:eu-west-1:222222222222:auto-backup:synthetic" }
   }
   assert {
-    condition     = length(output.workload_roles) == 4 && length(aws_iam_role_policy.runtime) == 3
+    condition     = toset(keys(output.workload_roles)) == toset(["api"]) && length(aws_iam_role_policy.runtime) == 0
     error_message = "GLOBAL_PERMISSIONS: global must operate independently without venue stores, country roles or replication"
   }
 }

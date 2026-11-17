@@ -16,7 +16,8 @@
     "pg": "^8.23.0",
     "@waitron-cloud/backups": "workspace:*",
     "@waitron-cloud/remote-access": "workspace:*",
-    "@waitron-cloud/translation": "workspace:*"
+    "@waitron-cloud/translation": "workspace:*",
+    "@simplewebauthn/server": "14.0.3"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"
