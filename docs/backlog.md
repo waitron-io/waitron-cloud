@@ -1035,7 +1035,7 @@ implementation or production evidence.
   an idle-stack observation. Application readiness, sustained Amazon OS/disk/CPU
   headroom, pairing and email qualification remain open. Driver inventory's
   optional health handling is checked through Docker itself by
-  `node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
+  `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
   relay-grant hint without advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
   owner consent, with synthetic checks for production refusal. Local guest-menu
