@@ -51,13 +51,19 @@ Replace the installation ID with your paired test box. A successful command retu
 `{"enabled":false}` after withdrawing the storage writer. The connected level and
 remote route stay available. The existing backup setup holds `testCloudEnabled:false`;
 new signed stream setup and snapshot provisioning refuse while it is off. Restarting
-storage preserves that refusal. Existing backup data and its recovery reader remain.
+storage preserves that refusal. Existing backup bytes and the stored read-only
+credential remain; new reader grants and signed stream-position reads refuse while off.
 If storage reload fails, the command fails after saving off; retry it to finish
 withdrawal rather than treating the failed command as a completed stop.
 
-To enable backups, send the same input with `enabled:true`. The response is
+The switch belongs to this installation's setup. A reset through the registered
+level clears it, and re-pairing or recovery creates a new installation without it.
+Run off again for the current installation after those changes.
+
+To enable backups after off, send the same input with `enabled:true`. The response is
 `{"enabled":true}`. This clears backup setup so the box must configure again and
-receive a fresh writer; the old credential stays refused. This command changes no
+receive a fresh writer; the old credential stays refused. Sending on when already on leaves setup unchanged.
+This command changes no
 venue level and refuses production, revoked and replaced installations.
 
 For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`.

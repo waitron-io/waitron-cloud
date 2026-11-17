@@ -18,7 +18,7 @@ const {S3Client,PutObjectCommand}=require('@aws-sdk/client-s3');
 const mode='test-venue-levels',origin='https://cloud.example.test';
 const environment={CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0'};
 
-// Removing the command, durable gate or writer withdrawal lets a box write after an owner stops backups.
+// Off must persist before storage opens and reconciles the physical writer.
 test('backup switch withdraws real writers and survives setup and restart while remote routes stay available',{timeout:120000},async t=>{
  const f=await venueServiceFixture();t.after(()=>f.close());await set(f);
  const installationId=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.venues[0]])).rows[0].id;
@@ -46,11 +46,18 @@ test('backup switch withdraws real writers and survives setup and restart while 
  function writer(config){const client=new S3Client({endpoint:storage.endpoint,region:'local',credentials:{accessKeyId:config.bucket.accessKeyId,secretAccessKey:config.bucket.secretAccessKey},forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});clients.push(client);return suffix=>client.send(new PutObjectCommand({Bucket:location.bucket,Key:config.bucket.prefix+suffix,Body:'retained backup'}));}
  const old=writer(first);await old('before');
  const context={pool:f.pool,issuer,origin,environment,storageOptions};
+ const alreadyOn=await installations.execute('configuration',proof('configuration'));
+ assert.deepEqual(await executeTestServiceCommand(context,{command:'backups',installationId,enabled:true}),{enabled:true});
+ const unchanged=await installations.execute('configuration',proof('configuration'));
+ assert.equal(unchanged.revision,alreadyOn.revision,'enabling backups that are already on must keep their setup revision');
+ assert.deepEqual(unchanged.services,alreadyOn.services);
+ await old('already-on');
  assert.deepEqual(await executeTestServiceCommand(context,{command:'backups',installationId,enabled:false}),{enabled:false});
  await assert.rejects(old('off'),error=>error?.$metadata?.httpStatusCode===403);
  assert.equal((await read(f)).level,'connected');
  assert.deepEqual((await remote.manifest(cellId)).routes.map(route=>route.installationId),[installationId]);
  const status=await installations.execute('configuration',proof('configuration'));
+ assert.equal(status.revision,unchanged.revision+1,'off must notify the box that setup changed');
  for(const name of ['continuous_backup','retained_snapshots']){const service=status.services.find(s=>s.service===name);assert.equal(service.state,'unconfigured');assert.deepEqual(service.configuration,{testCloudEnabled:false});}
  await assert.rejects(catalogue.provision(installationId,location),/backup.permission_denied/);
  await assert.rejects(catalogue.reserveCapture(installationId,randomUUID()),/backup.permission_denied/);
@@ -62,6 +69,7 @@ test('backup switch withdraws real writers and survives setup and restart while 
  await assert.rejects(configure(),/backup.permission_denied/);
  assert.equal((await reopened.read((await f.pool.query('SELECT reader_reference FROM backup_managed_streams WHERE venue_id=$1',[f.venues[0]])).rows[0].reader_reference,location,first.bucket.prefix+'before')).toString(),'retained backup');
  assert.deepEqual(await executeTestServiceCommand(context,{command:'backups',installationId,enabled:true}),{enabled:true});
+ assert.equal(await revision(),status.revision+1,'on must notify the box to configure again');
  await catalogue.provision(installationId,location);const next=await configure();
  assert.notEqual(next.bucket.accessKeyId,first.bucket.accessKeyId);assert.equal(next.recoveryKey,first.recoveryKey);
  await writer(next)('enabled');await assert.rejects(old('never-revived'),error=>error?.$metadata?.httpStatusCode===403);
@@ -69,4 +77,8 @@ test('backup switch withdraws real writers and survives setup and restart while 
  const production=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.production])).rows[0].id;
  await assert.rejects(executeTestServiceCommand(context,{command:'backups',installationId:production,enabled:false}),/test_cloud.service_target/);
  await assert.rejects(executeTestServiceCommand(context,{command:'backups',installationId,enabled:'false'}),/test_cloud.service_command/);
+ const retired=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NOT NULL',[f.venues[0]])).rows[0].id;
+ await assert.rejects(executeTestServiceCommand(context,{command:'backups',installationId:retired,enabled:false}),/test_cloud.service_target/);
+ await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[installationId]);
+ await assert.rejects(executeTestServiceCommand(context,{command:'backups',installationId,enabled:false}),/test_cloud.service_target/);
 });
