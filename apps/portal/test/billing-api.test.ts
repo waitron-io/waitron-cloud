@@ -37,3 +37,17 @@ test('billing retry delays subtract time spent reading the response body',async 
  t.mock.method(globalThis,'fetch',async()=>response);
  assert.deepEqual(await accountRequest('/billing/read',{}),{ok:false,status:429,code:'rate_limited',retryAfterMs:6000});
 });
+
+test('tax profile reads and save replies accept exact nullable strings but reject malformed profiles',async t=>{
+ const prior=['location','document'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)] as const);
+ Object.defineProperty(globalThis,'location',{configurable:true,value:{protocol:'https:'}});
+ Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=proof'}});
+ t.after(()=>{for(const [key,value] of prior){if(value)Object.defineProperty(globalThis,key,value);else Reflect.deleteProperty(globalThis,key);}});
+ const profile={legalName:'Retained\nname',address:null,taxNumber:'TEST-1'},venue={venueId,level:'registered',trial:null,canStartTrial:true};
+ let taxProfile:unknown=profile;
+ t.mock.method(globalThis,'fetch',async()=>Response.json({venues:[{...venue,taxProfile}]}));
+ for(const path of ['/billing/read','/billing/tax/save'])assert.deepEqual(await accountRequest(path,{}),{ok:true,value:{venues:[{...venue,taxProfile:profile}]}});
+ for(const malformed of [null,{}, {...profile,legalName:1},{...profile,address:[]},{...profile,extra:'not allowed'}]){
+  taxProfile=malformed;assert.equal((await accountRequest('/billing/read',{})).ok,false);assert.equal((await accountRequest('/billing/tax/save',{})).ok,false);
+ }
+});

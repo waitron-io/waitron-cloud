@@ -1,6 +1,6 @@
 import {createMailCapture} from '../../../packages/account-http/test/mail-capture.ts';
 import {TranslationFixture} from './translation-fixture.ts';
-import type {FactorConfig} from '../../../packages/account-http/src/config.ts';
+import type {BillingAccountOptions,FactorConfig} from '../../../packages/account-http/src/config.ts';
 import type {CaptureOptions} from '../../../packages/backups/src/captures.ts';
 import {generateKeyPairSync} from 'node:crypto';
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ export async function addVirtualAuthenticator(context: BrowserContext, page: Pag
     await session.detach().catch(() => undefined);
   }};
 }
-export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string,operatorAccountId?:string) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string,operatorAccountId?:string,billingAccount?:BillingAccountOptions) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -39,7 +39,7 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
   try {
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
     translations=translation?new TranslationFixture(db.pool,issuer,origin,translation.pageBytes):undefined;
-    running = await startAccountServer({operatorAccountId,guestOrigin,translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
+    running = await startAccountServer({operatorAccountId,billingAccount,planMode:billingAccount?'test-venue-levels':undefined,guestOrigin,translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
       config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: [], requireEnrollment},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     translations?.attach(running.server);

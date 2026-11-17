@@ -2,11 +2,21 @@ import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
 import {permissionActions} from './permission-actions.ts';
 import './billing-card.ts';
+import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
+import type {LitElement} from 'lit';
 
 export function billingScreen(app:PortalApp){
  const controller=app.billing,c=app.copy,venue=controller.venue,disabled=controller.pending||!!controller.waiting;
  if(!controller.loaded&&!controller.error)return nothing;
  const methodError=controller.error&&(controller.error.startsWith('billingMethod')||['pairEnrollment','actionProofUnavailable','billingProofRequired'].includes(controller.error));
+ const draft=controller.taxDraft;
+ const saveTax=async()=>{
+  await controller.saveTax();
+  if(controller.taxInvalid){
+   const field=app.root.querySelector<LitElement>('wt-input[name="billingTax-'+controller.taxInvalid+'"]');
+   await field?.updateComplete;field?.shadowRoot?.querySelector<HTMLInputElement>('input')?.focus();
+  }
+ };
  const levels={registered:c.billingRegistered,connected:c.billingConnected,hosted:c.billingHosted};
  const end=venue?.trial?new Date(venue.trial.endsOn+'T00:00:00Z'):undefined;
  if(end)end.setUTCDate(end.getUTCDate()-1);
@@ -17,6 +27,22 @@ export function billingScreen(app:PortalApp){
     ${end?html`<dt>${c.billingLastDay}</dt><dd><time datetime=${end.toISOString().slice(0,10)}>${new Intl.DateTimeFormat(app.locale==='en'?'en-GB':'es',{dateStyle:'long',timeZone:'UTC'}).format(end)}</time></dd>`:nothing}</dl>
    ${venue.canStartTrial?html`<wt-button .disabled=${disabled} .loading=${controller.pending} @click=${()=>{void controller.start();}}>${c.billingStart}</wt-button>`:!venue.trial?html`<p>${c.billingIneligible}</p>`:nothing}`:controller.loaded?html`<p>${c.billingEmpty}</p>`:nothing}
   <wt-button .disabled=${disabled} @click=${()=>{void controller.load();}}>${c.billingRefresh}</wt-button>
+  ${draft?html`<form id="billing-tax-form" method="post" action="/api/account/billing/tax/save" aria-labelledby="billing-tax-title"
+    @submit=${(event:SubmitEvent)=>{event.preventDefault();void saveTax();}}>
+   <h3 id="billing-tax-title">${c.billingTaxTitle}</h3><p>${c.billingTaxIntro}</p><p class="help">${c.billingTaxLimits}</p>
+   ${([
+    ['legalName',c.billingTaxName,c.billingTaxNameHint,200,'organization'],
+    ['address',c.billingTaxAddress,c.billingTaxAddressHint,600,'billing address-line1'],
+    ['taxNumber',c.billingTaxNumber,c.billingTaxNumberHint,32,'off']
+   ] as const).map(([field,label,hint,limit,autocomplete])=>html`<wt-input name=${'billingTax-'+field} .label=${label} .hint=${hint} .value=${draft[field]}
+     .required=${true} .maxlength=${limit} .autocomplete=${autocomplete} .spellcheck=${field!=='taxNumber'} .autocorrect=${field!=='taxNumber'} .autocapitalize=${field==='taxNumber'?'none':''} .disabled=${disabled}
+     .error=${controller.taxInvalid===field?c.billingTaxInvalid:''}
+     @wt-change=${(event:CustomEvent<{value:string}>)=>controller.editTax(field,event.detail.value)}
+     @keydown=${(event:KeyboardEvent)=>submitOnEnter(event,app.root.querySelector('#billing-tax-save'))}></wt-input>`)}
+   <wt-button id="billing-tax-save" .disabled=${disabled} .loading=${controller.pending}
+     @click=${()=>app.root.querySelector<HTMLFormElement>('#billing-tax-form')?.requestSubmit()}>${c.billingTaxSave}</wt-button>
+   ${controller.taxSaved?html`<p role="status">${c.billingTaxSaved}</p>`:nothing}
+  </form>`:nothing}
   ${venue?.paymentMethods?html`<section class="billing-methods" aria-label=${c.billingMethodsTitle}><h3>${c.billingMethodsTitle}</h3>
    ${controller.error&&methodError?html`<p role=${controller.error==='billingProofRequired'?'status':'alert'}>${c[controller.error]}</p>`:nothing}
    ${controller.error==='pairEnrollment'?html`<a href="#account-security-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#account-security-heading')?.focus();}}>${c.accountSecurity}</a>`:controller.error==='actionProofUnavailable'||controller.error==='billingProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}

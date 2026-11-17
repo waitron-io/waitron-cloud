@@ -2,7 +2,7 @@
 
 **Outcome:** an allowlisted synthetic owner can enter, read and correct a business’s legal name, address and tax number on Account. This is synthetic entry only, under the approved [billing design §§5,9](../specs/2026-10-29-cloud-billing-design.md) and [parent row F](2026-10-29-cloud-billing.md#the-slices-in-order). Lane G’s D604 queue explicitly asks for “portal pages to choose a level, give tax details”. Watcher 9 November 20:08 cleared this plan. Watcher 17 November 16:06 resumes its tax and account pages in test mode; only starting hosting remains behind D113 executor qualification. No owner approval of this plan is claimed.
 
-**Limits:** no paid access, charges, invoices, prices, providers, Waitron/fiscal/location changes, history, ledger, dependency or production eligibility. Paid-level collection and Spanish tax-number validation remain open in `docs/backlog.md:3131`; syntax checks establish no legal identity.
+**Limits:** no paid access, charges, invoices, prices, providers, Waitron/fiscal/location changes, history, ledger, dependency or production eligibility. Paid-level collection and Spanish tax-number validation remain open in `docs/backlog.md`; syntax checks establish no legal identity.
 
 **Shape:** reuse `legal_businesses.name`; preserve `country_code`. Existing name readers are registration `pairing.ts:34,69`, HTTP `venue-overview.ts:13`, backups `replacement.ts:27`. Append nullable `billing_address` and `tax_number`. Save trimmed strings atomically, rejecting controls, extra keys and empty values. Use signup’s JavaScript string-length limits: name200, address600, taxNumber32. Use single-line `wt-input` controls. Reads accept historical `string|null` values without applying input restrictions.
 
@@ -23,3 +23,15 @@ Use migration069, rechecking reservations before build. On 17 November main’s 
 3. Add failing portal cases, then strict key/string-null validation and controller-owned drafts per venue. Clear on account loss/pagehide; loads never overwrite drafts. Preserve drafts on uncertain saves, refresh without replay;400 shows a specific correction message. Concurrent saves are last-write-wins. Fence late replies and retain existing assertions.
 
 **Finish:** focused named PostgreSQL/API/portal/browser cases; real save/reload/correction; all eight English/Spanish × light/dark ×390/1280 views, keyboard/axe/overflow; typecheck/portal build. CI owns full suites: inspect every current-head job. The two Claude run-it reviews required for migrations and permission checks run during finish-branch, followed by one fixes read. The original pre-build plan read and watcher clearance are retained; watcher 17 November 16:06 authorises this resumed test-mode slice. Estimate750 touched lines: code250/20, tests390/40, config0/0, docs45/5 added/deleted; under3hours toPR.
+
+
+**17 November build choices.** K reuses the existing billing-account test helpers in
+that file instead of duplicating them in a new tax test file. The shared portal
+fixture accepts the same optional billing configuration, so all eight visual cases
+save/reload/correct through its actual HTTP server and PostgreSQL. Each case has
+its own fixture after the shared one reached the unchanged per-IP rate limit.
+The historical schema-upgrade receipt driver still checks specific old release
+lengths (up to 51, `scripts/schema-upgrade-receipt.mjs:202`); it cannot run the new
+69-migration candidate and is not widened here. The new populated-068 migration
+case owns this upgrade. Whole-row comparisons retain every old key and assert the
+two new keys as null; all fiscal rows and expected fiscal results remain unchanged.

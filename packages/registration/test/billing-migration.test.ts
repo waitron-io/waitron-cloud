@@ -8,11 +8,11 @@ import {migrate,migrationNames} from '../src/migrate.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 
 // These cases catch rewritten history, partially committed DDL and permissive startup gates.
-async function fixture(){
+async function fixture(count:44|68=44){
  const schema='billing_upgrade_'+randomUUID().replaceAll('-','');
  const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,application_name:schema});
- const old=await migrationRelease(44);
+ const old=await migrationRelease(count);
  try{
   await admin.query(`CREATE SCHEMA ${schema}`);await old.migrate(pool);
   const {seed}=await import(new URL('../../../scripts/schema-upgrade-fixture.mjs',import.meta.url).href);
@@ -45,13 +45,13 @@ test('044 upgrades preserve retained rows and digests while v2 invalidates old r
   assert.equal(hasReleaseMigrationCount(String(migrationNames.length+1),migrationNames),false);
   for(const name of f.old.names)assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),await readFile(f.old.root+'/packages/registration/migrations/'+name),name);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
-  const expected={...before,connection_requests:[],pairing_requests:[],venues:(before.venues as {row:Record<string,unknown>}[]).map(({row})=>{
+  const expected={...before,legal_businesses:(before.legal_businesses as {row:Record<string,unknown>}[]).map(({row})=>({row:{...row,billing_address:null,tax_number:null}})),connection_requests:[],pairing_requests:[],venues:(before.venues as {row:Record<string,unknown>}[]).map(({row})=>{
    const {local_venue_id,...retained}=row;return {row:retained};
   })};
   assert.deepEqual(await rows(f.pool,Object.keys(before)),expected);
   const current=(await rows(f.pool,['schema_migrations'])).schema_migrations as unknown[];
   assert.equal(current.length,migrationNames.length);assert.deepEqual(current.slice(0,44),ledger);
-  assert.equal(current.length-(ledger as unknown[]).length,24);assert.equal((current[60] as {row:{name:string}}).row.name,'061_connection_action_proof.sql');assert.equal((current[61] as {row:{name:string}}).row.name,'062_billing_method_action_proof.sql');assert.equal((current[59] as {row:{name:string}}).row.name,'060_account_email_changes.sql');assert.equal((current[58] as {row:{name:string}}).row.name,'059_account_action_proof.sql');assert.equal((current[57] as {row:{name:string}}).row.name,'058_account_recovery_codes.sql');assert.equal((current[56] as {row:{name:string}}).row.name,'057_recognised_browsers.sql');assert.equal((current[54] as {row:{name:string}}).row.name,'055_billing_method_setups.sql');assert.equal((current[50] as {row:{name:string}}).row.name,'051_mail_suppression_reconciliation.sql');assert.equal((current[51] as {row:{name:string}}).row.name,'052_box_error_reports.sql');assert.equal((current[52] as {row:{name:string}}).row.name,'053_country_flow_authority.sql');assert.equal((current[53] as {row:{name:string}}).row.name,'054_staff_problem_reports.sql');assert.equal((current[49] as {row:{name:string}}).row.name,'050_mail_legacy_suppression_scopes.sql');assert.equal((current[48] as {row:{name:string}}).row.name,'049_ses_feedback.sql');assert.equal((current[47] as {row:{name:string}}).row.name,'048_billing_allowances_traffic.sql');assert.equal((current[46] as {row:{name:string}}).row.name,'047_data_lifecycle.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
+  assert.equal(current.length-(ledger as unknown[]).length,25);assert.equal((current[68] as {row:{name:string}}).row.name,'069_billing_tax_details.sql');assert.equal((current[60] as {row:{name:string}}).row.name,'061_connection_action_proof.sql');assert.equal((current[61] as {row:{name:string}}).row.name,'062_billing_method_action_proof.sql');assert.equal((current[59] as {row:{name:string}}).row.name,'060_account_email_changes.sql');assert.equal((current[58] as {row:{name:string}}).row.name,'059_account_action_proof.sql');assert.equal((current[57] as {row:{name:string}}).row.name,'058_account_recovery_codes.sql');assert.equal((current[56] as {row:{name:string}}).row.name,'057_recognised_browsers.sql');assert.equal((current[54] as {row:{name:string}}).row.name,'055_billing_method_setups.sql');assert.equal((current[50] as {row:{name:string}}).row.name,'051_mail_suppression_reconciliation.sql');assert.equal((current[51] as {row:{name:string}}).row.name,'052_box_error_reports.sql');assert.equal((current[52] as {row:{name:string}}).row.name,'053_country_flow_authority.sql');assert.equal((current[53] as {row:{name:string}}).row.name,'054_staff_problem_reports.sql');assert.equal((current[49] as {row:{name:string}}).row.name,'050_mail_legacy_suppression_scopes.sql');assert.equal((current[48] as {row:{name:string}}).row.name,'049_ses_feedback.sql');assert.equal((current[47] as {row:{name:string}}).row.name,'048_billing_allowances_traffic.sql');assert.equal((current[46] as {row:{name:string}}).row.name,'047_data_lifecycle.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
  }finally{await f.close();}
 });
 
@@ -92,5 +92,24 @@ test('billing consumers refuse missing changed and future ledgers',async()=>{
   await f.pool.query('UPDATE schema_migrations SET digest=$1 WHERE name=$2',[ledger[44].digest,migrationNames[44]]);
   await f.pool.query("INSERT INTO schema_migrations(name,digest) VALUES('046_future.sql',$1)",['1'.repeat(64)]);
   const future=await rows(f.pool);await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);assert.deepEqual(await rows(f.pool),future);
+ }finally{await f.close();}
+});
+
+test('populated 068 upgrade adds nullable bounded tax fields without rewriting legal identity or prior digests',async()=>{
+ const f=await fixture(68);try{
+  const before=(await f.pool.query('SELECT * FROM legal_businesses ORDER BY id')).rows;
+  assert.ok(before.length>0,'the predecessor must contain a business');
+  const ledger=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
+  await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
+  const after=(await f.pool.query('SELECT * FROM legal_businesses ORDER BY id')).rows;
+  assert.deepEqual(after,before.map(row=>({...row,billing_address:null,tax_number:null})));
+  assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name LIMIT 68')).rows,ledger);
+  const id=before[0].id;
+  await f.pool.query('UPDATE legal_businesses SET billing_address=$2,tax_number=$3 WHERE id=$1',[id,'Synthetic address','TEST-TAX-1']);
+  assert.deepEqual((await f.pool.query('SELECT billing_address,tax_number FROM legal_businesses WHERE id=$1',[id])).rows,[{billing_address:'Synthetic address',tax_number:'TEST-TAX-1'}]);
+  for(const [address,taxNumber] of [['','TEST-TAX-1'],['x'.repeat(601),'TEST-TAX-1'],['Synthetic address',''],['Synthetic address','x'.repeat(33)]]){
+   await assert.rejects(f.pool.query('UPDATE legal_businesses SET billing_address=$2,tax_number=$3 WHERE id=$1',[id,address,taxNumber]),{code:'23514'});
+  }
+  await f.pool.query('UPDATE legal_businesses SET billing_address=NULL,tax_number=NULL WHERE id=$1',[id]);
  }finally{await f.close();}
 });
