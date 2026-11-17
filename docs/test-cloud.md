@@ -1998,7 +1998,8 @@ a grant. The [relay contract](transactional-email-relay-contract.md#discover-the
 defines the one-submit and status-only recovery rule. The test-only private-origin
 approval core is described below. The [local owner commands](test-cloud-service-controls.md)
 control guest pages, independent remote-access and backup off/on, box relay grants
-and the relay-wide sending switch. SES startup remains unfinished.
+and the relay-wide sending switch. The configured test layout captures approved
+box email in Mailpit through its account and email processes. SES startup remains unfinished.
 
 ## Rehearse synthetic Cloud actions
 
