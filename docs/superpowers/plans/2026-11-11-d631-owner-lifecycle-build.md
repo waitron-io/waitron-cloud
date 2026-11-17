@@ -141,41 +141,38 @@ See its focused store, HTTP and browser commands for local verification.
 
 **Files/test owners:** registration/HTTP/portal new owner-recovery files and tests; identity sessions, password/passkey/app/reset stores, outbox/account-mail and actual organisation-authority readers. Add only pending mailbox/box approval state and required account/session restriction fields. The authority owner tests exact request/account/organisation/venue/current pairing/country scope, single-use expiry and all relationship changes after waits, second-organisation reads/writes and later sign-in confinement. Routes own their distinct answers; preserve fiscal/activation boundaries.
 
-Dependencies: accepted Waitron currently-paired-box/local-admin interface (name its Waitron owner through the existing lifecycle backlog item, inspect main/open PRs), the existing country membership relationships, and approved scope/expiry policy. Never accept a machine signature or browser assertion as local administrator proof. Budget roughly production +500–750/−40–80, tests +500–750/−30–60, support 0 before re-cutting with these interfaces. Ship a complete usable recovery outcome, not a pending request without completion.
+Dependencies: accepted Waitron currently-paired-box/local-admin interface (name its Waitron owner through the existing lifecycle backlog item, inspect main/open PRs), the existing country membership relationships, and approved scope/expiry policy. Never treat possession of a paired machine key or a browser assertion as local administrator proof; require the qualified Waitron administrator approval path below. Budget roughly production +500–750/−40–80, tests +500–750/−30–60, support 0 before re-cutting with these interfaces. Ship a complete usable recovery outcome, not a pending request without completion.
 
 #### Box approval contract: Lane F and Cloud
 
-Watcher-commissioned on 17 November at 08:32; awaiting the driver's Claude read, not owner approval.
-Persist the account's one-organisation restriction across every authority reader; later password/app/passkey sign-in never widens or lifts it. Preserve any existing restriction; no extension policy is added.
+Watcher-commissioned on 17 November at 08:32; separately drafted by Sol-high and read once by Claude. Its source-only corrections are incorporated; no owner approval of this contract is claimed.
+Persist the account's one-organisation restriction across every authority reader. Password/app/passkey/recovery-code sign-in and mailbox-only password reset never widen or lift it. A different-organisation recovery remains pending the watcher's scope decision; do not implement widening.
 
-Cloud issues an immutable recovery request `R` with a fresh recovery UUID `requestId`:
+Cloud creates a fresh recovery UUID `requestId` for its mailbox challenge. After proving that mailbox for this request, the recovering browser chooses an organisation it owns and a venue in it; only then does Cloud freeze `R` and expose it to that pairing:
 `{requestId,accountId,email,organisationId,legalBusinessId,venueId,installationId,publicKey,environment,countryCode,expiresAt}`.
-Bind `accountId` to `cloud_accounts.id` and `email` to its normalised `cloud_credentials.email` with `email_verified_at`; require fresh mailbox-token proof for this exact request.
-Require `organisation_memberships.is_owner=true` for `accountId`/`organisationId`; bind `venues(organisation_id,legal_business_id,environment)`; set `countryCode=legal_businesses.country_code`, matching the configured country Cloud origin.
-Current pairing means `installations.id` and `public_key` for that venue, with `revoked_at` and `superseded_by` null.
-`expiresAt` is the mailbox challenge's unchanged UTC deadline; retries or lease renewal cannot extend it. Mailbox tokens stay in Cloud.
+Bind `accountId` to `cloud_accounts.id`, `email` to its unchanged verified `cloud_credentials.email`, and mailbox proof to this request. Require `organisation_memberships.is_owner=true` and the exact `venues(organisation_id,legal_business_id,environment)` relationship.
+Derive non-null `countryCode` from `legal_businesses.country_code`, matching the trusted country Cloud origin; this adds no country field to stored account/transfer rows.
+Current pairing means `installations.id` and `public_key` for that venue, with `revoked_at` and `superseded_by` null. `expiresAt` is the mailbox challenge's unchanged UTC deadline; retries/lease renewal cannot extend it. Never send mailbox tokens to the box.
 
-Propose paired machine actions `owner-recovery-read` and `owner-recovery-approve` under `/api/installations/`.
-Read body `JSON.stringify({requestId})` returns `R` only to its authenticated installation at the saved trusted origin; browser fields/URLs confer no authority.
-Approval uses `operationId=R.requestId`, body `JSON.stringify({request:R,approvedBy})`, `R` keys ordered above; Waitron sets `approvedBy` from local `authorizedBy`.
-Reuse `encodeMachine`/`verifyMachine`, `waitron-cloud-machine-v1`, Ed25519 `{payload,signature}` and the control lease, including origin/action/body and timestamp checks.
+Propose `owner-recovery-read`, `owner-recovery-approve` and `owner-recovery-refuse` under `/api/installations/` using the existing machine envelope/lease conventions.
+Read body `JSON.stringify({})` returns HTTP 200 `{requests:R[]}`: only live, mailbox-proven requests for this authenticated current pairing. Each read has a fresh `operationId`, distinct from every recovery `requestId`, so a cached read cannot occupy a decision's operation slot.
+Approve uses `operationId=R.requestId`, body `JSON.stringify({request:R,approvedBy})`; refuse uses that same operation ID and `{request:R,refusedBy}`. Waitron sets either person ID from local `authorizedBy`; order `R` keys as above.
+Return HTTP 200 `{requestId,state:'approved'}` or `{requestId,state:'refused'}` to the box. Approval only records box approval; refusal ends this request permanently. Repeating the same decision reads its result; a competing or changed decision conflicts and cannot revive it.
+Reuse `encodeMachine`/`verifyMachine`, `waitron-cloud-machine-v1`, Ed25519 `{payload,signature}`, exact origin/action/body, existing timestamp checks and a lease bound to that installation/key/venue/environment. Existing operation digest checks separate read and decision purposes.
 
-Lane F fetches `R` through the paired client and displays account/mailbox and organisation/venue before approval.
-Reuse `requireManagementSession`, the management-origin guard, `authorizeManager` and `requireFreshManagementSignIn`; require `authority.admin === true`, since `system.manage` also admits managers.
-Recheck active administrator, primary box and saved registration/key/environment after waits, immediately before signing; refuse changed pairing.
-Cloud trusts this guarded server's signed approval for the local role, never a bare machine signature or browser role/person assertion.
+Before fetching requests or deciding, Lane F requires a signed-in local administrator through `requireManagementSession`, the management-origin guard, `authorizeManager` and `requireFreshManagementSignIn`; require `authority.admin === true`, since `system.manage` admits managers too.
+Display the account/mailbox and organisation/venue before the administrator chooses approve or refuse. Recheck the active administrator, primary box and saved registration/key/environment after waits, immediately before signing.
+Cloud verifies the paired key and relies on the jointly qualified Waitron server guard for actual local-administrator enforcement; `approvedBy`/`refusedBy` are audit values, not independently verifiable role proofs. Possession of a machine key or a browser role/person assertion alone authorises nothing; keep recovery unavailable until this guarded path is qualified.
 
-Cloud independently rechecks stored-key signature/lease, exact `R`, fresh mailbox proof, unchanged verified address, enabled account, current ownership, venue/business/organisation/country and live pairing at completion.
-Hold existing authority locks through consumption; security/reset changes invalidate recovery. Recheck expiry after waits using Cloud's clock.
-Consume request/mailbox proof once with restricting the same account, ending lost proofs/sessions and issuing only the parent's enrollment-only session; require fresh enrollment before access.
-Replay creates no new session/authority. Pending, refused, unavailable or expired approval grants no access/membership; pending alone is no usable recovery outcome.
-Recovery changes no owner and conveys no fiscal/server activation, support/operator override or public provider permission.
+The recovering browser, never the box, completes recovery using its mailbox proof after approval. Cloud independently rechecks signature/lease, exact `R`, mailbox proof, unchanged verified email, enabled account, current ownership, venue/business/organisation/non-null country and live pairing.
+Hold existing authority locks through consumption; security/reset changes invalidate pending recovery. Recheck expiry after waits using Cloud's clock.
+Consume request/mailbox proof once with restricting the same account, ending lost proofs/sessions, queuing notice to its verified address and issuing only the parent's enrollment-only session to that browser. Require fresh enrollment before organisation access.
+Replay creates no new session or authority. Pending/refused/unavailable/expired requests grant no access or membership; pending state alone is no usable recovery outcome.
 
-Lane F tests actual administrator versus manager/browser claims and changed pairing/request after waits; Cloud's store owns mailbox plus guarded approval, wrong request/account/org/venue/country/current pairing and replay/expiry.
-Cloud authority/session tests own second-organisation read/write refusal and later-sign-in confinement; routes own distinct answers.
+Lane F owns actual-administrator versus manager/browser refusal and changed pairing/request after waits; Cloud's store owns mailbox plus guarded decision, request/scope/current-pairing bindings, terminal refusal and replay/expiry. The parent's authority/session tests own second-organisation denial and confinement across every later sign-in/reset path; routes own distinct answers.
 
 Source read only: Cloud `packages/registration/src/{installation-proof,installations,pairing,owner-transfer}.ts` and migrations 001–003.
 Waitron pin `e4351b9d2ee5399c17127f02d4435644a327371b`: `apps/server/src/{cloud-api,cloud-client,cloud-installation,cloud-signed-request}.ts`, `packages/identity/src/{authority,manager-login,fresh-sign-in}.ts` and `packages/contract/src/signing/installation-proof.ts`.
-**Pending qualification:** Lane F/Cloud acceptance of the proposed actions/routes and exact bodies, then qualification of guarded signing. These recovery interfaces are not implemented; this source read claims no runtime verification or recovery build clearance.
+**Pending qualification:** Lane F/Cloud acceptance of the proposed actions/routes and exact bodies, then qualification of guarded signing. These interfaces are unimplemented; this source read proves no runtime behaviour or recovery build clearance.
 
 **Publication:** link this corrected plan from lifecycle backlog item 5 when publishing, recording plan-only status and dependencies. Current guides change with their implementing PR, not with unbuilt behavior. No tests, provider access, mail/SMS, migration application or runtime qualification are claimed by this plan.
