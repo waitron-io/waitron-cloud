@@ -94,17 +94,17 @@ test('decision admission requires current operator, request-forgery token and fr
 });
 
 test('populatedUpgradePreservesRows: append action storage without changing existing accounts or migration digests',async()=>{
- assert.equal(migrationNames.at(66),'067_cloud_actions.sql');assert.equal(migrationNames.at(-1),'068_owner_transfer.sql');
+ assert.equal(migrationNames.at(66),'067_cloud_actions.sql');assert.equal(migrationNames.at(67),'068_owner_transfer.sql');assert.equal(migrationNames.at(-1),'069_billing_tax_details.sql');
  const old=`old_actions_${randomUUID().replaceAll('-','')}`,legacy=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${old}`});
  try{
   await admin.query(`CREATE SCHEMA ${old}`);await legacy.query('CREATE TABLE schema_migrations(name text PRIMARY KEY,digest text NOT NULL,applied_at timestamptz NOT NULL DEFAULT clock_timestamp())');
-  for(const name of migrationNames.slice(0,-1)){
+  for(const name of migrationNames.slice(0,67)){
    const sql=await readFile(new URL(`../migrations/${name}`,import.meta.url),'utf8');await legacy.query(sql);
    await legacy.query('INSERT INTO schema_migrations(name,digest) VALUES($1,$2)',[name,createHash('sha256').update(sql).digest('hex')]);
   }
   await legacy.query('INSERT INTO cloud_accounts(id) VALUES($1)',[operator]);const before=(await legacy.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
   await migrate(legacy);assert.equal((await legacy.query('SELECT id FROM cloud_accounts')).rows[0].id,operator);
-  assert.deepEqual((await legacy.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,-1),before);
+  assert.deepEqual((await legacy.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,67),before);
   assert.equal((await legacy.query('SELECT count(*) FROM cloud_action_requests')).rows[0].count,'0');
  }finally{await legacy.end();await admin.query(`DROP SCHEMA ${old} CASCADE`);}
 });
