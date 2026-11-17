@@ -1779,7 +1779,8 @@ implementation or production evidence.
   and the later [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
   No general AWS, production or schema authority follows from this first machine.
   Global account separation and the action controller have planning entries below;
-  release waves, hosted venues and regional failover remain later plans.
+  [release waves](superpowers/plans/2026-11-17-d114-release-waves.md) wait for
+  full P1 service and machine-loss qualification. Hosted venues and regional failover remain open.
   Country/provider/cell registry, repeatable resource
   creation, recovery from partial failures, capacity and customer movement remain open. The local
   movement state machine now reserves a destination without replacing the source, rejects
@@ -1801,7 +1802,8 @@ implementation or production evidence.
   gateway reconciler and provider-native storage before setting an availability promise.
 - **Independent countries and the worldwide admin console (P3 / D112-S).** The
   [replacement P3](superpowers/plans/2026-10-22-cloud-global-country-split.md) leaves
-  deploy-start control open; its next plan must name the exact GitHub job and inputs.
+  deploy-start control open. The [release-waves plan](superpowers/plans/2026-11-17-d114-release-waves.md#2-start-that-release-from-the-worldwide-console)
+  names the GitHub workflow and inputs for that button.
   Public hosting, DNS/certificate delivery and provider qualification remain open.
   No country customer/venue copies or country operator authority belong worldwide.
   D608 owns the one-owner rule and swap-owner function; P7 owns the outside checker.
