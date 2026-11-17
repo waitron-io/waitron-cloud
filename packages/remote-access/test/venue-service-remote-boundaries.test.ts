@@ -40,8 +40,9 @@ for(const reports of [false,true])test(`legacy remote batch excludes enrolled ve
   }
   assert.deepEqual(await transaction(f.pool,c=>eligibleRemoteInstallations(c,'test-free-paid',f.source)),[f.ids[1]]);
   const worker=new RemoteConfigurationReconciler(f.pool,{planMode:'test-free-paid',forwardReports:reports});await worker.schedule();
-  const jobs=(await f.pool.query("SELECT target_id FROM remote_configuration_jobs WHERE kind<>'route' AND enabled ORDER BY target_id")).rows;
+  const jobs=(await f.pool.query("SELECT target_id FROM remote_configuration_jobs WHERE kind LIKE 'certificate_%' AND enabled ORDER BY target_id")).rows;
   assert.deepEqual(jobs.map(r=>r.target_id),[f.ids[1],f.ids[1]]);
+  assert.deepEqual((await f.pool.query("SELECT target_id,kind FROM remote_configuration_jobs WHERE kind<>'route' AND kind NOT LIKE 'certificate_%' AND enabled ORDER BY target_id")).rows,[{target_id:f.ids[1],kind:'name'}]);
   // Existing mode remains permissive for fixture and compatibility callers.
   assert.deepEqual((await f.ordinary.manifest(f.source)).routes.map(r=>r.installationId),f.ids);
  }finally{await f.close();}

@@ -29,10 +29,10 @@ test('scheduling projects stable route and certificate targets for active placem
  await placements.createCell(cell);
  for(let n=0;n<2;n++){const current=await installation();await placements.provision(current.installationId,cell.id,peerKey());}
  const worker=new RemoteConfigurationReconciler(db.pool);
- assert.equal(await worker.schedule(),5);
+ assert.equal(await worker.schedule(),7);
  const first=await db.pool.query(`SELECT kind,target_id,desired_digest,status,enabled FROM remote_configuration_jobs ORDER BY kind,target_id`);
- assert.equal(first.rowCount,5);
- assert.deepEqual(first.rows.map(row=>row.kind),['certificate_public','certificate_public','certificate_staff','certificate_staff','route']);
+ assert.equal(first.rowCount,7);
+ assert.deepEqual(first.rows.map(row=>row.kind),['certificate_public','certificate_public','certificate_staff','certificate_staff','name','name','route']);
  for(const row of first.rows){assert.match(row.desired_digest,/^[a-f0-9]{64}$/);assert.equal(row.status,'pending');assert.equal(row.enabled,true);}
  assert.equal(await worker.schedule(),0);
  const second=await db.pool.query('SELECT kind,target_id,desired_digest FROM remote_configuration_jobs ORDER BY kind,target_id');
@@ -154,7 +154,7 @@ test('certificate checks skip usable material, renew expiring material and retai
  memory.csrs.set(`${current.installationId}:staff`,usable.csr);memory.certificates.set(`${current.installationId}:staff`,usable.certificate);
  memory.csrs.set(`${current.installationId}:public`,expiring.csr);memory.certificates.set(`${current.installationId}:public`,expiring.certificate);
  let issues=0;const worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async target=>{issues++;assert.equal(target.kind,'public');return renewed;}});await worker.schedule();
- await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind='route' OR target_id<>$1",[current.installationId]);
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind NOT LIKE 'certificate_%' OR target_id<>$1",[current.installationId]);
  assert.equal(await worker.runOnce(),true);assert.equal(await worker.runOnce(),true);assert.equal(issues,1);assert.deepEqual(memory.publications,[`${current.installationId}:public`]);
  memory.certificates.set(`${current.installationId}:public`,expiring.certificate);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[current.installationId]);
  const failed=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{throw new Error('provider secret');}});await failed.runOnce();
@@ -168,7 +168,7 @@ test('concurrent certificate completions do not require a second pool connection
  try{
   let entered=0,release!:()=>void;const bothEntered=new Promise<void>(resolve=>{release=resolve;});
   const worker=new RemoteConfigurationReconciler(limited,{artifacts:memory.adapter,issueCertificate:async target=>{if(++entered===2)release();await bothEntered;const material=target.kind==='staff'?staff:publicMaterial;return certificateFor(material.key,material.csr,target.hostname,90);}});await worker.schedule();
-  await limited.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind='route' OR target_id<>$1",[current.installationId]);
+  await limited.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind NOT LIKE 'certificate_%' OR target_id<>$1",[current.installationId]);
   assert.deepEqual(await Promise.all([worker.runOnce(),worker.runOnce()]),[true,true]);assert.deepEqual(memory.publications.sort(),[`${current.installationId}:public`,`${current.installationId}:staff`]);
  }finally{await limited.end();}
 });
@@ -249,12 +249,12 @@ test('reporting concurrent staff and public certificate completions serialize wi
  for(const [kind,material] of [['staff',staff],['public',publicMaterial]] as const){memory.csrs.set(`${current.installationId}:${kind}`,material.csr);memory.certificates.set(`${current.installationId}:${kind}`,material.certificate);}
  let issues=0,entered!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>entered=resolve),gate=new Promise<void>(resolve=>release=resolve);
  const worker=new RemoteConfigurationReconciler(db.pool,{forwardReports:true,artifacts:memory.adapter,issueCertificate:async target=>{if(++issues===2)entered();await gate;const m=target.kind==='staff'?staff:publicMaterial;return certificateFor(m.key,m.csr,target.hostname,90);}});
- await worker.schedule();await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind='route' OR target_id<>$1",[current.installationId]);
+ await worker.schedule();await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind NOT LIKE 'certificate_%' OR target_id<>$1",[current.installationId]);
  const running=Promise.all([worker.runOnce(),worker.runOnce()]),held=await db.secondPool.connect();
  try{
   await started;await held.query('BEGIN');await held.query('SELECT 1 FROM installations WHERE id=$1 FOR SHARE',[current.installationId]);release();
   await waitForDatabaseLock('%FROM installations%FOR % OF i%',2);await held.query('COMMIT');await running;
   assert.deepEqual(memory.publications.sort(),[`${current.installationId}:public`,`${current.installationId}:staff`]);
-  assert.deepEqual((await db.pool.query("SELECT failures,last_error,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE target_id=$1 ORDER BY kind",[current.installationId])).rows,[{failures:'0',last_error:null,applied:true},{failures:'0',last_error:null,applied:true}]);
+  assert.deepEqual((await db.pool.query("SELECT failures,last_error,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE target_id=$1 AND kind LIKE 'certificate_%' ORDER BY kind",[current.installationId])).rows,[{failures:'0',last_error:null,applied:true},{failures:'0',last_error:null,applied:true}]);
  }finally{release();await held.query('ROLLBACK');held.release();await running;}
 });

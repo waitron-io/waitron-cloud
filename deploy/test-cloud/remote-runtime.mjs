@@ -69,6 +69,7 @@ export async function openTestRemoteRuntime({pool,directory,mode}){
   async publishCertificate(id,kind,chain){if(kind!=='public')throw Error('test_cloud.remote_target');const target=publicTarget(directory,id);await atomic(join(directory,'public-certs',id+'.pem'),await privateFile(join(target,'key.pem'))+chain);await atomic(join(target,'certificate.pem'),chain);},
   async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');await atomic(join(directory,'gateway-manifest.json'),text);}
  };
- const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,staffExchange:true,artifacts,signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target)});
+ // The private test cell uses caller-provided name resolution, not an operator DNS zone.
+ const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,staffExchange:true,artifacts,pointName:async()=>{},signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target)});
  return {worker,cellId};
 }

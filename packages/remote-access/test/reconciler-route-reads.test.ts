@@ -70,7 +70,7 @@ for(const mode of ['existing','test-free-paid'] as const)test(`batched ${mode} t
  await assertRoutes(source,[moving.installationId,neighbour.installationId],mode);
  await assertRoutes(target,[moving.installationId,resident.installationId],mode);await assertRoutes(empty,[],mode);
  const before=(await db.pool.query('SELECT kind,target_id,desired_digest FROM remote_configuration_jobs ORDER BY kind,target_id')).rows;
- assert.equal(before.length,9);assert.equal(await worker.schedule(),0);
+ assert.equal(before.length,12);assert.equal(await worker.schedule(),0);
  assert.deepEqual((await db.pool.query('SELECT kind,target_id,desired_digest FROM remote_configuration_jobs ORDER BY kind,target_id')).rows,before);
  await store.markMoveReady(move.operationId,1,(await store.manifest(target)).sequence);await worker.schedule();
  await assertRoutes(target,[moving.installationId,resident.installationId],mode);
@@ -84,7 +84,7 @@ for(const change of ['revision','revocation'] as const)test(`batched incoming ro
  await new RemoteConfigurationReconciler(db.pool).schedule();
  await assertRoutes(source,change==='revision'?[moving.installationId]:[]);await assertRoutes(target,[resident.installationId]);
  const certificates=(await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND target_id=$1 AND enabled",[moving.installationId])).rows[0].n;
- assert.equal(certificates,change==='revision'?2:0);
+ assert.equal(certificates,change==='revision'?3:0);
 });
 
 for(const change of ['free','production','unconfigured'] as const)test(`batched test-mode targets exclude ${change} active and incoming routes`,async()=>{
@@ -136,7 +136,7 @@ for(const count of [4,16])test(`eligibility processing reads at most twice the e
  const home=await cell();for(let i=0;i<count;i++)await venue(home);
  const measured=await measuredEligibilitySchedule('test-free-paid');
  const jobs=(await db.pool.query('SELECT kind,count(*)::integer AS n FROM remote_configuration_jobs WHERE enabled GROUP BY kind ORDER BY kind')).rows;
- assert.deepEqual(jobs,[{kind:'certificate_public',n:count},{kind:'certificate_staff',n:count},{kind:'route',n:1}]);
+ assert.deepEqual(jobs,[{kind:'certificate_public',n:count},{kind:'certificate_staff',n:count},{kind:'name',n:count},{kind:'route',n:1}]);
  assert.equal(measured.lists,1,'measurement must observe the eligibility result');assert.equal(measured.eligibleCount,count);
  t.diagnostic(`${count} eligible installations: ${measured.idReads} ID reads, ${measured.arrayScans} array scans`);
  assert.equal(measured.arrayScans,0,'membership must not repeatedly scan an array, including a copied list');
@@ -155,5 +155,5 @@ test('an empty eligibility list withdraws routes and certificates while ordinary
  const ordinary=await measuredEligibilitySchedule('existing');
  assert.deepEqual(ordinary,{lists:0,idReads:0,eligibleCount:0,arrayScans:0});
  await assertRoutes(home,[resident.installationId]);
- assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,2);
+ assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,3);
 });

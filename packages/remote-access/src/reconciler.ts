@@ -7,7 +7,7 @@ import {RemoteAccessStore,type CertificateAuthorization,type TrafficCoverageJour
 import {certificateNeedsRenewal} from './renewal.ts';
 import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
 
-export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public';
+export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public'|'name';
 export interface RemoteConfigurationJob {
  kind:RemoteConfigurationKind;targetId:string;desiredDigest:string;claimId:string;attempts:number;
 }
@@ -28,9 +28,10 @@ interface ReconcilerOptions {
  artifacts?:ReconcilerArtifacts;
  issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
  signingKeyForCell?:(cellId:string)=>Promise<KeyObject>;
+ pointName?:(name:string,target:string,signal:AbortSignal)=>Promise<void>;
  now?:()=>number;
 }
-interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:string}
+interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:string;names?:{staff:string;public:string;target:string}}
 
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(route=>({installationId:route.installationId,venueId:route.venueId,staffHostname:route.staffHostname,publicHostname:route.publicHostname,address:route.address,port:route.port,peerPublicKey:route.peerPublicKey})));
@@ -88,13 +89,15 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
   routes.push({...(forwardReports||mode==='test-venue-levels'?{revision:Number(row.configuration_revision)}:{}),installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
  for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:publicationDigest(routesByCell.get(cell.id)??[],forwardReports&&cell.gateway_id&&!cell.revoked_at?{gatewayId:cell.gateway_id,generation:Number(cell.generation)}:undefined,mode==='test-venue-levels')});
- const certificates=cellId?[]:(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,s.hostname AS staff_hostname,u.hostname AS public_hostname,s.assigned_hostname AS staff_assigned,u.assigned_hostname AS public_assigned
-  FROM installations i JOIN remote_placements p ON p.installation_id=i.id
+ const certificates=cellId?[]:(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,s.hostname AS staff_hostname,u.hostname AS public_hostname,s.assigned_hostname AS staff_assigned,u.assigned_hostname AS public_assigned,c.endpoint
+  FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
   JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
   WHERE i.revoked_at IS NULL AND ($1::uuid IS NULL OR i.id=$1) ORDER BY i.id`,[installationId])).rows;
  for(const row of certificates){
   if(eligible&&!eligible.has(row.id))continue;
+  const names={staff:row.staff_assigned,public:row.public_assigned,target:row.endpoint.split(':')[0]};
+  targets.push({kind:'name',targetId:row.id,digest:digest(names),names});
   for(const kind of ['staff','public'] as const){
    const hostname=row[`${kind}_hostname`],assigned=row[`${kind}_assigned`],dnsName='_acme-challenge.'+assigned;
    let desiredDigest=certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,assigned,dnsName});
@@ -107,10 +110,10 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
 
 export class RemoteConfigurationReconciler {
  readonly #forwardReports:boolean;readonly #planMode:PlanMode;readonly #staffExchange:boolean;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
- readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
+ readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #pointName:ReconcilerOptions['pointName'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
  constructor(pool:Pool,options:ReconcilerOptions={}){
   if(options.trafficCoverage&&(!options.forwardReports||options.execute))throw new Error('invalid_traffic_options');
-  this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode,options.trafficCoverage);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;
+  this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode,options.trafficCoverage);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#pointName=options.pointName;this.#now=options.now??Date.now;
  }
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
@@ -147,15 +150,15 @@ export class RemoteConfigurationReconciler {
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
   const claimed=await transaction(this.#pool,async client=>{
-   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND status='running' AND attempts>=8
+   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND kind<>'name' AND status='running' AND attempts>=8
     AND lease_until<=clock_timestamp() ORDER BY lease_until,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
    if(exhausted){await client.query(`UPDATE remote_configuration_jobs SET status='failed',claim_id=NULL,lease_until=NULL,failures=failures+1,
     last_error='reconcile_failed',updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2`,[exhausted.kind,exhausted.target_id]);return {parked:true as const};}
-   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND attempts<8 AND
+   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND (attempts<8 OR kind='name') AND
     ((status='pending' AND available_at<=clock_timestamp()) OR (status='running' AND lease_until<=clock_timestamp()))
     ORDER BY available_at,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];if(!row)return;
    return {parked:false as const,job:rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',
-    attempts=attempts+1,runs=runs+1,updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 RETURNING *`,[row.kind,row.target_id,randomUUID()])).rows[0])};
+    attempts=LEAST(attempts+1,8),runs=runs+1,updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 RETURNING *`,[row.kind,row.target_id,randomUUID()])).rows[0])};
   });
   if(!claimed)return false;
   if(claimed.parked)return true;
@@ -165,9 +168,18 @@ export class RemoteConfigurationReconciler {
    if(!await this.#current(job))throw new Error('stale_configuration');
    if(this.#execute){await this.#execute(job,{signal,isCurrent:()=>this.#current(job)});await this.#complete(job,async()=>{});}
    else if(job.kind==='certificate_staff'||job.kind==='certificate_public')await this.#certificate(job,signal);
+   else if(job.kind==='name')await this.#name(job,signal);
    else await this.#route(job);
   }catch{await this.#release(job,signal.aborted);}
   return true;
+ }
+ async #name(job:RemoteConfigurationJob,signal:AbortSignal){
+  if(!this.#pointName)throw new Error('reconciler_not_configured');
+  const desired=await transaction(this.#pool,client=>desiredTargets(client,this.#staffExchange,this.#planMode,this.#forwardReports,job));
+  const names=desired.find(t=>t.kind==='name'&&t.digest===job.desiredDigest)?.names;
+  if(!names)throw new Error('stale_configuration');
+  for(const name of [names.staff,names.public]){signal.throwIfAborted();if(!await this.#current(job))throw new Error('stale_claim');await this.#pointName(name,names.target,signal);}
+  signal.throwIfAborted();await this.#complete(job,async()=>{});
  }
  async #route(job:RemoteConfigurationJob){
   if(!this.#artifacts||!this.#signingKeyForCell)throw new Error('reconciler_not_configured');const now=this.#now();
@@ -225,10 +237,10 @@ export class RemoteConfigurationReconciler {
   });
  }
  async #release(job:RemoteConfigurationJob,cancelled:boolean){
-  const attempts=job.attempts,status=!cancelled&&attempts>=8?'failed':'pending';
+  const attempts=job.attempts,status=job.kind!=='name'&&!cancelled&&attempts>=8?'failed':'pending';
   const seconds=cancelled?0:Math.min(900,30*2**Math.max(0,attempts-1));
   await this.#pool.query(`UPDATE remote_configuration_jobs SET status=$5,available_at=clock_timestamp()+$6*interval '1 second',claim_id=NULL,lease_until=NULL,
-   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
+   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) WHEN kind='name' THEN LEAST(attempts,7) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
    last_error=CASE WHEN $7 THEN last_error ELSE 'reconcile_failed' END,updated_at=clock_timestamp()
    WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4 AND status='running'`,[job.kind,job.targetId,job.desiredDigest,job.claimId,status,seconds,cancelled]);
  }

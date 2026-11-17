@@ -200,7 +200,7 @@ test('a free plan cannot export retained active setup through either operator ru
  try{
   assert.deepEqual((await store.manifest(v.cellId)).routes,[]);
   const output=join(root,'manifest.json'),signingKeyFile=join(root,'issuer.pem'),accountKeyFile=join(root,'acme.pem'),dnsModule=join(root,'dns.mjs'),configFile=join(root,'config.json'),url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+db.schema);
-  await writeFile(signingKeyFile,key.privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});await writeFile(dnsModule,'export default {present:async()=>{},remove:async()=>{}};');
+  await writeFile(signingKeyFile,key.privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});await writeFile(dnsModule,'export default {present:async()=>{},remove:async()=>{},point:async()=>{}};');
   await writeFile(configFile,JSON.stringify({cellId:v.cellId,signingKeyFile,output}));
   const run=(file:string,args:string[])=>{const result=spawnSync(process.execPath,[file,...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:url.toString(),CLOUD_TEST_SERVICE_PLANS:'1'}});assert.equal(result.status,0,result.stderr);};
   run('src/operator-cli.ts',['export',configFile]);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);

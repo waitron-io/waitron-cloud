@@ -6,7 +6,7 @@ import {createRoute53DnsProvider} from '../src/route53-dns.ts';
 
 const name='_acme-challenge.staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io';
 const token='A'.repeat(43);
-async function fixture(maxAttempts=1){
+async function fixture(maxAttempts=1,type:'TXT'|'CNAME'='TXT'){
  const requests:{method:string;path:string;body:string}[]=[],records=new Map<string,string>();let pending=0,denied=false,deniedGet=false,hang=false,hangGet=false,missingId=false;const errors:unknown[]=[],observers:(()=>void)[]=[];
  const server=createServer(async(req,res)=>{
   try{let body='';for await(const part of req)body+=part;
@@ -18,9 +18,9 @@ async function fixture(maxAttempts=1){
    res.end(`<GetChangeResponse xmlns="https://route53.amazonaws.com/doc/2013-04-01/"><ChangeInfo><Id>/change/C1</Id><Status>${pending-->0?'PENDING':'INSYNC'}</Status><SubmittedAt>2026-11-06T00:00:00Z</SubmittedAt></ChangeInfo></GetChangeResponse>`);return;
   }
   assert.equal(req.method,'POST');assert.equal(req.url,'/2013-04-01/hostedzone/Z123/rrset');
-  assert.match(body,/<Type>TXT<\/Type>/);assert.match(body,/<TTL>60<\/TTL>/);
-  const recordName=body.match(/<Name>([^<]+)<\/Name>/)![1]!,value=body.match(/<Value>([^<]+)<\/Value>/)![1]!.replaceAll('&quot;','"');
-  assert.match(value,/^"[A-Za-z0-9_-]{43}"$/);
+  if(type==='TXT'){assert.match(body,/<Type>TXT<\/Type>/);assert.match(body,/<TTL>60<\/TTL>/);}
+  const recordName=body.match(/<Name>([^<]+)<\/Name>/)![1]!,value=(body.match(/<Value(?:>([^<]*)<\/Value>|\/>)/)?.[1]??'').replaceAll('&quot;','"');
+  if(type==='TXT')assert.match(value,/^"[A-Za-z0-9_-]{43}"$/);
   if(body.includes('<Action>UPSERT</Action>'))records.set(recordName,value);
   else{assert.match(body,/<Action>DELETE<\/Action>/);if(records.get(recordName)!==value){error('InvalidChangeBatch');return;}records.delete(recordName);}
   res.end('<ChangeResourceRecordSetsResponse xmlns="https://route53.amazonaws.com/doc/2013-04-01/"><ChangeInfo>'+(missingId?'':'<Id>/change/C1</Id>')+'<Status>PENDING</Status><SubmittedAt>2026-11-06T00:00:00Z</SubmittedAt></ChangeInfo></ChangeResourceRecordSetsResponse>');
@@ -36,6 +36,23 @@ test('publishes only the challenge TXT value, waits for authoritative propagatio
   f.setPending();await f.dns.present(name,token);assert.equal(f.records.get(name),'"'+token+'"');
   assert.deepEqual(f.requests.map(r=>r.method),['POST','GET','GET']);
   await f.dns.remove(name,token);assert.equal(f.records.size,0);assert.deepEqual(f.requests.map(r=>r.method),['POST','GET','GET','POST']);assert.match(f.requests.at(-1)!.body,/<Action>DELETE<\/Action>/);
+ }finally{await f.close();}
+});
+test('points only assigned venue names at a cell with TTL 60 and waits for INSYNC',async()=>{
+ const f=await fixture(1,'CNAME');try{
+  f.setPending();await f.dns.point('staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io','gw.cell-b.example.test');
+  await f.dns.point('v-11111111-1111-4111-8111-111111111111.test.waitron.io','gw.cell-b.example.test');
+  assert.deepEqual([...f.records],[['staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io','gw.cell-b.example.test'],['v-11111111-1111-4111-8111-111111111111.test.waitron.io','gw.cell-b.example.test']]);
+  assert.deepEqual(f.requests.map(r=>r.method),['POST','GET','GET','POST','GET']);
+  for(const request of f.requests.filter(r=>r.method==='POST')){assert.match(request.body,/<Action>UPSERT<\/Action>/);assert.match(request.body,/<Type>CNAME<\/Type>/);assert.match(request.body,/<TTL>60<\/TTL>/);}
+ }finally{await f.close();}
+});
+test('refuses unassigned names and invalid targets before any record write',async()=>{
+ const f=await fixture(1,'CNAME');try{
+  const assigned='staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io';
+  for(const invalid of ['x.test.waitron.io',assigned.replace('test.waitron.io','other.example.test'),assigned.replace('test.waitron.io','evil-waitron.io'),assigned.replace('.test.waitron.io','xtest.waitron.io'),'evil-v-11111111-1111-4111-8111-111111111111.test.waitron.io','_acme-challenge.'+assigned,assigned+'.attacker.test',assigned.replace('11111111-1111-4111-8111-111111111111','not-a-uuid')])await assert.rejects(f.dns.point(invalid,'gw.cell-b.example.test'),/invalid_name_record/);
+  for(const target of ['','https://gw.cell-b.example.test','gw.cell-b.example.test:51820','*.example.test'])await assert.rejects(f.dns.point(assigned,target),/invalid_name_record/);
+  assert.equal(f.requests.length,0);
  }finally{await f.close();}
 });
 test('refuses unrelated names and malformed challenge values before any AWS request',async()=>{

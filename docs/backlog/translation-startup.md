@@ -40,3 +40,14 @@ fixed-message assertions rather than entering the success-only helper.
 These controls do not reproduce the
 historical runner or establish its cause. Retain the new result and service states
 if CI fails again, then investigate the reported process or bootstrap boundary.
+
+On 17 November, [PR #1282's translation job](https://github.com/waitron-io/waitron-cloud/actions/runs/44182558014/job/134390665850)
+reported startup exit 255 with `ETIMEDOUT`: the twenty-second Compose command
+returned after 135,848 ms, its state read returned an empty service list, and the
+thirty-second Node case was cancelled. No service output identified the blocked
+boundary. The same launcher passed in 12,156 ms on the preceding PR head; only
+three remote-access test files changed between those heads. The unchanged case
+also passed once in 9,418 ms through the authorised Mac Docker wrapper; that ARM
+run does not qualify the Linux runner or explain its delay. Preserve the command,
+test and migration-refusal checks. The startup cause remains open; another green
+CI execution qualifies that candidate without fixing this failure.

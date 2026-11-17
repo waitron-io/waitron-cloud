@@ -21,7 +21,7 @@ async function fixture(){
  const store=new RemoteAccessStore(db.pool),cellId=randomUUID(),signing=generateKeyPairSync('ed25519'),output=join(root,`${cellId}.json`),signingKeyFile=join(root,`${cellId}.key`),accountKeyFile=join(root,'account.key'),dnsModule=join(root,'dns.mjs');
  await store.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:`cell-${cellId}.example.test`,subnet:++subnet,publicKey:peerKey(),endpoint:`gateway-${cellId}.example.test:51820`});
  await writeFile(signingKeyFile,signing.privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});
- await writeFile(dnsModule,"export default {present:async()=>{},remove:async()=>{}};\n",{mode:0o600});
+ await writeFile(dnsModule,"export default {present:async()=>{},remove:async()=>{},point:async()=>{}};\n",{mode:0o600});
  const configFile=join(root,`${cellId}.config.json`);await writeFile(configFile,JSON.stringify({routes:[{cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'local@example.test',accountKeyFile,dnsModule}}),{mode:0o600});
  return {cellId,signing,output,configFile};
 }
@@ -33,6 +33,16 @@ test('trusted CLI arguments, once and status are strict and redact configuration
  const envelope=JSON.parse(await readFile(value.output,'utf8'));assert.equal(verifyManifest(envelope,value.signing.publicKey,value.cellId).routes.length,0);
  const status=run(value.configFile,'--status');assert.equal(status.status,0,status.stderr);assert.deepEqual(JSON.parse(status.stdout),{enabled:1,due:0,running:0,failed:0,oldestDueAt:null});
  const extra=run(value.configFile,'--bad');assert.equal(extra.status,1);assert.equal(extra.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
+});
+test('a DNS module without stable-name publication is refused before scheduling',async()=>{
+ const value=await fixture(),config=JSON.parse(await readFile(value.configFile,'utf8'));
+ try{
+ await writeFile(config.acme.dnsModule,"export default {present:async()=>{},remove:async()=>{}};\n");
+ const result=run(value.configFile,'--once');
+ assert.equal(result.status,1);assert.equal(result.stdout,'');
+ assert.equal(result.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
+ assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1',[value.cellId])).rows[0].n,0);
+ }finally{await db.pool.query('DELETE FROM remote_cells WHERE id=$1',[value.cellId]);}
 });
 
 test('a missing exact route mapping fails only that target with a redacted code',async()=>{

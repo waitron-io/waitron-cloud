@@ -112,7 +112,7 @@ for(const operation of ['manifest','reporting manifest','scheduler','reporting s
   else assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'0');
   assert.equal((await f.legacy.manifest(f.source)).routes.length,3);
   await new RemoteConfigurationReconciler(f.pool,{planMode:'test-free-paid',forwardReports:operation==='reporting scheduler'}).schedule();
-  assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'2');
+  assert.deepEqual((await f.pool.query("SELECT kind FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled ORDER BY kind",[newcomer])).rows.map(r=>r.kind),['certificate_public','certificate_staff','name']);
  }finally{release();await pending?.catch(()=>{});await f.close();}
 });
 
