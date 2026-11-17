@@ -1056,8 +1056,8 @@ implementation or production evidence.
   is cleared by the watcher for staged implementation. Configurable HTTPS reuses
   the test runtime and internal CA trust. The explicit Amazon driver target has
   local admission and rendered-configuration checks, with measured image sizes and
-  an idle-stack observation. Application readiness, sustained Amazon OS/disk/CPU
-  headroom, pairing and email qualification remain open. Driver inventory's
+  an idle-stack observation. Sustained Amazon OS/disk/CPU headroom, pairing and
+  email qualification remain open. Driver inventory's
   optional health handling is checked through Docker itself by
   `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
   relay-grant hint without advancing service configuration. The test-only private-origin
