@@ -41,9 +41,9 @@ export async function readRelayGrantHint(client:PoolClient,installationId:string
    JOIN organisation_memberships m ON m.account_id=a.id AND m.organisation_id=v.organisation_id AND m.is_owner
    CROSS JOIN relay_control c
    WHERE i.id=$1 AND c.singleton AND v.environment='test'
-   AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND i.lease_expires_at>clock_timestamp()
+   AND i.revoked_at IS NULL AND i.lease_expires_at>clock_timestamp()
    AND g.public_key=i.public_key AND g.venue_id=v.id AND g.organisation_id=v.organisation_id AND g.environment=v.environment
-   AND g.expires_at>clock_timestamp() AND g.origin_verified_until>clock_timestamp()`,[installationId])).rows[0];
+   AND g.expires_at>clock_timestamp()`,[installationId])).rows[0];
  return row?{id:row.id,revision:row.revision,expiresAt:row.expires_at.toISOString(),enabled:row.enabled}:null;
 }
 interface GrantRow {

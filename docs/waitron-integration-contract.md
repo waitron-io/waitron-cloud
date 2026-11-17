@@ -1088,7 +1088,7 @@ specified by the [transactional-email relay contract](transactional-email-relay-
 It is read fresh on configuration replay and does not change the service revision.
 A box submits each mail claim once, then reconciles status without resubmission or
 direct-SMTP fallback; a lost reply can remain a final unknown result. Live grant
-approval remains held for management-origin verification.
+approval is unavailable until the scoped test-only private-origin path is built.
 
 The default `configuration` reply returns exactly three services for existing callers. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
 services: the three it receives today and this one:

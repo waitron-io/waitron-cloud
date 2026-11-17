@@ -1995,5 +1995,7 @@ The separate `emailRelay` hint reports the grant identity, revision, expiry and
 switch state, or null when current authority is unavailable. Replaying the same
 configuration request reads the current hint. It does not enable delivery or approve
 a grant. The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
-defines the one-submit and status-only recovery rule. Live origin verification,
-service commands and SES startup remain unfinished.
+defines the one-submit and status-only recovery rule. The watcher cleared a test-only
+exception for an owner-enabled paired box with a signed, live lease and an RFC 1918
+private address or .local management name; that approval path is not built yet.
+Service commands and SES startup remain unfinished.

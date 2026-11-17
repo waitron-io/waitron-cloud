@@ -100,13 +100,16 @@ version-2 meaning; `emailRelay` is outside that array. A body of `{}` and ordina
 renewal keep their existing shapes.
 
 Read this hint before each submit. A live revoked grant or stopped relay returns
-`enabled: false`; a missing or expired grant, expired origin evidence or lost owner
-or account authority returns `grant: null`. A failed read is unavailable. Neither
-null nor a failed read means the owner explicitly switched email off. An enabled
-hint is not sending authority: submit still rechecks its existing protections.
+`enabled: false`; a missing or expired grant or lost owner or account authority
+returns `grant: null`. A failed read is unavailable. Neither
+null nor a failed read means the owner explicitly switched email off. A hint-read
+failure fails the whole version-2 configuration reply and rolls back its
+acknowledgement. The configuration outcome is unknown; treat the relay as
+unavailable and do not submit until a fresh hint read succeeds. An enabled hint is not
+sending authority: consent, policy, allowance and queue checks still happen at submit.
 Configuration replay reads the current hint without changing the service revision
 or storing the hint in its durable operation result. These are local fixture
-capabilities; live grant approval still needs the management-origin verifier.
+capabilities; the scoped test-only private-origin approval path is not built yet.
 
 ## Proposed wire exchange
 
@@ -185,7 +188,8 @@ Refuse unauthorised reads before
 revealing whether the message exists. Proposed errors: `400 invalid_message`,
 `401 invalid_proof`, `403 relay_disabled` or `grant_unavailable`, `409 message_conflict`,
 `429 rate_limited` or `allowance_exhausted`, and `503 relay_unavailable`. Give bounded
-`Retry-After` guidance for temporary refusal. A missing status is not proof that a
+`Retry-After` guidance for status polling or a fresh action after definite refusal;
+it does not permit resubmitting the original mail claim. A missing status is not proof that a
 concurrent submit failed. Keep the result unknown and reconcile status; never
 resubmit that claim or fall back to direct SMTP.
 
@@ -246,7 +250,7 @@ best-effort cancel suppress stale mail; Waitron's consume check remains decisive
 For production, recommend one customer unit per durably admitted message, retained for every later
 outcome, including uncertainty. This simple rule needs owner approval alongside the
 password-reset limit policy; it is not current pricing or an implemented entitlement.
-Rejected admissions cost zero customer units; exact retries cost zero extra units.
+Rejected admissions cost zero customer units; exact duplicates cost zero extra units.
 Track provider attempts, acceptances, refusals and uncertainty separately for cost
 and reliability. Do not equate an organisation usage event with an account debit.
 
@@ -444,7 +448,9 @@ Changing the persisted policy is outside this mechanism.
 
 A new admission reserves both counts and actual ciphertext bytes in the same
 transaction as its account unit. Exhaustion returns `429 rate_limited` with
-`Retry-After: 60`. Exact retries reserve nothing extra. Cancellation and delivery
+`Retry-After: 60`. The box may start a fresh action after this definite refusal;
+it does not resubmit that mail claim. Cloud defensively handles exact duplicates
+without reserving extra. Cancellation and delivery
 release payload bytes but do not refund counts. Sending, delayed and unreadable
 payloads count until cleared. The byte ceiling includes the encrypted JSON's
 28-byte nonce and authentication tag, but excludes indexes and other mail queues.
@@ -453,8 +459,10 @@ Migration 034 backfills existing bytes while consumers are stopped. An existing
 queue above your cap can drain, but cannot grow. Admission checks its signed proof,
 lease, installation, grant and message deadlines after both the bounds-lock and
 byte-tally waits. If its counter window ends during the final wait, the whole
-admission rolls back with `503 relay_unavailable` and `Retry-After: 1`; send a fresh
-signed retry. Workers never acquire the bounds lock.
+admission rolls back with `503 relay_unavailable` and `Retry-After: 1`. This is a
+definite refusal: the box ends that mail claim and may create a fresh action after
+the wait. It does not send another submit for that claim. Workers never acquire
+the bounds lock.
 
 Run the local PostgreSQL and independent HTTP-process proofs:
 
