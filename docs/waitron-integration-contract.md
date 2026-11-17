@@ -388,6 +388,13 @@ treat that as not provisioned and do not install a tunnel from that reply.
 See `packages/account-http/test/tunnel-provision.test.ts` for the exact
 PostgreSQL reply, plan-change case and real HTTP listener check.
 
+The local test Cloud's remote switch can return `state:"unconfigured"` while
+retaining the prior placement in `configuration`. Disconnect based on state even
+when those details remain. Ordinary box refresh keeps the matching peer key and
+does not request another placement. Explicit trusted provisioning, including the
+optional signed tunnel-provision trial endpoint, can restore setup; test account
+startup keeps that endpoint closed. This switch does not revoke the installation.
+
 If you lose the reply, retry with a fresh proof and your persisted peer key.
 The same key, cell and port keep the allocation and revision, except when the
 existing paid-mode setup restoration advances it. Repeating an identical valid

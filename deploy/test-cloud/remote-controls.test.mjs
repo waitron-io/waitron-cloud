@@ -44,6 +44,7 @@ test('remote switch withdraws signed routes after restart and restores the same 
  assert.equal(setup(off).state,'unconfigured');assert.deepEqual(setup(off).configuration,setup(before).configuration,'ordinary box refresh must still see its current peer key');
  const backups=view=>view.services.filter(s=>['continuous_backup','retained_snapshots'].includes(s.service));
  assert.deepEqual(backups(off),backups(before));assert.equal((await read(f)).level,'connected');
+ await drain(runtime.worker);assert.deepEqual((await manifest()).routes.map(r=>r.installationId),[current[1]],'the running worker must withdraw the route before restart');
  const restarted=await openTestRemoteRuntime(options);await drain(restarted.worker);
  assert.deepEqual((await manifest()).routes.map(r=>r.installationId),[current[1]]);
  await assert.rejects(remote.authorizeCertificate(installationId,'public','unused'),/permission_denied/);
