@@ -819,7 +819,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    the same owner through a verified mailbox plus a local administrator on a
    currently paired box, limited to that organisation. Follow the
    [lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
-   and [remaining build slices](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md).
+   and [paired-box approval contract](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md#box-approval-contract-lane-f-and-cloud).
+   The contract is proposed; Lane F owns the box half, and both halves remain unbuilt.
    Countries remain independent. Billing pages stay parked; no manual recovery,
    support takeover, operator, fiscal or activation permission is granted.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
