@@ -2060,6 +2060,11 @@ drain naming the old child's random identity cannot stop the new one, even when
 its numeric process ID is reused. Queue a new drain
 and approve that proposal if you want to stop the new child.
 
+If you queue another drain after the child has stopped, the command still reports
+it queued the drain. The account log then records the failed synthetic action;
+no additional proposal is saved. Inspect the saved result before starting a
+new demo child.
+
 Run the recovery journey against a throwaway database and Mailpit:
 
 ```sh
@@ -2067,9 +2072,6 @@ pnpm --dir apps/portal build
 node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test \
   test/cloud-actions-journey.test.ts
 ```
-
-Queuing another drain after the child has stopped produces no proposal; inspect
-its saved result before starting a new demo child.
 
 That journey closes the console before approval, drops a committed approval's
 reply, interrupts reporting after the effect and reopens the workload before
