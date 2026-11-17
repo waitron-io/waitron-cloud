@@ -69,7 +69,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      }
      assert.deepEqual(await page.locator('wt-form-error-summary').evaluate(element=>(element as HTMLElement & {errors:string[]}).errors),[]);
      const other=locale==='en'?'es':'en';
-     await page.getByRole('combobox').selectOption(other);
+     await page.getByRole('combobox',{name:c.language,exact:true}).selectOption(other);
      for(const field of flow.fields)assert.equal(await page.locator(`input[name=${field}]`).inputValue(),values[field]);
      assert.deepEqual(calls,[]);
      await page.getByRole('button',{name:translations[other][flow.button],exact:true}).click();
