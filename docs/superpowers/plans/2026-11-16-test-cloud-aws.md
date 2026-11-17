@@ -44,3 +44,5 @@ and signed stream setup. Prove configure after off creates no writer while the
 remote route remains available. Reuse the current trusted owner command and
 withdrawal; no schema or Waitron change. This is the watcher's cleared fallback
 within slice 4, not a new plan or owner design approval.
+
+**17 November remote command within the cleared local slice.** Reuse remote setup state: off keeps the recorded peer configuration but sets unconfigured; on calls the existing trusted same-peer provision method. The running manifest and gateway workers withdraw and restore the route. Backups and venue level remain independent. No new field, gate or endpoint; initial placement remains a prerequisite. Test the signed setup view, restart publication and unchanged neighbour/backup setup.
