@@ -34,7 +34,7 @@ for(const path of ['backups/list','diagnostics/read','diagnostics/read-final','r
       queries.push(sql);
       if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[],rowCount:0};
       if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1')return {rows:[{account_id:id}],rowCount:1};
-      if(sql.startsWith('SELECT id FROM cloud_accounts'))return {rows:[{id}],rowCount:1};
+      if(sql.startsWith('SELECT id FROM cloud_accounts')||sql.startsWith("SELECT id,to_jsonb(a)->>'recovery_organisation_id' AS recovery_organisation_id FROM cloud_accounts a"))return {rows:[{id,recovery_organisation_id:null}],rowCount:1};
       if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return {rows:[{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}],rowCount:1};
       if(sql==='SELECT clock_timestamp() AS now')return {rows:[{now}],rowCount:1};
       if(path==='diagnostics/read-final'){
