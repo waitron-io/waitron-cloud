@@ -52,7 +52,8 @@ legalBusinessId }` after creating all three records and the owner's membership i
 transaction. New passwords require at least 15 Unicode characters and at most 1024
 UTF-8 bytes. Names have a 200-character limit. Supply a two-letter country code; this
 records a declared country, not verified tax details or a hosting location.
-Pass the service country as constructor argument four (default `ES`); a different
+Pass the service country as two uppercase letters in constructor argument four
+(default `ES`); a different
 business country raises `country_unavailable` before any account writes. You can
 correct the country and retry the same email link.
 

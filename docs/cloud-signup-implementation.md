@@ -22,7 +22,9 @@ Start with one organisation and one business. Keep both as separate records so l
 businesses can have their own countries and tax identities. Your business country
 must match the service’s `CLOUD_COUNTRY_CODE` (default `ES`).
 Choosing France on Spain’s signup screen returns “Waitron Cloud isn't available in
-France yet”. Choose Spain and retry the same email link. The server returns HTTP 400
+France yet”. Choose Spain and retry the same email link before it expires and
+within its attempt limit. The portal preselects Spain; other countries are not
+configured end to end. The server returns HTTP 400
 `{"error":"country_unavailable"}` before writing an account; the browser translates
 the refusal in English or Spanish. Tax details and billing validation belong to
 the later billing journey; a country code does not provision resources or promise
