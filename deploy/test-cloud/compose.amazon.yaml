@@ -75,6 +75,7 @@ services:
       test: ["CMD", "curl", "--fail", "--silent", "--connect-to", "::127.0.0.1:3000", "${TEST_CLOUD_ORIGIN}/api/health/ready"]
 
   http-challenges:
+    restart: unless-stopped
     image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
     init: true
     read_only: true

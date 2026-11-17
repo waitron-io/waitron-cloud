@@ -28,10 +28,13 @@ test('serves account renewal without a worker and withdraws only the exact remot
 });
 test('refuses wrong authority, token, method and path without disclosing or changing challenge files',async t=>{
  const f=await fixture(t);await f.presentHttpChallenge(f.remoteDirectory,staff,'remote-token','remote-token.remote-key');
+ for(const host of ['evil.example.test','x.'+zone,'staff-v-11111111-1111-4111-8111-111111111111.other.example.test'])await f.presentHttpChallenge(f.remoteDirectory,host,'remote-token','foreign proof');
  await assert.rejects(f.presentHttpChallenge(f.remoteDirectory,staff,'../escape','unsafe'),/test_cloud.http_challenge/);
  assert.equal((await f.send(staff)).status,200);
  for(const [host,path,method] of [
   ['evil.example.test','/.well-known/acme-challenge/remote-token','GET'],
+  ['x.'+zone,'/.well-known/acme-challenge/remote-token','GET'],
+  ['staff-v-11111111-1111-4111-8111-111111111111.other.example.test','/.well-known/acme-challenge/remote-token','GET'],
   [staff+':8081','/.well-known/acme-challenge/remote-token','GET'],
   ['v-22222222-2222-4222-8222-222222222222.'+zone,'/.well-known/acme-challenge/remote-token','GET'],
   [staff,'/.well-known/acme-challenge/account-token','GET'],
