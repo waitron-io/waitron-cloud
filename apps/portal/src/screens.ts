@@ -18,8 +18,12 @@ import '@waitron-io/ui-core/components/wt-form-error-summary';
 import '@waitron-io/ui-core/components/wt-spinner';
 import type { PortalApp, Fields } from './app.ts';
 import type { Copy, Locale } from './locale.ts';
+// ISO 3166-1 alpha-2 codes; Intl also names regions that are not countries.
+const countryCodes = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
 export function screen(app: PortalApp) {
   const c = app.copy;
+  const countryNames = new Intl.DisplayNames([app.locale], {type: 'region'});
+  const countries = countryCodes.map(code => ({code, name: countryNames.of(code)!})).sort((a, b) => a.name.localeCompare(b.name, app.locale));
   const link = (path: string, label: string) => html`<a href=${path} @click=${(event: MouseEvent) => app.follow(event, path)}>${label}</a>`;
   const field = (key: keyof Fields, label: keyof Copy, type = 'text', autocomplete = '') => html`
     <wt-input name=${key} .label=${c[label]} .value=${app.fields[key]} .type=${type} .autocomplete=${autocomplete}
@@ -62,11 +66,13 @@ export function screen(app: PortalApp) {
       <p class="help">${c.soleTrader}</p>
       <label class="disclosure"><input type="checkbox" .checked=${app.differentOrg} ?disabled=${app.pending}
         @change=${(event: Event) => {app.readFields(); app.differentOrg = (event.target as HTMLInputElement).checked; if (!app.differentOrg) delete app.errors.organisationName; app.draw();}}> ${c.differentOrg}</label>
-      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<p>${c.country}: <strong>${c.spain}</strong></p>`}${rememberBrowserChoice(app)}${action(c.create)}`;
+      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<label class="business-choice" for="signup-country">${c.country}<select id="signup-country" name="countryCode" autocomplete="country" ?disabled=${app.pending}
+        @change=${(event: Event) => {app.readFields(); app.countryCode = (event.target as HTMLSelectElement).value; app.refusedCountry = undefined; if(app.error === 'countryUnavailable')app.error = undefined; app.draw();}}>
+        ${countries.map(country => html`<option value=${country.code} .selected=${country.code === app.countryCode}>${country.name}</option>`)}</select></label>`}${rememberBrowserChoice(app)}${action(c.create)}`;
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
-  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
+  const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [app.error === 'countryUnavailable' ? c.countryUnavailable.replace('{country}', countryNames.of(app.refusedCountry!)!) : c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>

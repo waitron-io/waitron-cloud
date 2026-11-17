@@ -38,7 +38,7 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 | --- | --- | --- |
 | POST `/signup/request` | `email` | 202, `{ status: "accepted" }` |
 | POST `/signup/transfer/complete` | `token`, `password`, optional `rememberBrowser` | 201, account ID; no business, membership or session; 409 `handover_unavailable` leaves the token usable |
-| POST `/signup/complete` | `token`, `password`, `organisationName`, `legalBusinessName`, `countryCode` | 201, account/organisation/business IDs; no session |
+| POST `/signup/complete` | `token`, `password`, `organisationName`, `legalBusinessName`, `countryCode` | 201, account/organisation/business IDs; no session; 400 `country_unavailable` for a business outside `CLOUD_COUNTRY_CODE` (default `ES`), leaving the link usable within its expiry and the API’s request limits |
 | POST `/login` | `email`, `password` | 200, account ID and cookies; or 202, bounded factor challenge with no cookies |
 | GET `/session` | Session cookie | 200, account ID and expiry; no idle extension |
 | POST `/session/activity` | Session cookie and CSRF header | 200, refreshed expiry, bounded by the existing absolute lifetime |

@@ -54,6 +54,17 @@ function protectedHeaders(response: Response) {
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(response.headers.has('access-control-allow-origin'), false);
 }
+test('signup country configuration reaches the store and returns a protected refusal', async () => {
+  const target = createAccountApp({pool: db.pool, outbox: db.outbox, config: {...config(), countryCode: 'FR'}});
+  await new SignupStore(db.pool, db.outbox).request('country@example.test');
+  const content = db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind = 'verification'")).rows[0]);
+  assert.ok('token' in content);
+  const response = await request('/signup/complete', {token: content.token, ...details}, {target});
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {error: 'country_unavailable'});
+  protectedHeaders(response);
+  assert.equal(response.headers.has('set-cookie'), false);
+});
 test('HTTP signup and recovery through Mailpit preserve accounts, cookies and session revocation', async () => {
   const email = `journey-${randomUUID()}@example.test`;
   const capture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!,

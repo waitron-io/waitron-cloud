@@ -52,6 +52,10 @@ legalBusinessId }` after creating all three records and the owner's membership i
 transaction. New passwords require at least 15 Unicode characters and at most 1024
 UTF-8 bytes. Names have a 200-character limit. Supply a two-letter country code; this
 records a declared country, not verified tax details or a hosting location.
+Pass the service country as two uppercase letters in constructor argument four
+(default `ES`); a different
+business country raises `country_unavailable` before any account writes. You can
+correct the country and retry the same email link before it expires.
 
 Pass an optional `PasswordScreeningProvider` as the third `SignupStore` constructor
 argument to enforce compromised-password screening. The provider receives only the
@@ -79,7 +83,8 @@ verified address; acceptance still requires enrollment and fresh proof.
 back, so you can reuse that token for ordinary business signup. See
 `test/owner-transfer.test.ts` for these PostgreSQL checks.
 
-`signup_invalid` identifies malformed input. `verification_unavailable` covers an
+`signup_invalid` identifies malformed input. `country_unavailable` refuses a
+business country different from this service’s configured country. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
 Delivery failures are recorded by the worker. Temporary failures retry automatically;
 permanent rejections stop retrying. Database or

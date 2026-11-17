@@ -3,6 +3,15 @@ import {test} from 'node:test';
 import {accountHttpConfig, validateConfig} from '../src/config.ts';
 
 const env = {CLOUD_PORTAL_ORIGIN: 'https://cloud.example.test', CLOUD_HTTP_RATE_KEY: 'ab'.repeat(32)};
+test('signup country defaults to ES and validates the setting at every configuration entry point', () => {
+  assert.equal(accountHttpConfig(env).countryCode, 'ES');
+  assert.equal(accountHttpConfig({...env, CLOUD_COUNTRY_CODE: 'FR'}).countryCode, 'FR');
+  assert.equal(validateConfig({...accountHttpConfig(env), countryCode: 'FR'}).countryCode, 'FR');
+  for (const countryCode of ['', 'fr', 'France', 'F1']) {
+    assert.throws(() => accountHttpConfig({...env, CLOUD_COUNTRY_CODE: countryCode}));
+    assert.throws(() => validateConfig({...accountHttpConfig(env), countryCode}));
+  }
+});
 test('country enrollment is off by default and explicitly enabled by its service setting', () => {
   assert.notEqual(accountHttpConfig(env).requireEnrollment, true);
   assert.notEqual(accountHttpConfig({...env, CLOUD_REQUIRE_ENROLLMENT: 'false'}).requireEnrollment, true);

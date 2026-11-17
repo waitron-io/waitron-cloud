@@ -36,6 +36,8 @@ export class PortalApp {
   requested = false;
   differentOrg = false;
   receivingBusiness = false;
+  countryCode = 'ES';
+  refusedCountry: string | undefined;
   reveal = false;
   pending = false;
   #serverCooldowns = new Map<string, number>();
@@ -241,7 +243,7 @@ export class PortalApp {
     this.locale = this.link.locale ?? this.locale;
     this.fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
-    this.pending = false; this.reveal = false; this.differentOrg = false; this.receivingBusiness = false;
+    this.pending = false; this.reveal = false; this.differentOrg = false; this.receivingBusiness = false; this.countryCode = 'ES'; this.refusedCountry = undefined;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.draw(); this.focusHeading();
     if (['/account','/','/connect','/recover','/operator/actions'].includes(path)) void this.session.check();
@@ -355,7 +357,7 @@ export class PortalApp {
     let path: string; let body: Record<string, string>;
     if (this.path === '/signup' && this.link.token) {
       path = this.receivingBusiness?'/signup/transfer/complete':'/signup/complete'; body = {token: this.link.token, password: f.password,
-        ...(this.receivingBusiness?{}:{legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: 'ES'}),...(this.authenticator.rememberBrowser?{rememberBrowser:'true'}:{})};
+        ...(this.receivingBusiness?{}:{legalBusinessName: f.legalBusinessName.trim(), organisationName: (this.differentOrg ? f.organisationName : f.legalBusinessName).trim(), countryCode: this.countryCode}),...(this.authenticator.rememberBrowser?{rememberBrowser:'true'}:{})};
     } else if (this.path === '/reset-password') { path = '/password-reset/complete'; body = {token: this.link.token!, password: f.password, locale: this.locale}; }
     else { path = this.path === '/signup' ? '/signup/request' : '/password-reset/request'; body = {email: f.email, locale: this.locale}; }
     this.pending = true; const route = this.#route;
@@ -372,6 +374,7 @@ export class PortalApp {
     } else {
       const cause = bodyRefusal(result);
       if (cause) this.error = `${path.startsWith('/signup/')&&path.endsWith('/complete')?'accountCreate':path==='/password-reset/complete'?'accountPassword':path==='/password-reset/request'?'accountReset':'account'}Request${cause}`;
+      else if (result.code === 'country_unavailable') { this.error = 'countryUnavailable'; this.refusedCountry = body.countryCode; }
       else if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'handover_unavailable' ? 'handoverUnavailable' : result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'

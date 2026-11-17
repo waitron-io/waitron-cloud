@@ -1783,9 +1783,7 @@ implementation or production evidence.
   gateway reconciler and provider-native storage before setting an availability promise.
 - **Independent countries and the worldwide admin console (P3 / D112-S).** The
   [replacement P3](superpowers/plans/2026-10-22-cloud-global-country-split.md) leaves
-  two implementation PRs: configure Spain's country and refuse foreign-business
-  signup (`Waitron Cloud isn't available in <country> yet`); then plan and build
-  the small worldwide admin console by reusing/shrinking P2's global setup, with
+  the small worldwide admin console to plan and build by reusing/shrinking P2's global setup, with
   its own admin passkey sign-in, health/deploy starts, apex DNS and Spain redirect.
   Retire the global customer sign-in, portal and registration worker in that code
   PR, and shrink its database to console admins only. No country customer/venue
