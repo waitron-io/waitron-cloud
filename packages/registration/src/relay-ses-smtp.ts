@@ -17,9 +17,9 @@ class RelaySmtpFailure extends Error{
 }
 function failure(error:unknown):Error{
  const e=error&&typeof error==='object'?error as {responseCode?:number;command?:string;code?:string}:{};
+ if(e.code==='EAUTH'||(e.code&&/CERT|TLS|SSL|SELF_SIGNED|UNABLE_TO_VERIFY_LEAF_SIGNATURE/.test(e.code)))return new RelaySmtpFailure('temporary');
  if(e.responseCode&&e.responseCode>=500&&e.responseCode<600)return new RelaySmtpFailure('refused');
  if(e.responseCode&&e.responseCode>=400&&e.responseCode<500)return new RelaySmtpFailure('temporary');
- if(e.code==='EAUTH'||(e.code&&/CERT|TLS|SSL|SELF_SIGNED|UNABLE_TO_VERIFY_LEAF_SIGNATURE/.test(e.code)))return new RelaySmtpFailure('refused');
  if(e.code==='ECONNREFUSED'||['EHLO','HELO','MAIL FROM','RCPT TO'].includes(e.command??''))return new RelaySmtpFailure('temporary');
  return new RelaySmtpFailure('uncertain');
 }

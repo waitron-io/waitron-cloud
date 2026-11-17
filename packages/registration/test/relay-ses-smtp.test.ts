@@ -45,18 +45,18 @@ test('relay separates temporary and permanent refusal without leaking SMTP diagn
  }
 });
 
-test('relay refuses untrusted certificates and authentication failure before DATA',async()=>{
+test('relay retains retryable configuration faults before DATA',async()=>{
  const create=createSesRelaySender,smtp=await tlsSmtp(),untrusted=await tlsSmtp();
  try{
-  assert.deepEqual(await create(config(),{...smtpConfig,port:smtp.port},{ca:untrusted.cert})(content(),admission,new AbortController().signal),{outcome:'refused'});
-  assert.deepEqual(await create(config(),{...smtpConfig,port:smtp.port,password:'wrong'},{ca:smtp.cert})(content(),admission,new AbortController().signal),{outcome:'refused'});
+  assert.deepEqual(await create(config(),{...smtpConfig,port:smtp.port},{ca:untrusted.cert})(content(),admission,new AbortController().signal),{outcome:'temporary'});
+  assert.deepEqual(await create(config(),{...smtpConfig,port:smtp.port,password:'wrong'},{ca:smtp.cert})(content(),admission,new AbortController().signal),{outcome:'temporary'});
   assert.equal(smtp.captured.length,0);
  }finally{await smtp.close();await untrusted.close();}
 });
 
-test('relay refuses a trusted TLS server that omits authentication',async()=>{
+test('relay retries a trusted TLS server that omits authentication without DATA',async()=>{
  const smtp=await tlsSmtp({disabledCommands:['AUTH'],authOptional:true});try{
-  assert.deepEqual(await createSesRelaySender(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert})(content(),admission,new AbortController().signal),{outcome:'refused'});
+  assert.deepEqual(await createSesRelaySender(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert})(content(),admission,new AbortController().signal),{outcome:'temporary'});
   assert.equal(smtp.captured.length,0);
  }finally{await smtp.close();}
 });

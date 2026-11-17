@@ -14,6 +14,8 @@ import {fixture as relayFixture} from './fixtures/relay-worker.ts';
 import * as relaySes from '../src/relay-ses-smtp.ts';
 import {createSmtpAccountMailer} from '../src/smtp-mailer.ts';
 import {tlsSmtp,smtpConfig} from './fixtures/ses-smtp.ts';
+import {validateSesFeedbackConfig} from '../src/ses-feedback-config.ts';
+import {feedbackFixture} from './fixtures/ses-feedback.ts';
 
 const outbox=new EmailOutbox({activeKeyId:'payload',keys:{payload:'77'.repeat(32)}});
 const ses={config:config(),recipientKeys:keys};
@@ -174,5 +176,76 @@ test('real TLS account handoff correlates early feedback and acceptance to its c
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-joint');
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_feedback_receipts')).rows[0].count,'1');
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');
+ }finally{await smtp?.close();await f.close();}
+});
+
+test('relay SES settings require validated venue admission before claiming',async()=>{
+ const f=await relayFixture();try{
+  const account=feedbackFixture(),accountOnly=validateSesFeedbackConfig(account.policy,account.input);
+  for(const binding of [undefined,{...ses,config:{...ses.config}},{...ses,config:accountOnly}]){
+   assert.throws(()=>new RelayWorker(f.pool,{...f.config,ses:binding,sesSmtp:{smtp:smtpConfig}}),/relay_unavailable/);
+  }
+  assert.throws(()=>new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{smtp:{...smtpConfig,host:'smtp.example.test'}}}),/relay_unavailable/);
+ }finally{await f.close();}
+});
+
+test('real TLS relay handoff binds its provider receipt with and without early feedback',async()=>{
+ for(const [withFeedback,feedbackCount] of [[false,'0'],[true,'1']] as const){
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),body=await venue.submit({recipient:'owner@example.test'});let received=0;
+  smtp=await tlsSmtp({onData(stream,session,done){
+   let raw='';stream.on('data',bytes=>raw+=bytes);stream.on('end',()=>{
+    void (async()=>{
+     received++;assert.equal(session.secure,true);
+     const tag=/X-SES-MESSAGE-TAGS: waitron-attempt=([A-Za-z0-9_-]{43})/i.exec(raw.replace(/\r\n[ \t]+/g,' '))?.[1];
+     assert.ok(tag);assert.ok(raw.includes(`Message-ID: <${body.messageId}@mail.example.test>`));
+     const attempt=(await f.pool.query('SELECT attempt_tag,recipient_refs_sealed FROM mail_attempts WHERE queue_id=$1',[body.messageId])).rows[0];
+     assert.equal(attempt.attempt_tag,tag);assert.equal(attempt.recipient_refs_sealed,true);
+     if(withFeedback)assert.equal(await earlyFeedback(f.pool,tag,'ses-relay-joint'),'applied');
+    })().then(()=>done(null,'Ok ses-relay-joint'),()=>done(new Error('fixture feedback refused')));
+   });
+  }});
+  const w=new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}});
+  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);assert.equal(received,1);
+  const row=await f.row(body.messageId);assert.equal(row.state,'accepted');assert.equal(row.payload,null);assert.equal(row.attempts,1);
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-relay-joint');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_feedback_receipts')).rows[0].count,feedbackCount);
+ }finally{await smtp?.close();await f.close();}
+ }
+});
+
+
+test('relay receipt-write failure leaves acceptance terminal without a resend',async()=>{
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),body=await venue.submit();smtp=await tlsSmtp();
+  await f.pool.query(`CREATE FUNCTION refuse_provider_receipt() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+   IF NEW.provider_message_id IS NOT NULL THEN RAISE EXCEPTION 'injected receipt write refusal';END IF;RETURN NEW;END$$;
+   CREATE TRIGGER refuse_provider_receipt BEFORE UPDATE ON mail_attempts FOR EACH ROW EXECUTE FUNCTION refuse_provider_receipt()`);
+  const w=new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}});
+  await assert.rejects(w.runOnce(),/injected receipt write refusal/);
+  const row=await f.row(body.messageId);assert.equal(row.state,'accepted');assert.equal(row.payload,null);
+  assert.equal(await w.runOnce(),false);assert.equal(smtp.captured.length,1);
+ }finally{await smtp?.close();await f.close();}
+});
+
+
+test('relay retries a repaired SMTP credential without losing payload or doubling its reservation',async()=>{
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),body=await venue.submit();smtp=await tlsSmtp();
+  const configuration={...f.config,ses,sesSmtp:{smtp:{...smtpConfig,port:smtp.port,password:'wrong'},trust:{ca:smtp.cert}}};
+  await new RelayWorker(f.pool,configuration).runOnce();
+  const held=await f.row(body.messageId);assert.equal(held.state,'queued');assert.ok(held.payload);assert.equal(held.attempts,1);
+  await f.pool.query('UPDATE relay_messages SET available_at=clock_timestamp() WHERE message_id=$1',[body.messageId]);
+  const w=new RelayWorker(f.pool,{...configuration,sesSmtp:{...configuration.sesSmtp,smtp:{...configuration.sesSmtp.smtp,password:smtpConfig.password}}});
+  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
+  const sent=await f.row(body.messageId);assert.equal(sent.state,'accepted');assert.equal(sent.payload,null);assert.equal(sent.attempts,2);
+  const attempts=(await f.pool.query('SELECT attempt_tag,provider_message_id FROM mail_attempts ORDER BY attempt')).rows;
+  assert.equal(attempts.length,2);assert.notEqual(attempts[0].attempt_tag,attempts[1].attempt_tag);
+  assert.deepEqual(attempts.map(row=>row.provider_message_id),[null,'ses-message-1']);
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');assert.equal(smtp.captured.length,1);
  }finally{await smtp?.close();await f.close();}
 });
