@@ -6,6 +6,7 @@ import {RelayControl} from '../../packages/registration/src/relay-control.ts';
 import {testRelaySettings} from './relay-settings.mjs';
 import {readVenuePermissions} from '../../packages/registration/src/venue-service-permissions.ts';
 import {openPlanStorage,testStorageOptions} from './service-runtime.mjs';
+import {RemoteAccessStore} from '../../packages/remote-access/src/placement.ts';
 import {setGuestMenuBlocked} from '../../packages/remote-access/src/guest-menu.ts';
 import {checkConsumerSchema,canonicalHttpsOrigin,loadRuntime,runtimeEnvironment} from '../local-stack/runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
@@ -19,6 +20,7 @@ export async function executeTestServiceCommand({pool,issuer,origin,environment,
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('test_cloud.service_command');
  const control=new RelayControl(pool);
  switch(input.command){
+  case 'remote-access':
   case 'backups':{
    if(!uuid.test(input.installationId)||typeof input.enabled!=='boolean')throw Error('test_cloud.service_command');
    await transaction(pool,async client=>{
@@ -27,11 +29,23 @@ export async function executeTestServiceCommand({pool,issuer,origin,environment,
     await readVenuePermissions(client,initial.venue_id,'test-venue-levels');
     const install=(await client.query('SELECT venue_id,revoked_at,superseded_by FROM installations WHERE id=$1 FOR UPDATE',[input.installationId])).rows[0];
     if(!install||install.venue_id!==initial.venue_id||install.revoked_at||install.superseded_by)throw Error('test_cloud.service_target');
+    if(input.command==='remote-access'){
+     if(input.enabled){
+      const placement=(await client.query('SELECT cell_id,peer_public_key,port FROM remote_placements WHERE installation_id=$1',[input.installationId])).rows[0];
+      if(!placement)throw Error('test_cloud.service_target');
+      await new RemoteAccessStore(pool,'test-venue-levels').provisionInTransaction(client,input.installationId,placement.cell_id,placement.peer_public_key,placement.port);
+     }else{
+      // Keep the peer key so ordinary box refresh does not request new provisioning.
+      const changed=await client.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[input.installationId]);
+      if(changed.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[input.installationId]);
+     }
+     return;
+    }
     const changed=await client.query("UPDATE installation_services SET state='unconfigured',configuration=$2 WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots') AND (NOT $3::boolean OR configuration->'testCloudEnabled'='false'::jsonb)",[input.installationId,input.enabled?{}:{testCloudEnabled:false},input.enabled]);
     if(changed.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[input.installationId]);
    });
    // Persist the switch before provider work so a failed reload can be retried.
-   if(!input.enabled){
+   if(input.command==='backups'&&!input.enabled){
     await openPlanStorage(storageOptions??await testStorageOptions({pool,directory,mode:'test-venue-levels'}));
    }
    return {enabled:input.enabled};

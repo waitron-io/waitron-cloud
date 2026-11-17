@@ -1,11 +1,11 @@
-# Switch test backups, guest pages and box email
+# Switch test remote access, backups, guest pages and box email
 
-You can stop a test venue's backups, withdraw its guest menu and control box email without
+You can stop a test venue's remote access or backups, withdraw its guest menu and control box email without
 changing its paid level. Run the local command inside the test account container,
 where it can read the private configuration and database. Start the test Cloud with
 `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`; the command
 reads those existing container settings and refuses other modes. Translation stays
-refused. A remote-access switch is still unavailable.
+refused.
 
 For example, save this synthetic command as a private file outside the checkout:
 
@@ -40,6 +40,32 @@ The guest command returns the menu state and revision. Disabling makes published
 pages unavailable and blocks further publication. Enabling after disabling returns `off`: the box
 must publish again, so you cannot accidentally restore an old menu. Production
 venues refuse the command.
+
+For remote access, use a private input file containing:
+
+```json
+{"command":"remote-access","installationId":"d62adff5-c9b8-4bc8-9fa2-d3bdd7691f81","enabled":false}
+```
+
+Replace the installation ID with your paired test box. The response is
+`{"enabled":false}` once the setup change is saved. The running manifest and gateway
+workers then remove its staff and public routes and tunnel peer. Check that both
+addresses refuse access before treating withdrawal as complete; a stopped worker
+cannot apply the change. Backups, the connected level and neighbouring venues stay on.
+
+Send the same input with `enabled:true` to restore its existing placement and peer.
+This requires a previously provisioned connected or hosted test installation. The response is
+`{"enabled":true}`; route and certificate workers apply the restored setup.
+Repeated on or off leaves the configuration revision unchanged.
+
+Off retains the peer configuration so the box's ordinary refresh sees its current
+key and does not request new provisioning. It still sees unconfigured setup and
+removes its tunnel configuration. Explicit trusted provisioning can restore setup,
+including the optional signed `POST /api/installations/tunnel-provision` trial
+endpoint. Test account startup keeps that endpoint closed. This switch does not
+revoke the installation or its keys. A level reset, recovery or re-pairing needs
+fresh provisioning. After any fresh provisioning, run off again if needed.
+Production, revoked and replaced installations refuse these commands.
 
 For backups, use the same command with a private input file containing:
 
