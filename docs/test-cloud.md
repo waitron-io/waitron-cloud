@@ -1997,8 +1997,8 @@ configuration request reads the current hint. It does not enable delivery or app
 a grant. The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
 defines the one-submit and status-only recovery rule. The test-only private-origin
 approval core is described below. The [local owner commands](test-cloud-service-controls.md)
-control guest pages, independent backup off/on, box relay grants and the relay-wide
-sending switch. The remote-access switch and SES startup remain unfinished.
+control guest pages, independent remote-access and backup off/on, box relay grants
+and the relay-wide sending switch. SES startup remains unfinished.
 
 ## Rehearse synthetic Cloud actions
 
