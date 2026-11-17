@@ -7,9 +7,10 @@ Connect Waitron's sender to the signed publication/status/withdrawal routes in t
 Qualify public DNS, production certificates and outside-network access. Every venue
 connected to Cloud qualifies without a billing gate. Generalize publication keys beyond
 the current base-language keys and sole stored variant; keep guest preference
-matching separate from that publication change. Mirror Waitron’s shared header-entry
-cap after its release. Settle Norwegian `no`/`nb` and region/script preferences in
-that shared rule before broadening variant publication. See
+matching separate from that publication change. Mirror Waitron’s shared 32-entry,
+deduplicated header limit after its release (`ACCEPT-LANGUAGE-CAP`). Keep Norwegian
+`no`/`nb` and region/script choices as questions for
+[Waitron’s shared matching rule](https://github.com/clintongormley/waitron/blob/7b5c9643ad4d4060f4783e89fbd3db49cd49e09c/packages/shared/src/language-match.ts). See
 [local deployment](../local-deployment.md#exercise-a-stored-guest-menu-copy)
 for focused synthetic checks.
 

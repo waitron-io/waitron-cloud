@@ -1,4 +1,4 @@
-// Keep Waitron’s packages/shared/src/language-match.ts rule so both products choose the same language.
+// Match Waitron's packages/shared/src/language-match.ts steps; Cloud supplies its documented tie order.
 export function matchGuestMenuLanguage(preferences:readonly string[],offered:readonly string[]):string|undefined{
  const canonical=(tag:string):string|undefined=>{
   try{return new Intl.Locale(tag).baseName;}catch{return undefined;}
