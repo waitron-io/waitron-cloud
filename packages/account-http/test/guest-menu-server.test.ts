@@ -43,7 +43,10 @@ test('anonymous HTTPS serves only the stored menu with language fallback, HEAD a
   assert.match(String(es.headers['content-security-policy']),/frame-ancestors 'none'/);
   assert.equal((await send(path+'?lang=ca')).body,'<h1>Menu</h1>');
   const head=await send(path,'HEAD');assert.equal(head.status,200);assert.equal(head.body,'');assert.equal(Number(head.headers['content-length']),13);
-  for(const suffix of ['?lang=xx','?lang=iw','?lang=FR','?lang=bad_tag','?lang=es&lang=en','/extra'])assert.equal((await send(path+suffix)).status,400);
+  for(const suffix of ['?lang=xx','?lang=iw','?lang=FR','?lang=bad_tag','?lang=']){
+   const fallback=await send(path+suffix);assert.equal(fallback.status,200);assert.equal(fallback.body,'<h1>Menu</h1>');assert.equal(fallback.headers['content-language'],'en');
+  }
+  for(const suffix of ['?lang=es&lang=en','/extra'])assert.equal((await send(path+suffix)).status,400);
   assert.equal((await send(path+'/../'+f.venueId)).status,400);
   assert.equal((await send(path+'?unknown=1')).body,'<h1>Menu</h1>');
   assert.equal((await send(path+'?lang=es&x=1')).body,'<h1>Menú</h1>');
@@ -54,6 +57,34 @@ test('anonymous HTTPS serves only the stored menu with language fallback, HEAD a
   const maximum=await send(path);assert.equal(maximum.status,200);assert.equal(Buffer.byteLength(maximum.body),2097152);
   await f.db.pool.query('UPDATE guest_menus SET pages=$2,revision=revision+1 WHERE venue_id=$1',[f.venueId,{en:'á'.repeat(1048577)}]);
   assert.equal((await send(path)).status,503);
+ }finally{await running?.close();await f.close();}
+});
+
+test('HTTPS follows phone preferences unless lang is explicit, and HEAD varies with the selected page',async()=>{
+ const f=await guestTlsFixture();let running:Awaited<ReturnType<typeof startGuestMenuServer>>|undefined;
+ try{
+  await f.seed({en:'<h1>Menu</h1>',es:'<h1>Menú</h1>',fr:'<h1>Carte</h1>',he:'<h1>Hebrew</h1>'});
+  running=await startGuestMenuServer(f.options);const address=running.server.address();assert(address&&typeof address!=='string');
+  const path='/m/'+f.venueId;
+  for(const [suffix,header,want] of [
+   ['', 'fr;q=0.5, es-MX;q=0.9','es'],
+   ['', 'fr;q=0.5, es;q=0.5','fr'],
+   ['', 'es;q=0, *;q=1, bad_tag, fr;q=2, he;q=0.8','he'],
+   ['', 'de','en'],
+   ['?lang=es-MX','fr','es'],
+   ['?lang=FR','es','fr'],
+   ['?lang=iw','es','he'],
+   ['?lang=','es','en'],
+   ['?lang=bad_tag','es','en'],
+   ['?language=es','fr','fr'],
+  ]){
+   const reply=await f.send(address.port,path+suffix,'GET',{'accept-language':header!});
+   assert.equal(reply.status,200,suffix+' '+header);assert.equal(reply.headers['content-language'],want,suffix+' '+header);
+   assert.equal(reply.headers.vary,'Accept-Language');
+  }
+  const head=await f.send(address.port,path,'HEAD',{'accept-language':'es-MX'});
+  assert.equal(head.status,200);assert.equal(head.body,'');assert.equal(head.headers['content-language'],'es');
+  assert.equal(Number(head.headers['content-length']),Buffer.byteLength('<h1>Menú</h1>'));assert.equal(head.headers.vary,'Accept-Language');
  }finally{await running?.close();await f.close();}
 });
 
