@@ -1986,3 +1986,16 @@ remain for the next slice. Keep continuous recovery unavailable: the ordinary
 `captureRuntime` does not configure a managed-stream reader, and the read endpoint
 returns 503 without one. The explicit test-only adapter supplies one for these
 proofs. These local results qualify no deployment or published image.
+
+## Discover an installation's relay grant locally
+
+Your paired test box can request `POST /api/installations/configuration` with the
+existing signed `configuration` action and exact body `{"servicesVersion":2}`.
+The separate `emailRelay` hint reports the grant identity, revision, expiry and
+switch state, or null when current authority is unavailable. Replaying the same
+configuration request reads the current hint. It does not enable delivery or approve
+a grant. The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
+defines the one-submit and status-only recovery rule. The watcher cleared a test-only
+exception for an owner-enabled paired box with a signed, live lease and an RFC 1918
+private address or .local management name; that approval path is not built yet.
+Service commands and SES startup remain unfinished.

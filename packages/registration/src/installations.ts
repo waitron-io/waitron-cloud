@@ -7,6 +7,7 @@ import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
 import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
 import {recordSecurityAuditEvent,securityAuditSourceId,type SecurityAuditActorKind} from './security-audit.ts';
+import {readRelayGrantHint,type RelayGrantHint} from './relay-grants.ts';
 const names=['continuous_backup','remote_access','retained_snapshots'] as const;
 type Service=typeof names[number];
 type State='unconfigured'|'provisioning'|'ready'|'failed';
@@ -18,6 +19,7 @@ export interface InstallationView {
   revision:number;revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;
   services:{service:Service|'content_translation';state:State;configuration:Record<string,unknown>;health:Health;failure:Failure|null;observedAt:string|null}[];
   lease?:SignedEnvelope;canRevoke?:boolean;
+  emailRelay?:{version:1;grant:RelayGrantHint|null};
 }
 interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;configuration_revision:number;environment:'test'|'production'}
 interface Report {revision:number;observedAt:number;services:{service:Service;health:Health;failure:Failure|null}[]}
@@ -99,6 +101,12 @@ export class InstallationStore {
       if(row.venue_id!==initial.venue_id)fail('invalid_proof');
       const c=verifyMachine(envelope,row.public_key,this.#origin,action,now);
       const body=readBody(action,c.body,now),report=body&&'revision' in body?body:undefined;
+      const respond=async(result:InstallationView):Promise<InstallationView>=>{
+        if(!body||!('servicesVersion' in body))return result;
+        const grant=await readRelayGrantHint(client,row.id);
+        verifyMachine(envelope,row.public_key,this.#origin,action);
+        return {...result,emailRelay:{version:1,grant}};
+      };
       const digest=createHash('sha256').update(JSON.stringify([action,c.body])).digest('hex');
       const prior=(await client.query('SELECT digest,result FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[row.id,c.operationId])).rows[0];
       if(prior&&prior.digest!==digest)fail('conflict');
@@ -111,11 +119,11 @@ export class InstallationStore {
         if(claims.installationId!==row.id||claims.venueId!==row.venue_id||claims.environment!==row.environment||claims.publicKey!==row.public_key)fail('invalid_proof');
       }
       if(prior){
-        if(this.#planMode==='existing')return prior.result;
+        if(this.#planMode==='existing')return respond(prior.result);
         const current=await view(client,row.id,body&&'servicesVersion' in body?2:1);
         if(prior.result.lease)current.lease=prior.result.lease;
         if(action==='revoke')for(const s of current.services)s.configuration={};
-        return maskPlan(current,plan,this.#planMode);
+        return respond(maskPlan(current,plan,this.#planMode));
       }
       let lease:SignedEnvelope|undefined;
       if(action==='renew'){
@@ -139,7 +147,7 @@ export class InstallationStore {
       if(action==='renew')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.credentials_renewed',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:securityAuditSourceId('installation.credentials_renewed',row.id,c.operationId)});
       if(action==='revoke')await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'installation.revoked',actorKind:'installation',actorId:row.id,subjectKind:'installation',subjectId:row.id,sourceId:row.id});
       await client.query('INSERT INTO installation_operations(installation_id,operation_id,digest,result) VALUES($1,$2,$3,$4)',[row.id,c.operationId,digest,result]);
-      return maskPlan(result,plan,this.#planMode);
+      return respond(maskPlan(result,plan,this.#planMode));
     });
   }
   /** Trusted provisioning only; deliberately has no public HTTP endpoint. */

@@ -27,6 +27,25 @@ export interface OriginEvidence extends OriginChallenge {domainControl:true;http
 export interface RelayConfig {mode:'local-proof';consentVersion:string;policy:RelayPolicy;verifyOrigin:(request:OriginChallenge)=>Promise<OriginEvidence>}
 export interface RelayApproval {installationId:string;expectedRevision:number;consent:true;consentVersion:string;managementOrigin:string;expiresAt:string}
 export interface RelayGrant {id:string;installationId:string;accountId:string;organisationId:string;venueId:string;environment:string;managementOrigin:string;revision:number;expiresAt:string;enabled:boolean}
+export type RelayGrantHint=Pick<RelayGrant,'id'|'revision'|'expiresAt'|'enabled'>;
+
+// Configuration holds the installation lock already. This projection takes no
+// policy or owner locks and is only a hint; submit rechecks sending authority.
+export async function readRelayGrantHint(client:PoolClient,installationId:string):Promise<RelayGrantHint|null>{
+ const row=(await client.query(`SELECT g.id,g.revision,g.expires_at,
+   (g.enabled AND g.revoked_at IS NULL AND NOT c.stopped) AS enabled
+   FROM relay_grants g JOIN installations i ON i.id=g.installation_id
+   JOIN venues v ON v.id=i.venue_id
+   JOIN cloud_accounts a ON a.id=g.account_id AND a.disabled_at IS NULL
+   JOIN cloud_credentials credentials ON credentials.account_id=a.id AND credentials.email_verified_at IS NOT NULL
+   JOIN organisation_memberships m ON m.account_id=a.id AND m.organisation_id=v.organisation_id AND m.is_owner
+   CROSS JOIN relay_control c
+   WHERE i.id=$1 AND c.singleton AND v.environment='test'
+   AND i.revoked_at IS NULL AND i.lease_expires_at>clock_timestamp()
+   AND g.public_key=i.public_key AND g.venue_id=v.id AND g.organisation_id=v.organisation_id AND g.environment=v.environment
+   AND g.expires_at>clock_timestamp()`,[installationId])).rows[0];
+ return row?{id:row.id,revision:row.revision,expiresAt:row.expires_at.toISOString(),enabled:row.enabled}:null;
+}
 interface GrantRow {
  id:string;installation_id:string;account_id:string;organisation_id:string;venue_id:string;environment:string;public_key:string;
  management_origin:string;consent_version:string;revision:number;expires_at:Date;origin_verified_until:Date;enabled:boolean;revoked_at:Date|null;

@@ -36,7 +36,8 @@ test('machine configuration exposes translation only through the exact signed ve
  const read=async(body:string)=>request('/api/installations/configuration',proof('configuration',initial.lease,body));
  const legacy=await read('{}');assert.equal(legacy.status,200);assert.equal((await legacy.json() as {services:unknown[]}).services.length,3);
  const current=await read('{"servicesVersion":2}');assert.equal(current.status,200);
- const result=await current.json() as {services:{service:string}[]};assert.equal(result.services.length,4);
+ const result=await current.json() as {services:{service:string}[];emailRelay:unknown};assert.equal(result.services.length,4);
+ assert.deepEqual(result.emailRelay,{version:1,grant:null});
  assert.deepEqual(result.services.find(s=>s.service==='content_translation'),{service:'content_translation',state:'ready',configuration:{},health:'unknown',failure:null,observedAt:null});
  for(const body of ['{"servicesVersion":1}','{"servicesVersion": 2}','{"servicesVersion":2,"extra":true}']){
   const invalid=await read(body);assert.equal(invalid.status,401);assert.deepEqual(await invalid.json(),{error:'invalid_proof'});

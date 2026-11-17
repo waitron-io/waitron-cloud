@@ -1033,7 +1033,9 @@ implementation or production evidence.
   an idle-stack observation. The actual machine, its OS/disk/CPU headroom, public
   certificate issuance, pairing and email qualification remain open. Dedicated
   launch access awaits the [owner setup](test-cloud-amazon-access.md); no Amazon
-  deployment is established by these local checks.
+  deployment is established by these local checks. Signed configuration now discovers a
+  relay-grant hint without advancing service configuration. Live grant approval,
+  owner service commands and SES feedback composition remain open.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
