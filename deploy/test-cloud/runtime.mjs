@@ -26,10 +26,10 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  return result;
 }
-export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'){
+export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',demoCommand='--fail'){
  const config=await loadRuntime(directory),environment=testRuntimeEnvironment(role,config,process.env),command=testRuntimeCommand(role);
  if(role!=='migrate'&&environment.DATABASE_URL)await checkConsumerDatabase(environment.DATABASE_URL,'/app');
- const args=role==='action-demo'?['--fail']:role==='usage'?['--watch']:role==='reconcile'?['/run/reconciler/config.json']:[];
+ const args=role==='action-demo'?[demoCommand]:role==='usage'?['--watch']:role==='reconcile'?['/run/reconciler/config.json']:[];
  const childEnvironment={PATH:process.env.PATH,HOME:'/tmp',LOCAL_STACK_CONFIG_DIR:directory,...environment};
  // Replace the launcher to avoid retaining its heap beside the worker.
  if(['monitor','usage','probe','manifest'].includes(role)){
@@ -41,4 +41,4 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
  try{return await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});}
  finally{process.removeListener('SIGINT',forward);process.removeListener('SIGTERM',forward);}
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{process.exitCode=await launchTestRuntime(process.argv[2]);}catch{console.error('Test Cloud runtime failed; check private configuration and schema');process.exitCode=1;}}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){try{process.exitCode=await launchTestRuntime(process.argv[2],undefined,process.argv[3]);}catch{console.error('Test Cloud runtime failed; check private configuration and schema');process.exitCode=1;}}

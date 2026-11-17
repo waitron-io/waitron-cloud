@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {cloudActionDemoEnabled,CloudActionWorker} from '../../packages/registration/src/cloud-action-worker.ts';
 import {proposeCloudAction} from '../../packages/registration/src/cloud-action-store.ts';
+import {cloudActionCatalogue} from '../../packages/registration/src/cloud-actions.ts';
 import {transaction} from '../../packages/registration/src/transaction.ts';
 import {runWorkerLoop} from '../../packages/registration/src/worker-loop.ts';
 
@@ -13,10 +14,10 @@ export async function openSyntheticWorkload(directory,environment={}){
  const owned=await mkdtemp(join(directory,'workload-'));
  const script=join(owned,'worker.mjs');
  await writeFile(script,"process.on('disconnect',()=>process.exit());process.on('SIGTERM',()=>process.exit());process.send('ready');setInterval(()=>{},1000);",{mode:0o600});
- let child,closed=false;
+ let child,childIdentity,closed=false;
  const start=async()=>{
   const next=fork(script,[],{stdio:['ignore','ignore','ignore','ipc'],env:{PATH:process.env.PATH}});
-  child=next;
+  child=next;childIdentity=randomUUID();
   await new Promise((resolve,reject)=>{
    const deadline=setTimeout(()=>{next.kill('SIGKILL');reject(Error('demo_start_timeout'));},5000);
    next.once('message',()=>{clearTimeout(deadline);resolve();});
@@ -41,13 +42,22 @@ export async function openSyntheticWorkload(directory,environment={}){
    await save('failure.json',proposal);return proposal;
   },
   async pending(){return load('failure.json');},
+  async drain(){
+   if(closed||!(await health()).healthy)throw Error('demo_target_changed');
+   const occurrence='demo-'+randomUUID();
+   const proposal={occurrence,cell:'demo-cell',target:'demo-worker',actionId:'machine_drain',proposal:'Stop the owned demo worker',evidence:occurrence+':running:'+childIdentity};
+   await save('failure.json',proposal);return proposal;
+  },
   async eligible(request){
    const failure=await load('failure.json');
-   return !closed&&!(await health()).healthy&&failure&&['occurrence','cell','target','actionId','proposal','evidence'].every(key=>request[key]===failure[key]);
+   const live=await health();
+   return !closed&&failure&&['occurrence','cell','target','actionId','proposal','evidence'].every(key=>request[key]===failure[key])&&
+    (request.actionId==='cloud_restart'&&!live.healthy||request.actionId==='machine_drain'&&live.healthy&&request.evidence===request.occurrence+':running:'+childIdentity);
   },
   async restart(request){
    if(!await this.eligible(request))throw Error('demo_target_changed');
-   await start();await save(request.effectId+'.json',{status:'confirmed'});
+   if(request.actionId==='machine_drain')await stop();else await start();
+   await save(request.effectId+'.json',{status:'confirmed'});
   },
   async observe(effectId){
    if(!/^[0-9a-f-]{36}$/.test(effectId))return 'unknown';
@@ -64,8 +74,9 @@ export async function startCloudActionDemo({pool,outbox,operatorAccountId,direct
  const running=runWorkerLoop({signal:controller.signal,concurrency:1,scheduleIntervalMs:1000,pollIntervalMs:1000,
   schedule:async()=>{
    try{await rm(join(directory,'fail'));await workload.fail();}catch(error){if(error.code!=='ENOENT')throw error;}
+   try{await rm(join(directory,'drain'));await workload.drain();}catch(error){if(error.code!=='ENOENT')throw error;}
    const proposal=await workload.pending();
-   if(proposal)await transaction(pool,client=>proposeCloudAction(client,proposal,'act-and-report',operatorAccountId,outbox));
+   if(proposal)await transaction(pool,client=>proposeCloudAction(client,proposal,cloudActionCatalogue.find(action=>action.id===proposal.actionId).policy,operatorAccountId,outbox));
   },
   runOnce:()=>worker.runOnce(),onError:()=>console.error('Synthetic Cloud action failed; inspect its saved status'),
  });

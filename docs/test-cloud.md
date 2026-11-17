@@ -1998,7 +1998,7 @@ a grant. The [relay contract](transactional-email-relay-contract.md#discover-the
 defines the one-submit and status-only recovery rule. The test-only private-origin
 approval core is described below. Service commands and SES startup remain unfinished.
 
-## Rehearse a synthetic Cloud restart
+## Rehearse synthetic Cloud actions
 
 To see a failed workload restart automatically, use the explicit local action demo.
 It owns one small child process beside the account service, in `demo-cell`. It
@@ -2025,14 +2025,59 @@ docker compose --env-file deploy/test-cloud/test.env -f compose.yaml \
 The command prints `Synthetic workload failure queued`. The account-side loop
 stops only its own child, saves an automatic `cloud_restart` proposal and restarts
 that workload in place. Sign in at `/operator/actions` and refresh: the proposal
-shows “Synthetic restart confirmed” (or “Reinicio sintético confirmado”). Its
+shows “Synthetic action confirmed” (or “Acción sintética confirmada”). Its
 operator notice uses the existing Mailpit queue. Read the saved result on the operator page.
 
 Dispatch is committed before the effect. If the reply or report is lost, the
 worker observes the saved effect identity instead of starting another restart.
-An unknown result keeps another disruption in that cell waiting. Approved
-ask-first actions and the interrupted-demo recovery journey remain the next
-slice; this demonstration does not qualify real executors or deployment.
+An unknown result keeps another disruption in that cell waiting. This demonstration
+does not qualify real executors or deployment.
+
+To try an action that needs your approval, queue a drain instead:
+
+```sh
+docker compose --env-file deploy/test-cloud/test.env -f compose.yaml \
+  -f deploy/test-cloud/compose.yaml exec account \
+  node deploy/test-cloud/runtime.mjs action-demo --drain
+```
+
+The command prints `Synthetic drain proposal queued`. It proposes stopping only
+the owned demo child. Open `/operator/actions`, refresh and inspect the exact
+incident, target and evidence before you approve it. The child keeps running
+while the proposal waits, including when you close the console. Approval lasts
+15 minutes and never extends on refresh or replay. The worker refuses expired
+approvals, changed evidence and approvals from a different configured operator.
+The normal fresh-sign-in check applies when you approve; keeping the browser
+open is not required to carry out that saved decision.
+
+Refresh after approval to read the confirmed synthetic result. If the approval
+reply is lost, reload the page: the saved decision retains its identity and expiry.
+If the controller stops after the effect, its next pass reads the separately saved
+result instead of executing again. Without that result the request stays
+unconfirmed, holding its cell; an unknown outcome never means recovery.
+Restarting the account service also starts a fresh demo child, so a still-pending
+drain naming the old child's random identity cannot stop the new one, even when
+its numeric process ID is reused. Queue a new drain
+and approve that proposal if you want to stop the new child.
+
+If you queue another drain after the child has stopped, the command still reports
+it queued the drain. The account log then records the failed synthetic action;
+no additional proposal is saved. Inspect the saved result before starting a
+new demo child.
+
+Run the recovery journey against a throwaway database and Mailpit:
+
+```sh
+pnpm --dir apps/portal build
+node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test \
+  test/cloud-actions-journey.test.ts
+```
+
+That journey closes the console before approval, drops a committed approval's
+reply, interrupts reporting after the effect and reopens the workload before
+reconciling. The worker/store tests additionally retain unknown completion and
+replay an identical serialized C39-shaped fact with its original timestamp and notice; C39's producer
+is not connected by this demo.
 
 ## Private box origin for test email
 

@@ -159,3 +159,12 @@ test('stored decision shape refuses an expiry on pending or rejected inserts',as
    CASE WHEN $4='rejected' THEN moment.now END,moment.now+interval '15 minutes'
   FROM cloud_action_requests CROSS JOIN moment WHERE id=$1`,[request.id,randomUUID(),randomUUID(),state]),/check constraint/);
 });
+
+test('signalReplayKeepsOriginalTime: replaying the identical serialized C39-shaped fact retains the proposal and first notice',async()=>{
+ const signal={version:1,eventId:'synthetic-api-failure-1',episodeId:'synthetic-episode-1',issue:'api',severity:'P1',state:'failed',at:'2026-11-16T18:00:00.000Z',cellId:'synthetic-cell'};
+ const input={...proposal,occurrence:signal.eventId,evidence:JSON.stringify(signal)};
+ const first=await propose(input);const decided=await actions.decide(actor.token,actor.csrfToken,decision(first));
+ assert.deepEqual(await propose(input),decided);
+ assert.equal(JSON.parse(decided.evidence).at,'2026-11-16T18:00:00.000Z');assert.equal(decided.createdAt,first.createdAt);
+ assert.equal((await pool.query("SELECT count(*) FROM cloud_action_events WHERE request_id=$1 AND kind='notice'",[first.id])).rows[0].count,'1');
+});

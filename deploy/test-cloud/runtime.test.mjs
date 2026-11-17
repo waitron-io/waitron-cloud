@@ -97,8 +97,9 @@ test('observer sign-in policy reaches only the explicit test account process', a
   assert.equal(testRuntimeEnvironment(role,config,supplied).CLOUD_FACTOR_POLICY,undefined,role);
 });
 
-for(const [role,command,args,replace,hasDatabase,mode,refused]of [
+for(const [role,command,args,replace,hasDatabase,mode,refused,demoArgument]of [
  ['action-demo','packages/registration/src/cloud-action-cli.ts',['--fail'],false,true,'0',false],
+ ['action-demo','packages/registration/src/cloud-action-cli.ts',['--drain'],false,true,'0',false,'--drain'],
  ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,false,'0',false],
  ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,true,'1',false],
  ['monitor','packages/registration/src/monitor-cli.ts',[],true,true,'0',false],
@@ -106,7 +107,7 @@ for(const [role,command,args,replace,hasDatabase,mode,refused]of [
  ['probe','packages/remote-access/src/probe-cli.ts',[],true,true,'0',false],
  ['reconcile','packages/remote-access/src/reconciler-cli.ts',['/run/reconciler/config.json'],false,true,'0',false],
  ['usage','packages/registration/src/usage-reconcile-cli.ts',['--watch'],true,true,'0',true],
-])test(`test Cloud ${role} mode ${mode} ${refused?'refuses an incompatible schema':'preserves its launch, exit and signal contract'}`,async t=>{
+])test(`test Cloud ${role} ${demoArgument??""} mode ${mode} ${refused?'refuses an incompatible schema':'preserves its launch, exit and signal contract'}`,async t=>{
  const {spawn}=await import('node:child_process');
  const dir=await mkdtemp(join(tmpdir(),'cloud-worker-exec-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
  for(const terminating of refused?[false]:[false,true]){
@@ -118,7 +119,7 @@ for(const [role,command,args,replace,hasDatabase,mode,refused]of [
    process.execve=(file,args,environment)=>{assert.equal(${replace},true);assert.equal(checked,${hasDatabase});assert.equal(directory,'/app');assert.equal(file,process.execPath);assert.deepEqual(args,[process.execPath,...${JSON.stringify([command,...args])}]);execve(file,[file,'-e',${JSON.stringify(worker)}],environment);};
    cp.spawn=(file,args,options)=>{assert.equal(${replace},false);assert.equal(checked,${hasDatabase});assert.equal(file,process.execPath);assert.deepEqual(args,${JSON.stringify([command,...args])});assert.equal(options.cwd,'/app');return spawn(file,['-e',${JSON.stringify(worker)}],{...options,cwd:${JSON.stringify(dir)}});};syncBuiltinESMExports();
    const {launchTestRuntime}=await import(${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)});console.log('launcher='+before);
-   try{process.exitCode=await launchTestRuntime(${JSON.stringify(role)},${JSON.stringify(dir)});}catch(error){if(${refused}&&error.message==='synthetic-schema-refusal')process.exitCode=29;else throw error;}`;
+   try{process.exitCode=await launchTestRuntime(${JSON.stringify(role)},${JSON.stringify(dir)},${JSON.stringify(demoArgument)});}catch(error){if(${refused}&&error.message==='synthetic-schema-refusal')process.exitCode=29;else throw error;}`;
   const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode,...(role==='action-demo'?{CLOUD_ACTION_DEMO:'1'}:{})},stdio:['ignore','pipe','pipe'],detached:true});
   let cleaned=false;const cleanup=()=>{if(cleaned||!child.pid)return;cleaned=true;try{process.kill(-child.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}};
   child.once('exit',cleanup);t.after(cleanup);

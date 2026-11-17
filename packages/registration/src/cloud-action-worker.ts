@@ -19,7 +19,8 @@ export class CloudActionWorker{
  async runOnce():Promise<boolean>{
   if(!this.options.demo||process.env.NODE_ENV==='production'||!this.options.operatorAccountId)return false;
   const candidates=(await this.pool.query(`SELECT id FROM cloud_action_requests WHERE outcome IS NULL
-   AND (dispatch_started_at IS NOT NULL OR state='pending' AND action_id='cloud_restart') ORDER BY created_at,id`)).rows;
+   AND (dispatch_started_at IS NOT NULL OR state='pending' AND action_id='cloud_restart'
+    OR state='approved' AND action_id='machine_drain') ORDER BY created_at,id`)).rows;
   for(const {id} of candidates){
    const initial=await transaction(this.pool,client=>readCloudActionRequest(client,id));
    if(!initial.dispatchStartedAt&&!await this.options.executor.eligible(initial))continue;
@@ -32,7 +33,14 @@ export class CloudActionWorker{
     if(row.outcome)return;
     if(row.dispatch_started_at)return {request:initial,dispatch:false};
     const policy=cloudActionCatalogue.find(action=>action.id===row.action_id);
-    if(row.state!=='pending'||row.action_id!=='cloud_restart'||!policy||row.policy!==policy.policy||policy.policy!=='act-and-report')return;
+    if(!policy||row.policy!==policy.policy)return;
+    if(row.action_id==='cloud_restart'){
+     if(row.state!=='pending'||policy.policy!=='act-and-report')return;
+    }else if(row.action_id==='machine_drain'){
+     if(row.state!=='approved'||policy.policy!=='ask-first'||!(await client.query(`SELECT id FROM cloud_action_events
+      WHERE request_id=$1 AND kind='approved' AND actor_account_id=$2 AND $3::timestamptz>clock_timestamp()`,
+      [id,this.options.operatorAccountId,row.approval_expires_at])).rowCount)return;
+    }else return;
     if((await client.query('SELECT id FROM cloud_action_requests WHERE cell=$1 AND dispatch_started_at IS NOT NULL AND outcome IS NULL AND id<>$2 LIMIT 1',[row.cell,id])).rowCount)return;
     await client.query('UPDATE cloud_action_requests SET dispatch_started_at=clock_timestamp() WHERE id=$1',[id]);
     return {request:initial,dispatch:true};
