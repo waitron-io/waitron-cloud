@@ -96,9 +96,14 @@ your account page. Creating an account attaches every live offer addressed to
 you, including when you choose ordinary business signup, but gives you no access
 to an offered business until you accept.
 
-If no handover is waiting, you can use the same verified link to create your own
-business or ask the sender for another offer. Cancelled and expired offers do
-not allow account-only signup.
+If no handover is waiting when you submit signup, your account is not created.
+You can use the same verified link to create your own business or ask the sender
+for another offer. Cancelled and expired offers do not allow account-only signup.
+
+Once your account exists, you cannot use signup to create a business for that
+address. If the handover is then cancelled or expires, ask the sender for a new
+offer and accept it from your existing account. Resetting your password also
+cancels the pending offer.
 
 The focused local PostgreSQL and browser checks are:
 

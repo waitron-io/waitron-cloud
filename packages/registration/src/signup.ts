@@ -43,6 +43,7 @@ export class SignupStore {
   }
 
   async complete(token: string, input: SignupDetails): Promise<SignupResult> {
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
     if (!input) throw new SignupError('signup_invalid');
     const organisationName = name(input.organisationName);
     const legalBusinessName = name(input.legalBusinessName);

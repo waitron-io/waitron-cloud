@@ -129,14 +129,15 @@ test('first-time recipients verify, sign up without a business, enroll and expli
 
 test('unavailable handover keeps the verified link usable for business signup in both languages',async()=>{
  const f=await startPortalFixture();
- try{for(const locale of ['en','es'] as const){
-  await f.db.pool.query('DELETE FROM account_rate_limits');const context=await f.browser.newContext({locale}),c=translations[locale];
+ try{for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
+  await f.db.pool.query('DELETE FROM account_rate_limits');const context=await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}}),c=translations[locale];
   try{
    const email=`no-offer-${randomUUID()}@example.test`,signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email,locale);
    const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
    const page=await context.newPage();page.setDefaultTimeout(7000);await page.goto(`${f.origin}/signup#token=${mail.token}&lang=${locale}`);
    const choice=page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true});await choice.check();await page.locator('input[name=password]').fill(password);await page.locator('#submit').click();
-   await page.getByText(locale==='en'?'No handover is waiting for this address. Create a business or ask the sender.':'No hay un traspaso pendiente para este correo. Crea un negocio o consulta con quien lo envió.',{exact:true}).waitFor();
+   await page.getByText(locale==='en'?'No handover is waiting for this address. Your account has not been created. Create a business or ask the sender.':'No hay un traspaso pendiente para este correo. Tu cuenta no se ha creado. Crea un negocio o consulta con quien lo envió.',{exact:true}).waitFor();
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/first-handover-refused-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
    assert.equal(await page.getByText(c.linkUnavailable,{exact:true}).count(),0);
    await choice.uncheck();await page.locator('input[name=legalBusinessName]').fill('New Café');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
    assert.equal((await f.db.pool.query('SELECT count(*) FROM organisation_memberships m JOIN cloud_credentials c ON c.account_id=m.account_id WHERE c.email=$1 AND m.is_owner',[email])).rows[0].count,'1');

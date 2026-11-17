@@ -37,6 +37,7 @@ All account routes live under `/api/account`. POST bodies must be JSON objects.
 | Method and path | Input | Successful result |
 | --- | --- | --- |
 | POST `/signup/request` | `email` | 202, `{ status: "accepted" }` |
+| POST `/signup/transfer/complete` | `token`, `password`, optional `rememberBrowser` | 201, account ID; no business, membership or session; 409 `handover_unavailable` leaves the token usable |
 | POST `/signup/complete` | `token`, `password`, `organisationName`, `legalBusinessName`, `countryCode` | 201, account/organisation/business IDs; no session |
 | POST `/login` | `email`, `password` | 200, account ID and cookies; or 202, bounded factor challenge with no cookies |
 | GET `/session` | Session cookie | 200, account ID and expiry; no idle extension |

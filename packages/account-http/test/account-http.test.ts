@@ -121,7 +121,7 @@ test('a forced reset-mail miss reports real queue and SMTP outcomes without priv
   });
 });
 test('every mutation rejects missing, null and foreign Origin before changing state', async () => {
-  const paths = ['/signup/request', '/signup/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
+  const paths = ['/signup/request', '/signup/complete', '/signup/transfer/complete', '/login', '/session/activity', '/logout', '/password-reset/request', '/password-reset/complete'];
   for (const path of paths) for (const badOrigin of [undefined, 'null', 'https://elsewhere.example.test']) {
     const headers = new Headers({'content-type': 'application/json'});
     if (badOrigin) headers.set('origin', badOrigin);
