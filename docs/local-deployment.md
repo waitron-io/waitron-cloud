@@ -76,7 +76,7 @@ remains an operating decision.
 
 Each catalogue entry shows its policy and **Execution unavailable**. The two initiation
 exceptions concern a failed Cloud workload restarted in place and the start of
-failed-machine replacement. They grant no hosted writer authority. Real execution remains unavailable. The separate [LAN action demo](test-cloud.md#rehearse-a-synthetic-cloud-restart) can restart only its own synthetic workload. Routine
+failed-machine replacement. They grant no hosted writer authority. Real execution remains unavailable. The separate [LAN action demo](test-cloud.md#rehearse-synthetic-cloud-actions) can stop or restart only its own synthetic workload. Routine
 workers keep their existing rules. A saved pending proposal queues one encrypted
 notice for the configured operator’s verified email, even when venue alerts are
 off. The local Mailpit adapter sends a link to this list without proposal details
