@@ -65,6 +65,12 @@ hosted-only Bluetooth exception.
 
 A1456 adds a read-only Mac status command over existing controller state and one reused SSH connection. It distinguishes occupied slots from observed worker execution, reports unknown evidence explicitly and leaves recovery untouched. The watcher owns connecting it to stall alarms.
 
+Pickup supplements complete-looking status lists with the newest 100 unfiltered runs,
+without replacing known observations or bypassing admission. Controlled tests cover the
+observed ten-row omission and a failed extra read. A run omitted from the status lists
+and older than that page can still be missed; the campaign's SERVER STUCK alarm remains
+necessary. Publishing and observing a natural admission remain to be qualified.
+
 A1472 bounds pickup and capacity run-list rereads at three fresh requests for count/list
 mismatches. Persistent mismatches retain the existing refusal; job pagination and routing
 policy are unchanged. The local consumer tests exercise recovery and exhaustion. Actual
