@@ -7,6 +7,7 @@ import {accountRequest} from '../src/api.ts';
 const flows = [
   {path: '/signup/request', status: 202, body: {email: 'owner@example.test', locale: 'es'}},
   {path: '/password-reset/request', status: 202, body: {email: 'owner@example.test', locale: 'en'}},
+  {path: '/signup/transfer/complete', status: 201, body: {token:'signup-link',password:' exact password ',rememberBrowser:'true'}},
   {path: '/signup/complete', status: 201, body: {token: 'signup-link', password: ' exact password ',
     organisationName: 'Café', legalBusinessName: 'Café SL', countryCode: 'ES'}},
   {path: '/password-reset/complete', status: 200, body: {token: 'reset-link', password: ' exact password ', locale: 'es'}},
@@ -73,7 +74,7 @@ for (const boundary of ['headers', 'body'] as const) {
     assert.deepEqual(results, flows.map(() => ({ok: false, status: boundary === 'headers' ? 0 : 503,
       code: boundary === 'headers' ? 'network_error' : 'unexpected_response', retryAfterMs: 0})));
     assert.deepEqual(received.sort(), flows.map(flow => `/api/account${flow.path}`).sort(), 'one request per operation');
-    assert.equal(signals.length, 4);
+    assert.equal(signals.length, 5);
     assert.ok(signals.every(signal => signal.aborted), 'the deadline covers headers and the complete response body');
   });
 }

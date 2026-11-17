@@ -26,7 +26,7 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
 }
 const enBase = {
   transferTitle:"Hand over ownership",transferFrom:"From",transferTo:"To",
-  transferIntro:"The recipient must already have a Cloud account. They have 24 hours to accept. You lose access to this business when they accept.",
+  transferIntro:"The recipient can create a Cloud account from the invitation. They have 24 hours to accept. You lose access to this business when they accept.",
   transferBusiness:"Business to hand over",
   transferEmail:"Recipient email",
   transferSend:"Send handover",
@@ -297,6 +297,7 @@ const enBase = {
   language:'Language', login:'Sign in', signup:'Create an account', completeSignup:'Complete your account',
   forgot:'Forgot your password?', reset:'Choose a new password', account:'Your account',
   email:'Email', password:'Password', newPassword:'New password', legalName:'Legal business name',
+  receivingBusiness:"I'm receiving a business",handoverUnavailable:'No handover is waiting for this address. Your account has not been created. Create a business or ask the sender.',
   soleTrader:'If you are a sole trader, use your own legal name.', differentOrg:'Use a different organisation name',
   orgName:'Organisation name', country:'Business country', spain:'Spain', show:'Show password', hide:'Hide password',
   continue:'Continue', create:'Create account', sendReset:'Send reset link', savePassword:'Save new password',
@@ -348,7 +349,7 @@ const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
   transferTitle:"Traspasar la titularidad",transferFrom:"De",transferTo:"Para",
-  transferIntro:"Quien recibe debe tener una cuenta de Cloud. Tiene 24 horas para aceptar. Pierdes el acceso a este negocio cuando acepte.",
+  transferIntro:"Quien recibe puede crear una cuenta de Cloud desde la invitación. Tiene 24 horas para aceptar. Pierdes el acceso a este negocio cuando acepte.",
   transferBusiness:"Negocio que traspasas",
   transferEmail:"Correo de quien recibe",
   transferSend:"Enviar traspaso",
@@ -619,6 +620,7 @@ const esBase: typeof enBase = {
   language:'Idioma', login:'Inicia sesión', signup:'Crea una cuenta', completeSignup:'Completa tu cuenta',
   forgot:'¿Has olvidado tu contraseña?', reset:'Elige una nueva contraseña', account:'Tu cuenta',
   email:'Correo electrónico', password:'Contraseña', newPassword:'Nueva contraseña', legalName:'Nombre legal del negocio',
+  receivingBusiness:'Estoy recibiendo un negocio',handoverUnavailable:'No hay un traspaso pendiente para este correo. Tu cuenta no se ha creado. Crea un negocio o consulta con quien lo envió.',
   soleTrader:'Si eres autónomo, utiliza tu propio nombre legal.', differentOrg:'Usar otro nombre para la organización',
   orgName:'Nombre de la organización', country:'País del negocio', spain:'España', show:'Mostrar contraseña', hide:'Ocultar contraseña',
   continue:'Continuar', create:'Crear cuenta', sendReset:'Enviar enlace', savePassword:'Guardar nueva contraseña',

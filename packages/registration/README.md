@@ -70,6 +70,15 @@ valid, but email uniqueness permits only one signup. A lost success reply is rec
 by signing in with the chosen password through the existing identity API. Replaying
 a token cannot create a session, reset a password or add another organisation.
 
+For a first-time handover recipient, call
+`completeForTransfer(token, {password, rememberBrowser?})` with the usual verified
+signup token. You receive `{accountId, browserToken?}` without a business,
+membership or session. Both signup modes attach all live unbound offers for the
+verified address; acceptance still requires enrollment and fresh proof.
+`handover_unavailable` means no matching offer remains. The transaction rolls
+back, so you can reuse that token for ordinary business signup. See
+`test/owner-transfer.test.ts` for these PostgreSQL checks.
+
 `signup_invalid` identifies malformed input. `verification_unavailable` covers an
 unknown, expired or used token and an email that already has an account.
 Delivery failures are recorded by the worker. Temporary failures retry automatically;

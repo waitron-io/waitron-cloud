@@ -5,7 +5,8 @@
 
 An unexpected reply must not tell you an account is ready or a password has
 changed. The client requires HTTP 202 with `accepted` for either email request,
-HTTP 201 with nonblank account, organisation and business IDs for signup, and
+HTTP 201 with nonblank account, organisation and business IDs for business signup
+(or just the account ID for account-only handover signup), and
 HTTP 200 with `completed` for password reset. Other success codes, malformed
 bodies and transport failures remain unsuccessful. An error code inside a success
 reply is unexpected too, so it cannot turn an uncertain completion into a definite
@@ -20,7 +21,7 @@ node --test apps/portal/test/signup-reset-response-boundary.test.ts apps/portal/
 
 Controlled replies cover exact statuses, blank identifiers and request bodies.
 Real local HTTP connections hold headers or JSON bodies beyond the 15-second
-deadline for all four calls. These public actions do not require a signed-in
+deadline for every signup/reset call. These public actions do not require a signed-in
 management cookie. Browser requests retain the same-origin credentials, JSON
 content type and automatic Origin header, which the server checks before acting.
 

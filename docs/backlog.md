@@ -387,8 +387,8 @@ release checks. See [the remaining consent qualifications](backlog/translation.m
 ## Signup and password-reset HTTP acknowledgements (D423)
 
 **Client and local server qualification complete.** Signup and password reset
-require the exact success status and acknowledgement; signup also requires three
-nonblank identifiers. Browser journeys preserve uncertain results for an explicit
+require the exact success status and acknowledgement; business signup also requires three
+nonblank identifiers, while account-only handover signup requires its account ID. Browser journeys preserve uncertain results for an explicit
 retry in both languages, themes and widths. Real HTTP checks cover the 15-second
 header and body deadline; local Mailpit checks cover server authority and session
 revocation. Production provider delivery remains with D102's owner-only enablement
@@ -815,8 +815,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    and the D101 design lists six open lawyer questions. Missing: terms of service, the data
    processing agreement with each venue, and the promises Cloud makes about how quickly a
    venue is recovered, how much data a failure can lose, and uptime.
-5. **Single-owner recovery and first-time handover.** Remaining D608 work:
-   account-only signup for handover recipients without an account, and recovery of
+5. **Single-owner recovery.** Remaining D608 work: recover
    the same owner through a verified mailbox plus a local administrator on a
    currently paired box, limited to that organisation. Follow the
    [lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)

@@ -1,6 +1,6 @@
 # D631: single-owner sign-in, handover and recovery build plan
 
-**Build authorised for the initial slices.** Owner, 11 November 2026 at 14:05 in the watcher window: “10-min window; build (Recommended)” (lane G questions.md, watcher 14:05; queued D608). Billing remains parked; existing-account handover follows the watcher-cleared [12a cut](2026-11-17-d608-handover.md); first-time handover and box recovery still need their remaining cuts. The first proof slice will incorporate the chosen 10-minute session window. The following paragraph records the earlier plan review.
+**Build authorised for the initial slices.** Owner, 11 November 2026 at 14:05 in the watcher window: “10-min window; build (Recommended)” (lane G questions.md, watcher 14:05; queued D608). Billing remains parked; existing-account handover follows the watcher-cleared [12a cut](2026-11-17-d608-handover.md); first-time handover follows the watcher-cleared [12b cut](2026-11-17-d608-first-time-handover.md); box recovery still needs its remaining cut. The first proof slice will incorporate the chosen 10-minute session window. The following paragraph records the earlier plan review.
 
 **Plan review record.** The owner approved [D608](../specs/2026-11-07-cloud-single-owner-lifecycle-design.md), not this plan or its build. A separate Sol/high invocation drafted it; one Claude source review found excess per-action proof state and incomplete later outcomes. The watcher cleared this smaller rewrite on 11 November 2026 at 11:05: session re-proof, priority 5 owning recovery scope, email fallback separate from recognition, and complete later handover/recovery outcomes. One fresh source read completed; its sentence-level corrections below are applied. The watcher cleared this corrected plan for docs-only publication on 11 November at 11:39. Those pending decisions were answered by the owner at 14:05 as recorded above; the remaining policy choices below stay open before their affected slices.
 
@@ -115,7 +115,7 @@ Keep ten 128-bit codes. Removing an app while a passkey remains preserves accoun
 
 ## Later complete outcomes: re-cut when dependencies exist
 
-The existing-account cut below has separate watcher clearance. First-time handover and box recovery remain **not build-ready assignments or included in the initial build go-ahead**. Recheck their interfaces and split only at useful outcomes, rather than publishing offers or recovery requests that nobody can finish.
+The existing-account and first-time recipient cuts below have separate watcher clearance. Box recovery remains **not build-ready or included in the initial build go-ahead**. Recheck their interfaces and split only at useful outcomes, rather than publishing offers or recovery requests that nobody can finish.
 
 ### 12. Organisation handover
 
@@ -126,11 +126,12 @@ impossible many-owner fixture assertions at 06:09. It uses the existing country
 memberships, without a P3 owner/revision interface, revision counter, saved reply
 record or commit-time minimum-owner trigger.
 
-**Remaining:** handover to a first-time recipient needs account-only signup.
-Reuse verification, password screening and the same handover row; enrolment,
-fresh proof and exact acceptance remain required. This is the later recipient
-journey, not authority to add invitations or a second owner. Re-cut its files,
-tests and size against the completed existing-account journey before building.
+The [first-time recipient cut](2026-11-17-d608-first-time-handover.md) reuses
+verification and password screening for account-only signup, attaching all live
+offers for the verified address in both signup modes. Claude read it twice; the
+watcher cleared publication and build on 17 November at 08:02. Enrollment, fresh
+proof and exact acceptance remain required; attachment grants no membership.
+See its focused store, HTTP and browser commands for local verification.
 
 ### 13. Recover the same owner for one organisation
 

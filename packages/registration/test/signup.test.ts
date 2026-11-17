@@ -284,3 +284,10 @@ test('verified signup remembers an explicitly chosen browser without creating a 
   const row=(await pool.query('SELECT * FROM cloud_recognised_browsers')).rows[0];
   assert.equal(row.account_id,result.accountId);assert.equal(row.token_hash,digest(result.browserToken!));
 });
+
+test('a malformed signup link remains unavailable before checking business details',async()=>{
+ for(const invalid of [{legalBusinessName:''},{countryCode:'invalid'}]){
+  await expectCode(store.complete('invalid-link',{...details,...invalid}),'verification_unavailable');
+ }
+ assert.equal(await count('cloud_accounts'),0);
+});

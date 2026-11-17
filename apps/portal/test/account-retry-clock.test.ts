@@ -108,7 +108,7 @@ const paths = ['/passkeys', '/passkeys/authentication/options', '/passkeys/authe
   '/passkeys/registration/options', '/passkeys/registration/verify', '/passkeys/remove', '/authenticator',
   '/authenticator/begin', '/authenticator/activate', '/authenticator/remove', '/authenticator/regenerate',
   '/authenticator/cancel', '/login', '/login/factor', '/sessions', '/sessions/revoke', '/session',
-  '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'];
+  '/session/activity', '/logout', '/signup/request', '/signup/complete', '/signup/transfer/complete', '/password-reset/request', '/password-reset/complete'];
 for (const path of paths) for (const entry of [
   {name: 'seconds', retry: '2', date: undefined},
   {name: 'server ahead', retry: 'Wed, 04 Nov 2026 13:00:02 GMT', date: 'Wed, 04 Nov 2026 13:00:00 GMT'},

@@ -59,6 +59,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations/revoke') return validInstallation(data);
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
   if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true) && (data.enrollmentRequired === undefined || data.enrollmentRequired === true);
+  if(path==='/signup/transfer/complete')return status===201&&typeof data.accountId==='string'&&data.accountId.trim().length>0;
   if (path === '/signup/complete') return status === 201 && ['accountId', 'organisationId', 'legalBusinessId']
     .every(field => typeof data[field] === 'string' && data[field].trim().length > 0);
   if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
@@ -75,7 +76,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
   try {
     const response = await fetch(`/api/account${path}`, {method: body ? 'POST' : 'GET', credentials: 'same-origin',
       headers, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(15_000)});
-    const elapsedRetry = path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
+    const elapsedRetry = path.startsWith('/owner-transfers') || path.startsWith('/operator/actions') || path.startsWith('/security/') || path.startsWith('/action-proof') || path.startsWith('/billing/') || path === '/usage/read' || path === '/alerts' || path === '/backups/list' || path.startsWith('/pairing/') || path === '/installations' || path === '/installations/revoke' || path === '/diagnostics/read' || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path.startsWith('/recovery/') || path === '/translation-consent' || path.startsWith('/passkeys') || path.startsWith('/authenticator') || ['/login', '/login/factor', '/login/email', '/login/recovery', '/sessions', '/sessions/revoke', '/session', '/session/activity', '/logout', '/signup/request', '/signup/complete', '/signup/transfer/complete', '/password-reset/request', '/password-reset/complete'].includes(path), receivedAt = elapsedRetry ? performance.now() : 0;
     const retry = response.headers.get('retry-after') ?? '';
     const serverDate = elapsedRetry ? Date.parse(response.headers.get('date') ?? '') : NaN;
     const retryAfterMs = Math.max(0, /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - (Number.isFinite(serverDate) ? serverDate : Date.now())) || 0;
@@ -83,6 +84,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
+    if(path==='/signup/transfer/complete'&&response.status===409)codes.push('handover_unavailable');
     if(path.startsWith('/owner-transfers/'))codes.push('transfer_unavailable','transfer_pending','recovery_in_progress');
     if(path==='/security/password'&&response.status===503)codes.push('password_screening_unavailable');
     if(path.startsWith('/operator/actions/')&&response.status===409)codes.push('conflict');

@@ -60,6 +60,7 @@ import { readAccountBody } from './request.ts';
 import { readSessionCookie, writeSessionCookies, readBrowserCookie, writeBrowserCookie } from './cookies.ts';
 import { AccountHttpError } from './errors.ts';
 const paths: Record<string, readonly string[]> = {
+  '/signup/transfer/complete': ['token','password'],
   '/signup/request': ['email'], '/signup/complete': ['token', 'password', 'organisationName', 'legalBusinessName', 'countryCode'],
   '/login': ['email', 'password'], '/session/activity': [], '/logout': [],
   '/password-reset/request': ['email'], '/password-reset/complete': ['token', 'password'],
@@ -88,6 +89,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof SecurityAuditError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='security_audit_conflict'?'conflict':error.code);
   if (error instanceof UsageError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='usage_conflict'?'conflict':error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
+    if(error.code==='handover_unavailable')return new AccountHttpError(409,'handover_unavailable');
     if (error.code === 'password_compromised') return new AccountHttpError(400, 'password_compromised');
     if (error.code === 'password_screening_unavailable') return new AccountHttpError(503, 'temporarily_unavailable', 1);
     return new AccountHttpError(400, ['verification_unavailable', 'reset_unavailable'].includes(error.code) ? 'link_unavailable' : 'invalid_input');
@@ -208,7 +210,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
       return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
-    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : path === '/signup/complete' ? ['rememberBrowser'] : []);
+    const body = await readAccountBody(c.req.raw, fields!, ['/login', '/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : ['/signup/complete','/signup/transfer/complete'].includes(path) ? ['rememberBrowser'] : []);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
     if (body.rememberBrowser !== undefined && body.rememberBrowser !== 'true') throw new AccountHttpError(400, 'invalid_input');
     const locale = body.locale ?? 'en';
@@ -240,8 +242,13 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
         return c.json(result, 202);
       }
       if (path.endsWith('/complete')) {
-        await consume([{scope: `${path}-ip`, subject: ip, limit: 10, windowSeconds: 900},
-          {scope: `${path}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
+        const completionPath=path==='/signup/transfer/complete'?'/signup/complete':path;
+        await consume([{scope: `${completionPath}-ip`, subject: ip, limit: 10, windowSeconds: 900},
+          {scope: `${completionPath}-token`, subject: body.token!, limit: 10, windowSeconds: 900}]);
+        if(path==='/signup/transfer/complete'){
+          const {browserToken,...result}=await signup.completeForTransfer(body.token!,{password:body.password!,rememberBrowser:body.rememberBrowser==='true'});
+          writeBrowserCookie(c,secure,browserToken);return c.json(result,201);
+        }
         if (path === '/signup/complete') {
           const {browserToken,...result} = await signup.complete(body.token!, {
           password: body.password!, organisationName: body.organisationName!, legalBusinessName: body.legalBusinessName!, countryCode: body.countryCode!, rememberBrowser:body.rememberBrowser === 'true',
