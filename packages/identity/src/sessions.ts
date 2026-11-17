@@ -92,7 +92,7 @@ export async function resolveSession(client: PoolClient, token: string, options:
   const lookup = await client.query('SELECT account_id FROM cloud_sessions WHERE token_hash = $1', [tokenHash]);
   const accountId: string | undefined = lookup.rows[0]?.account_id;
   if (!accountId) throw new IdentityError('session_unavailable');
-  const account = await client.query('SELECT id FROM cloud_accounts WHERE id = $1 AND disabled_at IS NULL FOR SHARE', [accountId]);
+  const account = await client.query("SELECT id,to_jsonb(a)->>'recovery_organisation_id' AS recovery_organisation_id FROM cloud_accounts a WHERE id = $1 AND disabled_at IS NULL FOR SHARE", [accountId]);
   if (!account.rowCount) throw new IdentityError('session_unavailable');
   const { rows } = await client.query(`SELECT last_seen_at, absolute_expires_at, csrf_hash FROM cloud_sessions
     WHERE token_hash = $1 AND account_id = $2 AND ended_at IS NULL FOR UPDATE`, [tokenHash, accountId]);
@@ -110,11 +110,11 @@ export async function resolveSession(client: PoolClient, token: string, options:
   }
   let enrollmentRequired: true | undefined;
   const policy = enrollmentPolicy.getStore();
-  if (policy?.required) {
+  if (policy?.required || account.rows[0].recovery_organisation_id) {
     const {rows} = await client.query(`SELECT EXISTS(SELECT 1 FROM cloud_passkeys WHERE account_id=$1)
       OR EXISTS(SELECT 1 FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL) AS enrolled`, [accountId]);
     if (!rows[0].enrolled) {
-      if (!policy.allowEnrollment) throw new IdentityError('enrollment_required');
+      if (!policy?.allowEnrollment) throw new IdentityError('enrollment_required');
       enrollmentRequired = true;
     }
   }

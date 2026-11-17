@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -276,4 +277,10 @@ test('an access audit conflict uses the support-grant error contract and rolls b
   VALUES($1,$2,'support.accessed','platform_account',$3,'support_grant',$4,$5)`,[organisation,venue,randomUUID(),grant.id,sourceId]);
  await expectCode(store.authorize(input,marker(operationId)),'grant_conflict');
  assert.equal((await pool.query('SELECT count(*) FROM support_test_markers')).rows[0].count,'0');
+});
+
+test('recovered scope: owner cannot grant support outside the recovered business',async()=>{
+ const grant=await store.approve(ownerSession.token,ownerSession.csrfToken,approval());
+ await setRecoveryScope(pool,owner,foreignOrganisation);assert.equal(await store.authorize(authorization(grant.id),marker(randomUUID(),'retained')),'retained');await assert.rejects(store.approve(ownerSession.token,ownerSession.csrfToken,approval()),/permission_denied/);
+ await setRecoveryScope(pool,owner,organisation);assert.equal((await store.approve(ownerSession.token,ownerSession.csrfToken,approval())).organisationId,organisation);
 });

@@ -91,8 +91,20 @@ restore those approvals. Close any unfinished backup recovery or replacement fir
 
 Refresh handovers if a reply is lost. The offer’s saved state shows whether
 acceptance or cancellation won. Password, email and proof changes cancel pending
-offers, except the recipient’s first required enrollment. Box-assisted account
-recovery remains unavailable.
+offers, except the recipient’s first required enrollment.
+
+If you lose every sign-in method, open your reset-mail link and choose **Lost your
+sign-in method?** Select a currently paired box from your business. A local
+administrator approves or refuses the exact request in that box’s Cloud services
+screen. Check the approval, set a new password and enroll a new app or passkey.
+The original link’s 30-minute deadline includes finding the administrator.
+
+Recovery limits your account to that organisation because the box proves access
+only there. Later sign-ins, recovery codes and ordinary password resets keep that
+restriction. Your other memberships and independently authorised venue services
+remain intact. Without your mailbox or a usable box, recovery is unavailable;
+there is no manual or support override. The [focused browser journey](../apps/portal/test/owner-recovery-browser.test.ts)
+exercises enrollment and subsequent sign-in/reset paths.
 
 If you are receiving a business and have no account, follow the invitation’s
 signup link and verify the same email address. Choose **I’m receiving a business**

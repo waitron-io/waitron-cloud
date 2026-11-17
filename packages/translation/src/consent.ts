@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/registration';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 import {TranslationError,type TranslationErrorCode} from './errors.ts';
@@ -48,7 +49,7 @@ async function ownedVenue(client:PoolClient,accountId:string,venueId:string):Pro
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('forbidden');
  const candidate=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1',[venueId])).rows[0];
  if(!candidate)fail('forbidden');
- if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND account_id=$2 AND is_owner FOR SHARE',[candidate.organisation_id,accountId])).rowCount)fail('forbidden');
+ if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND account_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[candidate.organisation_id,accountId])).rowCount)fail('forbidden');
  const venue=(await client.query<{organisation_id:string}>('SELECT organisation_id FROM venues WHERE id=$1 AND organisation_id=$2 FOR SHARE',[venueId,candidate.organisation_id])).rows[0];
  return venue??fail('forbidden');
 }
@@ -60,7 +61,7 @@ export async function listConsents(client:PoolClient,accountId:string):Promise<C
   JOIN cloud_accounts a ON a.id=m.account_id AND a.disabled_at IS NULL
   JOIN cloud_credentials k ON k.account_id=m.account_id AND k.email_verified_at IS NOT NULL
   LEFT JOIN LATERAL (${activeConsents} AND c.venue_id=owned.id LIMIT 1) c ON true
-  WHERE m.account_id=$1 AND m.is_owner ORDER BY owned.id`,[accountId,translationConsentVersion])).rows;
+  WHERE m.account_id=$1 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY owned.id`,[accountId,translationConsentVersion])).rows;
  return venues.map(venue=>({venueId:venue.id,consented:!!venue.consented_at,consentedAt:venue.consented_at?.toISOString()??null}));
 }
 export async function agreeConsent(client:PoolClient,accountId:string,input:{venueId:string;consentVersion:string}):Promise<ConsentView>{

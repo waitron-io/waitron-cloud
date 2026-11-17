@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -19,7 +20,7 @@ export async function guestMenuResponse(c:Context,options:{pool:Pool;origin:stri
  return c.json(await transaction(options.pool,async client=>{
   const session=await resolveSession(client,token,{csrfToken,touch:false});
   const owner=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id
-   WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[body.venueId,session.accountId]);
+   WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[body.venueId,session.accountId]);
   if(!owner.rowCount)throw new AccountHttpError(403,'permission_denied');
   const value=await setGuestMenuBlocked(client,body.venueId!,action==='takedown',options.guestOrigin!);
   await resolveSession(client,token,{csrfToken,touch:false});

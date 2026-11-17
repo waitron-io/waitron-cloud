@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims} from '../src/pairing-proof.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
@@ -196,7 +197,7 @@ test('upgrade refuses duplicate owners and preserves both rows until the duplica
   assert.deepEqual((await legacy.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner ORDER BY account_id',[org])).rows,[first,second].sort().map(account_id=>({account_id})));
   assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'67');
   await legacy.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[second]);await migrate(legacy.pool);
-  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'70');
+  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'71');
  }finally{await legacy.close();await old.close();}
 });
 
@@ -259,4 +260,12 @@ test('ordinary business signup also attaches its verified email offers without g
  const result=await signup.complete(mail.token,{password,organisationName:'New business',legalBusinessName:'New SL',countryCode:'ES'});
  assert.equal((await db.pool.query('SELECT recipient_id FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].recipient_id,result.accountId);
  assert.deepEqual((await db.pool.query('SELECT organisation_id FROM organisation_memberships WHERE account_id=$1',[result.accountId])).rows,[{organisation_id:result.organisationId}]);
+});
+
+test('recovered scope: handover cannot widen a recipient or give away an outside business',async()=>{
+ const sender=await signedAccount(),recipient=await signedAccount(),store=new OwnerTransferStore(db.pool,db.outbox);
+ const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
+ await setRecoveryScope(db.pool,recipient.accountId,recipient.organisationId);await assert.rejects(store.decide(recipient.token,recipient.csrfToken,offer.id,'accept'),/transfer_unavailable|permission_denied/);
+ await setRecoveryScope(db.pool,sender.accountId);await assert.rejects(store.create(sender.token,sender.csrfToken,sender.organisationId,'another@example.test'),/transfer_unavailable|permission_denied/);
+ await setRecoveryScope(db.pool,sender.accountId,sender.organisationId);assert.ok((await store.list(sender.token)).some(o=>o.id===offer.id));
 });

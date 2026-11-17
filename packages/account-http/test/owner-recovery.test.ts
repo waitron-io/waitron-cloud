@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import {generateKeyPairSync,randomUUID,randomBytes} from 'node:crypto';
+import {test,before,after} from 'node:test';
+import type {HttpBindings} from '@hono/node-server';
+import {createLeaseIssuer,PasswordRecoveryStore} from '@waitron-cloud/registration';
+import {connectedVenue,database} from '../../translation/test/fixtures.ts';
+import {createAccountApp} from '../src/app.ts';
+let db:Awaited<ReturnType<typeof database>>;
+const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+before(async()=>{db=await database();});after(async()=>db?.close());
+let address=10;
+async function fixture(){
+ const box=await connectedVenue(db,issuer,origin),email=(await db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[box.accountId])).rows[0].email;
+ await new PasswordRecoveryStore(db.pool,db.outbox).request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='password_reset' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const config={portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[],countryCode:'ES' as const,requireEnrollment:true};
+ const app=createAccountApp({pool:db.pool,outbox:db.outbox,config,leaseIssuer:issuer});
+ const bindings={incoming:{socket:{remoteAddress:'192.0.2.'+(++address)}}} as HttpBindings;
+ const call=(path:string,body:unknown={},headers:Record<string,string>={},method='POST')=>{const h=new Headers({origin,'content-type':'application/json',...headers});if(headers.origin==='')h.delete('origin');return app.request(origin+path,{method,headers:h,...(method==='GET'?{}:{body:JSON.stringify(body)})},bindings);};
+ const browser=(action:string,body:unknown={token:mail.token},headers:Record<string,string>={})=>call('/api/account/owner-recovery/'+action,body,headers);
+ const machine=(action:string,body:unknown={},operationId=randomUUID())=>call('/api/installations/'+action,box.proof(action,body,operationId,box.lease),{origin:''});
+ return {box,token:mail.token,app,call,browser,machine};
+}
+test('HTTP mailbox, signed box and completion issue only enrollment cookies, without renewing request authority',async()=>{
+ const f=await fixture(),begun=await f.browser('begin');assert.equal(begun.status,200,await begun.clone().text());
+ assert.equal(begun.headers.getSetCookie().length,0);assert.equal((await begun.json()).venues[0].installationId,f.box.installationId);
+ const selected=await f.browser('select',{token:f.token,installationId:f.box.installationId});assert.equal(selected.status,200);
+ const request=await selected.json();
+ for(let n=0;n<8;n++)assert.equal((await f.browser('status')).status,200);
+ const read=await f.machine('owner-recovery-read');assert.equal(read.status,200);assert.deepEqual(await read.json(),{requests:[request]});
+ const approved=await f.machine('owner-recovery-approve',{request,approvedBy:randomUUID()},request.requestId);assert.equal(approved.status,200);
+ const conflict=await f.machine('owner-recovery-refuse',{request,refusedBy:randomUUID()},request.requestId);assert.equal(conflict.status,409);
+ const done=await f.browser('complete',{token:f.token,password:'A long screened replacement password',locale:'es'});assert.equal(done.status,200,await done.clone().text());
+ assert.deepEqual(await done.json(),{accountId:f.box.accountId,enrollmentRequired:true});
+ const cookies=done.headers.getSetCookie();assert.equal(cookies.length,2);assert.ok(cookies.some(c=>c.startsWith('__Host-cloud_session=')&&c.includes('HttpOnly')&&c.includes('Secure')));
+ const cookie=cookies.map(c=>c.split(';')[0]).join('; ');
+ const session=await f.call('/api/account/session',{}, {cookie},'GET');assert.equal(session.status,200);assert.equal((await session.json()).enrollmentRequired,true);
+ assert.equal((await f.call('/api/account/installations',{}, {cookie},'GET')).status,403);
+ assert.equal((await f.browser('complete',{token:f.token,password:'A long screened replacement password'})).status,404);
+});
+test('HTTP recovery checks origin, method, exact fields and independent status and completion limits',async()=>{
+ const f=await fixture();
+ assert.equal((await f.browser('begin',undefined,{origin:'https://foreign.example.test'})).status,403);
+ assert.equal((await f.call('/api/account/owner-recovery/begin',{}, {},'GET')).status,405);
+ assert.equal((await f.browser('begin',{token:f.token,accountId:f.box.accountId})).status,400);
+ assert.equal((await f.browser('begin',{token:'bad'})).status,404);
+ assert.equal((await f.browser('owner-recovery-read')).status,404);
+ const rate=await fixture();for(let n=0;n<10;n++)assert.equal((await rate.browser('status')).status,404);
+ const limited=await rate.browser('status');assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
+ for(let n=0;n<10;n++)assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,404);
+ assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,429);
+});
+
+
+for(const action of ['status','complete'])test(action+' enforces IP and token limits independently',async()=>{
+  const byIp=await fixture();
+  for(let n=0;n<=10;n++){
+   const response=await byIp.browser(action,{token:randomBytes(32).toString('base64url'),...(action==='complete'?{password:'A new long enough password'}:{})});
+   assert.equal(response.status,n<10?404:429,action+' IP limit across different tokens');
+  }
+  const byToken=await fixture();
+  for(let n=0;n<=10;n++){
+   const response=await byToken.app.request(origin+'/api/account/owner-recovery/'+action,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({token:byToken.token,...(action==='complete'?{password:'A new long enough password'}:{})})},{incoming:{socket:{remoteAddress:'198.51.100.'+(n+1)}}} as HttpBindings);
+   assert.equal(response.status,n<10?404:429,action+' token limit across different IPs');
+  }
+});

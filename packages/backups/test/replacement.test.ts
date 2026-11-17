@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import {test,before,after} from 'node:test';
@@ -274,4 +275,12 @@ test('replacement cancels the old disconnected episode in its approval transacti
 test('replacement v2 signs the Cloud recovery and node without a local venue field',()=>{
  const proposed={id:'12345678-1234-4234-8234-123456789abc',nodeId:'22345678-1234-4234-8234-123456789abc',publicKey:'new-key',peerPublicKey:'peer-key'};
  assert.equal(replacementPayload('https://cloud.test','prepare',proposed,1800000000000).toString(),'["waitron-cloud-replacement-v2","https://cloud.test","12345678-1234-4234-8234-123456789abc","prepare","22345678-1234-4234-8234-123456789abc","test","new-key","peer-key",1800000000000]');
+});
+
+test('recovered scope: replacement inspection and completion refuse outside session authority',async()=>{
+ const f=await ready();await f.store.machine('prepare',f.envelope('prepare'));
+ await setRecoveryScope(db.pool,f.owner.accountId);
+ await assert.rejects(f.store.inspect(f.t.id,f.session.token,f.session.csrfToken),/permission_denied/);
+ await assert.rejects(f.store.complete(f.t.id,f.session.token,f.session.csrfToken,{oldInstallationId:f.installed.installationId,oldServerUnavailable:true,confirmReplacement:true}),/permission_denied/);
+ await setRecoveryScope(db.pool,f.owner.accountId,f.owner.organisationId);assert.equal((await f.store.inspect(f.t.id,f.session.token,f.session.csrfToken))?.state,'awaiting_owner');
 });

@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -244,4 +245,11 @@ test('revocation stays available when the store admission switch is off',async()
  await code(reserve(s,g),'grant_unavailable');
  const row=(await pool.query('SELECT enabled,revoked_at FROM relay_grants WHERE id=$1',[g.id])).rows[0];
  assert.equal(row.enabled,false);assert.ok(row.revoked_at instanceof Date);
+});
+
+test('recovered scope: owner relay approval is confined while an existing machine grant remains independent',async()=>{
+ const s=store(),g=await approve(s);await setRecoveryScope(pool,account,otherOrg);
+ await assert.rejects(approve(s,approval(secondInstallation)),/grant_unavailable/);
+ assert.equal((await transaction(pool,c=>relay.readRelayGrantHint(c,installation)))?.id,g.id);
+ await setRecoveryScope(pool,account,org);assert.equal((await approve(s,approval(secondInstallation))).organisationId,org);
 });

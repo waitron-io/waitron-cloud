@@ -1,3 +1,5 @@
+import {ownerRecoveryResponse} from './owner-recovery.ts';
+import {OwnerRecoveryStore} from '@waitron-cloud/registration';
 import {ownerTransferResponse} from './owner-transfer.ts';
 import {OwnerTransferStore,OwnerTransferError} from '@waitron-cloud/registration';
 import {CloudActions} from '@waitron-cloud/registration';
@@ -133,6 +135,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening, config.countryCode); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);
+  const ownerRecovery=options.leaseIssuer&&config.countryCode?new OwnerRecoveryStore(pool,outbox,{origin:config.portalOrigin,countryCode:config.countryCode,issuer:options.leaseIssuer,trusted:options.leaseTrust,screening:options.passwordScreening}):undefined;
   const app = new Hono<{Bindings: HttpBindings}>();
   app.onError((error, c) => {
     protect(c); const fault = publicError(error);
@@ -170,6 +173,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
       }catch{return c.json({status:'unavailable'},503);}
     }
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
+    if(c.req.path.startsWith('/api/account/owner-recovery/')||['/api/installations/owner-recovery-read','/api/installations/owner-recovery-approve','/api/installations/owner-recovery-refuse'].includes(c.req.path))return ownerRecoveryResponse(c,{store:ownerRecovery,origin:config.portalOrigin,secure,ip,consume});
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
     if(['/api/installations/guest-menu-publish','/api/installations/guest-menu-status','/api/installations/guest-menu-withdraw'].includes(c.req.path))return guestMenuDeliveryResponse(c,guestMenus);
     if(c.req.path.startsWith('/api/account/guest-menu/'))return guestMenuResponse(c,{pool,origin:config.portalOrigin,guestOrigin:options.guestOrigin});

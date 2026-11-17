@@ -36,8 +36,10 @@ a delivery failure cannot undo the reset. A queue failure rolls the reset back.
 The [account HTTP API](../packages/account-http/README.md) now adds Origin/CSRF and
 cookie protection, IP/token limits and a response-time floor. Before public exposure,
 assess timing under deployment load and add compromised-password checks, recovery
-screens, ingress controls and the selected extra authentication factors. Password recovery
-does not recover MFA. The [email queue](email-delivery-implementation.md) encrypts
+screens, ingress controls and the selected extra authentication factors. Ordinary password reset
+keeps enrolled sign-in methods. If you have lost them all, use the separate
+[paired-box account recovery](cloud-signup-implementation.md), which also requires
+your mailbox and confines recovered access to that box’s organisation. The [email queue](email-delivery-implementation.md) encrypts
 the delivery copy of each token and retries pending messages after a restart. Define
 retention for request and delivery records, including unknown email addresses.
 

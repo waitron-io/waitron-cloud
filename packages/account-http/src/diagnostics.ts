@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -12,7 +13,7 @@ const timestamp=(value:Date|null)=>value?.toISOString()??null;
 async function diagnostic(client:PoolClient,accountId:string,installationId:string){
  const row=(await client.query(`SELECT i.id,i.venue_id,v.environment,i.configuration_revision,i.revoked_at,i.last_contact_at,i.lease_expires_at,clock_timestamp() AS generated_at
   FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisation_memberships m ON m.organisation_id=v.organisation_id
-  WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF i`,[installationId,accountId])).rows[0];
+  WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF i`,[installationId,accountId])).rows[0];
  if(!row)throw new AccountHttpError(403,'permission_denied');
  const services=(await client.query(`SELECT s.service,s.state,
   CASE WHEN i.revoked_at IS NULL AND o.revision=i.configuration_revision AND o.received_at>clock_timestamp()-interval '5 minutes'
@@ -58,7 +59,7 @@ export async function diagnosticsResponse(c:Context,options:{pool:Pool;origin:st
   const result=await diagnostic(client,current.accountId,body.installationId as string);
   await resolveSession(client,token,{csrfToken:csrf,touch:false});
   const permission=await client.query(`SELECT 1 FROM installations i JOIN venues v ON v.id=i.venue_id
-   JOIN organisation_memberships m ON m.organisation_id=v.organisation_id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[body.installationId,current.accountId]);
+   JOIN organisation_memberships m ON m.organisation_id=v.organisation_id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[body.installationId,current.accountId]);
   if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return result;
  }));
 }

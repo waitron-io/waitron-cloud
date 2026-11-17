@@ -23,7 +23,7 @@ function database(condition:Condition,loss?:'owner'|'session'){
   if(sql.startsWith('SELECT EXISTS(SELECT 1 FROM cloud_passkeys'))return result([{enrolled:true}]);
   if(sql.startsWith('SELECT s.action_security_revision'))return result(loss==='session'&&refusalRead?[]:[{action_security_revision:0,absolute_expires_at:new Date(+now+3600000),password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
   if(sql.includes('AS fresh,action_credential_fingerprint'))return result([{fresh:true,password_hash:'synthetic-password-hash',action_credential_fingerprint:createHash('sha256').update('synthetic-password-hash').digest('hex')}]);
-  if(sql.startsWith('SELECT id FROM cloud_accounts'))return result([{id}]);
+  if(sql.startsWith('SELECT id FROM cloud_accounts')||sql.startsWith("SELECT id,to_jsonb(a)->>'recovery_organisation_id' AS recovery_organisation_id FROM cloud_accounts a"))return result([{id,recovery_organisation_id:null}]);
   if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return result([{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}]);
   if(sql==='SELECT clock_timestamp() AS now')return result([{now}]);
   if(sql.includes('organisation_memberships'))return result(condition==='foreign'||condition==='late-foreign'&&placementRead||loss==='owner'&&refusalRead?[]:[{account_id:id}]);

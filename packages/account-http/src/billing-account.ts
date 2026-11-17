@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {randomUUID} from 'node:crypto';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
@@ -19,12 +20,12 @@ async function verified(client:PoolClient,accountId:string):Promise<void>{
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)denied();
 }
 async function membership(client:PoolClient,accountId:string,organisationId:string):Promise<void>{
- if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[accountId,organisationId])).rowCount)denied();
+ if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[accountId,organisationId])).rowCount)denied();
 }
 async function readView(client:PoolClient,accountId:string,methodsEnabled=false):Promise<BillingAccountView>{
  await verified(client,accountId);
  const venues=(await client.query<VenueRow>(`SELECT v.id,v.organisation_id,v.legal_business_id,v.environment FROM venues v
-  JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=$1 AND m.is_owner ORDER BY v.id`,[accountId])).rows;
+  JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=$1 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY v.id`,[accountId])).rows;
  for(const organisationId of [...new Set(venues.map(row=>row.organisation_id))].sort())await membership(client,accountId,organisationId);
  const today=(await client.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;
  const result:BillingAccountView={venues:[]};

@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -11,7 +12,7 @@ export async function ownerTransferResponse(c:Context,o:{pool:Pool;store:OwnerTr
  if(path===''&&c.req.method==='GET'){
   const organisations=await transaction(o.pool,async client=>{
    const session=await resolveSession(client,token,{touch:false});
-   return (await client.query('SELECT o.id,o.name FROM organisations o JOIN organisation_memberships m ON m.organisation_id=o.id WHERE m.account_id=$1 AND m.is_owner ORDER BY o.id',[session.accountId])).rows;
+   return (await client.query(`SELECT o.id,o.name FROM organisations o JOIN organisation_memberships m ON m.organisation_id=o.id WHERE m.account_id=$1 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY o.id`,[session.accountId])).rows;
   });
   return c.json({organisations,offers:await o.store.list(token)});
  }

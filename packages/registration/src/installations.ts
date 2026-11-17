@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {privateManagementOrigin} from './test-relay-origin.ts';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -171,7 +172,7 @@ export class InstallationStore {
   async listWithSession(token:string):Promise<InstallationView[]> {
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{touch:false});
-      const memberships=await client.query('SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 FOR SHARE',[session.accountId]);
+      const memberships=await client.query(`SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId]);
       if(this.#planMode!=='existing')for(const m of [...memberships.rows].sort((a,b)=>a.organisation_id.localeCompare(b.organisation_id)))await readOrganisationPlan(client,m.organisation_id);
       const ids=await client.query(`SELECT i.id,i.venue_id,v.organisation_id,v.legal_business_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND i.superseded_by IS NULL ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
       const venuePlans=new Map<string,string>();
@@ -206,7 +207,7 @@ export class InstallationStore {
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{csrfToken,touch:false});
       const permission=await client.query(`SELECT m.organisation_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id
-        JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,session.accountId]);
+        JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[id,session.accountId]);
       if(!permission.rowCount)fail('permission_denied');await lock(client,id);
       await resolveSession(client,token,{csrfToken});
       await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);

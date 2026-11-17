@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
 import {before,after,test} from 'node:test';
@@ -341,4 +342,10 @@ for(const change of ['sign-out','absolute expiry'] as const)test(`an ordinary ve
  finally{g.release();}
  const response=await pending;assert.equal((await current(f)).paymentMethod,null);assert.equal(response.status,401);
  assert.equal((await transaction(db.pool,c=>resolveSession(c,f.session.token,{touch:false}))).accountId,f.accountId);
+});
+
+test('recovered scope: payment method setup refuses before contacting its provider',async()=>{
+ const f=await owner(),p=provider(),target=app(f,p);await setRecoveryScope(db.pool,f.accountId);
+ assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,403);assert.equal(p.calls.length,0);
+ await setRecoveryScope(db.pool,f.accountId,f.organisationId);assert.equal((await request(target,f.session,start,{venueId:f.venueId,kind:'card'})).status,200);
 });

@@ -37,6 +37,7 @@ export async function markAccountActionProof(client:PoolClient,token:string,csrf
   await client.query('UPDATE cloud_sessions SET action_proved_at=clock_timestamp(),action_proof_method=$2,action_credential_fingerprint=$3 WHERE token_hash=$1',[digest(token),method,digest(credential.password_hash)]);
 }
 export async function invalidateAccountActionProof(client:PoolClient,accountId:string,actingToken?:string,outbox?:EmailOutbox,initialEnrolment=false){
+  await client.query("UPDATE password_reset_requests SET consumed_at=clock_timestamp() WHERE account_id=$1 AND purpose='owner_recovery' AND consumed_at IS NULL",[accountId]);
   const enrollingForTransfer=await cancelOwnerTransfers(client,accountId,outbox,initialEnrolment);
   // The recipient’s first enrollment needs proof with the new method; other passkey changes retain the acting window.
   await client.query(`UPDATE cloud_sessions SET action_proved_at=CASE WHEN token_hash=$2 THEN action_proved_at END,

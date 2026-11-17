@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -123,4 +124,9 @@ test('legacy_rows_never_drive_default_or_healthy: diagnostic and overview timest
  const overview=await overviewApp.request(origin+'/api/account/installations',{headers:{cookie:'__Host-cloud_session='+f.session.token}}, {incoming:{socket:{remoteAddress:'192.0.2.89'}}} as HttpBindings);
  assert.equal(overview.status,200);const body=await overview.json();
  assert.equal(body.installations.find((i:{installationId:string})=>i.installationId===f.installed.installationId).overview.verifiedSnapshotAt,null);
+});
+
+test('recovered scope: diagnostics refuse outside authority before returning venue data',async()=>{
+ await setRecoveryScope(db.pool,owner);assert.equal((await call({installationId:installation})).status,403);
+ await setRecoveryScope(db.pool,owner,organisation);assert.equal((await call({installationId:installation})).status,200);
 });

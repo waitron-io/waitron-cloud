@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
@@ -225,4 +226,9 @@ test('remote status retains assigned names after a move to a different cell suff
  const operationId=randomUUID();await store.stageMove({operationId,installationId:venue.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
  const manifest=await store.manifest(target);await store.markMoveReady(operationId,1,manifest.sequence);await store.completeMove(operationId,1);
  const response=await request('status');assert.equal(response.status,200);assert.deepEqual((await response.json()).names,before.names);
+});
+
+test('recovered scope: remote status refuses another retained business',async()=>{
+ await setRecoveryScope(db.pool,owner.accountId);assert.equal((await request('status')).status,403);
+ await setRecoveryScope(db.pool,owner.accountId,owner.organisationId);assert.equal((await request('status')).status,200);
 });

@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {createHash} from 'node:crypto';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
@@ -71,7 +72,7 @@ export async function billingMethodsResponse(c:Context,options:{pool:Pool;origin
   const venue=(await client.query<Venue>('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1',[body.venueId])).rows[0];
   if(!venue||venue.environment!=='test')denied();
   if(expected&&(venue.organisation_id!==expected.organisationId||venue.legal_business_id!==expected.legalBusinessId))denied();
-  if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[session.accountId,venue.organisation_id])).rowCount)denied();
+  if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId,venue.organisation_id])).rowCount)denied();
   const scope={organisationId:venue.organisation_id,legalBusinessId:venue.legal_business_id},saved=await setups.readOn(client,scope);
   const final=(await client.query<Venue>('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1 FOR SHARE',[body.venueId])).rows[0];
   if(!final||final.environment!=='test'||final.organisation_id!==venue.organisation_id||final.legal_business_id!==venue.legal_business_id)denied();

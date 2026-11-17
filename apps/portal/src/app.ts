@@ -1,3 +1,4 @@
+import {OwnerRecoveryController} from './owner-recovery-controller.ts';
 import {OwnerTransferController} from './owner-transfer-controller.ts';
 import type {CloudActionRequest} from './cloud-actions-controller.ts';
 import {CloudActionsController} from './cloud-actions-controller.ts';
@@ -53,6 +54,7 @@ export class PortalApp {
   passkeys: PasskeyController;
   passkeyFirst: boolean;
   transfers:OwnerTransferController;
+  ownerRecovery:OwnerRecoveryController;
   security: AccountSecurityController;
   authenticator: AuthenticatorController;
   actionProof:AccountActionProofController;
@@ -94,6 +96,11 @@ export class PortalApp {
       if(this.session===session&&session.state.kind==='anonymous'&&(credentialNotice==='passwordChanged'||credentialNotice==='emailChanged')){this.notice=credentialNotice;this.draw();}
     });
     void this.passkeys.checkSupport();
+    this.ownerRecovery=new OwnerRecoveryController(()=>this.draw(),async accountId=>{
+      await this.session.check({fresh:true});
+      if(this.session.state.kind==='authenticated'&&this.session.state.accountId===accountId){this.navigate('/account');return true;}return false;
+    });
+    this.ownerRecovery.open(this.path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     this.transfers=new OwnerTransferController(()=>this.draw());
     this.alerts = new AlertController(() => this.draw());
     this.translationConsent = new TranslationConsentController(() => this.draw());
@@ -123,7 +130,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.ownerRecovery.open(); this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -191,6 +198,7 @@ export class PortalApp {
     return this.path;
   }
   get waiting() {
+    if(this.path==='/reset-password'&&this.ownerRecovery.stage!=='idle')return this.ownerRecovery.waiting;
     if(this.path==='/operator/actions')return Math.max(this.session.waiting,this.cloudActions.waiting);
     if (this.path === '/recover') return Math.max(this.recovery.waiting, this.backups.waiting, this.installations.waiting, this.session.waiting);
     if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
@@ -222,7 +230,7 @@ export class PortalApp {
     if (this.requested) return c.checkEmail;
     if (this.path === '/signup') return c[this.link.token ? 'completeSignup' : 'signup'];
     if (this.path === '/forgot-password') return c.forgot;
-    if (this.path === '/reset-password') return c.reset;
+    if (this.path === '/reset-password') return this.ownerRecovery.stage==='idle'?c.reset:c.ownerRecoveryTitle;
     if (['/', '/account'].includes(this.path)) return c.account;
     return c.login;
   }
@@ -238,6 +246,7 @@ export class PortalApp {
     if(!this.translationConsent.pending&&!this.translationConsent.loaded)this.translationConsent.loadAttempted=false;
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
+    this.ownerRecovery.open(path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
     if (this.link.requestId || this.link.invalid) this.pairing.open(this.link.requestId);
     this.locale = this.link.locale ?? this.locale;
@@ -254,6 +263,7 @@ export class PortalApp {
     event.preventDefault(); this.navigate(path);
   }
   readFields() {
+    const ownerPassword=this.root.querySelector('wt-input[name=ownerRecoveryPassword]')?.shadowRoot?.querySelector('input')?.value;if(ownerPassword!==undefined)this.ownerRecovery.password=ownerPassword;
     for(const [name,key] of [['newAccountPassword','newPassword'],['newAccountEmail','newEmail']] as const){
       const value=this.root.querySelector(`wt-input[name="${name}"]`)?.shadowRoot?.querySelector('input')?.value;if(value!==undefined)this.security[key]=value;
     }
@@ -326,7 +336,9 @@ export class PortalApp {
     else {await remote.apply();return;}
     this.draw();
   }
+  async beginOwnerRecovery(){this.link.token=undefined;await this.ownerRecovery.act('begin',this.locale);this.draw();this.focusHeading();}
   async submit() {
+    if(this.path==='/reset-password'&&this.ownerRecovery.stage!=='idle'){this.readFields();await this.ownerRecovery.submit(this.locale);this.draw();this.focusHeading();return;}
     if(this.path==='/operator/actions'){await this.proposeCloudAction();return;}
     if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}
     if(this.path==='/login' && this.factorCodes.length)return;

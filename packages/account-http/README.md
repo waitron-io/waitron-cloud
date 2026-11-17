@@ -238,11 +238,45 @@ remove it, and removes it without affecting password sign-in. Run it with:
 node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test --test-timeout=120000 test/passkey-browser.test.ts
 ```
 
-Signup and reset completion issue no session: sign in afterwards. Reset ends all
+Signup and ordinary password-reset completion issue no session: sign in afterwards. Reset ends all
 existing sessions. A token works once; if a completion response is lost, try signing
 in with your chosen password. Retrying the token cannot create another account or
 session. See [signup and recovery rules](../registration/README.md#cloud-account-signup)
 for password, token and account eligibility requirements.
+
+## Recover lost sign-in methods
+
+Open your reset-mail link and choose **Lost your sign-in method?** The country
+Cloud needs its configured country code and lease issuer. Send POST requests with
+its exact Origin to `/api/account/owner-recovery/`:
+
+| Action | Body | Reply |
+| --- | --- | --- |
+| `begin` | `{token}` | Request ID, state and owned paired boxes |
+| `select` | `{token,installationId}` | Frozen request for that box |
+| `status` | `{token}` | `choose`, `pending`, `approved` or `refused` |
+| `complete` | `{token,password,locale?}` | `{accountId,enrollmentRequired:true}` and session/CSRF cookies |
+
+Check status explicitly after the local administrator decides; the portal does not
+poll automatically. Status has its own 10-per-IP and 10-per-token allowance per
+15 minutes. Begin, select and complete use the existing ordinary reset completion
+budget, with the same limits. Status checks cannot exhaust that budget. Reset mail keeps its shared one-minute
+cooldown and original 30-minute deadline. The mailbox token is never sent to the box.
+
+The signed `/api/installations/owner-recovery-{read,approve,refuse}` routes use the
+[agreed request and bodies](../../docs/superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md#box-approval-contract-lane-f-and-cloud).
+They reject browser Origin headers and retain the existing IP, authentication,
+then installation-key limits. Recorded approvals retain their signature and lease
+verification at acceptance time; completion still checks the current live pairing
+and unchanged deadline. A different recorded decision returns 409 `conflict`.
+An unavailable browser request returns 404 `recovery_unavailable`; an A-limited
+account choosing B receives 403 `recovery_scope_limited`. Completion requires fresh
+enrollment before organisation access. Later sign-in or ordinary password reset
+never widens the account’s recovered scope.
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/owner-recovery.test.ts`
+for the route/cookie checks, and the portal’s `test/owner-recovery-browser.test.ts`
+for the journey, languages and layouts. These are local checks, not a production deployment.
 
 ## Browser sessions
 

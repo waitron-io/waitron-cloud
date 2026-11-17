@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {databaseClock} from './fixtures/database-clock.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
@@ -401,4 +402,11 @@ test('proof expiry during the relay hint read rolls back configuration acknowled
   try{await waitForLock();now+=61000;}finally{await blocker.query('COMMIT');blocker.release();}
   await expired;
   assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM installation_operations')).rows[0].n,before);
+});
+
+test('recovered scope: installation list and revoke ignore retained outside memberships',async()=>{
+ await setRecoveryScope(db.pool,owner.accountId);assert.deepEqual(await store.listWithSession(session.token),[]);
+ await assert.rejects(store.revokeWithSession(session.token,session.csrfToken,a.installationId),/permission_denied/);
+ await setRecoveryScope(db.pool,owner.accountId,owner.organisationId);assert.equal((await store.listWithSession(session.token)).length,2);
+ assert.equal((await store.revokeWithSession(session.token,session.csrfToken,a.installationId)).installationId,a.installationId);
 });

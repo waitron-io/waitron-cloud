@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -117,4 +118,9 @@ test('an in-progress owner page serializes with ownership removal',async()=>{
   assert.equal((await page).events.length,1);await remove;
  }finally{await blocker.query('ROLLBACK').catch(()=>{});blocker.release();}
  await assert.rejects(store.page(token,{organisationId:organisation,limit:2}),/permission_denied/);
+});
+
+test('recovered scope: audit page refuses a retained membership outside recovery',async()=>{
+ await setRecoveryScope(pool,owner,foreignOrganisation);await assert.rejects(store.page(token,{organisationId:organisation,limit:10}),/permission_denied/);
+ await setRecoveryScope(pool,owner,organisation);assert.deepEqual((await store.page(token,{organisationId:organisation,limit:10})).events,[]);
 });

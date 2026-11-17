@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -72,7 +73,7 @@ export class SecurityAuditStore {
   const cursor=decodeCursor(input.cursor);
   return transaction(this.#pool,async client=>{
    const session=await resolveSession(client,token,{touch:false});
-   const membership=await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[session.accountId,input.organisationId]);
+   const membership=await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId,input.organisationId]);
    if(!membership.rowCount)throw new SecurityAuditError('permission_denied');
    const values:unknown[]=[input.organisationId,input.limit+1];let where='organisation_id=$1';
    if(cursor){values.push(cursor[0],cursor[1]);where+=' AND (occurred_at,id)<($3::timestamptz,$4::uuid)';}
