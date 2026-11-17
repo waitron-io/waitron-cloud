@@ -185,11 +185,12 @@ test('relay SES settings require validated venue admission before claiming',asyn
   for(const binding of [undefined,{...ses,config:{...ses.config}},{...ses,config:accountOnly}]){
    assert.throws(()=>new RelayWorker(f.pool,{...f.config,ses:binding,sesSmtp:{smtp:smtpConfig}}),/relay_unavailable/);
   }
-  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+  assert.throws(()=>new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{smtp:{...smtpConfig,host:'smtp.example.test'}}}),/relay_unavailable/);
  }finally{await f.close();}
 });
 
-test('real TLS relay handoff binds early feedback and its provider receipt to the committed attempt',async()=>{
+test('real TLS relay handoff binds its provider receipt with and without early feedback',async()=>{
+ for(const [withFeedback,feedbackCount] of [[false,'0'],[true,'1']] as const){
  const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
  try{
   const venue=await f.venue(),body=await venue.submit({recipient:'owner@example.test'});let received=0;
@@ -201,7 +202,7 @@ test('real TLS relay handoff binds early feedback and its provider receipt to th
      assert.ok(tag);assert.ok(raw.includes(`Message-ID: <${body.messageId}@mail.example.test>`));
      const attempt=(await f.pool.query('SELECT attempt_tag,recipient_refs_sealed FROM mail_attempts WHERE queue_id=$1',[body.messageId])).rows[0];
      assert.equal(attempt.attempt_tag,tag);assert.equal(attempt.recipient_refs_sealed,true);
-     assert.equal(await earlyFeedback(f.pool,tag,'ses-relay-joint'),'applied');
+     if(withFeedback)assert.equal(await earlyFeedback(f.pool,tag,'ses-relay-joint'),'applied');
     })().then(()=>done(null,'Ok ses-relay-joint'),()=>done(new Error('fixture feedback refused')));
    });
   }});
@@ -210,6 +211,22 @@ test('real TLS relay handoff binds early feedback and its provider receipt to th
   const row=await f.row(body.messageId);assert.equal(row.state,'accepted');assert.equal(row.payload,null);assert.equal(row.attempts,1);
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-relay-joint');
   assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
-  assert.equal((await f.pool.query('SELECT count(*) FROM mail_feedback_receipts')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_feedback_receipts')).rows[0].count,feedbackCount);
+ }finally{await smtp?.close();await f.close();}
+ }
+});
+
+
+test('relay receipt-write failure leaves acceptance terminal without a resend',async()=>{
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),body=await venue.submit();smtp=await tlsSmtp();
+  await f.pool.query(`CREATE FUNCTION refuse_provider_receipt() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN
+   IF NEW.provider_message_id IS NOT NULL THEN RAISE EXCEPTION 'injected receipt write refusal';END IF;RETURN NEW;END$$;
+   CREATE TRIGGER refuse_provider_receipt BEFORE UPDATE ON mail_attempts FOR EACH ROW EXECUTE FUNCTION refuse_provider_receipt()`);
+  const w=new RelayWorker(f.pool,{...f.config,ses,sesSmtp:{smtp:{...smtpConfig,port:smtp.port},trust:{ca:smtp.cert}}});
+  await assert.rejects(w.runOnce(),/injected receipt write refusal/);
+  const row=await f.row(body.messageId);assert.equal(row.state,'accepted');assert.equal(row.payload,null);
+  assert.equal(await w.runOnce(),false);assert.equal(smtp.captured.length,1);
  }finally{await smtp?.close();await f.close();}
 });

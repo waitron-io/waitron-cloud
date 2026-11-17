@@ -44,8 +44,10 @@ export class RelayWorker {
   this.#active=config.suppressionKeys.activeKeyId;
   if(config.sesSmtp){
    if(!this.#ses||!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email'))messageError('relay_unavailable');
-   const send=createSesRelaySender(this.#ses.config,config.sesSmtp.smtp,config.sesSmtp.trust);
-   this.#send=(content,signal,admission)=>send(content,admission!,signal);
+   try{
+    const send=createSesRelaySender(this.#ses.config,config.sesSmtp.smtp,config.sesSmtp.trust);
+    this.#send=(content,signal,admission)=>send(content,admission!,signal);
+   }catch{messageError('relay_unavailable');}
   }else{
    const send=localRelaySmtp(config.smtpPort);this.#send=async(content,signal)=>({outcome:await send(content,signal)});
   }

@@ -532,12 +532,19 @@ payloadKeys, suppressionKeys, smtpPort}`. Reuse the admission grant configuratio
 payload ring; supply a separate suppression key ring with `{activeKeyId, keys}`.
 `runOnce()` handles at most one message and returns whether it handled work. You can
 use the existing `runWorkerLoop` with concurrency four to schedule it. Without a
-configuration, `runOnce()` returns false and leaves the queue unchanged. No server,
-Compose service, CLI or environment switch starts this worker automatically.
+configuration, `runOnce()` returns false and leaves the queue unchanged. The
+[test email entrypoint](../deploy/test-cloud/email-worker.mjs) starts its local
+capture worker only in test-venue-levels mode; production startup remains off.
 
-The adapter connects only to `127.0.0.1` at the supplied disposable capture port.
+The default adapter connects only to `127.0.0.1` at the supplied disposable capture port.
 It uses the fixed sender `relay@example.test`, no credentials and plain SMTP for
-that loopback fixture. It cannot serve as a production TLS adapter. Templates are
+that loopback fixture. It does not provide production TLS delivery. To select the existing SES adapter
+inside the worker, also supply `ses: {config, recipientKeys}` and
+`sesSmtp: {smtp, trust?}`. The worker constructs that sender from its own validated
+venue-email admission configuration, passes its committed attempt and saves the
+optional provider receipt after settling the queue outcome. Invalid SMTP settings
+refuse construction as `relay_unavailable`. These internal settings are not selected
+by the test email entrypoint yet. Templates are
 plain text in English or Spanish; links use the verified management origin and
 Waitron's existing token/purpose query parameters and recipient email fragment.
 
@@ -653,7 +660,7 @@ queued caller work begins; this document does not authorise edits to that reposi
 
 ## Internal SES adapter boundary
 
-The standalone `createSesRelaySender` adapter sends fixed relay templates through
+The `createSesRelaySender` adapter sends fixed relay templates through
 certificate-verified, authenticated TLS with a 15-second total budget. It uses
 only qualified configuration and the committed opaque attempt for SES headers,
 and returns an outcome separately from optional provider acceptance metadata.
