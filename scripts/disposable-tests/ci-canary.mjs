@@ -87,6 +87,20 @@ async function markHostedAttempt({api,policy,ci,signal}){
  values[String(ci.runId)]=ci.attempt+1;
  await writeRoutingVariable({api,policy,name:'DISPOSABLE_TESTS_HOSTED_ATTEMPTS',value:JSON.stringify(values),signal});
 }
+async function addRecentRuns({api,policy,signal,runs}){
+ try{
+  const data=await runInventory(api,`/repos/${policy.repository}/actions/runs?per_page=100`,signal);
+  assert.ok(Number.isSafeInteger(data.total_count) && data.total_count>=0 && Array.isArray(data.workflow_runs) &&
+   data.workflow_runs.length===Math.min(100,data.total_count) &&
+   data.workflow_runs.every(run=>Number.isSafeInteger(run?.id)&&run.id>0) &&
+   new Set(data.workflow_runs.map(run=>run.id)).size===data.workflow_runs.length,'Invalid recent run inventory');
+  for(const run of data.workflow_runs)if(['queued','in_progress'].includes(run.status)&&!runs.has(run.id))runs.set(run.id,run);
+ }catch(error){
+  signal?.throwIfAborted();
+  if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
+  console.error(JSON.stringify({event:'automatic-ci-recent-runs-pending',error:error.message}));
+ }
+}
 export async function readAutomaticPass({api,policy,signal,leases}){
  const base=`/repos/${policy.repository}`,observedAt=Date.now(),runs=new Map(),reads=new Map();
  const ignored=leases?.inspect().ignoredEmptyRuns??[];
@@ -106,6 +120,7 @@ export async function readAutomaticPass({api,policy,signal,leases}){
   }
   for(const run of listed)runs.set(run.id,run);
  }
+ await addRecentRuns({api,policy,signal,runs});
  if(leases){
   for(const [id,run] of runs){
    const age=observedAt-Date.parse(run.run_started_at??run.created_at),key=id+':'+run.run_attempt;
@@ -458,6 +473,7 @@ export async function findAutomatic({api,policy,limit,signal,budgetSignal,exclud
   assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.workflow_runs.length===inventory.total_count,'Incomplete automatic run inventory');
   for(const run of inventory.workflow_runs)runs.set(run.id,run);
  }
+ if(!observed)await addRecentRuns({api:upstream,policy,signal,runs});
  pickup:for(const run of [...runs.values()].sort((a,b)=>(a.created_at??'').localeCompare(b.created_at??'') || a.id-b.id)){
   if(excludeRuns.has(run.id) || hosted[run.id]===run.run_attempt || hosted[run.id]===run.run_attempt+1)continue;
   let candidate;

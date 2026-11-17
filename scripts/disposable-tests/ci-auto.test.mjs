@@ -1720,7 +1720,7 @@ test('known ignored attempts do not consume the repository run allowance',async 
  f.api.get=async(path,options)=>{
   if(path.includes('/runs?')){
    if(path.includes('status=in_progress'))return {total_count:0,workflow_runs:[]};
-   const page=Number(new URL('https://fixture.test'+path).searchParams.get('page')??1);pages.push(page);
+   const page=Number(new URL('https://fixture.test'+path).searchParams.get('page')??1);if(path.includes('status='))pages.push(page);
    return {total_count:101,workflow_runs:runs.slice((page-1)*100,page*100)};
   }
   return get(path,options);
@@ -1743,6 +1743,65 @@ test('overlapping automatic passes send one cancellation pair for an empty run',
  assert.equal(logs.length,1);
 });
 
+for(const shared of [true,false])test(`complete-looking ten-row inventory recovers omitted queued work with shared=${shared}`,async()=>{
+ const f=fixture(),get=f.api.get;
+ f.run.status='queued';
+ const queued=Array.from({length:10},(_,i)=>({...f.run,id:1000+i,workflow_id:999}));
+ const running={...f.run,id:2000,status:'in_progress',workflow_id:999};
+ const completed={...f.run,id:3000,status:'completed'};
+ f.api.get=async(path,options)=>{
+  if(path.includes('/runs?')){
+   if(path.includes('status=queued'))return {total_count:10,workflow_runs:queued};
+   if(path.includes('status=in_progress'))return {total_count:1,workflow_runs:[running]};
+   assert.equal(path,'/repos/fixture/waitron/actions/runs?per_page=100');
+   return {total_count:5000,workflow_runs:[completed,{...queued[0],status:'in_progress'},...queued.slice(1),running,f.run,
+    ...Array.from({length:87},(_,i)=>({...completed,id:4000+i}))]};
+  }
+  return get(path,options);
+ };
+ const pass=shared?await controller.readAutomaticPass({api:f.api,policy}):undefined;
+ const selected=await controller.findAutomatic({api:pass?.api??f.api,policy,limit:1,runs:pass?.runs});
+ assert.deepEqual(selected.map(ci=>[ci.runId,ci.attempt,ci.jobId]),[[789,1,901]]);
+ if(pass){
+  assert.equal(pass.runs.size,12);
+  assert.equal(pass.runs.get(1000).status,'queued','A recent overlap must not replace the filtered observation');
+  assert.equal(pass.runs.has(3000),false);
+  assert.equal(pass.runs.has(2000),true);
+ }
+});
+for(const fault of ['http','shape','duplicate','short'])test(`failed recent-run ${fault} read retains filtered candidates`,async t=>{
+ const f=fixture(),get=f.api.get,errors=[];
+ t.mock.method(console,'error',line=>errors.push(JSON.parse(line)));
+ f.api.get=async(path,options)=>{
+  if(path==='/repos/fixture/waitron/actions/runs?per_page=100'){
+   if(fault==='http')throw Object.assign(new Error('Recent list unavailable'),{status:503});
+   return fault==='shape'?{total_count:1,workflow_runs:null}:fault==='short'?{total_count:5000,workflow_runs:[f.run]}:{total_count:2,workflow_runs:[f.run,f.run]};
+  }
+  return get(path,options);
+ };
+ const pass=await controller.readAutomaticPass({api:f.api,policy});
+ assert.deepEqual((await controller.findAutomatic({api:pass.api,policy,limit:1,runs:pass.runs})).map(ci=>ci.jobId),[901]);
+ assert.equal(errors.length,1);assert.equal(errors[0].event,'automatic-ci-recent-runs-pending');
+});
+
+for(const shared of [true,false])for(const status of [401,403,429])test(`recent-run refusal stops discovery: shared=${shared}, status=${status}`,async()=>{
+ const f=fixture(),get=f.api.get;
+ f.api.get=async(path,options)=>{
+  if(path==='/repos/fixture/waitron/actions/runs?per_page=100')throw Object.assign(new Error('Refused'),{status,...(status===429?{retryAt:Date.now()+60000}:{})});
+  return get(path,options);
+ };
+ await assert.rejects(shared?controller.readAutomaticPass({api:f.api,policy}):controller.findAutomatic({api:f.api,policy,limit:1}),{status});
+});
+test('a recovered stale empty run follows existing cleanup',async t=>{
+ const {LocalLeases}=await import('./leases.mjs'),config=await refusalPool(t),f=fixture(),get=f.api.get,posts=[];
+ Object.assign(f.run,{status:'queued',event:'schedule',workflow_id:999,created_at:new Date(Date.now()-7200000).toISOString()});f.jobs.length=0;
+ f.api.get=async(path,options)=>path.includes('/runs?')&&path.includes('status=')?{total_count:0,workflow_runs:[]}:get(path,options);
+ f.api.post=async path=>posts.push(path);
+ const pass=await controller.readAutomaticPass({api:f.api,policy,leases:new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6})});
+ assert.deepEqual(posts,['/repos/fixture/waitron/actions/runs/789/cancel','/repos/fixture/waitron/actions/runs/789/force-cancel']);
+ assert.equal(pass.runs.has(789),false);
+});
+
 test('one automatic pass shares run, PR and job observations across its readers',async()=>{
  const f=fixture(),get=f.api.get,reads=[];
  f.api.get=async(path,options)=>{reads.push(path);if(path.includes('/pulls?state=open'))return [{number:12,state:'open',head:{sha:head,repo:{id:123}},base:{repo:{id:123}}}];return get(path,options);};
@@ -1751,7 +1810,7 @@ test('one automatic pass shares run, PR and job observations across its readers'
  await controller.reconcileDeadRuns({api:f.api,policy,pass,hosted:{}});
  assert.equal((await controller.findAutomatic({api:pass.api,policy,limit:1,runs:pass.runs})).length,1);
  assert.equal((await controller.overflowInventory({api:pass.api,policy,runs:pass.runs,includeHosted:false})).size,1);
- assert.equal(reads.filter(path=>path.includes('/runs?')).length,2);
+ assert.equal(reads.filter(path=>path.includes('/runs?')).length,3);
  assert.equal(reads.filter(path=>path.includes('/pulls?state=open')).length,1);
  assert.equal(reads.filter(path=>path.includes('/jobs?')).length,1);
  assert.equal(reads.filter(path=>path.endsWith('/runs/789')||path.endsWith('/pulls/12')).length,0);
