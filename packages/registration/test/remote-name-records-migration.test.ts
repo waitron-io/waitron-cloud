@@ -6,7 +6,7 @@ import {migrate} from '../src/migrate.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 
 test('the name-job upgrade preserves earlier jobs and migration receipts across repeated runners',async()=>{
- const old=await migrationRelease(70),schema='name_records_'+randomUUID().replaceAll('-','');
+ const old=await migrationRelease(71),schema='name_records_'+randomUUID().replaceAll('-','');
  const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL}),pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`});
  try{
   await admin.query(`CREATE SCHEMA ${schema}`);await old.migrate(pool);
@@ -17,6 +17,6 @@ test('the name-job upgrade preserves earlier jobs and migration receipts across 
   await pool.query("INSERT INTO remote_configuration_jobs(kind,target_id,desired_digest) VALUES('name',$1,$2)",[randomUUID(),'b'.repeat(64)]);
   assert.deepEqual((await pool.query("SELECT * FROM remote_configuration_jobs WHERE kind<>'name' ORDER BY kind")).rows,rows);
   const current=(await pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(current.slice(0,70),ledger);assert.equal(current.length,71);assert.equal(current[70].name,'071_remote_name_records.sql');
+  assert.deepEqual(current.slice(0,71),ledger);assert.equal(current.length,72);assert.equal(current[71].name,'072_remote_name_records.sql');
  }finally{await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();await old.close();}
 });
