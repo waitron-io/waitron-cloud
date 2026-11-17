@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims} from '../src/pairing-proof.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
@@ -259,4 +260,12 @@ test('ordinary business signup also attaches its verified email offers without g
  const result=await signup.complete(mail.token,{password,organisationName:'New business',legalBusinessName:'New SL',countryCode:'ES'});
  assert.equal((await db.pool.query('SELECT recipient_id FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].recipient_id,result.accountId);
  assert.deepEqual((await db.pool.query('SELECT organisation_id FROM organisation_memberships WHERE account_id=$1',[result.accountId])).rows,[{organisation_id:result.organisationId}]);
+});
+
+test('recovered scope: handover cannot widen a recipient or give away an outside business',async()=>{
+ const sender=await signedAccount(),recipient=await signedAccount(),store=new OwnerTransferStore(db.pool,db.outbox);
+ const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
+ await setRecoveryScope(db.pool,recipient.accountId,recipient.organisationId);await assert.rejects(store.decide(recipient.token,recipient.csrfToken,offer.id,'accept'),/transfer_unavailable|permission_denied/);
+ await setRecoveryScope(db.pool,sender.accountId);await assert.rejects(store.create(sender.token,sender.csrfToken,sender.organisationId,'another@example.test'),/transfer_unavailable|permission_denied/);
+ await setRecoveryScope(db.pool,sender.accountId,sender.organisationId);assert.ok((await store.list(sender.token)).some(o=>o.id===offer.id));
 });

@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {PairingCodes,pairingCodeKeysFromEnv,type PairingCodeKeys} from './pairing-codes.ts';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession,IdentityError} from '@waitron-cloud/identity';
@@ -44,7 +45,7 @@ async function permission(client:PoolClient,account:string,org:string,business:s
   if(!isPairingUuid(org)||!isPairingUuid(business))throw new PairingError('permission_denied');
   const result=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN cloud_accounts a ON a.id=m.account_id
     JOIN legal_businesses b ON b.organisation_id=m.organisation_id
-    WHERE m.account_id=$1 AND m.organisation_id=$2 AND b.id=$3 AND m.can_register_venues AND a.disabled_at IS NULL FOR SHARE OF m,a,b`,[account,org,business]);
+    WHERE m.account_id=$1 AND m.organisation_id=$2 AND b.id=$3 AND m.can_register_venues AND a.disabled_at IS NULL AND ${organisationScopeSql('a.id','m.organisation_id')} FOR SHARE OF m,a,b`,[account,org,business]);
   if(!result.rowCount)throw new PairingError('permission_denied');
 }
 async function requestedVenue(client:PoolClient,row:Row,org:string,business:string){
@@ -80,7 +81,7 @@ export class PairingStore {
       const result=await client.query(`SELECT o.id AS "organisationId",o.name AS "organisationName",b.id AS "legalBusinessId",
         b.name AS "legalBusinessName",b.country_code AS "countryCode" FROM organisation_memberships m
         JOIN organisations o ON o.id=m.organisation_id JOIN legal_businesses b ON b.organisation_id=o.id
-        WHERE m.account_id=$1 AND m.can_register_venues ORDER BY o.name,b.name,b.id`,[session.accountId]);
+        WHERE m.account_id=$1 AND m.can_register_venues AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY o.name,b.name,b.id`,[session.accountId]);
       // A plain SELECT can wait behind table maintenance past the session deadline.
       await resolveSession(client,token,{touch:false});return result.rows;
     });

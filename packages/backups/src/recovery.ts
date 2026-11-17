@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 export {readRecoveryMachineEnvelope} from './recovery-v2.ts';
 import { createHash, createPublicKey, verify } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -113,9 +114,9 @@ function validateProof(
     if(!expected.equals(bytes)||!verify(null,bytes,publicKey(key),decode(proof.signature,86)))throw Error();
   } catch {backupFail('invalid_proof');}
 }
-async function permission(client: PoolClient, account: string, venue: string) {
+async function permission(client: PoolClient, account: string, venue: string, sessionAuthority=false) {
   const allowed = await client.query(
-    `SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner AND a.disabled_at IS NULL FOR SHARE OF m,a`,
+    `SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner AND a.disabled_at IS NULL AND ${sessionAuthority?organisationScopeSql('m.account_id','m.organisation_id'):'true'} FOR SHARE OF m,a`,
     [venue, account],
   );
   if (!allowed.rowCount) backupFail("permission_denied");
@@ -204,8 +205,8 @@ export class BackupRecovery {
       const request=(await client.query('SELECT * FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[input.id])).rows[0];
       const session = await requireConnectionProof(client,token,csrfToken);
       let venueId:string,p:Awaited<ReturnType<typeof point>>|undefined,stream:StreamRow|undefined;
-      if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
-      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId);await backupPlan(client,venueId,this.#planMode);await lockVerificationPolicy(client);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
+      if(continuous){venueId=input.venueId;await permission(client,session.accountId,venueId,true);await backupPlan(client,venueId,this.#planMode);await lockVenue(client,venueId);stream=await currentStream(client,venueId,true);}
+      else{const first=await point(client,input.pointId);if(!first)backupFail('unavailable');venueId=first.venueId;await permission(client,session.accountId,venueId,true);await backupPlan(client,venueId,this.#planMode);await lockVerificationPolicy(client);await lockVenue(client,venueId);p=await point(client,input.pointId);if(!p||p.kind!=="snapshot"||p.deleting||p.deletedAt)backupFail("unavailable");if(p.verification!=="verified")backupFail("unverified");}
       await expireRecoveries(client,venueId);
       const prior = (
         await client.query("SELECT * FROM backup_recoveries WHERE id=$1", [
@@ -370,7 +371,7 @@ export class BackupRecovery {
     if (!uuid(venueId)) backupFail("unavailable");
     return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, { touch: false });
-      await permission(client, session.accountId, venueId);
+      await permission(client, session.accountId, venueId,true);
       await lockVerificationPolicy(client);
       await lockVenue(client, venueId);
       const points = await venuePoints(client, venueId),stream=await currentStream(client,venueId).catch(()=>undefined);
@@ -391,7 +392,7 @@ export class BackupRecovery {
     return this.#transaction(async (client) => {
       const session = await resolveSession(client, token, { touch: false }),
         row = await operation(client, id);
-      await permission(client, session.accountId, row.venue_id);
+      await permission(client, session.accountId, row.venue_id,true);
       await resolveSession(client, token, { touch: false });
       return view(row);
     });
@@ -404,7 +405,7 @@ export class BackupRecovery {
           touch: false,
         }),
         first = await operation(client, id);
-      await permission(client, session.accountId, first.venue_id);
+      await permission(client, session.accountId, first.venue_id,true);
       await lockVenue(client, first.venue_id);
       await resolveSession(client, token, { csrfToken });
       await client.query(

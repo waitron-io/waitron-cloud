@@ -555,7 +555,6 @@ test('required enrollment reads current passkey authority after an account-lock 
 });
 
 test('recovered accounts require enrollment even outside the country middleware and keep their organisation restriction on login', async () => {
-  await pool.query('ALTER TABLE cloud_accounts ADD COLUMN IF NOT EXISTS recovery_organisation_id uuid');
   await pool.query('UPDATE cloud_accounts SET recovery_organisation_id=$2 WHERE id=$1',[accountId,organisationId]);
   const session=await signIn();
   await expectCode(run(client=>resolveSession(client,session.token)), 'enrollment_required');
@@ -567,7 +566,6 @@ test('recovered accounts require enrollment even outside the country middleware 
 });
 
 test('recovered owner can approve A but cannot approve B despite retained membership', async () => {
-  await pool.query('ALTER TABLE cloud_accounts ADD COLUMN IF NOT EXISTS recovery_organisation_id uuid');
   const b=randomUUID(),businessB=randomUUID();
   await pool.query('INSERT INTO organisations(id) VALUES($1)',[b]);
   await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[businessB,b]);

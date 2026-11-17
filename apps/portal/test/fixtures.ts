@@ -25,7 +25,7 @@ export async function addVirtualAuthenticator(context: BrowserContext, page: Pag
     await session.detach().catch(() => undefined);
   }};
 }
-export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string,operatorAccountId?:string,billingAccount?:BillingAccountOptions) {
+export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?:(name:string)=>Promise<string[]>,factor?:FactorConfig,translation?:{pageBytes?:number},requireEnrollment=false,guestOrigin?:string,operatorAccountId?:string,billingAccount?:BillingAccountOptions,countryCode?:string) {
   const db = await database();
   const reserved = createServer();
   await new Promise<void>(resolve => reserved.listen(0, '127.0.0.1', resolve));
@@ -40,7 +40,7 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
     const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
     translations=translation?new TranslationFixture(db.pool,issuer,origin,translation.pageBytes):undefined;
     running = await startAccountServer({operatorAccountId,billingAccount,planMode:billingAccount?'test-venue-levels':undefined,guestOrigin,translation:!!translation,translationMachine:translations?.machine,captures,remoteResolve,factor:factor??{keys:null,policy:emailLoginPolicy},leaseIssuer:issuer,pool: db.pool, outbox: db.outbox, port: address.port,
-      config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: [], requireEnrollment},
+      config: {portalOrigin: origin, production: false, rateKey: db.rateKey, trustedProxyIps: [], requireEnrollment,countryCode},
       portalAssets: await loadPortalAssets(new URL('../dist', import.meta.url).pathname)});
     translations?.attach(running.server);
     const trace:object[]=[];const traceStarted=performance.now();

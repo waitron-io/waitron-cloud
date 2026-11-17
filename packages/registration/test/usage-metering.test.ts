@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -235,4 +236,10 @@ test('each translation measure keeps its quantity and source checks independent'
  ]);
  await assert.rejects(pool.query('UPDATE usage_events SET quantity=1 WHERE source_reference=$1',[reference]),/usage_event_immutable/);
  await assert.rejects(pool.query('DELETE FROM usage_events WHERE source_reference=$1',[reference]),/usage_event_immutable/);
+});
+
+test('recovered scope: usage summary refuses the other retained business',async()=>{
+ const token=(await transaction(pool,c=>createSession(c,accountId))).token,reader=new UsageStore(pool);
+ await setRecoveryScope(pool,accountId,secondOrganisationId);await assert.rejects(reader.summary(token,{organisationId}),/permission_denied/);
+ await setRecoveryScope(pool,accountId,organisationId);assert.equal((await reader.summary(token,{organisationId})).organisationId,organisationId);
 });

@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction,type InstallationView} from '@waitron-cloud/registration';
@@ -9,7 +10,7 @@ function remoteChecks(value:Record<'public'|'staff',{status:'healthy'|'failed';c
 export async function venueOverview(pool:Pool,token:string,installations:InstallationView[]){
  return transaction(pool,async client=>{
   const session=await resolveSession(client,token,{touch:false});
-  const memberships=await client.query('SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 FOR SHARE',[session.accountId]);
+  const memberships=await client.query(`SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId]);
   const rows=await client.query(`SELECT v.id,v.organisation_id,o.name AS organisation_name,b.name AS business_name,b.country_code,
    (SELECT max(p.captured_at) FROM backup_points p WHERE p.venue_id=v.id AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL) AS latest_snapshot_at,
    (SELECT max(p.captured_at) FROM backup_points p JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.venue_id=v.id AND q.current_verification='verified') AS verified_snapshot_at,

@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,beforeEach,after,test} from 'node:test';
@@ -73,4 +74,10 @@ test('account-only completion reports unavailable handover and shares the ordina
  const response=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'handover_unavailable'});
  for(let n=0;n<9;n++)assert.equal((await signupRequest(target,'/signup/complete',{...body,organisationName:'Business',legalBusinessName:'Business SL',countryCode:'ES',password:'short'})).status,400);
  const limited=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
+});
+
+test('recovered scope: handover chooser omits other retained memberships',async()=>{
+ const a=await account(),target=app();await setRecoveryScope(db.pool,a.accountId);
+ assert.deepEqual((await (await request(target,a,'')).json()).organisations,[]);
+ await setRecoveryScope(db.pool,a.accountId,a.organisationId);assert.deepEqual((await (await request(target,a,'')).json()).organisations.map((o:{id:string})=>o.id),[a.organisationId]);
 });

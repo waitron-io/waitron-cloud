@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {before,after,test} from 'node:test';
@@ -384,4 +385,11 @@ test('tax save business lock holds new venue creation until its transaction fini
   const read=await request(target,f.session);assert.equal(read.status,200);
   for(const venue of (await read.json()).venues)assert.equal(Object.hasOwn(venue,'taxProfile'),false);
  }finally{release();await pending?.catch(()=>{});await creating?.catch(()=>{});writer.release();hooked.mock.restore();}
+});
+
+test('recovered scope: billing chooser and tax save keep the recovered business only',async()=>{
+ const f=await owner(),target=app([f.accountId]);await setRecoveryScope(db.pool,f.accountId);
+ assert.deepEqual(await (await request(target,f.session)).json(),{venues:[]});
+ assert.equal((await request(target,f.session,'/api/account/billing/tax/save',{venueId:f.venueId,legalName:'Sol SL',address:'Synthetic 1',taxNumber:'B12345678'})).status,403);
+ await setRecoveryScope(db.pool,f.accountId,f.organisationId);assert.equal(((await (await request(target,f.session)).json()) as {venues:unknown[]}).venues.length,1);
 });

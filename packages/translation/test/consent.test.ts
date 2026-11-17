@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
@@ -165,4 +166,12 @@ test(`an account change may update its ${target} while agreement waits without a
   assert.equal(changed,true,String(changed));assert.ok(code('forbidden')(result.error),String(result.error));
   assert.equal((await db.pool.query('SELECT * FROM translation_consents WHERE venue_id=$1',[v.venueId])).rowCount,0);
  }finally{await client.query('ROLLBACK');client.release();await operation;}
+});
+
+test('recovered scope: consent owner actions are confined without stopping independently authorised translation',async()=>{
+ const v=await connectedVenue(db,issuer,origin);await tx(c=>agreeConsent(c,v.accountId,{venueId:v.venueId,consentVersion:translationConsentVersion}));
+ await setRecoveryScope(db.pool,v.accountId);assert.deepEqual(await tx(c=>listConsents(c,v.accountId)),[]);
+ await assert.rejects(tx(c=>withdrawConsent(c,v.accountId,{venueId:v.venueId})),/forbidden|permission_denied/);
+ assert.equal(await tx(c=>hasConsent(c,v.venueId)),true);
+ await setRecoveryScope(db.pool,v.accountId,v.organisationId);assert.equal((await tx(c=>listConsents(c,v.accountId))).length,1);assert.equal((await tx(c=>withdrawConsent(c,v.accountId,{venueId:v.venueId}))).consented,false);
 });

@@ -1,3 +1,5 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
+import {createSession} from '@waitron-cloud/identity';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -143,4 +145,14 @@ test('the real HTTP server accepts an exact 2 MiB escaped publication and refuse
   const oversized=await send(f.publish(body+' ',1));assert.equal(oversized.status,413);assert.deepEqual(JSON.parse(oversized.body),{error:'too_large'});
   assert.equal((await send({body:' '.repeat(12*1048576+16385),payload:'x',signature:'y'})).status,413);
  }finally{await running.close();await f.db.close();}
+});
+
+test('recovered scope: guest sharing cannot be changed outside the recovered business',async()=>{
+ const f=await guestMenuFixture();try{
+  await f.seed();const origin='https://cloud.example.test',app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,guestOrigin:'https://menus.example.test',config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
+  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
+  const send=()=>app.request(origin+'/api/account/guest-menu/takedown',{method:'POST',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken},body:JSON.stringify({venueId:f.venueId})},{incoming:{socket:{remoteAddress:'192.0.2.3'}}} as HttpBindings);
+  await setRecoveryScope(f.db.pool,f.owner.accountId);assert.equal((await send()).status,403);
+  await setRecoveryScope(f.db.pool,f.owner.accountId,f.owner.organisationId);assert.equal((await send()).status,200);
+ }finally{await f.db.close();}
 });

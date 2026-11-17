@@ -350,3 +350,7 @@ export {AccountActionProofStore,AccountActionProofError,requireAccountActionProo
 export {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
 
 export {OwnerTransferStore,OwnerTransferError,type OwnerTransferView} from './owner-transfer.ts';
+
+export {organisationScopeSql,requireOrganisationScope} from '@waitron-cloud/identity';
+
+export {OwnerRecoveryStore,OwnerRecoveryError,type OwnerRecoveryBinding} from './owner-recovery.ts';

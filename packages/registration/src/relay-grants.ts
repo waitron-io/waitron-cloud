@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {testRelayOriginProof,type TestRelayOrigin} from './test-relay-origin.ts';
 import {readMachineClaims,type MachineClaims,type SignedEnvelope} from './installation-proof.ts';
 import {requireVenueService} from './venue-service-permissions.ts';
@@ -62,10 +63,10 @@ async function account(client:PoolClient,accountId:string){
  if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
 }
-async function authority(client:PoolClient,accountId:string,installationId:string,planMode:PlanMode,allowances?:AllowanceOptions):Promise<InstallationRow>{
+async function authority(client:PoolClient,accountId:string,installationId:string,planMode:PlanMode,allowances?:AllowanceOptions,sessionAuthority=false):Promise<InstallationRow>{
  const candidate=(await client.query('SELECT v.organisation_id,v.legal_business_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[installationId])).rows[0];
  if(!candidate)fail('grant_unavailable');
- if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
+ if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${sessionAuthority?organisationScopeSql('account_id','organisation_id'):'true'} FOR SHARE`,[accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
  if(allowances){
   // Billing writers take business parents before venue and installation locks.
   await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[candidate.organisation_id]);
@@ -117,7 +118,7 @@ export class RelayGrantStore {
   };
   // Authenticate before network proof; the test exception is checked again under the grant's locks.
   await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);
-   const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
+   const installation=await authority(client,actor.accountId,input.installationId,this.#planMode,undefined,true);
    if(proof)await verifyTest(client,installation);
   });
   let verifiedUntil=input.expiresAt;
@@ -130,7 +131,7 @@ export class RelayGrantStore {
    verifiedUntil=evidence.expiresAt;
   }
   return transaction(this.#pool,async client=>{
-   const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
+   const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId,this.#planMode,undefined,true);
    // Serialize first approval too; there is no grant row to lock until it is created.
    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[installation.id]);
    const prior=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installation.id])).rows[0];
@@ -157,7 +158,7 @@ export class RelayGrantStore {
    const candidate=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1',[grantId])).rows[0];
    if(!candidate)fail('grant_unavailable');
    // Current owners can revoke even after the consenting owner or installation is disabled.
-   if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[actor.accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
+   if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[actor.accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
    await client.query('UPDATE relay_grants SET enabled=false,revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[grantId]);
    await session(client,token,csrfToken);
   });

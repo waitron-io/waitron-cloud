@@ -56,6 +56,10 @@ PACKAGES = [{
     'file': 'contract-0.2.16.tgz',
     'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.16/7fdf1ddd588770af491c0ca80786ddcbd1dcee80',
     'integrity': 'sha512-R+3qPQL3EUsEDECu56WaHKEu/ADdv2didGwwyf0pg7RPzkvQ0ATJCjpdIYccziCjZY7On76WA2VhPPoks/6JDg=='
+}, {
+    'file': 'contract-0.2.33.tgz',
+    'url': 'https://npm.pkg.github.com/download/@waitron-io/contract/0.2.33/0bf4f9af200e36d81f77a2f77b68973c8c69c1f4',
+    'integrity': 'sha512-i72eqk3zl3KYPhxTOoJB/nLYomElqFEbUGucgKOvWntWKF8gkKAUKCXTw71/9SinSyIUr4qD/prf/i2u4jC3SA=='
 }]
 
 

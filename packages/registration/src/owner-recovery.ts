@@ -1,6 +1,7 @@
+import {markAccountActionProof} from './account-action-proof.ts';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
-import {createSession,hashSecret,type SessionCredentials} from '@waitron-cloud/identity';
+import {createSession,hashSecret,withEnrollmentPolicy,type SessionCredentials} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
 import {cancelOwnerTransfers} from './owner-transfer.ts';
 import {validLocale,validNewPassword,type AccountLocale} from './account-input.ts';
@@ -86,6 +87,13 @@ export class OwnerRecoveryStore {
    if(row.expires_at.getTime()<=await time(client))unavailable();return selected;
   });
  }
+ async status(token:string){
+  this.#token(token);return transaction(this.#pool,async client=>{
+   const row=await lockRequest(client,'token_hash',digest(token));recovery(row);
+   if(row.recovery_binding)await currentBinding(client,row,this.#options.countryCode);
+   return {requestId:row.recovery_id!,state:row.recovery_decision??(row.recovery_binding?'pending':'choose')};
+  });
+ }
  authenticate(action:MachineAction,envelope:unknown){return new InstallationStore(this.#pool,this.#options.issuer,this.#options.origin,this.#trusted).authenticate(action,envelope);}
  async #machineProof(client:PoolClient,action:MachineAction,envelope:unknown,verifiedAt?:number){
   const routing=readMachineClaims(envelope);
@@ -155,6 +163,8 @@ export class OwnerRecoveryStore {
    await client.query('UPDATE password_reset_requests SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[row.account_id]);
    await this.#outbox.enqueue(client,'password_changed',{email:row.email,locale});
    const session=await createSession(client,row.account_id);
+   await withEnrollmentPolicy({required:true,allowEnrollment:true},()=>markAccountActionProof(client,session.token,session.csrfToken,'recovery'));
+   await this.#machineProof(client,'owner-recovery-approve',envelope,verifiedAt);
    if(row.expires_at.getTime()<=await time(client))unavailable();return session;
   });
  }

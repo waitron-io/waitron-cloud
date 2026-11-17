@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
@@ -63,9 +64,9 @@ function same(row:GrantRow,input:SupportGrantApproval,approver:string):boolean{r
  &&row.venue_id===input.venueId&&row.platform_account_id===input.platformAccountId&&row.approved_by_account_id===approver
  &&row.reason===input.reason&&row.expires_at.toISOString()===input.expiresAt&&row.actions.length===input.actions.length
  &&row.actions.every((value,index)=>value===input.actions[index]);}
-async function owner(client:PoolClient,accountId:string,organisationId:string):Promise<void>{
+async function owner(client:PoolClient,accountId:string,organisationId:string,sessionAuthority=false):Promise<void>{
  const result=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN cloud_accounts a ON a.id=m.account_id
-  WHERE m.account_id=$1 AND m.organisation_id=$2 AND m.is_owner AND a.disabled_at IS NULL FOR SHARE OF m,a`,[accountId,organisationId]);
+  WHERE m.account_id=$1 AND m.organisation_id=$2 AND m.is_owner AND a.disabled_at IS NULL AND ${sessionAuthority?organisationScopeSql('a.id','m.organisation_id'):'true'} FOR SHARE OF m,a`,[accountId,organisationId]);
  if(!result.rowCount)fail('permission_denied');
 }
 async function eligible(client:PoolClient,accountId:string,permissions:readonly string[]):Promise<void>{
@@ -92,13 +93,13 @@ export class SupportGrantStore {
  async approve(token:string,csrfToken:string,input:SupportGrantApproval):Promise<SupportGrant>{
   this.#requireConfigured();const proposed=approval(input,this.#grantableActions);
   return transaction(this.#pool,async client=>{
-   const actor=await session(client,token,csrfToken);await owner(client,actor.accountId,proposed.organisationId);
+   const actor=await session(client,token,csrfToken);await owner(client,actor.accountId,proposed.organisationId,true);
    await eligible(client,proposed.platformAccountId,this.#eligibilityPermissions);await venue(client,proposed.venueId,proposed.organisationId);
    const prior=(await client.query<GrantRow>('SELECT * FROM support_grants WHERE id=$1 FOR SHARE',[proposed.id])).rows[0];
    if(prior){
     if(!same(prior,proposed,actor.accountId))fail('grant_conflict');
     await recordSecurityAuditEvent(client,{organisationId:prior.organisation_id,venueId:prior.venue_id,type:'support.granted',actorKind:'account',actorId:actor.accountId,subjectKind:'support_grant',subjectId:prior.id,sourceId:prior.id});
-    await owner(client,actor.accountId,proposed.organisationId);await session(client,token,csrfToken);return view(prior);
+    await owner(client,actor.accountId,proposed.organisationId,true);await session(client,token,csrfToken);return view(prior);
    }
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(new Date(proposed.expiresAt).getTime()<=now.getTime())fail('invalid_input');
@@ -109,7 +110,7 @@ export class SupportGrantStore {
    const row=inserted.rows[0]??(await client.query<GrantRow>('SELECT * FROM support_grants WHERE id=$1 FOR SHARE',[proposed.id])).rows[0];
    if(!row||!same(row,proposed,actor.accountId))fail('grant_conflict');
    await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'support.granted',actorKind:'account',actorId:actor.accountId,subjectKind:'support_grant',subjectId:row.id,sourceId:row.id});
-   await owner(client,actor.accountId,proposed.organisationId);await session(client,token,csrfToken);return view(row);
+   await owner(client,actor.accountId,proposed.organisationId,true);await session(client,token,csrfToken);return view(row);
   });
  }
 
@@ -119,12 +120,12 @@ export class SupportGrantStore {
    const actor=await session(client,token,csrfToken);
    let row=(await client.query<GrantRow>('SELECT * FROM support_grants WHERE id=$1 FOR UPDATE',[grantId])).rows[0];
    if(!row)fail('grant_unavailable');
-   try{await owner(client,actor.accountId,row.organisation_id);}catch(error){if(error instanceof SupportGrantError&&error.code==='permission_denied')fail('grant_unavailable');throw error;}
+   try{await owner(client,actor.accountId,row.organisation_id,true);}catch(error){if(error instanceof SupportGrantError&&error.code==='permission_denied')fail('grant_unavailable');throw error;}
    if(row.revoked_at===null){
     row=(await client.query<GrantRow>('UPDATE support_grants SET revoked_at=clock_timestamp(),revoked_by_account_id=$2 WHERE id=$1 AND revoked_at IS NULL RETURNING *',[grantId,actor.accountId])).rows[0]!;
     await recordSecurityAuditEvent(client,{organisationId:row.organisation_id,venueId:row.venue_id,type:'support.revoked',actorKind:'account',actorId:actor.accountId,subjectKind:'support_grant',subjectId:row.id,sourceId:row.id});
    }
-   await owner(client,actor.accountId,row.organisation_id);await session(client,token,csrfToken);return view(row);
+   await owner(client,actor.accountId,row.organisation_id,true);await session(client,token,csrfToken);return view(row);
   });
  }
 

@@ -1,3 +1,7 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
+import {connectedVenue} from '../../translation/test/fixtures.ts';
+import {createLeaseIssuer} from '@waitron-cloud/registration';
+import {createSession} from '@waitron-cloud/identity';
 import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
 import {verifyPointFixture,configureRecoveryVerification,fixtureTarget} from './fixtures/verification.ts';
 import { test, before, after } from "node:test";
@@ -447,4 +451,15 @@ test("owner-authorised replacement is durable, target-bound and does not activat
     ).length,
     1,
   );
+});
+
+test('recovered scope: recovery catalogue refuses another retained business',async()=>{
+ await configureRecoveryVerification(db.pool);
+ const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const v=await connectedVenue(db,issuer,origin),vault=new BackupKeyVault(randomBytes(32));
+ const catalogue=new BackupCatalogue(db.pool,vault,()=>({async read(){throw Error('no objects');},async put(_k,b){return receipt(b);},async remove(){}}));
+ await catalogue.provision(v.installationId,{endpoint:'https://store.example.test',bucket:'synthetic-recovery',region:'local'});
+ const token=(await transaction(db.pool,c=>createSession(c,v.accountId))).token,store=new BackupRecovery(db.pool,vault,origin);
+ await setRecoveryScope(db.pool,v.accountId);await assert.rejects(store.catalogue(token,v.venueId),/permission_denied/);
+ await setRecoveryScope(db.pool,v.accountId,v.organisationId);assert.deepEqual((await store.catalogue(token,v.venueId)).points,[]);
 });

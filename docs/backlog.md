@@ -837,14 +837,6 @@ order. Remote access matters most because Waitron's customer-facing features wai
    and the D101 design lists six open lawyer questions. Missing: terms of service, the data
    processing agreement with each venue, and the promises Cloud makes about how quickly a
    venue is recovered, how much data a failure can lose, and uptime.
-5. **Single-owner recovery.** Remaining D608 work: recover
-   the same owner through a verified mailbox plus a local administrator on a
-   currently paired box, limited to that organisation. Follow the
-   [lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
-   and [paired-box approval contract](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md#box-approval-contract-lane-f-and-cloud).
-   The contract is proposed; Lane F owns the box half, and both halves remain unbuilt.
-   Countries remain independent. Billing pages stay parked; no manual recovery,
-   support takeover, operator, fiscal or activation permission is granted.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
    reflects the owner's 2026-11-08 paired-box reporting, automatic sending with exact Sent
    reports, country feature lists and standard 24-hour support access choices. Box forms,

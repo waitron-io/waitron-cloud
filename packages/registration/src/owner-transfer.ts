@@ -1,3 +1,4 @@
+import {organisationScopeSql,requireOrganisationScope} from '@waitron-cloud/identity';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -32,6 +33,7 @@ export class OwnerTransferStore {
    // Discover both accounts before taking either lock; all handovers use their sorted order.
    await lockAccounts(client,[candidate.accountId,lookup?.account_id]);
    const sender=await requireAccountActionProof(client,token,csrf);
+   await requireOrganisationScope(client,sender.accountId,organisationId);
    const recipient=(await client.query(`SELECT a.id,(${enrolled}) AS enrolled FROM cloud_accounts a JOIN cloud_credentials c ON c.account_id=a.id
     WHERE c.email=$1 AND a.id=$3 AND c.email_verified_at IS NOT NULL AND a.disabled_at IS NULL AND a.id<>$2`,[email,sender.accountId,lookup?.account_id??null])).rows[0];
    await client.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[organisationId]);
@@ -48,7 +50,7 @@ export class OwnerTransferStore {
  }
  async list(token:string){return transaction(this.#pool,async client=>{
   const session=await resolveSession(client,token,{touch:false});
-  const rows=(await client.query('SELECT * FROM owner_transfers WHERE sender_id=$1 OR recipient_id=$1 ORDER BY created_at DESC LIMIT 100',[session.accountId])).rows;
+  const rows=(await client.query(`SELECT * FROM owner_transfers WHERE (sender_id=$1 OR recipient_id=$1) AND ${organisationScopeSql('$1','organisation_id')} ORDER BY created_at DESC LIMIT 100`,[session.accountId])).rows;
   return Promise.all(rows.map(row=>view(client,row,session.accountId)));
  });}
  async decide(token:string,csrf:string,id:string,action:'accept'|'cancel'){
@@ -60,6 +62,7 @@ export class OwnerTransferStore {
    if(session.accountId!==candidate.recipient_id&&!(action==='cancel'&&session.accountId===candidate.sender_id))throw new OwnerTransferError();
    await client.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[candidate.organisation_id]);
    const offer:Offer=(await client.query('SELECT * FROM owner_transfers WHERE id=$1 FOR UPDATE',[id])).rows[0];
+   await requireOrganisationScope(client,session.accountId,offer.organisation_id);
    if(offer.state!=='pending')return view(client,offer,session.accountId);
    if(offer.expires_at<=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now)throw new OwnerTransferError();
    if(action==='cancel'){

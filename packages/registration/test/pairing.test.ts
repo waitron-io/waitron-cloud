@@ -1,3 +1,4 @@
+import {setRecoveryScope} from './fixtures/recovery-scope.ts';
 import {prepareConnectionProof} from './fixtures/action-proof.ts';
 import {requireConnectionProof} from '../src/connection-proof.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
@@ -335,4 +336,10 @@ test('a replacement needs both ordinary approvals and returns the retained Cloud
   const result=(await store.complete(completion(replacement))).registration!;
   assert.equal(result.venueId,old.venueId);assert.notEqual(result.installationId,old.installationId);
   assert.deepEqual((await other.complete(completion(replacement))).registration,result);
+});
+
+test('recovered scope: pairing lists and approval retain only the recovered organisation',async()=>{
+ await setRecoveryScope(db.pool,owner.accountId);assert.deepEqual(await store.businesses(session.token),[]);
+ const request=machine();await store.start(request);await assert.rejects(approve(request),/permission_denied/);
+ await setRecoveryScope(db.pool,owner.accountId,owner.organisationId);assert.equal((await store.businesses(session.token)).length,1);await approve(request);
 });

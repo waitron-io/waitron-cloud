@@ -1,6 +1,8 @@
+import {databaseClock} from './fixtures/database-clock.ts';
+import {setTimeout as delay} from 'node:timers/promises';
+import {requireAccountActionProof,invalidateAccountActionProof} from '../src/account-action-proof.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign,createHash} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
 import {after,before,beforeEach,test} from 'node:test';
 import {database} from '../../account-http/test/fixtures.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
@@ -34,8 +36,6 @@ async function approve(request:OwnerRecoveryBinding){return store.machine('owner
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
  await resetSchema(db.pool);
- // Apply the candidate migration directly until its occupied manifest slot is released.
- await db.pool.query(await readFile(new URL('../migrations/070_owner_recovery.sql',import.meta.url),'utf8'));
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const message=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0]);assert.ok('token' in message);
  owner=await signup.complete(message.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
  const installed=await installation();
@@ -64,6 +64,7 @@ test('approved recovery replaces lost authority once and issues enrollment-only 
  assert.deepEqual(await approve(request),{requestId:request.requestId,state:'approved'});
  const result=await store.complete(token,replacement);
  assert.equal(result.accountId,owner.accountId);assert.match(result.token,/^[\w-]{43}$/);
+ await withEnrollmentPolicy({required:true,allowEnrollment:true},()=>transaction(db.pool,c=>requireAccountActionProof(c,result.token,result.csrfToken)));
  await assert.rejects(transaction(db.pool,c=>resolveSession(c,old.token)),/session_unavailable/);
  await assert.rejects(transaction(db.pool,c=>resolveSession(c,result.token)),/enrollment_required/);
  assert.equal((await withEnrollmentPolicy({required:false,allowEnrollment:true},()=>transaction(db.pool,c=>resolveSession(c,result.token)))).enrollmentRequired,true);
@@ -136,4 +137,38 @@ test('completion rechecks expiry, enabled account, email, password, ownership, c
  await assert.rejects(store.complete(token,replacement),/recovery_unavailable/);
  assert.equal((await db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
  assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind='password_changed'")).rows[0].count,'0');
+});
+
+test('security changes invalidate a pending box recovery without changing the account restriction',async()=>{
+ const request=await selected();await approve(request);
+ await transaction(db.pool,c=>invalidateAccountActionProof(c,owner.accountId,undefined,db.outbox));
+ await assert.rejects(store.complete(token,replacement),/recovery_unavailable/);
+ assert.equal((await db.pool.query('SELECT recovery_organisation_id FROM cloud_accounts WHERE id=$1',[owner.accountId])).rows[0].recovery_organisation_id,null);
+});
+
+test('expiry during the notification lock wait rolls back recovery and its new session',async()=>{
+ const request=await selected();await approve(request);let clock=Date.now();
+ const timed=new OwnerRecoveryStore(databaseClock(db.pool,()=>clock),db.outbox,{origin,countryCode:'ES',issuer});
+ const blocker=await db.pool.connect();let completion:Promise<void>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('LOCK TABLE email_outbox IN SHARE MODE');
+  completion=assert.rejects(timed.complete(token,replacement),/recovery_unavailable/);
+  let waiting=false;for(let n=0;n<200;n++){
+   if((await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'INSERT INTO email_outbox%'",[db.schema])).rowCount){waiting=true;break;}await delay(20);
+  }
+  assert.equal(waiting,true,'completion reached the actual outbox lock');clock=Date.parse(request.expiresAt)+1;
+  await blocker.query('COMMIT');await completion;
+ }finally{await blocker.query('ROLLBACK');blocker.release();await completion;}
+ assert.equal((await db.pool.query('SELECT recovery_organisation_id FROM cloud_accounts WHERE id=$1',[owner.accountId])).rows[0].recovery_organisation_id,null);
+ assert.equal((await db.pool.query('SELECT count(*) FROM cloud_sessions')).rows[0].count,'0');
+ assert.equal((await db.pool.query("SELECT count(*) FROM email_outbox WHERE kind='password_changed'")).rows[0].count,'0');
+});
+
+test('password screening refusal leaves guarded recovery available for an acceptable replacement',async()=>{
+ const request=await selected();await approve(request);let mode:'compromised'|'unavailable'|'acceptable'='compromised';
+ const screened=new OwnerRecoveryStore(db.pool,db.outbox,{origin,countryCode:'ES',issuer,screening:{async check(){if(mode==='unavailable')throw Error('synthetic outage');return mode;}}});
+ await assert.rejects(screened.complete(token,replacement),/password_compromised/);mode='unavailable';await assert.rejects(screened.complete(token,replacement),/password_screening_unavailable/);
+ assert.equal((await db.pool.query('SELECT consumed_at FROM password_reset_requests WHERE token_hash=$1',[digest(token)])).rows[0].consumed_at,null);
+ mode='acceptable';await screened.complete(token,replacement);
+ assert.equal((await transaction(db.pool,c=>login(c,{email:'owner@example.test',password:replacement}))).accountId,owner.accountId);
 });

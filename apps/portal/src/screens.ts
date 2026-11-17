@@ -1,3 +1,4 @@
+import {ownerRecoveryScreen} from './owner-recovery-screen.ts';
 import {ownerTransferScreen} from './owner-transfer-screen.ts';
 import {cloudActionsScreen} from './cloud-actions-screen.ts';
 import {accountActionProofScreen} from './account-action-proof-screen.ts';
@@ -49,7 +50,8 @@ export function screen(app: PortalApp) {
       ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${ownerTransferScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
       : html`<p role="status">${app.session.state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
           ${app.session.state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
-  } else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
+  } else if(app.path==='/reset-password'&&app.ownerRecovery.stage!=='idle')content=ownerRecoveryScreen(app);
+  else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
     content = html`<p>${app.link.invalid ? c.linkUnavailable : c.missingLink}</p><nav>${link(retryLink, c.requestLink)} ${link('/login', c.login)}</nav>`;
   } else if (app.requested) {
     content = html`<p role="status">${c.emailSent}</p>${action(c.resend)}
@@ -69,7 +71,7 @@ export function screen(app: PortalApp) {
       ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<label class="business-choice" for="signup-country">${c.country}<select id="signup-country" name="countryCode" autocomplete="country" ?disabled=${app.pending}
         @change=${(event: Event) => {app.readFields(); app.countryCode = (event.target as HTMLSelectElement).value; app.refusedCountry = undefined; if(app.error === 'countryUnavailable')app.error = undefined; app.draw();}}>
         ${countries.map(country => html`<option value=${country.code} .selected=${country.code === app.countryCode}>${country.name}</option>`)}</select></label>`}${rememberBrowserChoice(app)}${action(c.create)}`;
-  } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
+  } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}<button type="button" class="text-button" ?disabled=${app.ownerRecovery.pending} @click=${()=>{void app.beginOwnerRecovery();}}>${c.ownerRecoveryLost}</button>`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;
   const errors = [...Object.values(app.errors).map(key => c[key!]), ...(app.error ? [app.error === 'countryUnavailable' ? c.countryUnavailable.replace('{country}', countryNames.of(app.refusedCountry!)!) : c[app.error]] : []), ...(app.path==='/login' && app.authenticator.error ? [c[app.authenticator.error]] : []), ...(app.path === '/login' && app.passkeys.error ? [c[app.passkeys.error]] : []), ...(app.path === '/connect' && app.pairing.error ? [c[app.pairing.error]] : [])];

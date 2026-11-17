@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {verifyPointFixture,verificationOutput} from '../../backups/test/fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {venueOverview} from '../src/venue-overview.ts';
@@ -131,4 +132,11 @@ test('overview exposes current monitoring evidence only to current organisation 
  await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.fresh,false);assert.equal(item.monitoring.incidents.length,3);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');item=(await(await browser('')).json()).installations[0];assert.equal(item.monitoring.enabled,false);assert.deepEqual(item.monitoring.incidents,[]);assert.equal(item.monitoring.remoteChecks,null);
  await db.pool.query('DELETE FROM organisation_memberships');assert.deepEqual((await(await browser('')).json()).installations,[]);
+});
+
+test('recovered scope: overview rechecks supplied installation metadata against the restriction',async()=>{
+ const initial=await (await browser('')).json() as {installations:import('@waitron-cloud/registration').InstallationView[]};
+ const a=(await db.pool.query('SELECT id FROM cloud_accounts')).rows[0].id,org=initial.installations[0]!.organisationId,token=/__Host-cloud_session=([^;]+)/.exec(cookie)![1]!;
+ await setRecoveryScope(db.pool,a);assert.deepEqual(await venueOverview(db.pool,token,initial.installations),[]);
+ await setRecoveryScope(db.pool,a,org);assert.equal((await venueOverview(db.pool,token,initial.installations)).length,1);
 });

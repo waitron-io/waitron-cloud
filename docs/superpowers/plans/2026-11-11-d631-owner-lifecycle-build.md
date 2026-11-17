@@ -156,11 +156,11 @@ Bind `accountId` to `cloud_accounts.id`, `email` to its unchanged verified `clou
 Derive non-null `countryCode` from `legal_businesses.country_code`, matching the trusted country Cloud origin; this adds no country field to stored account/transfer rows.
 Current pairing means `installations.id` and `public_key` for that venue, with `revoked_at` and `superseded_by` null. `expiresAt` is the mailbox challenge's unchanged UTC deadline; retries/lease renewal cannot extend it. Never send mailbox tokens to the box.
 
-Propose `owner-recovery-read`, `owner-recovery-approve` and `owner-recovery-refuse` under `/api/installations/` using the existing machine envelope/lease conventions.
+Use `owner-recovery-read`, `owner-recovery-approve` and `owner-recovery-refuse` under `/api/installations/` using the existing machine envelope/lease conventions.
 Read body `JSON.stringify({})` returns HTTP 200 `{requests:R[]}`: only live, mailbox-proven requests for this authenticated current pairing. Each read has a fresh `operationId`, distinct from every recovery `requestId`, so a cached read cannot occupy a decision's operation slot.
 Approve uses `operationId=R.requestId`, body `JSON.stringify({request:R,approvedBy})`; refuse uses that same operation ID and `{request:R,refusedBy}`. Waitron sets either person ID from local `authorizedBy`; order `R` keys as above.
 Return HTTP 200 `{requestId,state:'approved'}` or `{requestId,state:'refused'}` to the box. Approval only records box approval; refusal ends this request permanently. Repeating the same decision reads its result; a competing or changed decision conflicts and cannot revive it.
-Reuse `encodeMachine`/`verifyMachine`, `waitron-cloud-machine-v1`, Ed25519 `{payload,signature}`, exact origin/action/body, existing timestamp checks and a lease bound to that installation/key/venue/environment. Existing operation digest checks separate read and decision purposes.
+Reuse `encodeMachine`/`verifyMachine`, `waitron-cloud-machine-v1`, Ed25519 `{payload,signature}`, exact origin/action/body, existing timestamp checks and a lease bound to that installation/key/venue/environment. Recovery reads create no installation operation. Decision digest/result checks on the reset request separate read and decision purposes.
 
 Before fetching requests or deciding, Lane F requires a signed-in local administrator through `requireManagementSession`, the management-origin guard, `authorizeManager` and `requireFreshManagementSignIn`; require `authority.admin === true`, since `system.manage` admits managers too.
 Display the account/mailbox and organisation/venue before the administrator chooses approve or refuse. Recheck the active administrator, primary box and saved registration/key/environment after waits, immediately before signing.
@@ -175,6 +175,6 @@ Lane F owns actual-administrator versus manager/browser refusal and changed pair
 
 Source read only: Cloud `packages/registration/src/{installation-proof,installations,pairing,owner-transfer}.ts` and migrations 001–003.
 Waitron pin `e4351b9d2ee5399c17127f02d4435644a327371b`: `apps/server/src/{cloud-api,cloud-client,cloud-installation,cloud-signed-request}.ts`, `packages/identity/src/{authority,manager-login,fresh-sign-in}.ts` and `packages/contract/src/signing/installation-proof.ts`.
-**Pending qualification:** Lane F/Cloud acceptance of the proposed actions/routes and exact bodies, then qualification of guarded signing. These interfaces are unimplemented; this source read proves no runtime behaviour or recovery build clearance.
+**Implementation:** Lane F’s server `0e1d9e6e8b3b0efb85c42cb3ba8ac494f198f974` and panel `cac9f09838f4b826f04581732388b669d5593d59`, and contract `0.2.33`, supply the agreed guarded box path. Cloud follows the [recovery13 plan](2026-11-17-d608-recovery13.md), cleared by the watcher on 17 November19:18. The real Cloud/box qualification is a required landing check, separate from the earlier source reads. No owner plan approval is claimed.
 
 **Publication:** link this corrected plan from lifecycle backlog item 5 when publishing, recording plan-only status and dependencies. Current guides change with their implementing PR, not with unbuilt behavior. No tests, provider access, mail/SMS, migration application or runtime qualification are claimed by this plan.

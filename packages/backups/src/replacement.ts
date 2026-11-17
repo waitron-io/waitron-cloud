@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {lockVerificationPolicy} from './verification-admission.ts';
 import {snapshotBinding} from './recovery.ts';
 import {randomUUID,verify} from 'node:crypto';
@@ -20,8 +21,8 @@ function claims(origin:string,action:'prepare'|'status'|'reissue',envelope:Repla
   return c;
  }catch{return backupFail('invalid_proof');}
 }
-async function permission(client:PoolClient,account:string,venue:string){
- if(!(await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE m.account_id=$1 AND v.id=$2 AND m.is_owner AND a.disabled_at IS NULL FOR SHARE OF a,m`,[account,venue])).rowCount)backupFail('permission_denied');
+async function permission(client:PoolClient,account:string,venue:string,sessionAuthority=false){
+ if(!(await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN cloud_accounts a ON a.id=m.account_id WHERE m.account_id=$1 AND v.id=$2 AND m.is_owner AND a.disabled_at IS NULL AND ${sessionAuthority?organisationScopeSql('m.account_id','m.organisation_id'):'true'} FOR SHARE OF a,m`,[account,venue])).rowCount)backupFail('permission_denied');
 }
 async function recovery(client:PoolClient,id:string){
  const r=(await client.query(`SELECT r.*,COALESCE(p.source_node_id,r.stream_source_node_id) AS source_node_id,r.source_kind AS kind,p.verification,p.deleting,p.deleted_at,v.environment,v.organisation_id,v.legal_business_id,o.name AS organisation_name,b.name AS business_name
@@ -49,7 +50,7 @@ export class ReplacementStore {
   await client.query('SELECT id FROM backup_recovery_requests WHERE id=$1 FOR UPDATE',[id]);
   const r=await recovery(client,id);
   if(token!==undefined){const s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');}
-  await permission(client,r.account_id,r.venue_id);
+  await permission(client,r.account_id,r.venue_id,token!==undefined);
   await backupPlan(client,r.venue_id,this.planMode);
   if(r.kind==='snapshot')await lockVerificationPolicy(client);
   // Serialize changes to the current installation without blocking monitor foreign-key checks.
@@ -103,7 +104,7 @@ export class ReplacementStore {
  async inspect(id:string,token:string,csrf:string){
   if(!uuid(id))backupFail('unavailable');
   return transaction(this.pool,async client=>{
-   const r=await recovery(client,id),s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');await permission(client,s.accountId,r.venue_id);
+   const r=await recovery(client,id),s=await resolveSession(client,token,{csrfToken:csrf,touch:false});if(s.accountId!==r.account_id)backupFail('permission_denied');await permission(client,s.accountId,r.venue_id,true);
    if(r.kind==='snapshot'){await lockVerificationPolicy(client);await lockVenue(client,r.venue_id);}
    const p=(await client.query('SELECT * FROM installation_replacements WHERE id=$1',[id])).rows[0];
    if(p)await snapshotBinding(client,r,'unavailable');

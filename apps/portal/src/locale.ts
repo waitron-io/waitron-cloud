@@ -25,6 +25,8 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
+  ownerRecoveryLost:'Lost your sign-in method?', ownerRecoveryTitle:'Recover your account', ownerRecoveryChoose:'Choose a paired box from the business you need to recover.', ownerRecoveryBox:'Paired box', ownerRecoverySelect:'Request box approval', ownerRecoveryPending:'Ask a local administrator to approve this account in Cloud services on that box. Then check approval here.', ownerRecoveryCheck:'Check approval', ownerRecoveryApproved:'Box approval received. Set a new password, then enroll a new sign-in method.', ownerRecoveryComplete:'Recover account', ownerRecoveryRefused:'The local administrator refused this recovery. Request a new reset link to try again.', ownerRecoveryUnavailable:'Recovery is unavailable. You need your mailbox and a usable paired box. Request a new reset link to try again.', ownerRecoveryUncertain:'Check your sign-in. If it failed, request a new reset link.', ownerRecoveryScope:'This account is limited to another business. Use a paired box from that business to recover access.',
+
   transferTitle:"Hand over ownership",transferFrom:"From",transferTo:"To",
   transferIntro:"The recipient can create a Cloud account from the invitation. They have 24 hours to accept. You lose access to this business when they accept.",
   transferBusiness:"Business to hand over",
@@ -352,6 +354,8 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
+  ownerRecoveryLost:'¿Has perdido tu método de acceso?', ownerRecoveryTitle:'Recuperar tu cuenta', ownerRecoveryChoose:'Elige un equipo vinculado del negocio que necesitas recuperar.', ownerRecoveryBox:'Equipo vinculado', ownerRecoverySelect:'Solicitar aprobación del equipo', ownerRecoveryPending:'Pide a un administrador local que apruebe esta cuenta en Servicios Cloud de ese equipo. Después comprueba la aprobación aquí.', ownerRecoveryCheck:'Comprobar aprobación', ownerRecoveryApproved:'Aprobación del equipo recibida. Define una contraseña nueva y registra un método de acceso nuevo.', ownerRecoveryComplete:'Recuperar cuenta', ownerRecoveryRefused:'El administrador local ha rechazado esta recuperación. Solicita otro enlace de restablecimiento para intentarlo de nuevo.', ownerRecoveryUnavailable:'La recuperación no está disponible. Necesitas tu correo y un equipo vinculado que funcione. Solicita otro enlace para intentarlo de nuevo.', ownerRecoveryUncertain:'Comprueba si has accedido. Si no, solicita otro enlace de restablecimiento.', ownerRecoveryScope:'Esta cuenta está limitada a otro negocio. Usa un equipo vinculado de ese negocio para recuperar el acceso.',
+
   transferTitle:"Traspasar la titularidad",transferFrom:"De",transferTo:"Para",
   transferIntro:"Quien recibe puede crear una cuenta de Cloud desde la invitación. Tiene 24 horas para aceptar. Pierdes el acceso a este negocio cuando acepte.",
   transferBusiness:"Negocio que traspasas",

@@ -1,3 +1,4 @@
+import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import {Pool} from 'pg';
 import {BackupCatalogue} from '../../backups/src/catalogue.ts';
@@ -126,4 +127,10 @@ test('legacy_rows_never_drive_default_or_healthy: bounded public pages use curre
  await db.pool.query('UPDATE backup_verification_policy SET release_ready=false');
  const stale=await (await request({venueId:venues[0]!.venueId})).json();
  assert.equal(stale.points[0].verification,'pending');assert.equal(stale.defaultPointId,null);
+});
+
+test('recovered scope: backup HTTP metadata refuses a retained outside membership',async()=>{
+ const a=(await db.pool.query('SELECT id FROM cloud_accounts')).rows[0].id,org=(await db.pool.query('SELECT organisation_id FROM venues WHERE id=$1',[venues[0]!.venueId])).rows[0].organisation_id;
+ await setRecoveryScope(db.pool,a);assert.equal((await request({venueId:venues[0]!.venueId})).status,403);
+ await setRecoveryScope(db.pool,a,org);assert.equal((await request({venueId:venues[0]!.venueId})).status,200);
 });

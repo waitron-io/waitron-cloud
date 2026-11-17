@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import {guestMenuStatus} from '@waitron-cloud/remote-access/guest-menu';
 import {Resolver} from 'node:dns/promises';
 import type {Context} from 'hono';
@@ -28,7 +29,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrfToken=c.req.header('x-csrf-token')??'';
  const ownership=async(client:PoolClient,accountId:string)=>{
   // Match revocation's account/session/membership/installation order; hold ownership through commit.
-  const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,accountId]);
+  const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[id,accountId]);
   if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return accountId;
  };
  const admitted=await transaction(pool,async client=>{

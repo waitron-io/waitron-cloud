@@ -26,7 +26,7 @@ First use an available proof or single-use recovery code. If all are lost, an ad
 
 Box approval replaces missing proof; the verified-mailbox reset link remains required. Watcher 7 November 21:54 accepted this combination, subject to owner overrule, so box access alone cannot take your account. Invalidate lost proofs and sessions, require fresh enrolment before account access and notify your verified address. Restore the same account, never assign a different owner. Box-approved recovery reaches only the organisation of that venue’s paired box, never every organisation the account owns (owner, 2026-11-09).
 
-Cloud checks the request and relationships; Waitron supplies local administrator approval. Integration is unbuilt. Without the mailbox or usable paired box, this route is unavailable. If you lose every usable recovery route, there is no manual or staff route back and no support or operator override (owner, 2026-11-09).
+Cloud checks the request and relationships; Waitron supplies local administrator approval. The implementation follows the [recovery13 plan](../plans/2026-11-17-d608-recovery13.md); its named store/HTTP/browser checks exercise the Cloud journey, and landing requires the real pinned box/panel qualification. Without the mailbox or usable paired box, this route is unavailable. If you lose every usable recovery route, there is no manual or staff route back and no support or operator override (owner, 2026-11-09).
 
 ## Hand over one organisation
 

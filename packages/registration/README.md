@@ -177,6 +177,27 @@ account API implements HTTP protections; recovery screens and the
 [remaining deployment requirements](../../docs/password-recovery-implementation.md)
 are separate work.
 
+## Lost sign-in methods
+
+Use the existing reset link to prove your mailbox, then choose a currently paired
+box in an organisation you own. `OwnerRecoveryStore.begin(token)` changes that
+request’s purpose; ordinary password completion then refuses it. `select(token,
+installationId)` freezes the account, email, organisation, business, venue, key,
+environment, country and original deadline for local-administrator approval.
+
+After the box approves, `complete(token, password, locale)` screens the password,
+retires lost proofs, sessions and outstanding reset/security authority, consumes
+all reset links and queues the existing password-change notice in one transaction.
+It returns enrollment-only credentials for the same account. Memberships and
+independently authorised services remain, while every later session keeps the
+persistent one-organisation restriction. An account already limited to A cannot
+recover through B. Refusal, expiry or changed authority grants no access.
+
+The [agreed box interface](../../docs/superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md#box-approval-contract-lane-f-and-cloud)
+uses the current paired signature and lease. Polls create no installation operation;
+decision digests and results stay on the reset request. Exercise the real database
+boundary with `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/owner-recovery.test.ts`.
+
 ## Customer security audit
 
 Migration `022_security_audit.sql` adds the immutable `security_audit_events` table.

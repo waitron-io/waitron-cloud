@@ -1,3 +1,4 @@
+import {organisationScopeSql} from '@waitron-cloud/identity';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
@@ -199,7 +200,7 @@ export class UsageStore{
   return transaction(this.#pool,async client=>{
    const session=await resolveSession(client,token,{touch:false});
    const membership=await client.query(`SELECT account_id FROM organisation_memberships
-    WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE`,[session.accountId,input.organisationId]);
+    WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId,input.organisationId]);
    if(!membership.rowCount)throw new UsageError('permission_denied');
    const row=(await client.query<SummaryRow>(`SELECT
     COALESCE(sum(quantity) FILTER(WHERE event_type='backup.storage_added_bytes'),0)::text AS storage_added,
