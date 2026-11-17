@@ -45,7 +45,10 @@ try{
  let initialRuns=0;while(await worker.runOnce()){if(++initialRuns>5)throw new Error('unexpected initial reconciliation work');}
  assert.equal(initialRuns,5);assert.equal(issuances,2);assert.equal(routePublications,1);checks.push('initial route, stable names and public/staff certificates reconciled through local adapters');
  assert.deepEqual((await db.pool.query("SELECT applied_digest=desired_digest AS applied,failures::text FROM remote_configuration_jobs WHERE kind='name' ORDER BY target_id")).rows,[{applied:true,failures:'0'},{applied:true,failures:'0'}]);
- for(const placement of [selectedPlacement,otherPlacement])for(const hostname of [placement.staffHostname,placement.publicHostname])assert.deepEqual((await acme.resolveCname(hostname)).map(name=>name.replace(/\.$/,'')),['gateway.reconciler.example.test']);
+ for(const placement of [selectedPlacement,otherPlacement])for(const hostname of [placement.staffHostname,placement.publicHostname]){
+  let aliases;await assert.doesNotReject(async()=>{aliases=await acme.resolveCname(hostname);},'an applied name must answer its CNAME');
+  assert.deepEqual(aliases.map(name=>name.replace(/\.$/,'')),['gateway.reconciler.example.test']);
+ }
  checks.push('both name jobs applied and all four CNAME answers select the committed gateway');
  const initialStaff=new X509Certificate(await readFile(staffCertificate)),initialPublic=new X509Certificate(await readFile(publicCertificate));
  waitronCertificate('install',selectedPlacement.staffHostname,staffCertificate);assert.equal(await readFile(join(waitronState,'cloud/staff.crt'),'utf8'),await readFile(staffCertificate,'utf8'));
