@@ -52,3 +52,10 @@ test('operator forwards explicit test mode and rejects malformed mode before cha
  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_placements WHERE installation_id=$1',[installed.installationId])).rows[0].n,0);
  assert.equal((await operator('provision',input,'0')).status,0);
 });
+
+test('the cell command refuses a cell file without zone',async()=>{
+ const cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'cli-zone.example.test',subnet:220,publicKey:peerKey(),endpoint:'gateway.example.test:51820'};
+ const refused=await operator('cell',cell);assert.equal(refused.status,1);assert.equal(refused.stderr,'remote.command_failed\n');
+ assert.equal((await db.pool.query('SELECT count(*) FROM remote_cells WHERE id=$1',[cell.id])).rows[0].count,'0');
+ const accepted=await operator('cell',{...cell,zone:(await db.pool.query("SELECT suffix FROM remote_country_zones WHERE country='ES' AND environment='test'")).rows[0].suffix});assert.equal(accepted.status,0,accepted.stderr);
+});

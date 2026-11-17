@@ -88,16 +88,16 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
   routes.push({...(forwardReports||mode==='test-venue-levels'?{revision:Number(row.configuration_revision)}:{}),installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
  for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:publicationDigest(routesByCell.get(cell.id)??[],forwardReports&&cell.gateway_id&&!cell.revoked_at?{gatewayId:cell.gateway_id,generation:Number(cell.generation)}:undefined,mode==='test-venue-levels')});
- const certificates=cellId?[]:(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
-  FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
+ const certificates=cellId?[]:(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,s.hostname AS staff_hostname,u.hostname AS public_hostname,s.assigned_hostname AS staff_assigned,u.assigned_hostname AS public_assigned
+  FROM installations i JOIN remote_placements p ON p.installation_id=i.id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
   JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
   WHERE i.revoked_at IS NULL AND ($1::uuid IS NULL OR i.id=$1) ORDER BY i.id`,[installationId])).rows;
  for(const row of certificates){
   if(eligible&&!eligible.has(row.id))continue;
   for(const kind of ['staff','public'] as const){
-   const hostname=row[`${kind}_hostname`],dnsName=`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
-   let desiredDigest=certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,dnsName});
+   const hostname=row[`${kind}_hostname`],assigned=row[`${kind}_assigned`],dnsName='_acme-challenge.'+assigned;
+   let desiredDigest=certificateDigest(row.id,kind,{revision:Number(row.configuration_revision),hostname,assigned,dnsName});
    if(kind==='staff'&&staffExchange){const request=await readStaffRequest(client,row.id);if(!request||request.revision!==Number(row.configuration_revision)||request.hostname!==hostname)continue;desiredDigest=staffDigest(desiredDigest,request);}
    targets.push({kind:`certificate_${kind}`,targetId:row.id,digest:desiredDigest});
   }

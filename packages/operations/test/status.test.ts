@@ -87,8 +87,9 @@ async function configuredVenue(){
  await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'private-installation-key')",[installation,venue]);
  await db.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','ready'),($1,'continuous_backup','ready'),($1,'retained_snapshots','ready')",[installation]);
  await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','private.example.test',81,'private-cell-key','private.gateway.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
  await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.60.81.2','private-peer-key',51820)",[venue,installation,cell]);
- await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('private-staff.example.test',$1,'staff'),('private-public.example.test',$1,'public')",[venue]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES('private-staff.example.test',$1,'staff','private-staff.example.test'),('private-public.example.test',$1,'public','private-public.example.test')",[venue]);
  await db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://private-storage.test','private-bucket','local')",[venue,installation]);
  return {organisation,business,venue,installation,cell};
 }

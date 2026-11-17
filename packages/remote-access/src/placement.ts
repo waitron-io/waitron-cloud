@@ -4,7 +4,7 @@ import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
 import {requireRemotePlan,eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute,type AcceptedGatewayManifest,type ReportingGatewayRoute} from './manifest.ts';
-export interface CellInput {id:string;country:string;provider:string;environment:string;suffix:string;subnet:number;publicKey:string;endpoint:string}
+export interface CellInput {id:string;country:string;provider:string;environment:string;suffix:string;zone?:string;subnet:number;publicKey:string;endpoint:string}
 export interface Placement extends GatewayRoute {cellId:string;gatewayPublicKey:string;endpoint:string}
 export interface CellMove {
  operationId:string;installationId:string;venueId:string;expectedRevision:number;
@@ -12,7 +12,7 @@ export interface CellMove {
  source:Placement;target:Placement;
 }
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
-export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number;binding?:{venueId:string;publicKey:string}}
+export interface CertificateAuthorization {hostname:string;assigned:string;dnsName:string;revision:number;binding?:{venueId:string;publicKey:string}}
 export interface TrafficCoverageJournal {expect(client:PoolClient,manifest:AcceptedGatewayManifest):Promise<void>}
 function fail(code:string):never {throw new Error(code);}
 const route=(p:GatewayRoute):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
@@ -28,12 +28,12 @@ async function placement(client:PoolClient,id:string):Promise<Placement|undefine
 }
 async function certificateAuthorization(client:PoolClient,id:string,kind:'staff'|'public',csr:string,lock:'share'|'update',mode:PlanMode):Promise<CertificateAuthorization>{
  await requireRemotePlan(client,id,mode);
- const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,i.venue_id AS installation_venue_id,i.public_key,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
-  FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
+ const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,i.venue_id AS installation_venue_id,i.public_key,p.venue_id,s.hostname AS staff_hostname,u.hostname AS public_hostname,s.assigned_hostname AS staff_assigned,u.assigned_hostname AS public_assigned
+  FROM installations i JOIN remote_placements p ON p.installation_id=i.id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
   WHERE i.id=$1 FOR ${lock==='update'?'UPDATE':'SHARE'} OF i`,[id])).rows[0];
- if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');const hostname=kind==='staff'?row.staff_hostname:row.public_hostname;validateCsr(csr,hostname);
- return {hostname,dnsName:`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,revision:Number(row.configuration_revision),
+ if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');const hostname=row[kind+'_hostname'],assigned=row[kind+'_assigned'];validateCsr(csr,hostname);
+ return {hostname,assigned,dnsName:'_acme-challenge.'+assigned,revision:Number(row.configuration_revision),
   ...(mode==='test-venue-levels'?{binding:{venueId:row.installation_venue_id,publicKey:row.public_key}}:{})};
 }
 async function move(client:PoolClient,id:string,lock=false):Promise<CellMove|undefined>{
@@ -63,8 +63,13 @@ export class RemoteAccessStore {
  async createCell(c:CellInput){
   const endpoint=c.endpoint.split(':');
   if(!isUuid(c.id)||c.country!=='ES'||c.provider!=='aws'||!['test','production'].includes(c.environment)||!isHostname(c.suffix)||c.suffix.length>180
-   ||!Number.isInteger(c.subnet)||c.subnet<0||c.subnet>255||!isPeerKey(c.publicKey)||endpoint.length!==2||!isHostname(endpoint[0])||!/^\d{1,5}$/.test(endpoint[1]!)||Number(endpoint[1])<1||Number(endpoint[1])>65535)fail('invalid_cell');
-  await this.#pool.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[c.id,c.country,c.provider,c.environment,c.suffix,c.subnet,c.publicKey,c.endpoint]);
+   ||(c.zone!==undefined&&(!isHostname(c.zone)||c.zone.length>180))||!Number.isInteger(c.subnet)||c.subnet<0||c.subnet>255||!isPeerKey(c.publicKey)||endpoint.length!==2||!isHostname(endpoint[0])||!/^\d{1,5}$/.test(endpoint[1]!)||Number(endpoint[1])<1||Number(endpoint[1])>65535)fail('invalid_cell');
+  await transaction(this.#pool,async client=>{
+   await client.query('INSERT INTO remote_country_zones(country,environment,suffix) VALUES($1,$2,$3) ON CONFLICT(country,environment) DO NOTHING',[c.country,c.environment,c.zone??c.suffix]);
+   const zone=(await client.query('SELECT suffix FROM remote_country_zones WHERE country=$1 AND environment=$2 FOR SHARE',[c.country,c.environment])).rows[0];
+   if(c.zone!==undefined&&zone.suffix!==c.zone)fail('zone_conflict');
+   await client.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[c.id,c.country,c.provider,c.environment,c.suffix,c.subnet,c.publicKey,c.endpoint]);
+  });
  }
  async provision(installationId:string,cellId:string,peerPublicKey:string,port=443):Promise<Placement>{
   return transaction(this.#pool,client=>this.provisionInTransaction(client,installationId,cellId,peerPublicKey,port));
@@ -78,6 +83,8 @@ export class RemoteAccessStore {
    const environment=(await client.query('SELECT environment FROM venues WHERE id=$1',[install.venue_id])).rows[0]?.environment;
    const cell=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR UPDATE',[cellId])).rows[0];
    if(!cell||cell.environment!==environment)fail('cell_unavailable');
+   const zone=(await client.query('SELECT suffix FROM remote_country_zones WHERE country=$1 AND environment=$2',[cell.country,cell.environment])).rows[0];
+   if(!zone)fail('zone_unavailable');
    const prior=await placement(client,installationId);
    if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');
     if(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels'){
@@ -107,7 +114,7 @@ export class RemoteAccessStore {
     const address=`10.77.${cell.subnet}.${cell.next_address}`;
     await client.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,$4,$5,$6)',[install.venue_id,installationId,cellId,address,peerPublicKey,port]);
     const stem=`v-${install.venue_id}`;
-    await client.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,'staff'),($3,$2,'public')",[`staff-${stem}.${cell.suffix}`,install.venue_id,`${stem}.${cell.suffix}`]);
+    await client.query("INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES($1,$2,'staff',$1),($3,$2,'public',$3)",[`staff-${stem}.${zone.suffix}`,install.venue_id,`${stem}.${zone.suffix}`]);
     await client.query('UPDATE remote_cells SET next_address=next_address+1 WHERE id=$1',[cellId]);
    }
    const result=(await placement(client,installationId))!;
@@ -184,8 +191,8 @@ export class RemoteAccessStore {
   return transaction(this.#pool,async client=>{
   await requireRemotePlan(client,id,this.#planMode);
   const identity=this.#planMode==='test-venue-levels'?',i.venue_id AS installation_venue_id,i.public_key':'';
-  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at${identity} FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
-  if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return {hostname:`${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,
+  const row=(await client.query(`SELECT p.venue_id,h.assigned_hostname,i.revoked_at${identity} FROM remote_placements p JOIN installations i ON i.id=p.installation_id JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind=$2 WHERE i.id=$1`,[id,kind])).rows[0];
+  if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return {hostname:row.assigned_hostname,
    binding:this.#planMode==='test-venue-levels'?{venueId:row.installation_venue_id,publicKey:row.public_key}:undefined};
   });
  }
@@ -195,7 +202,7 @@ export class RemoteAccessStore {
   if(!isHostname(custom)||custom.length>237||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
   // The complete operator namespace is reserved, including names for venues not provisioned yet.
   if(custom!==assigned){
-   if((await this.#pool.query("SELECT id FROM remote_cells WHERE $1=suffix OR right($1,length(suffix)+1)='.'||suffix",[custom])).rowCount)fail('hostname_conflict');
+   if((await this.#pool.query("SELECT suffix FROM remote_cells WHERE $1=suffix OR right($1,length(suffix)+1)='.'||suffix UNION ALL SELECT suffix FROM remote_country_zones WHERE $1=suffix OR right($1,length(suffix)+1)='.'||suffix",[custom])).rowCount)fail('hostname_conflict');
    await verifyDelegation(custom,assigned,resolve);
   }
   try{return await transaction(this.#pool,async client=>{
@@ -206,7 +213,7 @@ export class RemoteAccessStore {
    // DNS delegation belongs to the installation identity admitted before the lookup.
    if(admitted.binding&&(row.venue_id!==admitted.binding.venueId||row.public_key!==admitted.binding.publicKey))fail('permission_denied');
    // Assigned names are reserved even when a venue elects to use a custom name.
-   const reserved=(await client.query(`SELECT p.installation_id FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id WHERE $1 IN ('staff-v-'||p.venue_id||'.'||c.suffix,'v-'||p.venue_id||'.'||c.suffix) AND p.installation_id<>$2`,[custom,id])).rowCount;
+   const reserved=(await client.query(`SELECT venue_id FROM remote_hostnames WHERE assigned_hostname=$1 AND venue_id<>$2`,[custom,row.venue_id])).rowCount;
    if(reserved)fail('hostname_conflict');
    await client.query('UPDATE remote_hostnames SET hostname=$3 WHERE venue_id=$1 AND kind=$2',[row.venue_id,kind,custom]);
    const result=(await placement(client,id))!;

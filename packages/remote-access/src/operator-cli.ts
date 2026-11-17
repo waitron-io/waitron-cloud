@@ -22,7 +22,7 @@ async function atomic(path:string,value:string){
 let stopping=false;for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{stopping=true;});
 try{
  const store=new RemoteAccessStore(pool,parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS));
- if(command==='cell')await store.createCell(config);
+ if(command==='cell'){if(typeof config.zone!=='string')throw new Error('invalid_cell');await store.createCell(config);}
  if(command==='provision')console.log(JSON.stringify(await store.provision(config.installationId,config.cellId,config.peerPublicKey,config.port??443)));
  if(command==='move-stage')console.log(JSON.stringify(await store.stageMove(config)));
  if(command==='move-ready')console.log(JSON.stringify(await store.markMoveReady(config.operationId,config.expectedRevision,config.sequence)));

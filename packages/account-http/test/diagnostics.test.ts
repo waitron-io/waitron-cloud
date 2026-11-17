@@ -37,8 +37,9 @@ test('owner receives one redacted diagnostic whose stale evidence is unknown',as
  await db.pool.query("INSERT INTO venue_monitors(venue_id,next_check_at,checked_at) VALUES($1,clock_timestamp(),clock_timestamp()-interval '10 minutes')",[venue]);
  await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision,opened_at,changed_at) VALUES($1,'disconnected','open',2,'2026-09-26T19:00:00Z','2026-09-26T19:05:00Z')",[venue]);
  const cell=id();await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','private.example.test',91,'private-cell-key','private-gateway:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
  await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.60.91.2','private-peer-key',51820)",[venue,installation,cell]);
- await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('private-public.example.test',$1,'public'),('private-staff.example.test',$1,'staff')",[venue]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES('private-public.example.test',$1,'public','private-public.example.test'),('private-staff.example.test',$1,'staff','private-staff.example.test')",[venue]);
  await db.pool.query(`INSERT INTO remote_probe_observations(installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,failure,certificate_not_before,certificate_not_after,certificate_fingerprint256)
   VALUES($1,$2,'public',0,'private-public.example.test','healthy',clock_timestamp()-interval '10 minutes',5,NULL,'2026-01-01','2027-01-01',$3),
    ($1,$2,'staff',0,'private-staff.example.test','failed',clock_timestamp(),6,'tls',NULL,NULL,NULL)`,[installation,venue,'a'.repeat(64)]);

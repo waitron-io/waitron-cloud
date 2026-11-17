@@ -151,8 +151,8 @@ for(const action of ['apply','status'])test(`session expiry while ${action} wait
 test('DNS instructions recheck ownership after a blocked metadata lookup',async()=>{
  const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;
  try{
-  await blocker.query('BEGIN');await blocker.query('LOCK remote_cells IN ACCESS EXCLUSIVE MODE');
-  response=request('dns',{kind:'staff',hostname:'staff.cafe.example'});await untilLock('SELECT p.venue_id,c.suffix,i.revoked_at');
+  await blocker.query('BEGIN');await blocker.query('LOCK remote_hostnames IN ACCESS EXCLUSIVE MODE');
+  response=request('dns',{kind:'staff',hostname:'staff.cafe.example'});await untilLock('SELECT p.venue_id,h.assigned_hostname,i.revoked_at');
   await db.pool.query('UPDATE organisation_memberships SET is_owner=false');await blocker.query('COMMIT');assert.equal((await response).status,403);
  }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
 });
@@ -197,9 +197,9 @@ for(const condition of ['free','revoked'] as const)test(`real database: late own
  try{
   await blocker.query('BEGIN');
   if(condition==='free')await blocker.query("UPDATE organisations SET service_plan='free'");
-  else await blocker.query('LOCK remote_cells IN ACCESS EXCLUSIVE MODE');
+  else await blocker.query('LOCK remote_hostnames IN ACCESS EXCLUSIVE MODE');
   response=request('dns',{kind:'staff',hostname:'staff.cafe.example'});
-  await untilLock(condition==='free'?'SELECT id,service_plan,service_plan_revision FROM organisations':'SELECT p.venue_id,c.suffix,i.revoked_at');
+  await untilLock(condition==='free'?'SELECT id,service_plan,service_plan_revision FROM organisations':'SELECT p.venue_id,h.assigned_hostname,i.revoked_at');
   await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false');
   await blocker.query('COMMIT');const reply=await response;
   assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:'permission_denied'});
@@ -217,4 +217,12 @@ for(const withdrawal of ['sign-out','deletion'] as const)test(`remote ${withdraw
  assert.equal(reply.status,401);assert.deepEqual(await reply.json(),{error:'unauthenticated'});
  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+});
+
+test('remote status retains assigned names after a move to a different cell suffix',async()=>{
+ const before=await (await request('status')).json(),target=randomUUID();
+ await store.createCell({id:target,country:'ES',provider:'aws',environment:'test',suffix:'destination.example.test',subnet:8,publicKey:randomBytes(32).toString('base64'),endpoint:'destination.example.test:51820'});
+ const operationId=randomUUID();await store.stageMove({operationId,installationId:venue.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
+ const manifest=await store.manifest(target);await store.markMoveReady(operationId,1,manifest.sequence);await store.completeMove(operationId,1);
+ const response=await request('status');assert.equal(response.status,200);assert.deepEqual((await response.json()).names,before.names);
 });

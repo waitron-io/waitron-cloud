@@ -4,6 +4,7 @@ import {after,before,test} from 'node:test';
 import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
+import {crypto as acmeCrypto} from 'acme-client';
 
 const peerKey=()=>randomBytes(32).toString('base64');
 let db:Awaited<ReturnType<typeof database>>,store:RemoteAccessStore;
@@ -20,10 +21,13 @@ async function installation(email:string){
 }
 
 test('a tested destination route cuts over once and preserves customer-facing names',async()=>{
- const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'source.example.test',subnet:21,publicKey:peerKey(),endpoint:'source-gateway.example.test:51820'};
+ const source={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'source.example.test',zone:'venues.example.test',subnet:21,publicKey:peerKey(),endpoint:'source-gateway.example.test:51820'};
  const target={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'target.example.test',subnet:22,publicKey:peerKey(),endpoint:'target-gateway.example.test:51820'};
  await store.createCell(source);await store.createCell(target);
  const installed=await installation('move@example.test'),venuePeer=peerKey(),active=await store.provision(installed.installationId,source.id,venuePeer);
+ const [,csr]=await acmeCrypto.createCsr({commonName:active.staffHostname,altNames:[active.staffHostname]});
+ const check=await store.authorizeCertificate(installed.installationId,'staff',csr.toString()),instructions=await store.hostnameInstructions(installed.installationId,'staff','staff.cafe.example.test');
+ assert.deepEqual(check,{hostname:active.staffHostname,assigned:active.staffHostname,dnsName:'_acme-challenge.staff-v-'+installed.venueId+'.venues.example.test',revision:1});
  const operationId=randomUUID();
  const staged=await store.stageMove({operationId,installationId:installed.installationId,targetCellId:target.id,targetPeerPublicKey:venuePeer,port:443,expectedRevision:1});
  assert.equal(staged.state,'staged');
@@ -39,6 +43,8 @@ test('a tested destination route cuts over once and preserves customer-facing na
  assert.deepEqual((await store.manifest(source.id)).routes,[]);
  const destination=await store.manifest(target.id);assert.deepEqual(destination.routes.map(route=>route.installationId),[installed.installationId]);
  assert.equal(destination.routes[0]!.staffHostname,active.staffHostname);assert.equal(destination.routes[0]!.publicHostname,active.publicHostname);
+ assert.deepEqual(await store.authorizeCertificate(installed.installationId,'staff',csr.toString()),{...check,revision:2});
+ assert.deepEqual(await store.hostnameInstructions(installed.installationId,'staff','staff.cafe.example.test'),instructions);
  const row=(await db.pool.query("SELECT i.configuration_revision,s.state,s.configuration FROM installations i JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access' WHERE i.id=$1",[installed.installationId])).rows[0];
  assert.equal(row.configuration_revision,2);assert.equal(row.state,'provisioning');assert.equal(row.configuration.cellId,target.id);assert.equal(row.configuration.staffHostname,active.staffHostname);
 });

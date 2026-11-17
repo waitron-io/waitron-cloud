@@ -9,6 +9,7 @@ async function fixture(){
  try{
   const cell=randomUUID(),gateway=randomUUID(),process=randomUUID();
   await f.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','traffic.test',13,'fixture-key','fixture-endpoint')",[cell]);
+  await f.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
   const installation=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[0]])).rows[0].id as string;
   const publicKey=generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'pem'}).toString();
   const processRow={cell_id:cell,gateway_id:gateway,generation:'1',process_id:process,reporter_public_key:publicKey,

@@ -48,8 +48,9 @@ function child(mode:string){
 async function remote(){
  const cell=randomUUID();
  await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','quiet.example.test',57,'fixture-key','gateway.example.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
  await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.77.57.2','fixture-peer',443)",[venue.venueId,venue.installationId,cell]);
- await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('public.quiet.example.test',$1,'public'),('staff.quiet.example.test',$1,'staff')",[venue.venueId]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES('public.quiet.example.test',$1,'public','public.quiet.example.test'),('staff.quiet.example.test',$1,'staff','staff.quiet.example.test')",[venue.venueId]);
  await db.pool.query(`INSERT INTO remote_probe_observations(installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,failure)
   VALUES($1,$2,'public',0,'public.quiet.example.test','failed',clock_timestamp()-interval '10 seconds',12,'timeout'),
    ($1,$2,'staff',0,'staff.quiet.example.test','healthy',clock_timestamp(),12,NULL)`,[venue.installationId,venue.venueId]);

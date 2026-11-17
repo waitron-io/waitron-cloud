@@ -58,6 +58,7 @@ export async function openTestRemoteRuntime({pool,directory,mode}){
   await client.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint,sequence) VALUES($1,'ES','aws','test',$2,61,$3,'waitron.local:51820',$4) ON CONFLICT(id) DO NOTHING",[cellId,suffix,publicKey,manifest.sequence]);
   const row=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR UPDATE',[cellId])).rows[0];
   if(row.country!=='ES'||row.provider!=='aws'||row.environment!=='test'||row.suffix!==suffix||row.subnet!==61||row.public_key!==publicKey||row.endpoint!=='waitron.local:51820')throw Error('test_cloud.remote_cell_conflict');
+  await client.query("INSERT INTO remote_country_zones(country,environment,suffix) VALUES('ES','test',$1) ON CONFLICT(country,environment) DO NOTHING",[suffix]);
   // File publication can survive a rolled-back completion; never reuse its signed sequence.
   await client.query('UPDATE remote_cells SET sequence=GREATEST(sequence,$2) WHERE id=$1',[cellId,manifest.sequence]);
  });
