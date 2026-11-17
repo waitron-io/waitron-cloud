@@ -1603,7 +1603,7 @@ implementation or production evidence.
   from the last observed record. Preserve run identity, final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
-  The evidence tool also refuses CI 44104446979 attempt 2: GitHub reports 44 latest final jobs but 45 attempt-specific records, including an extra queued record; watcher 17 November 16:10 closed that merge on the native44-job view, leaving this known readback gap open.
+  The evidence tool also refuses CI 44104446979 attempt 2: GitHub reports 44 latest final jobs but 45 attempt-specific records, including an extra queued record; watcher 17 November 16:10 closed that merge on the native 44-job view, leaving this known readback gap open.
 
 - **CI execution budget.** Keep the remaining qualifications and unknown causes
   below; delivered allocation, selection and fixture repairs are not open work.
