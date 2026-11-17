@@ -667,6 +667,9 @@ and returns an outcome separately from optional provider acceptance metadata.
 `settleSesRelayReceipt` binds accepted metadata to the original attempt without
 changing the queue, grant, allowance or outcome. Lost post-DATA acknowledgements
 remain uncertain; malformed optional IDs do not turn acceptance into a retry.
+Authentication and certificate/TLS configuration faults before DATA are temporary,
+so the existing bounded retry policy retains the payload while you repair settings.
+A recipient’s explicit 550 refusal remains permanent.
 These local fixtures establish no live provider qualification. Normal startup
 still exposes no production relay path, and `RelayWorkerConfig.mode` remains
 `local-proof`. A later enabling change must meet every existing relay gate.

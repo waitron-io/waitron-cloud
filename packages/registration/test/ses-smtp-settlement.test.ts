@@ -230,3 +230,22 @@ test('relay receipt-write failure leaves acceptance terminal without a resend',a
   assert.equal(await w.runOnce(),false);assert.equal(smtp.captured.length,1);
  }finally{await smtp?.close();await f.close();}
 });
+
+
+test('relay retries a repaired SMTP credential without losing payload or doubling its reservation',async()=>{
+ const f=await relayFixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const venue=await f.venue(),body=await venue.submit();smtp=await tlsSmtp();
+  const configuration={...f.config,ses,sesSmtp:{smtp:{...smtpConfig,port:smtp.port,password:'wrong'},trust:{ca:smtp.cert}}};
+  await new RelayWorker(f.pool,configuration).runOnce();
+  const held=await f.row(body.messageId);assert.equal(held.state,'queued');assert.ok(held.payload);assert.equal(held.attempts,1);
+  await f.pool.query('UPDATE relay_messages SET available_at=clock_timestamp() WHERE message_id=$1',[body.messageId]);
+  const w=new RelayWorker(f.pool,{...configuration,sesSmtp:{...configuration.sesSmtp,smtp:{...configuration.sesSmtp.smtp,password:smtpConfig.password}}});
+  assert.equal(await w.runOnce(),true);assert.equal(await w.runOnce(),false);
+  const sent=await f.row(body.messageId);assert.equal(sent.state,'accepted');assert.equal(sent.payload,null);assert.equal(sent.attempts,2);
+  const attempts=(await f.pool.query('SELECT attempt_tag,provider_message_id FROM mail_attempts ORDER BY attempt')).rows;
+  assert.equal(attempts.length,2);assert.notEqual(attempts[0].attempt_tag,attempts[1].attempt_tag);
+  assert.deepEqual(attempts.map(row=>row.provider_message_id),[null,'ses-message-1']);
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');assert.equal(smtp.captured.length,1);
+ }finally{await smtp?.close();await f.close();}
+});
