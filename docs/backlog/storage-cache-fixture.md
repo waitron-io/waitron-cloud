@@ -306,6 +306,14 @@ checks run, so an empty cache can require separate downloads. An unavailable ups
 fails setup rather than skipping controls. The storage fixture's
 own single download attempt and historical startup investigations remain separate.
 
+On 17 November, [PR #1256's root partition 2](https://github.com/waitron-io/waitron-cloud/actions/runs/43997929253/job/133754693086)
+reported two 30-second native startup test timeouts and four seed-hook failures in
+the unchanged claim-cleanup and identity-bind suites. The seed trace exhausted
+three header attempts with no response or bytes at 30,008 ms. A separate seed in
+the same job then received HTTP 200 and 45,801,355 bytes in 26,161 ms. This records
+an intermittent archive-acquisition occurrence under D585/D530-4; it does not
+identify the upstream cause or change any test, deadline or ownership check.
+
 ## Every SeaweedFS archive fetch and a controlled-copy proposal (D530-4)
 
 The D585 test-seed slice replaces the nine remaining raw seed hooks with
