@@ -25,7 +25,7 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
-  cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All pending proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
+  cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All unfinished proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
   cloudActionsOccurrence:'Incident ID',cloudActionsCell:'Cell',cloudActionsTarget:'Target',cloudActionsProposal:'Proposed repair',cloudActionsEvidence:'Evidence',
   cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save a synthetic proposal. Real repairs are unavailable. Use a new incident ID for a new attempt.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
   cloudActionsApprove:'Approve this proposal',cloudActionsReject:'Reject this proposal',cloudActionsExpires:'Approval expires',cloudActionsPolicies:'Repair policies',
@@ -33,7 +33,7 @@ const enBase = {
   cloudActionNotice_pending:'Notice queued',cloudActionNotice_processing:'Notice sending',cloudActionNotice_sent:'Notice sent',cloudActionNotice_expired:'Notice expired',cloudActionNotice_cancelled:'Notice cancelled',cloudActionNotice_failed:'Notice not delivered',cloudActionNotice_unknown:'Notice status unavailable',
   cloudActionState_pending:'Pending',cloudActionState_proposed:'Proposed',cloudActionState_approved:'Approved',cloudActionState_rejected:'Rejected',cloudActionState_superseded:'Superseded',
   cloudActionsTitle:'Cloud actions',cloudActionsHelp:'Repair policy for this country. The two automatic exceptions do not permit starting a hosted venue server. The owner changes policies in the repository, citing incidents.',
-  cloudActionsAsk:'Ask first',cloudActionsReport:'Act and report',cloudActionsConfirmed: 'Synthetic restart confirmed',cloudActionsUnknown: 'Restart dispatched; not yet confirmed. It will not be repeated.',
+  cloudActionsAsk:'Ask first',cloudActionsReport:'Act and report',cloudActionsConfirmed: 'Synthetic action confirmed',cloudActionsUnknown: 'Action dispatched; not yet confirmed. It will not be repeated.',
     cloudActionsUnavailable:'Execution unavailable',cloudActionsDenied:'This account is not the configured country operator. Return to Account overview, sign out, then sign in with the operator account and reopen this page.',
   cloudAction_cloud_restart:'Restart a failed Cloud workload in place',cloudAction_machine_replace:'Initiate replacement of a failed machine',
   cloudAction_machine_drain:'Drain a machine',cloudAction_machine_add:'Add a machine',cloudAction_machine_resize:'Resize a machine',
@@ -329,7 +329,7 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
-  cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas pendientes y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
+  cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas sin terminar y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
   cloudActionsOccurrence:'ID del incidente',cloudActionsCell:'Celda',cloudActionsTarget:'Destino',cloudActionsProposal:'Reparación propuesta',cloudActionsEvidence:'Pruebas',
   cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda una propuesta de prueba. Las reparaciones reales no están disponibles. Usa otro ID de incidente para un nuevo intento.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',
   cloudActionsApprove:'Aprobar esta propuesta',cloudActionsReject:'Rechazar esta propuesta',cloudActionsExpires:'La aprobación caduca',cloudActionsPolicies:'Políticas de reparación',
@@ -337,7 +337,7 @@ const esBase: typeof enBase = {
   cloudActionNotice_pending:'Aviso en cola',cloudActionNotice_processing:'Enviando aviso',cloudActionNotice_sent:'Aviso enviado',cloudActionNotice_expired:'Aviso caducado',cloudActionNotice_cancelled:'Aviso cancelado',cloudActionNotice_failed:'Aviso no entregado',cloudActionNotice_unknown:'Estado del aviso no disponible',
   cloudActionState_pending:'Pendiente',cloudActionState_proposed:'Propuesta',cloudActionState_approved:'Aprobada',cloudActionState_rejected:'Rechazada',cloudActionState_superseded:'Sustituida',
   cloudActionsTitle:'Acciones de Cloud',cloudActionsHelp:'Política de reparación del país. Las dos excepciones automáticas no autorizan a iniciar el servidor de un local alojado. El propietario cambia las políticas en el repositorio, citando incidentes.',
-  cloudActionsAsk:'Preguntar primero',cloudActionsReport:'Actuar e informar',cloudActionsConfirmed: 'Reinicio sintético confirmado',cloudActionsUnknown: 'Reinicio enviado; aún sin confirmar. No se repetirá.',
+  cloudActionsAsk:'Preguntar primero',cloudActionsReport:'Actuar e informar',cloudActionsConfirmed: 'Acción sintética confirmada',cloudActionsUnknown: 'Acción enviada; aún sin confirmar. No se repetirá.',
     cloudActionsUnavailable:'Ejecución no disponible',cloudActionsDenied:'Esta cuenta no es la del operador configurado para el país. Vuelve al resumen de la cuenta, cierra sesión entra con la cuenta del operador y vuelve a abrir esta página.',
   cloudAction_cloud_restart:'Reiniciar una carga de Cloud fallida sin moverla',cloudAction_machine_replace:'Iniciar la sustitución de una máquina fallida',
   cloudAction_machine_drain:'Vaciar una máquina',cloudAction_machine_add:'Añadir una máquina',cloudAction_machine_resize:'Cambiar el tamaño de una máquina',
