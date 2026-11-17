@@ -55,7 +55,7 @@ records a declared country, not verified tax details or a hosting location.
 Pass the service country as two uppercase letters in constructor argument four
 (default `ES`); a different
 business country raises `country_unavailable` before any account writes. You can
-correct the country and retry the same email link.
+correct the country and retry the same email link before it expires.
 
 Pass an optional `PasswordScreeningProvider` as the third `SignupStore` constructor
 argument to enforce compromised-password screening. The provider receives only the

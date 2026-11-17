@@ -10,7 +10,7 @@ Set `CLOUD_COUNTRY_CODE=ES` for Spain's signup service. It defaults to `ES` and
 must contain two uppercase letters; invalid configuration refuses startup. Signup
 for another business country returns HTTP 400 `{"error":"country_unavailable"}`,
 without consuming the email link. Correct the country and retry before the link
-expires and within its attempt limit. The portal preselects Spain; only `ES` is
+expires; the API’s request limits still apply. The portal preselects Spain; only `ES` is
 complete end to end. This setting changes the server’s signup check only; it
 does not configure another country’s portal, billing or hosting.
 
