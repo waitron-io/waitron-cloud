@@ -50,3 +50,27 @@ test('HTTP creation gives the same response for unknown, unverified and disabled
  let limited:Response|undefined;for(let n=0;n<15;n++){limited=await request(target,sender,'/cancel',{id:randomUUID()});if(limited.status===429)break;}
  assert.equal(limited?.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
 });
+
+function signupRequest(target:ReturnType<typeof app>,path:string,body:unknown,requestOrigin=origin){
+ return target.request(origin+'/api/account'+path,{method:'POST',headers:{origin:requestOrigin,'content-type':'application/json'},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.10'}}} as HttpBindings);
+}
+test('account-only completion is public, strict and creates no session cookies',async()=>{
+ const sender=await account(),email=`new-${randomUUID()}@example.test`,target=app();
+ await request(target,sender,'/create',{organisationId:sender.organisationId,email});
+ const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const body={token:mail.token,password,rememberBrowser:'true'},path='/signup/transfer/complete';
+ assert.equal((await signupRequest(target,path,body,'https://foreign.test')).status,403);
+ assert.equal((await signupRequest(target,path,{...body,organisationName:'Injected business'})).status,400);
+ const response=await signupRequest(target,path,body);assert.equal(response.status,201);
+ const value=await response.json() as {accountId:string};assert.deepEqual(Object.keys(value),['accountId']);assert.ok(value.accountId);
+ assert.match(response.headers.get('set-cookie')??'',/__Host-cloud_browser=/);assert.doesNotMatch(response.headers.get('set-cookie')??'',/cloud_session|cloud_csrf/);
+});
+test('account-only completion reports unavailable handover and shares the ordinary signup completion budget',async()=>{
+ const email=`new-${randomUUID()}@example.test`,signup=new SignupStore(db.pool,db.outbox),target=app();await signup.request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const body={token:mail.token,password};
+ const response=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(response.status,409);assert.deepEqual(await response.json(),{error:'handover_unavailable'});
+ for(let n=0;n<9;n++)assert.equal((await signupRequest(target,'/signup/complete',{...body,organisationName:'Business',legalBusinessName:'Business SL',countryCode:'ES',password:'short'})).status,400);
+ const limited=await signupRequest(target,'/signup/transfer/complete',body);assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
+});

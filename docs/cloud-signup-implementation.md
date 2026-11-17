@@ -70,8 +70,7 @@ checklists. Public ingress, browser behaviour and deployment checks remain separ
 ## Hand over an existing business
 
 When someone else takes over your business, open **Account → Hand over ownership**.
-Verify it is you, select the business and enter the recipient’s email. They must
-already have a Cloud account. The offer lasts 24 hours; either of you can cancel.
+Verify it is you, select the business and enter the recipient’s email. The offer lasts 24 hours; either of you can cancel.
 The invitation always uses the same wording, including for an unavailable address.
 It does not tell you whether that address has an account.
 
@@ -86,8 +85,20 @@ restore those approvals. Close any unfinished backup recovery or replacement fir
 
 Refresh handovers if a reply is lost. The offer’s saved state shows whether
 acceptance or cancellation won. Password, email and proof changes cancel pending
-offers, except the recipient’s first required enrollment. New-account handover
-and box-assisted account recovery remain unavailable in this slice.
+offers, except the recipient’s first required enrollment. Box-assisted account
+recovery remains unavailable.
+
+If you are receiving a business and have no account, follow the invitation’s
+signup link and verify the same email address. Choose **I’m receiving a business**
+and set your password. This creates your account without a new business. Sign in,
+enroll an app or passkey and verify it is you before accepting the handover on
+your account page. Creating an account attaches every live offer addressed to
+you, including when you choose ordinary business signup, but gives you no access
+to an offered business until you accept.
+
+If no handover is waiting, you can use the same verified link to create your own
+business or ask the sender for another offer. Cancelled and expired offers do
+not allow account-only signup.
 
 The focused local PostgreSQL and browser checks are:
 

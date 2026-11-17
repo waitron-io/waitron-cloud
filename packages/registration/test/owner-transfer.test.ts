@@ -225,3 +225,38 @@ test('a security change leaves an expired offer expired without queuing cancella
  const messages=(await db.pool.query("SELECT * FROM email_outbox WHERE kind='owner_transfer' AND payload IS NOT NULL")).rows.map(row=>db.outbox.open(row)).filter(message=>(message as {offerId:string}).offerId===offer.id);
  assert.deepEqual(messages.map(message=>(message as {event:string}).event),['invitation']);
 });
+
+test('verified first-time signup attaches every live offer without creating business access or a session',async()=>{
+ const senders=await Promise.all([signedAccount(),signedAccount()]),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
+ const offers=[];for(const sender of senders)offers.push(await store.create(sender.token,sender.csrfToken,sender.organisationId,email));
+ const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const before=(await db.pool.query('SELECT count(*) FROM organisations')).rows[0].count;
+ const result=await signup.completeForTransfer(mail.token,{password,rememberBrowser:true});
+ assert.deepEqual(Object.keys(result).sort(),['accountId','browserToken']);assert.ok(result.browserToken);
+ assert.equal((await db.pool.query('SELECT count(*) FROM organisations')).rows[0].count,before);
+ assert.equal((await db.pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1',[result.accountId])).rows[0].count,'0');
+ assert.equal((await db.pool.query('SELECT count(*) FROM cloud_sessions WHERE account_id=$1',[result.accountId])).rows[0].count,'0');
+ const rows=(await db.pool.query('SELECT id,recipient_id,recipient_needs_enrolment FROM owner_transfers WHERE id=ANY($1::uuid[]) ORDER BY id',[offers.map(o=>o.id)])).rows;
+ assert.deepEqual(rows,offers.map(o=>({id:o.id,recipient_id:result.accountId,recipient_needs_enrolment:true})).sort((a,b)=>a.id.localeCompare(b.id)));
+ await assert.rejects(signup.completeForTransfer(mail.token,{password}),/verification_unavailable/);
+});
+for(const unavailable of ['wrong address','cancelled','expired'])test(`account-only signup refuses ${unavailable} offers and leaves its verification usable`,async()=>{
+ const sender=await signedAccount(),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
+ const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,unavailable==='wrong address'?`other-${email}`:email);
+ if(unavailable==='cancelled')await store.decide(sender.token,sender.csrfToken,offer.id,'cancel');
+ if(unavailable==='expired')await db.pool.query("UPDATE owner_transfers SET created_at=clock_timestamp()-interval '3 days',expires_at=clock_timestamp()-interval '2 days' WHERE id=$1",[offer.id]);
+ const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ await assert.rejects(signup.completeForTransfer(mail.token,{password}),/handover_unavailable/);
+ assert.equal((await db.pool.query('SELECT count(*) FROM cloud_credentials WHERE email=$1',[email])).rows[0].count,'0');
+ assert.ok((await signup.complete(mail.token,{password,organisationName:'New business',legalBusinessName:'New SL',countryCode:'ES'})).organisationId);
+});
+test('ordinary business signup also attaches its verified email offers without granting the offered business',async()=>{
+ const sender=await signedAccount(),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
+ const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,email),signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
+ const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const result=await signup.complete(mail.token,{password,organisationName:'New business',legalBusinessName:'New SL',countryCode:'ES'});
+ assert.equal((await db.pool.query('SELECT recipient_id FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].recipient_id,result.accountId);
+ assert.deepEqual((await db.pool.query('SELECT organisation_id FROM organisation_memberships WHERE account_id=$1',[result.accountId])).rows,[{organisation_id:result.organisationId}]);
+});

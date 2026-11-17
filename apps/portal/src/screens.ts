@@ -55,11 +55,14 @@ export function screen(app: PortalApp) {
       ${app.passkeys.notice && app.passkeys.notice !== 'passkeyUnsupported' ? html`<p role="status">${c[app.passkeys.notice]}</p>` : nothing}
       ${action(c.login)}${app.passkeyFirst ? nothing : passkeySignInScreen(app)}<nav>${link('/forgot-password', c.forgot)}<span>${c.signupLink} ${link('/signup', c.signup)}</span></nav>`;
   } else if (app.path === '/signup' && app.link.token) {
-    content = html`${password()}<p class="help">${c.passwordHelp}</p>${field('legalBusinessName', 'legalName', 'text', 'organization')}
+    content = html`${password()}<p class="help">${c.passwordHelp}</p>
+      <label class="disclosure"><input type="checkbox" name="receivingBusiness" .checked=${app.receivingBusiness} ?disabled=${app.pending}
+        @change=${(event:Event)=>{app.readFields();app.receivingBusiness=(event.target as HTMLInputElement).checked;delete app.errors.legalBusinessName;delete app.errors.organisationName;app.error=undefined;app.draw();}}> ${c.receivingBusiness}</label>
+      ${app.receivingBusiness?nothing:html`${field('legalBusinessName', 'legalName', 'text', 'organization')}
       <p class="help">${c.soleTrader}</p>
       <label class="disclosure"><input type="checkbox" .checked=${app.differentOrg} ?disabled=${app.pending}
         @change=${(event: Event) => {app.readFields(); app.differentOrg = (event.target as HTMLInputElement).checked; if (!app.differentOrg) delete app.errors.organisationName; app.draw();}}> ${c.differentOrg}</label>
-      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<p>${c.country}: <strong>${c.spain}</strong></p>${rememberBrowserChoice(app)}${action(c.create)}`;
+      ${app.differentOrg ? field('organisationName', 'orgName') : nothing}<p>${c.country}: <strong>${c.spain}</strong></p>`}${rememberBrowserChoice(app)}${action(c.create)}`;
   } else if (app.path === '/reset-password') content = html`${password()}<p class="help">${c.passwordHelp}</p>${action(c.savePassword)}`;
   else content = html`<p>${app.path === '/signup' ? c.emailIntro : c.resetIntro}</p>${field('email', 'email', 'email', 'email')}
     ${action(app.path === '/signup' ? c.continue : c.sendReset)}<p>${c.loginLink} ${link('/login', c.login)}</p>`;

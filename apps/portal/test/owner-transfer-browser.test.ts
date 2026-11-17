@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {SignupStore} from '@waitron-cloud/registration';
-import {addVirtualAuthenticator,contextSignIn,prepareBrowserActionWindow,startPortalFixture} from './fixtures.ts';
+import {addVirtualAuthenticator,contextSignIn,completeBrowserEmail,mailFor,prepareBrowserActionWindow,startPortalFixture} from './fixtures.ts';
 const password='A real ownership handover password';
 test('existing-account handover completes in both languages, themes and widths',async t=>{
  const f=await startPortalFixture();
@@ -85,4 +85,61 @@ test('recipient’s first passkey preserves the offer but requires a new proof b
   await page.getByRole('button',{name:c.actionProofPasskey,exact:true}).click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
   await page.locator('#owner-transfer-section').getByRole('button',{name:'Accept handover',exact:true}).click();await page.locator('#owner-transfer-section').getByText('Accepted',{exact:true}).waitFor();
  }finally{await virtual?.close();await context.close();await f.close();}
+});
+
+test('first-time recipients verify, sign up without a business, enroll and explicitly accept',async t=>{
+ const f=await startPortalFixture(undefined,undefined,{keys:{activeKeyId:'test',keys:{test:'07'.repeat(32)}},policy:emailLoginPolicy});
+ try{for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
+  await f.db.pool.query('DELETE FROM account_rate_limits');
+  const c=translations[locale],senderEmail=`sender-${randomUUID()}@example.test`,email=`first-${randomUUID()}@example.test`,signup=new SignupStore(f.db.pool,f.db.outbox);
+  await signup.request(senderEmail);const verification=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in verification);
+  const sender=await signup.complete(verification.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
+  const sending=await f.browser.newContext(),context=await f.browser.newContext({locale,colorScheme,viewport:{width,height:900}});
+  try{
+   assert.equal((await contextSignIn(f,sending,senderEmail,password)).status(),200);await prepareBrowserActionWindow(f,sending,sender.accountId);
+   const cookies=await sending.cookies(),offer=await new OwnerTransferStore(f.db.pool,f.db.outbox).create(cookies.find(c=>c.name==='cloud_session')!.value,cookies.find(c=>c.name==='cloud_csrf')!.value,sender.organisationId,email,locale);
+   await f.drainMail();const invitation=await mailFor(email,locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud',f.mailEvidence);
+   const page=await context.newPage();page.setDefaultTimeout(8000);page.on('pageerror',e=>t.diagnostic(e.message));
+   const link=invitation.match(/http:\/\/localhost:[^\s]+\/signup/)?.[0];assert.ok(link);await page.goto(link+`#lang=${locale}`);
+   await page.locator('input[name=email]').fill(email);await page.locator('#submit').click();await page.getByText(c.emailSent,{exact:true}).waitFor();await f.drainMail();
+   const mail=await mailFor(email,locale==='en'?'Verify your Waitron Cloud email':'Verifica tu correo de Waitron Cloud',f.mailEvidence),url=mail.match(/http:\/\/localhost:[^\s]+/)?.[0];assert.ok(url);await page.goto(url);
+   await page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true}).check();
+   assert.equal(await page.locator('input[name=legalBusinessName]').count(),0);await page.locator('input[name=password]').fill(password);
+   async function look(stage:string){assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/first-handover-${stage}-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});}
+   await look('signup');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
+   const recipient=(await f.db.pool.query('SELECT account_id FROM cloud_credentials WHERE email=$1',[email])).rows[0].account_id;
+   assert.equal((await f.db.pool.query('SELECT count(*) FROM organisation_memberships WHERE account_id=$1',[recipient])).rows[0].count,'0');
+   await page.getByRole('link',{name:c.login,exact:true}).click();
+   const login=async()=>{await page.locator('input[name=email]').fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();};
+   await login();await completeBrowserEmail(f,page,email,locale);await page.getByText(c.accountIntro,{exact:true}).waitFor();
+   await page.getByRole('button',{name:c.actionProofEmail,exact:true}).click();await page.locator('input[name=actionProofCode]').waitFor();await f.drainMail();
+   const proofMail=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence),code=proofMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
+   await page.locator('input[name=actionProofCode]').fill(code);await page.locator('#action-proof-verify').click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+   await look('pending');await page.locator('#factor-enable').click();await page.locator('.factor-secret').waitFor();const secret=(await page.locator('.factor-secret').textContent())!;
+   await page.getByLabel(c.factorConfirmation,{exact:true}).fill(actionTestTotp(secret,-1));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.locator('.factor-codes').waitFor();await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();
+   await login();await page.locator('input[name=factorProof]').fill(actionTestTotp(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
+   const incoming=page.locator('#owner-transfer-section'),accept=locale==='en'?'Accept handover':'Aceptar traspaso';await incoming.getByRole('button',{name:accept,exact:true}).waitFor();
+   await page.reload();await incoming.getByRole('button',{name:accept,exact:true}).waitFor();await page.locator('input[name=actionProofCode]').fill(actionTestTotp(secret,1));await page.getByRole('button',{name:c.factorTotp,exact:true}).click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+   await incoming.getByText(senderEmail,{exact:true}).waitFor();await incoming.getByRole('button',{name:accept,exact:true}).click();await incoming.getByText(locale==='en'?'Accepted':'Aceptado',{exact:true}).waitFor();await look('accepted');
+   assert.equal((await f.db.pool.query('SELECT state FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].state,'accepted');
+   assert.deepEqual((await f.db.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner',[sender.organisationId])).rows,[{account_id:recipient}]);
+  }finally{await sending.close();await context.close();}
+ }}finally{await f.close();}
+});
+
+test('unavailable handover keeps the verified link usable for business signup in both languages',async()=>{
+ const f=await startPortalFixture();
+ try{for(const locale of ['en','es'] as const){
+  await f.db.pool.query('DELETE FROM account_rate_limits');const context=await f.browser.newContext({locale}),c=translations[locale];
+  try{
+   const email=`no-offer-${randomUUID()}@example.test`,signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email,locale);
+   const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+   const page=await context.newPage();page.setDefaultTimeout(7000);await page.goto(`${f.origin}/signup#token=${mail.token}&lang=${locale}`);
+   const choice=page.getByLabel(locale==='en'?"I'm receiving a business":'Estoy recibiendo un negocio',{exact:true});await choice.check();await page.locator('input[name=password]').fill(password);await page.locator('#submit').click();
+   await page.getByText(locale==='en'?'No handover is waiting for this address. Create a business or ask the sender.':'No hay un traspaso pendiente para este correo. Crea un negocio o consulta con quien lo envió.',{exact:true}).waitFor();
+   assert.equal(await page.getByText(c.linkUnavailable,{exact:true}).count(),0);
+   await choice.uncheck();await page.locator('input[name=legalBusinessName]').fill('New Café');await page.locator('#submit').click();await page.getByText(c.signupReady,{exact:true}).waitFor();
+   assert.equal((await f.db.pool.query('SELECT count(*) FROM organisation_memberships m JOIN cloud_credentials c ON c.account_id=m.account_id WHERE c.email=$1 AND m.is_owner',[email])).rows[0].count,'1');
+  }finally{await context.close();}
+ }}finally{await f.close();}
 });

@@ -1,9 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
 import type { EmailDeliveryContext, EmailDeliveryReceipt } from './email-delivery.ts';
 import type { EmailOutbox } from './email-outbox.ts';
 import {rememberBrowser} from './sign-in-check.ts';
+import {attachOwnerTransferRecipients} from './owner-transfer.ts';
 import { transaction } from './transaction.ts';
 import { normaliseEmail, validNewPassword, validLocale, type AccountLocale, type AccountEmail } from './account-input.ts';
 import { screenPassword, type PasswordScreeningProvider } from './compromised-passwords.ts';
@@ -13,7 +14,7 @@ export interface SignupMailer { sendVerification(message: SignupEmail, context?:
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; rememberBrowser?: boolean; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; browserToken?: string; }
 export class SignupError extends Error {
-  readonly code: 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable';
+  readonly code: 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable' | 'handover_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
 }
 export class SignupStore {
@@ -42,12 +43,29 @@ export class SignupStore {
   }
 
   async complete(token: string, input: SignupDetails): Promise<SignupResult> {
-    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
-    if (!input || !validNewPassword(input.password)) throw new SignupError('signup_invalid');
+    if (!input) throw new SignupError('signup_invalid');
     const organisationName = name(input.organisationName);
     const legalBusinessName = name(input.legalBusinessName);
     if (typeof input.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(input.countryCode)) throw new SignupError('signup_invalid');
     const countryCode = input.countryCode.toUpperCase();
+    return this.#complete(token,input,async (client,accountId)=>{
+      const organisationId=randomUUID(),legalBusinessId=randomUUID();
+      await client.query('INSERT INTO organisations (id, name) VALUES ($1, $2)', [organisationId, organisationName]);
+      await client.query('INSERT INTO legal_businesses (id, organisation_id, name, country_code) VALUES ($1, $2, $3, $4)',
+        [legalBusinessId, organisationId, legalBusinessName, countryCode]);
+      await client.query(`INSERT INTO organisation_memberships (account_id, organisation_id, can_register_venues, is_owner)
+        VALUES ($1, $2, true, true)`, [accountId, organisationId]);
+      return {organisationId,legalBusinessId};
+    });
+  }
+
+  async completeForTransfer(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>){
+    return this.#complete(token,input,async()=>({}),true);
+  }
+
+  async #complete<T extends object>(token:string,input:Pick<SignupDetails,'password'|'rememberBrowser'>,createBusiness:(client:PoolClient,accountId:string)=>Promise<T>,requireOffer=false){
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw new SignupError('verification_unavailable');
+    if (!input || !validNewPassword(input.password)) throw new SignupError('signup_invalid');
     const tokenHash = digest(token);
     return transaction(this.#pool, async client => {
       const candidate = await client.query(`SELECT 1 FROM signup_requests
@@ -62,24 +80,20 @@ export class SignupStore {
       const now: Date = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
       if (!request || request.consumed_at || request.expires_at <= now) throw new SignupError('verification_unavailable');
       const accountId = randomUUID();
-      const organisationId = randomUUID();
-      const legalBusinessId = randomUUID();
       await client.query('INSERT INTO cloud_accounts (id) VALUES ($1)', [accountId]);
       // Email uniqueness arbitrates different links racing to create the same account.
       const credentials = await client.query(`INSERT INTO cloud_credentials (account_id, email, password_hash, email_verified_at)
         VALUES ($1, $2, $3, $4) ON CONFLICT (email) DO NOTHING`, [accountId, request.email, passwordHash, now]);
       if (!credentials.rowCount) throw new SignupError('verification_unavailable');
-      await client.query('INSERT INTO organisations (id, name) VALUES ($1, $2)', [organisationId, organisationName]);
-      await client.query('INSERT INTO legal_businesses (id, organisation_id, name, country_code) VALUES ($1, $2, $3, $4)',
-        [legalBusinessId, organisationId, legalBusinessName, countryCode]);
-      await client.query(`INSERT INTO organisation_memberships (account_id, organisation_id, can_register_venues, is_owner)
-        VALUES ($1, $2, true, true)`, [accountId, organisationId]);
+      const attached=await attachOwnerTransferRecipients(client,accountId,request.email);
+      if(requireOffer&&!attached)throw new SignupError('handover_unavailable');
+      const business=await createBusiness(client,accountId);
       const browserToken=input.rememberBrowser?await rememberBrowser(client,accountId):undefined;
       // Expiry after a contended write rolls back the account, business and membership together.
       const consumed = await client.query(`UPDATE signup_requests SET consumed_at = clock_timestamp()
         WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [tokenHash]);
       if (!consumed.rowCount) throw new SignupError('verification_unavailable');
-      return { accountId, organisationId, legalBusinessId, ...(browserToken ? {browserToken} : {}) };
+      return { accountId, ...business, ...(browserToken ? {browserToken} : {}) };
     });
   }
 }

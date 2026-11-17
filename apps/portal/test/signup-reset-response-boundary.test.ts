@@ -7,6 +7,7 @@ const flows = [
     body: {email: 'owner@example.test', locale: 'es'}, value: {status: 'accepted'}},
   {path: '/password-reset/request', status: 202,
     body: {email: 'owner@example.test', locale: 'en'}, value: {status: 'accepted'}},
+  {path: '/signup/transfer/complete',status:201,body:{token:'signup-link',password:' exact password '},value:{accountId:'recipient'}},
   {path: '/signup/complete', status: 201,
     body: {token: 'signup-link', password: ' exact password ', legalBusinessName: 'Café SL',
       organisationName: 'Café', countryCode: 'ES'},
@@ -48,14 +49,14 @@ for (const flow of flows) {
     {name: 'string', value: 'accepted'},
     {name: 'empty object', value: {}},
   ];
-  if (flow.path === '/signup/complete') {
-    for (const field of ['accountId', 'organisationId', 'legalBusinessId']) {
+  if (flow.path === '/signup/complete' || flow.path === '/signup/transfer/complete') {
+    for (const field of flow.path === '/signup/transfer/complete' ? ['accountId'] : ['accountId', 'organisationId', 'legalBusinessId']) {
       for (const [name, value] of [['missing', undefined], ['null', null], ['numeric', 42]] as const) {
         invalid.push({name: `${name} ${field}`, value: {...flow.value, [field]: value}});
       }
     }
     invalid.push({name: 'empty account ID', value: {...flow.value, accountId: ''}});
-    for (const field of ['accountId', 'organisationId', 'legalBusinessId']) {
+    for (const field of flow.path === '/signup/transfer/complete' ? ['accountId'] : ['accountId', 'organisationId', 'legalBusinessId']) {
       for (const value of ['', ' \t']) {
         invalid.push({name: `blank ${field} ${JSON.stringify(value)}`, value: {...flow.value, [field]: value}});
       }
@@ -128,3 +129,12 @@ for (const flow of flows) {
     assert.equal(init.signal.aborted, false);
   });
 }
+
+ test('account-only signup preserves the handover refusal and discounts time reading its reply',async t=>{
+ let clock=1000;t.mock.method(performance,'now',()=>clock);
+ t.mock.method(globalThis,'fetch',async()=>{
+  const response=Response.json({error:'handover_unavailable'},{status:409,headers:{'retry-after':'7'}});
+  const json=response.json.bind(response);response.json=async()=>{clock+=2000;return json();};return response;
+ });
+ assert.deepEqual(await accountRequest('/signup/transfer/complete',{token:'link',password:'password'}),{ok:false,status:409,code:'handover_unavailable',retryAfterMs:5000});
+ });

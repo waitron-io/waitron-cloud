@@ -112,6 +112,7 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | Request | JSON body | Successful response |
 | --- | --- | --- |
 | POST `/signup/request` | `{"email":"owner@example.test"}` | 202 `{"status":"accepted"}` |
+| POST `/signup/transfer/complete` | `{"token":"<emailed token>","password":"a long unique password"}` | 201 `{"accountId":"<uuid>"}`; 409 `handover_unavailable` without a live offer |
 | POST `/signup/complete` | `{"token":"<emailed token>","password":"a long unique password","organisationName":"Casa Norte","legalBusinessName":"Casa Norte SL","countryCode":"ES"}` | 201 `{"accountId":"<uuid>","organisationId":"<uuid>","legalBusinessId":"<uuid>"}` |
 | POST `/login` | `{"email":"owner@example.test","password":"a long unique password"}` | 200 `{"accountId":"<uuid>"}` with cookies, or 202 app or email challenge without cookies |
 | GET `/session` | No body; session cookie | 200 `{"accountId":"<uuid>","expiresAt":"<ISO timestamp>"}` |
@@ -144,7 +145,7 @@ One pending offer per organisation lasts 24 hours. A repeated accept/cancel read
 its existing state; a cancelled offer cannot become accepted. Unavailable offers
 and other people’s IDs return 404 `transfer_unavailable`; an unfinished recovery
 returns 409 `recovery_in_progress`. Writes share limits of 10 per IP per minute
-and 20 per account per five minutes. First-time recipients cannot accept yet.
+and 20 per account per five minutes. First-time recipients can use account-only signup, then enroll and verify before accepting.
 See the [handover guide](../../docs/cloud-signup-implementation.md#hand-over-an-existing-business).
 
 Passkeys are optional and use the same account sessions. Start a discoverable sign-in
@@ -311,7 +312,7 @@ PostgreSQL counters apply across all API instances and survive restarts:
 | Credential changes, per IP / account | 10 per minute / 20 per 5 minutes |
 | Email-change delivery, per destination address | One per minute; wait before requesting another link to the same address |
 | Each signup/reset email-request route, per IP | 10 per 15 minutes |
-| Each signup/reset completion route, per IP and token | 10 per 15 minutes |
+| Signup completion (both modes share a budget), or reset completion, per IP and token | 10 per 15 minutes |
 | Diagnostic export, per account | 30 per minute |
 
 Successes and failures both count once a request reaches a limit. Login checks the
