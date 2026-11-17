@@ -9,6 +9,10 @@ test('console bootstrap creates only admin tables and refuses a customer schema 
     assert.deepEqual((await db.pool.query('SELECT tablename FROM pg_tables WHERE schemaname=current_schema() ORDER BY tablename')).rows.map(r => r.tablename),
       ['account_rate_limits', 'cloud_accounts', 'cloud_sessions', 'console_ceremonies', 'console_passkeys']);
     await initializeConsole(db.pool);
+    await db.pool.query('CREATE SCHEMA country; CREATE TABLE country.organisations(id text)');
+    await assert.rejects(initializeConsole(db.pool), /customer database/);
+    assert.equal((await db.pool.query('SELECT count(*) FROM country.organisations')).rows[0].count, '0');
+    await db.pool.query('DROP SCHEMA country CASCADE');
     await db.pool.query('CREATE TABLE organisations (id text)');
     await assert.rejects(initializeConsole(db.pool), /customer database/);
     assert.equal((await db.pool.query('SELECT count(*) FROM organisations')).rows[0].count, '0');

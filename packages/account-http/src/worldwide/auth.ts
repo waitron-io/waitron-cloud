@@ -6,8 +6,9 @@ import {readFile} from 'node:fs/promises';
 import type {Pool, PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
 export async function requireConsoleDatabase(client: Pool | PoolClient): Promise<void> {
-  const {rows} = await client.query("SELECT to_regclass('organisations') AS customers, to_regclass('schema_migrations') AS migrations");
-  if (rows[0].customers || rows[0].migrations) throw new Error('Refusing customer database');
+  const {rows} = await client.query(`SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE c.relname IN ('organisations','schema_migrations') AND n.nspname NOT LIKE 'pg_%' AND n.nspname <> 'information_schema') AS customers`);
+  if (rows[0].customers) throw new Error('Refusing customer database');
 }
 export async function initializeConsole(pool: Pool): Promise<void> {
   const sql = await readFile(new URL('../../../../deploy/worldwide/schema.sql', import.meta.url), 'utf8');

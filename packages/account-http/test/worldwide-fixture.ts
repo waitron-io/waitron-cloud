@@ -4,10 +4,11 @@ export async function worldwideDatabase() {
   if (!process.env.TEST_DATABASE_URL) throw new Error('Run through scripts/test-postgres.mjs');
   const schema = `console_${randomUUID().replaceAll('-', '')}`;
   const admin = new Pool({connectionString: process.env.TEST_DATABASE_URL});
-  await admin.query(`CREATE SCHEMA ${schema}`);
-  const connection = {connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${schema}`};
+  await admin.query(`CREATE DATABASE ${schema}`);
+  const url = new URL(process.env.TEST_DATABASE_URL); url.pathname = '/'+schema;
+  const connection = {connectionString: url.href, options: '-c search_path=public'};
   const pool = new Pool(connection);
-  return {pool, connection, async close() {await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end();}};
+  return {pool, connection, async close() {await pool.end(); await admin.query(`DROP DATABASE ${schema}`); await admin.end();}};
 }
 export async function consolePort() {
   const server = (await import('node:net')).createServer();
