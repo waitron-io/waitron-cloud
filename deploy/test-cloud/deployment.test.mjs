@@ -4,6 +4,7 @@ import test from 'node:test';
 import {existsSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {randomUUID} from 'node:crypto';
 const root=new URL('../../',import.meta.url).pathname;
 test('LAN override replaces ports, isolates private state and keeps independent launch gates off',async()=>{
  assert.ok(existsSync(new URL('compose.yaml',import.meta.url)),'LAN override is missing');
@@ -69,4 +70,20 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
  for(const[name,service]of Object.entries(value.services))if(!['bootstrap','proxy'].includes(name))assert.ok(!service.volumes?.some(v=>v.source===bundle.source),name+' must not read the public private key');
  assert.ok(value.services.account.healthcheck.test.includes('https://cloud.example.test'));
  assert.ok(value.services.proxy.healthcheck.test.some(v=>v.includes('cloud.example.test')));
+});
+
+// Docker's real template engine must accept a state with no optional Health key.
+test('driver inventory reads containers without a HEALTHCHECK without losing OOM status',async t=>{
+ const {inventory,execute}=await import('../../scripts/test-cloud-deploy.mjs');
+ const directory=mkdtempSync(join(tmpdir(),'cloud-inventory-')),tag='cloud-inventory:'+randomUUID();let id;
+ t.after(()=>{try{if(id)execFileSync('docker',['rm',id]);}finally{try{execFileSync('docker',['image','rm',tag]);}finally{rmSync(directory,{recursive:true,force:true});}}});
+ writeFileSync(join(directory,'Dockerfile'),'FROM scratch\nCMD ["/unused"]\n');
+ execFileSync('docker',['build','--network','none','--tag',tag,directory],{stdio:'pipe'});
+ id=execFileSync('docker',['create','--network','none',tag],{encoding:'utf8'}).trim();
+ const value=await inventory(async(command,args,options)=>{
+  if(command==='ss'||command==='lsof')return '';
+  if(command==='docker'&&args[0]==='ps')return JSON.stringify({ID:id,Names:'inventory-fixture',State:'created',Labels:'com.docker.compose.project=waitron-cloud-test'});
+  return execute(command,args,options);
+ });
+ assert.deepEqual(value.containers,[{id,project:'waitron-cloud-test',name:'inventory-fixture',state:'created',oom:false,health:null}]);
 });

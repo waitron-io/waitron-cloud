@@ -85,7 +85,7 @@ export async function inventory(run=execute){
  }
  const rows=containers.trim()?containers.trim().split('\n').map(line=>JSON.parse(line)):[];
  const watched=rows.filter(row=>/(?:^|,)com\.docker\.compose\.project=waitron-cloud-test(?:,|$)/.test(row.Labels??'')||['waitron-app-1','waitron-print-agent-1','waitron-mailpit-1'].includes(row.Names));
- const details=watched.length?JSON.parse('['+(await run('docker',['inspect','--format','{"id":{{json .Id}},"oom":{{json .State.OOMKilled}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}}',...watched.map(row=>row.ID)])).trim().split('\n').join(',')+']'):[];
+ const details=watched.length?JSON.parse('['+(await run('docker',['inspect','--format','{"id":{{json .Id}},"oom":{{json .State.OOMKilled}},"health":{{with index .State "Health"}}{{json .Status}}{{else}}null{{end}}}',...watched.map(row=>row.ID)])).trim().split('\n').join(',')+']'):[];
  const ids=networks.trim().split(/\s+/).filter(Boolean);const subnets=ids.length?JSON.parse(await run('docker',['network','inspect','--format','{{json .IPAM.Config}}',...ids]).then(text=>'['+text.trim().split('\n').join(',')+']')).flat().filter(Boolean).map(n=>n.Subnet).filter(Boolean):[];
  const lines=disk.trim().split('\n'),fields=lines.at(-1).trim().split(/\s+/);
  return {composeVersion:compose.trim().replace(/^v/,''),architecture:['x86_64','amd64'].includes(JSON.parse(engine))?'amd64':JSON.parse(engine),availableMiB,freeGiB:Number(fields[3])/1048576,listeners,networks:subnets,containers:rows.map(row=>({id:row.ID,project:/(?:^|,)com\.docker\.compose\.project=([^,]+)/.exec(row.Labels??'')?.[1]??'',name:row.Names,state:row.State,...details.find(value=>value.id===row.ID)}))};
