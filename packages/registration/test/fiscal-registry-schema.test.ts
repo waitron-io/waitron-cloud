@@ -86,6 +86,7 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
       'cloud_sign_in_checks', 'cloud_recognised_browsers', 'cloud_email_changes',
       'billing_allowance_versions', 'billing_allowance_reservations',
       'remote_traffic_processes', 'remote_traffic_samples', 'remote_traffic_coverage', 'remote_traffic_reports',
+      'remote_country_zones',
       'mail_queue_scopes', 'mail_attempts', 'mail_attempt_recipients', 'mail_feedback_receipts',
       'mail_feedback_events', 'mail_suppressions', 'mail_recipient_key_versions', 'mail_suppression_actions',
       'mail_legacy_suppression_scopes',

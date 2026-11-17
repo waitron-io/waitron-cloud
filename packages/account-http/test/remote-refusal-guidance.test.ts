@@ -34,7 +34,7 @@ function database(condition:Condition,loss?:'owner'|'session'){
   if(sql==='SELECT 1 FROM billing_service_authority WHERE venue_id=$1')return result([]);
   if(sql.startsWith('SELECT id,service_plan,service_plan_revision FROM organisations')){if(condition==='free')refusalRead=true;return result([{id,service_plan:condition==='free'?'free':'paid',service_plan_revision:0}]);}
   if(sql.startsWith('SELECT 1 FROM installation_services')){if(condition==='unconfigured')refusalRead=true;return result(condition==='unconfigured'?[]:[{}]);}
-  if(sql.startsWith('SELECT p.venue_id,c.suffix,i.revoked_at')){placementRead=true;if(condition==='revoked')refusalRead=true;return result([{venue_id:id,suffix:'cell.example.test',revoked_at:condition==='revoked'?now:null}]);}
+  if(sql.startsWith('SELECT p.venue_id,h.assigned_hostname,i.revoked_at')){placementRead=true;if(condition==='revoked')refusalRead=true;return result([{venue_id:id,assigned_hostname:'staff-v-'+id+'.cell.example.test',revoked_at:condition==='revoked'?now:null}]);}
   throw Error('Unexpected SQL: '+sql);
  }};
  return {queries,client:client as unknown as PoolClient,pool:{connect:async()=>client} as unknown as Pool};
