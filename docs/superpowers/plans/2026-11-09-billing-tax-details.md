@@ -4,7 +4,7 @@
 
 **Limits:** no paid access, charges, invoices, prices, providers, Waitron/fiscal/location changes, history, ledger, dependency or production eligibility. Paid-level collection and Spanish tax-number validation remain open in `docs/backlog.md`; syntax checks establish no legal identity.
 
-**Shape:** reuse `legal_businesses.name`; preserve `country_code`. Existing name readers are registration `pairing.ts:36,82`, HTTP `venue-overview.ts:13`, backups `replacement.ts:27`. Append nullable `billing_address` and `tax_number`. Save trimmed strings atomically, rejecting controls, extra keys and empty values. Use signup’s JavaScript string-length limits: name200, address600, taxNumber32. Use single-line `wt-input` controls. Reads accept historical `string|null` values without applying input restrictions.
+**Shape:** reuse `legal_businesses.name`; preserve `country_code`. Existing name readers are registration `pairing.ts:36,81`, HTTP `venue-overview.ts:13`, backups `replacement.ts:27`. Append nullable `billing_address` and `tax_number`. Save trimmed strings atomically, rejecting controls, extra keys and empty values. Use signup’s JavaScript string-length limits: name200, address600, taxNumber32. Use single-line `wt-input` controls. Reads accept historical `string|null` values without applying input restrictions.
 
 **Files** (R=`packages/registration`, H=`packages/account-http`, P=`apps/portal`; braces expand literally):
 

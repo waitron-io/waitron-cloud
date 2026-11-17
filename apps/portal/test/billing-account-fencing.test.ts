@@ -129,7 +129,7 @@ test('saving one venue refreshes untouched fields for a sibling without discardi
   return {ok:true,value:{venues:view.venues.map(venue=>({...venue,taxProfile:profile}))} as T};
  });
  c.account('owner');await c.load();c.select(second);c.editTax('taxNumber','SECOND-EDIT');
- c.select(first);c.editTax('legalName','New business name');await c.saveTax();await c.load();c.select(second);
+ c.select(first);c.editTax('legalName','New business name');await c.saveTax();c.select(second);
  assert.deepEqual(c.taxDraft,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
  await c.saveTax();assert.deepEqual(profile,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
 });
