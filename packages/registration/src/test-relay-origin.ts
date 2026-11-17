@@ -7,18 +7,18 @@ export function privateManagementOrigin(value:unknown):value is string {
   try {
     const u=new URL(value);
     if(u.protocol!=='https:'||u.origin!==value||u.username||u.password)return false;
-    if(u.hostname.endsWith('.local'))return true;
+    if(u.hostname.endsWith('.local'))return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+local$/.test(u.hostname);
     if(isIP(u.hostname)!==4)return false;
     const [a,b]=u.hostname.split('.').map(Number);
     return a===10||(a===172&&b!==undefined&&b>=16&&b<=31)||(a===192&&b===168);
   } catch {return false;}
 }
 export function testRelayOriginProof(config:TestRelayOrigin,installation:{id:string;venue_id:string;environment:string;public_key:string},managementOrigin:string,envelope:SignedEnvelope,time:number):void {
-  if(config.environment!=='test'||installation.environment!=='test'||!privateManagementOrigin(managementOrigin))throw Error('origin_unverified');
+  if(!privateManagementOrigin(managementOrigin))throw Error('origin_unverified');
   const c=verifyMachine(envelope,installation.public_key,config.origin,'configuration',time);
   if(c.installationId!==installation.id||c.body!==JSON.stringify({servicesVersion:2,managementOrigin}))throw Error('origin_unverified');
   const lease=JSON.parse(c.lease);
   if(JSON.stringify(lease)!==c.lease)throw Error('origin_unverified');
   const claims=verifyLease(lease,config.trusted,config.origin,time);
-  if(claims.installationId!==installation.id||claims.venueId!==installation.venue_id||claims.environment!=='test'||claims.publicKey!==installation.public_key)throw Error('origin_unverified');
+  if(claims.installationId!==installation.id||claims.venueId!==installation.venue_id||claims.environment!==installation.environment||claims.publicKey!==installation.public_key)throw Error('origin_unverified');
 }

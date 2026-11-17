@@ -1995,10 +1995,8 @@ The separate `emailRelay` hint reports the grant identity, revision, expiry and
 switch state, or null when current authority is unavailable. Replaying the same
 configuration request reads the current hint. It does not enable delivery or approve
 a grant. The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
-defines the one-submit and status-only recovery rule. The watcher cleared a test-only
-exception for an owner-enabled paired box with a signed, live lease and an RFC 1918
-private address or .local management name; that approval path is not built yet.
-Service commands and SES startup remain unfinished.
+defines the one-submit and status-only recovery rule. The test-only private-origin
+approval core is described below. Service commands and SES startup remain unfinished.
 
 ## Rehearse a synthetic Cloud restart
 
@@ -2038,9 +2036,9 @@ slice; this demonstration does not qualify real executors or deployment.
 
 ## Private box origin for test email
 
-Only on an explicitly test Cloud, you can approve your paired box's signed RFC 1918
-or `.local` management origin under its current key-bound lease, with your relay
-consent on, without the HTTPS origin challenge; production keeps refusing it.
+Only on an explicitly test Cloud, trusted owner tooling can approve a paired box's
+signed RFC 1918 or `.local` management origin under its current key-bound lease
+with owner relay consent, without the HTTPS origin challenge; production refuses it.
 
 The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
 names the signed request and the internal approval call. This core has synthetic

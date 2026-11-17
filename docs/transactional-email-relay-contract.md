@@ -105,12 +105,16 @@ renewal keep their existing shapes.
 For test-only private-origin approval, the box signs the canonical body
 `{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}`
 (keys in that order) on the same endpoint. Configuration authenticates the signed
-statement and returns the same version-2 reply; it does not turn email on. The trusted owner tool supplies that envelope as
+statement and returns the same version-2 reply; it does not turn email on. The box-side helper must submit that request and hand the same current envelope
+to the trusted owner tool through private standard input (for example over the
+owner’s SSH session); Cloud offers no endpoint to retrieve it. This handoff is
+part of the unbuilt box/tool integration. The trusted owner tool supplies it as
 the fourth argument to `RelayGrantStore.approve`, with `testOrigin` configured
 with environment `test`, the Cloud origin and its trusted lease keys. The normal
 owner session, consent, installation authority, grant revision and expiry checks
-still apply. Approval checks the current signature and lease again after lock
-waits. The existing grant expiry is the owner-selected end of this test exception;
+still apply. Approval requires the matching existing configuration operation digest and
+checks the current signature and lease again after lock waits. A signed statement
+that never completed that exchange is refused. The existing grant expiry is the owner-selected end of this test exception;
 no HTTPS challenge is claimed. No public approval route or normal-startup wiring
 is added. A box-side caller and the owner service command remain separate work.
 
@@ -123,8 +127,8 @@ acknowledgement. The configuration outcome is unknown; treat the relay as
 unavailable and do not submit until a fresh hint read succeeds. An enabled hint is not
 sending authority: consent, policy, allowance and queue checks still happen at submit.
 Configuration replay reads the current hint without changing the service revision
-or storing the hint in its durable operation result. These are local fixture
-capabilities; the scoped test-only private-origin approval path is not built yet.
+or storing the hint in its durable operation result. These local capabilities do
+not install owner commands or SES startup.
 
 ## Proposed wire exchange
 

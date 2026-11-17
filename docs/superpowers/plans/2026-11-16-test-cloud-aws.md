@@ -29,3 +29,10 @@ configuration envelope as an optional fourth argument only when a trusted
 `testOrigin` setting selects environment `test`. The box's signed body states
 `managementOrigin` after `servicesVersion:2`; there is no new record or route.
 Owner command and startup composition are the following slice.
+
+**17 November 02:35 watcher correction after both run-it reviews.** Keep the
+configuration-body route for lane F, restrict it to test venues, and require its
+existing installation operation digest before approval. A signed envelope that
+never completed configuration is refused; no record or field is added. The
+box/tool handoff must pass the current envelope privately to the owner tool; it
+is not a Cloud retrieval endpoint. The watcher cleared this correction, not the owner.

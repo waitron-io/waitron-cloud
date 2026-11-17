@@ -1,8 +1,8 @@
 import {testRelayOriginProof,type TestRelayOrigin} from './test-relay-origin.ts';
-import type {SignedEnvelope} from './installation-proof.ts';
+import {readMachineClaims,type MachineClaims,type SignedEnvelope} from './installation-proof.ts';
 import {requireVenueService} from './venue-service-permissions.ts';
 import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
@@ -106,14 +106,19 @@ export class RelayGrantStore {
   if(!exact(input,['installationId','expectedRevision','consent','consentVersion','managementOrigin','expiresAt'])||!id(input.installationId)
    ||!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||input.expectedRevision>=2147483647||input.consent!==true
    ||input.consentVersion!==config.consentVersion||!canonicalOrigin(input.managementOrigin)||!date(input.expiresAt))fail('invalid_input');
-  const verifyTest=(installation:InstallationRow,time:number)=>{
+  const verifyTest=async(client:PoolClient,installation:InstallationRow)=>{
    if(!config.testOrigin)fail('origin_unverified');
+   let claims:MachineClaims;try{claims=readMachineClaims(proof);}catch{fail('origin_unverified');}
+   const operation=(await client.query('SELECT digest FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[installation.id,claims.operationId])).rows[0];
+   const digest=createHash('sha256').update(JSON.stringify(['configuration',claims.body])).digest('hex');
+   if(operation?.digest!==digest)fail('origin_unverified');
+   const time=await now(client);liveInstallation(installation,time);
    try{testRelayOriginProof(config.testOrigin,installation,input.managementOrigin,proof!,time);}catch{fail('origin_unverified');}
   };
   // Authenticate before network proof; the test exception is checked again under the grant's locks.
   await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);
    const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
-   if(proof){const time=await now(client);liveInstallation(installation,time);verifyTest(installation,time);}
+   if(proof)await verifyTest(client,installation);
   });
   let verifiedUntil=input.expiresAt;
   if(!proof){
@@ -141,7 +146,7 @@ export class RelayGrantStore {
     consent_version=excluded.consent_version,revision=relay_grants.revision+1,expires_at=excluded.expires_at,origin_verified_until=excluded.origin_verified_until,enabled=true,revoked_at=NULL
     RETURNING *`,[randomUUID(),installation.id,actor.accountId,installation.organisation_id,installation.venue_id,installation.environment,installation.public_key,input.managementOrigin,input.consentVersion,input.expiresAt,verifiedUntil])).rows[0]!;
    await session(client,token,csrfToken);
-   if(proof)verifyTest(installation,await now(client));
+   if(proof)await verifyTest(client,installation);
    return view(g);
   });
  }

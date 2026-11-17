@@ -130,12 +130,26 @@ test('test owner approves only the private origin stated in a signed current con
   await grants.revoke(session.token,session.csrfToken,grant.id);
   assert.equal((await store.execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}))).emailRelay?.grant?.enabled,false);
 });
+test('private-origin approval requires the same statement to complete its configuration exchange',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const managementOrigin='https://waitron.local:3000';
+  const operationId=randomUUID(),proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin},operationId),grants=privateRelayStore();
+  await assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof),/origin_unverified/);
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
+  await store.execute('configuration',proof);
+  const changedOrigin='https://other.local';
+  const changed=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin:changedOrigin},operationId);
+  await assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(changedOrigin),changed),/origin_unverified/);
+  assert.equal((await grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof)).enabled,true);
+});
 test('private-origin approval rejects unsigned, mismatched, stale and unleased statements and missing owner consent',async()=>{
   const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
   const managementOrigin='https://waitron.local:3000',input=privateApproval(managementOrigin),grants=privateRelayStore();
   const body={servicesVersion:2,managementOrigin};
-  const good=request(a,'configuration',renewed.lease,body);
-  const cases=[undefined,{...good,signature:'invalid'},request(a,'configuration',undefined,body),
+  const operationId=randomUUID(),good=request(a,'configuration',renewed.lease,body,operationId);
+  await store.execute('configuration',good);
+  const otherLease=(await store.execute('renew',request(b))).lease;assert.ok(otherLease);
+  const cases=[request(a,'configuration',otherLease,body,operationId),undefined,{...good,signature:'invalid'},request(a,'configuration',undefined,body),
     request(a,'configuration',renewed.lease,body,randomUUID(),Date.now()-120000),
     request(a,'report',renewed.lease,body),request(b,'configuration',renewed.lease,body),
     request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin:'https://other.local'}),
@@ -157,7 +171,7 @@ test('private-origin approval rejects unsigned, mismatched, stale and unleased s
 test('test-only origin exception excludes public, loopback, link-local and non-HTTPS origins',async()=>{
   const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
   const grants=privateRelayStore();
-  for(const managementOrigin of ['https://example.test','https://127.0.0.1','https://169.254.1.2','https://172.15.255.255','https://172.32.0.1','https://[fe80::1]','https://localhost','https://local','https://waitron.local.example','http://192.168.1.2','https://waitron.local/path']){
+  for(const managementOrigin of ['https://example.test','https://127.0.0.1','https://169.254.1.2','https://172.15.255.255','https://172.32.0.1','https://[fe80::1]','https://localhost','https://local','https://waitron.local.example','http://192.168.1.2','https://waitron.local/path','https://.local','https://a..local','https://-.local','https://_x.local']){
     const proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
     await assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof));
   }
@@ -168,10 +182,11 @@ test('private-origin proof expiry during grant lock waits rolls approval back',a
   const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
   const grants=privateRelayStore('test',databaseClock(db.pool,()=>time));
   const managementOrigin='https://waitron.local:3000';
+  const proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
+  await store.execute('configuration',proof);
   const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
   await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[a.installationId]);
-  const pending=assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),
-    request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin})),/origin_unverified/);
+  const pending=assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof),/origin_unverified/);
   try{await waitForLock();time+=61000;}
   finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([pending]);}
   await pending;
@@ -179,9 +194,10 @@ test('private-origin proof expiry during grant lock waits rolls approval back',a
 });
 test('production cannot enable the private-origin exception or approve a production box',async()=>{
   assert.throws(()=>privateRelayStore('production'),/invalid_input/);
+  await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);
   const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
   const managementOrigin='https://waitron.local:3000',proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
-  await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);
+  await assert.rejects(store.execute('configuration',proof),/invalid_proof/);
   await assert.rejects(privateRelayStore().approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof),/grant_unavailable/);
   assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
 });
