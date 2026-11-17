@@ -2,8 +2,9 @@
 
 You can withdraw a test venue's guest menu and control its box email without
 changing its paid level. Run the local command inside the test account container,
-where it can read the private configuration and database. It requires
-`CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`. Translation stays
+where it can read the private configuration and database. Start the test Cloud with
+`CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`; the command
+reads those existing container settings and refuses other modes. Translation stays
 refused. Remote-access and backup switches are still unavailable.
 
 For example, save this synthetic command as a private file outside the checkout:
@@ -12,30 +13,39 @@ For example, save this synthetic command as a private file outside the checkout:
 {"command":"guest-menu","venueId":"5c2e280d-10ba-4d39-af5f-cbdcc6dfd033","enabled":false}
 ```
 
-Replace the venue ID with your test venue. With the same Compose files and
-settings you used to launch the test Cloud, run:
+Replace the venue ID with your test venue. On the configured Amazon test
+layout, use the same settings you used to launch it:
 
 ```sh
 docker compose --env-file deploy/test-cloud/test.env \
-  -f compose.yaml -f deploy/test-cloud/compose.yaml exec -T \
-  -e CLOUD_VENUE_SERVICE_LEVELS=test -e CLOUD_TEST_SERVICE_PLANS=0 \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml exec -T \
   account node deploy/test-cloud/service-controls.mjs < /private/menu-switch.json
 ```
 
-Include `-f deploy/test-cloud/compose.amazon.yaml` for that deployment. The command
-uses `TEST_CLOUD_ORIGIN` from the container. Native development can select its
-private configuration with `LOCAL_STACK_CONFIG_DIR` and an isolated database with
-`DATABASE_URL`; its complete migration ledger must match the checked-out release.
+The command reads the running container's test settings and `TEST_CLOUD_ORIGIN`.
+The ordinary home-network Compose layout leaves venue-level mode dormant and
+refuses these commands. Do not override its mode on an individual command.
+
+For native local development, keep `LOCAL_STACK_CONFIG_DIR`, `DATABASE_URL`,
+`TEST_CLOUD_ORIGIN` and the two test-mode settings in a private mode-0600 environment
+file. The database's complete migration ledger must match the checked-out release:
+
+```sh
+node --env-file=/private/test-cloud.env deploy/test-cloud/service-controls.mjs \
+  < /private/menu-switch.json
+```
 
 The guest command returns the menu state and revision. Disabling makes published
-pages unavailable and blocks further publication. Enabling returns `off`: the box
+pages unavailable and blocks further publication. Enabling after disabling returns `off`: the box
 must publish again, so you cannot accidentally restore an old menu. Production
 venues refuse the command.
 
 For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`,
-with no other fields. They return `{"stopped":true}` or `{"stopped":false}`.
+Only `command` is needed. They return `{"stopped":true}` or `{"stopped":false}`.
 Stopping affects the entire test box-email relay and uses its existing sending
-control. Account signup and password-reset mail use a separate worker. Resuming
+control. Cloud’s own signup and password-reset mail use a separate worker. Box staff
+password-reset mail is part of this relay and stops with it. Resuming
 creates no grant and supplies no sending adapter.
 
 To approve a paired box, pass one private JSON object with `command` set to
@@ -46,10 +56,10 @@ To approve a paired box, pass one private JSON object with `command` set to
   `consentVersion`, `managementOrigin` and `expiresAt`.
 - `statement`: the box's current signed configuration envelope, obtained through
   the [private box handoff](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request).
-- `policy`: an explicit test allowance with `version`, positive integer `units`,
-  positive integer `periodSeconds`, UTC `epoch`, `excess:"refuse"` and
-  `debit:"retain"`. Use the same consent version and policy in the relay worker
-  when that startup composition is available.
+The fixed synthetic consent version is `local-v1`. Invented versions refuse.
+The shared test settings allow three units per hour, with version `local-v1`
+and epoch `2026-01-01T00:00:00.000Z`, refusing excess and retaining debits.
+These are local fixture settings; the command accepts no policy choice.
 
 The statement must already have completed the signed configuration exchange.
 It expires after 60 seconds; obtain a fresh one rather than replaying stale
