@@ -33,6 +33,7 @@ test('volume-backed remote reconciler publishes paid routes and trusted certific
  }
  async function drain(worker){await worker.schedule();for(let n=0;n<12&&await worker.runOnce();n++);}
  await drain(runtime.worker);
+ assert.deepEqual((await db.pool.query("SELECT applied_digest=desired_digest AS applied,failures::text FROM remote_configuration_jobs WHERE kind='name' AND target_id=ANY($1::uuid[]) ORDER BY target_id",[venues.map(v=>v.installationId)])).rows,[{applied:true,failures:'0'},{applied:true,failures:'0'}]);
  const ca=new X509Certificate(await readFile(join(directory,'lan/ca.pem'))),trust=createPublicKey(await readFile(join(directory,'gateway-issuer.pem')));
  const manifest=()=>readFile(join(directory,'gateway-manifest.json'),'utf8').then(text=>verifyManifest(JSON.parse(text),trust,runtime.cellId));
  const initial=await manifest();assert.equal(initial.routes.length,2);assert.ok(initial.sequence>1,'bootstrap sequence must not supersede the real routes');

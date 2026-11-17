@@ -205,21 +205,22 @@ Create a trusted JSON file with these explicit mappings:
 ```
 
 List every public and staff certificate target separately. The DNS module exports a
-default object with async `present(name, value)` and `remove(name, value)` methods. All
+default object with async `present(name, value)`, `remove(name, value)` and
+`point(name, target)` methods. All
 paths must be absolute. A missing route or certificate mapping fails only that target;
 the worker does not infer a path or reuse another cell's key.
 
 For a Route 53 zone, set `acme.dnsModule` to the absolute path of
 `packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
 `CLOUD_DNS_SUFFIX` to the worker, along with the AWS SDK's normal credentials.
+The suffix must equal the configured country zone, not a parent of it.
 For the test installation, these are zone `Z01032422MAQ3V1X559WP` and suffix
 `test.waitron.io`. Keep credentials in a private environment file on the server.
 Grant only `route53:ChangeResourceRecordSets` for TXT records matching
 `_acme-challenge.*.test.waitron.io` and CNAME records matching `v-*` and
 `staff-v-*` under `test.waitron.io`, plus `route53:GetChange`. The adapter
-never lists zones or changes A/AAAA records. Publication, including
-propagation and AWS retries, has a 75-second budget inside the worker's existing
-120-second claim. Cleanup has a separate ten-second request budget and does not
+never lists zones or changes A/AAAA records. Each publication, including
+propagation and AWS retries, has a 75-second budget. Cleanup has a separate ten-second request budget and does not
 wait for deletion to propagate. This leaves time for ACME instead of spending a
 second propagation window before publishing the certificate. A hung request is
 aborted; a refused propagation read fails immediately. Shutdown interrupts DNS

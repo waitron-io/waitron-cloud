@@ -707,7 +707,10 @@ has eight slices in its [Cloud plan](superpowers/plans/2026-11-17-custom-domain-
 Stored country-zone names and certificate-check names now survive a cell move;
 `packages/remote-access/test/movement.test.ts` and
 `packages/remote-access/test/installation-configuration-names.test.ts` cover the
-stored names and signed reply. Remaining work:
+stored names and signed reply. DNS movement is checked locally by
+`packages/remote-access/test/name-records.test.ts` and the real CNAME reads in
+`scripts/remote-reconciler-receipt.mjs`; live DNS qualification remains open.
+Remaining work:
 
 - Reduce an owner’s custom name to one CNAME, with the gateway answering
   Let’s Encrypt’s TLS-ALPN-01 check on port 443.

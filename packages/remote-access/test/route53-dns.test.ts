@@ -50,7 +50,7 @@ test('points only assigned venue names at a cell with TTL 60 and waits for INSYN
 test('refuses unassigned names and invalid targets before any record write',async()=>{
  const f=await fixture();try{
   const assigned='staff-v-11111111-1111-4111-8111-111111111111.test.waitron.io';
-  for(const invalid of ['x.test.waitron.io',assigned.replace('test.waitron.io','other.example.test'),'_acme-challenge.'+assigned,assigned+'.attacker.test',assigned.replace('11111111-1111-4111-8111-111111111111','not-a-uuid')])await assert.rejects(f.dns.point(invalid,'gw.cell-b.example.test'),/invalid_name_record/);
+  for(const invalid of ['x.test.waitron.io',assigned.replace('test.waitron.io','other.example.test'),assigned.replace('test.waitron.io','evil-waitron.io'),assigned.replace('.test.waitron.io','xtest.waitron.io'),'evil-v-11111111-1111-4111-8111-111111111111.test.waitron.io','_acme-challenge.'+assigned,assigned+'.attacker.test',assigned.replace('11111111-1111-4111-8111-111111111111','not-a-uuid')])await assert.rejects(f.dns.point(invalid,'gw.cell-b.example.test'),/invalid_name_record/);
   for(const target of ['','https://gw.cell-b.example.test','gw.cell-b.example.test:51820','*.example.test'])await assert.rejects(f.dns.point(assigned,target),/invalid_name_record/);
   assert.equal(f.requests.length,0);
  }finally{await f.close();}
