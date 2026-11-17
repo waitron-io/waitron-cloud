@@ -2414,7 +2414,7 @@ requests 4–7 and 9 for future build; none of these are implemented effects.
 | --- | --- |
 | 1: facts; 2: code and issue date | Separate reads above. Billing display v1 remains closed. |
 | 3: addresses | Follow owner-approved A1188 section 13 items 5–6: separate emergency name, separate code-entry origin, never locally pointed at the box. No staff password enters the code-entry page; the copy itself still runs on Cloud's machines. |
-| 4: locked restore | Agreed part 3 item 1 below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Fresh-node placement still waits for A1425 part 3 / Waitron part 0 and A947/A1018 qualification. |
+| 4: locked restore | Agreed part 3 item 1 and its TOTP input amendment below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Fresh-node placement still waits for A1425 part 3 / Waitron part 0 and A947/A1018 qualification. |
 | 5: copy identity/certificate | Agreed part 3 item 2 below: launcher-delivered certificate/key PEM for the same emergency hostname, with Waitron terminating TLS and a copy-deadline lease cap. Staff certificate v1 stays unchanged; issuance, key cleanup and production qualification remain open. |
 | 6: still open; 7: box last heard | Agreed part 3 item 3 below: authenticated copy-operation status, current eligibility and the bound source installation's last accepted control contact, or explicit null. These facts cannot replace a fresh declaration read or its two-minute refusal. |
 | 8: declaration confirmation | Bind one durable operation to the actor, selected copy and exact declaration. Same inputs replay the stored result; changed inputs conflict. Later implementation must coordinate charging, owner mail, source-service withdrawal and the new backup generation without inventing a second operation after an uncertain reply. |
@@ -2428,12 +2428,14 @@ Cloud accepts items 1–4 of Waitron's
 for future implementation, with the clarifications below. The watcher cleared
 this docs-only answer at 16:39 CET on 15 November, after Claude's plan read.
 This is a technical agreement, not owner approval of a new design or a runnable
-emergency start. The pinned proposal supplies the exact fields and bounds.
+emergency start. The pinned proposal supplies the exact fields and bounds, except its account-key
+launcher input and decision 5 are superseded by the TOTP amendment below.
 
 1. **Fresh-node locked placement:** accept the immutable `copyOperationId`
    binding, distinct source/copy identities, selected stream, placed files and
    launcher inputs. Never import the source `node.db` or its private node key.
-   Cloud uses its held backup key; only TOTP opens the account secret. Before
+   Cloud uses its held backup key; the locked child receives only the TOTP purpose
+   keys agreed below, never the source vault ring or retired account-key input. Before
    declaration, start no workers and grant no fiscal authority or database writes.
    Cloud's read-only placement reader fetches and places files; the locked copy
    holds no bucket credential before confirmation. Real placement still waits
@@ -2487,6 +2489,22 @@ vectors before qualification. Cloud still has to build and qualify placement,
 leases, routes and counters; Waitron still has to qualify its locked entry's lack
 of writes. Declaration, charging, return and writer generation remain parts 4–6.
 A947/A1018, P6 and provider/production gates remain open.
+
+
+#### TOTP purpose-key input amendment, 17 November 2026
+
+Cloud accepts Waitron’s published [proposal](https://github.com/clintongormley/waitron/blob/16aec8456ec082cb2b1e546fa7839ee2bd09b084/docs/superpowers/plans/2026-11-17-a1188-locked-totp-purpose-keys.md) and [shared examples](https://github.com/clintongormley/waitron/blob/16aec8456ec082cb2b1e546fa7839ee2bd09b084/docs/superpowers/plans/2026-11-17-a1188-locked-totp-examples.md) for the future locked reader. The watcher cleared this agreement-first amendment on 17 November at 17:40; it is not owner approval of a new design or a runnable start.
+`WAITRON_LOCKED_TOTP_KEYS` is closed JSON `{current:{version,key},previous:{version,key}|null}`; each entry has exactly those fields. Keys are canonical base64 for 32 bytes. Versions are distinct positive safe integers, preserving the source numbers without an ordering requirement; a previous key needs its own nonempty version.
+Resolve the selected backup’s `secrets.env`, `trading.env` and optional `backup.env` through `loadKeyRing(resolveBackupKeyInputs(...))`, then derive `purposeKey(entry,"totp")` once for each entry. Later files override earlier ones; absent/empty current version defaults to 1, never the previous version. Missing secrets/trading entries or unsafe source versions refuse before spawning.
+A retry uses the same immutable bound backup and original versions. This replaces the old proposal’s account-key launcher input and decision 5; no `WAITRON_ACCOUNT_KEY` fallback is accepted.
+
+The future Cloud launcher derives before spawning the Waitron child. It passes only this purpose payload, never source vault variables or source secrets/trading/backup env files into the child’s state; the child’s placement creates a separate fresh ring.
+Cloud drops transient source-ring/payload references and its temporary child environment after spawn returns or fails. Store no handoff payload in files, arguments, database, logs or receipts.
+The child validates and removes the inherited payload on success or failure before venue locking/placement, retaining decoded purpose keys only until exit on startup failure, locked stop or fixed expiry. After confirmed declaration cancels that stop, lifetime belongs to parts 4–6 and is not agreed here.
+While Cloud retains that backup generation and its existing held backup key, it can re-read the archived ring and re-derive the keys. Existing backup retention is unchanged; this promises no physical RAM erasure or new cleanup protocol.
+
+The published examples cover original versions 7/3, no previous key, absent/empty current version 1 and wrong-key/purpose/version refusal. Missing/malformed payload refusals are prospective startup cases; neither the new reader nor Cloud delivery is qualified by those examples.
+The copy binding and fixed start-plus-30-minute deadline remain unchanged. Cloud’s supplier remains unbuilt until the real selected-backup-to-launch consumer exists; this agreement unblocks J’s reader, not P6 hosting or activation.
 
 ### A1018: answers to Lane A's four questions
 
