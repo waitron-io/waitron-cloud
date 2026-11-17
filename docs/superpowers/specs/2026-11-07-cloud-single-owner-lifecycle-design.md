@@ -30,7 +30,7 @@ Cloud checks the request and relationships; Waitron supplies local administrator
 
 ## Hand over one organisation
 
-You sign in, provide fresh proof and name the recipient’s email. They verify it, sign in, enrol their own proof and explicitly accept the exact transfer. First-time recipients need account-only signup; current signup also creates a business. One database transaction replaces the sole owner and revokes your organisation access together, at acceptance; no later confirmation from you.
+You sign in, provide fresh proof and name the recipient’s email. They verify it, sign in, enrol their own proof and explicitly accept the exact transfer. First-time recipients use account-only signup; ordinary signup also creates a business. One database transaction replaces the sole owner and revokes your organisation access together, at acceptance; no later confirmation from you.
 
 **Approved defaults (owner, 2026-11-09):** one pending transfer per organisation, displayed 24-hour expiry and cancellation by either participant. Completion remains at the recipient’s acceptance, with no later confirmation from the current owner. Pending, cancelled or expired transfers leave you owner and give no recipient access. Changing recipient requires cancellation. Security changes cancel affected transfers, except the recipient’s required initial enrolment, which binds fresh proof to that transfer.
 
