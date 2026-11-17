@@ -103,7 +103,7 @@ for another offer. Cancelled and expired offers do not allow account-only signup
 Once your account exists, you cannot use signup to create a business for that
 address. If the handover is then cancelled or expires, ask the sender for a new
 offer and accept it from your existing account. Resetting your password also
-cancels the pending offer.
+cancels any pending offers.
 
 The focused local PostgreSQL and browser checks are:
 

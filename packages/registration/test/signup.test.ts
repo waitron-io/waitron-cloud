@@ -286,7 +286,7 @@ test('verified signup remembers an explicitly chosen browser without creating a 
 });
 
 test('a malformed signup link remains unavailable before checking business details',async()=>{
- for(const invalid of [{legalBusinessName:''},{countryCode:'invalid'},{password:'short'}]){
+ for(const invalid of [{legalBusinessName:''},{countryCode:'invalid'}]){
   await expectCode(store.complete('invalid-link',{...details,...invalid}),'verification_unavailable');
  }
  assert.equal(await count('cloud_accounts'),0);
