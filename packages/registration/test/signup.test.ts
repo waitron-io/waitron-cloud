@@ -176,6 +176,7 @@ test('invalid signup details do not consume the link or create partial records',
     { password: 'short' }, { password: 'é'.repeat(513) }, { organisationName: ' ' },
     { legalBusinessName: 'x'.repeat(201) }, { countryCode: 'Spain' },
   ]) await expectCode(store.complete(message.token, { ...details, ...invalid }), 'signup_invalid');
+  await expectCode(store.complete(message.token, {...details, countryCode: 'FR'}), 'country_unavailable');
   assert.equal(await count('cloud_accounts'), 0);
   await store.complete(message.token, { ...details, password: '🔑'.repeat(15), countryCode: 'es' });
 });

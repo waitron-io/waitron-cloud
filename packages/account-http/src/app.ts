@@ -89,6 +89,7 @@ function publicError(error: unknown): AccountHttpError {
   if (error instanceof SecurityAuditError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='security_audit_conflict'?'conflict':error.code);
   if (error instanceof UsageError) return new AccountHttpError(error.code==='permission_denied'?403:error.code==='invalid_input'?400:409,error.code==='usage_conflict'?'conflict':error.code);
   if (error instanceof SignupError || error instanceof PasswordRecoveryError) {
+    if(error.code==='country_unavailable')return new AccountHttpError(400,'country_unavailable');
     if(error.code==='handover_unavailable')return new AccountHttpError(409,'handover_unavailable');
     if (error.code === 'password_compromised') return new AccountHttpError(400, 'password_compromised');
     if (error.code === 'password_screening_unavailable') return new AccountHttpError(503, 'temporarily_unavailable', 1);
@@ -130,7 +131,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
-  const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
+  const signup = new SignupStore(pool, outbox, options.passwordScreening, config.countryCode); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);
   const app = new Hono<{Bindings: HttpBindings}>();
   app.onError((error, c) => {

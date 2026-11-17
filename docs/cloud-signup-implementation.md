@@ -1,8 +1,7 @@
 # Cloud account signup
 
-You can create a Cloud account independently of a venue. This slice implements the
-backend. Waitron's SQLite storage switch landed on 2026-09-23, so pairing and shared
-UI extraction can now proceed against its current interfaces.
+You can create a Cloud account independently of a venue. Use the
+bilingual portal to verify your email, choose your business country and finish signup.
 
 ## Journey and boundary
 
@@ -14,16 +13,21 @@ UI extraction can now proceed against its current interfaces.
 2. Follow the email and submit your password, organisation name, legal-business name
    and two-letter country code. The token lasts 30 minutes and can complete signup
    once. Reading a link does not consume it; submit it to the account API completion
-   POST route. The linked browser screen remains to be built.
+   POST route. The linked portal screen submits these details.
 3. Create the verified account, organisation, legal business and owner membership in
    one transaction. The owner can register venues but receives no platform permission.
    Sign in through the existing password/session API after completion.
 
 Start with one organisation and one business. Keep both as separate records so later
-businesses can have their own countries and tax identities. Tax details, billing and
-country-specific validation belong to the later billing journey; a country code here
-does not provision resources or promise residency. Existing trusted setup records can
-retain missing profile fields until their operators supply real values.
+businesses can have their own countries and tax identities. Your business country
+must match the service’s `CLOUD_COUNTRY_CODE` (default `ES`).
+Choosing France on Spain’s signup screen returns “Waitron Cloud isn't available in
+France yet”. Choose Spain and retry the same email link. The server returns HTTP 400
+`{"error":"country_unavailable"}` before writing an account; the browser translates
+the refusal in English or Spanish. Tax details and billing validation belong to
+the later billing journey; a country code does not provision resources or promise
+residency. Existing trusted setup records can retain missing profile fields until
+their operators supply real values.
 
 Do not accept a password before proving email ownership. This prevents a third party
 from supplying a password for someone else's signup. Existing email accounts are

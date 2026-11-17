@@ -14,14 +14,15 @@ export interface SignupMailer { sendVerification(message: SignupEmail, context?:
 export interface SignupDetails { password: string; organisationName: string; legalBusinessName: string; countryCode: string; rememberBrowser?: boolean; }
 export interface SignupResult { accountId: string; organisationId: string; legalBusinessId: string; browserToken?: string; }
 export class SignupError extends Error {
-  readonly code: 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable' | 'handover_unavailable';
+  readonly code: 'country_unavailable' | 'signup_invalid' | 'verification_unavailable' | 'password_compromised' | 'password_screening_unavailable' | 'handover_unavailable';
   constructor(code: SignupError['code']) { super(code); this.name = 'SignupError'; this.code = code; }
 }
 export class SignupStore {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
   readonly #screening: PasswordScreeningProvider | undefined;
-  constructor(pool: Pool, outbox: EmailOutbox, screening?: PasswordScreeningProvider) { this.#pool = pool; this.#outbox = outbox; this.#screening = screening; }
+  readonly #countryCode: string;
+  constructor(pool: Pool, outbox: EmailOutbox, screening?: PasswordScreeningProvider, countryCode = 'ES') { this.#pool = pool; this.#outbox = outbox; this.#screening = screening; this.#countryCode = countryCode; }
 
   async request(input: string, locale: AccountLocale = 'en'): Promise<{status: 'accepted'}> {
     const email = normaliseEmail(input);
@@ -49,6 +50,7 @@ export class SignupStore {
     const legalBusinessName = name(input.legalBusinessName);
     if (typeof input.countryCode !== 'string' || !/^[A-Za-z]{2}$/.test(input.countryCode)) throw new SignupError('signup_invalid');
     const countryCode = input.countryCode.toUpperCase();
+    if (countryCode !== this.#countryCode) throw new SignupError('country_unavailable');
     return this.#complete(token,input,async (client,accountId)=>{
       const organisationId=randomUUID(),legalBusinessId=randomUUID();
       await client.query('INSERT INTO organisations (id, name) VALUES ($1, $2)', [organisationId, organisationName]);

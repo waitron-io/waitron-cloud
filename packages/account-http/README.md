@@ -6,6 +6,12 @@ stores. The optional Lit portal uses the same origin. The pairing API supports t
 awaits ingress, service-adapter and deployment checks. The real Waitron administrator
 adapter is included in the local integration proof.
 
+Set `CLOUD_COUNTRY_CODE=ES` for Spain's signup service. It defaults to `ES` and
+must contain two uppercase letters; invalid configuration refuses startup. Signup
+for another business country returns HTTP 400 `{"error":"country_unavailable"}`,
+without consuming the email link. Correct the country and retry. This setting
+changes signup only; it does not qualify another country's billing or hosting.
+
 ## Run locally
 
 You need Node.js 26+, pnpm 9.15.0, Docker for Mailpit, and a development PostgreSQL
