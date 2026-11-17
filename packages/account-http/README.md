@@ -724,7 +724,7 @@ trial, and production venues cannot start one here.
 The browser sends same-origin, CSRF-protected POST requests to
 `/api/account/billing/read` with `{}` and `/api/account/billing/start-trial` with
 `{"venueId":"11111111-1111-4111-8111-111111111111"}`. Each returns
-`{"venues":[{"venueId":"11111111-1111-4111-8111-111111111111","level":"registered","trial":null,"canStartTrial":true}]}`
+`{"venues":[{"venueId":"11111111-1111-4111-8111-111111111111","level":"registered","trial":null,"canStartTrial":true,"taxProfile":{"legalName":null,"address":null,"taxNumber":null}}]}`
 when reading an eligible synthetic venue before starting. Reads do not create
 billing state. A refused start rolls its writes back; a conflict returns the
 current venue view. If a write reply is lost, the portal reads the current plan
@@ -735,6 +735,25 @@ packages/account-http exec node --test --test-timeout=60000 test/billing-account
 These checks cover real PostgreSQL lock waits, expiry, ownership changes, concurrent
 starts and rollback. This piece sets no renewal anchor and makes no charge or
 provider request. Paid-plan changes and production billing remain separate work.
+
+## Test tax details
+
+Tax details use the same synthetic-account allowlist and test mode, independently
+of payment-method settings. POST `/api/account/billing/tax/save` with the string
+fields `venueId`, `legalName`, `address` and `taxNumber`, using your existing
+session, origin and CSRF proof. Use synthetic values only. The server trims each
+field, rejects control characters and Unicode line/paragraph separators, and bounds
+name/address/tax number to 200/600/32 characters using JavaScript string length,
+as signup does.
+
+A business sharing any non-test venue has no tax profile and cannot be changed.
+The response and `/billing/read` include optional `taxProfile` with `legalName`,
+`address` and `taxNumber` as strings or null. The business country is unchanged.
+Details apply to the business and every venue sharing it. The form keeps your
+edits per venue during reads and uncertain saves, and clears them when account
+authority ends or the page is hidden. A lost
+reply causes a read, never an automatic replay. This does not verify tax numbers,
+collect paid-plan details or make invoices; Spanish validation remains open.
 
 ## Test payment-method routes
 

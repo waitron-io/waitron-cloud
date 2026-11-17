@@ -44,7 +44,7 @@ test('billing chooser read lists a test venue without an installation or billing
  const f=await owner(),target=app([f.accountId]),before=await billingRows(f.organisationId);
  const seen=(await db.pool.query('SELECT last_seen_at FROM cloud_sessions WHERE account_id=$1',[f.accountId])).rows;
  const response=await request(target,f.session);assert.equal(response.status,200);
- assert.deepEqual(await response.json(),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true}]});
+ assert.deepEqual(await response.json(),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true,taxProfile:{legalName:null,address:null,taxNumber:null}}]});
  assert.deepEqual(await billingRows(f.organisationId),before);
  assert.deepEqual((await db.pool.query('SELECT last_seen_at FROM cloud_sessions WHERE account_id=$1',[f.accountId])).rows,seen);
 });
@@ -53,7 +53,7 @@ test('billing chooser starts the existing Connected trial without an anchor paym
  const f=await owner(),target=app([f.accountId]);
  const today=(await db.pool.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;
  const end=new Date(today+'T00:00:00Z');end.setUTCDate(end.getUTCDate()+30);
- const expected={venues:[{venueId:f.venueId,level:'connected',trial:{level:'connected',startedOn:today,endsOn:end.toISOString().slice(0,10),extended:false,state:'active'},canStartTrial:false}]};
+ const expected={venues:[{venueId:f.venueId,level:'connected',trial:{level:'connected',startedOn:today,endsOn:end.toISOString().slice(0,10),extended:false,state:'active'},canStartTrial:false,taxProfile:{legalName:null,address:null,taxNumber:null}}]};
  const response=await request(target,f.session,startPath,{venueId:f.venueId});assert.equal(response.status,200);
  assert.deepEqual(await response.json(),expected);
  assert.deepEqual(await (await request(target,f.session)).json(),expected);
@@ -178,7 +178,7 @@ test('billing trial rolls back across the database UTC day boundary and returns 
   }});
  });
  const response=await request(target,f.session,startPath,{venueId:f.venueId});clock.mock.restore();assert.equal(response.status,409);
- assert.deepEqual(await response.json(),{error:'conflict',venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true}]});
+ assert.deepEqual(await response.json(),{error:'conflict',venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true,taxProfile:{legalName:null,address:null,taxNumber:null}}]});
  assert.deepEqual(await billingRows(f.organisationId),before);
 });
 
@@ -203,7 +203,7 @@ test('billing chooser reads multiple businesses and expired trials without creat
  await store.execute(scope,event(),{type:'ensure_business'});
  await store.transition(scope,event(),{type:'start_trial',venueId:f.venueId,level:'connected',on:'2020-01-01'});
  const before=await billingRows(f.organisationId),response=await request(target,f.session);assert.equal(response.status,200);
- assert.deepEqual(await response.json(),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:false},{venueId:other.venueId,level:'registered',trial:null,canStartTrial:true}].sort((a,b)=>a.venueId.localeCompare(b.venueId))});
+ assert.deepEqual(await response.json(),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:false,taxProfile:{legalName:null,address:null,taxNumber:null}},{venueId:other.venueId,level:'registered',trial:null,canStartTrial:true,taxProfile:{legalName:null,address:null,taxNumber:null}}].sort((a,b)=>a.venueId.localeCompare(b.venueId))});
  assert.deepEqual(await billingRows(f.organisationId),before);
 });
 
@@ -240,7 +240,7 @@ test('account server forwards trial configuration without outbound requests or c
     let body='';res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk;});res.on('end',()=>resolve({status:res.statusCode!,body,policy:res.headers['content-security-policy']}));
    });call.on('error',reject);call.end('{}');
   });
-  assert.equal(response.status,200);assert.deepEqual(JSON.parse(response.body),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true}]});
+  assert.equal(response.status,200);assert.deepEqual(JSON.parse(response.body),{venues:[{venueId:f.venueId,level:'registered',trial:null,canStartTrial:true,taxProfile:{legalName:null,address:null,taxNumber:null}}]});
   assert.equal(response.policy,(await request(app(),f.session)).headers.get('content-security-policy')??undefined);assert.equal(calls,0);
  }finally{await running.close();}
 });
@@ -260,4 +260,128 @@ test('session and activity discover the trial chooser only for configured synthe
    assert.equal(Object.hasOwn(value,'billingTrialAvailable'),allowed?.includes(f.accountId)??false);
   }
  }
+});
+
+const taxPath='/api/account/billing/tax/save',taxProfile={legalName:'Synthetic business',address:'Synthetic street 1',taxNumber:'TEST-123'};
+async function taxRow(id:string){
+ return (await db.pool.query('SELECT name,billing_address,tax_number,country_code FROM legal_businesses WHERE id=$1',[id])).rows[0];
+}
+
+test('tax details can be saved reloaded and corrected without payment methods or billing changes',async()=>{
+ const f=await owner(),target=app([f.accountId]),billing=await billingRows(f.organisationId),sibling=randomUUID();
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[sibling,f.organisationId,f.legalBusinessId]);
+ await db.pool.query("UPDATE legal_businesses SET country_code='ES' WHERE id=$1",[f.legalBusinessId]);
+ const empty=await (await request(target,f.session)).json();
+ assert.deepEqual(empty.venues[0].taxProfile,{legalName:null,address:null,taxNumber:null});
+ assert.equal(empty.venues[0].paymentMethods,undefined);
+ const response=await request(target,f.session,taxPath,{venueId:f.venueId,legalName:'  Synthetic business  ',address:' Synthetic street 1 ',taxNumber:' TEST-123 '});
+ assert.equal(response.status,200);const saved=await response.json();assert.deepEqual(saved.venues.find((venue:any)=>venue.venueId===f.venueId).taxProfile,taxProfile);assert.deepEqual(saved.venues.find((venue:any)=>venue.venueId===sibling).taxProfile,taxProfile);
+ assert.deepEqual((await (await request(target,f.session)).json()).venues[0].taxProfile,taxProfile);
+ const corrected={legalName:'Corrected synthetic business',address:'Synthetic street 2',taxNumber:'TEST-456'};
+ assert.equal((await request(target,f.session,taxPath,{venueId:f.venueId,...corrected})).status,200);
+ assert.deepEqual(await taxRow(f.legalBusinessId),{name:corrected.legalName,billing_address:corrected.address,tax_number:corrected.taxNumber,country_code:'ES'});
+ assert.deepEqual(await billingRows(f.organisationId),billing);
+});
+
+test('tax saves reject unknown fields controls empty and oversized strings without partial writes',async()=>{
+ const f=await owner(),target=app([f.accountId]),before=await taxRow(f.legalBusinessId);
+ const invalid=[
+  {legalName:''},{legalName:'x'.repeat(201)},{address:'   '},{address:'x'.repeat(601)},
+  {taxNumber:''},{taxNumber:'x'.repeat(33)},{legalName:'Bad\nname'},{address:'Bad\u0085address'},
+  {taxNumber:'\tTEST-123'},{address:'Two\u2028lines'},{legalName:'Two\u2029lines'},{legalName:null},{countryCode:'FR'},{venueId:'not-an-id'}
+ ];
+ for(const change of invalid){
+  const response=await request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile,...change});
+  assert.equal(response.status,400,JSON.stringify(change));assert.deepEqual(await response.json(),{error:'invalid_input'});
+  assert.deepEqual(await taxRow(f.legalBusinessId),before);
+ }
+ const maximum={legalName:'n'.repeat(200),address:'a'.repeat(600),taxNumber:'t'.repeat(32)};
+ const accepted=await request(target,f.session,taxPath,{venueId:f.venueId,...maximum});
+ assert.equal(accepted.status,200);assert.deepEqual((await accepted.json()).venues[0].taxProfile,maximum);
+});
+
+test('tax saving requires allowlisted verified ownership and browser proof for the selected test business',async()=>{
+ const f=await owner(),foreign=await owner(),target=app([f.accountId]),body={venueId:f.venueId,...taxProfile},before=await taxRow(f.legalBusinessId);
+ assert.equal((await request(app(),f.session,taxPath,body)).status,503);
+ assert.equal((await request(app([randomUUID()]),f.session,taxPath,body)).status,403);
+ for(const headers of [{origin:'https://elsewhere.test'},{'x-csrf-token':'wrong'}] as Record<string,string>[]){
+  assert.equal((await request(target,f.session,taxPath,body,headers)).status,403);
+ }
+ assert.equal((await request(target,f.session,taxPath,{...body,venueId:foreign.venueId})).status,403);
+ await db.pool.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[f.accountId]);
+ assert.equal((await request(target,f.session,taxPath,body)).status,403);
+ await db.pool.query('UPDATE cloud_credentials SET email_verified_at=clock_timestamp() WHERE account_id=$1',[f.accountId]);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.accountId]);
+ assert.equal((await request(target,f.session,taxPath,body)).status,403);
+ assert.deepEqual(await taxRow(f.legalBusinessId),before);
+ assert.deepEqual(await taxRow(foreign.legalBusinessId),before);
+});
+
+test('a production venue sharing the business hides its tax profile and refuses a synthetic save',async()=>{
+ const f=await owner(),target=app([f.accountId]),before=await taxRow(f.legalBusinessId),production=randomUUID();
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[production,f.organisationId,f.legalBusinessId]);
+ const read=await request(target,f.session);assert.equal(read.status,200);
+ for(const venue of (await read.json()).venues)assert.equal(Object.hasOwn(venue,'taxProfile'),false);
+ const refused=await request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile});assert.equal(refused.status,403);
+ assert.deepEqual(await taxRow(f.legalBusinessId),before);
+});
+
+test('tax save rolls back if its session expires while waiting for the business lock',async()=>{
+ const f=await owner(),target=app([f.accountId]),before=await taxRow(f.legalBusinessId),blocker=await db.secondPool.connect();
+ const expiry=(await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '4 seconds' WHERE account_id=$1 RETURNING absolute_expires_at",[f.accountId])).rows[0].absolute_expires_at;
+ let pending:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM legal_businesses WHERE id=$1 FOR UPDATE',[f.legalBusinessId]);
+  pending=request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile});await waitForBillingLock('FROM legal_businesses');
+  for(;;){if((await db.secondPool.query('SELECT clock_timestamp()>=$1::timestamptz AS expired',[expiry])).rows[0].expired)break;await delay(20);}
+  await blocker.query('COMMIT');const response=await pending;
+  assert.equal(response.status,401);assert.deepEqual(await response.json(),{error:'session_expired'});
+  assert.deepEqual(await taxRow(f.legalBusinessId),before);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+test('tax save rechecks venue binding after the business lock wait',async()=>{
+ const f=await owner(),target=app([f.accountId]),before=await taxRow(f.legalBusinessId),other=randomUUID(),blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined;
+ await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[other,f.organisationId]);
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM legal_businesses WHERE id=$1 FOR UPDATE',[f.legalBusinessId]);
+  pending=request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile});await waitForBillingLock('FROM legal_businesses');
+  await blocker.query('UPDATE venues SET legal_business_id=$1 WHERE id=$2',[other,f.venueId]);await blocker.query('COMMIT');
+  assert.equal((await pending).status,403);assert.deepEqual(await taxRow(f.legalBusinessId),before);assert.deepEqual(await taxRow(other),before);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+test('tax save refuses a production venue created while it waits for its organisation lock',async()=>{
+ const f=await owner(),target=app([f.accountId]),before=await taxRow(f.legalBusinessId),blocker=await db.secondPool.connect();let pending:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[f.organisationId]);
+  pending=request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile});await waitForBillingLock('FROM organisations');
+  await blocker.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[randomUUID(),f.organisationId,f.legalBusinessId]);await blocker.query('COMMIT');
+  assert.equal((await pending).status,403);assert.deepEqual(await taxRow(f.legalBusinessId),before);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+test('tax save business lock holds new venue creation until its transaction finishes',async t=>{
+ const f=await owner(),target=app([f.accountId]),writer=await db.secondPool.connect(),connect=db.pool.connect.bind(db.pool);
+ let reached!:()=>void,release!:()=>void;const writing=new Promise<void>(resolve=>reached=resolve),continuing=new Promise<void>(resolve=>release=resolve);
+ const hooked=t.mock.method(db.pool,'connect',async()=>{
+  const client=await connect(),query=client.query.bind(client);
+  return new Proxy(client,{get(object,key){
+   if(key==='query')return async(...args:Parameters<typeof client.query>)=>{
+    const result=await (query as Function)(...args);
+    if(typeof args[0]==='string'&&args[0].startsWith('UPDATE legal_businesses SET name=')){reached();await continuing;}
+    return result;
+   };
+   const value=Reflect.get(object,key);return typeof value==='function'?value.bind(object):value;
+  }});
+ });
+ let pending:Promise<Response>|undefined,creating:Promise<unknown>|undefined;
+ try{
+  pending=request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile});await writing;
+  await writer.query("SELECT set_config('application_name',$1,false)",[db.schema]);
+  creating=writer.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[randomUUID(),f.organisationId,f.legalBusinessId]);
+  await waitForBillingLock('INSERT INTO venues');release();assert.equal((await pending).status,200);await creating;
+  const read=await request(target,f.session);assert.equal(read.status,200);
+  for(const venue of (await read.json()).venues)assert.equal(Object.hasOwn(venue,'taxProfile'),false);
+ }finally{release();await pending?.catch(()=>{});await creating?.catch(()=>{});writer.release();hooked.mock.restore();}
 });

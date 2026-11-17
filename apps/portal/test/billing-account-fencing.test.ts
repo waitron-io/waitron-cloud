@@ -84,3 +84,68 @@ for(const boundary of ['account','signout'] as const)for(const code of ['network
  assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.waiting,0);
  assert.equal(c.selected,undefined);assert.deepEqual(c.venues,[]);
 });
+
+const taxProfile={legalName:'Synthetic business',address:'Synthetic street 1',taxNumber:'TEST-123'};
+const taxView={venues:view.venues.map(venue=>({...venue,taxProfile}))};
+test('tax drafts survive venue changes and reads but clear on account loss and navigation fencing',async()=>{
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>({ok:true,value:taxView as T}));
+ c.account('owner');await c.load();assert.deepEqual(c.taxDraft,taxProfile);
+ c.editTax('legalName','Unsaved first');assert.equal(taxView.venues[0]!.taxProfile.legalName,'Synthetic business');c.select(second);c.editTax('address','Unsaved second');c.select(first);
+ await c.load();assert.equal(c.taxDraft?.legalName,'Unsaved first');c.select(second);assert.equal(c.taxDraft?.address,'Unsaved second');
+ c.fence();assert.deepEqual(c.taxDraft,taxProfile);c.account(undefined);assert.equal(c.taxDraft,undefined);
+});
+test('tax validation runs on save and a confirmed reply updates the retained draft',async()=>{
+ const calls:{path:string;body:unknown}[]=[];
+ const c=await controller(async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});return {ok:true,value:taxView as T};
+ });c.account('owner');await c.load();c.editTax('legalName','');await c.saveTax();
+ assert.equal(c.taxInvalid,'legalName');assert.equal(calls.length,1);
+ c.editTax('legalName',' Synthetic business ');assert.equal(c.taxInvalid,undefined);await c.saveTax();
+ assert.deepEqual(calls[1],{path:'/billing/tax/save',body:{venueId:first,...taxProfile,legalName:' Synthetic business '}});
+ assert.deepEqual(c.taxDraft,taxProfile);assert.equal(c.taxSaved,true);
+});
+for(const status of [0,400])test('tax draft survives '+(status?'a correction response':'an uncertain save read without replay'),async()=>{
+ const calls:string[]=[];
+ const c=await controller(async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);return path.endsWith('/save')?{ok:false,status,code:status?'invalid_input':'network_error',retryAfterMs:0}:{ok:true,value:taxView as T};
+ });c.account('owner');await c.load();c.editTax('address','Unsaved address');await c.saveTax();
+ assert.equal(c.taxDraft?.address,'Unsaved address');assert.equal(c.error,status?'billingTaxInvalid':'billingTaxUncertain');
+ assert.deepEqual(calls,status?['/billing/read','/billing/tax/save']:['/billing/read','/billing/tax/save','/billing/read']);
+});
+for(const boundary of ['account','venue','pagehide'] as const)test('late tax save cannot replace state after '+boundary,async()=>{
+ let finish!:(value:ApiResult<BillingView>)=>void,count=0;
+ const c=await controller(<T>():Promise<ApiResult<T>>=>++count===1?Promise.resolve({ok:true,value:taxView as T}):new Promise(resolve=>{finish=resolve as typeof finish;}));
+ c.account('owner');await c.load();c.editTax('legalName','Unsaved first');const pending=c.saveTax();
+ if(boundary==='venue')c.select(second);else c.account(boundary==='account'?'another-owner':undefined);
+ finish({ok:true,value:{venues:[{...taxView.venues[0]!,taxProfile:{...taxProfile,legalName:'Late saved'}}]}});await pending;
+ assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.taxSaved,false);
+ assert.equal(c.selected,boundary==='venue'?second:undefined);assert.equal(c.taxDraft?.legalName,boundary==='venue'?'Synthetic business':undefined);
+});
+
+test('saving one venue refreshes untouched fields for a sibling without discarding its edited field',async()=>{
+ let profile={...taxProfile};
+ const c=await controller(async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  if(path.endsWith('/save'))profile={legalName:String(body!.legalName),address:String(body!.address),taxNumber:String(body!.taxNumber)};
+  return {ok:true,value:{venues:view.venues.map(venue=>({...venue,taxProfile:profile}))} as T};
+ });
+ c.account('owner');await c.load();c.select(second);c.editTax('taxNumber','SECOND-EDIT');
+ c.select(first);c.editTax('legalName','New business name');await c.saveTax();c.select(second);
+ assert.deepEqual(c.taxDraft,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
+ await c.saveTax();assert.deepEqual(profile,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
+});
+test('tax draft validation refuses Unicode line separators before a save request',async()=>{
+ let calls=0;
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:taxView as T};});
+ c.account('owner');await c.load();
+ for(const separator of ['\u2028','\u2029']){
+  c.editTax('legalName','Two'+separator+'lines');await c.saveTax();assert.equal(c.taxInvalid,'legalName');assert.equal(calls,1);
+ }
+});
+
+test('refreshing an untouched tax form shows current server values',async()=>{
+ let profile={...taxProfile};
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>({ok:true,value:{venues:view.venues.map(venue=>({...venue,taxProfile:profile}))} as T}));
+ c.account('owner');await c.load();assert.equal(c.taxDraft?.legalName,'Synthetic business');
+ profile={legalName:'New business name',address:'New street',taxNumber:'NEW-1'};await c.load();
+ assert.deepEqual(c.taxDraft,{legalName:'New business name',address:'New street',taxNumber:'NEW-1'});
+});

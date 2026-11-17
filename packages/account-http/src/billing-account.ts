@@ -9,10 +9,11 @@ import {AccountHttpError} from './errors.ts';
 import type {BillingAccountOptions} from './config.ts';
 import type {RateRule} from './rate-limit.ts';
 
-export const billingAccountPaths=['/api/account/billing/read','/api/account/billing/start-trial'];
+export const billingAccountPaths=['/api/account/billing/read','/api/account/billing/start-trial','/api/account/billing/tax/save'];
 type VenueRow={id:string;organisation_id:string;legal_business_id:string;environment:string};
+type TaxProfile={legalName:string|null;address:string|null;taxNumber:string|null};
 type MethodPanel={selected:'card'|'direct_debit'|null;setup:{kind:'card'|'direct_debit';state:'pending'|'failed'|'verified'}|null};
-export type BillingAccountView={venues:{venueId:string;level:BillingLevel;trial:TrialView|null;canStartTrial:boolean;paymentMethods?:MethodPanel}[]};
+export type BillingAccountView={venues:{venueId:string;level:BillingLevel;trial:TrialView|null;canStartTrial:boolean;paymentMethods?:MethodPanel;taxProfile?:TaxProfile}[]};
 function denied():never{throw new AccountHttpError(403,'permission_denied');}
 async function verified(client:PoolClient,accountId:string):Promise<void>{
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)denied();
@@ -44,7 +45,10 @@ async function readView(client:PoolClient,accountId:string,methodsEnabled=false)
    paymentMethods={selected:method?.selected??null,setup:method?.setup_kind?{kind:method.setup_kind,
     state:method.completed?'verified':'pending'}:null};
   }
-  result.venues.push({...(paymentMethods?{paymentMethods}:{}),venueId:row.id,level:effectiveVenueLevel(venue.level,history.trials,today),
+  const taxProfile=row.environment==='test'?(await client.query<TaxProfile>(`SELECT name AS "legalName",billing_address AS address,tax_number AS "taxNumber"
+   FROM legal_businesses b WHERE b.id=$1 AND b.organisation_id=$2 AND NOT EXISTS(
+    SELECT 1 FROM venues v WHERE v.legal_business_id=b.id AND v.organisation_id=b.organisation_id AND v.environment<>'test')`,[row.legal_business_id,row.organisation_id])).rows[0]:undefined;
+  result.venues.push({...(paymentMethods?{paymentMethods}:{}),...(taxProfile?{taxProfile}:{}),venueId:row.id,level:effectiveVenueLevel(venue.level,history.trials,today),
    trial:history.trials.find(trial=>trial.level==='connected'&&trial.state==='active'&&trial.startedOn<=today&&today<trial.endsOn)??null,
    canStartTrial:row.environment==='test'&&mayStartTrial('connected',{trialled:history.trials.map(trial=>trial.level),paid:history.paid.map(period=>period.level)})});
  }
@@ -59,13 +63,35 @@ export async function billingAccountResponse(c:Context,options:{pool:Pool;origin
  const initial=await transaction(pool,client=>resolveSession(client,token,proof));
  if(!billing.accountIds.includes(initial.accountId))denied();
  await consume([{scope:'billing-account',subject:initial.accountId,limit:30,windowSeconds:60}]);
- const start=c.req.path==='/api/account/billing/start-trial',body=await readAccountBody(c.req.raw,start?['venueId']:[]);
- if(start&&!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(body.venueId!))throw new AccountHttpError(400,'invalid_input');
+ const start=c.req.path==='/api/account/billing/start-trial',saveTax=c.req.path==='/api/account/billing/tax/save';
+ const body=await readAccountBody(c.req.raw,saveTax?['venueId','legalName','address','taxNumber']:start?['venueId']:[]);
+ if((start||saveTax)&&!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(body.venueId!))throw new AccountHttpError(400,'invalid_input');
+ if(saveTax)for(const [field,limit] of Object.entries({legalName:200,address:600,taxNumber:32})){
+  const value=body[field]!;if(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value)||!value.trim()||value.trim().length>limit)throw new AccountHttpError(400,'invalid_input');
+  body[field]=value.trim();
+ }
  const read=()=>transaction(pool,async client=>{
   const session=await resolveSession(client,token,proof);if(session.accountId!==initial.accountId)denied();
   const view=await readView(client,session.accountId,options.methodsEnabled);await resolveSession(client,token,proof);return view;
  });
  try{
+  if(saveTax)return c.json(await transaction(pool,async client=>{
+   const session=await resolveSession(client,token,proof);if(session.accountId!==initial.accountId)denied();
+   await verified(client,session.accountId);
+   const venue=(await client.query<VenueRow>('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=$1',[body.venueId])).rows[0];
+   if(!venue||venue.environment!=='test')denied();
+   await membership(client,session.accountId,venue.organisation_id);
+   await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[venue.organisation_id]);
+   if(!(await client.query('SELECT id FROM legal_businesses WHERE id=$1 AND organisation_id=$2 FOR UPDATE',[venue.legal_business_id,venue.organisation_id])).rowCount)denied();
+   // The business lock prevents a new venue's foreign-key check from passing during the save.
+   const current=await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND legal_business_id=$3 AND environment='test'
+    AND NOT EXISTS(SELECT 1 FROM venues WHERE organisation_id=$2 AND legal_business_id=$3 AND environment<>'test')`,[venue.id,venue.organisation_id,venue.legal_business_id]);
+   if(!current.rowCount)denied();
+   await client.query('UPDATE legal_businesses SET name=$1,billing_address=$2,tax_number=$3 WHERE id=$4 AND organisation_id=$5',
+    [body.legalName,body.address,body.taxNumber,venue.legal_business_id,venue.organisation_id]);
+   const view=await readView(client,session.accountId,options.methodsEnabled);
+   await resolveSession(client,token,proof);return view;
+  }));
   if(!start)return c.json(await read());
   const store=new BillingStore(pool);
   return c.json(await transaction(pool,async client=>{

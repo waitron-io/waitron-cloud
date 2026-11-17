@@ -26,7 +26,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/security/email')return status===202&&!!value&&typeof value==='object'&&(value as {status?:unknown}).status==='accepted';
   if(path==='/billing/method/start')return status===200&&validMethodPresentation(value);
   if(path==='/billing/method/verify')return status===200&&validMethodResult(value);
-  if(path==='/billing/read'||path==='/billing/start-trial')return status===200&&validBillingView(value);
+  if(path==='/billing/read'||path==='/billing/start-trial'||path==='/billing/tax/save')return status===200&&validBillingView(value);
   if(path==='/action-proof')return status===200&&!!value&&typeof value==='object'&&Array.isArray((value as any).methods)&&(value as any).methods.length>0&&(value as any).methods.every((m:unknown)=>['email','app','passkey','recovery'].includes(String(m)))&&((value as any).freshUntil===null||typeof (value as any).freshUntil==='string'&&Number.isFinite(Date.parse((value as any).freshUntil)));
   if(path==='/action-proof/email')return status===200&&!!value&&typeof value==='object'&&typeof (value as any).challengeToken==='string'&&/^[A-Za-z0-9_-]{43}$/.test((value as any).challengeToken)&&typeof (value as any).expiresAt==='string'&&Number.isFinite(Date.parse((value as any).expiresAt));
   if(path==='/action-proof/passkey/options')return status===200&&validAuthenticationOptions(value);

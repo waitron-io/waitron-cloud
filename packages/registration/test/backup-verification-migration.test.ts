@@ -133,6 +133,7 @@ test('upgrade_legacy_success_is_protected_but_not_current', async () => {
     assert.equal((await p.query("SELECT EXISTS(SELECT 1 FROM backup_verifications WHERE point_id=$1 AND outcome='verified') AS protected", [f.point])).rows[0].protected, true);
     for (const entry of allBefore.backup_recoveries as {row: Record<string, unknown>}[]) Object.assign(entry.row, {cloud_session_id: null, cloud_security_revision: null});
     for(const entry of allBefore.venues as {row:Record<string,unknown>}[])delete entry.row.local_venue_id;
+    for(const entry of allBefore.legal_businesses as {row:Record<string,unknown>}[])Object.assign(entry.row,{billing_address:null,tax_number:null});
     const allAfter=await allOldRows();
     for(const entry of allBefore.backup_recovery_requests as {row:Record<string,unknown>}[]){
       if(entry.row.operation_id!==null)continue;

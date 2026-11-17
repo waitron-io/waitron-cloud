@@ -7,6 +7,7 @@ import {promisify} from 'node:util';
 import type {Pool} from 'pg';
 
 const revisions = {
+  68:'f8aa2756700782d265d531baf5bb3d6119858a55',
   67:'a6823a43f001e33e79a59050f284619cf28f796c',
   47: '1aae8f14c05113cc2a2c71337940ff7721ad5f5b',
   46: '9a75808dd17a86f2dc1e9b87614be4e55e81deb2',
@@ -33,7 +34,7 @@ export function migrationRelease(count: keyof typeof revisions): Promise<Release
           {cwd: new URL('../../../../', import.meta.url)});
         await exec('tar', ['-xf', join(root, 'release.tar'), '-C', root]);
         await rm(join(root, 'release.tar'));
-        if (count === 44 || count === 45 || count === 46 || count === 47) await exec('pnpm', ['install', '--frozen-lockfile'], {cwd: root});
+        if (count === 44 || count === 45 || count === 46 || count === 47 || count === 68) await exec('pnpm', ['install', '--frozen-lockfile'], {cwd: root});
         else await symlink(new URL('../../../../node_modules', import.meta.url).pathname, join(root, 'node_modules'));
         const module = await import(pathToFileURL(join(root, 'packages/registration/src/migrate.ts')).href);
         return {root, migrate: module.migrate, names: module.migrationNames,
