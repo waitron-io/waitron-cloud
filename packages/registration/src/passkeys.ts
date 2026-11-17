@@ -20,6 +20,7 @@ import type {
 } from '@simplewebauthn/server';
 import { createSession, resolveSession, type SessionCredentials } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import type {EmailOutbox} from './email-outbox.ts';
 import {accountActionSession,markAccountActionProof,requireAccountActionProof,invalidateAccountActionProof} from './account-action-proof.ts';
 import {retireRecoveryCodesWithoutMethod} from './account-recovery-codes.ts';
 
@@ -56,10 +57,12 @@ type Config = Readonly<{rpName: string; rpId: string; origin: string}>;
 type RegistrationCeremony = {accountId: string; challenge: string;securityRevision:number};
 
 export class PasskeyStore {
+  readonly #outbox:EmailOutbox|undefined;
   readonly #pool: Pool;
   readonly #config: Config;
   readonly #adapter: PasskeyCeremonyAdapter;
-  constructor(pool: Pool, config: Config, adapter: PasskeyCeremonyAdapter = simpleWebAuthn) {
+  constructor(pool: Pool, config: Config, adapter: PasskeyCeremonyAdapter = simpleWebAuthn,outbox?:EmailOutbox) {
+    this.#outbox=outbox;
     const parsed = new URL(config.origin);
     if (!config.rpName.trim() || parsed.origin !== config.origin || parsed.hostname !== config.rpId || parsed.pathname !== '/') {
       throw new Error('Invalid passkey configuration');
@@ -119,12 +122,13 @@ export class PasskeyStore {
       return await transaction(this.#pool, async client => {
         const session = await accountActionSession(client,token,csrfToken);
         if (session.accountId !== ceremony.accountId || session.securityRevision!==ceremony.securityRevision) throw new PasskeyError();
+        const initialEnrolment=!(await client.query(`SELECT 1 FROM cloud_passkeys WHERE account_id=$1 UNION ALL SELECT 1 FROM cloud_authenticator_factors WHERE account_id=$1 AND secret_envelope IS NOT NULL`,[session.accountId])).rowCount;
         const inserted = await client.query(`INSERT INTO cloud_passkeys
           (id, account_id, credential_id, public_key, counter, transports, device_type, backed_up)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at`,
         [id, ceremony.accountId, credential.id, Buffer.from(credential.publicKey), credential.counter,
           credential.transports ?? [], credentialDeviceType, credentialBackedUp]);
-        await invalidateAccountActionProof(client,session.accountId,token);
+        await invalidateAccountActionProof(client,session.accountId,token,this.#outbox,initialEnrolment);
         return {id, createdAt: inserted.rows[0].created_at.toISOString(), lastUsedAt: null};
       });
     } catch (error) {
@@ -209,7 +213,7 @@ export class PasskeyStore {
     return transaction(this.#pool, async client => {
       const session=await requireAccountActionProof(client,token,csrfToken);
       const removed = await client.query('DELETE FROM cloud_passkeys WHERE id = $1 AND account_id = $2', [id, session.accountId]);
-      if(removed.rowCount){await retireRecoveryCodesWithoutMethod(client,session.accountId);await invalidateAccountActionProof(client,session.accountId,token);}
+      if(removed.rowCount){await retireRecoveryCodesWithoutMethod(client,session.accountId);await invalidateAccountActionProof(client,session.accountId,token,this.#outbox);}
       return removed.rowCount === 1;
     });
   }

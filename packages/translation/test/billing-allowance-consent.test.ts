@@ -20,7 +20,7 @@ async function fixture(){
   const other=randomUUID();
   await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[other]);
   await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[other,other+'@consent.invalid']);
-  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[other,v.organisationId]);
+  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,false)',[other,v.organisationId]);
   await giveConsent(db,v);
   const consentId=(await db.pool.query('SELECT id FROM translation_consents WHERE venue_id=$1',[v.venueId])).rows[0].id as string;
   return {db,v,other,consentId,read,run:()=>transaction(db.secondPool,client=>read(client,v.venueId))};
@@ -36,7 +36,7 @@ async function blocked(f:Awaited<ReturnType<typeof fixture>>,pid:number,settled:
 }
 
 // Choosing a different owner or accepting a replaced consent must break these results.
-test('allowance consent selects the exact consenting owner among two owners',async()=>{
+test('allowance consent selects the exact consenting owner among business members',async()=>{
  const f=await fixture();try{
   assert.deepEqual(await f.run(),{accountId:f.v.accountId,consentId:f.consentId});
   assert.equal((await f.db.pool.query('SELECT count(*) FROM billing_allowance_reservations')).rows[0].count,'0');
@@ -122,6 +122,7 @@ for(const replacement of ['same owner','other owner'] as const)test('allowance c
   await holder.query(`INSERT INTO translation_consents(id,venue_id,organisation_id,account_id,consent_version,providers)
    VALUES($1,$2,$3,$4,'providers-2026-10-14',ARRAY['openai','anthropic','google'])`,[consentId,f.v.venueId,f.v.organisationId,accountId]);
   await holder.query('COMMIT');await assert.rejects(pending,{code:'consent_required'});
+  if(replacement==='other owner'){await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.v.accountId]);await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.other]);}
   assert.deepEqual(await f.run(),{accountId,consentId});
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.db.close();}
 });
@@ -135,6 +136,6 @@ for(const change of ['actor','version'] as const)test('allowance consent recheck
   if(change==='actor')await holder.query('UPDATE translation_consents SET account_id=$2 WHERE id=$1',[f.consentId,f.other]);
   else await holder.query("UPDATE translation_consents SET consent_version='old' WHERE id=$1",[f.consentId]);
   await holder.query('COMMIT');await assert.rejects(pending,{code:'consent_required'});
-  if(change==='actor')assert.deepEqual(await f.run(),{accountId:f.other,consentId:f.consentId});
+  if(change==='actor'){await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.v.accountId]);await f.db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.other]);assert.deepEqual(await f.run(),{accountId:f.other,consentId:f.consentId});}
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.db.close();}
 });

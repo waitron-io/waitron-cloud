@@ -128,6 +128,25 @@ parameters remain rejected, so tokens belong only in completion bodies.
 | POST `/usage/read` | `{"organisationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 decimal-string usage totals and measurement freshness |
 | POST `/diagnostics/read` | `{"installationId":"<uuid>"}`, session cookie and `X-CSRF-Token` | 200 owner-scoped schema-v1 redacted installation diagnostic |
 
+Handover uses the current session and the shared ten-minute proof window. All
+three writes require the exact portal Origin and CSRF header. Acceptance also
+requires an enrolled app or passkey. Read the offer’s parties and expiry before
+accepting; creating an offer grants the recipient no business access.
+
+| Request | JSON body | Successful response |
+| --- | --- | --- |
+| GET `/owner-transfers` | No body; session cookie | 200 with your owned `organisations` and participating `offers` |
+| POST `/owner-transfers/create` | `{"organisationId":"<uuid>","email":"recipient@example.test","locale":"en"}` | 202 `{"status":"accepted"}` for every eligible-format address |
+| POST `/owner-transfers/accept` | `{"id":"<offer uuid>"}` | 200 with the offer state; acceptance replaces the owner atomically |
+| POST `/owner-transfers/cancel` | `{"id":"<offer uuid>"}` | 200 with the offer state; either participant may cancel |
+
+One pending offer per organisation lasts 24 hours. A repeated accept/cancel reads
+its existing state; a cancelled offer cannot become accepted. Unavailable offers
+and other people’s IDs return 404 `transfer_unavailable`; an unfinished recovery
+returns 409 `recovery_in_progress`. Writes share limits of 10 per IP per minute
+and 20 per account per five minutes. First-time recipients cannot accept yet.
+See the [handover guide](../../docs/cloud-signup-implementation.md#hand-over-an-existing-business).
+
 Passkeys are optional and use the same account sessions. Start a discoverable sign-in
 with `POST /passkeys/authentication/options {}`, then send the browser result and
 returned ceremony ID to `POST /passkeys/authentication/verify`. A verified response

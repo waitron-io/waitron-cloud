@@ -1,6 +1,6 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
-import { validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
-export type AccountMailKind = 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+import { validOwnerTransferMail, type OwnerTransferMail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+export type AccountMailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 const copy = {
   en: {
     verification: 'Verify your Waitron Cloud email', password_reset: 'Reset your Waitron Cloud password',
@@ -15,10 +15,17 @@ const copy = {
     expiry: 'Este enlace de un solo uso caduca el', ignore: 'Si no has solicitado este correo, puedes ignorarlo.',
   },
 };
-export function accountMail(origin: URL, kind: AccountMailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert): {subject: string; text: string} {
+export function accountMail(origin: URL, kind: AccountMailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail): {subject: string; text: string} {
   if (message.locale !== undefined && !validLocale(message.locale)) throw new Error('Invalid account email');
   const locale = message.locale ?? 'en';
   const text = copy[locale];
+  if(kind==='owner_transfer'){
+    if(!validOwnerTransferMail(message))throw new Error('Invalid account email');
+    const subject=locale==='en'?'Waitron Cloud ownership handover':'Traspaso de titularidad de Waitron Cloud';
+    const detail=message.event==='invitation'?(locale==='en'?'Sign in to review a handover. You must already have a Cloud account; handover to a new account is not available yet.':'Inicia sesión para revisar un traspaso. Ya debes tener una cuenta de Cloud; el traspaso a una cuenta nueva aún no está disponible.')
+      :message.event==='accepted'?(locale==='en'?'The ownership handover was accepted.':'Se ha aceptado el traspaso de titularidad.'):(locale==='en'?'The ownership handover was cancelled.':'Se ha cancelado el traspaso de titularidad.');
+    return {subject,text:[subject,'',detail,new URL('/account',origin).href].join('\n')};
+  }
   if(kind==='operator_notice'){
     const subject=locale==='es'?'Waitron Cloud: acción para revisar':'Waitron Cloud: action to review';
     return {subject,text:[subject,'',locale==='es'?'Abre la consola de operador para revisar la solicitud.':'Open the operator console to review the request.',new URL('/operator/actions',origin).href].join('\n')};

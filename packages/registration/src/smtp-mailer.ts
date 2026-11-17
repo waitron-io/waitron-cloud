@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { connect, type TLSSocket } from 'node:tls';
 import nodemailer from 'nodemailer';
 import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
-import { normaliseEmail, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+import { normaliseEmail, type AccountEmail, type AccountNotification, type AccountSignInCheck, type OwnerTransferMail } from './account-input.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
 import {sesSmtpHeaders,sesProviderReceipt} from './ses-smtp-metadata.ts';
 import {isValidatedSesFeedbackConfig,type SesFeedbackConfig,type MailPurpose} from './ses-feedback-config.ts';
@@ -91,14 +91,15 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
 export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={},ses?:SesFeedbackConfig){
  const deliver=createSmtpDelivery(config,trust,ses);
  const origin=new URL(config.portalOrigin),domain=config.from.split('@')[1]!;
- const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|AccountSignInCheck|ServiceAlert,context?:EmailDeliveryContext)=>{
+ const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|AccountSignInCheck|ServiceAlert|OwnerTransferMail,context?:EmailDeliveryContext)=>{
   if(!message||typeof message.email!=='string'||normaliseEmail(message.email)!==message.email
-   ||(kind!=='password_changed'&&kind!=='email_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
+   ||(kind!=='owner_transfer'&&kind!=='password_changed'&&kind!=='email_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
   const deliveryId=context?.deliveryId??randomUUID();
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId))throw new EmailDeliveryError('delivery_rejected');
   return deliver(message.email,()=>accountMail(origin,kind,message),`<${deliveryId}@${domain}>`,context);
  };
   return {
+    sendOwnerTransfer: (message:OwnerTransferMail,context?:import('./email-delivery.ts').EmailDeliveryContext) => send('owner_transfer',message,context),
     sendEmailChange: (message: AccountEmail, context?: EmailDeliveryContext) => send('email_change', message, context),
     sendEmailChanged: (message: AccountNotification, context?: EmailDeliveryContext) => send('email_changed', message, context),
     sendSignInCheck: (message: AccountSignInCheck, context?: EmailDeliveryContext) => send('sign_in_check', message, context),

@@ -20,3 +20,9 @@ export function normaliseEmail(value: unknown): string | undefined {
     || labels.length < 2 || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return undefined;
   return email;
 }
+
+export interface OwnerTransferMail extends AccountNotification {offerId:string;event:'invitation'|'accepted'|'cancelled'}
+export function validOwnerTransferMail(message:AccountNotification):message is OwnerTransferMail {
+ return 'offerId' in message&&typeof message.offerId==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(message.offerId)
+  &&'event' in message&&['invitation','accepted','cancelled'].includes(String(message.event));
+}

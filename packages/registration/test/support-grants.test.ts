@@ -32,7 +32,7 @@ beforeEach(async()=>{
  const business=randomUUID(),foreignBusiness=randomUUID();
  await pool.query("INSERT INTO legal_businesses(id,organisation_id,name,country_code) VALUES($1,$2,'Customer SL','ES'),($3,$4,'Foreign SL','ES')",[business,organisation,foreignBusiness,foreignOrganisation]);
  await pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test'),($4,$5,$6,'test')",[venue,organisation,business,foreignVenue,foreignOrganisation,foreignBusiness]);
- await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true),($3,$2,true),($4,$2,false),($4,$5,true)',[owner,organisation,secondOwner,member,foreignOrganisation]);
+ await pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true),($3,$2,false),($4,$2,false),($4,$5,true)',[owner,organisation,secondOwner,member,foreignOrganisation]);
  await pool.query("INSERT INTO platform_permissions(account_id,permission) VALUES($1,'support.eligible')",[platform]);
  ownerSession=await transaction(pool,client=>createSession(client,owner));
  secondOwnerSession=await transaction(pool,client=>createSession(client,secondOwner));
@@ -121,8 +121,12 @@ test('an identical lost-reply approval retry returns the original grant after ex
 test('a current owner can revoke early once without exposing the grant to another tenant',async()=>{
  const input=approval(),created=await store.approve(ownerSession.token,ownerSession.csrfToken,input);
  await expectCode(store.revoke(memberSession.token,memberSession.csrfToken,input.id),'grant_unavailable');
+ await pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
+ await pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1 AND organisation_id=$2',[secondOwner,organisation]);
  const revoked=await store.revoke(secondOwnerSession.token,secondOwnerSession.csrfToken,input.id);
  assert.equal(revoked.revokedByAccountId,secondOwner);assert.ok(revoked.revokedAt);assert.equal(revoked.createdAt,created.createdAt);
+ await pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[secondOwner,organisation]);
+ await pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1 AND organisation_id=$2',[owner,organisation]);
  assert.deepEqual(await store.revoke(ownerSession.token,ownerSession.csrfToken,input.id),revoked);
  const audit=(await pool.query("SELECT actor_id,subject_id FROM security_audit_events WHERE event_type='support.revoked'")).rows;
  assert.deepEqual(audit,[{actor_id:secondOwner,subject_id:input.id}]);

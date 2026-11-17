@@ -82,3 +82,13 @@ for(const locale of ['en','es'] as const)test(`operator notice renders ${locale}
  assert.equal(mail.subject,locale==='en'?'Waitron Cloud: action to review':'Waitron Cloud: acción para revisar');
  assert.match(mail.text,/http:\/\/localhost:3000\/operator\/actions/);assert.doesNotMatch(mail.text,/token=|operator@example|approve|aprobar/);
 });
+
+test('handover invitations use the same account link and explain the existing-account limit in both languages',()=>{
+ for(const locale of ['en','es'] as const){
+  const message={email:'recipient@example.test',locale,offerId:'11111111-2222-4333-8444-555555555555',event:'invitation' as const};
+  const mail=accountMail(new URL('https://cloud.example.test'),'owner_transfer',message);
+  assert.ok(mail.text.includes('https://cloud.example.test/account'));
+  assert.match(mail.text,locale==='en'?/already.*account/:/Ya.*cuenta/);
+  assert.equal(mail.text.includes(message.email),false,'invitation reveals no account or business details');
+ }
+});

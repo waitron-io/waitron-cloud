@@ -1,3 +1,4 @@
+import {OwnerTransferController} from './owner-transfer-controller.ts';
 import type {CloudActionRequest} from './cloud-actions-controller.ts';
 import {CloudActionsController} from './cloud-actions-controller.ts';
 import {AccountActionProofController} from './account-action-proof-controller.ts';
@@ -48,6 +49,7 @@ export class PortalApp {
   translationConsent: TranslationConsentController;
   passkeys: PasskeyController;
   passkeyFirst: boolean;
+  transfers:OwnerTransferController;
   security: AccountSecurityController;
   authenticator: AuthenticatorController;
   actionProof:AccountActionProofController;
@@ -89,6 +91,7 @@ export class PortalApp {
       if(this.session===session&&session.state.kind==='anonymous'&&(credentialNotice==='passwordChanged'||credentialNotice==='emailChanged')){this.notice=credentialNotice;this.draw();}
     });
     void this.passkeys.checkSupport();
+    this.transfers=new OwnerTransferController(()=>this.draw());
     this.alerts = new AlertController(() => this.draw());
     this.translationConsent = new TranslationConsentController(() => this.draw());
     this.usage = new UsageController(() => this.draw());
@@ -117,7 +120,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -145,6 +148,8 @@ export class PortalApp {
     const billingAccount=ordinary && state.billingTrialAvailable === true ? state.accountId : undefined;
     this.billing.account(billingAccount);
     if (['/account','/'].includes(this.path) && billingAccount && !this.billing.loadAttempted) void this.billing.load();
+    this.transfers.account(ordinary?state.accountId:undefined);
+    if(['/account','/'].includes(this.path)&&ordinary&&!this.transfers.loadAttempted)void this.transfers.load();
     this.security.account(ordinary ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && ordinary && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -186,7 +191,7 @@ export class PortalApp {
     if(this.path==='/operator/actions')return Math.max(this.session.waiting,this.cloudActions.waiting);
     if (this.path === '/recover') return Math.max(this.recovery.waiting, this.backups.waiting, this.installations.waiting, this.session.waiting);
     if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
-    if (['/', '/account'].includes(this.path)) return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting,
+    if (['/', '/account'].includes(this.path)) return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting,this.transfers.waiting,
       this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.remote.waiting, this.usage.waiting, this.billing.waiting, this.diagnostics.waiting);
     const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
       this.#serverCooldowns.get(this.operation) ?? 0);
@@ -221,7 +226,7 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
     if(path!=='/login')this.#operatorSignin=false;
-    this.cloudActions.account(undefined);
+    this.transfers.account(undefined);this.cloudActions.account(undefined);
     this.billing.fence();
     if (path === '/login') this.passkeyFirst = this.passkeys.preferred;
     this.actionProof.fence();this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
@@ -446,6 +451,14 @@ export class PortalApp {
     await this.passkeys.remove(id, '');await this.actionProof.load();
     if (this.passkeys.notice === 'passkeyRemoved') await this.session.check({fresh: true});
   }
+  async transferOwnership(action:'create'|'accept'|'cancel',id?:string){
+    const input=this.root.querySelector('wt-input[name=ownerTransferEmail]')?.shadowRoot?.querySelector('input')?.value;if(input!==undefined)this.transfers.email=input;
+    if(!await this.#requireActionProof())return;
+    if(await this.transfers.act(action,this.locale,id)){
+      for(const controller of [this.installations,this.backups,this.recovery,this.remote,this.alerts,this.translationConsent,this.usage,this.billing,this.diagnostics])controller.account(undefined);
+      await this.session.check({fresh:true});
+    }
+  }
   async revokeSession(id: string) { await this.security.revoke(id); }
   async changeCredentials(kind:'password'|'email'|'verify'){
     this.readFields();if(kind!=='verify'&&!await this.#requireActionProof())return;
@@ -453,7 +466,7 @@ export class PortalApp {
   }
   get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
-  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
+  get logoutDisabled() { return this.transfers.pending || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
     this.pending = true; this.error = undefined; this.draw();

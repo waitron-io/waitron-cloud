@@ -1,15 +1,15 @@
-import type {OperatorNoticeMailer} from './email-outbox.ts';
+import type {OwnerTransferMailer,OperatorNoticeMailer} from './email-outbox.ts';
 import type {EmailChangeMailer} from './account-security.ts';
 import type {SignInCheckMailer} from './sign-in-check.ts';
 import type {ServiceAlert,ServiceAlertMailer} from './service-alert.ts';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
-import type { AccountEmail, AccountNotification, AccountSignInCheck } from './account-input.ts';
+import type { AccountEmail, AccountNotification, AccountSignInCheck, OwnerTransferMail } from './account-input.ts';
 import nodemailer from 'nodemailer';
 
 /** Development capture only; the SMTP host is fixed to loopback and has no production configuration. */
-export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer {
+export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer {
   const port = options.port ?? 1125;
   let origin: URL;
   try { origin = new URL(options.portalOrigin ?? 'http://localhost:3000'); }
@@ -27,12 +27,13 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     // SMTP errors can contain recipients or secrets; expose only a fixed diagnostic.
     catch { throw new Error('Local email delivery failed'); }
   };
-  const action = async (kind: AccountMailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert) => {
+  const action = async (kind: AccountMailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail) => {
     const rendered = accountMail(origin, kind, message);
     await send(message.email, rendered.subject, rendered.text);
   };
   return {
     sendOperatorNotice: message => action('operator_notice', message),
+    sendOwnerTransfer: (message:OwnerTransferMail) => action('owner_transfer',message),
     sendEmailChange: message => action('email_change', message),
     sendEmailChanged: message => action('email_changed', message),
     sendSignInCheck: message => action('sign_in_check', message),

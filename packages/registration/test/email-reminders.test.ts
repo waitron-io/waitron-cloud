@@ -1,10 +1,11 @@
+import {connectedVenue} from '../../translation/test/fixtures.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {test,before,after,beforeEach} from 'node:test';
 import {randomUUID,generateKeyPairSync,createCipheriv,randomBytes} from 'node:crypto';
 import {database} from '../../account-http/test/fixtures.ts';
-import {SignupStore,RegistrationStore} from '../src/index.ts';
+import {SignupStore,createLeaseIssuer,RegistrationStore} from '../src/index.ts';
 import {MonitorWorker} from '../src/monitoring.ts';
 import {EmailWorker} from '../src/email-outbox.ts';
 import {UsageReconciler} from '../src/usage-metering.ts';
@@ -31,10 +32,10 @@ async function alerts(){return(await db.pool.query("SELECT * FROM email_outbox W
 async function episode(){return(await db.pool.query('SELECT * FROM venue_alert_episodes ORDER BY opened_at DESC LIMIT 1')).rows[0];}
 async function pastDeadline(){await db.pool.query("WITH stamp AS (SELECT clock_timestamp() AS now) UPDATE venue_alert_episodes SET opened_at=stamp.now-interval '3 seconds',opening_due_at=stamp.now-interval '3 seconds'+quiet_seconds*interval '1 second' FROM stamp");await due();}
 async function extraOwner(enabled:boolean){
- const id=randomUUID();await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
- await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[id,id+'@example.test']);
- await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[id,owner.organisationId]);
- await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,$2,'es')",[id,enabled]);return id;
+ const other=await connectedVenue(db,createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url')),'http://localhost');
+ await db.pool.query("INSERT INTO account_alert_preferences(account_id,enabled,locale) VALUES($1,$2,'es')",[other.accountId,enabled]);
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[other.installationId]);
+ await monitor.schedule();await db.pool.query("UPDATE installations SET last_contact_at=clock_timestamp()-interval '16 minutes' WHERE id=$1",[other.installationId]);return other.accountId;
 }
 
 function child(mode:string){
@@ -58,17 +59,17 @@ function emailWorker(delivered:ServiceAlert[],pool=db.pool){return new EmailWork
  async sendVerification(){throw Error('unexpected verification');},async sendPasswordReset(){throw Error('unexpected reset');},async sendPasswordChanged(){throw Error('unexpected change');},
  async sendServiceAlert(message){delivered.push({...message});},
 });}
-async function opening(){await contact(901);await monitor.runOnce();await pastDeadline();await monitor.runOnce();return(await alerts())[0];}
+async function opening(){await contact(901);while(await monitor.runOnce()){}await pastDeadline();while(await monitor.runOnce()){}return(await alerts())[0];}
 async function reminders(){return(await db.pool.query("SELECT e.*,d.account_id FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id WHERE d.notification='reminder' ORDER BY e.created_at,e.id")).rows;}
 async function sentOpening(){await opening();const delivered:ServiceAlert[]=[];const worker=emailWorker(delivered);while(await worker.runOnce()){}assert.equal(delivered.length,1);return(await alerts())[0];}
 async function anchorPast(){await db.pool.query("UPDATE email_outbox SET finished_at=clock_timestamp()-interval '4 seconds' WHERE id IN (SELECT outbox_id FROM service_alert_deliveries WHERE notification='transition' AND state='open') AND status='sent'");await due();await monitor.runOnce();}
 
 test('reminderWaitsForSentOpeningPerRecipient',async()=>{
- const second=await extraOwner(true);await opening();await due();await monitor.runOnce();assert.equal((await reminders()).length,0);
+ const second=await extraOwner(true);await opening();await due();while(await monitor.runOnce()){}assert.equal((await reminders()).length,0);
  const opened=(await db.pool.query("SELECT e.*,d.account_id FROM email_outbox e JOIN service_alert_deliveries d ON d.outbox_id=e.id WHERE d.state='open'")).rows;
  const notified=opened.find(r=>r.account_id===owner.accountId),waiting=opened.find(r=>r.account_id===second);
  await db.pool.query("UPDATE email_outbox SET status='sent',finished_at=clock_timestamp()-interval '4 seconds',payload=NULL,key_id=NULL WHERE id=$1",[notified.id]);
- await due();await monitor.runOnce();const pending=await reminders();assert.equal(pending.length,1);assert.equal(pending[0].account_id,owner.accountId);
+ await due();while(await monitor.runOnce()){}const pending=await reminders();assert.equal(pending.length,1);assert.equal(pending[0].account_id,owner.accountId);
  const slot=(await db.pool.query('SELECT * FROM venue_alert_recipients WHERE account_id=$1',[owner.accountId])).rows[0];assert.equal(slot.reminder_due_at.getTime()-((await db.pool.query('SELECT finished_at FROM email_outbox WHERE id=$1',[notified.id])).rows[0].finished_at).getTime(),3000);
  assert.equal((await db.pool.query('SELECT status FROM email_outbox WHERE id=$1',[waiting.id])).rows[0].status,'pending');
  const delivered:ServiceAlert[]=[];while(await emailWorker(delivered).runOnce()){}

@@ -196,6 +196,7 @@ test('billing chooser bounds bodies methods and request rates',async()=>{
 
 test('billing chooser reads multiple businesses and expired trials without creating billing rows',async()=>{
  const f=await owner(),other=await owner(),target=app([f.accountId]);
+ await db.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2',[other.accountId,other.organisationId]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[f.accountId,other.organisationId]);
  const scope={organisationId:f.organisationId,legalBusinessId:f.legalBusinessId},store=new BillingStore(db.pool);
  const event=()=>({key:randomUUID(),occurredAt:'2020-01-01T00:00:00.000Z',source:{kind:'internal' as const}});

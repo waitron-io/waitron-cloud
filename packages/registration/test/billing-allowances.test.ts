@@ -29,7 +29,7 @@ async function fixture(){
   for(const [id,org] of [[accountId,f.scope.organisationId],[otherAccount,f.scope.organisationId],[foreignAccount,f.foreign.organisationId]]){
    await f.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
    await f.pool.query("INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())",[id,id+'@allowance.invalid']);
-   await f.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[id,org]);
+   await f.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,$3)',[id,org,id!==otherAccount]);
   }
   const config=new methods.AllowanceConfigStore(f.pool);
   const installation=async(venueId:string)=>(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venueId])).rows[0].id as string;
@@ -111,7 +111,11 @@ test('reservation replay retains its original receipt and refuses changed immuta
  const f=await fixture();try{
   await f.config.publish(TEST_ALLOWANCES);const saved=await f.reserve();
   assert.deepEqual(await f.reserve({},f.peer),saved);
-  for(const changed of [{accountId:f.otherAccount},{venueId:f.venues[1]!},{binding:'changed-body'},{units:2n}])await assert.rejects(f.reserve(changed),{code:'allowance_conflict'});
+  for(const changed of [{accountId:f.otherAccount},{venueId:f.venues[1]!},{binding:'changed-body'},{units:2n}]){
+   if('accountId' in changed){await f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.accountId]);await f.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.otherAccount]);}
+   await assert.rejects(f.reserve(changed),{code:'allowance_conflict'});
+   if('accountId' in changed){await f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.otherAccount]);await f.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[f.accountId]);}
+  }
   assert.deepEqual(await f.reserve({},f.peer),saved);assert.equal(await f.total(),1n);
   const separate=await f.reserve({service:'address_lookup'});assert.notEqual(separate.id,saved.id);assert.equal(await f.total('service=$1',['address_lookup']),1n);
  }finally{await f.close();}
@@ -125,6 +129,8 @@ test('level transitions select a ceiling over one reservation history',async()=>
   const third=await f.reserve({operationId:randomUUID()});assert.equal(third.units,'1');
   await set(f,'registered');await assert.rejects(f.reserve({operationId:randomUUID()}),{code:'allowance_exhausted'});
   assert.equal(await f.total('account_id=$1',[f.accountId]),3n);
+  await f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[f.accountId,f.scope.organisationId]);
+  await f.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1 AND organisation_id=$2',[f.otherAccount,f.scope.organisationId]);
   const other=await f.reserve({operationId:randomUUID(),accountId:f.otherAccount});assert.equal(other.units,'1');
   assert.equal(await f.total('account_id=$1',[f.otherAccount]),1n);
  }finally{await f.close();}

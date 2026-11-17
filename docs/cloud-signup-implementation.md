@@ -60,9 +60,38 @@ link must use a configured trusted HTTPS origin and avoid referrer leakage.
 
 The backend now has an account HTTP adapter. The existing trusted account-provisioning path remains
 responsible for its own email-ownership checks; it is not a public signup endpoint.
-No Waitron files, browser screens, SES resources or production emails change here.
+These account flows do not change Waitron or configure a production email provider.
 
 The token and password rules follow the applicable guidance in the
 [OWASP authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 and [single-use email token](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
 checklists. Public ingress, browser behaviour and deployment checks remain separate gates.
+
+## Hand over an existing business
+
+When someone else takes over your business, open **Account → Hand over ownership**.
+Verify it is you, select the business and enter the recipient’s email. They must
+already have a Cloud account. The offer lasts 24 hours; either of you can cancel.
+The invitation always uses the same wording, including for an unavailable address.
+It does not tell you whether that address has an account.
+
+The recipient signs in, enrolls an app or passkey if needed, verifies it is them
+and accepts the displayed business and parties. Activating an app ends their
+session, so they save their recovery codes and sign in again before accepting.
+Acceptance removes your membership and gives them sole ownership together. Your
+other businesses and the venue’s independently authorised machines remain.
+Old support and email-relay approvals are revoked; translation consent and
+queued or running translation work stop. Handing the business back does not
+restore those approvals. Close any unfinished backup recovery or replacement first.
+
+Refresh handovers if a reply is lost. The offer’s saved state shows whether
+acceptance or cancellation won. Password, email and proof changes cancel pending
+offers, except the recipient’s first required enrollment. New-account handover
+and box-assisted account recovery remain unavailable in this slice.
+
+The focused local PostgreSQL and browser checks are:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/owner-transfer.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test test/owner-transfer-browser.test.ts
+```

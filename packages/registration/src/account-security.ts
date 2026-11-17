@@ -77,7 +77,7 @@ export class AccountSecurityStore {
     }
   }
   async #endAuthority(client:PoolClient,accountId:string){
-    await invalidateAccountActionProof(client,accountId);
+    await invalidateAccountActionProof(client,accountId,undefined,this.#outbox);
     await client.query('UPDATE cloud_factor_login_challenges SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[accountId]);
     await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[accountId]);
     await client.query('DELETE FROM cloud_recognised_browsers WHERE account_id=$1',[accountId]);

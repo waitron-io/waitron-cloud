@@ -25,6 +25,24 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
+  transferTitle:"Hand over ownership",transferFrom:"From",transferTo:"To",
+  transferIntro:"The recipient must already have a Cloud account. They have 24 hours to accept. You lose access to this business when they accept.",
+  transferBusiness:"Business to hand over",
+  transferEmail:"Recipient email",
+  transferSend:"Send handover",
+  transferAccept:"Accept handover",
+  transferCancel:"Cancel handover",
+  transferRefresh:"Refresh handovers",
+  transferPending:"Pending",
+  transferAccepted:"Accepted",
+  transferCancelled:"Cancelled",
+  transferExpired:"Expired",
+  transferExpiry:"Expires",
+  transferRecovery:"Close the business’s backup recovery before handing it over.",
+  transferPendingHelp:"Cancel the current handover before naming another recipient.",
+  transferUnavailable:"This handover is unavailable. Refresh to check its state.",
+  transferUncertain:"The result is unknown. Refresh handovers before trying again.",
+
   cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All pending proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
   cloudActionsOccurrence:'Incident ID',cloudActionsCell:'Cell',cloudActionsTarget:'Target',cloudActionsProposal:'Proposed repair',cloudActionsEvidence:'Evidence',
   cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save a synthetic proposal. Real repairs are unavailable. Use a new incident ID for a new attempt.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
@@ -329,6 +347,24 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
+  transferTitle:"Traspasar la titularidad",transferFrom:"De",transferTo:"Para",
+  transferIntro:"Quien recibe debe tener una cuenta de Cloud. Tiene 24 horas para aceptar. Pierdes el acceso a este negocio cuando acepte.",
+  transferBusiness:"Negocio que traspasas",
+  transferEmail:"Correo de quien recibe",
+  transferSend:"Enviar traspaso",
+  transferAccept:"Aceptar traspaso",
+  transferCancel:"Cancelar traspaso",
+  transferRefresh:"Actualizar traspasos",
+  transferPending:"Pendiente",
+  transferAccepted:"Aceptado",
+  transferCancelled:"Cancelado",
+  transferExpired:"Caducado",
+  transferExpiry:"Caduca",
+  transferRecovery:"Cierra la recuperación de copias del negocio antes de traspasarlo.",
+  transferPendingHelp:"Cancela el traspaso actual antes de indicar otra persona.",
+  transferUnavailable:"Este traspaso no está disponible. Actualiza para ver su estado.",
+  transferUncertain:"El resultado es desconocido. Actualiza los traspasos antes de repetir.",
+
   cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas pendientes y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
   cloudActionsOccurrence:'ID del incidente',cloudActionsCell:'Celda',cloudActionsTarget:'Destino',cloudActionsProposal:'Reparación propuesta',cloudActionsEvidence:'Pruebas',
   cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda una propuesta de prueba. Las reparaciones reales no están disponibles. Usa otro ID de incidente para un nuevo intento.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',
