@@ -1083,6 +1083,13 @@ allowance. Never drop fields, names or corrections, or truncate text, to make a 
 
 ### Seeing the service
 
+The signed version-2 configuration also carries the separate `emailRelay` hint
+specified by the [transactional-email relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request).
+It is read fresh on configuration replay and does not change the service revision.
+A box submits each mail claim once, then reconciles status without resubmission or
+direct-SMTP fallback; a lost reply can remain a final unknown result. Live grant
+approval remains held for management-origin verification.
+
 The default `configuration` reply returns exactly three services for existing callers. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
 services: the three it receives today and this one:
 

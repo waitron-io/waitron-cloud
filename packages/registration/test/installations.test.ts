@@ -7,6 +7,8 @@ import {login} from '@waitron-cloud/identity';
 import {database} from '../../account-http/test/fixtures.ts';
 import {SignupStore,RegistrationStore,transaction} from '../src/index.ts';
 import {InstallationStore} from '../src/installations.ts';
+import {RelayGrantStore} from '../src/relay-grants.ts';
+import {RelayControl} from '../src/relay-control.ts';
 import {createLeaseIssuer,encodeMachine,type MachineAction,type SignedEnvelope} from '../src/installation-proof.ts';
 const origin='https://cloud.example.test',password='a long enough local test password';
 const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -24,6 +26,14 @@ function request(target=a,action:MachineAction='renew',lease:SignedEnvelope|unde
   return {payload:bytes.toString('base64url'),signature:sign(null,bytes,target.key.privateKey).toString('base64url')};
 }
 const config=(target=a,lease?:SignedEnvelope)=>store.execute('configuration',request(target,'configuration',lease));
+async function relayGrant(expectedRevision=0){
+  const grants=new RelayGrantStore(db.pool,{mode:'local-proof',consentVersion:'fixture-v1',
+    policy:{version:'fixture-v1',units:3,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},
+    verifyOrigin:async challenge=>({...challenge,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+3600000).toISOString()})});
+  const grant=await grants.approve(session.token,session.csrfToken,{installationId:a.installationId,expectedRevision,
+    consent:true,consentVersion:'fixture-v1',managementOrigin:'https://manage.example.test',expiresAt:new Date(Date.now()+1800000).toISOString()});
+  return {grant,grants};
+}
 before(async()=>{db=await database();store=new InstallationStore(db.pool,issuer,origin);other=new InstallationStore(db.secondPool,issuer,origin);});
 after(async()=>db?.close());
 beforeEach(async()=>{
@@ -31,6 +41,68 @@ beforeEach(async()=>{
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
   session=await transaction(db.pool,c=>login(c,{email:'owner@example.test',password}));a=await installation();b=await installation();
+});
+test('version two discovers only its installation grant without changing service configuration',async()=>{
+  await store.configure(a.installationId,0,[{service:'remote_access',state:'ready',configuration:{hostname:'venue.example.test'}}]);
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const legacy=await config(a,renewed.lease);
+  assert.equal(Object.hasOwn(legacy,'emailRelay'),false);
+  const read=()=>store.execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}));
+  const initial=await read();assert.deepEqual(initial.emailRelay,{version:1,grant:null});
+  const {grant}=await relayGrant();
+  const discovered=await read();
+  assert.deepEqual(discovered.emailRelay,{version:1,grant:{id:grant.id,revision:1,expiresAt:grant.expiresAt,enabled:true}});
+  assert.equal(discovered.revision,legacy.revision);
+  assert.deepEqual(discovered.services,initial.services);
+  for(const mode of ['test-free-paid','test-venue-levels'] as const){
+    const masked=await new InstallationStore(db.pool,issuer,origin,undefined,mode).execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}));
+    assert.deepEqual(masked.emailRelay,discovered.emailRelay);
+    assert.equal(masked.services.find(s=>s.service==='remote_access')?.state,'unconfigured');
+    assert.equal(masked.revision,legacy.revision);
+  }
+  const second=await store.execute('renew',request(b));assert.ok(second.lease);
+  assert.deepEqual((await store.execute('configuration',request(b,'configuration',second.lease,{servicesVersion:2}))).emailRelay,{version:1,grant:null});
+  assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM installation_operations WHERE result ? 'emailRelay'")).rows[0].n,0);
+});
+test('exact version two replay reads current relay stop, revoke and renewed grant hints',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const proof=request(a,'configuration',renewed.lease,{servicesVersion:2});
+  const {grant,grants}=await relayGrant(),control=new RelayControl(db.pool);
+  const read=()=>store.execute('configuration',proof);
+  assert.equal((await read()).emailRelay?.grant?.enabled,true);
+  await control.stop();assert.equal((await read()).emailRelay?.grant?.enabled,false);
+  await control.resume();assert.equal((await read()).emailRelay?.grant?.enabled,true);
+  await grants.revoke(session.token,session.csrfToken,grant.id);
+  assert.deepEqual((await read()).emailRelay,{version:1,grant:{id:grant.id,revision:1,expiresAt:grant.expiresAt,enabled:false}});
+  const next=await relayGrant(1);
+  assert.deepEqual((await read()).emailRelay,{version:1,grant:{id:next.grant.id,revision:2,expiresAt:next.grant.expiresAt,enabled:true}});
+  assert.equal((await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[a.installationId])).rows[0].configuration_revision,0);
+  assert.equal((await db.pool.query("SELECT count(*)::int AS n FROM installation_operations WHERE installation_id=$1 AND operation_id=$2",[a.installationId,JSON.parse(Buffer.from(proof.payload,'base64url').toString())[4]])).rows[0].n,1);
+});
+test('unavailable grant authority is unknown rather than an explicit off hint',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const {grant}=await relayGrant();
+  const proof=request(a,'configuration',renewed.lease,{servicesVersion:2}),read=()=>store.execute('configuration',proof);
+  const mutations=[
+    ["UPDATE relay_grants SET created_at=clock_timestamp()-interval '1 day',expires_at=clock_timestamp()-interval '1 second' WHERE id=$1","UPDATE relay_grants SET expires_at=$2 WHERE id=$1",grant.id,grant.expiresAt],
+    ["UPDATE relay_grants SET public_key='wrong' WHERE id=$1","UPDATE relay_grants SET public_key=$2 WHERE id=$1",grant.id,a.publicKey],
+    ["UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1","UPDATE cloud_accounts SET disabled_at=NULL WHERE id=$1",owner.accountId],
+    ["UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1","UPDATE cloud_credentials SET email_verified_at=clock_timestamp() WHERE account_id=$1",owner.accountId],
+    ["UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1","UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1",owner.accountId],
+    ["UPDATE installations SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1","UPDATE installations SET lease_expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1",a.installationId],
+  ];
+  assert.equal((await read()).emailRelay?.grant?.enabled,true);
+  await db.pool.query("UPDATE relay_grants SET venue_id=$2 WHERE id=$1",[grant.id,b.venueId]);
+  assert.deepEqual((await read()).emailRelay,{version:1,grant:null});
+  await db.pool.query("UPDATE relay_grants SET venue_id=$2 WHERE id=$1",[grant.id,a.venueId]);
+  for(const [change,restore,...values] of mutations){
+    // Each change is committed so the independent machine transaction observes it.
+    const count=(sql:string)=>Math.max(...[...sql.matchAll(/\$(\d+)/g)].map(m=>Number(m[1])));
+    await db.pool.query(change as string,values.slice(0,count(change as string)));
+    try{assert.deepEqual((await read()).emailRelay,{version:1,grant:null},change as string);}
+    finally{await db.pool.query(restore as string,values.slice(0,count(restore as string)));}
+    assert.equal((await read()).emailRelay?.grant?.enabled,true);
+  }
 });
 test('durable renewal is scoped and replayed once across independent workers',async()=>{
   const operationId=randomUUID(),proof=request(a,'renew',undefined,{},operationId),[one,two]=await Promise.all([store.execute('renew',proof),other.execute('renew',proof)]);
@@ -220,4 +292,15 @@ test('proof expiry during the final configuration read rolls back all writes',as
   try{await waitForLock();await new Promise(r=>setTimeout(r,600));}finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([expired]);}
   await expired;assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
   assert.equal((await db.pool.query('SELECT lease_expires_at FROM installations WHERE id=$1',[a.installationId])).rows[0].lease_expires_at,null);
+});
+test('proof expiry during the relay hint read rolls back configuration acknowledgement',async t=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  let now=Date.now();t.mock.method(Date,'now',()=>now);
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('LOCK TABLE relay_grants IN ACCESS EXCLUSIVE MODE');
+  const before=(await db.pool.query('SELECT count(*)::int AS n FROM installation_operations')).rows[0].n;
+  const pending=store.execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}));
+  const expired=assert.rejects(pending,/invalid_proof/);void expired.catch(()=>{});
+  try{await waitForLock();now+=61000;}finally{await blocker.query('COMMIT');blocker.release();}
+  await expired;
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM installation_operations')).rows[0].n,before);
 });

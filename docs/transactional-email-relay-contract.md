@@ -90,6 +90,24 @@ Cloud cannot independently prove that an authenticated but compromised venue rea
 requested a password reset. Fixed templates, narrow origins and bounded recipient
 traffic reduce that abuse; they do not eliminate it. Suspend the grant when detected.
 
+## Discover the grant over the existing configuration request
+
+Send the existing signed `configuration` action to
+`POST /api/installations/configuration` with the exact body `{"servicesVersion":2}`.
+Its reply includes `emailRelay: {version: 1, grant: null}` or a grant with only
+`id`, `revision`, `expiresAt` and `enabled`. The service array keeps its existing
+version-2 meaning; `emailRelay` is outside that array. A body of `{}` and ordinary
+renewal keep their existing shapes.
+
+Read this hint before each submit. A live revoked grant or stopped relay returns
+`enabled: false`; a missing or expired grant, expired origin evidence or lost owner
+or account authority returns `grant: null`. A failed read is unavailable. Neither
+null nor a failed read means the owner explicitly switched email off. An enabled
+hint is not sending authority: submit still rechecks its existing protections.
+Configuration replay reads the current hint without changing the service revision
+or storing the hint in its durable operation result. These are local fixture
+capabilities; live grant approval still needs the management-origin verifier.
+
 ## Proposed wire exchange
 
 The proposed routes are `POST /v1/installations/email/submit`, `/status` and `/cancel`.
@@ -101,8 +119,10 @@ key-bound lease and origin checks. Each signed body's `version` is `1`. Unsuppor
 versions and unknown fields fail before queueing.
 
 Persist a UUID `messageId` with the local action before the first network attempt.
-For submit, use it as the signed `operationId`; retain it across restart and lost
-responses. Re-sign with a fresh time/lease without changing the body. Status/cancel
+For submit, use it as the signed `operationId`. The box submits at most once per
+mail claim. After a lost reply or an abandoned claim, reconcile status without
+resubmitting; if delivery remains unknown, end that claim as unknown. A person can
+request a fresh invitation, reset or email change. Status/cancel
 have separate operation IDs and identify the message in their signed bodies. The
 idempotency key is `(installationId, messageId)`, scoped to the authenticated
 installation; a different body under that key returns `409 message_conflict`.
@@ -166,13 +186,15 @@ revealing whether the message exists. Proposed errors: `400 invalid_message`,
 `401 invalid_proof`, `403 relay_disabled` or `grant_unavailable`, `409 message_conflict`,
 `429 rate_limited` or `allowance_exhausted`, and `503 relay_unavailable`. Give bounded
 `Retry-After` guidance for temporary refusal. A missing status is not proof that a
-concurrent submit failed; retry the original submit ID.
+concurrent submit failed. Keep the result unknown and reconcile status; never
+resubmit that claim or fall back to direct SMTP.
 
 ## Queueing and uncertain delivery
 
 Waitron needs a durable local submission record tied to its account action. Never
 hold its database write lock across a Cloud call. After a crash it must recover the
-same identity and fields, stop locally expired work and reconcile Cloud status.
+same identity, stop locally expired work and reconcile Cloud status without
+resubmitting. It need not retain the sensitive submit payload for a retry.
 Treat the old `Promise<void>` success and UI `emailVerificationSent` semantics as a
 migration dependency: accepted into a queue must be labelled “Queued”, not “Delivered”.
 An uncertain Cloud reply must not trigger automatic direct-SMTP fallback or a new ID.
@@ -184,7 +206,9 @@ must fail closed. Keep recipients, tokens, codes and rendered content encrypted 
 rest, including local durable storage and backups; keep keys outside database
 backups. Clear ciphertext at terminal completion. Choose metadata retention before
 production, and keep deduplication tombstones for the full accepted-message/retry
-window so cleanup cannot allow the same live request twice. Fingerprint-key rotation
+window so cleanup cannot allow the same live request twice. Cloud still rejects a
+changed body under an existing identity and handles exact duplicates defensively;
+that does not require or authorise the box to send a second submit. Fingerprint-key rotation
 must retain verification for that window too.
 
 Proposed states are `queued`, `sending`, `accepted`, `uncertain`, `failed`, `expired`
