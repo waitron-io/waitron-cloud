@@ -1046,8 +1046,9 @@ implementation or production evidence.
   relay-grant hint without advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
   owner consent, with synthetic checks for production refusal. Local guest-menu
-  and relay commands have synthetic checks. Remote/backup controls, box handoff
-  qualification and SES feedback composition remain open.
+  and relay commands have synthetic checks. An independent test backup command
+  withdraws the writer and refuses fresh setup while keeping remote access on.
+  Remote controls, box handoff qualification and SES feedback composition remain open.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings

@@ -1,11 +1,11 @@
-# Switch test guest pages and box email
+# Switch test backups, guest pages and box email
 
-You can withdraw a test venue's guest menu and control its box email without
+You can stop a test venue's backups, withdraw its guest menu and control box email without
 changing its paid level. Run the local command inside the test account container,
 where it can read the private configuration and database. Start the test Cloud with
 `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`; the command
 reads those existing container settings and refuses other modes. Translation stays
-refused. Remote-access and backup switches are still unavailable.
+refused. A remote-access switch is still unavailable.
 
 For example, save this synthetic command as a private file outside the checkout:
 
@@ -40,6 +40,31 @@ The guest command returns the menu state and revision. Disabling makes published
 pages unavailable and blocks further publication. Enabling after disabling returns `off`: the box
 must publish again, so you cannot accidentally restore an old menu. Production
 venues refuse the command.
+
+For backups, use the same command with a private input file containing:
+
+```json
+{"command":"backups","installationId":"d62adff5-c9b8-4bc8-9fa2-d3bdd7691f81","enabled":false}
+```
+
+Replace the installation ID with your paired test box. A successful command returns
+`{"enabled":false}` after withdrawing the storage writer. The connected level and
+remote route stay available. The existing backup setup holds `testCloudEnabled:false`;
+new signed stream setup and snapshot provisioning refuse while it is off. Restarting
+storage preserves that refusal. Existing backup bytes and the stored read-only
+credential remain; new reader grants and signed stream-position reads refuse while off.
+If storage reload fails, the command fails after saving off; retry it to finish
+withdrawal rather than treating the failed command as a completed stop.
+
+The switch belongs to this installation's setup. A reset through the registered
+level clears it, and re-pairing or recovery creates a new installation without it.
+Run off again for the current installation after those changes.
+
+To enable backups after off, send the same input with `enabled:true`. The response is
+`{"enabled":true}`. This clears backup setup so the box must configure again and
+receive a fresh writer; the old credential stays refused. Sending on when already on leaves setup unchanged.
+This command changes no
+venue level and refuses production, revoked and replaced installations.
 
 For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`.
 Only `command` is needed. They return `{"stopped":true}` or `{"stopped":false}`.

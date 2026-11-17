@@ -36,3 +36,11 @@ existing installation operation digest before approval. An unrecorded configurat
 is refused; no record or field is added. The
 box/tool handoff must pass the current envelope privately to the owner tool; it
 is not a Cloud retrieval endpoint. The watcher cleared this correction, not the owner.
+
+**17 November 04:31 watcher clearance for the next switch.** Keep the venue
+connected: registered removes remote access too. Use one explicit off value in
+existing backup setup, test venues only, consumed by storage writer authorisation
+and signed stream setup. Prove configure after off creates no writer while the
+remote route remains available. Reuse the current trusted owner command and
+withdrawal; no schema or Waitron change. This is the watcher's cleared fallback
+within slice 4, not a new plan or owner design approval.
