@@ -1,6 +1,6 @@
 import {prepareBrowserActionWindow} from './fixtures.ts';
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHmac,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {hashSecret} from '@waitron-cloud/identity';
 import {completeBrowserEmail,contextSignIn,addVirtualAuthenticator, startPortalFixture, mailFor} from './fixtures.ts';
@@ -18,6 +18,8 @@ test('real resident passkeys enrol, authenticate once, stay account-scoped, and 
       ['en', 'light', {width: 1280, height: 900}],
       ['es', 'dark', {width: 390, height: 812}],
     ] as const) {
+      const allIpKey=createHmac('sha256',Buffer.from(f.db.rateKey,'hex')).update(JSON.stringify(['all-ip','127.0.0.1'])).digest('hex');
+      await f.db.pool.query("UPDATE account_rate_limits SET expires_at=clock_timestamp()-interval '1 second' WHERE key=$1",[allIpKey]);
       const owner = {id: randomUUID(), email: `passkey-${locale}-${randomUUID()}@example.test`};
       const other = {id: randomUUID(), email: `other-${locale}-${randomUUID()}@example.test`};
       for (const account of [owner, other]) {

@@ -33,6 +33,7 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
       page.on('pageerror', e => errors.push(e.message));
       await page.route('https://portal.test/**', route => {
       const proof=mockActionProof(route);if(proof)return proof;
+      if(new URL(route.request().url()).pathname==='/api/account/owner-transfers')return route.fulfill({json:{organisations:[],offers:[]}});
         const path = new URL(route.request().url()).pathname;
         if (!path.startsWith('/api/')) return route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
         if (armed && path === '/api/account' + target) {

@@ -29,6 +29,7 @@ async function setup(t:any,{allowances=options as unknown,configured=true,policy
  async function venue(accountId?:string){
   const v=await f.venue();
   if(accountId){
+   await f.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE organisation_id=$1',[v.organisation]);
    await f.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[accountId,v.organisation]);
    await f.pool.query('UPDATE relay_grants SET account_id=$1 WHERE installation_id=$2',[accountId,v.installation]);
   }
