@@ -35,8 +35,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   page=await context.newPage();page.setDefaultTimeout(5000);await page.goto(f.origin+'/operator/actions');
   const article=page.getByRole('article');await article.getByText(input.proposal,{exact:true}).waitFor();
   assert.equal((await f.db.pool.query('SELECT id FROM cloud_action_requests')).rows[0].id,saved.id);
-  f.loseAccountReply('/operator/actions/decide');
+  await page.route('**/operator/actions/decide',async route=>{
+   const response=await route.fetch();assert.equal(response.status(),200);await route.abort('failed');
+  });
+  const lostReply=page.waitForEvent('requestfailed',request=>request.url().endsWith('/operator/actions/decide'));
   await article.getByRole('button',{name:c.cloudActionsApprove,exact:true}).click();
+  assert.ok((await lostReply).failure(),'the committed approval reply must actually be lost');
   await article.getByText(c.cloudActionState_approved,{exact:true}).first().waitFor();
   const approved=(await f.db.pool.query('SELECT * FROM cloud_action_requests')).rows[0];
   assert.equal(approved.effect_id,saved.effect_id);assert.equal(approved.version,1);

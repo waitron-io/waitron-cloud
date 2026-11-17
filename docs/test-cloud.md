@@ -2056,7 +2056,8 @@ If the controller stops after the effect, its next pass reads the separately sav
 result instead of executing again. Without that result the request stays
 unconfirmed, holding its cell; an unknown outcome never means recovery.
 Restarting the account service also starts a fresh demo child, so a still-pending
-drain naming the old child's evidence cannot stop the new one. Queue a new drain
+drain naming the old child's random identity cannot stop the new one, even when
+its numeric process ID is reused. Queue a new drain
 and approve that proposal if you want to stop the new child.
 
 Run the recovery journey against a throwaway database and Mailpit:
@@ -2067,10 +2068,13 @@ node scripts/test-postgres.mjs exec pnpm --dir apps/portal exec node --test \
   test/cloud-actions-journey.test.ts
 ```
 
+Queuing another drain after the child has stopped produces no proposal; inspect
+its saved result before starting a new demo child.
+
 That journey closes the console before approval, drops a committed approval's
 reply, interrupts reporting after the effect and reopens the workload before
 reconciling. The worker/store tests additionally retain unknown completion and
-replay a C39-shaped fact with its original timestamp and notice; C39's producer
+replay an identical serialized C39-shaped fact with its original timestamp and notice; C39's producer
 is not connected by this demo.
 
 ## Private box origin for test email

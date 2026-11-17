@@ -29,9 +29,9 @@ export async function readCloudActionRequest(client:PoolClient,id:string){
  return view(row,(await client.query('SELECT event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=$1 ORDER BY event.created_at,event.id',[id])).rows);
 }
 export async function readCloudActionRequests(client:PoolClient){
- const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE (state IN ('pending','approved') AND outcome IS NULL) OR id IN
-  (SELECT id FROM cloud_action_requests WHERE state NOT IN ('pending','approved') OR outcome IS NOT NULL ORDER BY created_at DESC,id DESC LIMIT 50)
-  ORDER BY (state IN ('pending','approved') AND outcome IS NULL) DESC,created_at DESC,id DESC`)).rows;
+ const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE (state='pending' AND outcome IS NULL) OR id IN
+  (SELECT id FROM cloud_action_requests WHERE state<>'pending' OR outcome IS NOT NULL ORDER BY created_at DESC,id DESC LIMIT 50)
+  ORDER BY (state='pending' AND outcome IS NULL) DESC,created_at DESC,id DESC`)).rows;
  if(!rows.length)return [];
  const events=(await client.query('SELECT event.request_id,event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=ANY($1::uuid[]) ORDER BY event.created_at,event.id',[rows.map(row=>row.id)])).rows;
  return rows.map(row=>view(row,events.filter(event=>event.request_id===row.id)));

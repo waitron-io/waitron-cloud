@@ -14,10 +14,10 @@ export async function openSyntheticWorkload(directory,environment={}){
  const owned=await mkdtemp(join(directory,'workload-'));
  const script=join(owned,'worker.mjs');
  await writeFile(script,"process.on('disconnect',()=>process.exit());process.on('SIGTERM',()=>process.exit());process.send('ready');setInterval(()=>{},1000);",{mode:0o600});
- let child,closed=false;
+ let child,childIdentity,closed=false;
  const start=async()=>{
   const next=fork(script,[],{stdio:['ignore','ignore','ignore','ipc'],env:{PATH:process.env.PATH}});
-  child=next;
+  child=next;childIdentity=randomUUID();
   await new Promise((resolve,reject)=>{
    const deadline=setTimeout(()=>{next.kill('SIGKILL');reject(Error('demo_start_timeout'));},5000);
    next.once('message',()=>{clearTimeout(deadline);resolve();});
@@ -43,15 +43,16 @@ export async function openSyntheticWorkload(directory,environment={}){
   },
   async pending(){return load('failure.json');},
   async drain(){
+   if(closed||!(await health()).healthy)throw Error('demo_target_changed');
    const occurrence='demo-'+randomUUID();
-   const proposal={occurrence,cell:'demo-cell',target:'demo-worker',actionId:'machine_drain',proposal:'Stop the owned demo worker',evidence:occurrence+':running:'+child?.pid};
+   const proposal={occurrence,cell:'demo-cell',target:'demo-worker',actionId:'machine_drain',proposal:'Stop the owned demo worker',evidence:occurrence+':running:'+childIdentity};
    await save('failure.json',proposal);return proposal;
   },
   async eligible(request){
    const failure=await load('failure.json');
    const live=await health();
    return !closed&&failure&&['occurrence','cell','target','actionId','proposal','evidence'].every(key=>request[key]===failure[key])&&
-    (request.actionId==='cloud_restart'&&!live.healthy||request.actionId==='machine_drain'&&live.healthy&&request.evidence===request.occurrence+':running:'+live.pid);
+    (request.actionId==='cloud_restart'&&!live.healthy||request.actionId==='machine_drain'&&live.healthy&&request.evidence===request.occurrence+':running:'+childIdentity);
   },
   async restart(request){
    if(!await this.eligible(request))throw Error('demo_target_changed');

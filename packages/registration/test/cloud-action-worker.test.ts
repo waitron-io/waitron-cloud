@@ -227,6 +227,7 @@ test('crashAfterEffectNeverRepeats: an approved owned drain reconciles its saved
  const execute=workload.restart.bind(workload);workload.restart=async (value:import('../src/cloud-action-store.ts').CloudActionRequest)=>{await execute(value);throw Error('controller stopped after effect');};
  await assert.rejects(new CloudActionWorker(pool,options).runOnce(),/controller stopped after effect/);
  assert.equal((await workload.health()).healthy,false);assert.equal(await workload.observe(request.effectId),'confirmed');
+ await assert.rejects(workload.drain(),/demo_target_changed/);assert.deepEqual(await workload.pending(),input);
  assert.equal((await pool.query('SELECT outcome FROM cloud_action_requests WHERE id=$1',[request.id])).rows[0].outcome,null);
  await workload.close();workload=await openSyntheticWorkload(directory,{CLOUD_ACTION_DEMO:'1'});
  const before=await workload.health();assert.equal(await new CloudActionWorker(pool,{...options,executor:workload}).runOnce(),true);
@@ -274,4 +275,31 @@ test('LAN drain trigger keeps the owned workload running until the operator appr
  await actions.decide(actor.token,actor.csrfToken,{requestId:row.id,version:row.version,decision:'approved'});
  while(Date.now()<deadline){row=(await pool.query('SELECT * FROM cloud_action_requests WHERE id=$1',[row.id])).rows[0];if(row.outcome)break;await delay(20);}
  assert.deepEqual(row.outcome,{status:'confirmed'});
+});
+
+test('an approval superseded while target inspection waits cannot dispatch',async()=>{
+ const {CloudActionWorker}=await api(),effect=executor(),request=await propose({actionId:'machine_drain'});
+ await actions.decide(actor.token,actor.csrfToken,{requestId:request.id,version:1,decision:'approved'});
+ effect.eligible=async()=>{await propose({actionId:'machine_drain',evidence:'new evidence'});return true;};
+ assert.equal(await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce(),false);
+ assert.equal(effect.calls,0);
+ assert.equal((await pool.query('SELECT state FROM cloud_action_requests WHERE id=$1',[request.id])).rows[0].state,'superseded');
+});
+
+test('a fresh owned child cannot inherit a pending drain when a process id is reused',async t=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+ const cp=await import('node:child_process'),{syncBuiltinESMExports}=await import('node:module'),fork=cp.fork;
+ // Separate container PID namespaces can give successive children the same numeric PID.
+ t.mock.method(cp.default,'fork',(...args:Parameters<typeof fork>)=>{
+  const child=fork(...args);Object.defineProperty(child,'pid',{value:7});return child;
+ });syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const directory=await mkdtemp(join(tmpdir(),'cloud-action-child-identity-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const {openSyntheticWorkload}=await import(new URL('../../../deploy/test-cloud/cloud-action-demo.mjs',import.meta.url).href);
+ let workload=await openSyntheticWorkload(directory,{CLOUD_ACTION_DEMO:'1'});t.after(()=>workload.close());
+ const input=await workload.drain(),before=await workload.health();assert.equal(before.pid,7);
+ await workload.close();workload=await openSyntheticWorkload(directory,{CLOUD_ACTION_DEMO:'1'});
+ assert.equal((await workload.health()).pid,7);
+ assert.equal(await workload.eligible(input),false,'same numeric PID does not identify the same owned child');
+ assert.equal((await workload.health()).healthy,true);
 });

@@ -1798,8 +1798,8 @@ implementation or production evidence.
   operations, deployment, spending, production schema and live email retain their
   separate authority gates.
 - **Repair actions and Cloud controller (P4).** The [country-local plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
-  leaves C39's future fact feed, real executors, P1's remaining qualification, release waves, hosted
-  handover and regional failover remain open. Allocate migrations against the
+  leaves C39's future fact feed, real executors, P1's remaining qualification,
+  release waves, hosted handover and regional failover open. Allocate migrations against the
   live manifest/reservations. Production operator selection and provider
   delivery remain operating decisions; local synthetic/Mailpit rehearsal
   authorises no provider operation, spending, deployment or live mail.

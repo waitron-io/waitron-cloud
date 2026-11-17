@@ -25,7 +25,7 @@ function bodyRefusalCopy(copy: typeof enBase): Record<BodyRefusalCopyKey,string>
   return messages;
 }
 const enBase = {
-  cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All unfinished proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
+  cloudActionsInvalid:'Check the proposal fields.',cloudActionsRequests:'Repair proposals',cloudActionsRecent:'All pending proposals and the latest 50 history entries.',cloudActionsEmpty:'No proposals yet.',
   cloudActionsOccurrence:'Incident ID',cloudActionsCell:'Cell',cloudActionsTarget:'Target',cloudActionsProposal:'Proposed repair',cloudActionsEvidence:'Evidence',
   cloudActionsNew:'Propose a repair',cloudActionsNoExecution:'Save a synthetic proposal. Real repairs are unavailable. Use a new incident ID for a new attempt.',cloudActionsAction:'Action',cloudActionsSave:'Save proposal',
   cloudActionsApprove:'Approve this proposal',cloudActionsReject:'Reject this proposal',cloudActionsExpires:'Approval expires',cloudActionsPolicies:'Repair policies',
@@ -329,7 +329,7 @@ const enBase = {
 const en = {...enBase,...bodyRefusalCopy(enBase)};
 export type Copy = typeof en;
 const esBase: typeof enBase = {
-  cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas sin terminar y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
+  cloudActionsInvalid:'Revisa los campos de la propuesta.',cloudActionsRequests:'Propuestas de reparación',cloudActionsRecent:'Todas las propuestas pendientes y las últimas 50 entradas del historial.',cloudActionsEmpty:'No hay propuestas.',
   cloudActionsOccurrence:'ID del incidente',cloudActionsCell:'Celda',cloudActionsTarget:'Destino',cloudActionsProposal:'Reparación propuesta',cloudActionsEvidence:'Pruebas',
   cloudActionsNew:'Proponer una reparación',cloudActionsNoExecution:'Guarda una propuesta de prueba. Las reparaciones reales no están disponibles. Usa otro ID de incidente para un nuevo intento.',cloudActionsAction:'Acción',cloudActionsSave:'Guardar propuesta',
   cloudActionsApprove:'Aprobar esta propuesta',cloudActionsReject:'Rechazar esta propuesta',cloudActionsExpires:'La aprobación caduca',cloudActionsPolicies:'Políticas de reparación',
