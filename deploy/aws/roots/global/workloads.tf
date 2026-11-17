@@ -6,7 +6,7 @@ module "workload_permissions" {
   cell_name         = each.key
   oidc_issuer       = module.cell[each.key].cell.oidc_issuer
   namespace         = "waitron-cloud-global"
-  role_names        = { "api" = "api", "portal" = "portal", "registration-worker" = "registration-worker", "monitor-worker" = "monitor-worker" }
+  role_names        = { "api" = "api" }
   recovery_role_arn = var.recovery_role_arn
   prefixes          = { stream = "streams/", snapshot = "snapshots/" }
   custody_refs = {

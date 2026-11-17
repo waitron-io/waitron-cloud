@@ -74,3 +74,6 @@ billing-card iframe { max-width: 100%; }
 
 .cloud-actions { --wt-form-actions-in-place: true; }
 .cloud-actions wt-form-actions { position: static; }
+
+.console-countries { padding: 0; list-style: none; }
+.console-countries li { border-block-start: 1px solid var(--wt-color-border); padding-block: 1rem; overflow-wrap: anywhere; }

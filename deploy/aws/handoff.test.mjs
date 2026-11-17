@@ -23,7 +23,7 @@ function expected(scope, cell, count) {
   const key = place => `arn:aws:kms:${place}:${account}:key/${place === region ? '11111111-1111-1111-1111-111111111111' : '22222222-2222-2222-2222-222222222222'}`;
   const secretNames = country ? ['backup-master-key', 'email-key-ring', 'gateway-signing', 'wireguard', 'installation-signing'] : ['email-key-ring', 'sign-in-signing'];
   const secrets = place => Object.fromEntries(secretNames.map(name => [name, `arn:aws:secretsmanager:${place}:${account}:secret:waitron-${prefix}/${name}-ABCDEF`]));
-  const roles = country ? ['api', 'portal', 'registration-worker', 'backup-worker', 'backup-verifier', 'remote-gateway', 'remote-reconciler', 'monitor-worker'] : ['api', 'portal', 'registration-worker', 'monitor-worker'];
+  const roles = country ? ['api', 'portal', 'registration-worker', 'backup-worker', 'backup-verifier', 'remote-gateway', 'remote-reconciler', 'monitor-worker'] : ['api'];
   const alarm = `arn:aws:cloudwatch:${region}:${account}:alarm:synthetic`;
   const signals = {
     'database-storage': alarm, 'database-connections': alarm,

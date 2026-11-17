@@ -858,8 +858,8 @@ references, and primary and backup secret references. The provisional
 shared policy attachment references and their admission result. Shared recovery
 and replication permissions are composed. The provisional `workload_topology`
 output maps each exact cell name to its workload roles and runtime policy
-attachments. Global cells each have the four agreed global roles; Spain cells
-each have all eight country roles. Each cell consumes its own cluster identity,
+attachments. Global cells have only the console `api` role, with no runtime
+policy attachments; Spain cells retain all eight country roles. Each cell consumes its own cluster identity,
 namespace and service accounts, so adding a cell does not share cluster trust.
 Country runtime policies use the same planned store names as shared recovery
 and replication. The root's storage check binds those names and keys to the
@@ -999,7 +999,9 @@ dns = {
 ```
 
 Use the externally verified zone ID for your own scope. The global root names
-`waitron.io`; Spain names `es.waitron.io`. Creation requires `create_zone = true`
+`waitron.io`; Spain names `es.waitron.io`. The global root aliases `waitron.io`
+and `console.waitron.io` to the first cell in sorted cell-name order. Both names
+use the first cell’s HTTPS ingress, including when you configure several cells. Creation requires `create_zone = true`
 and a null existing ID. This input only describes the selected path; it neither
 imports nor changes a live zone during the local checks. Parent delegation stays
 in the separate delegation root, and P1 still owns venue records and target

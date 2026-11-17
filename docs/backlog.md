@@ -1601,6 +1601,7 @@ implementation or production evidence.
   from the last observed record. Preserve run identity, final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
+  The evidence tool also refuses CI44104446979 attempt2: GitHub reports44latest final jobs but45attempt-specific records, including an extra queued record; watcher17November16:10 closed that merge on the native44-job view, leaving this known readback gap open.
 
 - **CI execution budget.** Keep the remaining qualifications and unknown causes
   below; delivered allocation, selection and fixture repairs are not open work.
@@ -1783,17 +1784,11 @@ implementation or production evidence.
   gateway reconciler and provider-native storage before setting an availability promise.
 - **Independent countries and the worldwide admin console (P3 / D112-S).** The
   [replacement P3](superpowers/plans/2026-10-22-cloud-global-country-split.md) leaves
-  the small worldwide admin console to plan and build by reusing/shrinking P2's global setup, with
-  its own admin passkey sign-in, health/deploy starts, apex DNS and Spain redirect.
-  Retire the global customer sign-in, portal and registration worker in that code
-  PR, and shrink its database to console admins only. No country customer/venue
-  copies or country operator authority belong worldwide. Each country owns its
-  billing, customer email, logs/alarms, keys/secrets, backups and second region;
-  the email provider is unchosen. Each pulls reviewed repository releases started
-  from the console, with no messages between countries. D608 handover owns the
-  one-owner rule and swap-owner function. P7 owns the outside checker. Provider
-  operations, deployment, spending, production schema and live email retain their
-  separate authority gates.
+  deploy-start control open; its next plan must name the exact GitHub job and inputs.
+  Public hosting, DNS/certificate delivery and provider qualification remain open.
+  No country customer/venue copies or country operator authority belong worldwide.
+  D608 owns the one-owner rule and swap-owner function; P7 owns the outside checker.
+  Provider operations, deployment, spending and live email retain separate authority gates.
 - **Repair actions and Cloud controller (P4).** The [country-local plan](superpowers/plans/2026-10-22-cloud-action-controller.md)
   leaves C39's future fact feed, real executors, P1's remaining qualification,
   release waves, hosted handover and regional failover open. Allocate migrations against the

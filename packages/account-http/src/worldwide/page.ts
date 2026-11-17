@@ -1,0 +1,1 @@
+export const consolePage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Waitron Cloud · Admin</title><link rel="stylesheet" href="/app.css"><script type="module" src="/worldwide.js"></script></head><body><div id="portal"></div></body></html>`;

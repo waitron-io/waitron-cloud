@@ -2,9 +2,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 locals {
   issuer = trimprefix(var.oidc_issuer, "https://")
-  role_secrets = var.scope == "global" ? {
-    api = ["email-key-ring", "sign-in-signing"], portal = [], registration-worker = ["email-key-ring"], monitor-worker = ["email-key-ring"]
-    } : {
+  role_secrets = var.scope == "global" ? {} : {
     api = ["email-key-ring", "installation-signing", "gateway-signing"], portal = [], registration-worker = ["email-key-ring", "installation-signing"], backup-worker = ["backup-master-key"], backup-verifier = ["backup-master-key"], remote-gateway = ["gateway-signing", "wireguard"], remote-reconciler = ["gateway-signing"], monitor-worker = ["email-key-ring"]
   }
   runtime_secrets = { for role in keys(var.role_names) : role => [for purpose in lookup(local.role_secrets, role, []) : var.custody_refs.secrets[purpose]] if length(lookup(local.role_secrets, role, [])) > 0 }

@@ -474,3 +474,55 @@ is exposed only at `127.0.0.1:${LOCAL_STACK_GUEST_PORT:-3443}`; the default stac
 does not reserve a guest port. No certificate is requested and no DNS
 record is created. Starting this listener does not make it reachable from a phone
 outside your local network.
+
+## Try the worldwide admin console
+
+Use a separate, empty PostgreSQL database for the worldwide console. Its startup
+creates only admin accounts, sessions, rate limits and passkey records; it refuses
+a database containing customer migrations or organisations. Never point it at a
+country database. The implementation is in `packages/account-http/src/worldwide/`.
+
+Build the existing portal assets with `pnpm portal:build`. Set `DATABASE_URL` to
+your local console database and `CONSOLE_RATE_KEY` to a fresh 32-byte hexadecimal
+value, kept outside the repository. Then run:
+
+```sh
+CONSOLE_ORIGIN=http://localhost:3000 \
+CONSOLE_COUNTRIES='{"ES":"https://country.example.test"}' \
+node packages/account-http/src/worldwide/server-cli.ts
+```
+
+For a fully local rehearsal, inject the synthetic country fetcher as the named
+browser test does; the example address above intentionally reports unavailable.
+Readiness means the country API has its expected database schema, not that its
+venue services or outside availability check have passed.
+
+In another terminal with the same `DATABASE_URL`, provision your first admin:
+
+```sh
+node packages/account-http/src/worldwide/admin-cli.ts create "Console administrator"
+```
+
+The command prints a one-use secret. Paste it into the enrolment field at
+`http://localhost:3000` within ten minutes, then create a passkey. Keep the secret
+out of URLs and logs. `reissue "Console administrator"` revokes that admin’s old
+passkeys and sessions before issuing a fresh secret; `disable` revokes access.
+There is no customer signup, password recovery, country operator action or deploy
+control in this runtime (`test/worldwide-{auth,http}.test.ts`).
+
+`deploy/kubernetes/worldwide.yaml` supplies a single console pod with a TLS proxy.
+It expects a `worldwide-console` Secret containing `database-url` and `rate-key`,
+a `worldwide-tls` Secret containing the combined certificate/key as `tls.pem`, and
+a `worldwide-proxy` ConfigMap containing `deploy/worldwide/proxy.cfg` as `proxy.cfg`.
+These are operator-supplied inputs, not committed credentials. Run the admin CLI
+inside the `api` container when provisioning a cluster admin. The unused `api`
+AWS role grants no application-secret access. The service uses P2’s node ports
+30443 for HTTPS and 30999 for TCP health; P1 still owns node target registration.
+
+The proxy serves HTTPS only. Apex `/` redirects to exactly `https://es.waitron.io/`
+and discards queries; other apex paths return404. Console requests stay on
+`console.waitron.io`. The local-stack Dockerfile can build the qualification
+image, but its development mode and bundled tools are not a qualified production
+image. No public DNS, certificate, resource creation or deployment is authorised
+by this example. The real-proxy test is
+`packages/account-http/test/worldwide-hosting.test.ts`.

@@ -201,7 +201,7 @@ for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
     assert.equal(permissions.oidc_issuer, '${module.cell[each.key].cell.oidc_issuer}');
     assert.equal(permissions.namespace, JSON.stringify(`waitron-cloud-${label}`));
     const contract = JSON.parse(readFileSync(new URL('contracts/p1-roles-v1.json', import.meta.url), 'utf8'));
-    const roles = scope === 'global' ? ['api', 'portal', 'registration-worker', 'monitor-worker'] : contract.roles;
+    const roles = scope === 'global' ? ['api'] : contract.roles;
     assert.deepEqual(Object.fromEntries(Object.entries(permissions.role_names).map(([role, account]) => [role.startsWith('"') ? JSON.parse(role) : role, account])), Object.fromEntries(roles.map(role => [role, JSON.stringify(contract.service_accounts[role])])));
     assert.equal(permissions.count, undefined);
     assert.equal(permissions.depends_on, undefined);
