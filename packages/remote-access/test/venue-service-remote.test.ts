@@ -31,7 +31,7 @@ async function fixture(){
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
 async function disableSibling(f:Fixture){await set(f,'registered',f.venues[1]);}
-async function certificateJobs(f:Fixture,id:string){return Number((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[id])).rows[0].n);}
+async function certificateJobs(f:Fixture,id:string){return Number((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind LIKE 'certificate_%' AND enabled",[id])).rows[0].n);}
 async function due(f:Fixture,worker:RemoteConfigurationReconciler,cellId=f.source){
  await worker.schedule();await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");
  await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='route' AND target_id=$1",[cellId]);
