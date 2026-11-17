@@ -104,6 +104,87 @@ test('unavailable grant authority is unknown rather than an explicit off hint',a
     assert.equal((await read()).emailRelay?.grant?.enabled,true);
   }
 });
+function privateRelayStore(environment='test',pool=db.pool){
+  return new RelayGrantStore(pool,{mode:'local-proof',consentVersion:'fixture-v1',
+    policy:{version:'fixture-v1',units:3,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},
+    verifyOrigin:async()=>{throw Error('No public origin challenge for a private box');},
+    testOrigin:{environment,origin,trusted:new Map([[issuer.keyId,issuer.publicKey]])}});
+}
+function privateApproval(managementOrigin:string,expectedRevision=0){
+  return {installationId:a.installationId,expectedRevision,consent:true as const,consentVersion:'fixture-v1',
+    managementOrigin,expiresAt:new Date(Date.now()+1800000).toISOString()};
+}
+test('test owner approves only the private origin stated in a signed current configuration exchange',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const grants=privateRelayStore();let revision=0;
+  for(const managementOrigin of ['https://192.168.10.10:3000','https://10.1.2.3','https://172.16.0.1','https://172.31.255.254','https://waitron.local:3000']){
+    const proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
+    const configuration=await store.execute('configuration',proof);
+    assert.equal(configuration.revision,0);
+    const grant=await grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin,revision),proof);
+    assert.equal(grant.managementOrigin,managementOrigin);assert.equal(grant.enabled,true);revision++;
+    const hint=await store.execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}));
+    assert.equal(hint.emailRelay?.grant?.id,grant.id);assert.equal(hint.emailRelay?.grant?.revision,revision);
+  }
+  const grant=(await db.pool.query('SELECT id FROM relay_grants WHERE installation_id=$1',[a.installationId])).rows[0];
+  await grants.revoke(session.token,session.csrfToken,grant.id);
+  assert.equal((await store.execute('configuration',request(a,'configuration',renewed.lease,{servicesVersion:2}))).emailRelay?.grant?.enabled,false);
+});
+test('private-origin approval rejects unsigned, mismatched, stale and unleased statements and missing owner consent',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const managementOrigin='https://waitron.local:3000',input=privateApproval(managementOrigin),grants=privateRelayStore();
+  const body={servicesVersion:2,managementOrigin};
+  const good=request(a,'configuration',renewed.lease,body);
+  const cases=[undefined,{...good,signature:'invalid'},request(a,'configuration',undefined,body),
+    request(a,'configuration',renewed.lease,body,randomUUID(),Date.now()-120000),
+    request(a,'report',renewed.lease,body),request(b,'configuration',renewed.lease,body),
+    request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin:'https://other.local'}),
+    request(a,'configuration',renewed.lease,{servicesVersion:2})];
+  for(const proof of cases)await assert.rejects(grants.approve(session.token,session.csrfToken,input,proof),/origin_unverified/);
+  await assert.rejects(grants.approve(session.token,session.csrfToken,{...input,consent:false} as any,good),/invalid_input/);
+  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
+  await assert.rejects(grants.approve(session.token,session.csrfToken,input,good),/grant_unavailable/);
+  await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[owner.accountId]);
+  for(const [change,restore] of [
+    ["UPDATE installations SET public_key='changed' WHERE id=$1",'UPDATE installations SET public_key=$2 WHERE id=$1'],
+    ["UPDATE installations SET lease_expires_at=clock_timestamp()-interval '1 second' WHERE id=$1", "UPDATE installations SET lease_expires_at=clock_timestamp()+interval '1 hour' WHERE id=$1"]] as const){
+    await db.pool.query(change,[a.installationId]);
+    await assert.rejects(grants.approve(session.token,session.csrfToken,input,good));
+    await db.pool.query(restore,restore.includes('$2')?[a.installationId,a.publicKey]:[a.installationId]);
+  }
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
+});
+test('test-only origin exception excludes public, loopback, link-local and non-HTTPS origins',async()=>{
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const grants=privateRelayStore();
+  for(const managementOrigin of ['https://example.test','https://127.0.0.1','https://169.254.1.2','https://172.15.255.255','https://172.32.0.1','https://[fe80::1]','https://localhost','https://local','https://waitron.local.example','http://192.168.1.2','https://waitron.local/path']){
+    const proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
+    await assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof));
+  }
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
+});
+test('private-origin proof expiry during grant lock waits rolls approval back',async t=>{
+  let time=Date.now();t.mock.method(Date,'now',()=>time);
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const grants=privateRelayStore('test',databaseClock(db.pool,()=>time));
+  const managementOrigin='https://waitron.local:3000';
+  const blocker=await db.secondPool.connect();await blocker.query('BEGIN');
+  await blocker.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[a.installationId]);
+  const pending=assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),
+    request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin})),/origin_unverified/);
+  try{await waitForLock();time+=61000;}
+  finally{await blocker.query('COMMIT');blocker.release();await Promise.allSettled([pending]);}
+  await pending;
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
+});
+test('production cannot enable the private-origin exception or approve a production box',async()=>{
+  assert.throws(()=>privateRelayStore('production'),/invalid_input/);
+  const renewed=await store.execute('renew',request());assert.ok(renewed.lease);
+  const managementOrigin='https://waitron.local:3000',proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
+  await db.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[a.venueId]);
+  await assert.rejects(privateRelayStore().approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof),/grant_unavailable/);
+  assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);
+});
 test('durable renewal is scoped and replayed once across independent workers',async()=>{
   const operationId=randomUUID(),proof=request(a,'renew',undefined,{},operationId),[one,two]=await Promise.all([store.execute('renew',proof),other.execute('renew',proof)]);
   assert.deepEqual(one,two);assert.ok(one.lease);assert.equal(one.installationId,a.installationId);

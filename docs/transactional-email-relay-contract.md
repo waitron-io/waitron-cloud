@@ -62,9 +62,12 @@ expiry; do not assume permission. Never grant email because a paid service is ac
 
 A free email grant needs an independently verified management origin, including a
 customer-managed endpoint when the venue has no paid Cloud route. Domain control
-and an HTTPS endpoint check must be part of grant setup. A private LAN origin needs
-an explicit verification design before support; do not silently accept arbitrary
-URLs. Remote access is not a prerequisite, and delivery does not prove the recipient
+and an HTTPS endpoint check must be part of grant setup. Production has no private-LAN exception. On an explicitly test Cloud, the
+owner may instead approve the private origin stated by the paired box in its signed
+configuration request, under its current key-bound lease. Only RFC 1918 IPv4
+addresses or names ending in `.local` qualify; loopback, link-local and public
+addresses do not. This statement proves the paired box made the claim, not domain
+control or public reachability. Remote access is not a prerequisite, and delivery does not prove the recipient
 can reach the venue. The setup screen must explain that local access may be needed.
 
 ## Only three message classes
@@ -98,6 +101,18 @@ Its reply includes `emailRelay: {version: 1, grant: null}` or a grant with only
 `id`, `revision`, `expiresAt` and `enabled`. The service array keeps its existing
 version-2 meaning; `emailRelay` is outside that array. A body of `{}` and ordinary
 renewal keep their existing shapes.
+
+For test-only private-origin approval, the box signs the canonical body
+`{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}`
+(keys in that order) on the same endpoint. Configuration authenticates the signed
+statement and returns the same version-2 reply; it does not turn email on. The trusted owner tool supplies that envelope as
+the fourth argument to `RelayGrantStore.approve`, with `testOrigin` configured
+with environment `test`, the Cloud origin and its trusted lease keys. The normal
+owner session, consent, installation authority, grant revision and expiry checks
+still apply. Approval checks the current signature and lease again after lock
+waits. The existing grant expiry is the owner-selected end of this test exception;
+no HTTPS challenge is claimed. No public approval route or normal-startup wiring
+is added. A box-side caller and the owner service command remain separate work.
 
 Read this hint before each submit. A live revoked grant or stopped relay returns
 `enabled: false`; a missing or expired grant or lost owner or account authority

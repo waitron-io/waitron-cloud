@@ -1087,8 +1087,9 @@ The signed version-2 configuration also carries the separate `emailRelay` hint
 specified by the [transactional-email relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request).
 It is read fresh on configuration replay and does not change the service revision.
 A box submits each mail claim once, then reconciles status without resubmission or
-direct-SMTP fallback; a lost reply can remain a final unknown result. Live grant
-approval is unavailable until the scoped test-only private-origin path is built.
+direct-SMTP fallback; a lost reply can remain a final unknown result. The explicitly test-only private-origin approval core is described in the
+[relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request).
+Owner command and startup composition remain separate work.
 
 The default `configuration` reply returns exactly three services for existing callers. A `configuration` request whose signed body is exactly `{"servicesVersion":2}` receives four
 services: the three it receives today and this one:
@@ -1098,7 +1099,10 @@ services: the three it receives today and this one:
 ```
 
 Services are matched by name; their order in the list is not significant. A `configuration` body
-of `{}` keeps receiving exactly three; any other `configuration` body is an invalid proof (401).
+of `{}` keeps receiving exactly three. The test relay may additionally state a private
+management origin with canonical body `{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}`
+on that same signed exchange, as the relay contract specifies; this alone grants no
+email authority. Every other `configuration` body is an invalid proof (401).
 `renew` and `report` replies are unchanged and always carry three, so the box keeps the
 `content_translation` entry from its last version-2 `configuration` reply.
 

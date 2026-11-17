@@ -1034,8 +1034,10 @@ implementation or production evidence.
   certificate issuance, pairing and email qualification remain open. Dedicated
   launch access awaits the [owner setup](test-cloud-amazon-access.md); no Amazon
   deployment is established by these local checks. Signed configuration now discovers a
-  relay-grant hint without advancing service configuration. Live grant approval,
-  owner service commands and SES feedback composition remain open.
+  relay-grant hint without advancing service configuration. The test-only private-origin
+  approval core accepts a signed statement under the current key-bound lease and
+  owner consent, with synthetic checks for production refusal. Box-side origin
+  exchange, owner service commands and SES feedback composition remain open.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings

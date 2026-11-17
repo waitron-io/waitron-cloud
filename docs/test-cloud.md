@@ -2035,3 +2035,15 @@ worker observes the saved effect identity instead of starting another restart.
 An unknown result keeps another disruption in that cell waiting. Approved
 ask-first actions and the interrupted-demo recovery journey remain the next
 slice; this demonstration does not qualify real executors or deployment.
+
+## Private box origin for test email
+
+Only on an explicitly test Cloud, you can approve your paired box's signed RFC 1918
+or `.local` management origin under its current key-bound lease, with your relay
+consent on, without the HTTPS origin challenge; production keeps refusing it.
+
+The [relay contract](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request)
+names the signed request and the internal approval call. This core has synthetic
+database checks in `packages/registration/test/installations.test.ts`; the owner
+command, box-side statement and SES startup are still to be composed. Approval
+is not evidence that the origin is publicly reachable.
