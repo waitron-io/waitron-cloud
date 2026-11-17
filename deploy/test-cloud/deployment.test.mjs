@@ -43,8 +43,10 @@ test('unavailable backup profile has its own writable controller volume and read
  for(const [name,service] of Object.entries(value.services))if(name!=='backup-worker')assert.ok(!service.volumes?.some(v=>v.source===state.source),name+' can access private verifier state');
 });
 
-test('Amazon override configures HTTPS without publishing database, mail or internal storage',()=>{
+test('Amazon override configures HTTPS without publishing database, mail or internal storage',async()=>{
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'}}));
+ const{validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');assert.equal(validateDeployment(value,{image:value.services.account.image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/tmp/synthetic-certificates'}).ready,true);
+ assert.equal(value.services.account.environment.CLOUD_VENUE_SERVICE_LEVELS,'test');
  assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['0.0.0.0','443',3000]]);
  for(const name of ['account','postgres','mailpit','storage','gateway'])assert.equal(value.services[name].ports,undefined,name);
  for(const name of ['bootstrap','account','email-worker'])assert.equal(value.services[name].environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');
