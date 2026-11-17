@@ -151,7 +151,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     const write = c.req.method === 'POST' && ['/api/account/session/activity', '/api/account/logout',
       '/api/account/passkeys/registration/options', '/api/account/passkeys/registration/verify',
       '/api/account/authenticator/begin', '/api/account/authenticator/activate', '/api/account/authenticator/cancel'].includes(c.req.path);
-    return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write || c.req.path==='/api/account/owner-recovery/complete' || c.req.path.startsWith('/api/account/action-proof/')}, next);
+    return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write || c.req.path.startsWith('/api/account/action-proof/')}, next);
   });
   app.all('*', async c => {
     protect(c);
