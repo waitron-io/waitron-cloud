@@ -1,3 +1,4 @@
+import type {EmailOutbox} from './email-outbox.ts';
 import type {Pool,PoolClient} from 'pg';
 import {accountActionSession,requireAccountActionProof} from './account-action-proof.ts';
 import {CloudActionError,readCloudActionRequests,proposeCloudAction,decideCloudAction,validateCloudActionProposal,type CloudActionProposal,type CloudActionDecision} from './cloud-action-store.ts';
@@ -13,10 +14,10 @@ export const cloudActionCatalogue=Object.freeze([
  action('certificate_rotate'),action('key_rotate'),action('permission_change'),action('security_change'),
 ]);
 export class CloudActions{
- readonly #pool:Pool;readonly #operator:string|undefined;
- constructor(pool:Pool,operatorAccountId?:string){
+ readonly #pool:Pool;readonly #operator:string|undefined;readonly #outbox:EmailOutbox|undefined;
+ constructor(pool:Pool,operatorAccountId?:string,outbox?:EmailOutbox){
   if(operatorAccountId&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(operatorAccountId))throw Error('cloud_operator_account_invalid');
-  this.#pool=pool;this.#operator=operatorAccountId||undefined;
+  this.#pool=pool;this.#operator=operatorAccountId||undefined;this.#outbox=outbox;
  }
  async #write<T>(token:string,csrfToken:string,write:(client:PoolClient,actor:string)=>Promise<T>){
   return transaction(this.#pool,async client=>{
@@ -30,7 +31,7 @@ export class CloudActions{
  async propose(token:string,csrfToken:string,input:CloudActionProposal){
   validateCloudActionProposal(input);const action=cloudActionCatalogue.find(action=>action.id===input.actionId);
   if(!action)throw new CloudActionError('invalid_input');
-  return this.#write(token,csrfToken,(client,actor)=>proposeCloudAction(client,input,action.policy,actor));
+  return this.#write(token,csrfToken,(client,actor)=>{if(!this.#outbox)throw Error('cloud_operator_notice_unavailable');return proposeCloudAction(client,input,action.policy,actor,this.#outbox);});
  }
  async decide(token:string,csrfToken:string,input:CloudActionDecision){
   return this.#write(token,csrfToken,(client,actor)=>decideCloudAction(client,input,actor));

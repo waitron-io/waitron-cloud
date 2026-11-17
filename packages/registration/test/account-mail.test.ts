@@ -76,3 +76,9 @@ test('mailbox sign-in templates refuse malformed codes', () => {
     email:'owner@example.test',token,code:'12345',expiresAt:'2030-01-01T12:00:00.000Z',
   }),/Invalid account email/);
 });
+
+for(const locale of ['en','es'] as const)test(`operator notice renders ${locale} without customer details or approval links`,()=>{
+ const mail=accountMail(new URL('http://localhost:3000'),'operator_notice',{email:'operator@example.test',locale});
+ assert.equal(mail.subject,locale==='en'?'Waitron Cloud: action to review':'Waitron Cloud: acción para revisar');
+ assert.match(mail.text,/http:\/\/localhost:3000\/operator\/actions/);assert.doesNotMatch(mail.text,/token=|operator@example|approve|aprobar/);
+});

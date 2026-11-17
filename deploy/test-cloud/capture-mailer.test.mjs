@@ -67,3 +67,11 @@ test('email worker uses the operator origin and refuses a different runtime orig
  assert.equal(messages.length,1,'the completed worker must not deliver the misconfigured link');
  assert.match(messages[0],/https:\/\/cloud\.example\.test\/signup#token=/);assert.equal(refused,'refused');
 });
+
+test('operator notices use the local and test-capture loopback adapters',async t=>{
+ const {port,messages}=await sink(t),{createTestCaptureMailer}=await api();
+ const local=createLocalAccountMailer({port,portalOrigin:'http://localhost:3000'});
+ const capture=createTestCaptureMailer({origin:'https://waitron.local:3000',port});
+ for(const mailer of [local,capture]){assert.equal(typeof mailer.sendOperatorNotice,'function');await mailer.sendOperatorNotice({email:'operator@example.test',locale:'en'});}
+ assert.equal(messages.length,2);assert.match(messages[0],/http:\/\/localhost:3000\/operator\/actions/);assert.match(messages[1],/https:\/\/waitron.local:3000\/operator\/actions/);
+});

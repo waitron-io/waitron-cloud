@@ -117,3 +117,27 @@ test('response validation admits every pending proposal beyond fifty',async()=>{
   await page.getByRole('article').nth(51).waitFor();assert.equal(await page.getByRole('article').count(),52);
  }finally{await browser.close();}
 });
+
+for(const locale of ['en','es'] as const)test(`${locale}: operator notice delivery remains visible`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
+  const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
+  let noticeStatus='failed';
+  await page.route('https://portal.test/operator/actions',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cloud</title><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',r=>{
+   const path=new URL(r.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return r.fulfill({json:session});
+   if(path.endsWith('/operator/actions'))return r.fulfill({json:{actions,requests:[{...proposalFixture,events:[...proposalFixture.events,{kind:'notice',at:proposalFixture.createdAt,noticeStatus}]}]}});
+   return r.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+  });
+  await page.goto('https://portal.test/operator/actions');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  const article=page.getByRole('article');await article.waitFor();
+  const failed=locale==='en'?'Notice not delivered':'Aviso no entregado';assert.match(await article.innerText(),new RegExp(failed));
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.addScriptTag({content:axe.source});assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
+  if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/notice-${locale}-${theme}-${width}.png`,fullPage:true});}
+  noticeStatus='sent';await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
+  await article.getByText(locale==='en'?'Notice sent':'Aviso enviado',{exact:false}).waitFor();assert.doesNotMatch(await article.innerText(),new RegExp(failed));
+  await page.close();
+ }}finally{await browser.close();}
+});

@@ -1,3 +1,4 @@
+import type {OperatorNoticeMailer} from './email-outbox.ts';
 import type {EmailChangeMailer} from './account-security.ts';
 import type {SignInCheckMailer} from './sign-in-check.ts';
 import type {ServiceAlert,ServiceAlertMailer} from './service-alert.ts';
@@ -8,7 +9,7 @@ import type { AccountEmail, AccountNotification, AccountSignInCheck } from './ac
 import nodemailer from 'nodemailer';
 
 /** Development capture only; the SMTP host is fixed to loopback and has no production configuration. */
-export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & SignInCheckMailer & EmailChangeMailer {
+export function createLocalAccountMailer(options: {port?: number; portalOrigin?: string} = {}): SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer {
   const port = options.port ?? 1125;
   let origin: URL;
   try { origin = new URL(options.portalOrigin ?? 'http://localhost:3000'); }
@@ -31,6 +32,7 @@ export function createLocalAccountMailer(options: {port?: number; portalOrigin?:
     await send(message.email, rendered.subject, rendered.text);
   };
   return {
+    sendOperatorNotice: message => action('operator_notice', message),
     sendEmailChange: message => action('email_change', message),
     sendEmailChanged: message => action('email_changed', message),
     sendSignInCheck: message => action('sign_in_check', message),

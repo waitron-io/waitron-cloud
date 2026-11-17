@@ -1,6 +1,6 @@
 import {validServiceAlert,type ServiceAlert} from './service-alert.ts';
 import { validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
-export type AccountMailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+export type AccountMailKind = 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 const copy = {
   en: {
     verification: 'Verify your Waitron Cloud email', password_reset: 'Reset your Waitron Cloud password',
@@ -19,6 +19,10 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if (message.locale !== undefined && !validLocale(message.locale)) throw new Error('Invalid account email');
   const locale = message.locale ?? 'en';
   const text = copy[locale];
+  if(kind==='operator_notice'){
+    const subject=locale==='es'?'Waitron Cloud: acción para revisar':'Waitron Cloud: action to review';
+    return {subject,text:[subject,'',locale==='es'?'Abre la consola de operador para revisar la solicitud.':'Open the operator console to review the request.',new URL('/operator/actions',origin).href].join('\n')};
+  }
   if(kind==='email_changed'){
     const subject=locale==='en'?'Your Waitron Cloud email changed':'Tu correo de Waitron Cloud ha cambiado';
     return {subject,text:[subject,locale==='en'?'Existing sessions have ended. If you did not make this change, contact support.':'Se han cerrado las sesiones existentes. Si no has realizado este cambio, contacta con soporte.',new URL('/forgot-password',origin).href].join('\n')};

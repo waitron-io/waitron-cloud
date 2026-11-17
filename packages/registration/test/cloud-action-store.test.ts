@@ -1,3 +1,4 @@
+import {testOutbox} from './fixtures/delivery.ts';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -21,7 +22,7 @@ after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCAD
 beforeEach(async()=>{
  await resetSchema(pool);await pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[operator]);
  await pool.query("INSERT INTO cloud_credentials(account_id,email,password_hash,email_verified_at) VALUES($1,'operator@example.test','synthetic-hash',clock_timestamp())",[operator]);
- actor=await transaction(pool,c=>createSession(c,operator));await openProofWindow(pool,actor.token);actions=new CloudActions(pool,operator);
+ actor=await transaction(pool,c=>createSession(c,operator));await openProofWindow(pool,actor.token);actions=new CloudActions(pool,operator,testOutbox);
 });
 const code=(expected:string)=>(e:unknown)=>e instanceof Error&&'code'in e&&e.code===expected;
 async function propose(input=proposal){assert.equal(typeof actions.propose,'function','durable proposals are missing');return actions.propose(actor.token,actor.csrfToken,input);}
@@ -39,7 +40,7 @@ test('lostDecisionReplyKeepsIdentity: retry and polling preserve the exact appro
  assert.deepEqual(view.requests,[decided]);
  assert.equal((await pool.query("SELECT count(*) FROM cloud_action_events WHERE kind='approved'")).rows[0].count,'1');
  await assert.rejects(actions.decide(actor.token,actor.csrfToken,decision(request,'rejected')),code('conflict'));
- assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0','notices belong to slice 3');
+ assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'1','the proposal and its operator notice commit together');
 });
 
 test('changedProposalNeedsDecision: changed target/evidence creates a pending version and retires old approval',async()=>{
@@ -52,7 +53,7 @@ test('changedProposalNeedsDecision: changed target/evidence creates a pending ve
  const rejected=await actions.decide(actor.token,actor.csrfToken,decision(next,'rejected'));assert.equal(rejected.state,'rejected');
  await assert.rejects(pool.query("UPDATE cloud_action_requests SET state='pending',decided_at=NULL,approval_expires_at=NULL WHERE id=$1",[next.id]),/immutable/);
  const view=await actions.read(actor.token);assert.equal(view.requests.find(r=>r.id===first.id)?.state,'superseded');
- assert.deepEqual((await pool.query('SELECT kind FROM cloud_action_events ORDER BY created_at,id')).rows.map(r=>r.kind),['proposed','approved','superseded','proposed','rejected']);
+ assert.deepEqual((await pool.query('SELECT kind FROM cloud_action_events ORDER BY created_at,id')).rows.map(r=>r.kind),['proposed','notice','approved','superseded','proposed','notice','rejected']);
  await assert.rejects(pool.query("UPDATE cloud_action_requests SET target='rewritten' WHERE id=$1",[next.id]),/immutable/);
  await assert.rejects(pool.query("UPDATE cloud_action_events SET actor_account_id=NULL WHERE request_id=$1 AND kind='rejected'",[next.id]),/immutable/);
  const unanswered=await propose({...proposal,occurrence:'synthetic-unanswered'});
@@ -127,10 +128,9 @@ test('pending proposals remain reachable beyond a full page of newer incidents',
 
 test('delivery cleanup keeps immutable notice identity without retaining the expired outbox row',async()=>{
  const {HistoryCleanup}=await import('../src/history-cleanup.ts');
- const request=await propose(),notice=randomUUID();
- await pool.query(`INSERT INTO email_outbox(id,kind,status,created_at,expires_at,finished_at)
-  VALUES($1,'operator_notice','sent',clock_timestamp()-interval '10 days',clock_timestamp()-interval '9 days',clock_timestamp()-interval '9 days')`,[notice]);
- await pool.query("INSERT INTO cloud_action_events(id,request_id,kind,actor_account_id,notice_id) VALUES($1,$2,'notice',$3,$4)",[randomUUID(),request.id,operator,notice]);
+ const request=await propose(),notice=(await pool.query("SELECT notice_id FROM cloud_action_events WHERE request_id=$1 AND kind='notice'",[request.id])).rows[0].notice_id;
+ await pool.query(`UPDATE email_outbox SET status='sent',payload=NULL,key_id=NULL,created_at=clock_timestamp()-interval '10 days',
+  expires_at=clock_timestamp()-interval '9 days',finished_at=clock_timestamp()-interval '9 days' WHERE id=$1`,[notice]);
  const report=await new HistoryCleanup(pool).run({cutoffs:{emailDeliveries:new Date(Date.now()-86400000).toISOString()},chunkSize:100},{apply:true});
  assert.equal(report.categories.emailDeliveries?.deleted,1);
  assert.equal((await pool.query("SELECT notice_id FROM cloud_action_events WHERE kind='notice'")).rows[0].notice_id,notice);

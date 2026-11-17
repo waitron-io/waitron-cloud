@@ -104,7 +104,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   if(options.staffCertificates&&!options.leaseIssuer)throw Error('staff_certificate.installation_issuer_required');
   if(options.captures&&!options.leaseIssuer)throw Error('backup.installation_issuer_required');
   const {pool, outbox} = options;
-  const cloudActions=new CloudActions(pool,options.operatorAccountId);
+  const cloudActions=new CloudActions(pool,options.operatorAccountId,outbox);
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);

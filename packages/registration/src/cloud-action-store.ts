@@ -1,3 +1,4 @@
+import type {EmailOutbox,EmailDeliveryStatus} from './email-outbox.ts';
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
 export type CloudActionProposal={occurrence:string;actionId:string;cell:string;target:string;proposal:string;evidence:string};
@@ -17,39 +18,50 @@ function view(row:any,events:any[]=[]){return {
  proposal:row.proposal,evidence:row.evidence,state:row.state as 'pending'|'approved'|'rejected'|'superseded',effectId:row.effect_id,available:false as const,
  createdAt:row.created_at.toISOString() as string,decidedAt:row.decided_at?.toISOString()??null as string|null,
  approvalExpiresAt:row.approval_expires_at?.toISOString()??null as string|null,
- events:events.map(event=>({kind:event.kind as string,at:event.created_at.toISOString() as string})),
+ events:events.map(event=>({kind:event.kind as string,at:event.created_at.toISOString() as string,...(event.kind==='notice'?{noticeStatus:(event.delivery_status??'unknown') as keyof EmailDeliveryStatus['counts']|'unknown'}:{})})),
 };}
 export type CloudActionRequest=ReturnType<typeof view>;
 export async function readCloudActionRequest(client:PoolClient,id:string){
  const row=(await client.query('SELECT * FROM cloud_action_requests WHERE id=$1',[id])).rows[0];
  if(!row)throw new CloudActionError('conflict');
- return view(row,(await client.query('SELECT kind,created_at FROM cloud_action_events WHERE request_id=$1 ORDER BY created_at,id',[id])).rows);
+ return view(row,(await client.query('SELECT event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=$1 ORDER BY event.created_at,event.id',[id])).rows);
 }
 export async function readCloudActionRequests(client:PoolClient){
  const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE state='pending' OR id IN
   (SELECT id FROM cloud_action_requests WHERE state<>'pending' ORDER BY created_at DESC,id DESC LIMIT 50)
   ORDER BY (state='pending') DESC,created_at DESC,id DESC`)).rows;
  if(!rows.length)return [];
- const events=(await client.query('SELECT request_id,kind,created_at FROM cloud_action_events WHERE request_id=ANY($1::uuid[]) ORDER BY created_at,id',[rows.map(row=>row.id)])).rows;
+ const events=(await client.query('SELECT event.request_id,event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=ANY($1::uuid[]) ORDER BY event.created_at,event.id',[rows.map(row=>row.id)])).rows;
  return rows.map(row=>view(row,events.filter(event=>event.request_id===row.id)));
 }
 async function event(client:PoolClient,requestId:string,kind:string,actor:string){
  await client.query('INSERT INTO cloud_action_events(id,request_id,kind,actor_account_id) VALUES($1,$2,$3,$4)',[randomUUID(),requestId,kind,actor]);
 }
-export async function proposeCloudAction(client:PoolClient,input:CloudActionProposal,policy:'ask-first'|'act-and-report',actor:string){
+async function proposalWithNotice(client:PoolClient,id:string,actor:string,outbox:EmailOutbox){
+ const request=await readCloudActionRequest(client,id);
+ if(request.state!=='pending'||request.events.some(event=>event.kind==='notice'))return request;
+ const account=(await client.query(`SELECT credential.email,preferences.locale FROM cloud_accounts account
+  JOIN cloud_credentials credential ON credential.account_id=account.id LEFT JOIN account_alert_preferences preferences ON preferences.account_id=account.id
+  WHERE account.id=$1 AND account.disabled_at IS NULL AND credential.email_verified_at IS NOT NULL`,[actor])).rows[0];
+ if(!account)throw Error('cloud_operator_email_unavailable');
+ const notice=await outbox.enqueue(client,'operator_notice',{email:account.email,locale:account.locale??'en'});
+ await client.query("INSERT INTO cloud_action_events(id,request_id,kind,actor_account_id,notice_id) VALUES($1,$2,'notice',$3,$4)",[randomUUID(),id,actor,notice]);
+ return readCloudActionRequest(client,id);
+}
+export async function proposeCloudAction(client:PoolClient,input:CloudActionProposal,policy:'ask-first'|'act-and-report',actor:string,outbox:EmailOutbox){
  // All versions of one observed incident share a turn, including its first insertion.
  await client.query("SELECT pg_advisory_xact_lock(hashtext('cloud-action-occurrence'),hashtext($1))",[input.occurrence]);
  const replay=(await client.query(`SELECT id FROM cloud_action_requests WHERE occurrence=$1 AND action_id=$2 AND cell=$3 AND target=$4 AND proposal=$5 AND evidence=$6 AND policy=$7`,[input.occurrence,input.actionId,input.cell,input.target,input.proposal,input.evidence,policy])).rows[0];
- if(replay)return readCloudActionRequest(client,replay.id);
+ if(replay)return proposalWithNotice(client,replay.id,actor,outbox);
  const prior=(await client.query('SELECT * FROM cloud_action_requests WHERE occurrence=$1 ORDER BY version DESC LIMIT 1 FOR UPDATE',[input.occurrence])).rows[0];
  if(prior){
   const original=view(prior);
-  if(binding.every(key=>input[key]===original[key])&&policy===original.policy)return readCloudActionRequest(client,prior.id);
+  if(binding.every(key=>input[key]===original[key])&&policy===original.policy)return proposalWithNotice(client,prior.id,actor,outbox);
   await client.query("UPDATE cloud_action_requests SET state='superseded' WHERE id=$1",[prior.id]);await event(client,prior.id,'superseded',actor);
  }
  const id=randomUUID();await client.query(`INSERT INTO cloud_action_requests(id,occurrence,version,action_id,policy,cell,target,proposal,evidence,effect_id)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[id,input.occurrence,(prior?.version??0)+1,input.actionId,policy,input.cell,input.target,input.proposal,input.evidence,randomUUID()]);
- await event(client,id,'proposed',actor);return readCloudActionRequest(client,id);
+ await event(client,id,'proposed',actor);return proposalWithNotice(client,id,actor,outbox);
 }
 export async function decideCloudAction(client:PoolClient,input:CloudActionDecision,actor:string){
  if(!input||Object.keys(input).sort().join(',')!=='decision,requestId,version'||!uuid.test(input.requestId)||!Number.isSafeInteger(input.version)||input.version<1||!['approved','rejected'].includes(input.decision))throw new CloudActionError('invalid_input');
