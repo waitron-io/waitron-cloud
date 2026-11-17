@@ -69,7 +69,10 @@ Pickup supplements complete-looking status lists with the newest 100 unfiltered 
 without replacing known observations or bypassing admission. Controlled tests cover the
 observed ten-row omission and a failed extra read. A run omitted from the status lists
 and older than that page can still be missed; the campaign's SERVER STUCK alarm remains
-necessary. Publishing and observing a natural admission remain to be qualified.
+necessary. The [installed release and natural pickup](https://github.com/waitron-io/waitron-cloud/pull/1258#issuecomment-6936711737)
+were qualified on 17 November: all three native proofs passed, then a natural changes
+job succeeded with independent guest and runner cleanup readback. That is ordinary
+pickup evidence, not a replay of the earlier omission.
 
 A1472 bounds pickup and capacity run-list rereads at three fresh requests for count/list
 mismatches. Persistent mismatches retain the existing refusal; job pagination and routing
