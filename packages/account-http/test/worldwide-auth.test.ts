@@ -89,6 +89,7 @@ test('reissue removes old keys and sessions; disabling refuses new sign-in and e
   await assert.rejects(auth.authenticate(pending.ceremonyId, authentication), /credentials_invalid/);
   const renewed = await auth.registrationOptions(fresh!); const signedIn = await auth.register(fresh!, renewed.ceremonyId, registration);
   await auth.admin('disable', 'Admin');
+  await assert.rejects(auth.admin('reissue','Admin'), /credentials_invalid/);
   await assert.rejects(auth.session(signedIn.token), /session_unavailable/);
   const login = await auth.authenticationOptions();
   await assert.rejects(auth.authenticate(login.ceremonyId, authentication), /credentials_invalid/);

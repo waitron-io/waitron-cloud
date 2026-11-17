@@ -1,3 +1,4 @@
+-- Session columns must match identity createSession/resolveSession/endSession; rate limits share AccountRateLimiter.
 CREATE TABLE IF NOT EXISTS cloud_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL UNIQUE,

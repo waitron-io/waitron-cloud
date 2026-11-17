@@ -48,7 +48,7 @@ export class ConsoleAuth {
         await client.query('DELETE FROM console_passkeys WHERE account_id=$1', [row.id]);
         await client.query('DELETE FROM console_ceremonies WHERE account_id=$1', [row.id]);
         await client.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1 AND ended_at IS NULL', [row.id]);
-        await client.query(`UPDATE cloud_accounts SET disabled_at=CASE WHEN $2 THEN clock_timestamp() ELSE NULL END,
+        await client.query(`UPDATE cloud_accounts SET disabled_at=CASE WHEN $2 THEN clock_timestamp() ELSE disabled_at END,
           bootstrap_hash=$3,bootstrap_expires_at=CASE WHEN $2 THEN NULL ELSE clock_timestamp()+interval '10 minutes' END WHERE id=$1`,
         [row.id, action === 'disable', action === 'disable' ? null : digest(secret)]);
       }

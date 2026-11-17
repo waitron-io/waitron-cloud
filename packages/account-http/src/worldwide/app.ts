@@ -6,6 +6,7 @@ import {AccountHttpError} from '../errors.ts';
 import {readBoundedJsonObject} from '../request.ts';
 import {readSessionCookie, writeSessionCookies} from '../cookies.ts';
 import {securityHeaders, type PortalAssets} from '../portal.ts';
+import {clientAddress} from '../client-address.ts';
 import {AccountRateLimiter} from '../rate-limit.ts';
 import type {ConsoleAuth} from './auth.ts';
 import type {CountryReadiness} from './countries.ts';
@@ -42,7 +43,7 @@ export function createConsoleApp({auth, countries, rateKey, assets}: ConsoleOpti
     const read = path === '/api/console/session' || path === '/api/console/countries';
     if (c.req.method !== (read ? 'GET' : 'POST')) throw new AccountHttpError(405,'method_not_allowed');
     if (!read && c.req.header('origin') !== auth.origin) throw new AccountHttpError(403,'forbidden');
-    const ip = c.env?.incoming?.socket.remoteAddress ?? 'local';
+    const ip = clientAddress(c.env?.incoming?.socket.remoteAddress ?? '',c.req.header('x-forwarded-for'),secure ? ['127.0.0.1','::1'] : []);
     const limit = await limiter.consume([{scope:read?'console-read':'console-write',subject:ip,limit:read?120:20,windowSeconds:60}]);
     if (!limit.allowed) throw new AccountHttpError(429,'rate_limited',limit.retryAfterSeconds);
     const token = readSessionCookie(c,secure) ?? '';

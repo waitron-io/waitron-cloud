@@ -24,7 +24,9 @@ test('admin CLI bootstraps a separate database and the server starts only its co
     assert.equal((await fetch(`http://localhost:${running.port}/api/account/signup`)).status,404);
   } finally {await running.close();}
   await db.pool.query('CREATE TABLE schema_migrations(name text)');
-  await assert.rejects(startConsole({auth:new ConsoleAuth(db.pool,'http://localhost:3000'),countries:new CountryReadiness({ES:'https://es.example.test'}),rateKey:randomBytes(32).toString('hex'),port:0}),/customer database/);
+  let unexpected: Awaited<ReturnType<typeof startConsole>> | undefined;
+  try {await assert.rejects(async () => {unexpected=await startConsole({auth:new ConsoleAuth(db.pool,'http://localhost:3000'),countries:new CountryReadiness({ES:'https://es.example.test'}),rateKey:randomBytes(32).toString('hex'),port:0});},/customer database/);}
+  finally {await unexpected?.close();}
 });
 
 test('real TLS proxy redirects only apex root to Spain and admits the console host', async () => {
