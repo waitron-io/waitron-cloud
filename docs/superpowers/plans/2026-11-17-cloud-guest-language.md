@@ -15,3 +15,5 @@
 - [ ] **Proof/finish:** observe intended red then green. Run named matcher tests; through `node scripts/test-postgres.mjs exec node --test`, run remote-access `test/guest-menu.test.ts` and account-http `test/{guest-menu-server,guest-menu,guest-menu-runtime}.test.ts` using full paths; retain real database contention coverage. Run unchanged validator tests and `pnpm typecheck`; CI owns whole suites. Rewrite the hosted-menu paragraph in `docs/waitron-integration-contract.md`; record only remaining generic-variant publication in the existing `docs/backlog/guest-menu.md` bundle; update its existing `docs/backlog.md` entry without another link. No Waitron identity/labels imports, framework, provider calls or browser changes; visual checks only if markup changes.
 
 **Forecast, lines added / removed:** production 35–70 / 5–10; tests 100–160 / 1–4; support 0 / 0; docs 5–15 / 5–10.
+
+**Watcher21:29 review decision:** land this shared rule now. Waitron publishes the32-entry deduplicated header cap first; Cloud mirrors its published parser in a small follow-up. Norwegian and region/script choices remain shared-rule questions in the existing guest-menu bundle.

@@ -1,3 +1,4 @@
+// Keep header grammar aligned with Waitron’s apps/server/src/accept-language.ts.
 export function parseAcceptLanguage(
   header: string | undefined,
 ): { range: string; weight: number; index: number }[] {
