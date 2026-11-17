@@ -147,11 +147,16 @@ node packages/remote-access/src/operator-cli.ts export /path/to/export.json
 ```
 
 A cell file contains `id` (UUID), `country: "ES"`, `provider: "aws"`,
-`environment: "test"`, `suffix`, `subnet` (0–255), its WireGuard `publicKey`, and
+`environment: "test"`, `suffix`, `zone`, `subnet` (0–255), its WireGuard `publicKey`, and
 `endpoint` (`hostname:port`). A cell holds at most 64 placements. A venue file contains
 `installationId`, `cellId`, `peerPublicKey` and `port` (normally 443). Provisioning
 returns the two hostnames, private tunnel address and public gateway configuration.
 Retries with the same binding return the existing placement; conflicting bindings fail.
+
+Use the same country/environment `zone` for every cell. Each venue keeps its stored
+`v-<venue-id>.<zone>` and `staff-v-<venue-id>.<zone>` names across cell moves.
+A conflicting zone is refused; the operator CLI requires it explicitly. The core
+API can reuse the recorded zone, using the first cell’s suffix if none exists.
 
 An export file contains `cellId`, `signingKeyFile` (Ed25519 PEM), `output` and optionally
 `watch: true`. Watch mode exports every thirty seconds. The gateway reads the output
@@ -228,12 +233,11 @@ Use Let's Encrypt's staging directory first, then its production directory once
 issuance works. This changes the DNS provider only: the existing CSR checks,
 reconciler and staff exchange still decide who can receive a certificate, and the
 staff exchange still refuses production installations. Each box keeps its own key.
-The trial's wildcard address points at one gateway. A move retains the database's
-existing hostname, but certificate authorization currently derives its challenge
-name from the destination cell's suffix. A cross-suffix move can therefore write
-the wrong challenge or be refused by this adapter. That renewal path and routing
-the old hostname remain unqualified before production. The single-suffix trial
-does not exercise that move.
+The trial's wildcard address points at one gateway. Certificate authorization and
+renewal use each venue's stored assigned name, including after a cross-suffix move.
+Public DNS does not yet follow the destination cell automatically; its record
+worker and live routing qualification remain open. The single-suffix trial does
+not exercise that move.
 
 Run one scheduling and work pass, inspect redacted status, or leave the worker running:
 
@@ -321,7 +325,7 @@ production certificate-availability promise.
 ## Move a venue between existing cells
 
 Cell movement is a trusted operator workflow. It preserves the current staff and public
-hostnames, but it does not provision a cell, change public DNS or install the venue peer.
+hostnames and assigned certificate-check names, but it does not provision a cell, change public DNS or install the venue peer.
 Use one UUID as the durable operation ID and keep the installation revision returned by
 the account/control API.
 
@@ -393,7 +397,7 @@ node packages/remote-access/src/operator-cli.ts dns /path/to/custom-name.json
 The file contains `installationId`, `kind` and `hostname`. Create both returned
 CNAME records, then add the current `expectedRevision` and run the `hostname` command.
 Both CNAMEs must resolve to the assigned venue targets. Custom names cannot claim
-any cell suffix, including names reserved for venues not yet provisioned. The command refuses an already
+any country-zone or cell suffix, including names reserved for venues not yet provisioned. The command refuses an already
 claimed name or stale revision, changes the active hostname and returns the placement
 to provisioning. Reissue its certificate and update Waitron's management origin before
 exporting routes with the changed name. This initial operator flow selects one active

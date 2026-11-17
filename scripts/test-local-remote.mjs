@@ -120,8 +120,8 @@ try{
  const databaseUrl=new URL(process.env.TEST_DATABASE_URL);databaseUrl.searchParams.set('options','-c search_path='+f.db.schema);
  const operator=async(command,value)=>{const file=join(root,'operator-'+randomUUID()+'.json');await secret(file,JSON.stringify(value));return execFileSync(process.execPath,['packages/remote-access/src/operator-cli.ts',command,file],{encoding:'utf8',env:{...process.env,DATABASE_URL:databaseUrl.toString()}}).trim();};
  const placementStore=new RemoteAccessStore(f.db.pool),installations=new InstallationStore(f.db.pool,f.issuer,f.origin);
- await operator('cell',{id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'remote.example.test',subnet:17,publicKey:gatewayKey.publicKey,endpoint:'gateway.example.test:51820'});
- await operator('cell',{id:targetCellId,country:'ES',provider:'aws',environment:'test',suffix:'target.remote.example.test',subnet:18,publicKey:targetGatewayKey.publicKey,endpoint:'target-gateway.example.test:51820'});
+ await operator('cell',{id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'remote.example.test',zone:'remote.example.test',subnet:17,publicKey:gatewayKey.publicKey,endpoint:'gateway.example.test:51820'});
+ await operator('cell',{id:targetCellId,country:'ES',provider:'aws',environment:'test',suffix:'target.remote.example.test',zone:'remote.example.test',subnet:18,publicKey:targetGatewayKey.publicKey,endpoint:'target-gateway.example.test:51820'});
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
  const venues=[];
  for(let n=0;n<2;n++){

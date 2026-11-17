@@ -5,6 +5,7 @@ import {SignupStore,RegistrationStore,advancePlanConfiguration,transaction} from
 import {database} from '../../account-http/test/fixtures.ts';
 import {crypto} from 'acme-client';
 import {RemoteAccessStore} from '../src/placement.ts';
+import {guestMenuFixture} from './fixtures/guest-menu.ts';
 const publicKey=()=>randomBytes(32).toString('base64');
 let db:Awaited<ReturnType<typeof database>>,store:RemoteAccessStore;
 before(async()=>{db=await database();store=new RemoteAccessStore(db.pool);});
@@ -32,7 +33,7 @@ test('two venues share one cell with distinct stable routes, independent configu
  await assert.rejects(store.setHostname(a.installationId,'staff',custom,0,async name=>[dns.find(r=>r.name===name)!.value]),/revision_conflict/);
  const changed=await store.setHostname(a.installationId,'staff',custom,1,async name=>[dns.find(r=>r.name===name)!.value]);assert.equal(changed.staffHostname,custom);
  const [,csr]=await crypto.createCsr({commonName:custom,altNames:[custom]});
- assert.deepEqual(await store.authorizeCertificate(a.installationId,'staff',csr.toString()),{hostname:custom,dnsName:'_acme-challenge.'+one.staffHostname,revision:2});
+ assert.deepEqual(await store.authorizeCertificate(a.installationId,'staff',csr.toString()),{hostname:custom,assigned:one.staffHostname,dnsName:'_acme-challenge.'+one.staffHostname,revision:2});
  await assert.rejects(store.authorizeCertificate(b.installationId,'staff',csr.toString()),/invalid_csr/);
  await assert.rejects(store.setHostname(b.installationId,'staff',custom,1,async name=>[name.startsWith('_acme')?'_acme-challenge.'+two.staffHostname:two.staffHostname]),/hostname_conflict/);
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[a.installationId]);
@@ -91,4 +92,47 @@ test('replacement tunnel reclaim refuses production setup',async()=>{
  await registration.start(next);await registration.approveCloud(next,owner.accountId);await registration.approveLocal(next,randomUUID());const replacement=await registration.complete(next);
  await assert.rejects(store.provision(replacement.installationId,cell,publicKey()),/local_integration_only/);
  assert.deepEqual((await db.pool.query('SELECT installation_id FROM remote_placements WHERE venue_id=$1',[old.venueId])).rows,[{installation_id:prior.installationId}]);
+});
+
+const zoneCell=(suffix:string,subnet=200)=>({id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix,subnet,publicKey:publicKey(),endpoint:'gateway.example.test:51820'});
+test('a placement is named under the country zone, not the cell suffix',async()=>{
+ const f=await guestMenuFixture();try{
+  const remote=new RemoteAccessStore(f.db.pool),cell={...zoneCell('cell-a.example.test'),zone:'venues.example.test'};await remote.createCell(cell);
+  const placed=await remote.provision(f.installationId,cell.id,publicKey());
+  assert.equal(placed.staffHostname,'staff-v-'+f.venueId+'.venues.example.test');assert.equal(placed.publicHostname,'v-'+f.venueId+'.venues.example.test');
+ }finally{await f.db.close();}
+});
+test('a second cell in the same country and environment shares the zone',async()=>{
+ const f=await database();try{
+  const remote=new RemoteAccessStore(f.pool);await remote.createCell({...zoneCell('first.example.test'),zone:'venues.example.test'});
+  await remote.createCell(zoneCell('second.example.test',201));
+  await assert.rejects(remote.createCell({...zoneCell('third.example.test',202),zone:'other.example.test'}),/zone_conflict/);
+  assert.deepEqual((await f.pool.query('SELECT country,environment,suffix FROM remote_country_zones')).rows,[{country:'ES',environment:'test',suffix:'venues.example.test'}]);
+  assert.equal((await f.pool.query('SELECT count(*) FROM remote_cells')).rows[0].count,'2');
+ }finally{await f.close();}
+});
+test('a cell created without any zone records its own suffix',async()=>{
+ const f=await database();try{
+  const remote=new RemoteAccessStore(f.pool);await remote.createCell(zoneCell('fallback.example.test'));
+  assert.equal((await f.pool.query('SELECT suffix FROM remote_country_zones')).rows[0]?.suffix,'fallback.example.test');
+  for(const zone of ['bad name','x'.repeat(181)])await assert.rejects(remote.createCell({...zoneCell('invalid.example.test',201),zone}),/invalid_cell/);
+ }finally{await f.close();}
+});
+test('placement refuses zone_unavailable for a cell inserted without a zone',async()=>{
+ const f=await guestMenuFixture();try{
+  const cell=zoneCell('unrecorded.example.test');await f.db.pool.query('INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',Object.values(cell));
+  await assert.rejects(new RemoteAccessStore(f.db.pool).provision(f.installationId,cell.id,publicKey()),/zone_unavailable/);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_placements')).rows[0].count,'0');
+ }finally{await f.db.close();}
+});
+
+test('a name under the country zone or any cell suffix is refused as a custom name',async()=>{
+ const f=await guestMenuFixture();try{
+  const remote=new RemoteAccessStore(f.db.pool),first={...zoneCell('a.example.test'),zone:'venues.example.test'};await remote.createCell(first);await remote.createCell(zoneCell('b.example.test',201));
+  await remote.provision(f.installationId,first.id,publicKey());let resolves=0;
+  for(const hostname of ['x.venues.example.test','venues.example.test','x.b.example.test','staff-v-'+randomUUID()+'.venues.example.test']){
+   await assert.rejects(remote.setHostname(f.installationId,'staff',hostname,1,async()=>{resolves++;return [];}),/hostname_conflict/);
+  }
+  assert.equal(resolves,0);
+ }finally{await f.db.close();}
 });

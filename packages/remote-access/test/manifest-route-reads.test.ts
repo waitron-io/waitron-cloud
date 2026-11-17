@@ -53,7 +53,7 @@ for(const publish of [false,true])for(const mode of ['existing','test-free-paid'
    key=peer();port=9443+i;
    await store.stageMove({operationId:randomUUID(),installationId:resident.installationId,targetCellId:target.id,targetPeerPublicKey:key,port,expectedRevision:1});
   }
-  expected.push({installationId:resident.installationId,venueId:resident.venueId,staffHostname:`staff-v-${resident.venueId}.reads-${home.id}.example.test`,publicHostname:`v-${resident.venueId}.reads-${home.id}.example.test`,address,port,peerPublicKey:key});
+  expected.push({installationId:resident.installationId,venueId:resident.venueId,staffHostname:`staff-v-${resident.venueId}.reads-${target.id}.example.test`,publicHostname:`v-${resident.venueId}.reads-${target.id}.example.test`,address,port,peerPublicKey:key});
  }
  await venue(account,source);
  const measured=await measuredExport(target.id,mode,publish);
@@ -87,7 +87,7 @@ for(const publish of [false,true])for(const incoming of [false,true])for(const k
  await assert.rejects(publish?store.publishManifest(target.id,async()=>{published=true;}):store.manifest(target.id),/installation_unavailable/);
  assert.equal(published,false);
  assert.equal(Number((await db.pool.query('SELECT sequence FROM remote_cells WHERE id=$1',[target.id])).rows[0].sequence),0);
- await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[`${kind==='staff'?'staff-':''}v-${victim.venueId}.reads-${home.id}.example.test`,victim.venueId,kind]);
+ await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES($1,$2,$3,$1)',[`${kind==='staff'?'staff-':''}v-${victim.venueId}.reads-${home.id}.example.test`,victim.venueId,kind]);
  const restored=await measuredExport(target.id,'existing',publish);
  assert.equal(restored.manifest.sequence,1);
  assert.deepEqual(restored.manifest.routes.map(r=>r.installationId).sort(),[neighbour.installationId,victim.installationId].sort());

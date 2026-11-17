@@ -936,7 +936,10 @@ JSON body (the envelope carries its JSON encoding as a string):
 }
 ```
 
-Take hostname and revision from the current installation configuration. Generate the
+Take hostname from the `remote_access` service’s `configuration.staffHostname` and
+revision from the current signed installation configuration reply. The stored
+assigned name stays the same across cell moves; a custom name is returned once
+selected. Generate the
 CSR with Waitron's `cloud-certificate.ts csr STATE_DIR HOSTNAME FILE` command. Its
 signature, RSA key size and single exact hostname must pass the existing Cloud CSR
 checks. Keep the full submit body and operation ID until you know the result. After

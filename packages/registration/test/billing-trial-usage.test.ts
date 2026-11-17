@@ -31,6 +31,7 @@ async function fixture(){
   },unpaidTrial:{content_translation:'2',rota_solver:'1'}});
   await f.pool.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint)
    VALUES($1,'ES','aws','test','trial.example.test',24,$2,'gateway.example.test:51820')`,[cellId,randomUUID()]);
+  await f.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
   await f.pool.query(`INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port)
    VALUES($1,$2,$3,'10.77.24.2',$4,443)`,[venueId,await installation(venueId),cellId,randomUUID()]);
   async function coverage(){

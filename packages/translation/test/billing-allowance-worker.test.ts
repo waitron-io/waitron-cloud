@@ -36,6 +36,7 @@ async function fixture(count=2){
    const cellId=randomUUID();
    await db.pool.query(`INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint)
     VALUES($1,'ES','aws','test','worker.example.test',24,$2,'gateway.example.test:51820')`,[cellId,randomUUID()]);
+   await db.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
    await db.pool.query(`INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port)
     VALUES($1,$2,$3,'10.77.24.2',$4,443)`,[v.venueId,v.installationId,cellId,randomUUID()]);
    const from=Date.parse(trial.startedOn+'T00:00:00Z'),until=Date.parse(trial.endsOn+'T00:00:00Z');

@@ -84,7 +84,7 @@ for(const flags of [
  try{
   const file=join(directory,'config.json'),dns=join(directory,'dns.mjs'),key=join(directory,'key.pem');
   await writeFile(dns,'export default {async present(){},async remove(){}};');await writeFile(key,'local-fixture');
-  await writeFile(file,JSON.stringify(role==='operator'?{id:'11111111-1111-4111-8111-111111111111',country:'ES',provider:'aws',environment:'test',suffix:'example.test',subnet:1,publicKey:Buffer.alloc(32,1).toString('base64'),endpoint:'gateway.example.test:51820'}:{routes:[],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'fixture@example.test',accountKeyFile:key,dnsModule:dns}}));
+  await writeFile(file,JSON.stringify(role==='operator'?{id:'11111111-1111-4111-8111-111111111111',country:'ES',provider:'aws',environment:'test',suffix:'example.test',zone:'example.test',subnet:1,publicKey:Buffer.alloc(32,1).toString('base64'),endpoint:'gateway.example.test:51820'}:{routes:[],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'fixture@example.test',accountKeyFile:key,dnsModule:dns}}));
   const result=await command(`packages/remote-access/src/${role==='operator'?'operator-cli':'reconciler-cli'}.ts`,role==='operator'?['cell',file]:[file,'--status'],{...flags,DATABASE_URL:`postgres://fixture:fixture@127.0.0.1:${server.address().port}/fixture`});
   assert.equal(result.code,1);assert.equal(result.signal,null);assert.equal(result.stdout,'');
   assert.equal(connections,0,'invalid authority must be refused before a remote operation');

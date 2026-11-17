@@ -81,8 +81,9 @@ async function kinds(){return(await db.pool.query("SELECT kind FROM venue_incide
 async function remoteRoute(){
  const cell=randomUUID();
  await db.pool.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint) VALUES($1,'ES','aws','test','monitor.example.test',55,'fixture-key','gateway.example.test:51820')",[cell]);
+ await db.pool.query("INSERT INTO remote_country_zones(country,environment,suffix) SELECT country,environment,min(suffix) FROM remote_cells GROUP BY country,environment ON CONFLICT(country,environment) DO NOTHING");
  await db.pool.query("INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port) VALUES($1,$2,$3,'10.77.55.2','fixture-peer',443)",[venue.venueId,venue.installationId,cell]);
- await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES('staff.monitor.example.test',$1,'staff'),('public.monitor.example.test',$1,'public')",[venue.venueId]);
+ await db.pool.query("INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES('staff.monitor.example.test',$1,'staff','staff.monitor.example.test'),('public.monitor.example.test',$1,'public','public.monitor.example.test')",[venue.venueId]);
 }
 async function remoteObservation(service:'public'|'staff',status:'healthy'|'failed',secondsOld=0,certificateDays=31){
  const hostname=`${service}.monitor.example.test`,failure=status==='failed'?'timeout':null;
@@ -170,7 +171,7 @@ test('remote evidence records unknown, failure, recovery, certificate expiry and
  await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
  const hostnames=(await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 RETURNING *',[venue.venueId])).rows,placement=(await db.pool.query('DELETE FROM remote_placements WHERE installation_id=$1 RETURNING *',[venue.installationId])).rows[0];await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[placement.venue_id,placement.installation_id,placement.cell_id,placement.address,placement.peer_public_key,placement.port,placement.created_at]);
- for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[hostname.hostname,hostname.venue_id,hostname.kind]);
+ for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES($1,$2,$3,$4)',[hostname.hostname,hostname.venue_id,hostname.kind,hostname.assigned_hostname]);
  await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
 
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await due();await restarted.runOnce();
@@ -191,7 +192,7 @@ test('remote alerts deduplicate transitions and recheck opt-in, route and revoca
  await remoteObservation('public','failed');await due();await monitor.runOnce();const hostnames=(await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 RETURNING *',[venue.venueId])).rows,placement=(await db.pool.query('DELETE FROM remote_placements WHERE installation_id=$1 RETURNING *',[venue.installationId])).rows[0];await deliver();
  rows=await alerts();assert.equal(rows.length,4);assert.equal(rows[3].status,'cancelled');assert.equal(sent.length,2);
  await db.pool.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[placement.venue_id,placement.installation_id,placement.cell_id,placement.address,placement.peer_public_key,placement.port,placement.created_at]);
- for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind) VALUES($1,$2,$3)',[hostname.hostname,hostname.venue_id,hostname.kind]);
+ for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES($1,$2,$3,$4)',[hostname.hostname,hostname.venue_id,hostname.kind,hostname.assigned_hostname]);
  await remoteObservation('public','healthy');await due();await monitor.runOnce();await remoteObservation('public','failed');await due();await monitor.runOnce();await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await deliver();
  rows=await alerts();assert.equal(rows.length,5);assert.equal(rows[4].status,'cancelled');assert.equal(sent.length,2);
 });

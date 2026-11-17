@@ -702,21 +702,23 @@ exclude live forwarding, which belongs to Waitron A509 online ordering.
 
 ## Custom domains with one record, and names that follow the venue
 
-**Designed and approved (2026-11-17); queued to the campaign lanes, unbuilt.** The
-[design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md) covers five changes:
+The [approved design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
+has eight slices in its [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md).
+Stored country-zone names and certificate-check names now survive a cell move;
+`packages/remote-access/test/movement.test.ts` and
+`packages/remote-access/test/installation-configuration-names.test.ts` cover the
+stored names and signed reply. Remaining work:
 
-- An owner's own domain needs one CNAME.
-- Cloud's gateway answers Let's Encrypt's TLS-ALPN-01 check on port 443.
-- Every venue's names sit in the country zone, so a move or failover to another cell changes no
-  owner record and no QR link.
-- Certificates are issued, renewed and installed with nobody acting, and owners get no
-  certificate-expiry email.
-- When an owner's record stops pointing at Cloud, they are told in their own language.
+- Move each assigned name’s DNS record to the current cell.
+- Reduce an owner’s custom name to one CNAME, with the gateway answering
+  Let’s Encrypt’s TLS-ALPN-01 check on port 443.
+- Issue, renew and install every certificate automatically, removing owner
+  certificate-expiry emails.
+- Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 
-The [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md) has eight pull requests.
-Waitron's part (the box takes its staff name from Cloud) is a separate plan in Waitron, after Cloud
-PR 1. Live Let's Encrypt, Route 53, production keys and multi-gateway coordination stay production
-gates.
+Waitron’s part, taking its staff name from Cloud, is a separate plan in Waitron
+that can start after Cloud PR1. Live Let’s Encrypt, Route53, production keys and
+multi-gateway coordination remain production gates.
 
 ## Launch platform work, in priority order
 
