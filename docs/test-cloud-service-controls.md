@@ -95,9 +95,10 @@ venue level and refuses production, revoked and replaced installations.
 For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`.
 Only `command` is needed. They return `{"stopped":true}` or `{"stopped":false}`.
 Stopping affects the entire test box-email relay and uses its existing sending
-control. Cloud’s own signup and password-reset mail use a separate worker. Box staff
+control. Cloud’s own signup and password-reset mail use an independent queue and
+worker loop in the same email process. Box staff
 password-reset mail is part of this relay and stops with it. Resuming
-creates no grant and supplies no sending adapter.
+creates no grant.
 
 To approve a paired box, pass one private JSON object with `command` set to
 `relay-approve` and these existing core inputs:
@@ -112,7 +113,8 @@ The fixed synthetic consent version is `local-v1`. Invented versions refuse.
 The shared fixture policy has three units per hour, version `local-v1` and
 epoch `2026-01-01T00:00:00.000Z`, refusing excess and retaining debits.
 Approval only validates this policy; it reserves no allowance and sends no mail.
-The later test relay startup must use these same settings when reserving sends.
+Test relay startup uses these same settings when reserving sends. You can send
+three box emails per hour per approved grant; Cloud account mail uses its own queue.
 You cannot choose a policy through this command.
 
 The statement must already have completed the signed configuration exchange.
@@ -130,6 +132,20 @@ statements in mode-0600 input files or pipe them privately over SSH. Never put t
 in command arguments, repository files or logs. A failure prints a fixed error and
 exits unsuccessfully without echoing the input.
 
-These commands manage the existing local core. They do not start a relay worker,
-send real mail or deploy the Amazon machine. SES startup, feedback and suppression
-qualification remain separate work.
+The configured-HTTPS layout shown above starts the relay with the account and email
+processes. You can run that layout locally with synthetic certificates to rehearse
+the workflow; its Compose files create no Amazon resources. The ordinary home-network
+layout leaves the relay unavailable. After approval, the paired box submits to
+`POST /v1/installations/email/submit`, and the email process delivers to Mailpit.
+Read the private inbox as described in the [test Cloud guide](test-cloud.md).
+
+Keep `relay-keys.json` from the private configuration volume with your saved runtime
+configuration. It contains separate encryption, replay, suppression and recipient-counter
+keys and stays outside database backups. Startup creates it only when no relay history
+exists. If it is missing after a database restore, the relay refuses work; restore
+the saved file with mode `0600`, then restart the account and email processes.
+An invalid or unreadable file is also refused. Account access and Cloud account mail
+remain available while relay startup is refused.
+
+Real SES delivery, its feedback and suppression qualification, the joint box workflow
+and the Amazon machine remain separate work.
