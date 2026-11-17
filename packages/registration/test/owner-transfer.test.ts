@@ -215,3 +215,13 @@ test('a pending venue connection loses its former owner approval at handover',as
  await assert.rejects(pairing.complete({...claims,action:'complete',code:'',organisationId:sender.organisationId,legalBusinessId:sender.legalBusinessId}),/permission_denied|pairing_unavailable/);
  assert.equal((await db.pool.query('SELECT count(*) FROM installations WHERE public_key=$1',[claims.publicKey])).rows[0].count,'0');
 });
+
+
+test('a security change leaves an expired offer expired without queuing cancellation notices',async()=>{
+ const sender=await signedAccount(),recipient=await signedAccount(),store=new OwnerTransferStore(db.pool,db.outbox),offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);
+ await db.pool.query("UPDATE owner_transfers SET created_at=clock_timestamp()-interval '3 days',expires_at=clock_timestamp()-interval '2 days' WHERE id=$1",[offer.id]);
+ await new AccountSecurityStore(db.pool,db.outbox).password(sender.token,sender.csrfToken,'Another sufficiently long password');
+ assert.equal((await store.list(recipient.token)).find(row=>row.id===offer.id)?.state,'expired');
+ const messages=(await db.pool.query("SELECT * FROM email_outbox WHERE kind='owner_transfer' AND payload IS NOT NULL")).rows.map(row=>db.outbox.open(row)).filter(message=>(message as {offerId:string}).offerId===offer.id);
+ assert.deepEqual(messages.map(message=>(message as {event:string}).event),['invitation']);
+});

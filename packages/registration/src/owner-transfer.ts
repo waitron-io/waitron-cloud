@@ -96,10 +96,10 @@ async function notices(client:PoolClient,outbox:EmailOutbox,offer:Offer){
 // Security writers already hold this account; never take the other participant’s account here.
 export async function cancelOwnerTransfers(client:PoolClient,accountId:string,outbox?:EmailOutbox,initialEnrolment=false){
  let preserved=false;
- const orgs=(await client.query("SELECT DISTINCT organisation_id FROM owner_transfers WHERE state='pending' AND (sender_id=$1 OR recipient_id=$1) ORDER BY organisation_id",[accountId])).rows;
+ const orgs=(await client.query("SELECT DISTINCT organisation_id FROM owner_transfers WHERE state='pending' AND expires_at>clock_timestamp() AND (sender_id=$1 OR recipient_id=$1) ORDER BY organisation_id",[accountId])).rows;
  for(const row of orgs){
   await client.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[row.organisation_id]);
-  const offers:Offer[]=(await client.query("SELECT * FROM owner_transfers WHERE organisation_id=$1 AND state='pending' AND (sender_id=$2 OR recipient_id=$2) FOR UPDATE",[row.organisation_id,accountId])).rows;
+  const offers:Offer[]=(await client.query("SELECT * FROM owner_transfers WHERE organisation_id=$1 AND state='pending' AND expires_at>clock_timestamp() AND (sender_id=$2 OR recipient_id=$2) FOR UPDATE",[row.organisation_id,accountId])).rows;
   for(const offer of offers){
    if(initialEnrolment&&offer.recipient_id===accountId&&offer.recipient_needs_enrolment){preserved=true;await client.query('UPDATE owner_transfers SET recipient_needs_enrolment=false WHERE id=$1',[offer.id]);continue;}
    await client.query("UPDATE owner_transfers SET state='cancelled' WHERE id=$1",[offer.id]);
