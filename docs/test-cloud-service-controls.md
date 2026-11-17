@@ -41,7 +41,7 @@ pages unavailable and blocks further publication. Enabling after disabling retur
 must publish again, so you cannot accidentally restore an old menu. Production
 venues refuse the command.
 
-For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`,
+For box email, the commands are `relay-stop`, `relay-resume` and `relay-status`.
 Only `command` is needed. They return `{"stopped":true}` or `{"stopped":false}`.
 Stopping affects the entire test box-email relay and uses its existing sending
 control. Cloud’s own signup and password-reset mail use a separate worker. Box staff
@@ -56,10 +56,13 @@ To approve a paired box, pass one private JSON object with `command` set to
   `consentVersion`, `managementOrigin` and `expiresAt`.
 - `statement`: the box's current signed configuration envelope, obtained through
   the [private box handoff](transactional-email-relay-contract.md#discover-the-grant-over-the-existing-configuration-request).
+
 The fixed synthetic consent version is `local-v1`. Invented versions refuse.
-The shared test settings allow three units per hour, with version `local-v1`
-and epoch `2026-01-01T00:00:00.000Z`, refusing excess and retaining debits.
-These are local fixture settings; the command accepts no policy choice.
+The shared fixture policy has three units per hour, version `local-v1` and
+epoch `2026-01-01T00:00:00.000Z`, refusing excess and retaining debits.
+Approval only validates this policy; it reserves no allowance and sends no mail.
+The later test relay startup must use these same settings when reserving sends.
+You cannot choose a policy through this command.
 
 The statement must already have completed the signed configuration exchange.
 It expires after 60 seconds; obtain a fresh one rather than replaying stale

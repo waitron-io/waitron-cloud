@@ -12,6 +12,7 @@ import {RelayMessages} from '../../packages/registration/src/relay-messages.ts';
 import {RelayWorker} from '../../packages/registration/src/relay-worker.ts';
 import {connectedVenue, database} from '../../packages/translation/test/fixtures.ts';
 import {bootstrapTestCloud} from './bootstrap.mjs';
+import {testRelaySettings} from './relay-settings.mjs';
 
 // Paid status must create neither consent nor a grant; revocation must win before SMTP.
 test('both plans need fixture-bound TLS origin evidence and explicit relay consent at handoff', async () => {
@@ -31,7 +32,7 @@ test('both plans need fixture-bound TLS origin evidence and explicit relay conse
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const managementOrigin = `https://waitron.local:${server.address().port}`;
-    const grants = {mode: 'local-proof', consentVersion: 'local-v1', policy: {version: 'local-v1', units: 3, periodSeconds: 3600, epoch: '2026-01-01T00:00:00.000Z', excess: 'refuse', debit: 'retain'},
+    const grants = {mode: 'local-proof', ...testRelaySettings,
       async verifyOrigin(input) {
         assert.equal(input.installationId, boundInstallation); assert.equal(input.managementOrigin, managementOrigin);
         const evidence = await new Promise((resolve, reject) => {
