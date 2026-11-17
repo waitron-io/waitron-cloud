@@ -1,6 +1,7 @@
 import {cloudActionDemoEnabled} from '../../packages/registration/src/cloud-action-worker.ts';
 import {startCloudActionDemo} from './cloud-action-demo.mjs';
 import {openTestCaptureRuntime} from './service-runtime.mjs';
+import {openTestRelayRuntime} from './relay-runtime.mjs';
 import {createRequire} from 'node:module';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '../../packages/registration/src/index.ts';
@@ -49,7 +50,10 @@ try {
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
-    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    let relay;
+    try{relay=await openTestRelayRuntime({pool,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
+    catch{console.error('Test relay startup failed; restore private keys and check schema');}
+    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();

@@ -1,9 +1,9 @@
 import {createRequire} from 'node:module';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {createLeaseIssuer,createLeaseTrust,parsePlanMode,transaction} from '../../packages/registration/src/index.ts';
+import {createLeaseIssuer,parsePlanMode,transaction} from '../../packages/registration/src/index.ts';
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {RelayControl} from '../../packages/registration/src/relay-control.ts';
-import {testRelaySettings} from './relay-settings.mjs';
+import {testRelayGrantConfig} from './relay-runtime.mjs';
 import {readVenuePermissions} from '../../packages/registration/src/venue-service-permissions.ts';
 import {openPlanStorage,testStorageOptions} from './service-runtime.mjs';
 import {RemoteAccessStore} from '../../packages/remote-access/src/placement.ts';
@@ -64,9 +64,7 @@ export async function executeTestServiceCommand({pool,issuer,origin,environment,
   }
   case 'relay-approve':{
    if(!input.statement||!input.session||!input.approval||!issuer)throw Error('test_cloud.service_command');
-   const config={mode:'local-proof',...testRelaySettings,
-    testOrigin:{environment:'test',origin,trusted:createLeaseTrust(issuer)},
-    verifyOrigin:async()=>{throw Error('origin_unverified');}};
+   const config=testRelayGrantConfig({issuer,origin});
    const grant=await new RelayGrantStore(pool,config,'test-venue-levels').approve(input.session.token,input.session.csrfToken,input.approval,input.statement);
    return {id:grant.id,installationId:grant.installationId,revision:grant.revision,expiresAt:grant.expiresAt,enabled:grant.enabled};
   }

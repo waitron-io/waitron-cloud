@@ -10,3 +10,5 @@
 4. **Documentation and delivery.** Update `docs/test-cloud-service-controls.md` with the selected local rehearsal layout, three-emails/hour limit, private key custody, missing-key refusal and remaining live gates. Coordinate G's active handover before touching docs/test-cloud.md/backlog.md; the TEST-CLOUD-AWS entry must retain only unfinished work. Tell lane F the existing endpoint and which running layout accepts it once landed. Finish-branch reviews, exact-head CI, authorised land-branch and exact-merge CI evidence complete this slice.
 
 **Size/time.** Production +180/−15; tests +220/−0; test support0; prose +50/−3 including this plan: about468changedlines,3workinghours to open the PR. Stop for watcher opinion beyond702lines. The memory measurement is evidence, not advance permission to raise the container limit.
+
+**17 November 08:23 watcher clearance.** Build the smaller real local startup cut after Claude’s read, with no further plan read. The SES sender moves to the following slice. Shared guide/backlog edits stay held while G’s D608 branch is open; service-controls guide changes are permitted. This is watcher clearance, not owner design approval.
