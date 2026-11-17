@@ -146,7 +146,9 @@ Dependencies: accepted Waitron currently-paired-box/local-admin interface (name 
 #### Box approval contract: Lane F and Cloud
 
 Watcher-commissioned on 17 November at 08:32; separately drafted by Sol-high and read once by Claude. Its source-only corrections are incorporated; no owner approval of this contract is claimed.
-Persist the account's one-organisation restriction across every authority reader. Password/app/passkey/recovery-code sign-in and mailbox-only password reset never widen or lift it. A different-organisation recovery remains pending the watcher's scope decision; do not implement widening.
+Persist the account's one-organisation restriction across every authority reader. Password/app/passkey/recovery-code sign-in and mailbox-only password reset never widen or lift it. Watcher 17 November 08:52 settled the conflict: refuse creating or completing a recovery for organisation B while this account is restricted to A; preserve A and make no recovery changes.
+
+The verified browser explains refusal: **EN:** “This account is limited to another business. Use a paired box from that business to recover access.” **ES:** «Esta cuenta está limitada a otro negocio. Usa un equipo vinculado de ese negocio para recuperar el acceso». If no usable box for A exists, retain the design's unavailable result and no staff/manual override.
 
 Cloud creates a fresh recovery UUID `requestId` for its mailbox challenge. After proving that mailbox for this request, the recovering browser chooses an organisation it owns and a venue in it; only then does Cloud freeze `R` and expose it to that pairing:
 `{requestId,accountId,email,organisationId,legalBusinessId,venueId,installationId,publicKey,environment,countryCode,expiresAt}`.
@@ -169,7 +171,7 @@ Hold existing authority locks through consumption; security/reset changes invali
 Consume request/mailbox proof once with restricting the same account, ending lost proofs/sessions, queuing notice to its verified address and issuing only the parent's enrollment-only session to that browser. Require fresh enrollment before organisation access.
 Replay creates no new session or authority. Pending/refused/unavailable/expired requests grant no access or membership; pending state alone is no usable recovery outcome.
 
-Lane F owns actual-administrator versus manager/browser refusal and changed pairing/request after waits; Cloud's store owns mailbox plus guarded decision, request/scope/current-pairing bindings, terminal refusal and replay/expiry. The parent's authority/session tests own second-organisation denial and confinement across every later sign-in/reset path; routes own distinct answers.
+Lane F owns actual-administrator versus manager/browser refusal and changed pairing/request after waits; Cloud's store owns mailbox plus guarded decision, request/scope/current-pairing bindings, terminal refusal and replay/expiry. Include the A-restricted/B-box refusal case, retaining A and making no recovery effects. The parent's authority/session tests own second-organisation denial and confinement across every later sign-in/reset path; routes own distinct answers.
 
 Source read only: Cloud `packages/registration/src/{installation-proof,installations,pairing,owner-transfer}.ts` and migrations 001–003.
 Waitron pin `e4351b9d2ee5399c17127f02d4435644a327371b`: `apps/server/src/{cloud-api,cloud-client,cloud-installation,cloud-signed-request}.ts`, `packages/identity/src/{authority,manager-login,fresh-sign-in}.ts` and `packages/contract/src/signing/installation-proof.ts`.
