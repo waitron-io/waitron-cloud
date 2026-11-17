@@ -7,7 +7,6 @@ import {createTestCaptureMailer} from './capture-mailer.mjs';
 import {checkConsumerDatabase,loadRuntime} from '../local-stack/runtime.mjs';
 import {testRuntimeEnvironment} from './runtime.mjs';
 import {parsePlanMode} from '../../packages/registration/src/organisation-plans.ts';
-import {openTestRelayRuntime} from './relay-runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 export async function runTestEmailQueues({account,relay,signal,once=false}){
  if(once){
@@ -31,6 +30,7 @@ export async function runTestEmailWorker({directory='/run/local-stack',root='/ap
   const worker=new EmailWorker(pool,outbox,createTestCaptureMailer({origin:environment.CLOUD_PORTAL_ORIGIN,port:1025},process.env.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));
   const mode=parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS);let relayRuntime;
   const relay=mode==='test-venue-levels'?{async runOnce(){
+   const {openTestRelayRuntime}=await import('./relay-runtime.mjs');
    relayRuntime??=await openTestRelayRuntime({pool,directory,issuer:createLeaseIssuer(config.installation.issuerKey),origin:environment.CLOUD_PORTAL_ORIGIN,mode});
    return relayRuntime.worker.runOnce();
   }}:undefined;

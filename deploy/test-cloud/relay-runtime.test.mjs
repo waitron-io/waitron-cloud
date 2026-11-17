@@ -156,3 +156,15 @@ test('actual email entrypoint drains account mail before reporting lost relay ke
  const inbox=await fetch(`${process.env.MAILPIT_TEST_URL}/api/v1/messages?limit=1000`);
  assert.equal((await inbox.json()).messages.filter(mail=>mail.To.some(to=>to.Address===recipient)).length,1);
 });
+
+// Restoring an older database beside a newly generated file must retain unknown-key refusal.
+test('regenerated keys cannot silently accept restored suppression history',async t=>{
+ const {openTestRelayRuntime}=await api(),{db,context}=await setup(t),original=await openTestRelayRuntime(context);
+ await original.worker.suppress('blocked@example.test');
+ const blocked=(await db.pool.query('SELECT key_id,digest FROM relay_suppressions')).rows[0];
+ await db.pool.query('DELETE FROM relay_suppressions');await unlink(join(context.directory,'relay-keys.json'));
+ const regenerated=await openTestRelayRuntime(context);
+ await db.pool.query('INSERT INTO relay_suppressions(key_id,digest) VALUES($1,$2)',[blocked.key_id,blocked.digest]);
+ await assert.rejects(regenerated.worker.suppress('another@example.test'),/relay_unavailable/);
+ assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_suppressions')).rows[0].n,1);
+});

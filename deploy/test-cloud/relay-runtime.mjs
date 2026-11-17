@@ -31,7 +31,7 @@ async function loadKeys(pool,directory){
    OR EXISTS(SELECT 1 FROM relay_reservations) OR EXISTS(SELECT 1 FROM relay_suppressions)
    OR EXISTS(SELECT 1 FROM relay_bounds_windows) OR EXISTS(SELECT 1 FROM relay_bounds_policy) AS present`);
   if(history.rows[0].present)throw Error('test_cloud.relay_keys');
-  const keys={version:1};for(const purpose of purposes)keys[purpose]={activeKeyId:'local-v1',keys:{'local-v1':randomBytes(32).toString('hex')}};
+  const keys={version:1};for(const purpose of purposes){const id=randomUUID();keys[purpose]={activeKeyId:id,keys:{[id]:randomBytes(32).toString('hex')}};}
   await writeFile(temporary,JSON.stringify(keys),{mode:0o600});await lease.assertOwned();await rename(temporary,path);return keys;
  }finally{await rm(temporary,{force:true});await lease.release();}
 }
