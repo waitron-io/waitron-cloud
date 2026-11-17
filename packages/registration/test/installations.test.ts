@@ -149,9 +149,9 @@ test('private-origin approval rejects unsigned, mismatched, stale and unleased s
   const operationId=randomUUID(),good=request(a,'configuration',renewed.lease,body,operationId);
   await store.execute('configuration',good);
   const otherLease=(await store.execute('renew',request(b))).lease;assert.ok(otherLease);
-  const cases=[request(a,'configuration',otherLease,body,operationId),undefined,{...good,signature:'invalid'},request(a,'configuration',undefined,body),
-    request(a,'configuration',renewed.lease,body,randomUUID(),Date.now()-120000),
-    request(a,'report',renewed.lease,body),request(b,'configuration',renewed.lease,body),
+  const cases=[request(a,'configuration',otherLease,body,operationId),undefined,{...good,signature:'invalid'},request(a,'configuration',undefined,body,operationId),
+    request(a,'configuration',renewed.lease,body,operationId,Date.now()-120000),
+    request(a,'report',renewed.lease,body,operationId),request(b,'configuration',renewed.lease,body,operationId),
     request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin:'https://other.local'}),
     request(a,'configuration',renewed.lease,{servicesVersion:2})];
   for(const proof of cases)await assert.rejects(grants.approve(session.token,session.csrfToken,input,proof),/origin_unverified/);
@@ -173,6 +173,7 @@ test('test-only origin exception excludes public, loopback, link-local and non-H
   const grants=privateRelayStore();
   for(const managementOrigin of ['https://example.test','https://127.0.0.1','https://169.254.1.2','https://172.15.255.255','https://172.32.0.1','https://[fe80::1]','https://localhost','https://local','https://waitron.local.example','http://192.168.1.2','https://waitron.local/path','https://.local','https://a..local','https://-.local','https://_x.local']){
     const proof=request(a,'configuration',renewed.lease,{servicesVersion:2,managementOrigin});
+    await assert.rejects(store.execute('configuration',proof),/invalid_proof/);
     await assert.rejects(grants.approve(session.token,session.csrfToken,privateApproval(managementOrigin),proof));
   }
   assert.equal((await db.pool.query('SELECT count(*)::int AS n FROM relay_grants')).rows[0].n,0);

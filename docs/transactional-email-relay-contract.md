@@ -105,16 +105,17 @@ renewal keep their existing shapes.
 For test-only private-origin approval, the box signs the canonical body
 `{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}`
 (keys in that order) on the same endpoint. Configuration authenticates the signed
-statement and returns the same version-2 reply; it does not turn email on. The box-side helper must submit that request and hand the same current envelope
+statement and returns the same version-2 reply; it does not turn email on. The box-side helper must submit that request and hand the same current statement and operation
 to the trusted owner tool through private standard input (for example over the
 owner’s SSH session); Cloud offers no endpoint to retrieve it. This handoff is
-part of the unbuilt box/tool integration. The trusted owner tool supplies it as
+part of the unbuilt box/tool integration. It must finish while the machine proof is fresh (within 60 seconds of signing);
+otherwise obtain a fresh proof. The trusted owner tool supplies the envelope as
 the fourth argument to `RelayGrantStore.approve`, with `testOrigin` configured
 with environment `test`, the Cloud origin and its trusted lease keys. The normal
 owner session, consent, installation authority, grant revision and expiry checks
 still apply. Approval requires the matching existing configuration operation digest and
-checks the current signature and lease again after lock waits. A signed statement
-that never completed that exchange is refused. The existing grant expiry is the owner-selected end of this test exception;
+checks the current signature and lease again after lock waits. The action, body and operation ID must match; lease renewal and re-signing
+may retain that operation identity. An unrecorded statement is refused. The existing grant expiry is the owner-selected end of this test exception;
 no HTTPS challenge is claimed. No public approval route or normal-startup wiring
 is added. A box-side caller and the owner service command remain separate work.
 

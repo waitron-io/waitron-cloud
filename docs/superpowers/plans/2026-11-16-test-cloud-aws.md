@@ -32,7 +32,7 @@ Owner command and startup composition are the following slice.
 
 **17 November 02:35 watcher correction after both run-it reviews.** Keep the
 configuration-body route for lane F, restrict it to test venues, and require its
-existing installation operation digest before approval. A signed envelope that
-never completed configuration is refused; no record or field is added. The
+existing installation operation digest before approval. An unrecorded configuration statement
+is refused; no record or field is added. The
 box/tool handoff must pass the current envelope privately to the owner tool; it
 is not a Cloud retrieval endpoint. The watcher cleared this correction, not the owner.

@@ -13,6 +13,7 @@ export function privateManagementOrigin(value:unknown):value is string {
     return a===10||(a===172&&b!==undefined&&b>=16&&b<=31)||(a===192&&b===168);
   } catch {return false;}
 }
+// The caller holds test-only owner and installation authority; this checks the signed statement.
 export function testRelayOriginProof(config:TestRelayOrigin,installation:{id:string;venue_id:string;environment:string;public_key:string},managementOrigin:string,envelope:SignedEnvelope,time:number):void {
   if(!privateManagementOrigin(managementOrigin))throw Error('origin_unverified');
   const c=verifyMachine(envelope,installation.public_key,config.origin,'configuration',time);
