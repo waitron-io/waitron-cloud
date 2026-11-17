@@ -4,7 +4,6 @@ import test from 'node:test';
 import {existsSync,mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {randomUUID} from 'node:crypto';
 const root=new URL('../../',import.meta.url).pathname;
 test('LAN override replaces ports, isolates private state and keeps independent launch gates off',async()=>{
  assert.ok(existsSync(new URL('compose.yaml',import.meta.url)),'LAN override is missing');
@@ -72,18 +71,28 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
  assert.ok(value.services.proxy.healthcheck.test.some(v=>v.includes('cloud.example.test')));
 });
 
-// Docker's real template engine must accept a state with no optional Health key.
-test('driver inventory reads containers without a HEALTHCHECK without losing OOM status',async t=>{
- const {inventory,execute}=await import('../../scripts/test-cloud-deploy.mjs');
- const directory=mkdtempSync(join(tmpdir(),'cloud-inventory-')),tag='cloud-inventory:'+randomUUID();let id;
- t.after(()=>{try{if(id)execFileSync('docker',['rm',id]);}finally{try{execFileSync('docker',['image','rm',tag]);}finally{rmSync(directory,{recursive:true,force:true});}}});
- writeFileSync(join(directory,'Dockerfile'),'FROM scratch\nCMD ["/unused"]\n');
- execFileSync('docker',['build','--network','none','--tag',tag,directory],{stdio:'pipe'});
- id=execFileSync('docker',['create','--network','none',tag],{encoding:'utf8'}).trim();
- const value=await inventory(async(command,args,options)=>{
+// Exercise the emitted template through Docker, including the health guard's input.
+test('driver inventory preserves absent, healthy and unhealthy states for its resource guard',{timeout:30000},async t=>{
+ const {inventory,execute,resourceGuard}=await import('../../scripts/test-cloud-deploy.mjs'),ids=[];
+ const docker=async args=>(await execute('docker',args)).trim();
+ t.after(async()=>{if(ids.length)await docker(['rm','--force',...ids]);});
+ const absent=await docker(['create','--network','none','--no-healthcheck','--entrypoint','sh','postgres:18-alpine','-c','sleep 60']);ids.push(absent);
+ const watched=await docker(['create','--network','none','--memory','32m','--read-only','--tmpfs','/tmp:size=1m','--health-cmd','test ! -f /tmp/unhealthy','--health-interval','100ms','--health-retries','1','--entrypoint','sh','postgres:18-alpine','-c','sleep 60']);ids.push(watched);
+ const read=()=>inventory(async(command,args,options)=>{
   if(command==='ss'||command==='lsof')return '';
-  if(command==='docker'&&args[0]==='ps')return JSON.stringify({ID:id,Names:'inventory-fixture',State:'created',Labels:'com.docker.compose.project=waitron-cloud-test'});
+  if(command==='docker'&&args[0]==='ps')return [
+   {ID:absent,Names:'inventory-fixture',State:'created',Labels:'com.docker.compose.project=waitron-cloud-test'},
+   {ID:watched,Names:'waitron-app-1',State:'running',Labels:'com.docker.compose.project=waitron'}
+  ].map(row=>JSON.stringify(row)).join('\n');
   return execute(command,args,options);
  });
- assert.deepEqual(value.containers,[{id,project:'waitron-cloud-test',name:'inventory-fixture',state:'created',oom:false,health:null}]);
+ const wait=async status=>{for(let n=0;n<80;n++){
+  if(JSON.parse(await docker(['inspect','--format','{{json .State}}',watched])).Health?.Status===status)return;
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }assert.fail('owned container never became '+status);};
+ await docker(['start',watched]);await wait('healthy');const before=await read();
+ assert.deepEqual(before.containers,[{id:absent,project:'waitron-cloud-test',name:'inventory-fixture',state:'created',oom:false,health:null},{id:watched,project:'waitron',name:'waitron-app-1',state:'running',oom:false,health:'healthy'}]);
+ await docker(['exec',watched,'touch','/tmp/unhealthy']);await wait('unhealthy');const after=await read();
+ assert.equal(after.containers.find(row=>row.id===watched).health,'unhealthy');
+ assert.throws(()=>resourceGuard({...before,availableMiB:5000,freeGiB:30},{...after,availableMiB:5000,freeGiB:30}),/test_cloud.waitron_health/);
 });
