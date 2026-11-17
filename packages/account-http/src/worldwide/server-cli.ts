@@ -21,10 +21,10 @@ export async function loadConsoleAssets(directory: string): Promise<PortalAssets
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const pool = new Pool({connectionString:process.env.DATABASE_URL});
   try {
-    if (!process.env.DATABASE_URL || !process.env.CONSOLE_ORIGIN || !process.env.CONSOLE_RATE_KEY || !process.env.CONSOLE_COUNTRIES) throw new Error('Missing console configuration');
+    if (!process.env.DATABASE_URL || !process.env.CONSOLE_ORIGIN || !process.env.CONSOLE_RATE_KEY || !process.env.CONSOLE_COUNTRIES || !process.env.CLOUD_PORTAL_ASSETS_DIR) throw new Error('Missing console configuration');
     const running = await startConsole({auth:new ConsoleAuth(pool,process.env.CONSOLE_ORIGIN),
       countries:new CountryReadiness(JSON.parse(process.env.CONSOLE_COUNTRIES)),rateKey:process.env.CONSOLE_RATE_KEY,
-      assets:await loadConsoleAssets(process.env.CONSOLE_ASSETS ?? 'apps/portal/dist'),port:Number(process.env.PORT ?? '3000'),hostname:'0.0.0.0'});
+      assets:await loadConsoleAssets(process.env.CLOUD_PORTAL_ASSETS_DIR),port:Number(process.env.PORT ?? '3000'),hostname:'0.0.0.0'});
     console.log('Console listening');
     const stop = async () => {await running.close();await pool.end();};
     process.once('SIGTERM',() => {void stop();});process.once('SIGINT',() => {void stop();});

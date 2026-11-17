@@ -35,6 +35,7 @@ spec:
               valueFrom: {secretKeyRef: {name: worldwide-console, key: database-url}}
             - name: CONSOLE_RATE_KEY
               valueFrom: {secretKeyRef: {name: worldwide-console, key: rate-key}}
+            - {name: CLOUD_PORTAL_ASSETS_DIR, value: /app/apps/portal/dist}
             - {name: CONSOLE_ORIGIN, value: 'https://console.waitron.io'}
             - {name: CONSOLE_COUNTRIES, value: '{"ES":"https://es.waitron.io"}'}
           ports: [{name: api, containerPort: 3000}]

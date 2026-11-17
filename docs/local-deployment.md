@@ -487,6 +487,7 @@ your local console database and `CONSOLE_RATE_KEY` to a fresh 32-byte hexadecima
 value, kept outside the repository. Then run:
 
 ```sh
+CLOUD_PORTAL_ASSETS_DIR=apps/portal/dist \
 CONSOLE_ORIGIN=http://localhost:3000 \
 CONSOLE_COUNTRIES='{"ES":"https://country.example.test"}' \
 node packages/account-http/src/worldwide/server-cli.ts

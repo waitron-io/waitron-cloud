@@ -65,3 +65,23 @@ test('an empty dedicated database can start before the first admin is provisione
   try {assert.equal((await fetch(`http://localhost:${port}/api/health/ready`)).status,200);}
   finally {await running.close();}
 });
+test('console CLI serves the explicitly configured asset directory', async t => {
+  const {spawn} = await import('node:child_process'); const {mkdtemp,writeFile,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os'); const {join}=await import('node:path');
+  const db=await worldwideDatabase();t.after(()=>db.close()); const port=await consolePort();
+  const directory=await mkdtemp(join(tmpdir(),'console-assets-'));
+  await writeFile(join(directory,'worldwide.js'),'// configured console bundle'); await writeFile(join(directory,'app.css'),'/* configured console styles */');
+  const child=spawn(process.execPath,[new URL('../src/worldwide/server-cli.ts',import.meta.url).pathname],{env:{...process.env,
+    DATABASE_URL:db.connection.connectionString,PORT:String(port),CONSOLE_ORIGIN:`http://localhost:${port}`,CONSOLE_RATE_KEY:'ab'.repeat(32),
+    CONSOLE_COUNTRIES:'{"ES":"https://es.example.test"}',CLOUD_PORTAL_ASSETS_DIR:directory},stdio:['ignore','pipe','pipe']});
+  const exited=new Promise<void>(resolve=>child.once('close',()=>resolve()));let diagnostic='';child.stderr.on('data',chunk=>{diagnostic+=String(chunk);});
+  try {
+    await new Promise<void>((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error('Console startup timeout: '+diagnostic)),5000);let output='';
+      child.stdout.on('data',chunk=>{output+=String(chunk);if(output.includes('Console listening')){clearTimeout(timer);resolve();}});
+      child.once('error',error=>{clearTimeout(timer);reject(error);});child.once('exit',()=>{clearTimeout(timer);reject(new Error('Console exited: '+diagnostic));});
+    });
+    const script=await fetch(`http://localhost:${port}/worldwide.js`);assert.equal(script.status,200);assert.equal(await script.text(),'// configured console bundle');
+    assert.equal(await (await fetch(`http://localhost:${port}/app.css`)).text(),'/* configured console styles */');
+  } finally {if(child.exitCode===null)child.kill('SIGTERM');await exited;await rm(directory,{recursive:true,force:true});}
+});
