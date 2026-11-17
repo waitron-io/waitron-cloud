@@ -4,6 +4,8 @@ import {createLeaseIssuer,createLeaseTrust,parsePlanMode,transaction} from '../.
 import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {RelayControl} from '../../packages/registration/src/relay-control.ts';
 import {testRelaySettings} from './relay-settings.mjs';
+import {readVenuePermissions} from '../../packages/registration/src/venue-service-permissions.ts';
+import {openPlanStorage,testStorageOptions} from './service-runtime.mjs';
 import {setGuestMenuBlocked} from '../../packages/remote-access/src/guest-menu.ts';
 import {checkConsumerSchema,canonicalHttpsOrigin,loadRuntime,runtimeEnvironment} from '../local-stack/runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
@@ -12,11 +14,30 @@ function testMode(environment){
  try{if(parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS)!=='test-venue-levels')throw Error();}
  catch{throw Error('test_cloud.service_mode');}
 }
-export async function executeTestServiceCommand({pool,issuer,origin,environment},input){
+export async function executeTestServiceCommand({pool,issuer,origin,environment,directory,storageOptions},input){
  testMode(environment);canonicalHttpsOrigin(origin);
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('test_cloud.service_command');
  const control=new RelayControl(pool);
  switch(input.command){
+  case 'backups':{
+   if(!uuid.test(input.installationId)||typeof input.enabled!=='boolean')throw Error('test_cloud.service_command');
+   const venueId=await transaction(pool,async client=>{
+    const initial=(await client.query('SELECT i.venue_id,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[input.installationId])).rows[0];
+    if(initial?.environment!=='test')throw Error('test_cloud.service_target');
+    await readVenuePermissions(client,initial.venue_id,'test-venue-levels');
+    const install=(await client.query('SELECT venue_id,revoked_at,superseded_by FROM installations WHERE id=$1 FOR UPDATE',[input.installationId])).rows[0];
+    if(!install||install.venue_id!==initial.venue_id||install.revoked_at||install.superseded_by)throw Error('test_cloud.service_target');
+    await client.query("UPDATE installation_services SET state='unconfigured',configuration=$2 WHERE installation_id=$1 AND service IN ('continuous_backup','retained_snapshots')",[input.installationId,input.enabled?{}:{testCloudEnabled:false}]);
+    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[input.installationId]);
+    return install.venue_id;
+   });
+   // Persist the switch before provider work so a failed reload can be retried.
+   if(!input.enabled){
+    const authority=await openPlanStorage(storageOptions??await testStorageOptions({pool,directory,mode:'test-venue-levels'}));
+    await authority.withdrawWriter(venueId);
+   }
+   return {enabled:input.enabled};
+  }
   case 'relay-stop':return control.stop();
   case 'relay-resume':return control.resume();
   case 'relay-status':return control.status();
@@ -60,7 +81,7 @@ async function main(){
   const parts=[];let size=0;
   for await(const chunk of process.stdin){size+=chunk.length;if(size>32768)throw Error();parts.push(chunk);}
   const input=JSON.parse(Buffer.concat(parts).toString('utf8'));
-  const result=await executeTestServiceCommand({pool,issuer:createLeaseIssuer(config.installation.issuerKey),origin,environment:process.env},input);
+  const result=await executeTestServiceCommand({pool,issuer:createLeaseIssuer(config.installation.issuerKey),origin,environment:process.env,directory},input);
   console.log(JSON.stringify(result));
  }catch{console.error('Test service command failed; check test mode, private input, owner session and schema');process.exitCode=1;}
  finally{try{await pool?.end();}catch{process.exitCode=1;}}

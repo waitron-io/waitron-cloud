@@ -195,6 +195,7 @@ async function lockedInstallation(client: PoolClient, installationId: string, mo
   if (row.revoked_at || row.superseded_by) backupFail("revoked");
   if (row.environment !== "test") backupFail("local_integration_only");
   if (row.id !== installationId) backupFail("conflict");
+  if(mode==='test-venue-levels' && (await client.query("SELECT configuration FROM installation_services WHERE installation_id=$1 AND service='continuous_backup'",[installationId])).rows[0]?.configuration.testCloudEnabled===false)backupFail('permission_denied');
   return row;
 }
 

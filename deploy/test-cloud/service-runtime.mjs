@@ -42,6 +42,9 @@ export async function openPlanStorage({pool,mode,...options}){
    if(mode==='test-venue-levels'){
     const permission=await readVenuePermissions(client,venueId,mode);
     if(!levelAllows(permission.level,'continuous_backup'))throw Error('permission_denied');
+    if((await client.query(`SELECT 1 FROM installations i JOIN installation_services s ON s.installation_id=i.id
+      WHERE i.venue_id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND s.service='continuous_backup'
+      AND s.configuration->'testCloudEnabled'='false'::jsonb`,[venueId])).rowCount)throw Error('permission_denied');
     return permission.revision;
    }
    if(await readVenuePlan(client,venueId,mode)!=='paid')throw Error('permission_denied');

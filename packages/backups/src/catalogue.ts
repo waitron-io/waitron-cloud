@@ -151,6 +151,7 @@ async function active(client: PoolClient, id: string, mode: PlanMode) {
   if(mode==='test-venue-levels'&&row.venue_id!==initial.venue_id)backupFail('permission_denied');
   if (row.revoked_at) backupFail("revoked");
   if (row.environment !== "test") backupFail("local_integration_only");
+  if(mode==='test-venue-levels' && (await client.query("SELECT configuration FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'",[id])).rows[0]?.configuration.testCloudEnabled===false)backupFail('permission_denied');
   return row;
 }
 const metadataColumns = `p.id,p.venue_id AS "venueId",p.installation_id AS "installationId",p.key_version AS "keyVersion",p.kind,p.object_key AS "objectKey",p.digest,p.size,p.captured_at AS "capturedAt",p.retention,p.source_node_id AS "sourceNodeId",p.modules,p.deleting,p.deleted_at AS "deletedAt"`;
