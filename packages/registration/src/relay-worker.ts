@@ -9,11 +9,13 @@ import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
 import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
-import {settleSesRelayReceipt} from './relay-ses-smtp.ts';
+import {createSesRelaySender,settleSesRelayReceipt,type RelaySesResult} from './relay-ses-smtp.ts';
+import type {SmtpAccountMailConfig} from './smtp-mailer.ts';
 import {lockMailScope,advanceMailSuppressionRevision} from './recipient-suppression.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 export interface RelayWorkerConfig {
  mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;ses?:SesHandoffConfig;
+ sesSmtp?:{smtp:SmtpAccountMailConfig;trust?:{ca?:string|Buffer}};
 }
 interface Row extends RelayPayloadBinding {
  payload:Buffer;binding:string;state:string;claim_id:string;lease_until:Date;expires_at:Date;attempts:number;
@@ -27,7 +29,7 @@ const suppressionLock="SELECT pg_advisory_xact_lock(hashtextextended(current_sch
 export class RelayWorker {
  readonly #pool:Pool;readonly #grants:RelayGrantStore|undefined;readonly #payload:RelayKeys|undefined;
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
- readonly #send:ReturnType<typeof localRelaySmtp>|undefined;readonly #timeout:number;
+ readonly #send:((content:RelayContent,signal:AbortSignal,admission?:HandoffAdmission)=>Promise<RelaySesResult>)|undefined;readonly #timeout:number;
  readonly #ses:SesHandoffConfig|undefined;
  constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
   allowances=validateAllowanceOptions(allowances,planMode);
@@ -39,7 +41,14 @@ export class RelayWorker {
   this.#grants=new RelayGrantStore(pool,config.grants,planMode,allowances);this.#payload=new RelayKeys(config.payloadKeys);
   new RelayKeys(config.suppressionKeys);
   for(const [id,value] of Object.entries(config.suppressionKeys.keys))this.#suppression.set(id,Buffer.from(value,'hex'));
-  this.#active=config.suppressionKeys.activeKeyId;this.#send=localRelaySmtp(config.smtpPort);
+  this.#active=config.suppressionKeys.activeKeyId;
+  if(config.sesSmtp){
+   if(!this.#ses||!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email'))messageError('relay_unavailable');
+   const send=createSesRelaySender(this.#ses.config,config.sesSmtp.smtp,config.sesSmtp.trust);
+   this.#send=(content,signal,admission)=>send(content,admission!,signal);
+  }else{
+   const send=localRelaySmtp(config.smtpPort);this.#send=async(content,signal)=>({outcome:await send(content,signal)});
+  }
  }
  #digest(id:string,recipient:string){return createHmac('sha256',this.#suppression.get(id)!).update(JSON.stringify(['relay-suppression-v1',recipient])).digest('hex');}
  async #checkSuppressionKeys(client:PoolClient){
@@ -76,7 +85,7 @@ export class RelayWorker {
   }
   return {counts,attempts};
  }
- /** One bounded database claim and at most one local SMTP handoff. No config means no work. */
+ /** One bounded database claim and at most one configured SMTP handoff. No config means no work. */
  async runOnce():Promise<boolean>{
   if(!this.#send)return false;
   const claimed=await transaction(this.#pool,async c=>{
@@ -100,15 +109,15 @@ export class RelayWorker {
   if(!handoff)return true;
   const {content,admission}=handoff;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
-  let result:RelayDelivery;
+  let result:RelaySesResult;
   try{
-   const timeout=new Promise<RelayDelivery>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve('uncertain');},this.#timeout);});
-   result=await Promise.race([this.#send(content,controller.signal),timeout]);
-  }catch{result='uncertain';}
+   const timeout=new Promise<RelaySesResult>(resolve=>{timer=setTimeout(()=>{controller.abort();resolve({outcome:'uncertain'});},this.#timeout);});
+   result=await Promise.race([this.#send(content,controller.signal,admission),timeout]);
+  }catch{result={outcome:'uncertain'};}
   finally{clearTimeout(timer);controller.abort();}
   // Database failure leaves durable sending for conservative recovery; never retry SMTP here.
-  await this.#settle(claimed,result);
-  await settleSesRelayReceipt(this.#pool,admission,{outcome:result});return true;
+  await this.#settle(claimed,result.outcome);
+  await settleSesRelayReceipt(this.#pool,admission,result);return true;
  }
  async #terminal(c:PoolClient,row:Row,state:Terminal,reason:string|null){
   await c.query(`UPDATE relay_messages SET state=$3,reason=$4,payload=NULL,claim_id=NULL,lease_until=NULL,status_revision=status_revision+1
