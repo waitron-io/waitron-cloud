@@ -742,13 +742,14 @@ Tax details use the same synthetic-account allowlist and test mode, independentl
 of payment-method settings. POST `/api/account/billing/tax/save` with the string
 fields `venueId`, `legalName`, `address` and `taxNumber`, using your existing
 session, origin and CSRF proof. Use synthetic values only. The server trims each
-field, rejects control characters and bounds name/address/tax number to 200/600/32
+field, rejects control characters and Unicode line/paragraph separators, and bounds name/address/tax number to 200/600/32
 characters using JavaScript string length, as signup does.
 
 A business sharing any non-test venue has no tax profile and cannot be changed.
 The response and `/billing/read` include optional `taxProfile` with `legalName`,
 `address` and `taxNumber` as strings or null. The business country is unchanged.
-The form keeps separate drafts per venue, retains them during reads or uncertain
+Details apply to the business and every venue sharing it. The form keeps edited
+fields per venue, refreshes untouched fields on reads, retains edits during uncertain
 saves, and clears them when account authority ends or the page is hidden. A lost
 reply causes a read, never an automatic replay. This does not verify tax numbers,
 collect paid-plan details or make invoices; Spanish validation remains open.

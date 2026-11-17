@@ -42,12 +42,10 @@ export class BillingController{
  }
  get taxDraft():TaxDraft|undefined{
   const venue=this.venue,profile=venue?.taxProfile;if(!venue||!profile)return;
-  let draft=this.#taxDrafts.get(venue.venueId);
-  if(!draft){draft={legalName:profile.legalName??'',address:profile.address??'',taxNumber:profile.taxNumber??''};this.#taxDrafts.set(venue.venueId,draft);}
-  return draft;
+  return this.#taxDrafts.get(venue.venueId)??{legalName:profile.legalName??'',address:profile.address??'',taxNumber:profile.taxNumber??''};
  }
  editTax(field:keyof TaxDraft,value:string){
-  const draft=this.taxDraft;if(!draft||this.pending)return;draft[field]=value;
+  const venue=this.venue,draft=this.taxDraft;if(!venue||!draft||this.pending)return;draft[field]=value;this.#taxDrafts.set(venue.venueId,draft);
   if(this.taxInvalid===field)this.taxInvalid=undefined;this.taxSaved=false;
   if(this.error==='billingTaxInvalid'||this.error==='billingTaxUncertain')this.error=undefined;
   this.#changed();
@@ -57,7 +55,7 @@ export class BillingController{
   if(!this.#account||!draft||!venueId||this.pending||this.waiting)return;
   this.taxSaved=false;this.taxInvalid=undefined;this.error=undefined;
   for(const [field,limit] of Object.entries({legalName:200,address:600,taxNumber:32}) as [keyof TaxDraft,number][]){
-   if(/[\u0000-\u001f\u007f-\u009f]/.test(draft[field])||!draft[field].trim()||draft[field].trim().length>limit){this.taxInvalid=field;this.#changed();return;}
+   if(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(draft[field])||!draft[field].trim()||draft[field].trim().length>limit){this.taxInvalid=field;this.#changed();return;}
   }
   const generation=this.#generation;this.pending=true;this.#changed();
   const result=await this.#request<BillingView>('/billing/tax/save',{venueId,...draft});
@@ -113,7 +111,14 @@ export class BillingController{
   }else if(result.status===401||result.status===403){this.#clearMethod();this.#failure(result);}
   else this.error=result.status===429?'limited':result.status===409?'billingMethodChanged':'billingMethodUncertain';
  }
- #apply(view:BillingView){this.venues=view.venues;this.loaded=true;if(!this.venues.some(venue=>venue.venueId===this.selected))this.selected=this.venues[0]?.venueId;}
+ #apply(view:BillingView){
+  // Retain unsaved field differences while refreshing values shared by the business's venues.
+  for(const [id,draft] of this.#taxDrafts){
+   const before=this.venues.find(venue=>venue.venueId===id)?.taxProfile,after=view.venues.find(venue=>venue.venueId===id)?.taxProfile;
+   if(before&&after)for(const field of ['legalName','address','taxNumber'] as const)if(draft[field]===(before[field]??''))draft[field]=after[field]??'';
+  }
+  this.venues=view.venues;this.loaded=true;if(!this.venues.some(venue=>venue.venueId===this.selected))this.selected=this.venues[0]?.venueId;
+ }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,initialRead=false){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403){this.#taxDrafts.clear();this.taxInvalid=undefined;this.taxSaved=false;this.venues=[];this.selected=undefined;this.loaded=false;}

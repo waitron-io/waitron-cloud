@@ -67,7 +67,7 @@ export async function billingAccountResponse(c:Context,options:{pool:Pool;origin
  const body=await readAccountBody(c.req.raw,saveTax?['venueId','legalName','address','taxNumber']:start?['venueId']:[]);
  if((start||saveTax)&&!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(body.venueId!))throw new AccountHttpError(400,'invalid_input');
  if(saveTax)for(const [field,limit] of Object.entries({legalName:200,address:600,taxNumber:32})){
-  const value=body[field]!;if(/[\u0000-\u001f\u007f-\u009f]/.test(value)||!value.trim()||value.trim().length>limit)throw new AccountHttpError(400,'invalid_input');
+  const value=body[field]!;if(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value)||!value.trim()||value.trim().length>limit)throw new AccountHttpError(400,'invalid_input');
   body[field]=value.trim();
  }
  const read=()=>transaction(pool,async client=>{

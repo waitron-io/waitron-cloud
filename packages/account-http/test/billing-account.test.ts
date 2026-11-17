@@ -268,13 +268,14 @@ async function taxRow(id:string){
 }
 
 test('tax details can be saved reloaded and corrected without payment methods or billing changes',async()=>{
- const f=await owner(),target=app([f.accountId]),billing=await billingRows(f.organisationId);
+ const f=await owner(),target=app([f.accountId]),billing=await billingRows(f.organisationId),sibling=randomUUID();
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[sibling,f.organisationId,f.legalBusinessId]);
  await db.pool.query("UPDATE legal_businesses SET country_code='ES' WHERE id=$1",[f.legalBusinessId]);
  const empty=await (await request(target,f.session)).json();
  assert.deepEqual(empty.venues[0].taxProfile,{legalName:null,address:null,taxNumber:null});
  assert.equal(empty.venues[0].paymentMethods,undefined);
  const response=await request(target,f.session,taxPath,{venueId:f.venueId,legalName:'  Synthetic business  ',address:' Synthetic street 1 ',taxNumber:' TEST-123 '});
- assert.equal(response.status,200);assert.deepEqual((await response.json()).venues[0].taxProfile,taxProfile);
+ assert.equal(response.status,200);const saved=await response.json();assert.deepEqual(saved.venues.find((venue:any)=>venue.venueId===f.venueId).taxProfile,taxProfile);assert.deepEqual(saved.venues.find((venue:any)=>venue.venueId===sibling).taxProfile,taxProfile);
  assert.deepEqual((await (await request(target,f.session)).json()).venues[0].taxProfile,taxProfile);
  const corrected={legalName:'Corrected synthetic business',address:'Synthetic street 2',taxNumber:'TEST-456'};
  assert.equal((await request(target,f.session,taxPath,{venueId:f.venueId,...corrected})).status,200);
@@ -287,7 +288,7 @@ test('tax saves reject unknown fields controls empty and oversized strings witho
  const invalid=[
   {legalName:''},{legalName:'x'.repeat(201)},{address:'   '},{address:'x'.repeat(601)},
   {taxNumber:''},{taxNumber:'x'.repeat(33)},{legalName:'Bad\nname'},{address:'Bad\u0085address'},
-  {taxNumber:'\tTEST-123'},{legalName:null},{countryCode:'FR'},{venueId:'not-an-id'}
+  {taxNumber:'\tTEST-123'},{address:'Two\u2028lines'},{legalName:'Two\u2029lines'},{legalName:null},{countryCode:'FR'},{venueId:'not-an-id'}
  ];
  for(const change of invalid){
   const response=await request(target,f.session,taxPath,{venueId:f.venueId,...taxProfile,...change});

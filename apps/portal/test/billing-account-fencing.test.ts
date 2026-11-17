@@ -121,3 +121,31 @@ for(const boundary of ['account','venue','pagehide'] as const)test('late tax sav
  assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.taxSaved,false);
  assert.equal(c.selected,boundary==='venue'?second:undefined);assert.equal(c.taxDraft?.legalName,boundary==='venue'?'Synthetic business':undefined);
 });
+
+test('saving one venue refreshes untouched fields for a sibling without discarding its edited field',async()=>{
+ let profile={...taxProfile};
+ const c=await controller(async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  if(path.endsWith('/save'))profile={legalName:String(body!.legalName),address:String(body!.address),taxNumber:String(body!.taxNumber)};
+  return {ok:true,value:{venues:view.venues.map(venue=>({...venue,taxProfile:profile}))} as T};
+ });
+ c.account('owner');await c.load();c.select(second);c.editTax('taxNumber','SECOND-EDIT');
+ c.select(first);c.editTax('legalName','New business name');await c.saveTax();await c.load();c.select(second);
+ assert.deepEqual(c.taxDraft,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
+ await c.saveTax();assert.deepEqual(profile,{legalName:'New business name',address:'Synthetic street 1',taxNumber:'SECOND-EDIT'});
+});
+test('tax draft validation refuses Unicode line separators before a save request',async()=>{
+ let calls=0;
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:taxView as T};});
+ c.account('owner');await c.load();
+ for(const separator of ['\u2028','\u2029']){
+  c.editTax('legalName','Two'+separator+'lines');await c.saveTax();assert.equal(c.taxInvalid,'legalName');assert.equal(calls,1);
+ }
+});
+
+test('refreshing an untouched tax form shows current server values',async()=>{
+ let profile={...taxProfile};
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>({ok:true,value:{venues:view.venues.map(venue=>({...venue,taxProfile:profile}))} as T}));
+ c.account('owner');await c.load();assert.equal(c.taxDraft?.legalName,'Synthetic business');
+ profile={legalName:'New business name',address:'New street',taxNumber:'NEW-1'};await c.load();
+ assert.deepEqual(c.taxDraft,{legalName:'New business name',address:'New street',taxNumber:'NEW-1'});
+});
