@@ -15,7 +15,7 @@ export function createRoute53DnsProvider(config:{zoneId:string;suffix:string},cl
   if(!name.startsWith('_acme-challenge.')||name.length>253||!isHostname(hostname)
    ||!hostname.endsWith('.'+suffix)||!/^[A-Za-z0-9_-]{43}$/.test(value))throw new Error('invalid_dns_challenge');
   }
-  // Leave room for ACME in the existing 120-second claim; cleanup needs no propagation wait.
+  // Bound each publication separately; cleanup needs no propagation wait.
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),action==='UPSERT'?75000:10000);
   const signal=caller?AbortSignal.any([caller,controller.signal]):controller.signal;
   try{
