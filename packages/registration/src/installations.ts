@@ -1,3 +1,4 @@
+import {privateManagementOrigin} from './test-relay-origin.ts';
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -27,8 +28,10 @@ function fail(code:InstallationError['code']):never {throw new InstallationError
 function object(value:unknown,keys:string[]):value is Record<string,unknown> {
   return !!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');
 }
-function readBody(action:MachineAction,text:string,now:number):Report|{servicesVersion:2}|undefined {
+function readBody(action:MachineAction,text:string,now:number,environment:string):Report|{servicesVersion:2;managementOrigin?:string}|undefined {
   let v:unknown;try{v=JSON.parse(text);}catch{return fail('invalid_proof');}
+  if(action==='configuration'&&environment==='test'&&object(v,['servicesVersion','managementOrigin'])&&v.servicesVersion===2&&privateManagementOrigin(v.managementOrigin)
+    &&JSON.stringify({servicesVersion:2,managementOrigin:v.managementOrigin})===text)return {servicesVersion:2,managementOrigin:v.managementOrigin};
   if(action==='configuration'&&text==='{"servicesVersion":2}')return {servicesVersion:2};
   if(action!=='report'){if(text!=='{}')fail('invalid_proof');return;}
   if(!object(v,['revision','observedAt','services'])||!Number.isSafeInteger(v.revision)||Number(v.revision)<0
@@ -100,7 +103,7 @@ export class InstallationStore {
       const row=await lock(client,routing.installationId),now=Date.now();
       if(row.venue_id!==initial.venue_id)fail('invalid_proof');
       const c=verifyMachine(envelope,row.public_key,this.#origin,action,now);
-      const body=readBody(action,c.body,now),report=body&&'revision' in body?body:undefined;
+      const body=readBody(action,c.body,now,row.environment),report=body&&'revision' in body?body:undefined;
       const respond=async(result:InstallationView):Promise<InstallationView>=>{
         if(!body||!('servicesVersion' in body))return result;
         const grant=await readRelayGrantHint(client,row.id);

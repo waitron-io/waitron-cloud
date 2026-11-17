@@ -22,4 +22,17 @@ You need a reachable test Cloud paired with your box, with switchable services. 
 
 **17 November local slice order, watcher 01:04.** After admission #1253, deliver the signed version-2 configuration grant hint first (lane F and the email switch need it), then local service commands and service composition, then SES feedback/suppression with the test adapter. This follows the existing slices without a new plan. Grant discovery is read-only and fixture-only; a client submits once, reconciles status and never resubmits, with no direct-SMTP fallback. Live management-origin verification and Amazon access retain their separate gates.
 
-**17 November 01:21 watcher decision, not built in discovery.** Test only: the paired box may state an RFC 1918 private address (no link-local) or .local management origin over its signed configuration request with its current key-bound lease, while its owner relay switch is on. This replaces the HTTPS origin challenge only in that test setting; production keeps its refusal and needs an explicit regression check when the exception is built. Synthetic fixtures remain the only approval path in the discovery slice.
+**17 November 01:21 watcher decision, separate from discovery.** Test only: the paired box may state an RFC 1918 private address (no link-local) or .local management origin over its signed configuration request with its current key-bound lease, while its owner relay switch is on. This replaces the HTTPS origin challenge only in that test setting; production keeps its refusal and needs an explicit regression check when the exception is built. Synthetic fixtures remain the only approval path in the discovery slice.
+
+The local approval core uses the existing owner `approve` call, with the signed
+configuration envelope as an optional fourth argument only when a trusted
+`testOrigin` setting selects environment `test`. The box's signed body states
+`managementOrigin` after `servicesVersion:2`; there is no new record or route.
+Owner command and startup composition are the following slice.
+
+**17 November 02:35 watcher correction after both run-it reviews.** Keep the
+configuration-body route for lane F, restrict it to test venues, and require its
+existing installation operation digest before approval. An unrecorded configuration statement
+is refused; no record or field is added. The
+box/tool handoff must pass the current envelope privately to the owner tool; it
+is not a Cloud retrieval endpoint. The watcher cleared this correction, not the owner.

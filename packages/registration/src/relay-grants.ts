@@ -1,6 +1,8 @@
+import {testRelayOriginProof,type TestRelayOrigin} from './test-relay-origin.ts';
+import {readMachineClaims,type MachineClaims,type SignedEnvelope} from './installation-proof.ts';
 import {requireVenueService} from './venue-service-permissions.ts';
 import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
@@ -24,7 +26,7 @@ function canonicalOrigin(value:unknown):value is string{
 export interface RelayPolicy {version:string;units:number;periodSeconds:number;epoch:string;excess:'refuse';debit:'retain'}
 export interface OriginChallenge {installationId:string;managementOrigin:string;challenge:string}
 export interface OriginEvidence extends OriginChallenge {domainControl:true;httpsEndpoint:true;expiresAt:string}
-export interface RelayConfig {mode:'local-proof';consentVersion:string;policy:RelayPolicy;verifyOrigin:(request:OriginChallenge)=>Promise<OriginEvidence>}
+export interface RelayConfig {testOrigin?:TestRelayOrigin;mode:'local-proof';consentVersion:string;policy:RelayPolicy;verifyOrigin:(request:OriginChallenge)=>Promise<OriginEvidence>}
 export interface RelayApproval {installationId:string;expectedRevision:number;consent:true;consentVersion:string;managementOrigin:string;expiresAt:string}
 export interface RelayGrant {id:string;installationId:string;accountId:string;organisationId:string;venueId:string;environment:string;managementOrigin:string;revision:number;expiresAt:string;enabled:boolean}
 export type RelayGrantHint=Pick<RelayGrant,'id'|'revision'|'expiresAt'|'enabled'>;
@@ -94,22 +96,39 @@ export class RelayGrantStore {
    if(config?.mode!=='local-proof'||typeof config.consentVersion!=='string'||!version.test(config.consentVersion)||typeof config.verifyOrigin!=='function'
     ||!p||typeof p.version!=='string'||!version.test(p.version)||!Number.isSafeInteger(p.units)||p.units<1||p.units>1_000_000
     ||!Number.isSafeInteger(p.periodSeconds)||p.periodSeconds<1||p.periodSeconds>366*86400||!date(p.epoch)||p.excess!=='refuse'||p.debit!=='retain')fail('invalid_input');
-   this.#config={...config,policy:{...p}};
+   if(config.testOrigin&&(config.testOrigin.environment!=='test'||!canonicalOrigin(config.testOrigin.origin)||!(config.testOrigin.trusted instanceof Map)))fail('invalid_input');
+   this.#config={...config,policy:{...p},...(config.testOrigin?{testOrigin:{...config.testOrigin,trusted:new Map(config.testOrigin.trusted)}}:{})};
   }
  }
  #configured():RelayConfig{if(!this.#config)fail('relay_disabled');return this.#config;}
- async approve(token:string,csrfToken:string,input:RelayApproval):Promise<RelayGrant>{
+ async approve(token:string,csrfToken:string,input:RelayApproval,proof?:SignedEnvelope):Promise<RelayGrant>{
   const config=this.#configured();
   if(!exact(input,['installationId','expectedRevision','consent','consentVersion','managementOrigin','expiresAt'])||!id(input.installationId)
    ||!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||input.expectedRevision>=2147483647||input.consent!==true
    ||input.consentVersion!==config.consentVersion||!canonicalOrigin(input.managementOrigin)||!date(input.expiresAt))fail('invalid_input');
-  // Authenticate before invoking the trusted verifier; network proof runs outside database locks.
-  await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);await authority(client,actor.accountId,input.installationId,this.#planMode);});
-  const challenge={installationId:input.installationId,managementOrigin:input.managementOrigin,challenge:randomUUID()};
-  let evidence:OriginEvidence;
-  try{evidence=await config.verifyOrigin({...challenge});}catch{return fail('origin_unverified');}
-  if(!evidence||evidence.installationId!==challenge.installationId||evidence.managementOrigin!==challenge.managementOrigin||evidence.challenge!==challenge.challenge
-   ||evidence.domainControl!==true||evidence.httpsEndpoint!==true||!date(evidence.expiresAt))fail('origin_unverified');
+  const verifyTest=async(client:PoolClient,installation:InstallationRow)=>{
+   if(!config.testOrigin)fail('origin_unverified');
+   let claims:MachineClaims;try{claims=readMachineClaims(proof);}catch{fail('origin_unverified');}
+   const operation=(await client.query('SELECT digest FROM installation_operations WHERE installation_id=$1 AND operation_id=$2',[installation.id,claims.operationId])).rows[0];
+   const digest=createHash('sha256').update(JSON.stringify(['configuration',claims.body])).digest('hex');
+   if(operation?.digest!==digest)fail('origin_unverified');
+   const time=await now(client);liveInstallation(installation,time);
+   try{testRelayOriginProof(config.testOrigin,installation,input.managementOrigin,proof!,time);}catch{fail('origin_unverified');}
+  };
+  // Authenticate before network proof; the test exception is checked again under the grant's locks.
+  await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);
+   const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
+   if(proof)await verifyTest(client,installation);
+  });
+  let verifiedUntil=input.expiresAt;
+  if(!proof){
+   const challenge={installationId:input.installationId,managementOrigin:input.managementOrigin,challenge:randomUUID()};
+   let evidence:OriginEvidence;
+   try{evidence=await config.verifyOrigin({...challenge});}catch{return fail('origin_unverified');}
+   if(!evidence||evidence.installationId!==challenge.installationId||evidence.managementOrigin!==challenge.managementOrigin||evidence.challenge!==challenge.challenge
+    ||evidence.domainControl!==true||evidence.httpsEndpoint!==true||!date(evidence.expiresAt))fail('origin_unverified');
+   verifiedUntil=evidence.expiresAt;
+  }
   return transaction(this.#pool,async client=>{
    const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
    // Serialize first approval too; there is no grant row to lock until it is created.
@@ -117,7 +136,7 @@ export class RelayGrantStore {
    const prior=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installation.id])).rows[0];
    if((prior?.revision??0)!==input.expectedRevision)fail('grant_conflict');
    const time=await now(client);liveInstallation(installation,time);
-   if(Date.parse(evidence.expiresAt)<=time||Date.parse(evidence.expiresAt)<Date.parse(input.expiresAt))fail('origin_unverified');
+   if(Date.parse(verifiedUntil)<=time||Date.parse(verifiedUntil)<Date.parse(input.expiresAt))fail('origin_unverified');
    if(Date.parse(input.expiresAt)<=time)fail('invalid_input');
    const g=(await client.query<GrantRow>(`INSERT INTO relay_grants
     (id,installation_id,account_id,organisation_id,venue_id,environment,public_key,management_origin,consent_version,revision,expires_at,origin_verified_until,enabled)
@@ -125,8 +144,10 @@ export class RelayGrantStore {
     ON CONFLICT(installation_id) DO UPDATE SET account_id=excluded.account_id,organisation_id=excluded.organisation_id,
     venue_id=excluded.venue_id,environment=excluded.environment,public_key=excluded.public_key,management_origin=excluded.management_origin,
     consent_version=excluded.consent_version,revision=relay_grants.revision+1,expires_at=excluded.expires_at,origin_verified_until=excluded.origin_verified_until,enabled=true,revoked_at=NULL
-    RETURNING *`,[randomUUID(),installation.id,actor.accountId,installation.organisation_id,installation.venue_id,installation.environment,installation.public_key,input.managementOrigin,input.consentVersion,input.expiresAt,evidence.expiresAt])).rows[0]!;
-   await session(client,token,csrfToken);return view(g);
+    RETURNING *`,[randomUUID(),installation.id,actor.accountId,installation.organisation_id,installation.venue_id,installation.environment,installation.public_key,input.managementOrigin,input.consentVersion,input.expiresAt,verifiedUntil])).rows[0]!;
+   await session(client,token,csrfToken);
+   if(proof)await verifyTest(client,installation);
+   return view(g);
   });
  }
  async revoke(token:string,csrfToken:string,grantId:string):Promise<void>{

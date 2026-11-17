@@ -62,9 +62,12 @@ expiry; do not assume permission. Never grant email because a paid service is ac
 
 A free email grant needs an independently verified management origin, including a
 customer-managed endpoint when the venue has no paid Cloud route. Domain control
-and an HTTPS endpoint check must be part of grant setup. A private LAN origin needs
-an explicit verification design before support; do not silently accept arbitrary
-URLs. Remote access is not a prerequisite, and delivery does not prove the recipient
+and an HTTPS endpoint check must be part of grant setup. Production has no private-LAN exception. On an explicitly test Cloud, the
+owner may instead approve the private origin stated by the paired box in its signed
+configuration request, under its current key-bound lease. Only RFC 1918 IPv4
+addresses or names ending in `.local` qualify; loopback, link-local and public
+addresses do not. This statement proves the paired box made the claim, not domain
+control or public reachability. Remote access is not a prerequisite, and delivery does not prove the recipient
 can reach the venue. The setup screen must explain that local access may be needed.
 
 ## Only three message classes
@@ -99,6 +102,23 @@ Its reply includes `emailRelay: {version: 1, grant: null}` or a grant with only
 version-2 meaning; `emailRelay` is outside that array. A body of `{}` and ordinary
 renewal keep their existing shapes.
 
+For test-only private-origin approval, the box signs the canonical body
+`{"servicesVersion":2,"managementOrigin":"https://waitron.local:3000"}`
+(keys in that order) on the same endpoint. Configuration authenticates the signed
+statement and returns the same version-2 reply; it does not turn email on. The box-side helper must submit that request and hand the same current statement and operation
+to the trusted owner tool through private standard input (for example over the
+owner’s SSH session); Cloud offers no endpoint to retrieve it. This handoff is
+part of the unbuilt box/tool integration. It must finish while the machine proof is fresh (within 60 seconds of signing);
+otherwise obtain a fresh proof. The trusted owner tool supplies the envelope as
+the fourth argument to `RelayGrantStore.approve`, with `testOrigin` configured
+with environment `test`, the Cloud origin and its trusted lease keys. The normal
+owner session, consent, installation authority, grant revision and expiry checks
+still apply. Approval requires the matching existing configuration operation digest and
+checks the current signature and lease again after lock waits. The action, body and operation ID must match; lease renewal and re-signing
+may retain that operation identity. An unrecorded statement is refused. The existing grant expiry is the owner-selected end of this test exception;
+no HTTPS challenge is claimed. No public approval route or normal-startup wiring
+is added. A box-side caller and the owner service command remain separate work.
+
 Read this hint before each submit. A live revoked grant or stopped relay returns
 `enabled: false`; a missing or expired grant or lost owner or account authority
 returns `grant: null`. A failed read is unavailable. Neither
@@ -108,8 +128,8 @@ acknowledgement. The configuration outcome is unknown; treat the relay as
 unavailable and do not submit until a fresh hint read succeeds. An enabled hint is not
 sending authority: consent, policy, allowance and queue checks still happen at submit.
 Configuration replay reads the current hint without changing the service revision
-or storing the hint in its durable operation result. These are local fixture
-capabilities; the scoped test-only private-origin approval path is not built yet.
+or storing the hint in its durable operation result. These local capabilities do
+not install owner commands or SES startup.
 
 ## Proposed wire exchange
 
