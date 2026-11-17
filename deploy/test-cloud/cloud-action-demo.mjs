@@ -60,16 +60,12 @@ export async function openSyntheticWorkload(directory,environment={}){
 export async function startCloudActionDemo({pool,outbox,operatorAccountId,directory,environment}){
  if(!operatorAccountId)throw Error('cloud_action_demo_operator_required');
  const workload=await openSyntheticWorkload(directory,environment),controller=new AbortController();
- let proposedOccurrence;
  const worker=new CloudActionWorker(pool,{demo:true,operatorAccountId,executor:workload});
  const running=runWorkerLoop({signal:controller.signal,concurrency:1,scheduleIntervalMs:1000,pollIntervalMs:1000,
   schedule:async()=>{
    try{await rm(join(directory,'fail'));await workload.fail();}catch(error){if(error.code!=='ENOENT')throw error;}
    const proposal=await workload.pending();
-   if(proposal&&proposal.occurrence!==proposedOccurrence){
-    await transaction(pool,client=>proposeCloudAction(client,proposal,'act-and-report',operatorAccountId,outbox));
-    proposedOccurrence=proposal.occurrence;
-   }
+   if(proposal)await transaction(pool,client=>proposeCloudAction(client,proposal,'act-and-report',operatorAccountId,outbox));
   },
   runOnce:()=>worker.runOnce(),onError:()=>console.error('Synthetic Cloud action failed; inspect its saved status'),
  });

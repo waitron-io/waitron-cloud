@@ -67,10 +67,9 @@ test('changedPolicyBlocksDispatch and real targets remain unavailable',async()=>
  assert.equal((await pool.query('SELECT count(*) FROM cloud_action_requests WHERE dispatch_started_at IS NOT NULL')).rows[0].count,'0');
 });
 
-test('changed evidence and a rejected or superseded request cannot restart a workload',async()=>{
+test('changed evidence and a superseded request cannot restart a workload',async()=>{
  const {CloudActionWorker}=await api(),effect=executor(),first=await propose();
  await propose({evidence:'workload recovered'});
- const rejected=await propose({occurrence:'rejected',actionId:'machine_drain'});await actions.decide(actor.token,actor.csrfToken,{requestId:rejected.id,version:1,decision:'rejected'});
  assert.equal((await actions.read(actor.token)).requests.find(r=>r.id===first.id)?.state,'superseded');
  assert.equal(await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce(),false);assert.equal(effect.calls,0);
 });

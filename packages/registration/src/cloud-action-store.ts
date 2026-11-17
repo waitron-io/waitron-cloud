@@ -68,7 +68,7 @@ export async function proposeCloudAction(client:PoolClient,input:CloudActionProp
 export async function decideCloudAction(client:PoolClient,input:CloudActionDecision,actor:string){
  if(!input||Object.keys(input).sort().join(',')!=='decision,requestId,version'||!uuid.test(input.requestId)||!Number.isSafeInteger(input.version)||input.version<1||!['approved','rejected'].includes(input.decision))throw new CloudActionError('invalid_input');
  const row=(await client.query('SELECT * FROM cloud_action_requests WHERE id=$1 FOR UPDATE',[input.requestId])).rows[0];
- if(!row||row.policy!=='ask-first'||row.dispatch_started_at||row.outcome||row.version!==input.version||row.state!=='pending'&&row.state!==input.decision)throw new CloudActionError('conflict');
+ if(!row||row.policy!=='ask-first'||row.version!==input.version||row.state!=='pending'&&row.state!==input.decision)throw new CloudActionError('conflict');
  if(row.state==='pending'){
   await client.query(`WITH moment AS (SELECT clock_timestamp() AS now) UPDATE cloud_action_requests SET state=$2,decided_at=moment.now,
    approval_expires_at=CASE WHEN $2='approved' THEN moment.now+interval '15 minutes' END FROM moment WHERE id=$1`,[input.requestId,input.decision]);
