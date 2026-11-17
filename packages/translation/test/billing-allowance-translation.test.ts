@@ -72,6 +72,7 @@ test('translation replay retains the first consent actor and debit after consent
   const operationId=randomUUID(),reply=await f.submit(2,operationId),saved=await f.rows();assert.equal(saved.length,1);
   const other=randomUUID();await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[other]);
   await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[other,other+'@allowance.invalid']);
+  await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[f.v.accountId,f.v.organisationId]);
   await f.db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[other,f.v.organisationId]);
   await f.db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[f.v.venueId]);
   await giveConsent(f.db,{...f.v,accountId:other});

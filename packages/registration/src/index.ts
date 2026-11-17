@@ -348,3 +348,5 @@ export {SignInCheckError, type SignInCheckMailer} from './sign-in-check.ts';
 
 export {AccountActionProofStore,AccountActionProofError,requireAccountActionProof} from './account-action-proof.ts';
 export {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
+
+export {OwnerTransferStore,OwnerTransferError,type OwnerTransferView} from './owner-transfer.ts';

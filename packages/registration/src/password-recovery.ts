@@ -1,3 +1,4 @@
+import {cancelOwnerTransfers} from './owner-transfer.ts';
 import type { Pool } from 'pg';
 import { createHash, randomBytes } from 'node:crypto';
 import { hashSecret } from '@waitron-cloud/identity';
@@ -71,6 +72,7 @@ export class PasswordRecoveryStore {
       if (!request || request.consumed_at || request.expires_at <= now || request.account_id !== candidate.account_id
         || !credential?.email_verified_at || !credential.password_hash || credential.email !== request.email
         || digest(credential.password_hash) !== request.password_fingerprint) throw new PasswordRecoveryError('reset_unavailable');
+      await cancelOwnerTransfers(client,candidate.account_id,this.#outbox);
       // A fresh salted hash invalidates all earlier links, including when reusing the old password.
       await client.query('UPDATE cloud_credentials SET password_hash = $2 WHERE account_id = $1', [candidate.account_id, passwordHash]);
       // Email recovery preserves the enrolled factor but cannot preserve earlier pending authority.

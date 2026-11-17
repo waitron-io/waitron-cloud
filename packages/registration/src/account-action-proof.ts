@@ -1,3 +1,4 @@
+import {cancelOwnerTransfers} from './owner-transfer.ts';
 import {createHash} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession,IdentityError,type FactorKeys} from '@waitron-cloud/identity';
@@ -35,12 +36,13 @@ export async function markAccountActionProof(client:PoolClient,token:string,csrf
   const credential=(await client.query('SELECT c.password_hash FROM cloud_credentials c JOIN cloud_sessions s ON s.account_id=c.account_id WHERE s.token_hash=$1',[digest(token)])).rows[0];
   await client.query('UPDATE cloud_sessions SET action_proved_at=clock_timestamp(),action_proof_method=$2,action_credential_fingerprint=$3 WHERE token_hash=$1',[digest(token),method,digest(credential.password_hash)]);
 }
-export async function invalidateAccountActionProof(client:PoolClient,accountId:string,actingToken?:string){
-  // A passkey change keeps the acting session's original window; revoke peers and all pending requests.
+export async function invalidateAccountActionProof(client:PoolClient,accountId:string,actingToken?:string,outbox?:EmailOutbox,initialEnrolment=false){
+  const enrollingForTransfer=await cancelOwnerTransfers(client,accountId,outbox,initialEnrolment);
+  // The recipient’s first enrollment needs proof with the new method; other passkey changes retain the acting window.
   await client.query(`UPDATE cloud_sessions SET action_proved_at=CASE WHEN token_hash=$2 THEN action_proved_at END,
     action_proof_method=CASE WHEN token_hash=$2 THEN action_proof_method END,
     action_credential_fingerprint=CASE WHEN token_hash=$2 THEN action_credential_fingerprint END,
-    action_security_revision=action_security_revision+1 WHERE account_id=$1`,[accountId,actingToken?digest(actingToken):null]);
+    action_security_revision=action_security_revision+1 WHERE account_id=$1`,[accountId,actingToken&&!enrollingForTransfer?digest(actingToken):null]);
   await client.query(`UPDATE cloud_webauthn_ceremonies SET consumed_at=clock_timestamp() WHERE consumed_at IS NULL
     AND (account_id=$1 OR action_session_token_hash IN(SELECT token_hash FROM cloud_sessions WHERE account_id=$1))`,[accountId]);
   await client.query('UPDATE cloud_sign_in_checks SET consumed_at=clock_timestamp() WHERE account_id=$1 AND action_session_token_hash IS NOT NULL AND consumed_at IS NULL',[accountId]);

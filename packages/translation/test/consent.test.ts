@@ -35,13 +35,15 @@ test('consent counts only while its owner is a current, enabled, verified owner 
 });
 test('only an owner of the venue may agree, with the current version; any owner may withdraw',async()=>{
  const v=await connectedVenue(db,issuer,origin),other=await connectedVenue(db,issuer,origin);
- const member=await account(v.organisationId,false),second=await account(v.organisationId,true);
+ const member=await account(v.organisationId,false),second=await account(v.organisationId,false);
  const agreeAs=(accountId:string,consentVersion=translationConsentVersion,venueId=v.venueId)=>tx(c=>agreeConsent(c,accountId,{venueId,consentVersion}));
  await assert.rejects(agreeAs(member),code('forbidden'));
  await assert.rejects(agreeAs(other.accountId),code('forbidden'));
  await assert.rejects(agreeAs(v.accountId,'providers-2026-01-01'),code('invalid_request'));
  await assert.rejects(agreeAs(v.accountId,translationConsentVersion,'not-a-venue'),code('invalid_request'));
  assert.equal((await agreeAs(v.accountId)).consented,true);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[v.accountId]);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[second]);
  assert.equal((await tx(c=>withdrawConsent(c,second,{venueId:v.venueId}))).consented,false);
  const rows=(await db.pool.query('SELECT providers,withdrawn_at FROM translation_consents WHERE venue_id=$1',[v.venueId])).rows;
  assert.equal(rows.length,1);assert.deepEqual(rows[0].providers,['openai','anthropic','google']);assert.ok(rows[0].withdrawn_at);
@@ -49,10 +51,11 @@ test('only an owner of the venue may agree, with the current version; any owner 
  assert.deepEqual(await tx(c=>listConsents(c,member)),[]);
 });
 test('a new owner needs fresh consent, and agreeing replaces the one whose owner left',async()=>{
- const v=await connectedVenue(db,issuer,origin),second=await account(v.organisationId,true);
+ const v=await connectedVenue(db,issuer,origin),second=await account(v.organisationId,false);
  await tx(c=>agreeConsent(c,v.accountId,{venueId:v.venueId,consentVersion:translationConsentVersion}));
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[v.accountId]);
  assert.equal(await tx(c=>hasConsent(c,v.venueId)),false);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1',[second]);
  assert.equal((await tx(c=>agreeConsent(c,second,{venueId:v.venueId,consentVersion:translationConsentVersion}))).consented,true);
  assert.deepEqual((await db.pool.query('SELECT account_id,withdrawn_at IS NULL AS current FROM translation_consents WHERE venue_id=$1 ORDER BY consented_at',[v.venueId])).rows,
   [{account_id:v.accountId,current:false},{account_id:second,current:true}]);
@@ -135,6 +138,7 @@ test(`agreement rechecks a committed ${name} after its row-lock wait`,async()=>{
 
 test('listing includes owned venues in id order with current consent and excludes another organisation',async()=>{
  const v=await connectedVenue(db,issuer,origin),second=await connectedVenue(db,issuer,origin),foreign=await connectedVenue(db,issuer,origin);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[second.accountId,second.organisationId]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,false)',[v.accountId,second.organisationId]);
  const consent=await tx(c=>agreeConsent(c,v.accountId,{venueId:v.venueId,consentVersion:translationConsentVersion}));
  const rows=await tx(c=>listConsents(c,v.accountId));

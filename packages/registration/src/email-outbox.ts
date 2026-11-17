@@ -1,3 +1,4 @@
+import {ownerTransferMailLive} from './owner-transfer.ts';
 import {IDLE_TIMEOUT_MS} from '@waitron-cloud/identity';
 import type {EmailChangeMailer} from './account-security.ts';
 import type {SignInCheckMailer} from './sign-in-check.ts';
@@ -6,7 +7,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { Pool, PoolClient } from 'pg';
 import type { SignupMailer } from './signup.ts';
 import type { PasswordRecoveryMailer } from './password-recovery.ts';
-import { normaliseEmail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
+import { validOwnerTransferMail,type OwnerTransferMail, normaliseEmail, validLocale, type AccountEmail, type AccountNotification, type AccountSignInCheck } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt, type EmailDeliveryContext } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
 import {admitMailAttempt,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
@@ -14,7 +15,8 @@ import {bindSesProviderReceipt} from './ses-smtp-receipt.ts';
 import {lockMailScope} from './recipient-suppression.ts';
 
 export interface OperatorNoticeMailer {sendOperatorNotice?(message:AccountNotification,context:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}
-export type EmailKind = 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
+export interface OwnerTransferMailer {sendOwnerTransfer?(message:OwnerTransferMail,context:EmailDeliveryContext):Promise<void|EmailDeliveryReceipt>;}
+export type EmailKind = 'owner_transfer' | 'operator_notice' | 'verification' | 'password_reset' | 'password_changed' | 'service_alert' | 'sign_in_check' | 'email_change' | 'email_changed';
 type Status = 'pending' | 'processing' | 'sent' | 'expired' | 'cancelled' | 'failed';
 type Failure = EmailDeliveryFailure | 'payload_unavailable' | 'attempts_exhausted';
 interface MessageRow {
@@ -64,13 +66,17 @@ export class EmailOutbox {
     return rows.map(row=>row.id);
   }
 
-  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert): Promise<string> {
-    if (!['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
+  async enqueue(client: PoolClient, kind: EmailKind, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail): Promise<string> {
+    if (!['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice','owner_transfer'].includes(kind) || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error('Invalid queued email');
     if(kind==='service_alert')return (await this.enqueueServiceAlerts(client,[message as ServiceAlert]))[0]!;
     let tokenHash: string | null = null;
     let expiresAt: Date;
-    let content: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert = {email: message.email};
-    if (kind === 'password_changed' || kind === 'email_changed' || kind === 'operator_notice') {
+    let content: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail = {email: message.email};
+    if(kind==='owner_transfer'){
+      if(!validOwnerTransferMail(message))throw new Error('Invalid queued email');
+      content={email:message.email,offerId:message.offerId,event:message.event};
+      expiresAt=(await client.query("SELECT clock_timestamp()+interval '24 hours' AS expiry")).rows[0].expiry;
+    } else if (kind === 'password_changed' || kind === 'email_changed' || kind === 'operator_notice') {
       expiresAt = (await client.query("SELECT clock_timestamp() + interval '7 days' AS expiry")).rows[0].expiry;
     } else {
       if (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))) throw new Error('Invalid queued email');
@@ -95,7 +101,7 @@ export class EmailOutbox {
   }
 
   /** Only the delivery worker should recover plaintext; it must never log this return value. */
-  open(row: MessageRow): AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert {
+  open(row: MessageRow): AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail {
     try {
       const key = this.#keys.get(row.key_id);
       if (!key || row.payload.length < 29) throw new Error();
@@ -105,7 +111,8 @@ export class EmailOutbox {
       const message = JSON.parse(Buffer.concat([decipher.update(row.payload.subarray(28)), decipher.final()]).toString('utf8'));
       if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email || (message.locale !== undefined && !validLocale(message.locale))) throw new Error();
       if (row.kind === 'service_alert' && !validServiceAlert(message))throw new Error();
-      if (row.kind !== 'operator_notice' && row.kind !== 'password_changed' && row.kind !== 'email_changed' && row.kind !== 'service_alert' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
+      if(row.kind==='owner_transfer'&&!validOwnerTransferMail(message))throw new Error();
+      if (row.kind !== 'owner_transfer' && row.kind !== 'operator_notice' && row.kind !== 'password_changed' && row.kind !== 'email_changed' && row.kind !== 'service_alert' && (typeof message.token !== 'string' || digest(message.token) !== row.token_hash
         || Date.parse(message.expiresAt) !== row.expires_at.getTime())) throw new Error();
       if (row.kind === 'sign_in_check' && (typeof message.code !== 'string' || !/^[0-9]{6}$/.test(message.code))) throw new Error();
       return message;
@@ -116,10 +123,10 @@ export class EmailOutbox {
 export class EmailWorker {
   readonly #pool: Pool;
   readonly #outbox: EmailOutbox;
-  readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer>;
+  readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>;
   readonly #timeout: number;
   readonly #ses:SesHandoffConfig|undefined;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer>, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig} = {}) {
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer & Partial<SignInCheckMailer & EmailChangeMailer & OperatorNoticeMailer & OwnerTransferMailer>, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig} = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
     this.#ses=options.ses&&{config:options.ses.config,recipientKeys:{activeKeyId:options.ses.recipientKeys.activeKeyId,keys:{...options.ses.recipientKeys.keys}}};
@@ -147,7 +154,7 @@ export class EmailWorker {
     });
     if (claim === undefined) return false;
     if (claim === null) return true;
-    let message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert;
+    let message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
     if(claim.kind==='operator_notice'&&(!this.#mailer.sendOperatorNotice||this.#ses)){await this.#fail(claim,'delivery_configuration',false);return true;}
@@ -166,7 +173,7 @@ export class EmailWorker {
     const context = {deliveryId: claim.id, signal: controller.signal,...(admission?{ses:admission}:{})};
     let receipt: void | EmailDeliveryReceipt;
     try {
-      const send = () => claim.kind === 'operator_notice' ? this.#mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(message as ServiceAlert,context) : claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
+      const send = () => claim.kind === 'owner_transfer' ? this.#sendOwnerTransfer(message as OwnerTransferMail,context) : claim.kind === 'operator_notice' ? this.#mailer.sendOperatorNotice!(message,context) : claim.kind === 'email_change' || claim.kind === 'email_changed' ? this.#sendEmailChange(claim.kind,message,context) : claim.kind === 'sign_in_check' ? this.#sendCheck(message as AccountSignInCheck,context) : claim.kind === 'service_alert' ? this.#sendAlert(message as ServiceAlert,context) : claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
         : claim.kind === 'password_reset' ? this.#mailer.sendPasswordReset(message as AccountEmail, context)
         : this.#mailer.sendPasswordChanged(message, context);
       // A timeout cannot retract a message already accepted by a provider. Retried sends may duplicate it.
@@ -189,6 +196,10 @@ export class EmailWorker {
     return true;
   }
 
+  async #sendOwnerTransfer(message:OwnerTransferMail,context:EmailDeliveryContext){
+    if(!this.#mailer.sendOwnerTransfer)throw new EmailDeliveryError('delivery_configuration');
+    return this.#mailer.sendOwnerTransfer(message,context);
+  }
   async #sendCheck(message:AccountSignInCheck,context:{deliveryId:string;signal:AbortSignal}) {
     if (!this.#mailer.sendSignInCheck) throw new EmailDeliveryError('delivery_configuration');
     return this.#mailer.sendSignInCheck(message,context);
@@ -199,7 +210,7 @@ export class EmailWorker {
     return this.#mailer.sendServiceAlert(message,context);
   }
 
-  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert):Promise<boolean|HandoffAdmission>{
+  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert|OwnerTransferMail):Promise<boolean|HandoffAdmission>{
     return transaction(this.#pool,async client=>{
       if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(row.kind==='verification')await client.query('SELECT token_hash FROM signup_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
@@ -250,6 +261,7 @@ export class EmailWorker {
         const notice=(await client.query("SELECT actor_account_id FROM cloud_action_events WHERE notice_id=$1 AND kind='notice'",[row.id])).rows[0];
         if(notice){await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[notice.actor_account_id]);await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 FOR SHARE',[notice.actor_account_id]);}
       }
+      if(row.kind==='owner_transfer'&&!await ownerTransferMailLive(client,message as OwnerTransferMail,true)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(this.#ses)await lockMailScope(client,this.#ses.config.scope);
       const current=(await client.query(`SELECT * FROM email_outbox WHERE id=$1 AND claim_id=$2 AND status='processing' FOR UPDATE`,[row.id,row.claim_id])).rows[0];
       if(!current)return false;
@@ -268,7 +280,8 @@ export class EmailWorker {
     });
   }
 
-  async #live(client:PoolClient,row: MessageRow, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert): Promise<boolean> {
+  async #live(client:PoolClient,row: MessageRow, message: AccountEmail | AccountNotification | AccountSignInCheck | ServiceAlert | OwnerTransferMail): Promise<boolean> {
+    if(row.kind==='owner_transfer')return ownerTransferMailLive(client,message as OwnerTransferMail);
     if(row.kind==='operator_notice')return !!(await client.query(`SELECT 1 FROM cloud_action_events event
       JOIN cloud_action_requests request ON request.id=event.request_id JOIN cloud_accounts account ON account.id=event.actor_account_id
       JOIN cloud_credentials credential ON credential.account_id=account.id

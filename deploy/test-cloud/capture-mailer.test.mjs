@@ -75,3 +75,11 @@ test('operator notices use the local and test-capture loopback adapters',async t
  for(const mailer of [local,capture]){assert.equal(typeof mailer.sendOperatorNotice,'function');await mailer.sendOperatorNotice({email:'operator@example.test',locale:'en'});}
  assert.equal(messages.length,2);assert.match(messages[0],/http:\/\/localhost:3000\/operator\/actions/);assert.match(messages[1],/https:\/\/waitron.local:3000\/operator\/actions/);
 });
+
+
+test('test capture delivers handover invitations and outcomes through the loopback sink',async t=>{
+ const {createTestCaptureMailer}=await api(),{port,messages}=await sink(t),mailer=createTestCaptureMailer({origin:'https://waitron.local:3000',port});
+ for(const event of ['invitation','accepted','cancelled'])await mailer.sendOwnerTransfer({email:'owner@example.test',locale:'en',offerId:'00000000-0000-4000-8000-000000000001',event});
+ assert.equal(messages.length,3);assert.match(messages[0],/https:\/\/waitron\.local:3000\/account/);
+ assert.match(messages[1],/accepted/i);assert.match(messages[2],/cancelled/i);
+});

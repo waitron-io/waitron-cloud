@@ -42,7 +42,7 @@ test('listing many venues keeps database round trips bounded and preserves every
 });
 
 for(const [name,change,valid] of [
- ['another current owner',null,true],
+ ['current owner',null,true],
  ['former owner','DELETE FROM organisation_memberships WHERE account_id=$1',false],
  ['non-owner','UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',false],
  ['disabled owner','UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',false],
@@ -50,13 +50,12 @@ for(const [name,change,valid] of [
  ['old version',"UPDATE translation_consents SET consent_version='providers-2026-01-01' WHERE account_id=$1",false],
  ['withdrawn consent','UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE account_id=$1',false],
 ] as const)
-test(`listing for a different active owner checks consent from ${name}`,async()=>{
- const v=await connectedVenue(db,issuer,origin),viewer=randomUUID();await consent(v);
- await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[viewer]);
- await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[viewer,`listing-${viewer}@example.test`]);
- await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[viewer,v.organisationId]);
+test(`listing checks the consenting ${name}`,async()=>{
+ const v=await connectedVenue(db,issuer,origin);await consent(v);
  if(change)await db.pool.query(change,[v.accountId]);
- assert.deepEqual(await transaction(db.pool,c=>listConsents(c,viewer)),[{venueId:v.venueId,consented:valid,consentedAt:valid?consentedAt:null}]);
+ const visible=valid?[{venueId:v.venueId,consented:true,consentedAt}]:['old version','withdrawn consent'].includes(name)?[{venueId:v.venueId,consented:false,consentedAt:null}]:[];
+ assert.deepEqual(await transaction(db.pool,c=>listConsents(c,v.accountId)),visible);
+
 });
 
 test('listing an account with no owned venues returns no consent',async()=>{
@@ -65,14 +64,14 @@ test('listing an account with no owned venues returns no consent',async()=>{
 
 test('one batch keeps consent tied to each organisation and its own current owner',async()=>{
  const first=await connectedVenue(db,issuer,origin),second=await connectedVenue(db,issuer,origin);
- await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true),($3,$4,true)',
-  [first.accountId,second.organisationId,second.accountId,first.organisationId]);
- await consent(first);await consent(second);
+ await db.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2',[second.accountId,second.organisationId]);
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[first.accountId,second.organisationId]);
+ await consent(first);await consent({...second,accountId:first.accountId});
  const expected=[{venueId:first.venueId,consented:true,consentedAt},{venueId:second.venueId,consented:true,consentedAt}]
   .sort((a,b)=>a.venueId.localeCompare(b.venueId));
  let result=await measuredListing(first.accountId);assert.deepEqual(result.rows,expected);
  assert.ok(result.queries<=2,`two organisations need at most two reads, observed ${result.queries}`);
- await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[second.accountId,second.organisationId]);
+ await db.pool.query('UPDATE translation_consents SET account_id=$1 WHERE organisation_id=$2',[second.accountId,second.organisationId]);
  result=await measuredListing(first.accountId);
  assert.deepEqual(result.rows,expected.map(row=>row.venueId===second.venueId?{venueId:second.venueId,consented:false,consentedAt:null}:row));
 });
@@ -87,6 +86,7 @@ test(`listing cannot combine old authority with consent recorded after ${name}`,
  const v=await connectedVenue(db,issuer,origin),viewer=randomUUID();
  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[viewer]);
  await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[viewer,`snapshot-${viewer}@example.test`]);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[v.accountId,v.organisationId]);
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[viewer,v.organisationId]);
  const result=await transaction(db.pool,async client=>{
   const query=client.query;let first=true;
@@ -98,6 +98,8 @@ test(`listing cannot combine old authority with consent recorded after ${name}`,
     await transaction(db.secondPool,async concurrent=>{
      await concurrent.query("SET LOCAL lock_timeout='5s'");
      await concurrent.query(change,[viewer]);
+     await concurrent.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[viewer,v.organisationId]);
+     await concurrent.query('UPDATE organisation_memberships SET is_owner=true WHERE account_id=$1 AND organisation_id=$2',[v.accountId,v.organisationId]);
      await agreeConsent(concurrent,v.accountId,{venueId:v.venueId,consentVersion:'providers-2026-10-14'});
     });
    }

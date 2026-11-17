@@ -1,3 +1,5 @@
+import {ownerTransferResponse} from './owner-transfer.ts';
+import {OwnerTransferStore,OwnerTransferError} from '@waitron-cloud/registration';
 import {CloudActions} from '@waitron-cloud/registration';
 import {CloudActionError} from '@waitron-cloud/registration';
 import {cloudActionsResponse} from './cloud-actions.ts';
@@ -68,6 +70,7 @@ function protect(c: Context) {
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
   if(error instanceof FactorError||error instanceof SignInCheckError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
+  if(error instanceof OwnerTransferError)return new AccountHttpError(error.code==='transfer_unavailable'?404:error.code==='invalid_input'?400:409,error.code);
   if(error instanceof CloudActionError)return new AccountHttpError(error.code==='conflict'?409:400,error.code);
   if(error instanceof AccountActionProofError)return new AccountHttpError(403,'proof_required');
   if(error instanceof AccountSecurityError)return new AccountHttpError(400,'link_unavailable');
@@ -108,8 +111,9 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const factor=options.factor?validateFactorConfig(options.factor):factorConfigFromEnv(process.env);
   const passwordLogin=new PasswordLoginStore(pool,factor.keys,factor.policy,outbox);
   const actionProof=new AccountActionProofStore(pool,factor.keys,factor.policy,outbox);
+  const ownerTransfers=new OwnerTransferStore(pool,outbox);
   const accountSecurity=new AccountSecurityStore(pool,outbox,options.passwordScreening);
-  const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy);
+  const authenticator=new AuthenticatorFactorStore(pool,factor.keys,factor.policy,outbox);
   const recoveryCodeKeys=options.recoveryCodeKeys===undefined?(recoveryCodeKeysFromEnv(process.env)??null):options.recoveryCodeKeys;
   const pairingCodeKeys=options.pairingCodeKeys===undefined?(pairingCodeKeysFromEnv(process.env)??null):options.pairingCodeKeys;
   const origin = new URL(config.portalOrigin); const secure = origin.protocol === 'https:';
@@ -125,7 +129,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
   const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
-  const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter);
+  const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter,outbox);
   const app = new Hono<{Bindings: HttpBindings}>();
   app.onError((error, c) => {
     protect(c); const fault = publicError(error);
@@ -171,6 +175,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path==='/api/account/sessions'||c.req.path.startsWith('/api/account/sessions/'))return accountSessionResponse(c,{pool,origin:config.portalOrigin,secure});
+    if(c.req.path==='/api/account/owner-transfers'||c.req.path.startsWith('/api/account/owner-transfers/'))return ownerTransferResponse(c,{pool,store:ownerTransfers,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/account/security/'))return accountSecurityResponse(c,{pool,store:accountSecurity,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/action-proof'||c.req.path.startsWith('/api/account/action-proof/'))return accountActionProofResponse(c,{pool,store:actionProof,passkeys,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path==='/api/account/passkeys'||c.req.path.startsWith('/api/account/passkeys/'))return passkeyResponse(c,{pool,store:passkeys,origin:config.portalOrigin,secure,ip,consume});

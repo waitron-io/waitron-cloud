@@ -1,3 +1,4 @@
+import type {EmailOutbox} from './email-outbox.ts';
 import {randomBytes, randomUUID} from 'node:crypto';
 import type {Pool, PoolClient} from 'pg';
 import {decryptFactorSecret, encryptFactorSecret, IdentityError, resolveSession,
@@ -35,11 +36,12 @@ function freshSecret(): string {
     .map(bits=>alphabet[parseInt(bits,2)]).join('');
 }
 export class AuthenticatorFactorStore {
+  readonly #outbox:EmailOutbox|undefined;
   readonly #pool: Pool;
   readonly #keys: FactorKeys | null;
   readonly #policy: FactorManagementPolicy | null;
-  constructor(pool: Pool, keys: FactorKeys | null, policy: FactorManagementPolicy | null) {
-    this.#pool=pool;this.#keys=keys;this.#policy=policy;
+  constructor(pool: Pool, keys: FactorKeys | null, policy: FactorManagementPolicy | null,outbox?:EmailOutbox) {
+    this.#outbox=outbox;this.#pool=pool;this.#keys=keys;this.#policy=policy;
   }
   #policyReady(): FactorManagementPolicy {
     const p=this.#policy;
@@ -147,8 +149,8 @@ export class AuthenticatorFactorStore {
     await c.client.query('SELECT id FROM cloud_sessions WHERE account_id=$1 ORDER BY id FOR UPDATE',[c.accountId]);
     await resolveSession(c.client,a.token,{csrfToken:a.csrfToken,touch:false});
   }
-  async #changed(c:Context):Promise<void> {
-    await invalidateAccountActionProof(c.client,c.accountId);
+  async #changed(c:Context,initialEnrolment=false):Promise<void> {
+    await invalidateAccountActionProof(c.client,c.accountId,undefined,this.#outbox,initialEnrolment);
     await c.client.query('UPDATE cloud_factor_enrolments SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
     await c.client.query('UPDATE cloud_factor_login_challenges SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
     await c.client.query('UPDATE cloud_sessions SET ended_at=clock_timestamp() WHERE account_id=$1 AND ended_at IS NULL',[c.accountId]);
@@ -164,10 +166,11 @@ export class AuthenticatorFactorStore {
         this.#keys,{kind:'totp',code},c.deadline);
       if(!deadline) throw new FactorManagementError(await factorNow(c.client)>=pending.expires_at?'setup_unavailable':'permission_denied');c.deadline=deadline;
       await this.#lockSessions(c,a);
+      const initialEnrolment=!c.factor.secret_envelope&&!(await c.client.query('SELECT 1 FROM cloud_passkeys WHERE account_id=$1',[c.accountId])).rowCount;
       await c.client.query('UPDATE cloud_authenticator_factors SET version=$2,secret_generation=$3,secret_envelope=$4 WHERE account_id=$1',[c.accountId,version,pending.id,envelope]);
       const previous=await c.client.query('SELECT 1 FROM cloud_factor_recovery_codes WHERE account_id=$1 AND consumed_at IS NULL LIMIT 1',[c.accountId]);
       const recoveryCodes=previous.rowCount?undefined:await createAccountRecoveryCodes(c.client,c.accountId);
-      await this.#changed(c);return {status:'changed',active:true,...(recoveryCodes?{recoveryCodes}:{})};
+      await this.#changed(c,initialEnrolment);return {status:'changed',active:true,...(recoveryCodes?{recoveryCodes}:{})};
     },pendingToken);
   }
   async regenerate(a:FactorAuthority):Promise<{status:'changed';active:boolean;recoveryCodes:string[]}> {

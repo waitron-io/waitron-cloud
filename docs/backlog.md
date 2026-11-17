@@ -815,21 +815,14 @@ order. Remote access matters most because Waitron's customer-facing features wai
    and the D101 design lists six open lawyer questions. Missing: terms of service, the data
    processing agreement with each venue, and the promises Cloud makes about how quickly a
    venue is recovered, how much data a failure can lose, and uptime.
-5. **Single-owner account lifecycle.** Each customer organisation has one Cloud account
-   owner in its country, with no invitations, manager accounts or concurrent second owner
-   (owner, 2026-10-24). Two countries mean two accounts. The owner approved the
-   [D608 lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
-   on 9 November 2026, including organisation-limited box recovery, single-use recovery
-   codes for every enrolled second method, password resets forgetting recognised devices,
-   handover defaults and no manual recovery or support/operator override. The watcher
-   cleared the [build plan](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md)
-   for publication on 11 November; the owner authorised building it at 14:05 with
-   “10-min window; build (Recommended)”. Slice 1 remembers passkey-first sign-in locally.
-   D608's handover slices 12–13 build the exactly-one-owner database rule and
-   swap-owner function on existing country ownership data; they no longer wait for
-   P3's owner/revision interface. Lost-owner recovery retains its lifecycle gates.
-   Billing account pages stay parked. Ownership grants no support takeover,
-   operator, fiscal or activation permission.
+5. **Single-owner recovery and first-time handover.** Remaining D608 work:
+   account-only signup for handover recipients without an account, and recovery of
+   the same owner through a verified mailbox plus a local administrator on a
+   currently paired box, limited to that organisation. Follow the
+   [lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
+   and [remaining build slices](superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md).
+   Countries remain independent. Billing pages stay parked; no manual recovery,
+   support takeover, operator, fiscal or activation permission is granted.
 6. **Support and the operator console.** The [D609 approved design](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
    reflects the owner's 2026-11-08 paired-box reporting, automatic sending with exact Sent
    reports, country feature lists and standard 24-hour support access choices. Box forms,

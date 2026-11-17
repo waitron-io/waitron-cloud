@@ -59,7 +59,7 @@ export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: 
       const {rows} = await readOutbox();
       // Allow only known states and counts; no row IDs, payloads, recipients or raw errors.
       outbox = rows.map(row => ({
-        kind: allowed(row.kind, ['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice']),
+        kind: allowed(row.kind, ['verification', 'password_reset', 'password_changed', 'service_alert', 'sign_in_check', 'email_change', 'email_changed', 'operator_notice','owner_transfer']),
         status: allowed(row.status, ['pending', 'processing', 'sent', 'expired', 'cancelled', 'failed']),
         attempts: count(row.attempts), failures: count(row.failures),
         lastError: row.last_error === null ? null : allowed(row.last_error, ['payload_unavailable', 'attempts_exhausted',
@@ -72,7 +72,7 @@ export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: 
   const diagnostic = async (boundary: object) => `Mail capture: ${JSON.stringify(await evidence(boundary))}`;
   return {
     evidence,
-    mailer: {...(options.mailer.sendOperatorNotice?{sendOperatorNotice:observe('sendOperatorNotice','operator_notice')}:{}),sendEmailChange: observe('sendEmailChange','email_change'),sendEmailChanged:observe('sendEmailChanged','email_changed'),sendVerification: observe('sendVerification', 'verification'), sendPasswordReset: observe('sendPasswordReset', 'password_reset'),
+    mailer: {...(options.mailer.sendOwnerTransfer?{sendOwnerTransfer:observe('sendOwnerTransfer','owner_transfer')}:{}),...(options.mailer.sendOperatorNotice?{sendOperatorNotice:observe('sendOperatorNotice','operator_notice')}:{}),sendEmailChange: observe('sendEmailChange','email_change'),sendEmailChanged:observe('sendEmailChanged','email_changed'),sendVerification: observe('sendVerification', 'verification'), sendPasswordReset: observe('sendPasswordReset', 'password_reset'),
       sendSignInCheck: observe('sendSignInCheck', 'sign_in_check'), sendPasswordChanged: observe('sendPasswordChanged', 'password_changed'), sendServiceAlert: observe('sendServiceAlert', 'service_alert')},
     async runOnce(worker: Pick<EmailWorker, 'runOnce'>) {
       const started = performance.now();
