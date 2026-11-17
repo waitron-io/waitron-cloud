@@ -57,6 +57,9 @@ test('remote switch withdraws signed routes after restart and restores the same 
  assert.deepEqual((await remote.manifest(runtime.cellId)).routes.find(r=>r.installationId===installationId).peerPublicKey,placement.peerPublicKey);
  await executeTestServiceCommand(context,{...command,enabled:true});
  assert.equal((await installations.execute('configuration',proof('configuration'))).revision,on.revision,'repeated on preserves setup');
+ await executeTestServiceCommand(context,{...command,enabled:false});
+ const pendingRestart=await openTestRemoteRuntime(options);await drain(pendingRestart.worker);
+ assert.deepEqual((await manifest()).routes.map(r=>r.installationId),[current[1]],'a restarted worker must apply an off not yet published');
  const production=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.production])).rows[0].id;
  const retired=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NOT NULL',[f.venues[0]])).rows[0].id;
  for(const id of [production,retired])await assert.rejects(executeTestServiceCommand(context,{...command,installationId:id,enabled:false}),/test_cloud.service_target/);

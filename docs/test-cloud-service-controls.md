@@ -60,11 +60,11 @@ Repeated on or off leaves the configuration revision unchanged.
 
 Off retains the peer configuration so the box's ordinary refresh sees its current
 key and does not request new provisioning. It still sees unconfigured setup and
-removes its tunnel configuration. Explicit trusted provisioning can restore setup;
-this switch does not revoke the installation or its keys. The optional signed
-`POST /api/installations/tunnel-provision` trial endpoint also restores setup if
-you enable it. Test account startup keeps that endpoint closed.
-A level reset, recovery or re-pairing needs fresh provisioning. Run off again after that setup change if needed.
+removes its tunnel configuration. Explicit trusted provisioning can restore setup,
+including the optional signed `POST /api/installations/tunnel-provision` trial
+endpoint. Test account startup keeps that endpoint closed. This switch does not
+revoke the installation or its keys. A level reset, recovery or re-pairing needs
+fresh provisioning. After any fresh provisioning, run off again if needed.
 Production, revoked and replaced installations refuse these commands.
 
 For backups, use the same command with a private input file containing:
