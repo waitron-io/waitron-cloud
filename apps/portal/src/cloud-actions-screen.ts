@@ -7,6 +7,7 @@ export function cloudActionsScreen(app:PortalApp){
  const c=app.copy,actions=app.cloudActions,disabled=actions.pending||!!actions.waiting;
  const date=(value:string)=>new Intl.DateTimeFormat(app.locale,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
  const state=(value:string)=>c[`cloudActionState_${value}` as keyof Copy];
+ const notice=(value:string)=>c[`cloudActionNotice_${value}` as keyof Copy]??c.cloudActionNotice_unknown;
  return html`<div class="cloud-actions"><p>${c.cloudActionsHelp}</p>
   ${actions.error?html`<p role="alert">${c[actions.error]}</p>`:nothing}
   ${actions.pending?html`<p role="status">${c.checking}</p>`:nothing}
@@ -20,7 +21,7 @@ export function cloudActionsScreen(app:PortalApp){
       <dt>${c.cloudActionsProposal}</dt><dd>${request.proposal}</dd><dt>${c.cloudActionsEvidence}</dt><dd>${request.evidence}</dd>
      </dl><p>${c.cloudActionsUnavailable}</p>
      ${request.state==='approved'&&request.approvalExpiresAt?html`<p>${c.cloudActionsExpires}: ${date(request.approvalExpiresAt)}</p>`:nothing}
-     ${request.events.map(event=>html`<p>${state(event.kind)} · ${date(event.at)}</p>`)}
+     ${request.events.map(event=>html`<p>${event.kind==='notice'?notice(event.noticeStatus??'unknown'):state(event.kind)} · ${date(event.at)}</p>`)}
      ${request.state==='pending'?html`<wt-form-actions><wt-button .disabled=${disabled} @click=${()=>{void app.decideCloudAction(request,'approved');}}>${c.cloudActionsApprove}</wt-button>
       <wt-button .disabled=${disabled} @click=${()=>{void app.decideCloudAction(request,'rejected');}}>${c.cloudActionsReject}</wt-button></wt-form-actions>`:nothing}
     </article>`)}

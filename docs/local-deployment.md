@@ -76,9 +76,12 @@ remains an operating decision.
 
 Every row shows its policy and **Execution unavailable**. The two initiation
 exceptions concern a failed Cloud workload restarted in place and the start of
-failed-machine replacement. They grant no hosted writer authority. Execution and
-notifications remain unavailable; later P4 slices add Mailpit notices and synthetic
-LAN effects. Routine workers keep their existing rules.
+failed-machine replacement. They grant no hosted writer authority. Execution remains unavailable; later P4 slices add synthetic LAN effects. Routine
+workers keep their existing rules. A saved pending proposal queues one encrypted
+notice for the configured operator’s verified email, even when venue alerts are
+off. The local Mailpit adapter sends a link to this list without proposal details
+or approval authority. The history shows delivery failures; provider transports
+refuse these notices.
 
 To rehearse a decision, enter `synthetic-incident-1` as the incident ID,
 `synthetic-cell` as the cell and `synthetic-worker` as the target. Choose **Drain a
