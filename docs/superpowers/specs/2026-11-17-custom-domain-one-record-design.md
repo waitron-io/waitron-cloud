@@ -130,11 +130,18 @@ Within approach 3 there are three places the answer could live:
   adding it and one removing it. In traffic-measurement mode each manifest starts a new HAProxy
   process and adds traffic-coverage rows, which feed billing allowances. A new manifest version
   would also break that mode, which accepts only version 2.
-- **b. In the gateway, delivered as a separate signed check list — chosen (Claude's call).** The
-  renewal worker signs a small per-cell check list with the cell's existing signing key, and each
-  gateway polls it next to the manifest. Routes, HAProxy and traffic coverage are untouched by a
-  check. There is no new service and no new network path, and the gateway still trusts only what
-  the cell key signed.
+- **b. In the gateway, as one plain file per name in the gateway's check folder, delivered the way
+  public certificates are — chosen (Claude's call, revised 2026-11-17 after review).** The renewal
+  worker writes a small file for each name being checked into the check folder of every cell that
+  serves the venue, and each gateway reads that folder in its existing loop. Routes, HAProxy and
+  traffic coverage are untouched by a check, and there is no new service or network path. The files
+  are not signed, because public certificates and their keys already reach the gateway as plain,
+  unsigned files in `/input/public-certs`
+  ([`gateway-cli.ts`](../../../packages/remote-access/src/gateway-cli.ts)): anyone who could write
+  the gateway's input could already plant a public certificate, so signing the far less sensitive
+  check files would add no protection. The first version of this design chose a signed, numbered
+  check list; a plain file per name also removes that list's weakness of an older list being
+  accepted after a gateway restart.
 - **c. One responder per cell that gateways forward check connections to.** This gives one answer,
   so there's no "has every gateway got it yet" question. But it's a new service holding state,
   reached from internet-facing gateways, that needs its own database access or a push path.
@@ -161,15 +168,14 @@ For each check:
 1. The worker builds the check certificate with a fresh throwaway key
    (`createAlpnCertificate(authz, keyAuthorization)`). It confirms the check is for exactly the
    name it ordered, as today's DNS path does (`unexpected_challenge`).
-2. It adds `{hostname, certificate, key, expiresAt}` to the check list of every cell that holds an
-   active or staged route for that venue, and signs and publishes those lists itself. Only route
-   jobs publish today ([`reconciler.ts`](../../../packages/remote-access/src/reconciler.ts)). The
-   worker loop schedules only between batches, so a certificate job cannot wait for a separate job
-   to publish its check.
-3. It tells Let's Encrypt the check is ready only once those lists have been loaded (see
-   *When to tell Let's Encrypt it is ready*).
-4. When the order ends, whether it succeeds or fails, it removes the entry and publishes the next
-   list without it.
+2. It writes the name's check file (certificate, key, `expiresAt`) itself into the check folder of
+   every cell that holds an active or staged route for that venue. Only route jobs publish today
+   ([`reconciler.ts`](../../../packages/remote-access/src/reconciler.ts)). The worker loop
+   schedules only between batches, so a certificate job cannot wait for a separate job to deliver
+   its check.
+3. It tells Let's Encrypt the check is ready only once every gateway reports the name answerable
+   (see *When to tell Let's Encrypt it is ready*).
+4. When the order ends, whether it succeeds or fails, it deletes those files.
 
 The throwaway key is not a secret worth protecting: it can answer only this one check, and only to
 someone already reaching the gateway for that name. It still never goes in logs or receipts.
@@ -178,21 +184,17 @@ The certificate's own key is unchanged: the box's CSR for the staff address, and
 public address, exactly as today. `validateCsr` and the publication rechecks
 (`publishAuthorizedCertificate`) stay as they are.
 
-### The check list
+### The check files
 
-- A signed envelope shaped like the manifest's, with its own `audience` (so a manifest can never
-  be taken for a check list, or the reverse), the cell id, its own increasing sequence, `issuedAt`,
-  a short `expiresAt`, and `challenges`: `{hostname, certificate, key, expiresAt}` entries.
-- It is signed with the cell's existing manifest key and refused unless the signature, cell,
-  audience, sequence and expiry all check out, as `verifyManifest` does for routes.
-- Each entry's `expiresAt` is no later than the list's own. Names are unique within a list.
-- The gateway answers a name only if it is a route name in the gateway's currently accepted
-  manifest *and* has a current entry in its accepted check list. A check list cannot add a route.
-- Size: the reviewer built a real ECDSA check certificate with the installed `acme-client`, and one
-  encoded entry came to about 1,710 characters. A list on its own, under the same 65,536-character
-  cap, fits about 38. The worker publishes at most what fits, and holds the rest for the next list.
-  Use an ECDSA throwaway key; `createAlpnCertificate` accepts one.
-- An expired or missing list means no checks are answered. Routing carries on unaffected.
+- One plain file per hostname in the gateway's check folder, holding the check certificate, its
+  key and `expiresAt`. No signing, no audience, no sequence.
+- The worker writes the file to every cell holding an active or staged route for the venue, and
+  deletes it when the order ends.
+- The gateway answers a name only if its file is unexpired **and** the name is a route name in the
+  gateway's currently accepted manifest. A check file cannot add a route.
+- Use an ECDSA throwaway key; `createAlpnCertificate` accepts one.
+- A missing, expired or unreadable file means that name's check is not answered. Routing carries
+  on unaffected.
 
 ### The gateway
 
@@ -205,17 +207,18 @@ public address, exactly as today. `validateCsr` and the publication rechecks
 - `acme_alpn` forwards to a small local TLS listener on loopback, inside the gateway process. That
   listener:
   - offers only the `acme-tls/1` protocol;
-  - picks the certificate by name from the accepted check list;
-  - refuses the handshake for any name that lacks a current entry or is not a route name in the
-    accepted manifest;
+  - picks the certificate by name from the check folder;
+  - refuses the handshake for any name that lacks an unexpired check file or is not a route name in
+    the accepted manifest;
   - sends no application data and closes after the handshake. RFC 8737 has the validating side
     close straight after the handshake.
 - Connections without `acme-tls/1` are routed exactly as today.
-- The listener swaps in a new check list's certificates in memory once it accepts the list. A check
-  list never touches HAProxy, the route manifest or traffic coverage. HAProxy is restarted only by
-  what restarts it today: a new manifest, and, with `GATEWAY_CERTIFICATE_REFRESH=1`, changed
-  public certificate files.
-- `status.json` gains the accepted check-list sequence, and whether that list is loaded.
+- The listener loads the check folder's certificates into memory in the gateway's existing loop. A
+  check file never touches HAProxy, the route manifest or traffic coverage. HAProxy is restarted
+  only by what restarts it today: a new manifest, and, with `GATEWAY_CERTIFICATE_REFRESH=1`,
+  changed public certificate files.
+- `status.json` gains the names the gateway can answer right now: unexpired file, loaded
+  certificate, and a route name in the accepted manifest.
 
 ### When to tell Let's Encrypt it is ready
 
@@ -225,12 +228,13 @@ answer is expensive: "Up to 5 authorization failures per identifier can be incur
 every hour" ([rate limits](https://letsencrypt.org/docs/rate-limits/)).
 
 So the worker tells Let's Encrypt the check is ready only after **every gateway that can receive
-that name reports a loaded check list whose sequence carries the check**. Accepted is not enough;
-it must be loaded. Today a gateway reports only to its own `status.json`. Nothing central learns
-it, and the backlog already lists "multi-gateway coordination" as open before production
+that name reports the name answerable**: its check file loaded, unexpired, and the name a route in
+that gateway's accepted manifest. A file merely present is not enough. Today a gateway reports only
+to its own `status.json`. Nothing central learns it, and the backlog already lists "multi-gateway
+coordination" as open before production
 ([service-candidates.md](../../backlog/service-candidates.md)). This design therefore:
 
-- defines the readiness rule in terms of a per-gateway "loaded check-list sequence" signal;
+- defines the readiness rule in terms of a per-gateway "answerable check names" signal;
 - in the local proof (one gateway per cell), reads it the way the proof already reads gateway
   status;
 - adds the signal to the existing multi-gateway coordination item as a requirement, without
@@ -238,10 +242,14 @@ it, and the backlog already lists "multi-gateway coordination" as open before pr
 
 Before tasks are written, the builder states how the local proof reads that signal.
 
-**Time limit.** A certificate job holds a 120-second claim, but nothing stops a job that runs past
-it. Once the claim lapses, a second worker can pick up the same job and start a second order for
-the same name. So the whole order, including the wait for gateways, must stay inside the claim. A
-job that cannot finish in time renews its claim, as the existing lease fences allow, or gives up.
+**Time limit.** Today every job holds a 120-second claim, and nothing stops a job that runs past it.
+Once the claim lapses, a second worker can pick up the same job and start a second order for the same
+name. So the whole order, including the wait for gateways, must stay inside the claim.
+
+Route 53 alone may take 75 of those 120 seconds, so certificate jobs get a longer claim than route and
+name jobs. A review on 2026-11-17 found the squeeze. The plan sets the value and shows its arithmetic.
+A job that still cannot finish in time renews its claim, as the existing lease fences allow, or gives
+up.
 Two orders for one name must never be in flight at once.
 
 If the gateways have not confirmed in time, the job ends the order without saying "ready". Nothing
@@ -421,7 +429,7 @@ DNS record, and must not break printed QR links.
 - **A move or failover switches only Cloud's record**, at the point the move commits to the new
   cell.
   - Before the switch, the new cell must already hold the venue's route, the public certificate and
-    any check entry. A staged move already publishes the route to the destination cell.
+    any check file. A staged move already publishes the route to the destination cell.
   - The owner's CNAME and the QR links are unchanged throughout.
   - Deciding *when* to fail over, and getting a replacement cell ready when a cell is lost, stay
     with the cell-move work. This design only guarantees that the names never need to change.
@@ -430,7 +438,7 @@ DNS record, and must not break printed QR links.
     with the cell, so the cross-suffix "wrong challenge name" problem in local-remote-access.md
     goes away.
   - For a custom name, Let's Encrypt follows owner's CNAME → stable name → current cell, so the
-    check reaches whichever cell serves the venue. During a staged move the check entry goes to
+    check reaches whichever cell serves the venue. During a staged move the check file goes to
     both cells, because the record may switch while an order runs.
 - **Nothing is in production**, so no existing venue needs its names carried over. Test
   installations are placed again. A migration that has already run is never edited: the new column
@@ -457,20 +465,20 @@ DNS record, and must not break printed QR links.
 ## What the tests must show
 
 - **Gateway:** a check connection for a current custom name gets the check certificate. One for an
-  unknown name, an expired entry or a name only in another cell's manifest is refused. A check
+  unknown name, an expired check file or a name only in another cell's manifest is refused. A check
   connection with a staff name never reaches the box (count backend connections). A normal
   connection with the same name is routed as before.
-- **Check list:** validation refuses a wrong signature, cell, audience, a sequence that doesn't
-  increase, an expired list, an entry expiring after the list, duplicate names and an over-size
-  list. A manifest is refused as a check list, and a check list as a manifest. In
-  traffic-measurement mode, publishing a check list starts no HAProxy process and adds no coverage
-  row.
+- **Check files:** the gateway ignores an expired file, a file whose key does not match its
+  certificate, a certificate without the `acme-tls/1` proof, and a file for a name that is not a
+  route in its accepted manifest. In traffic-measurement mode, writing a check file starts no
+  HAProxy process and adds no coverage row.
 - **Worker:** an order for a custom name uses TLS-ALPN-01 only, and one for an assigned name uses
-  DNS-01 only. "Ready" is never sent before every gateway reports the list loaded; accepted but not
-  loaded does not count. A timed-out wait sends nothing and retries. Two workers never hold orders
-  for one name at once. The entry is removed after success and after failure. A renewal for a name
-  whose CNAME has moved starts no order and records `dns_not_verified`. A venue with a staged move
-  gets the entry in both cells.
+  DNS-01 only. "Ready" is never sent before every gateway reports the name answerable; a file
+  present but not answerable (for example, its route not yet in the gateway's manifest) does not
+  count. A timed-out wait sends nothing and retries. Two workers never hold orders
+  for one name at once. The check files are deleted after success and after failure. A renewal for a
+  name whose CNAME has moved starts no order and records `dns_not_verified`. A venue with a staged
+  move gets the check file in both cells.
 - **Saving a name:** one record is required, and a missing or wrong one is refused with
   `dns_not_verified`. The namespace and reserved-name refusals still hold.
 - **Stable names:**
@@ -515,11 +523,10 @@ requires. `verifyDelegation`'s tests change deliberately, from two records to on
 
 ## Left to the builder
 
-- The check list's field names, audience string, file location and polling interval, and its
-  per-list limit from measured sizes.
+- The check files' format, folder location and file naming.
 - Whether the loopback listener is part of the existing public-gate process or a sibling inside the
   gateway process.
-- How the local proof reads each gateway's loaded check-list sequence.
+- How the local proof reads each gateway's answerable check names.
 - Whether a long order renews its claim or is bounded to fit inside it.
 - Whether to raise the 237-character custom-name limit.
 - Updating [local-remote-access.md](../../local-remote-access.md), the
@@ -529,8 +536,8 @@ requires. `verifyDelegation`'s tests change deliberately, from two records to on
 ## Still open after this lands
 
 The same production gates as the rest of remote access: live Let's Encrypt, the real zone,
-production keys, and multi-gateway coordination, which now carries this design's loaded check-list
-signal.
+production keys, and multi-gateway coordination, which now carries this design's answerable
+check-names signal, and getting each venue's check files to every gateway of a cell.
 
 The cell-move work keeps two questions: when to fail over, and how a replacement cell is made ready
 when one is lost. This design removes names from those questions, but doesn't answer them.
