@@ -564,7 +564,7 @@ completed history is excluded. This extra read is shared by the pass, and standa
 pickup uses the same reader. Recovered runs also reach the existing stale-empty-run
 and obsolete-PR cleanup rules. Authentication and rate-limit refusals still stop the
 pass; other failed or malformed extra reads log
-`automatic-ci-recent-runs-pending` and leaves filtered discovery available.
+`automatic-ci-recent-runs-pending` and leave filtered discovery available.
 A run omitted from the filtered lists and older than that recent page can still be
 missed. The campaign stall script's SERVER STUCK alarm catches stalled pickup; keep
 that alarm active. The controlled ten-row omission test checks discovery and admission,
