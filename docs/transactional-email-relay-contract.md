@@ -668,7 +668,9 @@ and returns an outcome separately from optional provider acceptance metadata.
 changing the queue, grant, allowance or outcome. Lost post-DATA acknowledgements
 remain uncertain; malformed optional IDs do not turn acceptance into a retry.
 Authentication and certificate/TLS configuration faults before DATA are temporary,
-so the existing bounded retry policy retains the payload while you repair settings.
+so you can repair settings within the existing retry window: the worker retains
+the payload for up to eight attempts or the message’s expiry, whichever comes
+first. Exhausting that bound still ends delivery and clears the payload.
 A recipient’s explicit 550 refusal remains permanent.
 These local fixtures establish no live provider qualification. Normal startup
 still exposes no production relay path, and `RelayWorkerConfig.mode` remains
