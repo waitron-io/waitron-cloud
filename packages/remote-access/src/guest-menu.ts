@@ -1,3 +1,4 @@
+import {matchGuestMenuLanguage} from './guest-menu-match.ts';
 import {isGuestMenuLanguage} from './guest-menu-language.ts';
 import type {Pool,PoolClient} from 'pg';
 import {createHash} from 'node:crypto';
@@ -20,10 +21,12 @@ export async function setGuestMenuBlocked(client:PoolClient,venueId:string,block
  else await client.query("UPDATE guest_menus SET revision=revision+1,state='off' WHERE venue_id=$1 AND state='blocked'",[venueId]);
  return guestMenuStatus(client,venueId,origin);
 }
-export async function readGuestMenu(client:Pick<Pool,'query'>,venueId:string,language?:string):Promise<{html:string;revision:number;language:string}|null>{
+export async function readGuestMenu(client:Pick<Pool,'query'>,venueId:string,language?:string|readonly string[]):Promise<{html:string;revision:number;language:string}|null>{
  const row=(await client.query("SELECT revision,default_language,pages FROM guest_menus WHERE venue_id=$1 AND state='current'",[venueId])).rows[0];
  if(!row)return null;
- const selected=language&&row.pages?.[language]!==undefined?language:row.default_language,html=row.pages?.[selected];
+ // jsonb has no saved key order; the main page wins ties, then byte-sorted keys.
+ const offered=[row.default_language,...Object.keys(row.pages??{}).filter(key=>key!==row.default_language).sort()];
+ const selected=matchGuestMenuLanguage(typeof language==='string'?[language]:language??[],offered)??row.default_language,html=row.pages?.[selected];
  if(typeof html!=='string'||Buffer.byteLength(html)>2097152)throw Error('guest_menu_unavailable');
  return {html,revision:Number(row.revision),language:selected};
 }

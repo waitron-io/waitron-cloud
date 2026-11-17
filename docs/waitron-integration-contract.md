@@ -2700,12 +2700,20 @@ representation, reserve and permission/commit mappings need E/G engineering acce
 
 The [guest-menu contract](superpowers/plans/2026-11-14-a670-cloud-guest-menu.md)
 separates stored public pages from live ordering. Its local reader serves
-`GUEST_ORIGIN/m/<venueUuid>` with an optional `lang` using Waitron’s stored content-language key, such as
-`fr` or `ca-ES-valencia`, choosing the stored default when a translation is absent.
-Keys are named canonical lowercase two- or three-letter language codes, plus
-exactly `ca-ES-valencia`; aliases, case variants and malformed keys are refused. GET and HEAD require the exact
-guest host; extra paths, duplicate or unsupported `lang`, request bodies and
-upgrades are refused. Unknown query parameters are ignored.
+`GUEST_ORIGIN/m/<venueUuid>`. With `?lang=`, that value alone chooses the page;
+otherwise your phone’s `Accept-Language` preferences apply, in descending positive
+weight and header order on ties. Malformed entries, zero weights and wildcards
+are ignored. For each preference, canonicalize with `Intl.Locale`, strip extensions,
+try the exact tag, drop trailing parts one at a time, then try the same base language.
+No match, including an empty or invalid explicit `lang`, uses the stored main page.
+Matching ties prefer the main page, then page keys sorted by bytes, because the
+stored JSON keeps no saved order. Successful GET and HEAD include the selected
+`Content-Language` and `Vary: Accept-Language`.
+Publication keys still require canonical lowercase two- or three-letter language
+codes, plus exactly `ca-ES-valencia`; aliases, case variants and malformed keys
+are refused at publication. GET and HEAD require the exact guest host; extra paths,
+duplicate `lang`, request bodies and upgrades are refused. Unknown query parameters,
+including `language`, are ignored.
 HTML is limited to 2 MiB and sent with `no-store` and a content policy that denies
 scripts, external assets, forms and framing, while allowing inline styles.
 

@@ -36,6 +36,22 @@ test('a stored public copy has one permanent link; takedown removes bytes and En
  assert.equal(await readGuestMenu(db.pool,venueId),null);
 });
 
+test('stored pages match regional strings and ordered phone preferences with the main page first on ties',async()=>{
+ const f=await guestMenuFixture();try{
+  await f.seed({en:'<h1>Menu</h1>',es:'<h1>Menú</h1>','ca-ES-valencia':'<h1>Carta</h1>',fr:'<h1>Carte</h1>'});
+  await f.db.pool.query('UPDATE guest_menus SET default_language=$1 WHERE venue_id=$2',['fr',f.venueId]);
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,'es-MX'))?.language,'es');
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,['ca','es']))?.language,'ca-ES-valencia');
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,['de','ES-mx']))?.html,'<h1>Menú</h1>');
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,['bad_tag','de']))?.language,'fr');
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,[]))?.language,'fr');
+  await f.db.pool.query("UPDATE guest_menus SET pages=pages || $1::jsonb,default_language='ca-ES-valencia' WHERE venue_id=$2",[{'ca-AD':'<h1>Other page</h1>','ca-FR':'<h1>Other Catalan</h1>'},f.venueId]);
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,'ca-BE'))?.language,'ca-ES-valencia');
+  await f.db.pool.query("UPDATE guest_menus SET default_language='fr',pages=pages-'ca-AD' WHERE venue_id=$1",[f.venueId]);
+  assert.equal((await readGuestMenu(f.db.pool,f.venueId,'ca-BE'))?.language,'ca-ES-valencia');
+ }finally{await f.db.close();}
+});
+
 const cloud='https://cloud.example.test';
 async function delivery(){
  const db=await database(),issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));

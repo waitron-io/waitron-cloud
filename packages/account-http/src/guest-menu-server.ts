@@ -1,4 +1,4 @@
-import {isGuestMenuLanguage} from '../../remote-access/src/guest-menu-language.ts';
+import {guestMenuPreferences} from './guest-menu-preferences.ts';
 import {createServer} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
 import type {Pool} from 'pg';
@@ -31,18 +31,17 @@ export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;ori
    if(url.origin!==origin||req.headers.host!==new URL(origin).host){respond(res,403,'forbidden');return;}
    if(!['GET','HEAD'].includes(req.method??'')){respond(res,405,'method_not_allowed');return;}
    if((req.url??'').split('?')[0]!==url.pathname||!url.pathname.startsWith('/m/')||!isUuid(id)||url.hash||url.searchParams.getAll('lang').length>1
-    ||(language!==undefined&&!isGuestMenuLanguage(language))
     ||req.headers['transfer-encoding']!==undefined||req.headers.upgrade!==undefined
     ||(req.headers['content-length']!==undefined&&req.headers['content-length']!=='0')){respond(res,400,'invalid_input');return;}
    const rate=await limiter.consume([{scope:'guest-menu-ip',subject:clientAddress(req.socket.remoteAddress??'',undefined,[]),limit:120,windowSeconds:60}]);
    if(!rate.allowed){res.setHeader('retry-after',rate.retryAfterSeconds);respond(res,429,'limited');return;}
-   const menu=await readGuestMenu(options.pool,id,language);
+   const menu=await readGuestMenu(options.pool,id,language===undefined?guestMenuPreferences(req.headers['accept-language']):language);
    if(!menu){respond(res,404,'not_found');return;}
    // A takedown that commits while the copy is buffered must be seen before releasing bytes.
    const current=(await options.pool.query('SELECT revision,state FROM guest_menus WHERE venue_id=$1',[id])).rows[0];
    if(current?.state!=='current'){respond(res,404,'not_found');return;}
    if(Number(current.revision)!==menu.revision){respond(res,503,'unavailable');return;}
-   if(!res.destroyed){res.writeHead(200,{...headers,'content-type':'text/html; charset=utf-8','content-language':menu.language,'content-length':Buffer.byteLength(menu.html)});res.end(req.method==='HEAD'?undefined:menu.html);}
+   if(!res.destroyed){res.writeHead(200,{...headers,'vary':'Accept-Language','content-type':'text/html; charset=utf-8','content-language':menu.language,'content-length':Buffer.byteLength(menu.html)});res.end(req.method==='HEAD'?undefined:menu.html);}
   }catch(error){respond(res,error instanceof AccountHttpError?error.status:503,error instanceof AccountHttpError?error.message:'unavailable');}
   finally{active--;}
  };
