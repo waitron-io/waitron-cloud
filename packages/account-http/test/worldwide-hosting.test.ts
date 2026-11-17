@@ -30,19 +30,20 @@ test('admin CLI bootstraps a separate database and the server starts only its co
 });
 
 test('real TLS proxy redirects only apex root to Spain and admits the console host', async () => {
-  const {mkdtemp,readFile,writeFile,rm} = await import('node:fs/promises');
+  const {mkdtemp,readFile,writeFile,rm,chmod} = await import('node:fs/promises');
   const {existsSync} = await import('node:fs');
   const {tmpdir} = await import('node:os'); const {join} = await import('node:path');
   const {request} = await import('node:https'); const {randomUUID} = await import('node:crypto');
   const config = new URL('../../../deploy/worldwide/proxy.cfg',import.meta.url);
   assert.ok(existsSync(config),'Worldwide TLS proxy must be supplied');
   const directory = await mkdtemp(join(tmpdir(),'console-proxy-')); const name = 'cloud-console-proxy-'+randomUUID(); let owned=false;
+  await chmod(directory,0o755);
   try {
     await exec('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=console.example.test','-keyout',join(directory,'key.pem'),'-out',join(directory,'cert.pem')]);
     await writeFile(join(directory,'tls.pem'),await readFile(join(directory,'cert.pem'),'utf8')+await readFile(join(directory,'key.pem'),'utf8'));
     await writeFile(join(directory,'proxy.cfg'),await readFile(config));
     try {await exec('docker',['image','inspect','haproxy:3.2-alpine']);} catch {await exec('docker',['pull','haproxy:3.2-alpine'],{timeout:120000});}
-    await exec('docker',['run','--detach','--rm','--name',name,'--publish','127.0.0.1::8443','--volume',`${directory}:/run/console:ro`,'--env','CONSOLE_HOST=console.example.test','--env','APEX_HOST=example.test','haproxy:3.2-alpine','haproxy','-W','-db','-f','/run/console/proxy.cfg']); owned=true;
+    await exec('docker',['run','--detach','--name',name,'--publish','127.0.0.1::8443','--volume',`${directory}:/run/console:ro`,'--env','CONSOLE_HOST=console.example.test','--env','APEX_HOST=example.test','haproxy:3.2-alpine','haproxy','-W','-db','-f','/run/console/proxy.cfg']); owned=true;
     const port = Number((await exec('docker',['port',name,'8443/tcp'])).stdout.trim().split(':').at(-1));
     const get = (host:string,path:string) => new Promise<{status:number;headers:import('node:http').IncomingHttpHeaders}>((resolve,reject) => {
       const req = request({hostname:'127.0.0.1',port,path,headers:{host,cookie:'country_session=never-forward'},rejectUnauthorized:false},response=>{
@@ -57,6 +58,9 @@ test('real TLS proxy redirects only apex root to Spain and admits the console ho
     assert.equal((await get('example.test','/api/account/session')).status,404);
     assert.equal((await get('console.example.test','/')).status,503);
     assert.equal((await get('elsewhere.test','/')).status,403);
+  } catch (error) {
+    if (owned) {const logs=await exec('docker',['logs',name]);throw new Error(`Proxy fixture failed: ${error instanceof Error ? error.message : 'Error'}\n${logs.stdout}${logs.stderr}`,{cause:error});}
+    throw error;
   } finally {if(owned) await exec('docker',['rm','--force',name]);await rm(directory,{recursive:true,force:true});}
 });
 test('an empty dedicated database can start before the first admin is provisioned', async t => {
