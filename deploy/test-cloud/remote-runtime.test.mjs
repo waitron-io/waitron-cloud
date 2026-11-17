@@ -104,3 +104,23 @@ test('manifest readiness waits for its cell transaction before allowing paid pla
  child.kill('SIGTERM');assert.equal(await closed,0,stderr);
  assert.equal(probe(),1,'a stopped worker must not retain readiness');
 });
+
+test('public remote startup changes only an empty test cell and retains identity before refusing occupied changes',async t=>{
+ const {openTestRemoteRuntime}=await import('./remote-runtime.mjs'),db=await database();t.after(()=>db.close());
+ const directory=await mkdtemp(join(tmpdir(),'cloud-public-remote-'));t.after(()=>rm(directory,{recursive:true,force:true}));await bootstrapTestCloud(directory);
+ const options={pool:db.pool,directory,mode:'test-free-paid'},local=await openTestRemoteRuntime(options);
+ const identity=await Promise.all(['runtime.json','gateway-signing-key.pem','gateway-wireguard.key','gateway-issuer.pem'].map(file=>readFile(join(directory,file))));
+ const previous=(await db.pool.query('SELECT public_key,sequence FROM remote_cells WHERE id=$1',[local.cellId])).rows[0],zone='test-cloud.example.test';
+ const publicRemote={zone,endpoint:zone+':51820',directoryUrl:'https://ca.example.test/dir',accountKey:generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'pem',type:'pkcs8'})};
+ const current=await openTestRemoteRuntime({...options,publicRemote});assert.equal(current.cellId,local.cellId);
+ const row=(await db.pool.query('SELECT suffix,endpoint,public_key,sequence FROM remote_cells WHERE id=$1',[local.cellId])).rows[0];
+ assert.deepEqual(row,{suffix:zone,endpoint:zone+':51820',...previous});assert.equal((await db.pool.query("SELECT suffix FROM remote_country_zones WHERE country='ES' AND environment='test'")).rows[0].suffix,zone);
+ assert.deepEqual(await Promise.all(['runtime.json','gateway-signing-key.pem','gateway-wireguard.key','gateway-issuer.pem'].map(file=>readFile(join(directory,file)))),identity);
+ const organisation=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID();
+ await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);await db.pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,venue,generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).toString('base64url')]);await db.pool.query("INSERT INTO installation_services(installation_id,service) VALUES($1,'remote_access')",[installation]);await new OrganisationPlanStore(db.pool).set(organisation,'paid');
+ const placement=await new RemoteAccessStore(db.pool,'test-free-paid').provision(installation,local.cellId,generateKeyPairSync('x25519').publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64'));
+ assert.equal(placement.publicHostname,'v-'+venue+'.'+zone);assert.equal(placement.staffHostname,'staff-v-'+venue+'.'+zone);
+ await openTestRemoteRuntime({...options,publicRemote});
+ await assert.rejects(openTestRemoteRuntime({...options,publicRemote:{...publicRemote,zone:'other.example.test',endpoint:'other.example.test:51820'}}),/test_cloud.remote_cell_conflict/);
+ assert.deepEqual((await db.pool.query('SELECT suffix,endpoint,public_key,sequence FROM remote_cells WHERE id=$1',[local.cellId])).rows[0],row);
+});
