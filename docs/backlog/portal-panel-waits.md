@@ -48,3 +48,20 @@ authority.
 **Open:** capture a diagnostic recurrence, reproduce its recorded boundary, then
 fix the proved cause without changing the existing checks or deadlines. Do not
 repeat the passing baseline without a new diagnostic lead.
+
+## Owner handover enrolment wait
+
+On 17 November, [PR #1282's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44182558014/job/134390665646)
+timed out at `owner-transfer-browser.test.ts:119` waiting eight seconds for
+`.factor-codes`. The case passed on the previous PR head, and only three
+remote-access test files changed between heads. Its unchanged journey also
+passed all eight language, theme and width combinations on the Mac.
+
+The fixture submits `actionTestTotp(secret,-1)`. In a disposable browser probe,
+holding only its activation request for 2,479 ms across the next thirty-second
+code boundary produced HTTP 403 and the same page-wait failure. No clock,
+assertion, deadline or production source changed. This demonstrates a timing
+weakness in the fixture; the original CI response was not retained, so it does
+not establish that run's cause. The Mac result does not qualify Linux. Keep the
+enrolment, session, membership and explicit acceptance checks while investigating
+the fixture's code timing; a later green CI run is not a repair.

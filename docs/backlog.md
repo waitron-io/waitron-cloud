@@ -296,6 +296,9 @@ investigation, with the original assertions, limits and cleanup checks preserved
 PR #1173 later hit the translation launcher’s unchanged 20-second startup limit
 twice. The real-stack launcher now runs apart from the package’s database-heavy tests;
 the CI timeout’s cause remains unproved, and no link to D574 is established.
+PR #1282 later reported startup `ETIMEDOUT` with no service states in the same
+fixture; [the retained evidence](backlog/translation-startup.md) leaves its cause
+open and preserves every deadline and migration-refusal assertion.
 
 Lane J's local `receipts/d593/sweep-inventory.json` retains every original entry,
 its source revision and its investigation links. The matching failure records
@@ -2248,6 +2251,10 @@ bounded diagnostics](backlog/mail-capture.md#account-http-reset-mail-capture).
 attributing the initial signed-in timeout. See the [investigation and diagnostic boundaries](backlog/portal-session-startup.md).
 
 ## Recovery and remote browser waits (D530)
+
+PR #1282 also exposed an owner-handover enrolment wait. A controlled request delay
+reproduces it across an authenticator-code boundary; the original CI cause remains
+unproved. See [the recorded timing probe](backlog/portal-panel-waits.md#owner-handover-enrolment-wait).
 
 15 November 2026: [run 43694844056, portal job 132753088334](https://github.com/waitron-io/waitron-cloud/actions/runs/43694844056/job/132753088334) has one `account_without_registry es light 1280` sign-out timeout waiting four seconds for the sign-in heading (`fiscal-registry-removed-browser.test.ts:63`); no matching history was found, and the cause remains unknown. Preserve every assertion and deadline; a recurrence needs priority root-cause investigation.
 
