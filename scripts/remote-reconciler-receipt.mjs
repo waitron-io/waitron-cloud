@@ -45,7 +45,7 @@ try{
  let initialRuns=0;while(await worker.runOnce()){if(++initialRuns>5)throw new Error('unexpected initial reconciliation work');}
  assert.equal(initialRuns,5);assert.equal(issuances,2);assert.equal(routePublications,1);checks.push('initial route, stable names and public/staff certificates reconciled through local adapters');
  const initialStaff=new X509Certificate(await readFile(staffCertificate)),initialPublic=new X509Certificate(await readFile(publicCertificate));
- waitronCertificate('install',selectedPlacement.staffHostname,staffCertificate);assert.equal(await readFile(join(waitronState,'cloud-staff.crt'),'utf8'),await readFile(staffCertificate,'utf8'));
+ waitronCertificate('install',selectedPlacement.staffHostname,staffCertificate);assert.equal(await readFile(join(waitronState,'cloud/staff.crt'),'utf8'),await readFile(staffCertificate,'utf8'));
  const staffPrivate=await readFile(join(waitronState,'cloud/staff.key'),'utf8'),cloudArtifacts=(await Promise.all([staffCsr,staffCertificate,publicCsr,publicCertificate,manifestFile].map(file=>readFile(file,'utf8')))).join('\n');assert.equal(cloudArtifacts.includes(staffPrivate),false);checks.push('Waitron existing install interface accepted the staff chain while its private key stayed in Waitron state');
  const firstManifest=verifyManifest(envelopes[0],signing.publicKey,cellId);assert.deepEqual(firstManifest.routes.map(route=>route.installationId).sort(),[selected.installationId,other.installationId].sort());
  assert.notEqual(firstManifest.routes.find(route=>route.installationId===selected.installationId)?.peerPublicKey,otherPlacement.peerPublicKey);checks.push('signed route projection contains two isolated venue identities');
