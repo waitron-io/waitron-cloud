@@ -240,7 +240,7 @@ async function open(t, f) {
   t.after(() => run.close().catch(error => assert.equal(error.message, bad.message))); return run;
 }
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function upload(f) { for (let i = 0; i < 100 && !f.uploaded(); i++) await wait(20); assert.ok(f.uploaded() > 0); }
+async function upload(f, prior = 0, phase = 'initial') { for (let i = 0; i < 100 && f.uploaded() <= prior; i++) await wait(20); assert.ok(f.uploaded() > prior, 'Expected a new '+phase+' upload'); }
 function clean(f) {
   assert.equal(existsSync(join(f.root, 'native-stream')), false);
   assert.equal(existsSync(f.database), true); assert.equal(readFileSync(join(f.root, 'unrelated'), 'utf8'), 'keep');
@@ -258,8 +258,8 @@ test('replayStreamKeepsOneWriterAcrossPhasesAndRestoresAllExpectedSales', async 
   const run = await open(t, f); await upload(f);
   const startup = await run.setPhase('workload'); assert.deepEqual(startup, { phase: 'workload' });
   const db = new DatabaseSync(f.database); db.exec('INSERT INTO sales VALUES(2)'); db.close();
-  await wait(150); await run.setPhase('idle'); await wait(100);
-  await run.setPhase('verification'); await wait(100);
+  await upload(f, f.uploaded(), 'workload'); await run.setPhase('idle'); await upload(f, f.uploaded(), 'idle');
+  await run.setPhase('verification'); await upload(f, f.uploaded(), 'verification');
   const result = await run.finish({ expectedSales: 2 });
   assert.deepEqual(result.restored, { sales: 2, integrity: true });
   assert.equal(result.stream.status, 'measured'); assert.equal(result.stream.requests.reconciled, true);
