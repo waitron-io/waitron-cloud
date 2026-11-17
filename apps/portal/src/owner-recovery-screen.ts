@@ -3,7 +3,7 @@ import type {PortalApp} from './app.ts';
 export function ownerRecoveryScreen(app:PortalApp){
  const r=app.ownerRecovery,c=app.copy,busy=r.pending||!!r.waiting;
  const button=(label:string)=>html`<wt-form-actions><wt-button id="submit" variant="primary" .disabled=${busy} .loading=${r.pending} @click=${()=>{void app.submit();}}>${label}</wt-button></wt-form-actions>`;
- return html`<section aria-labelledby="owner-recovery-heading"><h2 id="owner-recovery-heading" tabindex="-1">${c.ownerRecoveryTitle}</h2>
+ return html`<section>
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}
   ${r.stage==='choose'?html`<p>${c.ownerRecoveryChoose}</p>${r.venues.length?html`
    <div class="business-choice"><label for="owner-recovery-venue">${c.ownerRecoveryBox}</label><select id="owner-recovery-venue" name="ownerRecoveryVenue" .value=${r.installationId} ?disabled=${busy}

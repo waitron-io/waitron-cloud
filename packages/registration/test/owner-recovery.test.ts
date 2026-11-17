@@ -172,3 +172,17 @@ test('password screening refusal leaves guarded recovery available for an accept
  mode='acceptable';await screened.complete(token,replacement);
  assert.equal((await transaction(db.pool,c=>login(c,{email:'owner@example.test',password:replacement}))).accountId,owner.accountId);
 });
+
+
+test('accepted approval survives its transport lease but a later box revocation still refuses completion',async()=>{
+ const now=Date.now();
+ box.lease=issuer.issue({origin,leaseId:randomUUID(),installationId:box.installationId,venueId:box.venueId,environment:'test',publicKey:box.publicKey,issuedAt:now-55*60_000,expiresAt:now+5*60_000});
+ const request=await selected();await approve(request);
+ const timed=new OwnerRecoveryStore(databaseClock(db.pool,()=>now+6*60_000),db.outbox,{origin,countryCode:'ES',issuer});
+ assert.equal((await timed.status(token)).state,'approved');
+ await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[box.installationId]);
+ await assert.rejects(timed.complete(token,replacement),/recovery_unavailable/);
+ assert.equal((await db.pool.query('SELECT consumed_at FROM password_reset_requests WHERE token_hash=$1',[digest(token)])).rows[0].consumed_at,null);
+ await db.pool.query('UPDATE installations SET revoked_at=NULL WHERE id=$1',[box.installationId]);
+ assert.equal((await timed.complete(token,replacement)).accountId,owner.accountId);
+});

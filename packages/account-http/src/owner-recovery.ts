@@ -19,7 +19,8 @@ export async function ownerRecoveryResponse(c:Context,o:{store?:OwnerRecoverySto
    return c.json(await o.store.machine(action as MachineAction,body));
   }
   const body=await readAccountBody(c.req.raw,action==='select'?['token','installationId']:action==='complete'?['token','password']:['token'],action==='complete'?['locale']:[]);
-  await o.consume([{scope:'/password-reset/complete-ip',subject:o.ip,limit:10,windowSeconds:900},{scope:'/password-reset/complete-token',subject:body.token!,limit:10,windowSeconds:900}]);
+  const budget=action==='status'?'/owner-recovery/status':'/password-reset/complete';
+  await o.consume([{scope:budget+'-ip',subject:o.ip,limit:10,windowSeconds:900},{scope:budget+'-token',subject:body.token!,limit:10,windowSeconds:900}]);
   if(action==='begin')return c.json(await o.store.begin(body.token!));
   if(action==='select')return c.json(await o.store.select(body.token!,body.installationId!));
   if(action==='status')return c.json(await o.store.status(body.token!));

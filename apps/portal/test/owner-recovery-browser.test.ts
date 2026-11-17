@@ -21,7 +21,7 @@ test('reset link recovers through the real Cloud box decision, then enrolls a ne
   await f.db.pool.query('DELETE FROM organisation_memberships WHERE organisation_id=$1',[other.organisationId]);await f.db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner,can_register_venues) VALUES($1,$2,true,true)',[box.accountId,other.organisationId]);
   const token=await resetLink(f,box.accountId),page=await context.newPage();page.setDefaultTimeout(6000);virtual=await addVirtualAuthenticator(context,page);
   await page.goto(f.origin+'/reset-password#token='+token);assert.equal(new URL(page.url()).hash,'');
-  await page.getByRole('button',{name:'Lost your sign-in method?',exact:true}).click();await page.locator('#owner-recovery-venue').waitFor();
+  await page.getByRole('button',{name:'Lost your sign-in method?',exact:true}).click();await page.locator('#owner-recovery-venue').waitFor();assert.equal(await page.getByRole('heading',{level:1}).textContent(),'Recover your account');
   async function look(stage:string){for(const lang of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
    await page.setViewportSize({width,height:900});await page.emulateMedia({colorScheme:theme});await page.locator('header select').selectOption(lang);
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/owner-recovery-${stage}-${lang}-${theme}-${width}.png`,import.meta.url).pathname,fullPage:true});

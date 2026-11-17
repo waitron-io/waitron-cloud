@@ -167,6 +167,8 @@ Display the account/mailbox and organisation/venue before the administrator choo
 Cloud verifies the paired key and relies on the jointly qualified Waitron server guard for actual local-administrator enforcement; `approvedBy`/`refusedBy` are audit values, not independently verifiable role proofs. Possession of a machine key or a browser role/person assertion alone authorises nothing; keep recovery unavailable until this guarded path is qualified.
 
 The recovering browser, never the box, completes recovery using its mailbox proof after approval. Cloud independently rechecks signature/lease, exact `R`, mailbox proof, unchanged verified email, enabled account, current ownership, venue/business/organisation/non-null country and live pairing.
+
+Watcher, 17 November20:20: verify the recorded signature and lease at their recorded acceptance time; completion still locks and rechecks the current installation/key and all request bindings before the unchanged recovery deadline.
 Hold existing authority locks through consumption; security/reset changes invalidate pending recovery. Recheck expiry after waits using Cloud's clock.
 Consume request/mailbox proof once with restricting the same account, ending lost proofs/sessions, queuing notice to its verified address and issuing only the parent's enrollment-only session to that browser. Require fresh enrollment before organisation access.
 Replay creates no new session or authority. Pending/refused/unavailable/expired requests grant no access or membership; pending state alone is no usable recovery outcome.

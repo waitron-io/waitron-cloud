@@ -101,7 +101,7 @@ export class OwnerRecoveryStore {
   if(!row)invalid();const now=await time(client),claims=verifyMachine(envelope,row.public_key,this.#options.origin,action,verifiedAt??now);
   let lease:unknown;try{lease=JSON.parse(claims.lease);}catch{invalid();}
   if(JSON.stringify(lease)!==claims.lease)invalid();
-  const l=verifyLease(lease,this.#trusted,this.#options.origin,now);
+  const l=verifyLease(lease,this.#trusted,this.#options.origin,verifiedAt??now);
   if(l.installationId!==row.id||l.venueId!==row.venue_id||l.publicKey!==row.public_key||l.environment!==row.environment)invalid();
   return claims;
  }

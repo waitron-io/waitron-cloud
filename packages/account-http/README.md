@@ -258,14 +258,17 @@ its exact Origin to `/api/account/owner-recovery/`:
 | `complete` | `{token,password,locale?}` | `{accountId,enrollmentRequired:true}` and session/CSRF cookies |
 
 Check status explicitly after the local administrator decides; the portal does not
-poll automatically. These routes share ordinary reset completion’s 10-per-IP and
-10-per-token allowance per 15 minutes. Reset mail keeps its shared one-minute
+poll automatically. Status has its own 10-per-IP and 10-per-token allowance per
+15 minutes. Begin, select and complete share ordinary reset completion’s separate
+equal allowance, so status checks cannot exhaust completion. Reset mail keeps its shared one-minute
 cooldown and original 30-minute deadline. The mailbox token is never sent to the box.
 
 The signed `/api/installations/owner-recovery-{read,approve,refuse}` routes use the
 [agreed request and bodies](../../docs/superpowers/plans/2026-11-11-d631-owner-lifecycle-build.md#box-approval-contract-lane-f-and-cloud).
 They reject browser Origin headers and retain the existing IP, authentication,
-then installation-key limits. A different recorded decision returns 409 `conflict`.
+then installation-key limits. Recorded approvals retain their signature and lease
+verification at acceptance time; completion still checks the current live pairing
+and unchanged deadline. A different recorded decision returns 409 `conflict`.
 An unavailable browser request returns 404 `recovery_unavailable`; an A-limited
 account choosing B receives 403 `recovery_scope_limited`. Completion requires fresh
 enrollment before organisation access. Later sign-in or ordinary password reset

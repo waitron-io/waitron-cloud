@@ -230,7 +230,7 @@ export class PortalApp {
     if (this.requested) return c.checkEmail;
     if (this.path === '/signup') return c[this.link.token ? 'completeSignup' : 'signup'];
     if (this.path === '/forgot-password') return c.forgot;
-    if (this.path === '/reset-password') return c.reset;
+    if (this.path === '/reset-password') return this.ownerRecovery.stage==='idle'?c.reset:c.ownerRecoveryTitle;
     if (['/', '/account'].includes(this.path)) return c.account;
     return c.login;
   }

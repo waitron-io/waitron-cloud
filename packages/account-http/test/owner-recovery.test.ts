@@ -26,6 +26,7 @@ test('HTTP mailbox, signed box and completion issue only enrollment cookies, wit
  assert.equal(begun.headers.getSetCookie().length,0);assert.equal((await begun.json()).venues[0].installationId,f.box.installationId);
  const selected=await f.browser('select',{token:f.token,installationId:f.box.installationId});assert.equal(selected.status,200);
  const request=await selected.json();
+ for(let n=0;n<8;n++)assert.equal((await f.browser('status')).status,200);
  const read=await f.machine('owner-recovery-read');assert.equal(read.status,200);assert.deepEqual(await read.json(),{requests:[request]});
  const approved=await f.machine('owner-recovery-approve',{request,approvedBy:randomUUID()},request.requestId);assert.equal(approved.status,200);
  const conflict=await f.machine('owner-recovery-refuse',{request,refusedBy:randomUUID()},request.requestId);assert.equal(conflict.status,409);
@@ -37,7 +38,7 @@ test('HTTP mailbox, signed box and completion issue only enrollment cookies, wit
  assert.equal((await f.call('/api/account/installations',{}, {cookie},'GET')).status,403);
  assert.equal((await f.browser('complete',{token:f.token,password:'A long screened replacement password'})).status,404);
 });
-test('HTTP recovery checks origin, method, exact fields and shared reset completion limits',async()=>{
+test('HTTP recovery checks origin, method, exact fields and independent status and completion limits',async()=>{
  const f=await fixture();
  assert.equal((await f.browser('begin',undefined,{origin:'https://foreign.example.test'})).status,403);
  assert.equal((await f.call('/api/account/owner-recovery/begin',{}, {},'GET')).status,405);
@@ -45,5 +46,7 @@ test('HTTP recovery checks origin, method, exact fields and shared reset complet
  assert.equal((await f.browser('begin',{token:'bad'})).status,404);
  assert.equal((await f.browser('owner-recovery-read')).status,404);
  const rate=await fixture();for(let n=0;n<10;n++)assert.equal((await rate.browser('status')).status,404);
- const limited=await rate.browser('complete',{token:rate.token,password:'A new long enough password'});assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
+ const limited=await rate.browser('status');assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
+ for(let n=0;n<10;n++)assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,404);
+ assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,429);
 });
