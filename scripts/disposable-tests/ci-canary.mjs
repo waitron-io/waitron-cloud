@@ -97,6 +97,7 @@ async function addRecentRuns({api,policy,signal,runs}){
   for(const run of data.workflow_runs)if(['queued','in_progress'].includes(run.status)&&!runs.has(run.id))runs.set(run.id,run);
  }catch(error){
   signal?.throwIfAborted();
+  if(error.status===401 || error.status===403 || error.status===429 || Number.isFinite(error.retryAt))throw error;
   console.error(JSON.stringify({event:'automatic-ci-recent-runs-pending',error:error.message}));
  }
 }
