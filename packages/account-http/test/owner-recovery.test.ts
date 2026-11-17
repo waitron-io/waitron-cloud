@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomUUID,randomBytes} from 'node:crypto';
 import {test,before,after} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
 import {createLeaseIssuer,PasswordRecoveryStore} from '@waitron-cloud/registration';
@@ -49,4 +49,18 @@ test('HTTP recovery checks origin, method, exact fields and independent status a
  const limited=await rate.browser('status');assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);
  for(let n=0;n<10;n++)assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,404);
  assert.equal((await rate.browser('complete',{token:rate.token,password:'A new long enough password'})).status,429);
+});
+
+
+for(const action of ['status','complete'])test(action+' enforces IP and token limits independently',async()=>{
+  const byIp=await fixture();
+  for(let n=0;n<=10;n++){
+   const response=await byIp.browser(action,{token:randomBytes(32).toString('base64url'),...(action==='complete'?{password:'A new long enough password'}:{})});
+   assert.equal(response.status,n<10?404:429,action+' IP limit across different tokens');
+  }
+  const byToken=await fixture();
+  for(let n=0;n<=10;n++){
+   const response=await byToken.app.request(origin+'/api/account/owner-recovery/'+action,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({token:byToken.token,...(action==='complete'?{password:'A new long enough password'}:{})})},{incoming:{socket:{remoteAddress:'198.51.100.'+(n+1)}}} as HttpBindings);
+   assert.equal(response.status,n<10?404:429,action+' token limit across different IPs');
+  }
 });

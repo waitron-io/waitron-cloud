@@ -259,8 +259,8 @@ its exact Origin to `/api/account/owner-recovery/`:
 
 Check status explicitly after the local administrator decides; the portal does not
 poll automatically. Status has its own 10-per-IP and 10-per-token allowance per
-15 minutes. Begin, select and complete share ordinary reset completion’s separate
-equal allowance, so status checks cannot exhaust completion. Reset mail keeps its shared one-minute
+15 minutes. Begin, select and complete use the existing ordinary reset completion
+budget, with the same limits. Status checks cannot exhaust that budget. Reset mail keeps its shared one-minute
 cooldown and original 30-minute deadline. The mailbox token is never sent to the box.
 
 The signed `/api/installations/owner-recovery-{read,approve,refuse}` routes use the
