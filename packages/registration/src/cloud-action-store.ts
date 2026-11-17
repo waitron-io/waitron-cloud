@@ -16,6 +16,8 @@ export function validateCloudActionProposal(input:CloudActionProposal){
 function view(row:any,events:any[]=[]){return {
  id:row.id,occurrence:row.occurrence,version:row.version,actionId:row.action_id,policy:row.policy as 'ask-first'|'act-and-report',cell:row.cell,target:row.target,
  proposal:row.proposal,evidence:row.evidence,state:row.state as 'pending'|'approved'|'rejected'|'superseded',effectId:row.effect_id,available:false as const,
+ dispatchStartedAt:row.dispatch_started_at?.toISOString()??null as string|null,
+ outcome:row.outcome as {status:'confirmed'}|null,
  createdAt:row.created_at.toISOString() as string,decidedAt:row.decided_at?.toISOString()??null as string|null,
  approvalExpiresAt:row.approval_expires_at?.toISOString()??null as string|null,
  events:events.map(event=>({kind:event.kind as string,at:event.created_at.toISOString() as string,...(event.kind==='notice'?{noticeStatus:(event.delivery_status??'unknown') as keyof EmailDeliveryStatus['counts']|'unknown'}:{})})),
@@ -27,9 +29,9 @@ export async function readCloudActionRequest(client:PoolClient,id:string){
  return view(row,(await client.query('SELECT event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=$1 ORDER BY event.created_at,event.id',[id])).rows);
 }
 export async function readCloudActionRequests(client:PoolClient){
- const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE state='pending' OR id IN
-  (SELECT id FROM cloud_action_requests WHERE state<>'pending' ORDER BY created_at DESC,id DESC LIMIT 50)
-  ORDER BY (state='pending') DESC,created_at DESC,id DESC`)).rows;
+ const rows=(await client.query(`SELECT * FROM cloud_action_requests WHERE (state='pending' AND outcome IS NULL) OR id IN
+  (SELECT id FROM cloud_action_requests WHERE state<>'pending' OR outcome IS NOT NULL ORDER BY created_at DESC,id DESC LIMIT 50)
+  ORDER BY (state='pending' AND outcome IS NULL) DESC,created_at DESC,id DESC`)).rows;
  if(!rows.length)return [];
  const events=(await client.query('SELECT event.request_id,event.kind,event.created_at,mail.status AS delivery_status FROM cloud_action_events event LEFT JOIN email_outbox mail ON mail.id=event.notice_id WHERE event.request_id=ANY($1::uuid[]) ORDER BY event.created_at,event.id',[rows.map(row=>row.id)])).rows;
  return rows.map(row=>view(row,events.filter(event=>event.request_id===row.id)));
@@ -66,7 +68,7 @@ export async function proposeCloudAction(client:PoolClient,input:CloudActionProp
 export async function decideCloudAction(client:PoolClient,input:CloudActionDecision,actor:string){
  if(!input||Object.keys(input).sort().join(',')!=='decision,requestId,version'||!uuid.test(input.requestId)||!Number.isSafeInteger(input.version)||input.version<1||!['approved','rejected'].includes(input.decision))throw new CloudActionError('invalid_input');
  const row=(await client.query('SELECT * FROM cloud_action_requests WHERE id=$1 FOR UPDATE',[input.requestId])).rows[0];
- if(!row||row.version!==input.version||row.state!=='pending'&&row.state!==input.decision)throw new CloudActionError('conflict');
+ if(!row||row.policy!=='ask-first'||row.version!==input.version||row.state!=='pending'&&row.state!==input.decision)throw new CloudActionError('conflict');
  if(row.state==='pending'){
   await client.query(`WITH moment AS (SELECT clock_timestamp() AS now) UPDATE cloud_action_requests SET state=$2,decided_at=moment.now,
    approval_expires_at=CASE WHEN $2='approved' THEN moment.now+interval '15 minutes' END FROM moment WHERE id=$1`,[input.requestId,input.decision]);

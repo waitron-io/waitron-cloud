@@ -98,6 +98,7 @@ test('observer sign-in policy reaches only the explicit test account process', a
 });
 
 for(const [role,command,args,replace,hasDatabase,mode,refused]of [
+ ['action-demo','packages/registration/src/cloud-action-cli.ts',['--fail'],false,true,'0',false],
  ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,false,'0',false],
  ['manifest','deploy/test-cloud/remote-worker.mjs',[],true,true,'1',false],
  ['monitor','packages/registration/src/monitor-cli.ts',[],true,true,'0',false],
@@ -118,7 +119,7 @@ for(const [role,command,args,replace,hasDatabase,mode,refused]of [
    cp.spawn=(file,args,options)=>{assert.equal(${replace},false);assert.equal(checked,${hasDatabase});assert.equal(file,process.execPath);assert.deepEqual(args,${JSON.stringify([command,...args])});assert.equal(options.cwd,'/app');return spawn(file,['-e',${JSON.stringify(worker)}],{...options,cwd:${JSON.stringify(dir)}});};syncBuiltinESMExports();
    const {launchTestRuntime}=await import(${JSON.stringify(new URL('./runtime.mjs',import.meta.url).href)});console.log('launcher='+before);
    try{process.exitCode=await launchTestRuntime(${JSON.stringify(role)},${JSON.stringify(dir)});}catch(error){if(${refused}&&error.message==='synthetic-schema-refusal')process.exitCode=29;else throw error;}`;
-  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode},stdio:['ignore','pipe','pipe'],detached:true});
+  const child=spawn(process.execPath,['--experimental-test-module-mocks','--input-type=module','-e',fixture],{env:{PATH:process.env.PATH,NODE_AUTH_TOKEN:'synthetic-canary',CLOUD_TEST_SERVICE_PLANS:mode,...(role==='action-demo'?{CLOUD_ACTION_DEMO:'1'}:{})},stdio:['ignore','pipe','pipe'],detached:true});
   let cleaned=false;const cleanup=()=>{if(cleaned||!child.pid)return;cleaned=true;try{process.kill(-child.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}};
   child.once('exit',cleanup);t.after(cleanup);
   let stdout='',stderr='',sent=false;child.stderr.on('data',chunk=>{stderr+=chunk;});
@@ -146,4 +147,18 @@ test('configured HTTPS account and captured-mail origins preserve private servic
  for(const origin of ['', 'http://cloud.example.test','https://cloud.example.test/','https://user:pass@cloud.example.test','https://cloud.example.test/path','https://cloud.example.test?next=evil','https://cloud.example.test#secret','https://cloud.example.test\n']){
   assert.throws(()=>testRuntimeEnvironment('account',config,{TEST_CLOUD_ORIGIN:origin}),/origin_invalid/,JSON.stringify(origin));
  }
+});
+
+test('demoModeOffByDefault: only an explicit LAN demo passes the operator to the account process',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-action-env-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const operator='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ assert.equal(testRuntimeEnvironment('account',config,{CLOUD_OPERATOR_ACCOUNT_ID:operator}).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+ assert.throws(()=>testRuntimeEnvironment('action-demo',config,{}),/demo/);
+ const enabled={CLOUD_ACTION_DEMO:'1',CLOUD_OPERATOR_ACCOUNT_ID:operator};
+ assert.match(testRuntimeEnvironment('action-demo',config,enabled).DATABASE_URL,/postgres:5432/);
+ assert.equal(testRuntimeEnvironment('action-demo',config,enabled).CLOUD_ACTION_DEMO,'1');
+ assert.equal(testRuntimeEnvironment('account',config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,operator);
+ for(const role of ['email','monitor','storage'])assert.equal(testRuntimeEnvironment(role,config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
+ assert.throws(()=>testRuntimeEnvironment('account',config,{...enabled,NODE_ENV:'production'}),/demo/);
 });
