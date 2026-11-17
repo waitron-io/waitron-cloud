@@ -47,13 +47,18 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'}}));
  const{validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');assert.equal(validateDeployment(value,{image:value.services.account.image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/tmp/synthetic-certificates'}).ready,true);
  assert.equal(value.services.account.environment.CLOUD_VENUE_SERVICE_LEVELS,'test');
- assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['0.0.0.0','443',3000]]);
- for(const name of ['account','postgres','mailpit','storage','gateway'])assert.equal(value.services[name].ports,undefined,name);
+ assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['0.0.0.0','443',443]]);
+ for(const name of ['account','postgres','mailpit','storage'])assert.equal(value.services[name].ports,undefined,name);
+ assert.deepEqual(value.services.gateway.ports.map(p=>[p.host_ip,p.published,p.target,p.protocol]),[['0.0.0.0','51820',51820,'udp']]);
+ const challenge=value.services['http-challenges'];assert.ok(challenge,'independent challenge listener missing');assert.deepEqual(challenge.ports.map(p=>[p.host_ip,p.published,p.target,p.protocol]),[['0.0.0.0','80',8080,'tcp']]);assert.equal(challenge.depends_on,undefined);assert.equal(Number(challenge.mem_limit),64*1024*1024);assert.ok(challenge.volumes.every(v=>v.read_only));assert.deepEqual(challenge.volumes.map(v=>v.target).sort(),['/run/account-webroot','/run/remote-challenges']);
+ assert.equal(value.services['gateway-manifest'].environment.TEST_CLOUD_PUBLIC_REMOTE,'1');assert.equal(value.services.gateway.environment.TEST_CLOUD_PUBLIC_REMOTE,'1');
+ assert.ok(value.services['gateway-manifest'].volumes.some(v=>v.source==='test-cloud-http-challenges'&&!v.read_only));
+ assert.ok(Object.values(value.services).reduce((sum,v)=>sum+Number(v.mem_limit),0)<=2112*1024*1024);
  for(const name of ['bootstrap','account','email-worker'])assert.equal(value.services[name].environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');
  assert.equal(value.services.bootstrap.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/run/public-certificate');
  assert.ok(value.services.bootstrap.volumes.some(v=>v.type==='bind'&&v.source==='/tmp/synthetic-certificates'&&v.target==='/run/public-certificate'&&v.read_only));
  for(const [name,service]of Object.entries(value.services)){
-  if(name!=='bootstrap')assert.ok(!service.volumes?.some(v=>v.type==='bind'),name);
+  if(!['bootstrap','http-challenges'].includes(name))assert.ok(!service.volumes?.some(v=>v.type==='bind'),name);
   assert.ok(!service.volumes?.some(v=>v.source?.includes('docker.sock')),name);
   assert.notEqual(service.environment?.CLOUD_TRANSLATION,'1');
  }

@@ -41,6 +41,10 @@ pages unavailable and blocks further publication. Enabling after disabling retur
 must publish again, so you cannot accidentally restore an old menu. Production
 venues refuse the command.
 
+For the Amazon target, first qualify the [public HTTPS layout](test-cloud.md#configure-a-separate-https-test-name),
+including venue certificates and UDP 51820. Its service switch uses the same
+installation command as LAN; landing the layout does not prove a mobile connection.
+
 For remote access, use a private input file containing:
 
 ```json

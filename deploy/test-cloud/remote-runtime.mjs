@@ -3,12 +3,15 @@ import {execFile} from 'node:child_process';
 import {mkdir,open,readFile,rename,rm,stat,writeFile} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
 import {promisify} from 'node:util';
+import {createRequire} from 'node:module';
 import {transaction} from '../../packages/registration/src/transaction.ts';
 import {RemoteConfigurationReconciler} from '../../packages/remote-access/src/reconciler.ts';
 import {isUuid,isHostname,verifyManifest} from '../../packages/remote-access/src/manifest.ts';
 import {validateCsr} from '../../packages/remote-access/src/certificates.ts';
 import {loadRuntime,canonicalHttpsOrigin} from '../local-stack/runtime.mjs';
 import {claimLease} from '../local-stack/lease.mjs';
+import {isTestRemoteHostname,presentHttpChallenge,removeHttpChallenge} from './http-challenges.mjs';
+const {Client}=createRequire(new URL('../../packages/remote-access/package.json',import.meta.url))('acme-client');
 
 const execute=promisify(execFile),suffix='r.waitron.local';
 async function privateFile(path){if(((await stat(path)).mode&0o777)!==0o600)throw Error('test_cloud.remote_state_invalid');return readFile(path,'utf8');}
@@ -26,9 +29,9 @@ export async function loadPublicRemoteSettings(directory,environment){
  }finally{await lease.release();}
 }
 function publicTarget(directory,id){if(!isUuid(id))throw Error('test_cloud.remote_target');return join(directory,'remote',id);}
-async function publicRequest(pool,directory,id){
+async function publicRequest(pool,directory,id,zone=suffix){
  const target=publicTarget(directory,id),hostname=(await pool.query("SELECT h.hostname FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind='public' WHERE p.installation_id=$1",[id])).rows[0]?.hostname;
- if(!hostname||!hostname.endsWith('.'+suffix))throw Error('test_cloud.remote_target');
+ if(!hostname||!hostname.endsWith('.'+zone))throw Error('test_cloud.remote_target');
  const lease=await claimLease(join(directory,'remote','.'+id+'.lock'));if(!lease)throw Error('test_cloud.remote_busy');
  const scratch=target+'.'+randomUUID();
  try{
@@ -45,8 +48,22 @@ async function publicRequest(pool,directory,id){
   await lease.assertOwned();await rename(scratch,target);return csr;
  }finally{await rm(scratch,{recursive:true,force:true});await lease.release();}
 }
-export async function issueTestRemoteCertificate(directory,target){
+export async function issueTestRemoteCertificate(directory,target,publicRemote){
  target.signal.throwIfAborted();validateCsr(target.csr,target.hostname);
+ if(publicRemote){
+  if(!isTestRemoteHostname(target.hostname,publicRemote.zone))throw Error('test_cloud.remote_target');
+  const client=new Client({directoryUrl:publicRemote.directoryUrl,accountKey:publicRemote.accountKey,backoffAttempts:5,backoffMin:500,backoffMax:3000}),active=new Set();
+  const cleanup=()=>Promise.all([...active].map(token=>removeHttpChallenge(publicRemote.challengeDirectory,target.hostname,token))),abort=()=>{void cleanup().catch(()=>{});};
+  target.signal.addEventListener('abort',abort,{once:true});
+  try{
+   // An explicit empty contact list makes repeated registration a valid account update.
+   await client.createAccount({termsOfServiceAgreed:true,contact:[]});target.signal.throwIfAborted();
+   const chain=await client.auto({csr:target.csr,termsOfServiceAgreed:true,challengePriority:['http-01'],skipChallengeVerification:true,
+    challengeCreateFn:async(authz,challenge,value)=>{target.signal.throwIfAborted();if(authz.identifier.value!==target.hostname||challenge.type!=='http-01')throw Error('test_cloud.remote_challenge');active.add(challenge.token);await presentHttpChallenge(publicRemote.challengeDirectory,target.hostname,challenge.token,value);if(target.signal.aborted){await cleanup();target.signal.throwIfAborted();}},
+    challengeRemoveFn:async(authz,challenge)=>{if(authz.identifier.value!==target.hostname||challenge.type!=='http-01')throw Error('test_cloud.remote_challenge');await removeHttpChallenge(publicRemote.challengeDirectory,target.hostname,challenge.token);active.delete(challenge.token);}
+   });target.signal.throwIfAborted();return chain;
+  }finally{target.signal.removeEventListener('abort',abort);await cleanup();}
+ }
  if(!target.hostname.endsWith('.'+suffix))throw Error('test_cloud.remote_target');
  const scratch=join(directory,'remote','.sign-'+randomUUID());await mkdir(scratch,{mode:0o700});
  try{
@@ -88,12 +105,12 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote}){
  });
  await mkdir(join(directory,'remote'),{recursive:true,mode:0o700});
  const artifacts={
-  readCsr:async(id,kind)=>{if(kind!=='public')throw Error('test_cloud.remote_target');return publicRequest(pool,directory,id);},
+  readCsr:async(id,kind)=>{if(kind!=='public')throw Error('test_cloud.remote_target');return publicRequest(pool,directory,id,zone);},
   async readCertificate(id,kind){if(kind!=='public')throw Error('test_cloud.remote_target');try{return await privateFile(join(publicTarget(directory,id),'certificate.pem'));}catch(error){if(error.code!=='ENOENT')throw error;}},
   async publishCertificate(id,kind,chain){if(kind!=='public')throw Error('test_cloud.remote_target');const target=publicTarget(directory,id);await atomic(join(directory,'public-certs',id+'.pem'),await privateFile(join(target,'key.pem'))+chain);await atomic(join(target,'certificate.pem'),chain);},
   async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');await atomic(join(directory,'gateway-manifest.json'),text);}
  };
- // The private test cell uses caller-provided name resolution, not an operator DNS zone.
- const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,staffExchange:true,artifacts,pointName:async()=>{},signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target)});
+ // LAN uses caller-provided resolution; Amazon uses the operator's existing wildcard.
+ const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,staffExchange:true,artifacts,pointName:async()=>{},signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target,publicRemote)});
  return {worker,cellId};
 }

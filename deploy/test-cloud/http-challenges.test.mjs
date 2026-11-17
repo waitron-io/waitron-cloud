@@ -22,6 +22,7 @@ test('serves account renewal without a worker and withdraws only the exact remot
  const f=await fixture(t);assert.deepEqual(await f.send(zone,'/.well-known/acme-challenge/account-token'),{status:200,body:'account-token.account-key'});
  await f.presentHttpChallenge(f.remoteDirectory,staff,'remote-token','remote-token.remote-key');
  assert.deepEqual(await f.send(staff),{status:200,body:'remote-token.remote-key'});
+ assert.deepEqual(await f.send(staff+':80'),{status:200,body:'remote-token.remote-key'});
  await f.removeHttpChallenge(f.remoteDirectory,staff,'remote-token');assert.equal((await f.send(staff)).status,404);
  assert.deepEqual(await f.send(zone,'/.well-known/acme-challenge/account-token'),{status:200,body:'account-token.account-key'});
 });
@@ -31,6 +32,7 @@ test('refuses wrong authority, token, method and path without disclosing or chan
  assert.equal((await f.send(staff)).status,200);
  for(const [host,path,method] of [
   ['evil.example.test','/.well-known/acme-challenge/remote-token','GET'],
+  [staff+':8081','/.well-known/acme-challenge/remote-token','GET'],
   ['v-22222222-2222-4222-8222-222222222222.'+zone,'/.well-known/acme-challenge/remote-token','GET'],
   [staff,'/.well-known/acme-challenge/account-token','GET'],
   [staff,'/.well-known/acme-challenge/remote-token','POST'],

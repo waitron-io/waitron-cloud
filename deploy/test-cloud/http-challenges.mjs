@@ -6,6 +6,11 @@ import {pathToFileURL} from 'node:url';
 import {isHostname,isUuid} from '../../packages/remote-access/src/manifest.ts';
 
 const tokenPattern=/^[A-Za-z0-9_-]{1,128}$/;
+export function isTestRemoteHostname(hostname,zone){
+ if(!isHostname(hostname)||!isHostname(zone))return false;
+ const label=hostname.slice(0,-zone.length-1),id=label.startsWith('staff-v-')?label.slice(8):label.startsWith('v-')?label.slice(2):'';
+ return hostname===label+'.'+zone&&isUuid(id);
+}
 function challengePath(directory,hostname,token){
  if(!isHostname(hostname)||!tokenPattern.test(token))throw Error('test_cloud.http_challenge');
  return join(directory,hostname,token);
@@ -31,14 +36,13 @@ export function createHttpChallengeServer({accountHostname,zone,accountWebroot,r
  if(!isHostname(accountHostname)||!isHostname(zone)||!isAbsolute(accountWebroot)||!isAbsolute(remoteDirectory))throw Error('test_cloud.http_configuration');
  return createServer(async(req,res)=>{
   req.resume();
-  const token=req.url?.match(/^\/\.well-known\/acme-challenge\/([A-Za-z0-9_-]{1,128})$/)?.[1],hostname=req.headers.host;
+  const token=req.url?.match(/^\/\.well-known\/acme-challenge\/([A-Za-z0-9_-]{1,128})$/)?.[1],hostname=req.headers.host?.replace(/:80$/,'');
   const hosts=req.rawHeaders.filter((_,i)=>i%2===0&&req.rawHeaders[i].toLowerCase()==='host').length;
   if(req.method!=='GET'||!token||hosts!==1||!isHostname(hostname)){res.writeHead(404);res.end();return;}
   let path;
   if(hostname===accountHostname)path=join(accountWebroot,'.well-known/acme-challenge',token);
   else{
-   const label=hostname.slice(0,-zone.length-1),id=label.startsWith('staff-v-')?label.slice(8):label.startsWith('v-')?label.slice(2):'';
-   if(hostname===label+'.'+zone&&isUuid(id))path=challengePath(remoteDirectory,hostname,token);
+   if(isTestRemoteHostname(hostname,zone))path=challengePath(remoteDirectory,hostname,token);
   }
   try{if(!path)throw Error();const body=await readFile(path);res.writeHead(200,{'content-type':'text/plain','cache-control':'no-store','content-length':body.length});res.end(body);}
   catch{res.writeHead(404);res.end();}

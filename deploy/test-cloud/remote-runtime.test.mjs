@@ -124,3 +124,29 @@ test('public remote startup changes only an empty test cell and retains identity
  await assert.rejects(openTestRemoteRuntime({...options,publicRemote:{...publicRemote,zone:'other.example.test',endpoint:'other.example.test:51820'}}),/test_cloud.remote_cell_conflict/);
  assert.deepEqual((await db.pool.query('SELECT suffix,endpoint,public_key,sequence FROM remote_cells WHERE id=$1',[local.cellId])).rows[0],row);
 });
+
+test('public HTTP issuance and renewal use the independent listener and remove every challenge',{timeout:120000},async t=>{
+ const {startAcme,docker,waitFor}=await import('../../scripts/remote-fixtures.mjs'),{readdir,mkdir}=await import('node:fs/promises');
+ const directory=await mkdtemp(join(tmpdir(),'cloud-public-acme-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const challenges=join(directory,'challenges'),accountWebroot=join(directory,'account'),zone='test-cloud.example.test';await mkdir(challenges);await mkdir(accountWebroot);
+ const acme=await startAcme({http:{zone,accountWebroot,challengeDirectory:challenges}});t.after(()=>acme.close());assert.equal(acme.httpReady,true,'real independent HTTP fixture missing');
+ const keyFile=join(directory,'account-key.pem');await writeFile(keyFile,generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});
+ const {crypto}=await import('../../packages/remote-access/node_modules/acme-client/src/index.js');
+ const hostname='staff-v-11111111-1111-4111-8111-111111111111.'+zone,[key,csr]=await crypto.createCsr({commonName:hostname,altNames:[hostname]});
+ const csrFile=join(directory,'request.pem'),output=join(directory,'certificate.pem');await writeFile(csrFile,csr,{mode:0o600});
+ const options={hostname,csrFile,accountKeyFile:keyFile,output,http:{zone,challengeDirectory:challenges}};
+ const first=new X509Certificate(await acme.issue(options)),renewed=new X509Certificate(await acme.issue(options));
+ assert.equal(first.checkHost(hostname),hostname);assert.notEqual(first.serialNumber,renewed.serialNumber);assert.ok(first.publicKey.equals(createPublicKey(key)));
+ assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.deepEqual(JSON.parse(await readFile(output+'.account.json','utf8')).contact??[],[]);
+ await assert.rejects(acme.issue({...options,http:{zone:'foreign.example.test',challengeDirectory:challenges}}),/certificate_issuance_failed/);assert.deepEqual(await readdir(join(challenges,hostname)),[]);
+ const previous=await readFile(output,'utf8');
+ docker('stop','--time','1',acme.name+'-http');await assert.rejects(acme.issue(options),/certificate_issuance_failed/);
+ assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.equal(await readFile(output,'utf8'),previous);
+ const beforePort=new URL(acme.httpUrl).port;docker('start',acme.name+'-http');
+ const restartedHttp='http://127.0.0.1:'+docker('port',acme.name+'-http','80/tcp').split(':').at(-1);t.diagnostic(JSON.stringify({beforePort,afterPort:new URL(restartedHttp).port}));
+ await waitFor(async()=> (await fetch(restartedHttp+'/.well-known/acme-challenge/readiness',{signal:AbortSignal.timeout(1000)})).status===404,5000);
+ const abortAccount=join(directory,'abort-account.pem');await writeFile(abortAccount,generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});
+ await assert.rejects(acme.issue({...options,accountKeyFile:abortAccount,http:{...options.http,abortOnChallenge:true}}),/"aborted":true/);
+ assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.equal(await readFile(output,'utf8'),previous);
+ assert.equal(new X509Certificate(await acme.issue(options)).checkHost(hostname),hostname);
+});

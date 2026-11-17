@@ -36,10 +36,18 @@ services:
   remote-probe:
     environment: *amazon-environment
   gateway-manifest:
-    environment: *amazon-environment
+    environment:
+      <<: *amazon-environment
+      TEST_CLOUD_PUBLIC_REMOTE: "1"
+      TEST_CLOUD_ACME_DIRECTORY: ${TEST_CLOUD_ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
+      TEST_CLOUD_CHALLENGE_DIR: /run/remote-challenges
+    volumes:
+      - test-cloud-http-challenges:/run/remote-challenges
   gateway:
-    environment: *amazon-environment
-    ports: !reset []
+    environment:
+      <<: *amazon-environment
+      TEST_CLOUD_PUBLIC_REMOTE: "1"
+    ports: !override ["0.0.0.0:51820:51820/udp"]
   backup-worker:
     environment: *amazon-environment
   remote-reconciler:
@@ -59,12 +67,41 @@ services:
       - -ec
       - |
         export TEST_CLOUD_HOST="$${TEST_CLOUD_ORIGIN#https://}"
-        exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg
+        exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg -f /app/deploy/test-cloud/proxy.amazon.cfg
     volumes: !override
       - test-cloud-public-certificate:/run/proxy-certificate:ro
-    ports: !override ["0.0.0.0:443:3000"]
+    ports: !override ["0.0.0.0:443:443"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--connect-to", "::127.0.0.1:3000", "${TEST_CLOUD_ORIGIN}/api/health/ready"]
 
+  http-challenges:
+    image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    init: true
+    read_only: true
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    environment:
+      TEST_CLOUD_ORIGIN: ${TEST_CLOUD_ORIGIN}
+      TEST_CLOUD_ACCOUNT_WEBROOT: /run/account-webroot
+      TEST_CLOUD_CHALLENGE_DIR: /run/remote-challenges
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        export TEST_CLOUD_REMOTE_ZONE="$${TEST_CLOUD_ORIGIN#https://}"
+        exec node deploy/test-cloud/http-challenges.mjs
+    ports: ["0.0.0.0:80:8080"]
+    volumes:
+      - type: bind
+        source: /opt/waitron-cloud/acme-webroot
+        target: /run/account-webroot
+        read_only: true
+        bind:
+          create_host_path: false
+      - test-cloud-http-challenges:/run/remote-challenges:ro
+
 volumes:
+  test-cloud-http-challenges:
   test-cloud-public-certificate:
