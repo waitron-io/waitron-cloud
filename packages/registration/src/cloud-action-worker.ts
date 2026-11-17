@@ -19,10 +19,13 @@ export class CloudActionWorker{
  async runOnce():Promise<boolean>{
   if(!this.options.demo||process.env.NODE_ENV==='production'||!this.options.operatorAccountId)return false;
   const candidates=(await this.pool.query(`SELECT id FROM cloud_action_requests WHERE outcome IS NULL
-   AND (dispatch_started_at IS NOT NULL OR state='pending' AND action_id='cloud_restart') ORDER BY created_at,id LIMIT 50`)).rows;
+   AND (dispatch_started_at IS NOT NULL OR state='pending' AND action_id='cloud_restart') ORDER BY created_at,id`)).rows;
   for(const {id} of candidates){
+   const initial=await transaction(this.pool,client=>readCloudActionRequest(client,id));
+   if(!initial.dispatchStartedAt&&!await this.options.executor.eligible(initial))continue;
    const claimed=await transaction(this.pool,async client=>{
-    const initial=await readCloudActionRequest(client,id);
+    // Console writes take the account before the request; claims follow that order too.
+    if(!initial.dispatchStartedAt&&!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[this.options.operatorAccountId])).rowCount)return;
     // Lock the cell before its request so independent workers share the same disruption boundary.
     if(!(await client.query("SELECT pg_try_advisory_xact_lock(hashtext('cloud-action-cell'),hashtext($1)) AS locked",[initial.cell])).rows[0].locked)return;
     const row=(await client.query('SELECT * FROM cloud_action_requests WHERE id=$1 FOR UPDATE',[id])).rows[0];
@@ -31,10 +34,6 @@ export class CloudActionWorker{
     const policy=cloudActionCatalogue.find(action=>action.id===row.action_id);
     if(row.state!=='pending'||row.action_id!=='cloud_restart'||!policy||row.policy!==policy.policy||policy.policy!=='act-and-report')return;
     if((await client.query('SELECT id FROM cloud_action_requests WHERE cell=$1 AND dispatch_started_at IS NOT NULL AND outcome IS NULL AND id<>$2 LIMIT 1',[row.cell,id])).rowCount)return;
-    if(!await this.options.executor.eligible(initial))return;
-    // Inspection can wait: the configured country account must still exist and be enabled afterwards.
-    const operator=await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[this.options.operatorAccountId]);
-    if(!operator.rowCount)return;
     await client.query('UPDATE cloud_action_requests SET dispatch_started_at=clock_timestamp() WHERE id=$1',[id]);
     return {request:initial,dispatch:true};
    });

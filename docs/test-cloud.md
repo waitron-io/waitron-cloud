@@ -2009,8 +2009,8 @@ leave it off, and `NODE_ENV=production` refuses it.
 
 Create a synthetic operator account and verify its `.test` email through Mailpit,
 following [the local operator setup](local-deployment.md#review-country-repair-proposals).
-Set its UUID in `CLOUD_OPERATOR_ACCOUNT_ID` and set `CLOUD_ACTION_DEMO=1` when you
-recreate the LAN account service with your chosen local image. Only the account
+Export its UUID as `CLOUD_OPERATOR_ACCOUNT_ID` and export `CLOUD_ACTION_DEMO=1`
+before you recreate the LAN account service with your chosen local image. Only the account
 service receives these settings; its private `test-cloud-action-demo` volume
 keeps the synthetic outcomes separately from PostgreSQL. No new service or
 Docker socket is needed.
@@ -2021,15 +2021,14 @@ container. Use the same Compose arguments and project name as your LAN launch:
 ```sh
 docker compose --env-file deploy/test-cloud/test.env -f compose.yaml \
   -f deploy/test-cloud/compose.yaml exec account \
-  node packages/registration/src/cloud-action-cli.ts --fail
+  node deploy/test-cloud/runtime.mjs action-demo
 ```
 
 The command prints `Synthetic workload failure queued`. The account-side loop
 stops only its own child, saves an automatic `cloud_restart` proposal and restarts
 that workload in place. Sign in at `/operator/actions` and refresh: the proposal
 shows “Synthetic restart confirmed” (or “Reinicio sintético confirmado”). Its
-operator notice uses the existing Mailpit queue. You can also run the same command
-with `--status` to read saved dispatch identities and outcomes.
+operator notice uses the existing Mailpit queue. Read the saved result on the operator page.
 
 Dispatch is committed before the effect. If the reply or report is lost, the
 worker observes the saved effect identity instead of starting another restart.

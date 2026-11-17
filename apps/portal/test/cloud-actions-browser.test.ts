@@ -97,9 +97,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await page.getByRole('button',{name:/execute|ejecutar/i}).count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.addScriptTag({content:axe.source});assert.deepEqual(await page.evaluate(async()=>(await (window as any).axe.run(document)).violations),[]);
+  requests=[{...approved,actionId:'cloud_restart',policy:'act-and-report',state:'pending',decidedAt:null,approvalExpiresAt:null}];
+  await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
+  await proposal.getByText(locale==='en'?'Pending':'Pendiente',{exact:true}).waitFor();
+  assert.equal(await proposal.getByRole('button').count(),0);
+  requests=[{...requests[0]!,...{dispatchStartedAt:'2026-11-16T19:02:00Z',outcome:null}}];
+  await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
+  await proposal.getByText(locale==='en'?'Restart dispatched; awaiting confirmation':'Reinicio enviado; esperando confirmación',{exact:true}).waitFor();
   requests=[{...approved,actionId:'cloud_restart',policy:'act-and-report',state:'pending',decidedAt:null,approvalExpiresAt:null,...{outcome:{status:'confirmed'},dispatchStartedAt:'2026-11-16T19:02:00Z'}}];
   await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
   await proposal.getByText(locale==='en'?'Synthetic restart confirmed':'Reinicio sintético confirmado',{exact:true}).waitFor();
+  assert.equal(await proposal.getByText(locale==='en'?'Pending':'Pendiente',{exact:true}).count(),0);
   if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/decision-${locale}-${theme}-${width}.png`,fullPage:true});}
  }finally{await browser.close();}
 });

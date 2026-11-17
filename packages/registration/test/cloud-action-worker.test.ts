@@ -7,12 +7,14 @@ import {CloudActions,transaction} from '../src/index.ts';
 import {migrate} from '../src/migrate.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import {openProofWindow} from './fixtures/action-proof.ts';
+import {waitLock} from './fixtures/relay-stop-barrier.ts';
+import {proposeCloudAction} from '../src/cloud-action-store.ts';
 import {testOutbox} from './fixtures/delivery.ts';
 
 if(!process.env.TEST_DATABASE_URL)throw Error('Run through scripts/test-postgres.mjs');
 const schema=`action_worker_${randomUUID().replaceAll('-','')}`,operator=randomUUID();
 const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
-const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema} -c statement_timeout=10000`});
+const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema} -c statement_timeout=10000`,application_name:schema});
 let actor:Awaited<ReturnType<typeof createSession>>,actions:CloudActions;
 const proposal={occurrence:'demo-failure-1',cell:'demo-cell',target:'demo-worker',actionId:'cloud_restart',proposal:'Restart failed demo worker in place',evidence:'demo-worker stopped:1'};
 before(async()=>{await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);});
@@ -27,7 +29,7 @@ async function propose(overrides={}){return actions.propose(actor.token,actor.cs
 function executor(){
  const effects=new Map<string,string>();let calls=0;
  return {effects,get calls(){return calls;},
-  eligible:async(request:{target:string;evidence:string})=>request.target==='demo-worker'&&request.evidence==='demo-worker stopped:1',
+  eligible:async(request:{target:string;evidence:string;id?:string})=>request.target==='demo-worker'&&request.evidence==='demo-worker stopped:1',
   restart:async(request:{effectId:string})=>{calls++;effects.set(request.effectId,'confirmed');},
   observe:async(effectId:string)=>effects.get(effectId)==='confirmed'?'confirmed' as const:'unknown' as const,
  };
@@ -68,7 +70,7 @@ test('changedPolicyBlocksDispatch and real targets remain unavailable',async()=>
 test('changed evidence and a rejected or superseded request cannot restart a workload',async()=>{
  const {CloudActionWorker}=await api(),effect=executor(),first=await propose();
  await propose({evidence:'workload recovered'});
- const rejected=await propose({occurrence:'rejected'});await actions.decide(actor.token,actor.csrfToken,{requestId:rejected.id,version:1,decision:'rejected'});
+ const rejected=await propose({occurrence:'rejected',actionId:'machine_drain'});await actions.decide(actor.token,actor.csrfToken,{requestId:rejected.id,version:1,decision:'rejected'});
  assert.equal((await actions.read(actor.token)).requests.find(r=>r.id===first.id)?.state,'superseded');
  assert.equal(await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce(),false);assert.equal(effect.calls,0);
 });
@@ -145,4 +147,58 @@ test('account-side demo loop turns a requested failure into a saved automatic re
  assert.equal(rows.length,1);assert.equal(rows[0].action_id,'cloud_restart');assert.equal(rows[0].cell,'demo-cell');
  assert.deepEqual(rows[0].outcome,{status:'confirmed'});assert.ok(rows[0].dispatch_started_at);
  assert.equal((await pool.query("SELECT count(*) FROM email_outbox WHERE kind='operator_notice'")).rows[0].count,'1');
+});
+
+test('automatic requests cannot be approved or rejected before or after dispatch',async()=>{
+ const {CloudActionWorker}=await api(),effect=executor(),request=await propose();
+ const conflict=(error:unknown)=>error instanceof Error&&'code'in error&&error.code==='conflict';
+ for(const decision of ['approved','rejected'] as const)await assert.rejects(actions.decide(actor.token,actor.csrfToken,{requestId:request.id,version:1,decision}),conflict);
+ await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce();
+ await assert.rejects(actions.decide(actor.token,actor.csrfToken,{requestId:request.id,version:1,decision:'rejected'}),conflict);
+ assert.equal(effect.calls,1);
+});
+
+test('an eligible demo failure is still repaired after fifty unmatched proposals',async()=>{
+ const {CloudActionWorker}=await api(),effect=executor();
+ for(let i=0;i<50;i++)await propose({occurrence:'unmatched-'+i,target:'unowned'});
+ const request=await propose();await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce();
+ assert.equal(effect.calls,1);assert.deepEqual((await pool.query('SELECT outcome FROM cloud_action_requests WHERE id=$1',[request.id])).rows[0].outcome,{status:'confirmed'});
+});
+
+test('completed automatic reports use the bounded history instead of remaining pending work',async()=>{
+ const {CloudActionWorker}=await api(),effect=executor(),worker=new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect});
+ const original=await propose();await worker.runOnce();
+ for(let i=0;i<50;i++){await propose({occurrence:'later-'+i});await worker.runOnce();}
+ const pending=await propose({occurrence:'still-awaiting',actionId:'machine_drain'});
+ const view=await actions.read(actor.token);assert.equal(view.requests.length,51);
+ assert.equal(view.requests.some(r=>r.id===original.id),false);assert.equal(view.requests[0]?.id,pending.id);
+ assert.equal(view.requests.filter(r=>r.outcome?.status==='confirmed').length,50);
+});
+
+test('a console proposal and a worker claim take account and request locks in the same order',async()=>{
+ const {CloudActionWorker}=await api(),effect=executor();await propose();
+ const blocker=await pool.connect();let pending:Promise<boolean>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[operator]);
+  const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:effect}).runOnce();pending.catch(()=>{});
+  await waitLock(admin,schema,'SELECT id FROM cloud_accounts',pid);
+  const changed=await proposeCloudAction(blocker,{...proposal,evidence:'new observed failure'},'act-and-report',operator,testOutbox);
+  await blocker.query('COMMIT');assert.equal(changed.version,2);
+  assert.equal(await pending,false);assert.equal(effect.calls,0);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
+});
+
+test('two different proposals in one cell cannot pass a worker waiting on its request lock',async()=>{
+ const {CloudActionWorker}=await api(),a=await propose(),b=await propose({occurrence:'second'}),first=executor(),second=executor();
+ first.eligible=async request=>request.id===a.id;second.eligible=async request=>request.id===b.id;
+ const blocker=await pool.connect();let pending:Promise<boolean>|undefined;
+ try{
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_action_requests WHERE id=$1 FOR UPDATE',[a.id]);
+  const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:first}).runOnce();pending.catch(()=>{});
+  await waitLock(admin,schema,'SELECT * FROM cloud_action_requests WHERE id=',pid);
+  assert.equal(await new CloudActionWorker(pool,{demo:true,operatorAccountId:operator,executor:second}).runOnce(),false);
+  assert.equal(second.calls,0);await blocker.query('COMMIT');assert.equal(await pending,true);assert.equal(first.calls,1);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 });
