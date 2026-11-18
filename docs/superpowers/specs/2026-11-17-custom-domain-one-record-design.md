@@ -1,8 +1,18 @@
 # Custom domains with one DNS record, and names that follow the venue
 
-Status: the watcher released the corrected plan on 2026-11-17 at 18:21 after the owner landed #1273 and #1275.
+The owner approved this design on 17 November 2026, answering “yes” at 16:49 CET in session
+`29fb1f67-404b-49ce-b2e6-54ede24542d9`. The watcher released the corrected plan at 18:21 CET
+after the owner landed #1273 and #1275.
 
-The design uses one DNS record per custom name and checks the name on port 443. Keep port 80 closed.
+The owner approved these decisions in that session:
+
+- Use one DNS record per custom name and answer the certificate check on port 443.
+- Keep the venue’s names fixed across cell moves.
+- Tell the owner in their language when their record stops pointing at Cloud.
+- Renew certificates automatically and stop sending certificate-expiry emails to owners.
+
+At 15:55 CET in the same session, the owner answered “no” to serving plain `http://`.
+Keep port 80 closed.
 
 ## Why
 

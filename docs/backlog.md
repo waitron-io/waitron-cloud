@@ -705,7 +705,7 @@ exclude live forwarding, which belongs to Waitron A509 online ordering.
 
 ## Custom domains with one record, and names that follow the venue
 
-The [design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
+The [approved design](superpowers/specs/2026-11-17-custom-domain-one-record-design.md)
 has eight slices in its [Cloud plan](superpowers/plans/2026-11-17-custom-domain-one-record.md).
 Stored country-zone names and certificate-check names now survive a cell move;
 `packages/remote-access/test/movement.test.ts` and
