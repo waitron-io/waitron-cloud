@@ -13,8 +13,11 @@ test('a moved CNAME preserves the last public certificate and retries until DNS 
  const f=await staffExchangeFixture();t.after(f.close);
  const root=await mkdtemp(join(tmpdir(),'moved-cname-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const {installationId,placement,venueId}=await f.venue(),hostname='menu.cafe.example.test',assigned=placement.publicHostname;
- let destination=assigned,now=Date.now(),orders=0;
- const resolveCname=async()=>[destination];
+ let destination=assigned,now=Date.now(),orders=0,lookupError:string|undefined;
+ const resolveCname=async()=>{
+  if(lookupError)throw Object.assign(Error('synthetic resolver failure'),{code:lookupError});
+  return [destination];
+ };
  await f.store.setHostname(installationId,'public',hostname,1,resolveCname);
  const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{cellId:placement.cellId,
   challenges:root,output:join(root,'manifest.json'),publicCertificates:root}]});
@@ -41,10 +44,14 @@ test('a moved CNAME preserves the last public certificate and retries until DNS 
  }
  await run();const good=await artifacts.readPublicCertificate(installationId);assert.ok(good);
  assert.equal(orders,1);
- destination='other.example.test';now+=61*86400000;
+ now+=61*86400000;lookupError='ETIMEOUT';
+ await run();assert.equal(orders,1);assert.equal(await record(),null);
+ lookupError=undefined;destination='other.example.test';
  await run();const moved=await record();assert.ok(moved instanceof Date);
  for(let attempt=2;attempt<=9;attempt++)await run();
  assert.equal(orders,1);assert.deepEqual(await record(),moved);
+ lookupError='ESERVFAIL';await run();assert.deepEqual(await record(),moved);
+ lookupError=undefined;
  assert.deepEqual(await artifacts.readPublicCertificate(installationId),good);
  assert.deepEqual(await job(),{status:'pending',last_error:'dns_not_verified',attempts:7,bounded:true});
  await f.db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);

@@ -323,8 +323,8 @@ data only. The normal command-line configuration serves assigned names.
 
 The worker checks that the custom CNAME still points to the assigned address before
 starting an order. If the record has moved, Cloud keeps the current certificate while
-the worker retries. Point the record back and allow up to 15 minutes for the next
-attempt. For a staged move, the worker writes the check into both cells and waits
+the worker retries. A failed DNS lookup leaves the last known record state in place.
+Point the record back and allow up to 15 minutes for the next attempt. For a staged move, the worker writes the check into both cells and waits
 until all mapped gateways report that name ready. The certificate claim lasts five
 minutes. The worker stops accepting an order result 15 seconds before the claim ends.
 

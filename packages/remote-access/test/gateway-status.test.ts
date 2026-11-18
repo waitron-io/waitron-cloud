@@ -24,3 +24,7 @@ test('an unanswered status read still gives up at the deadline',async()=>{
  const status={read:()=>new Promise<ReadonlySet<string>[]>(()=>{})};
  await assert.rejects(awaitAnswerable(status,['source'],hostname,{signal:new AbortController().signal,giveUpAt:Date.now()+25}),/challenge_not_answerable/);
 });
+test('a status reader that throws synchronously holds the order until the readiness deadline',async()=>{
+ const status={read():Promise<ReadonlySet<string>[]> {throw Error('unreadable status');}};
+ await assert.rejects(awaitAnswerable(status,['source'],hostname,{signal:new AbortController().signal,giveUpAt:Date.now()+25,pollMs:1}),/challenge_not_answerable/);
+});

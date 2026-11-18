@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {isAbsolute,dirname,join} from 'node:path';
-import {mkdir,open,readFile,rename,rm} from 'node:fs/promises';
+import {constants} from 'node:fs';
+import {access,mkdir,open,readFile,rename,rm} from 'node:fs/promises';
 import {isUuid} from './manifest.ts';
 import {deleteChallenge,writeChallenge,type ChallengeFile} from './challenge-files.ts';
 import type {ReconcilerArtifacts} from './reconciler.ts';
@@ -43,7 +44,11 @@ export class FileReconcilerArtifacts implements ReconcilerArtifacts {
   for(const [id,directory]of this.#publicCertificates)if(!cellIds.includes(id))try{await rm(join(directory,venueId+'.pem'),{force:true});}catch{complete=false;}
   return {copied,complete};
  }
- hasChallengeFolder(cellId:string){return this.#challenges.has(cellId);}
+ async hasChallengeFolder(cellId:string){
+  const folder=this.#challenges.get(cellId);
+  if(!folder)return false;
+  try{await access(folder+'/',constants.W_OK|constants.X_OK);return true;}catch{return false;}
+ }
  async writeChallenge(cellId:string,file:ChallengeFile){
   const folder=this.#challenges.get(cellId);if(!folder)throw new Error('challenge_not_answerable');
   await writeChallenge(folder,file);

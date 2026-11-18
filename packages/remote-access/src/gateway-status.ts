@@ -17,7 +17,10 @@ export async function awaitAnswerable(status:GatewayChallengeStatus,cellIds:stri
   for(;;){
    stop.throwIfAborted();
    if(Date.now()>=giveUpAt)throw reason;
-   const cells=await Promise.race([Promise.all(cellIds.map(async id=>status.read(id).catch(()=>[]))),aborted]);
+   const readings=Promise.all(cellIds.map(async id=>{
+    try{return await status.read(id);}catch{return [];}
+   }));
+   const cells=await Promise.race([readings,aborted]);
    stop.throwIfAborted();
    if(Date.now()>=giveUpAt)throw reason;
    if(cells.length&&cells.every(gateways=>gateways.length&&gateways.every(names=>names.has(hostname))))return;

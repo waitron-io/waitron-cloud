@@ -26,7 +26,7 @@ export interface ReconcilerArtifacts {
  readPublicCertificate:(installationId:string)=>Promise<PublicCertificateCopy|undefined>;
  publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy)=>Promise<{copied:string[];complete:boolean}>;
  publishManifest:(cellId:string,envelope:string)=>Promise<void>;
- hasChallengeFolder?:(cellId:string)=>boolean;
+ hasChallengeFolder?:(cellId:string)=>Promise<boolean>;
  writeChallenge?:(cellId:string,file:ChallengeFile)=>Promise<void>;
  deleteChallenge?:(cellId:string,hostname:string)=>Promise<void>;
 }
@@ -236,8 +236,15 @@ export class RemoteConfigurationReconciler {
   };
   let validation:CheckValidation={type:'dns-01',dnsName:target.dnsName};
   if(hostname!==assigned){
+   let answers:string[];
+   try{answers=await boundedResolveCname(hostname,this.#resolveCname);}
+   catch(error){
+    const code=(error as NodeJS.ErrnoException|undefined)?.code;
+    if(code!=='ENODATA'&&code!=='ENOTFOUND')throw new Error('dns_not_verified');
+    answers=[];
+   }
    let moved=false;
-   try{await verifyDelegation(hostname,assigned,name=>boundedResolveCname(name,this.#resolveCname));}
+   try{await verifyDelegation(hostname,assigned,async()=>answers);}
    catch{moved=true;}
    checkDeadline();
    await this.#complete(job,async client=>{
@@ -248,8 +255,10 @@ export class RemoteConfigurationReconciler {
    if(moved)throw new Error('dns_not_verified');
 
    const checkCells=cells??await transaction(this.#pool,client=>routeCells(client,job.targetId));
-   if(!status||!artifacts?.hasChallengeFolder||!artifacts.writeChallenge||!artifacts.deleteChallenge
-    ||!checkCells.length||checkCells.some(cellId=>!artifacts.hasChallengeFolder!(cellId)))throw new Error('challenge_not_answerable');
+   if(!status||!artifacts?.hasChallengeFolder||!artifacts.writeChallenge||!artifacts.deleteChallenge||!checkCells.length)
+    throw new Error('challenge_not_answerable');
+   const folders=await Promise.all(checkCells.map(cellId=>artifacts.hasChallengeFolder!(cellId)));
+   if(folders.some(available=>!available))throw new Error('challenge_not_answerable');
    const write=artifacts.writeChallenge.bind(artifacts);
    validation={type:'tls-alpn-01',present:async entry=>{
     for(const cellId of checkCells){

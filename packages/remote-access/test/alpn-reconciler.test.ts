@@ -83,3 +83,20 @@ test('a custom staff name keeps retrying beyond its eighth unanswerable gateway 
  assert.deepEqual(recovered,{status:'pending',last_error:'challenge_not_answerable',attempts:7,runs:10});
  assert.equal(orders,0);
 });
+
+test('an unmounted check folder refuses before the custom staff issuer is called',async t=>{
+ const f=await customStaff(t),root=await mkdtemp(join(tmpdir(),'worker-alpn-unmounted-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{
+  cellId:f.venue.placement.cellId,output:join(root,'manifest.json'),publicCertificates:root,challenges:join(root,'unmounted'),
+ }]});
+ let orders=0;
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts,resolveCname:f.resolveCname,
+  gatewayStatus:{async read(){return [new Set()];}},
+  async issueCertificate(){orders++;throw Error('unmounted folder must refuse before order');},
+ });
+ await f.run(worker);
+ assert.equal(orders,0);
+ const job=(await f.db.pool.query("SELECT status,last_error FROM remote_configuration_jobs WHERE target_id=$1 AND kind='certificate_staff'",[f.venue.installationId])).rows[0];
+ assert.deepEqual(job,{status:'pending',last_error:'challenge_not_answerable'});
+});
