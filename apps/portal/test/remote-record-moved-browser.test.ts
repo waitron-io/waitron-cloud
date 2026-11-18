@@ -61,6 +61,13 @@ for(const locale of ['en','es'] as const)test(`the ${locale} record notice ident
   await notice.waitFor();
   const check=panel.getByRole('button',{name:locale==='en'?'Check again':'Comprobar de nuevo',exact:true});
   assert.equal(await check.count(),1);
+  await check.click();
+  await panel.getByRole('alert').getByText(c.remoteDnsWait,{exact:true}).waitFor();
+  const explanation = locale === 'en'
+   ? /Cloud may still have the earlier DNS answer.*wait a few minutes/i
+   : /Cloud puede seguir usando la respuesta DNS anterior.*espera unos minutos/i;
+  await panel.getByRole('alert').getByText(explanation).waitFor();
+  assert.equal(await notice.count(),1);
   for(const width of [390,1280])for(const colorScheme of ['light','dark'] as const){
    await page.setViewportSize({width,height:812});
    await page.emulateMedia({colorScheme});
@@ -71,9 +78,6 @@ for(const locale of ['en','es'] as const)test(`the ${locale} record notice ident
    const receipts=process.env.RECORD_MOVED_RECEIPT_DIR;
    if(receipts){await mkdir(receipts,{recursive:true});await panel.screenshot({path:`${receipts}/${locale}-${colorScheme}-${width}.png`});}
   }
-  await check.click();
-  await panel.getByRole('alert').getByText(c.remoteDnsWait,{exact:true}).waitFor();
-  assert.equal(await notice.count(),1);
   fixed=true;
   await check.click();
   await notice.waitFor({state:'detached'});

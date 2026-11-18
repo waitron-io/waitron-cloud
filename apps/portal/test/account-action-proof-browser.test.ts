@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {hashSecret,createSession,encryptFactorSecret} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
 import axe from 'axe-core';
+import {openProofWindow} from '../../../packages/registration/test/fixtures/action-proof.ts';
 import {startPortalFixture,completeBrowserEmail,addVirtualAuthenticator,mailFor} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280])test(`shared action proof ${locale} ${colorScheme} ${width}`,async()=>{
@@ -49,3 +50,132 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
 
  }finally{await virtual.close();await context.close();await f.close();}
 });
+
+test('email verification continues the Add request once', async () => {
+  const f = await startPortalFixture();
+  const context = await f.browser.newContext({locale: 'en'});
+  const page = await context.newPage(), virtual = await addVirtualAuthenticator(context, page);
+  const id = randomUUID(), email = `add-${id}@example.test`;
+  page.setDefaultTimeout(7000);
+  try {
+    await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [id]);
+    await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',
+      [id, email, await hashSecret('Synthetic password for Add')]);
+    const actor = await transaction(f.db.pool, client => createSession(client, id));
+    await context.addCookies([{name: 'cloud_session', value: actor.token, url: f.origin}, {name: 'cloud_csrf', value: actor.csrfToken, url: f.origin}]);
+    await page.goto(f.origin + '/account');
+    await page.getByRole('button', {name: 'Add a passkey', exact: true}).click();
+    await page.getByText('Verify it’s you to add a passkey.', {exact: true}).waitFor();
+    await page.waitForFunction(() => document.activeElement?.id === 'action-proof-heading');
+    await page.getByRole('button', {name: 'Email a code', exact: true}).click();
+    const input = page.locator('input[name=actionProofCode]');
+    await input.waitFor();
+    await f.drainMail();
+    const code = (await mailFor(email, 'Your Waitron Cloud verification code')).match(/^([0-9]{6})$/m)?.[1];
+    assert.ok(code);
+    await input.fill(code === '000000' ? '111111' : '000000');
+    await input.press('Enter');
+    await page.locator('.action-proof [role=alert]').waitFor();
+    assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1', [id])).rows[0].count, '0');
+    await input.fill(code);
+    await input.press('Enter');
+    await page.getByText('Your passkey was added.', {exact: true}).waitFor();
+    await page.waitForFunction(() => document.activeElement?.id === 'passkey-feedback');
+    assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1', [id])).rows[0].count, '1');
+  } finally { await virtual.close(); await context.close(); await f.close(); }
+});
+
+for (const scenario of ['lost reply', 'refused', 'navigation', 'standalone', 'retry'] as const) {
+  test(`Add continuation after passkey verification: ${scenario}`, async () => {
+    const f = await startPortalFixture();
+    const context = await f.browser.newContext({locale: 'en'});
+    const page = await context.newPage(), virtual = await addVirtualAuthenticator(context, page);
+    let replacement: Awaited<ReturnType<typeof addVirtualAuthenticator>> | undefined;
+    const id = randomUUID();
+    const verifyPath = '/action-proof/passkey/verify';
+    page.setDefaultTimeout(7000);
+    try {
+      await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)', [id]);
+      await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',
+        [id, `passkey-${id}@example.test`, await hashSecret('Synthetic password for proof')]);
+      const actor = await transaction(f.db.pool, client => createSession(client, id));
+      await context.addCookies([{name: 'cloud_session', value: actor.token, url: f.origin}, {name: 'cloud_csrf', value: actor.csrfToken, url: f.origin}]);
+      const expire = () => f.db.pool.query('UPDATE cloud_sessions SET action_proved_at=NULL WHERE account_id=$1', [id]);
+      const fresh = () => openProofWindow(f.db.pool, actor.token);
+      const added = page.getByText('Your passkey was added.', {exact: true});
+      const add = page.getByRole('button', {name: 'Add a passkey', exact: true});
+      await fresh();
+      await page.goto(f.origin + '/account');
+      await add.click();
+      await added.waitFor();
+      await expire();
+      await page.reload();
+      if (scenario !== 'standalone') await add.click();
+      let enrollments = 0;
+      const trace: string[] = [];
+      page.on('response', response => {
+        const path = new URL(response.url()).pathname;
+        if (path.includes('/action-proof') || path.includes('/passkeys/registration')) trace.push(`${response.status()} ${path}`);
+      });
+      page.on('requestfailed', request => {
+        const path = new URL(request.url()).pathname;
+        if (path.includes('/action-proof') || path.includes('/passkeys/registration')) trace.push(`${request.failure()?.errorText} ${path}`);
+      });
+      page.on('request', request => {
+        if (new URL(request.url()).pathname === '/api/account/passkeys/registration/options') enrollments++;
+      });
+      if (scenario === 'lost reply') {
+        await page.route(`**/api/account${verifyPath}`, async route => {
+          const response = await route.fetch();
+          assert.equal(response.status(), 204);
+          await route.abort('connectionreset');
+        });
+        await page.route('**/api/account/passkeys/registration/options', async route => {
+          await virtual.close();
+          replacement = await addVirtualAuthenticator(context, page);
+          await route.continue();
+        });
+      }
+      if (scenario === 'refused') await page.route(`**/api/account${verifyPath}`, async route => {
+        await fresh();
+        await route.fulfill({status: 403, json: {error: 'proof_required'}});
+      });
+      if (scenario === 'navigation') await page.route(`**/api/account${verifyPath}`, async route => {
+        const response = await route.fetch();
+        await page.evaluate(() => { void history.pushState(null, '', '/account'); dispatchEvent(new PopStateEvent('popstate')); });
+        await route.fulfill({response});
+      });
+      if (scenario === 'retry') await page.route('**/api/account/passkeys/registration/options', async route => {
+        const response = await route.fetch();
+        await virtual.close();
+        await page.evaluate(() => {
+          navigator.credentials.create = async () => { throw new DOMException('No authenticator', 'NotAllowedError'); };
+        });
+        await route.fulfill({response});
+      });
+      await page.getByRole('button', {name: 'Use a passkey', exact: true}).click();
+      if (scenario === 'lost reply') {
+        await added.waitFor().catch(async error => {
+          console.error('Passkey continuation', {
+            trace, proof: await page.locator('.action-proof').innerText(), passkeys: await page.locator('.passkeys').innerText(),
+          });
+          throw error;
+        });
+        assert.equal(enrollments, 1);
+      } else if (scenario === 'retry') {
+        await page.getByText('Select Add a passkey again to finish.', {exact: true}).waitFor();
+        await page.waitForFunction(() => document.activeElement?.id === 'passkey-add');
+        assert.equal(enrollments, 1);
+      } else {
+        await page.getByText('Identity verified.', {exact: true}).waitFor();
+        const proofAlert = page.locator('.action-proof [role=alert]');
+        if (scenario === 'refused') await proofAlert.or(page.locator('.passkeys [role=alert]')).first().waitFor();
+        await add.waitFor();
+        assert.equal(enrollments, 0);
+        if (scenario === 'refused') await proofAlert.waitFor();
+      }
+      const saved = await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1', [id]);
+      assert.equal(saved.rows[0].count, scenario === 'lost reply' ? '2' : '1');
+    } finally { await replacement?.close(); await virtual.close(); await context.close(); await f.close(); }
+  });
+}

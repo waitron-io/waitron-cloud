@@ -9,6 +9,8 @@ or authenticator app in your Cloud account before connecting a box.
 2. Choose **Open Cloud**, sign in and enter that code. Check **New venue** (or the existing Cloud venue identifier) and
    choose the business that owns it. Verify your identity, then choose **Approve this venue**.
    One verification covers sensitive actions in that session for ten minutes.
+   Cloud shows the venue identifier, installation type, organisation and legal business,
+   with a link back to your Cloud account.
 3. Return to Waitron and choose **Check connection**. Check the organisation and
    legal business, then choose **Connect this venue**.
 

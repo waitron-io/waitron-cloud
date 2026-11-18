@@ -25,6 +25,8 @@ import { chooseLocale, translations, type Copy, type Locale } from './locale.ts'
 import { PortalSession, type SessionState } from './session.ts';
 import { screen } from './screens.ts';
 export type Fields = {email: string; password: string; legalBusinessName: string; organisationName: string};
+type PasskeyAddRequest = {accountId: string};
+
 export class PortalApp {
   root: HTMLElement;
   path = location.pathname;
@@ -64,6 +66,7 @@ export class PortalApp {
   diagnostics: DiagnosticController;
   cloudActions:CloudActionsController;
   #route = 0;
+  #passkeyAddRequest: PasskeyAddRequest | undefined;
   #operatorSignin=false;
   #passkeyOffered = false;
   #enrollmentRestricted = false;
@@ -130,7 +133,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/operator/actions'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.ownerRecovery.open(); this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -139,6 +142,9 @@ export class PortalApp {
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
+    if (state.kind !== 'authenticated' || this.#passkeyAddRequest?.accountId !== state.accountId) {
+      this.#passkeyAddRequest = undefined;
+    }
     const restricted = state.kind === 'authenticated' && state.enrollmentRequired === true;
     // A restriction can follow a method change on the same account; reload its setup controls.
     if (restricted && !this.#enrollmentRestricted) { this.passkeys.account(undefined); this.authenticator.account(undefined); }
@@ -240,6 +246,7 @@ export class PortalApp {
     this.transfers.account(undefined);this.cloudActions.account(undefined);
     this.billing.fence();
     if (path === '/login') this.passkeyFirst = this.passkeys.preferred;
+    this.#passkeyAddRequest = undefined;
     this.actionProof.fence();this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
@@ -440,16 +447,46 @@ export class PortalApp {
   }
   async proposeCloudAction(){if(await this.#requireActionProof())await this.cloudActions.propose();}
   async decideCloudAction(request:CloudActionRequest,decision:'approved'|'rejected'){if(await this.#requireActionProof())await this.cloudActions.decide(request,decision);}
-  async #requireActionProof(){
-    const route=this.#route,account=this.session.state.kind==='authenticated'?this.session.state.accountId:undefined;
-    if(await this.actionProof.ensure()&&route===this.#route)return true;
-    if(route===this.#route&&this.session.state.kind==='authenticated'&&this.session.state.accountId===account){this.draw();this.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}
+  #sameAccountRoute(route: number, accountId: string | undefined) {
+    return route === this.#route && this.session.state.kind === 'authenticated' && this.session.state.accountId === accountId;
+  }
+  async #requireActionProof(add?: PasskeyAddRequest) {
+    const route = this.#route, account = this.session.state.kind === 'authenticated' ? this.session.state.accountId : undefined;
+    this.#passkeyAddRequest = add;
+    const proved = await this.actionProof.ensure();
+    if (!this.#sameAccountRoute(route, account) || (add && add !== this.#passkeyAddRequest)) return false;
+    if (proved) {
+      if (add) this.#passkeyAddRequest = undefined;
+      return true;
+    }
+    this.draw();
+    this.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();
     return false;
   }
-  async proveWithPasskey(){
-    const route=this.#route,account=this.session.state.kind==='authenticated'?this.session.state.accountId:undefined;const result=await this.passkeys.signIn(false,true);if(route!==this.#route||this.session.state.kind!=='authenticated'||this.session.state.accountId!==account)return;
-    this.passkeys.error=undefined;this.passkeys.notice=undefined;
-    await this.actionProof.load();if(route!==this.#route||this.session.state.kind!=='authenticated'||this.session.state.accountId!==account)return;if(!result||!this.actionProof.status?.freshUntil)this.actionProof.error='actionProofUnavailable';this.draw();
+  get verifyingToAddPasskey() { return !!this.#passkeyAddRequest; }
+  async proveWithCode(method: 'email' | 'app' | 'recovery') {
+    const add = this.#passkeyAddRequest;
+    const proved = await this.actionProof.verify(method);
+    await this.#continuePasskeyAdd(add, proved);
+  }
+  async proveWithPasskey() {
+    const route = this.#route, account = this.session.state.kind === 'authenticated' ? this.session.state.accountId : undefined;
+    const add = this.#passkeyAddRequest;
+    const result = await this.passkeys.signIn(false, true);
+    if (!this.#sameAccountRoute(route, account)) return;
+    this.passkeys.error = undefined;
+    this.passkeys.notice = undefined;
+    await this.actionProof.load();
+    if (!this.#sameAccountRoute(route, account)) return;
+    const proved = !!result && !!this.actionProof.status?.freshUntil;
+    if (!proved) this.actionProof.error = 'actionProofUnavailable';
+    this.draw();
+    await this.#continuePasskeyAdd(add, proved);
+  }
+  async #continuePasskeyAdd(add: PasskeyAddRequest | undefined, proved: boolean) {
+    if (!proved || !add || add !== this.#passkeyAddRequest) return;
+    this.#passkeyAddRequest = undefined;
+    await this.#enrollPasskey(true);
   }
   async refreshPasskeys() {
     const route = this.#route;
@@ -458,9 +495,21 @@ export class PortalApp {
   }
   async addPasskey() {
     this.readFields();
-    if(!await this.#requireActionProof())return;
-    await this.passkeys.enrollAfterList();await this.actionProof.load();
+    if (this.session.state.kind !== 'authenticated') return;
+    if (await this.#requireActionProof({accountId: this.session.state.accountId})) await this.#enrollPasskey();
+  }
+  async #enrollPasskey(continued = false) {
+    const route = this.#route, account = this.session.state.kind === 'authenticated' ? this.session.state.accountId : undefined;
+    await this.passkeys.enrollAfterList();
+    if (!this.#sameAccountRoute(route, account)) return;
+    const retry = continued && this.passkeys.notice === 'passkeyCancelled';
+    if (retry) { this.passkeys.notice = 'passkeyAddAgain'; this.draw(); }
+    await this.actionProof.load();
+    if (!this.#sameAccountRoute(route, account)) return;
     if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) await this.session.check({fresh: true});
+    if (!continued || !this.#sameAccountRoute(route, account)) return;
+    if (retry) this.root.querySelector<HTMLElement>('#passkey-add')?.focus();
+    else if (this.passkeys.notice === 'passkeyAdded') this.root.querySelector<HTMLElement>('#passkey-feedback')?.focus();
   }
   async removePasskey(id: string) {
     this.readFields();
@@ -486,6 +535,7 @@ export class PortalApp {
   get logoutDisabled() { return this.transfers.pending || this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
+    this.#passkeyAddRequest = undefined;
     this.pending = true; this.error = undefined; this.draw();
     const route = this.#route;
     const success = await this.session.logout();

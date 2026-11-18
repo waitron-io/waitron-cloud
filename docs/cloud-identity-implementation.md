@@ -15,8 +15,10 @@ credentials after email proof. The [recovery backend](password-recovery-implemen
 now resets passwords and revokes existing sessions. The [account HTTP API](../packages/account-http/README.md)
 provides the account routes and serves the [bilingual portal](../README.md#run-the-account-portal).
 Optional passkeys are implemented in [the passkey slice](superpowers/specs/2026-09-26-cloud-passkeys-design.md),
-with password-confirmed enrolment/removal, account-scoped credentials and Chromium
-sign-in checks. On the portal, select **Use passkeys first next time** before signing in with a passkey
+with fresh identity verification for enrolment and removal, account-scoped credentials
+and Chromium sign-in checks. When you choose **Add a passkey**, the portal continues
+after you verify your identity. If the browser declines the continued prompt,
+choose **Add a passkey** again. On the portal, select **Use passkeys first next time** before signing in with a passkey
 if you want saved passkeys offered first next time. The preference is saved only after
 verified sign-in and contains no account or credential identifier. Uncheck it to clear it.
 Browsers with passkey autofill can offer their saved keys; the explicit passkey button

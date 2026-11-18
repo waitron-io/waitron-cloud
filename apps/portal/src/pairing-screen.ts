@@ -10,17 +10,26 @@ export function pairingScreen(app:PortalApp){
   if(!p.loaded)return html`${p.pending?html`<p role="status">${c.pairLoading}</p>`:nothing}
     <wt-button .disabled=${p.pending||!!p.waiting} @click=${()=>{void p.load();}}>${c.retry}</wt-button>${logout}`;
   if(!p.businesses.length)return html`<p>${c.pairNoBusinesses}</p>${logout}`;
-  if(p.view&&p.view.state!=='awaiting_cloud')return html`<p role="status">${p.view.state==='complete'?c.pairComplete:c.pairApproved}</p>
-    <p>${p.view.organisationName}</p><p>${p.view.legalBusinessName}</p>${logout}`;
-  const choice=p.businesses.find(b=>b.legalBusinessId===p.selected);
+  const view = p.view;
+  const approved = view && view.state !== 'awaiting_cloud';
+  const business = approved ? view : p.businesses.length === 1 ? p.businesses[0] : undefined;
+  const details = view ? html`<dl class="pairing-details">
+    <dt>${c.pairVenue}</dt><dd class="venue-id">${view.venueId || c.pairNewVenue}</dd>
+    <dt>${c.pairInstallation}</dt><dd>${view.environment === 'test' ? c.pairTest : c.pairProduction}</dd>
+    ${business ? html`<dt>${c.chooseOrganisation}</dt><dd>${business.organisationName}</dd>
+      <dt>${c.pairBusiness}</dt><dd>${business.legalBusinessName}</dd>` : nothing}
+  </dl>` : nothing;
+  if(approved)return html`<p role="status">${view.state === 'complete' ? c.pairComplete : c.pairApproved}</p>
+    ${details}
+    <p><a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.pairBackToAccount}</a></p>
+    ${logout}`;
   const proofRequested=app.actionProof.loaded||app.actionProof.pending||p.error==='pairEnrollment';
   return html`<p>${c.pairIntro}</p>
     <wt-input name="pairingCode" .label=${c.pairCode} .value=${p.code} .required=${true} .disabled=${p.pending||!!p.view}
       .error=${p.codeError?c.pairCodeError:''} autocomplete="off"
       @wt-change=${(event:CustomEvent<{value:string}>)=>{p.code=event.detail.value;p.codeError=false;if(p.error==='pairCodeError')p.error=undefined;app.draw();}}></wt-input>
-    ${p.view?html`<p>${c.pairConfirm}</p><dl><dt>${c.pairVenue}</dt><dd class="venue-id">${p.view.venueId||c.pairNewVenue}</dd></dl>
-      <p>${p.view.environment==='test'?c.pairTest:c.pairProduction}</p>
-      ${p.businesses.length===1?html`<p>${choice?.organisationName}</p><p>${choice?.legalBusinessName}</p>`:
+    ${p.view?html`<p>${c.pairConfirm}</p>${details}
+      ${p.businesses.length===1?nothing:
         html`<label class="business-choice">${c.pairBusiness} *<select name="legalBusinessId" aria-invalid=${p.error==='pairChoice'?'true':'false'} aria-describedby="business-error" ?disabled=${p.pending}
           @change=${(event:Event)=>{p.selected=(event.target as HTMLSelectElement).value;if(p.selected&&p.error==='pairChoice')p.error=undefined;app.draw();}}>
           <option value="" .selected=${!p.selected}>${c.pairChoice}</option>${p.businesses.map(b=>html`<option value=${b.legalBusinessId} .selected=${b.legalBusinessId===p.selected}>${b.organisationName} · ${b.legalBusinessName} (${b.countryCode})</option>`)}</select></label><p id="business-error">${p.error==='pairChoice'?c.pairChoice:''}</p>`}`:nothing}
