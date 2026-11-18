@@ -1,0 +1,146 @@
+name: AWS Emulator tests
+on:
+  pull_request:
+    paths:
+      - 'packages/remote-access/src/route53-dns.ts'
+      - 'packages/remote-access/src/manifest.ts'
+      - 'packages/remote-access/emulator/**'
+      - 'packages/remote-access/package.json'
+      - 'packages/registration/src/country-policy.ts'
+      - 'packages/registration/src/migrate.ts'
+      - 'packages/registration/src/ses-feedback-*.ts'
+      - 'packages/registration/src/transaction.ts'
+      - 'packages/registration/emulator/**'
+      - 'packages/registration/test/fixtures/mail-attempt.ts'
+      - 'packages/registration/test/fixtures/ses-feedback.ts'
+      - 'packages/registration/package.json'
+      - 'package.json'
+      - '*pnpm-lock.yaml' # Keep the root lockfile match distinct from a pnpm command in the setup guard.
+      - 'scripts/ci-required-cases.json'
+      - 'scripts/ci-required-cases.mjs'
+      - 'scripts/ci-setup-pnpm.mjs'
+      - 'scripts/ci-pnpm-bootstrap-lock.json'
+      - 'scripts/ci-pnpm-diagnostics.cjs'
+      - 'scripts/ci-download.py'
+      - '.github/workflows/aws-emulator.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/remote-access/src/route53-dns.ts'
+      - 'packages/remote-access/src/manifest.ts'
+      - 'packages/remote-access/emulator/**'
+      - 'packages/remote-access/package.json'
+      - 'packages/registration/src/country-policy.ts'
+      - 'packages/registration/src/migrate.ts'
+      - 'packages/registration/src/ses-feedback-*.ts'
+      - 'packages/registration/src/transaction.ts'
+      - 'packages/registration/emulator/**'
+      - 'packages/registration/test/fixtures/mail-attempt.ts'
+      - 'packages/registration/test/fixtures/ses-feedback.ts'
+      - 'packages/registration/package.json'
+      - 'package.json'
+      - '*pnpm-lock.yaml' # Keep the root lockfile match distinct from a pnpm command in the setup guard.
+      - 'scripts/ci-required-cases.json'
+      - 'scripts/ci-required-cases.mjs'
+      - 'scripts/ci-setup-pnpm.mjs'
+      - 'scripts/ci-pnpm-bootstrap-lock.json'
+      - 'scripts/ci-pnpm-diagnostics.cjs'
+      - 'scripts/ci-download.py'
+      - '.github/workflows/aws-emulator.yml'
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: aws-emulator-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  emulator-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Check for the emulator tests on the checked-out head
+        id: presence
+        run: |
+          route53=packages/remote-access/emulator/route53-dns.test.ts
+          sqs=packages/registration/emulator/ses-feedback-queue.test.ts
+          if [[ -f "$route53" && -f "$sqs" ]]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          elif [[ -f "$route53" || -f "$sqs" ]] || grep -Fq '"test:aws-emulator"' package.json; then
+            echo 'AWS Emulator tests are incomplete. Both adapter test files are required.'
+            exit 1
+          else
+            echo 'present=false' >> "$GITHUB_OUTPUT"
+            echo 'Skipping: this head predates the AWS Emulator tests.'
+          fi
+      - if: steps.presence.outputs.present == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        if: steps.presence.outputs.present == 'true'
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - if: steps.presence.outputs.present == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        if: steps.presence.outputs.present == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install the pinned AWS Emulator
+        if: steps.presence.outputs.present == 'true'
+        shell: bash
+        run: |
+          package="$RUNNER_TEMP/aws-emulator.deb"
+          python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 -- \
+            curl -fsSL --connect-timeout 20 --max-time 110 -o "$package" \
+            https://downloads.aws.com/aws-emulator/packages/aws-emulator/LTS/aws-emulator_1.0.512-1_amd64.deb
+          echo "557f7c2fbf4c4bd99ac50434cdbb36c2f18a111c36d78cfd3cc4f88f765c0962  $package" | sha256sum -c -
+          sudo python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 \
+            --lock /var/lib/dpkg/lock-frontend --lock /var/lib/dpkg/lock -- dpkg -i "$package"
+          aws-emulator -v
+      - name: Start the AWS Emulator on loopback
+        if: steps.presence.outputs.present == 'true'
+        shell: bash
+        run: |
+          aws-emulator -p 9297 -t off --idle-timeout 900 > "$RUNNER_TEMP/aws-emulator.log" 2>&1 &
+          emulator_pid=$!
+          endpoint=https://127.0.0.1:9297
+          files="$HOME/.aws/emulator/9297"
+          deadline=$((SECONDS + 60))
+          until [[ $(curl -fs --max-time 2 --cacert "$files/ca.pem" "$endpoint/__admin/health") == ok ]]; do
+            if (( SECONDS >= deadline )) || ! kill -0 "$emulator_pid" 2>/dev/null; then
+              echo 'AWS Emulator did not become ready.'
+              exit 1
+            fi
+            sleep 1
+          done
+          {
+            echo "AWS_EMULATOR_ENDPOINT=$endpoint"
+            echo "AWS_EMULATOR_CREDENTIALS_FILE=$files/emulator_credentials"
+            echo "NODE_EXTRA_CA_CERTS=$files/ca.pem"
+          } >> "$GITHUB_ENV"
+      - name: Test both adapters against the AWS Emulator
+        if: steps.presence.outputs.present == 'true'
+        run: pnpm test:aws-emulator
+      - name: Read the AWS Emulator log on failure
+        if: failure() && steps.presence.outputs.present == 'true'
+        run: |
+          if [[ -f "$RUNNER_TEMP/aws-emulator.log" ]]; then
+            tail -n 100 "$RUNNER_TEMP/aws-emulator.log"
+          fi

@@ -30,6 +30,8 @@ the upload retains the logs that were produced.
 Kubernetes prerequisites are separate: only changes matching their PR/main-push
 paths start them. They have no scheduled or manual trigger, so this nightly
 backstop does not check their external tool dependencies for drift.
+The AWS Emulator workflow runs separately at 04:17 UTC, on matching pull
+requests and pushes to `main`, and on demand.
 
 You can start the same full run manually:
 

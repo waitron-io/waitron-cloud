@@ -137,10 +137,11 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
   the whole workspace, including dependents, is typechecked. Dependent behaviour
   that remains type-correct waits for nightly ([ci-package-selection.md](docs/ci-package-selection.md)). The venue proof
   selects separately; cost conformance runs manually and nightly, outside PRs
-  ([ci-proof-selection.md](docs/ci-proof-selection.md)). AWS and Kubernetes workflows start only
-  for their declared paths. A green pull request says nothing about checks that did not run.
-- **The nightly run at 03:17 UTC runs everything** ([ci-nightly.md](docs/ci-nightly.md)). Start one with
-  `gh workflow run nightly.yml --ref main`.
+  ([ci-proof-selection.md](docs/ci-proof-selection.md)). AWS, AWS Emulator and Kubernetes
+  workflows use their declared paths for pull requests and pushes. A green pull request says
+  nothing about checks that did not run.
+- **The nightly run at 03:17 UTC runs full standard CI, cost, venue, AWS infrastructure and mutation
+  checks** ([ci-nightly.md](docs/ci-nightly.md)). Start one with `gh workflow run nightly.yml --ref main`.
 - **Review changed code's actual readers and test owners.**
   Follow [ci-root-input-ownership.md](docs/ci-root-input-ownership.md) and
   [ci-documentation-audit.md](docs/ci-documentation-audit.md). The selectors keep known owners and

@@ -201,3 +201,11 @@ in the main CI workflow. The separate proofs omit this family independently.
 Read every separate Kubernetes result before merging; the required `summary`
 check does not certify it. Workflow-only edits omit the generic pnpm-bootstrap
 PR test; the full nightly still runs it.
+
+The AWS Emulator workflow runs the Route 53 and SQS adapter tests on pull
+requests and pushes to `main` that touch its listed paths, every night at 04:17
+UTC, and on demand. It
+checks the SHA-256 of version 1.0.512 before installing it and runs it with
+telemetry off. A head that predates the emulator tests skips the job. Read the
+emulator result before merging because the required `summary` check covers
+standard CI only.
