@@ -55,12 +55,24 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-async function waitForPieces(run, node, keys, signal) {
+export async function waitForPieces(run, node, keys, signal, multipart) {
   // A read can succeed from the other four drives before the returned drives have healed.
-  const files = keys.flatMap(key => ['0', '1'].map(slot => storePath + '/' + slot + '/' + bucket + '/' + key + '/xl.meta'));
+  const disks = ['0', '1'].map(slot => storePath + '/' + slot + '/' + bucket);
+  const metadata = disks.flatMap(disk => keys.map(key => disk + '/' + key + '/xl.meta'));
+  const parts = disks.map(disk => disk + '/' + multipart);
+  const check = `
+    first=$1; second=$2; shift 2
+    for file; do [ -s "$file" ] || exit 0; done
+    for object in "$first" "$second"; do
+      for version in "$object"/*; do
+        if [ -s "$version/part.1" ] && [ -s "$version/part.2" ]; then continue 2; fi
+      done
+      exit 0
+    done
+    echo repaired
+  `;
   for (;;) {
-    const result = await run('docker', ['exec', node.id, 'sh', '-ec',
-      'for file; do [ -s "$file" ] || exit 0; done; echo repaired', 'store', ...files], {signal});
+    const result = await run('docker', ['exec', node.id, 'sh', '-ec', check, 'store', ...parts, ...metadata], {signal});
     if (result === 'repaired') return;
     await delay(1000, undefined, {signal});
   }
@@ -118,7 +130,7 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       // A successful read with all drives back queues MinIO's repair for that object.
       assert.deepEqual(await readObject(first, name, key, repair), bytes, name);
       assert.deepEqual(await readObject(first, multipart, key, repair), upload.bytes, multipart);
-      await waitForPieces(run, node, [name, multipart], repair);
+      await waitForPieces(run, node, [name, multipart], repair, multipart);
       const repairMs = Math.round(performance.now() - repairStart);
       process.stderr.write('Confirmed returned shards on ' + node.name + ' in ' + repairMs + ' ms\n');
       legs.push({...leg, repairMs});

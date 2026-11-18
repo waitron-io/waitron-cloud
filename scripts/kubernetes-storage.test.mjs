@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
+import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import test from 'node:test';
 import {promisify} from 'node:util';
 import {stockholmStoreResources} from './kubernetes-storage.mjs';
@@ -42,6 +45,32 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.deepEqual(placements, ['stockholm-a', 'stockholm-a', 'stockholm-b', 'stockholm-b', 'stockholm-c', 'stockholm-c']);
   assert.deepEqual(paths, ['/var/local/d621-store/0', '/var/local/d621-store/1',
     '/var/local/d621-store/0', '/var/local/d621-store/1', '/var/local/d621-store/0', '/var/local/d621-store/1']);
+});
+
+test('repair checks both disks for actual multipart data files', async t => {
+  const {waitForPieces} = await import('./kubernetes-storage-proof.mjs');
+  const temp = await mkdtemp(join(tmpdir(), 'store-shards-test-'));
+  t.after(() => rm(temp, {recursive: true, force: true}));
+  for (const disk of ['0', '1']) {
+    const directory = join(temp, disk, 'cloud-storage-rehearsal', 'multipart-0');
+    await mkdir(join(directory, 'data-version'), {recursive: true});
+    await writeFile(join(directory, 'xl.meta'), 'metadata');
+    await writeFile(join(directory, 'data-version', 'part.1'), 'data');
+  }
+  await writeFile(join(temp, '0/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
+  const controller = new AbortController();
+  async function run(binary, [exec, id, shell, flag, script, name, ...args]) {
+    assert.deepEqual([binary, exec, id], ['docker', 'exec', 'example-node']);
+    const paths = args.map(path => path.replace('/var/local/d621-store', temp));
+    const {stdout} = await promisify(execFile)(shell, [flag, script, name, ...paths]);
+    if (!stdout) controller.abort();
+    return stdout.trim();
+  }
+  const files = ['multipart-0'];
+  const node = {id: 'example-node'};
+  await assert.rejects(waitForPieces(run, node, files, controller.signal, 'multipart-0'), {name: 'AbortError'});
+  await writeFile(join(temp, '1/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
+  await waitForPieces(run, node, files, AbortSignal.timeout(2000), 'multipart-0');
 });
 
 test('encrypted bytes, listing and multipart survive each machine loss and repair', {
