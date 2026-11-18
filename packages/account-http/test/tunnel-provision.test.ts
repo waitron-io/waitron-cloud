@@ -60,6 +60,7 @@ test('automatic mode provisions only eligible signed boxes and preserves a stopp
   const other=await connectedVenue(f.db,f.issuer,origin),otherKey=peer();
   const postOther=()=>f.request(other.proof('tunnel-provision',{peerPublicKey:otherKey},randomUUID(),other.lease),app);
   const denied=await postOther();assert.equal(denied.status,403,await denied.clone().text());
+  assert.deepEqual(await denied.json(),{error:'permission_denied'});
   assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM remote_placements')).rows[0].n,0);
   const billing=new BillingStore(f.db.pool);
   for(const venue of [f.v,other]){

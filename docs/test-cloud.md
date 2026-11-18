@@ -301,8 +301,9 @@ its addresses in the configured cell. After pairing, check **Remote access**
 for the assigned Staff address. Use the switch on the box to stop access.
 If the cell is still starting, the box can retry with the same key. Once the
 test cell has allocated 64 addresses, a new request returns HTTP 503 and the
-portal shows no assigned address. If existing addresses still work, check the
-configured cell's `remote_cells.next_address` value. A value of 66 means it is full.
+portal shows no assigned address. The box gets the same reply while the cell
+starts. To check capacity, read the configured cell's `remote_cells.next_address`
+value. A value of 66 means it is full.
 
 On an authorised machine, use Certbot to obtain and renew the public certificate.
 Its HTTP-01 challenge proves the name by serving a temporary response on port 80.
