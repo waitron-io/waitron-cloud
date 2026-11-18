@@ -186,7 +186,7 @@ export class PasskeyController {
 
   async enrollAfterList() {
     const generation = this.#generation;
-    // The list owns pending state until it finishes. A click belongs to the account and page that accepted it.
+    // The list owns pending state until it finishes. Drop the click if the page or account changes while it waits.
     if (this.#listRead) await this.#listRead;
     if (generation === this.#generation) await this.enroll();
   }

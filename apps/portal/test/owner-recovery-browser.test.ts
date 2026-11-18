@@ -61,6 +61,7 @@ test('reset link recovers through the real Cloud box decision, then enrolls a ne
    proof.release();await page.getByText(translations.en.actionProofReady,{exact:true}).waitFor();
    step('proof ready, waiting for Account');
    list.release();await page.getByText(translations.en.accountIntro,{exact:true}).waitFor();
+   await page.unrouteAll({behavior:'wait'});
   }catch(error){
    t.diagnostic(JSON.stringify({loadAverage:loadavg()}));
    await failPortalWait(page,trace,stage,error,details=>t.diagnostic(details));

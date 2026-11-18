@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {setImmediate as nextTurn} from 'node:timers/promises';
 import {PasskeyController, type PasskeyBrowser} from '../src/passkey-controller.ts';
 import type {ApiResult} from '../src/api.ts';
 import type {PasskeySummary} from '../src/passkey-types.ts';
@@ -80,25 +81,65 @@ for (const action of ['load', 'refresh', 'signIn', 'enroll', 'remove'] as const)
   });
 }
 
-test('an accepted enrolment waiting on the list cannot follow a switch to another account', async () => {
+function holdList() {
   let finish!: (result: ApiResult<{passkeys: PasskeySummary[]}>) => void;
   const reply = new Promise<ApiResult<{passkeys: PasskeySummary[]}>>(resolve => {finish = resolve;});
+  return {reply, finish};
+}
+
+function listController(...lists: ReturnType<typeof holdList>[]) {
   const calls: string[] = [];
   const request = async <T>(path: string): Promise<ApiResult<T>> => {
+    const list = lists[calls.length];
     calls.push(path);
-    if (calls.length === 1) return await reply as ApiResult<T>;
+    if (path === '/passkeys' && list) return await list.reply as ApiResult<T>;
     if (path === '/passkeys') return {ok: true, value: {passkeys: [added]} as T};
     return {ok: false, status: 503, code: 'unavailable', retryAfterMs: 0};
   };
   const controller = new PasskeyController(() => {}, request);
-  controller.account('first');
+  controller.account('owner');
+  return {controller, calls};
+}
+
+test('an accepted enrolment waiting on the list cannot follow a switch to another account', async () => {
+  const oldList = holdList();
+  const {controller, calls} = listController(oldList);
   const readingOldAccount = controller.load();
   const enrolling = controller.enrollAfterList();
   assert.deepEqual(calls, ['/passkeys']);
   controller.account('second');
   await controller.load();
-  finish({ok: true, value: {passkeys: [existing]}});
+  oldList.finish({ok: true, value: {passkeys: [existing]}});
   await Promise.all([readingOldAccount, enrolling]);
   assert.deepEqual(calls, ['/passkeys', '/passkeys']);
   assert.deepEqual(controller.passkeys, [added]);
+});
+
+test('a click after navigation does not wait for the previous page’s list', async () => {
+  const list = holdList();
+  const {controller, calls} = listController(list);
+  const loading = controller.load();
+  controller.fence();
+  const enrolling = controller.enrollAfterList();
+  try {
+    await nextTurn();
+    assert.deepEqual([...calls], ['/passkeys', '/passkeys/registration/options']);
+  } finally {
+    list.finish({ok: true, value: {passkeys: [existing]}});
+    await Promise.all([loading, enrolling]);
+  }
+});
+
+test('the previous page’s list cannot cancel the wait for its replacement', async () => {
+  const oldList = holdList(), newList = holdList();
+  const {controller, calls} = listController(oldList, newList);
+  const previous = controller.load();
+  controller.fence();
+  const current = controller.load();
+  oldList.finish({ok: true, value: {passkeys: [existing]}});
+  await previous;
+  const enrolling = controller.enrollAfterList();
+  newList.finish({ok: true, value: {passkeys: [added]}});
+  await Promise.all([current, enrolling]);
+  assert.deepEqual(calls, ['/passkeys', '/passkeys', '/passkeys/registration/options']);
 });
