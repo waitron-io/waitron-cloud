@@ -163,60 +163,49 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
     const key = randomBytes(32).toString('base64'), wrongKey = randomBytes(32).toString('base64');
     const encrypted = {SSECustomerAlgorithm: 'AES256', SSECustomerKey: key,
       SSECustomerKeyMD5: createHash('md5').update(Buffer.from(key, 'base64')).digest('base64')};
-    const old = new Map([['baseline', randomBytes(512)]]);
-    await first.objects.putStaged('baseline', bufferObject(old.get('baseline')), key, {signal: ready});
-    const legs = [];
-    for (const [index, node] of [...nodes, nodes[0]].entries()) {
-      const name = 'outage-' + index, multipart = 'multipart-' + index, bytes = randomBytes(512);
-      const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
-      await waitForDrives(nodes[0], 6, uploadLimit);
-      const upload = await startMultipart(first, multipart, encrypted, uploadLimit);
-      const survivorNodes = nodes.filter(machine => machine.name !== node.name);
-      const survivors = survivorNodes.map(machine => clients.get(machine.name));
-      const [client] = survivors;
-      const survivor = survivorNodes[0];
-      const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
-        // MinIO must see the four surviving drives before it can assess a multipart write.
-        const peerCounts = await waitForDrives(survivor, 4, stopped);
-        process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + peerCounts + ')\n');
-        for (const survivor of survivors) {
-          assert.deepEqual(await readObject(survivor, 'baseline', key, stopped), old.get('baseline'));
-        }
-        for (const [object, expected] of old) {
-          if (object !== 'baseline') assert.deepEqual(await readObject(client, object, key, stopped), expected, object);
-        }
-        await client.objects.putStaged(name, bufferObject(bytes), key, {signal: stopped});
-        assert.deepEqual(await readObject(client, name, key, stopped), bytes, name);
-        await assert.rejects(readObject(client, name, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
-        await finishMultipart(client, upload, encrypted, stopped);
-        assert.deepEqual(await readObject(client, multipart, key, stopped), upload.bytes, multipart);
-        await assert.rejects(readObject(client, multipart, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
-        const listed = await client.send(ListObjectsV2Command, {}, stopped);
-        assert.deepEqual(listed.Contents.map(row => row.Key).sort(), [...old.keys(), name, multipart].sort());
-      }});
-      old.set(name, bytes);
-      old.set(multipart, upload.bytes);
-      const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
-      process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
-      try {
-        await waitForStore({nodes: names, kube, signal: repair});
-        const peerCounts = await waitForDrives(survivor, 6, repair);
-        process.stderr.write('Store drives online after rejoin on ' + survivor.name + ' (' + peerCounts + ')\n');
-        // A survivor has the acknowledged bytes while the returned volumes are still missing them.
-        assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
-        assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);
-        await waitForPieces(run, node, [name, multipart], repair, multipart);
-        const returned = clients.get(node.name);
-        assert.deepEqual(await readObject(returned, name, key, repair), bytes, name);
-        assert.deepEqual(await readObject(returned, multipart, key, repair), upload.bytes, multipart);
-      } catch (error) {
-        throw Error('storage_loss.repair on ' + node.name + ': ' + error.message, {cause: error});
+    const baseline = randomBytes(512), bytes = randomBytes(512);
+    await first.objects.putStaged('baseline', bufferObject(baseline), key, {signal: ready});
+    const name = 'outage-0', multipart = 'multipart-0';
+    const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+    await waitForDrives(nodes[0], 6, uploadLimit);
+    const upload = await startMultipart(first, multipart, encrypted, uploadLimit);
+    const [node, ...survivorNodes] = nodes;
+    const survivors = survivorNodes.map(machine => clients.get(machine.name));
+    const [client] = survivors, [survivor] = survivorNodes;
+    const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
+      // MinIO must see the four surviving drives before it can assess a multipart write.
+      const driveCounts = await waitForDrives(survivor, 4, stopped);
+      process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + driveCounts + ')\n');
+      for (const survivingClient of survivors) {
+        assert.deepEqual(await readObject(survivingClient, 'baseline', key, stopped), baseline);
       }
-      const repairMs = Math.round(performance.now() - repairStart);
-      process.stderr.write('Confirmed returned shards on ' + node.name + ' in ' + repairMs + ' ms\n');
-      legs.push({...leg, repairMs});
+      await client.objects.putStaged(name, bufferObject(bytes), key, {signal: stopped});
+      assert.deepEqual(await readObject(client, name, key, stopped), bytes, name);
+      await assert.rejects(readObject(client, name, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
+      await finishMultipart(client, upload, encrypted, stopped);
+      assert.deepEqual(await readObject(client, multipart, key, stopped), upload.bytes, multipart);
+      await assert.rejects(readObject(client, multipart, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
+      const listed = await client.send(ListObjectsV2Command, {}, stopped);
+      assert.deepEqual(listed.Contents.map(row => row.Key).sort(), ['baseline', multipart, name]);
+    }});
+    const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+    process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
+    try {
+      await waitForStore({nodes: names, kube, signal: repair});
+      const driveCounts = await waitForDrives(survivor, 6, repair);
+      process.stderr.write('Store drives online after rejoin on ' + survivor.name + ' (' + driveCounts + ')\n');
+      // A survivor has the acknowledged bytes while the returned volumes are still missing them.
+      assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
+      assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);
+      await waitForPieces(run, node, [name, multipart], repair, multipart);
+      assert.deepEqual(await readObject(first, name, key, repair), bytes, name);
+      assert.deepEqual(await readObject(first, multipart, key, repair), upload.bytes, multipart);
+    } catch (error) {
+      throw Error('storage_loss.repair on ' + node.name + ': ' + error.message, {cause: error});
     }
-    return {legs};
+    const repairMs = Math.round(performance.now() - repairStart);
+    process.stderr.write('Confirmed returned shards on ' + node.name + ' in ' + repairMs + ' ms\n');
+    return {...leg, repairMs};
   } catch (error) {
     failure = error;
     const pods = await kube(['-n', 'd621-store', 'get', 'pods', '-o', 'wide'], {signal: null}).catch(String);

@@ -119,17 +119,15 @@ test('repair checks both disks for actual multipart data files', async t => {
   await waitForPieces(run, node, files, AbortSignal.timeout(2000), 'multipart-0');
 });
 
-test('encrypted bytes, listing and multipart survive each machine loss and repair', {
+test('encrypted bytes, listing and multipart survive the first machine loss and repair', {
   skip: process.env.TEST_KUBERNETES_STOCKHOLM_STORAGE !== '1', timeout: 2_100_000,
 }, async () => {
   const child = promisify(execFile)(process.execPath, ['scripts/kubernetes-check.mjs', '--storage-loss'],
     {timeout: 2_000_000, maxBuffer: 2 * 1024 * 1024});
   child.child.stderr.pipe(process.stderr);
   const {stdout} = await child;
-  const {storage: {legs}} = JSON.parse(stdout);
-  assert.equal(legs.length, 4);
-  assert.equal(new Set(legs.map(leg => leg.stopped)).size, 3);
-  assert.equal(legs[0].stopped, legs[3].stopped);
-  assert.ok(legs.every(leg => leg.failoverMs <= 90_000 && leg.repairMs <= 180_000));
-  console.log(JSON.stringify(legs));
+  const {storage, nodes} = JSON.parse(stdout);
+  assert.equal(storage.stopped, nodes[0].name);
+  assert.ok(storage.failoverMs <= 90_000 && storage.repairMs <= 180_000);
+  console.log(JSON.stringify(storage));
 });

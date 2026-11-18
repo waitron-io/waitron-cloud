@@ -1763,9 +1763,10 @@ implementation or production evidence.
   startup in the same Kind setup. The bounded launcher brings up the private
   six-peer store. Run `node scripts/kubernetes-check.mjs --storage-loss` in the
   Linux guest to check encrypted objects, multipart completion and shard repair
-  through each single-machine outage. Scoped store credentials, switching Cloud
-  services to replicated data, real Stockholm machine loss and cold restart
-  remain open.
+  through the first outage. Scoped store credentials and switching Cloud services
+  to replicated data remain open. The Cloud services slice must pass consecutive
+  outage multipart and repair checks before run 9. Real Stockholm machine loss
+  and cold restart remain open.
   Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups

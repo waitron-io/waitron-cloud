@@ -2,7 +2,7 @@
 
 PR 3a prepares per-machine disks and installs the replicated database in the bounded
 Stockholm setup. PR 3b adds the test S3 store and an opt-in Kind check for encrypted
-reads, writes, multipart completion and repair through a machine outage.
+reads, writes, multipart completion and repair through the first machine outage.
 [P1 database and storage requirements](2026-10-22-cloud-country-cell.md#task-5-replicate-the-country-database-and-order-migrations-4065-calls)
 
 ## PR 3a — Install PostgreSQL on Stockholm's local disks
@@ -43,13 +43,14 @@ Add `--storage-loss` to `scripts/kubernetes-check.mjs` and the check in
 `scripts/kubernetes-storage.mjs`. Use PR 2's owned Kind stop and rejoin. Run one host
 client using the backups package's `BackupObjects` to write and read encrypted files
 and raw S3 for listings and the multipart missing-part case. Use a private NodePort that routes only to peers
-on the contacted host and matching TLS names. Within each 90-second leg, check old bytes, list,
+on the contacted host and matching TLS names. Within the 90-second outage, check old bytes, list,
 new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
 the stop. During it, reject completion that references a missing part, then upload
 that part, complete and compare bytes. Once all six peers return, read each outage write once to queue repair.
-Within 180 seconds, verify its pieces are on both volumes of the returned
-machine, then stop the next machine and read the earlier outage writes.
-Repeat the first stop to check the last leg's writes after repair.
+Within 180 seconds, verify both objects on both volumes of the returned
+machine, then read the original bytes through that machine. PR 5 covers a
+pending multipart upload and repair across consecutive outages before run 9,
+as required in the country-cell plan's Cloud services task.
 
 Start with the placement checks and name the live fault cases in
 `scripts/kubernetes-storage.test.mjs`. Check the launcher store install order and
