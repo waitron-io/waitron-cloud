@@ -38,7 +38,7 @@ function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) 
       process.exitCode = 1;
     }
   `, {mode: 0o755});
-  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed']) symlinkSync(stub, join(dir, name));
+  for (const name of ['id', 'ip', 'hostname', 'kubeadm', 'kubectl', 'curl', 'sleep', 'sed', 'install']) symlinkSync(stub, join(dir, name));
   symlinkSync('/usr/bin/awk', join(dir, 'awk'));
   if (root) {
     chmodSync(dir, 0o755);
@@ -123,4 +123,14 @@ test('failed join keeps the diagnosis and hides the token and certificate key', 
   assert.ok(!result.stderr.includes(token) && !result.stderr.includes(key));
   assert.equal(result.stdout, '');
   assert.match(hosts, /^10\.77\.0\.1 d618-api$/m);
+});
+
+
+test('the database bootstrap prepares a private directory on this machine', t => {
+  const {result, calls} = bootstrap(t, 'database-storage');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls.map(({name, args}) => [name, ...args]), [
+    ['id', '-u'],
+    ['install', '-d', '-m', '0700', '-o', '26', '-g', '26', '/var/local/d621-postgres'],
+  ]);
 });

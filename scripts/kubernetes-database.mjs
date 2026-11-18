@@ -45,13 +45,13 @@ function managedRole(name, groupNames) {
   return {name, ensure: 'present', login: true, inRoles: groupNames, passwordSecret: {name}};
 }
 
-function databaseCluster() {
+export function databaseCluster({storageClass = 'standard', proofRoles = true} = {}) {
   return {apiVersion: 'postgresql.cnpg.io/v1', kind: 'Cluster', metadata: {name: database},
     spec: {instances: 3, imageName: postgresImage, enableSuperuserAccess: false, failoverDelay: 0,
-      switchoverDelay: 15, stopDelay: 20, storage: {size: '1Gi', storageClass: 'standard'},
+      switchoverDelay: 15, stopDelay: 20, storage: {size: '1Gi', storageClass},
       affinity: {enablePodAntiAffinity: true, topologyKey: 'kubernetes.io/hostname', podAntiAffinityType: 'required'},
       postgresql: {parameters: {synchronous_commit: 'on'}, synchronous: {method: 'any', number: 1, dataDurability: 'required', failoverQuorum: true}},
-      managed: {roles: [managedRole(reader, ['pg_read_all_data']), managedRole(writer, [])]}
+      ...(proofRoles && {managed: {roles: [managedRole(reader, ['pg_read_all_data']), managedRole(writer, [])]}})
     }};
 }
 

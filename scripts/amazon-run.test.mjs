@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [];
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -267,6 +267,9 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
           joins.push({host: args.at(-2), input});
           if (scenario === 'failed control-plane join') throw Error('synthetic join refusal');
         }
+        if (scenario === 'database not ready' && script.includes('scripts/kubernetes-data.mjs')) {
+          throw Error('synthetic database readiness failure');
+        }
         if (script.includes("'token' 'create'")) return 'kubeadm join d618-api:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:' + hashes;
       }
       return '';
@@ -333,6 +336,10 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       assert.deepEqual(joins.map(row => row.host), ['admin@203.0.113.2']);
       assert.deepEqual(phases, [], 'no fixture starts after a failed member join');
     }
+    if (scenario === 'database not ready') {
+      assert.deepEqual(phases, [], 'no fixture starts if PostgreSQL setup fails');
+      assert.equal(calls.some(row => row[1] === 'stop-instances'), false);
+    }
     if (['failed bundle upload','failed private copy'].includes(scenario)) assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes("'ctr'")),false,'no import after a failed distribution');
     return;
   }
@@ -370,6 +377,20 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   const ready = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'status' 'daemonset/kube-proxy'"));
   const fixture = calls.findIndex(row => row[0] === 'scp' && row.at(-2).endsWith('target.json'));
   assert.ok(lastJoin >= 0 && lastJoin < refresh && refresh < ready && ready < fixture, 'refresh the proxy after both joins and wait before fixtures');
+  const nodeReady = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'--for=condition=Ready' 'nodes'"));
+  const disks = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'database-storage'"));
+  const data = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-data.mjs'));
+  assert.deepEqual(disks.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+  assert.ok(nodeReady > lastJoin && nodeReady < data && ready < data && data < fixture);
+  assert.ok(disks.every(row => calls.indexOf(row) < data), 'all local directories exist before PostgreSQL starts');
+  assert.equal(calls[data].at(-2), 'admin@203.0.113.1');
+  // Allow the operator and database waits to finish and print their own diagnosis.
+  assert.ok(transports.find(row => row.args.at(-1) === calls[data].at(-1)).timeout >= 750_000);
+  assert.match(calls[data].at(-1), /'--kubeconfig=\/etc\/kubernetes\/admin\.conf'/);
+  assert.ok(calls[data].at(-1).includes("'--context=" + clusterName + "'"));
+  for (const suffix of ['-control-plane', '-worker', '-worker2']) {
+    assert.ok(calls[data].at(-1).includes("'" + clusterName + suffix + "'"));
+  }
   if (scenario === 'observer') {
     assert.ok(calls.findIndex(row=>row[0]==='flux-prepare')>=0&&calls.findIndex(row=>row[0]==='flux-prepare')<calls.findIndex(row=>row[1]==='create-stack'),'prepare offline controllers before machines');
     assert.equal(savedTags.filter(tag=>/:(source|kustomize)-controller$/.test(tag)).length,2);
