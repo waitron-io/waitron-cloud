@@ -18,6 +18,7 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
     if (binary === 'kind') {
       if (args[0] === 'version') return 'kind v0.31.0';
       assert.equal(options.env.KIND_EXPERIMENTAL_DOCKER_NETWORK, label);
+      assert.ok(`${label}-external-load-balancer`.length <= 63, 'the Kind balancer name must fit one DNS label');
       assert.equal(options.env.KIND_EXPERIMENTAL_PROVIDER, 'docker');
       assert.ok(args.includes('--retain'));
       const configuration = JSON.parse(options.input);

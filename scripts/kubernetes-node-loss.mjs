@@ -56,7 +56,9 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
 `;
 
 export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
-  const cluster = 'd621-' + randomUUID(), directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
+  // Kind appends its role names to the cluster name, within one DNS label.
+  const cluster = 'd621-' + randomUUID().replaceAll('-', '');
+  const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
   const kubeconfig = join(directory, 'kubeconfig');
   const env = {...process.env, KUBECONFIG: kubeconfig, DOCKER_CONTEXT: 'default', KIND_EXPERIMENTAL_PROVIDER: 'docker',
     KIND_EXPERIMENTAL_DOCKER_NETWORK: cluster};
