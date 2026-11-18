@@ -79,8 +79,8 @@ async function readRegularFile(path: string) {
     } finally {
       await file.close();
     }
-  } catch (error) {
-    if (!['ENOENT', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+  } catch {
+    return;
   }
 }
 
@@ -88,7 +88,8 @@ export async function readChallengeFolder(folder: string, names: ReadonlySet<str
   previous: ReadonlyMap<string, LoadedChallenge> = new Map()): Promise<Map<string, LoadedChallenge>> {
   const result = new Map<string, LoadedChallenge>();
   try {
-    await access(folder, constants.X_OK);
+    // A trailing slash requires the configured path to be a directory.
+    await access(folder + '/', constants.X_OK);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return result;
     throw error;

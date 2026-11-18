@@ -169,20 +169,16 @@ Keep the signing key outside the gateway; mount only its public key.
 
 ### Answer a certificate authority's TLS check
 
-To exercise a TLS-ALPN-01 certificate check, set `GATEWAY_CHALLENGES` to a private
-directory and mount it read-only in the gateway. Give write access only to the
-role that presents certificate checks. That role can prove control of routed staff
-and public names. Leave the setting unset to answer no checks.
+Set `GATEWAY_CHALLENGES` to a private, read-only mount. Grant write access only to the role that presents checks.
+When enabled, the gateway needs loopback port 8445 free. Leave the setting unset for no checks.
 
 Supply one `<hostname>.json` per routed name, with `hostname`, an RFC 8737
 `certificate` and its matching PEM `key`, and `expiresAt` in epoch milliseconds.
-The gateway reads at most 128 files, each at most 16 KiB, once a second. It drops
-missing or invalid checks and clears the list if the directory read fails. A
-withdrawn route or an expired check stops answering immediately.
+The gateway reads up to 128 files of at most 16 KiB each per second. A failed directory read
+clears the list. An invalid file, withdrawn route or expired check cannot supply a certificate.
 
-HAProxy sends connections offering `acme-tls/1` on port 443 to the gateway's
-loopback listener on port 8445. `status.json` lists ready names in `challenges.answerable`.
-The local image test uses a synthetic certificate. Worker orders and delivery are still open.
+HAProxy sends connections offering `acme-tls/1` on port 443 to the loopback TLS 1.3 listener.
+Read ready names in `status.json` under `challenges.answerable`.
 
 ## Reconcile routes and certificates
 

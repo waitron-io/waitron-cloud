@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node 26 TypeScript (type stripping), Node 24 in the gateway image, `node:test`, PostgreSQL through `scripts/test-postgres.mjs`, `acme-client` 5.4.0, HAProxy 3.2.26 (Alpine 3.23 `apk add haproxy`, measured), Docker, Pebble and pebble-challtestsrv (digests pinned in `scripts/remote-fixtures.mjs`), Lit portal.
 
-**Spec:** `docs/superpowers/specs/2026-11-17-custom-domain-one-record-design.md` (approved by the owner 2026-11-17). Every decision in it is settled. Read it with this plan.
+**Spec:** `docs/superpowers/specs/2026-11-17-custom-domain-one-record-design.md` Read it with this plan. The watcher released the corrected plan on 2026-11-17 at 18:21 after the owner landed #1273 and #1275.
 
 **The other plan:** Waitron's box-side part is a separate plan (`docs/superpowers/plans/2026-11-17-box-staff-name-from-cloud.md` in the Waitron repository). It starts only after **PR 1 of this plan** has landed. Nothing in this plan waits for it.
 

@@ -34,6 +34,13 @@ test('loads an unexpired check for the current route while ignoring a file for a
   assert.deepEqual([...await readChecks(folder, names)].map(([name]) => name), [hostname]);
 });
 
+test('a route whose file name exceeds the filesystem limit does not block other checks', async t => {
+  const {folder, check, put} = await setup(t);
+  await put(check);
+  const longName = [63, 63, 63, 61].map(length => 'a'.repeat(length)).join('.');
+  assert.deepEqual([...await readChecks(folder, new Set([longName, hostname]))].map(([name]) => name), [hostname]);
+});
+
 test('refuses invalid files while retaining the neighbouring check', async t => {
   const {folder, check, put} = await setup(t);
   const other = await challengeCertificate('other.example.test', now + 1);
@@ -79,7 +86,7 @@ test('requires the critical identifier extension itself, with a 32-byte digest',
   }
 });
 
-test('a symlink and FIFO cannot supply or stall a check', {timeout: 3000}, async t => {
+test('a symlink and FIFO cannot supply or stall a check', async t => {
   const {folder, check, put} = await setup(t);
   await put(check, 'stand-in');
   const filename = join(folder, hostname + '.json');
@@ -87,5 +94,12 @@ test('a symlink and FIFO cannot supply or stall a check', {timeout: 3000}, async
   assert.equal((await readChecks(folder)).size, 0);
   await rm(filename);
   execFileSync('mkfifo', [filename]);
-  assert.equal((await readChecks(folder)).size, 0);
+  // A blocked open can outlive Node's in-process test timeout.
+  const reader = new URL('../src/challenge-files.ts', import.meta.url).href;
+  const size = execFileSync(process.execPath, ['--input-type=module', '-e', `
+    import {readChallengeFolder} from ${JSON.stringify(reader)};
+    const [folder, name] = process.argv.slice(1);
+    console.log((await readChallengeFolder(folder, new Set([name]), ${now})).size);
+  `, folder, hostname], {encoding: 'utf8', timeout: 3000, killSignal: 'SIGKILL'});
+  assert.equal(size.trim(), '0');
 });

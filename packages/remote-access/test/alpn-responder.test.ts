@@ -72,6 +72,7 @@ test('a new route needs a refresh but withdrawal and expiry take effect immediat
   await responder.refresh();
   assert.deepEqual(responder.answerable(), [hostname]);
   routes.clear();
+  assert.deepEqual(responder.answerable(), []);
   await refuses(port, hostname, ['acme-tls/1']);
   routes.add(hostname);
   expire();
@@ -94,4 +95,17 @@ test('deletion and a failed folder read each withdraw a loaded check at refresh'
   await assert.rejects(responder.refresh(), {code: 'ENOTDIR'});
   assert.deepEqual(responder.answerable(), []);
   await refuses(port, hostname, ['acme-tls/1']);
+});
+
+test('replacing a check file presents the new certificate after refresh', async t => {
+  const {responder, port, filename, check} = await setup(t);
+  await responder.refresh();
+  const previous = await handshake(port, hostname, ['acme-tls/1']);
+  assert.equal(previous.fingerprint, new X509Certificate(check.certificate).fingerprint256);
+
+  const replacement = await challengeCertificate(hostname, check.expiresAt);
+  await writeFile(filename, JSON.stringify(replacement));
+  await responder.refresh();
+  const current = await handshake(port, hostname, ['acme-tls/1']);
+  assert.equal(current.fingerprint, new X509Certificate(replacement.certificate).fingerprint256);
 });

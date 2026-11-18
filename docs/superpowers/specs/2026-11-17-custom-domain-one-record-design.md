@@ -1,10 +1,8 @@
 # Custom domains with one DNS record, and names that follow the venue
 
-Status: approved by the owner on 2026-11-17 ("yes"), in the session that produced it.
+Status: the watcher released the corrected plan on 2026-11-17 at 18:21 after the owner landed #1273 and #1275.
 
-The owner's decisions so far were made in the session of 2026-11-17 that produced this document:
-use one DNS record per custom name, check the name on port 443, and have Cloud answer no plain
-`http://` address ("no" to opening port 80).
+The design uses one DNS record per custom name and checks the name on port 443. Cloud serves HTTPS.
 
 ## Why
 

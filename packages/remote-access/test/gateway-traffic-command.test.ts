@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {spawn,type ChildProcess} from 'node:child_process';
-import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
 import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
+import {connect} from 'node:tls';
 import {signManifest,type ReportingGatewayManifest} from '../src/manifest.ts';
 import {serveTrafficLifetimes} from '../src/traffic-lifetime-transport.ts';
 import {verifyTrafficReport} from '../src/traffic-report.ts';
@@ -150,10 +151,18 @@ test('publishing a check updates status without starting HAProxy or a traffic li
  const f=await fixture(t,60_000,true),held=await f.holdCountry(),gateway=f.launch();
  await f.prepared();await held.accepted();held.release();
  const route=f.manifest.routes[0]!.staffHostname;
- for(const name of [route,'unrouted.example.test']) {
-  await writeFile(join(f.checkDirectory,name+'.json'),JSON.stringify(await challengeCertificate(name)));
+ const check=await challengeCertificate(route);
+ for(const entry of [check,await challengeCertificate('unrouted.example.test')]) {
+  await writeFile(join(f.checkDirectory,entry.hostname+'.json'),JSON.stringify(entry));
  }
  await waitFor(async()=>assert.deepEqual((await f.status()).challenges?.answerable,[route]),3000);
+ const presented=await new Promise<string>((resolve,reject)=>{
+  const socket=connect({host:'127.0.0.1',port:8445,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
+  socket.setTimeout(2000,()=>socket.destroy(new Error('gateway certificate check timed out')));
+  socket.once('error',reject);
+  socket.once('secureConnect',()=>{resolve(socket.getPeerCertificate().fingerprint256);socket.end();});
+ });
+ assert.equal(presented,new X509Certificate(check.certificate).fingerprint256);
  assert.equal((await f.children()).length,1);
  assert.deepEqual(f.lifetimes.map(e=>verifyTrafficLifecycle(e,f.reporter.publicKey).kind),['start']);
  await f.publish({...f.manifest,sequence:2,routes:[]});
