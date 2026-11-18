@@ -27,7 +27,14 @@ export function remoteScreen(app:PortalApp,id:string,revoked=false){
    ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}
   </section>`:nothing}
   ${v?.names?html`<p>${c.remotePrivacy}</p>
-   ${(['staff','public'] as const).map(kind=>html`<h5>${kind==='staff'?c.remoteStaff:c.remotePublic}</h5><dl><dt>${c.remoteCurrent}</dt><dd>${ready?html`<a href=${'https://'+v.names![kind].current} target="_blank" rel="noopener noreferrer">${v.names![kind].current}</a>`:v.names![kind].current}</dd><dt>${c.remoteAssigned}</dt><dd>${v.names![kind].assigned}</dd></dl>`)}
+   ${(['staff','public'] as const).map(kind=>{
+    const name=v.names![kind],heading='remote-name-'+kind;
+    const notice=c.remoteRecordMoved.replace('{hostname}',name.current).replace('{target}',name.assigned);
+    return html`<h5 id=${heading} tabindex="-1">${kind==='staff'?c.remoteStaff:c.remotePublic}</h5>
+     <dl><dt>${c.remoteCurrent}</dt><dd>${ready?html`<a href=${'https://'+name.current} target="_blank" rel="noopener noreferrer">${name.current}</a>`:name.current}</dd><dt>${c.remoteAssigned}</dt><dd>${name.assigned}</dd></dl>
+     ${name.recordMoved&&!v.revoked?html`<p role="status">${notice}</p>
+      <wt-button .disabled=${disabled} @click=${async()=>{if(await r.recheck(kind))app.root.querySelector<HTMLElement>('#'+heading)?.focus();}}>${c.remoteCheckAgain}</wt-button>`:nothing}`;
+   })}
    <details><summary>${c.remoteLan}</summary><p>${c.remoteLanHelp}</p><p>${c.remoteLanTest}</p></details>
    ${!v.revoked?html`<h5>${c.remoteCustom}</h5><div class="business-choice"><label for="remote-kind">${c.remoteWhich}</label><select id="remote-kind" .value=${r.kind} ?disabled=${disabled} @change=${(e:Event)=>r.choose((e.target as HTMLSelectElement).value as RemoteKind)}><option value="staff">${c.remoteStaff}</option><option value="public">${c.remotePublic}</option></select></div>
     <wt-input name="remoteHostname" .label=${c.remoteHostname} .required=${true} .error=${r.error==='remoteInvalid'?c.remoteInvalid:''} .value=${r.hostname} .disabled=${disabled} @wt-change=${(e:CustomEvent<{value:string}>)=>r.edit(e.detail.value)}

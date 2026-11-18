@@ -1,4 +1,4 @@
-export type MonitoringIncidentKind='disconnected'|'snapshot_stale'|'verification_failed'|'public_route_failed'|'staff_route_failed'|'public_probe_stale'|'staff_probe_stale';
+export type MonitoringIncidentKind='disconnected'|'snapshot_stale'|'verification_failed'|'public_route_failed'|'staff_route_failed'|'public_probe_stale'|'staff_probe_stale'|'public_record_moved'|'staff_record_moved';
 export interface RemoteCheck {status:'healthy'|'failed';checkedAt:string;certificateNotAfter:string|null;}
 export interface AccountInstallation {
  installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;revision:number;
@@ -25,7 +25,7 @@ function validOverview(value:unknown):boolean{
 function validMonitoring(value:unknown):boolean{
  if(!value||typeof value!=='object')return false;const v=value as Record<string,unknown>;
  const date=(s:unknown)=>typeof s==='string'&&Number.isFinite(Date.parse(s));
- const kinds=['disconnected','snapshot_stale','verification_failed','public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale'];
+ const kinds=['disconnected','snapshot_stale','verification_failed','public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_record_moved','staff_record_moved'];
  const checks=v.remoteChecks,check=(c:unknown)=>{
   if(!c||typeof c!=='object'||Array.isArray(c))return false;const r=c as Record<string,unknown>;
   return Object.keys(r).length===3&&['status','checkedAt','certificateNotAfter'].every(k=>k in r)&&['healthy','failed'].includes(String(r.status))&&date(r.checkedAt)&&(r.certificateNotAfter===null||date(r.certificateNotAfter));

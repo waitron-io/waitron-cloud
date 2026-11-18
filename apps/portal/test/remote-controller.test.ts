@@ -173,3 +173,44 @@ for(const code of ['proof_required','enrollment_required'])test(`remote ${code} 
  await c.apply();assert.equal(c.error,code==='proof_required'?'actionProofUnavailable':'pairEnrollment');
  assert.deepEqual(c.confirmation,reviewed);assert(c.view?.names);assert.equal(calls.filter(p=>p.endsWith('/apply')).length,1);
 });
+
+test('remote views refuse invalid record-moved evidence while accepting older replies',()=>{
+ const staff={...view.names.staff,current:dns.hostname,recordMoved:true};
+ assert(validRemoteView(view));
+ assert(validRemoteView({...view,names:{...view.names,staff}}));
+ for(const patch of [{recordMoved:'yes'},{current:staff.assigned}]){
+  assert.equal(validRemoteView({...view,names:{...view.names,staff:{...staff,...patch}}}),false);
+ }
+});
+
+test('Check again posts the affected name kind and uses the returned status',async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ let moved=true;
+ const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});
+  if(path.endsWith('/recheck'))moved=false;
+  return {ok:true,value:{...view,names:{...view.names,staff:{...view.names.staff,current:dns.hostname,recordMoved:moved}}} as T};
+ });
+ c.account('owner');await c.open(id);
+ await c.recheck('staff');
+ assert.deepEqual(calls,[
+  {path:'/remote-access/status',body:{installationId:id}},
+  {path:'/remote-access/recheck',body:{installationId:id,kind:'staff'}},
+ ]);
+ assert.equal(c.view?.names?.staff.recordMoved,false);
+});
+
+test('successful Check again closes a preview for another hostname',async()=>{
+ const proposed='staff.next.example',current={...view.names.staff,current:dns.hostname,recordMoved:true};
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  if(path.endsWith('/dns'))return {ok:true,value:{...dns,hostname:proposed,records:[{...dns.records[0],name:proposed}]} as T};
+  const recordMoved=!path.endsWith('/recheck');
+  return {ok:true,value:{...view,names:{...view.names,staff:{...current,recordMoved}}} as T};
+ });
+ c.account('owner');await c.open(id);
+ c.edit(proposed);await c.preview();
+ assert.equal(c.confirmation?.hostname,proposed);
+ await c.recheck('staff');
+ assert.equal(c.hostname,dns.hostname);
+ assert.equal(c.confirmation,undefined);
+});

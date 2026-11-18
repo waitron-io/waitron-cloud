@@ -119,8 +119,8 @@ test('a known installation in another organisation is refused before DNS queries
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('other@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox ORDER BY created_at DESC LIMIT 1')).rows[0]);assert('token' in mail);
  const other=await signup.complete(mail.token,{password,organisationName:'Luna',legalBusinessName:'Luna SL',countryCode:'ES'}),r=new RegistrationStore(db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:other.organisationId,legalBusinessId:other.legalBusinessId};await r.start(b);await r.approveCloud(b,other.accountId);await r.approveLocal(b,randomUUID());const foreign=await r.complete(b);
  let lookups=0;resolve=async()=>{lookups++;return [];};
- for(const action of ['status','dns','apply']){
-  const extra=action==='status'?{}:action==='dns'?{kind:'staff',hostname:'staff.cafe.example'}:{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'};
+ for(const action of ['status','dns','apply','recheck']){
+  const extra=action==='status'?{}:action==='recheck'?{kind:'staff'}:action==='dns'?{kind:'staff',hostname:'staff.cafe.example'}:{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'};
   assert.equal((await request(action,{installationId:foreign.installationId,...extra} as Record<string,string>)).status,403);
  }
  assert.equal(lookups,0);
@@ -233,4 +233,115 @@ test('remote status retains assigned names after a move to a different cell suff
 test('recovered scope: remote status refuses another retained business',async()=>{
  await setRecoveryScope(db.pool,owner.accountId);assert.equal((await request('status')).status,403);
  await setRecoveryScope(db.pool,owner.accountId,owner.organisationId);assert.equal((await request('status')).status,200);
+});
+
+async function movedStaffRecord() {
+ const hostname='staff.cafe.example';
+ await db.pool.query("UPDATE remote_hostnames SET hostname=$1,record_moved_at=clock_timestamp() WHERE kind='staff'",[hostname]);
+ await db.pool.query(`INSERT INTO remote_configuration_jobs(kind,target_id,desired_digest,status,attempts,last_error,available_at)
+  VALUES('certificate_staff',$1,repeat('a',64),'failed',8,'dns_not_verified',clock_timestamp()+interval '1 day')`,[venue.installationId]);
+ return hostname;
+}
+
+test('only the affected custom name reports its moved record and leaves probe dates out',async()=>{
+ const hostname=await movedStaffRecord(),expiry='2026-12-01T12:00:00.000Z';
+ await db.pool.query(`INSERT INTO remote_probe_observations
+  (installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,certificate_not_before,certificate_not_after,certificate_fingerprint256)
+  VALUES($1,$2,'staff',1,$3,'healthy',clock_timestamp(),12,'2026-09-01T12:00:00Z',$4,'AA:BB')`,[venue.installationId,venue.venueId,hostname,expiry]);
+ const reply=await request('status');
+ assert.equal(reply.status,200);
+ const {names}=await reply.json();
+ assert.deepEqual(names.staff,{assigned,current:hostname,recordMoved:true});
+ assert.equal(names.public.recordMoved,false);
+});
+
+test('Check again clears a verified record notice and makes a failed job due',async()=>{
+ const hostname=await movedStaffRecord();
+ resolve=async name=>name===hostname?[assigned]:[];
+ const reply=await request('recheck',{kind:'staff'});
+ assert.equal(reply.status,200);
+ const view=await reply.json();
+ assert.equal(view.names.staff.recordMoved,false);
+ assert.equal(view.publicForward,null);
+ const {rows}=await db.pool.query(`SELECT status,attempts,last_error,available_at<=clock_timestamp() AS due
+  FROM remote_configuration_jobs WHERE kind='certificate_staff'`);
+ assert.deepEqual(rows,[{status:'pending',attempts:0,last_error:null,due:true}]);
+});
+
+test('Check again preserves existing rows when DNS is still wrong or the session loses ownership',async()=>{
+ await movedStaffRecord();
+ const state=async()=> (await db.pool.query(`SELECT row_to_json(h) AS name,row_to_json(j) AS job
+  FROM remote_hostnames h CROSS JOIN remote_configuration_jobs j WHERE h.kind='staff' AND j.kind='certificate_staff'`)).rows;
+ const before=await state();
+ resolve=async()=>['elsewhere.example.test'];
+ const wrong=await request('recheck',{kind:'staff'});
+ assert.equal(wrong.status,400);
+ assert.deepEqual(await wrong.json(),{error:'dns_not_verified'});
+ assert.deepEqual(await state(),before);
+
+ resolve=async()=>{
+  await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false');
+  return [assigned];
+ };
+ assert.equal((await request('recheck',{kind:'staff'})).status,403);
+ assert.deepEqual(await state(),before);
+ assert.equal((await request('status')).status,403);
+});
+
+for(const mode of ['existing','test-free-paid'] as const)test(`Check again leaves a locked running claim intact in ${mode} mode`,async()=>{
+ await movedStaffRecord();
+ await db.pool.query("UPDATE organisations SET service_plan='paid'");
+ app=createAccountApp({...options(),planMode:mode});
+ await db.pool.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$1,lease_until=clock_timestamp()+interval '1 minute'`,[randomUUID()]);
+ const before=(await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows;
+ const worker=await db.secondPool.connect();
+ let reply:Promise<Response>|undefined,timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+  await worker.query('BEGIN');
+  await worker.query('SELECT 1 FROM remote_configuration_jobs FOR UPDATE');
+  reply=request('recheck',{kind:'staff'});
+  const result=await Promise.race([reply,new Promise<null>(done=>{timer=setTimeout(()=>done(null),1500);})]);
+  assert(result,'Check again must complete while the running job is still locked');
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).names.staff.recordMoved,false);
+ }finally{
+  clearTimeout(timer);await worker.query('ROLLBACK');worker.release();await reply?.catch(()=>{});
+ }
+ assert.deepEqual((await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows,before);
+});
+
+test('Check again preserves a claim committed while it waits to reset a pending job',async()=>{
+ await movedStaffRecord();
+ const worker=await db.secondPool.connect(),claim=randomUUID();
+ let reply:Promise<Response>|undefined,committed=false;
+ try{
+  await worker.query('BEGIN');
+  await worker.query("UPDATE remote_configuration_jobs SET status='running',claim_id=$1,lease_until=clock_timestamp()+interval '1 minute'",[claim]);
+  reply=request('recheck',{kind:'staff'});
+  await untilLock("UPDATE remote_configuration_jobs SET status='pending'");
+  await worker.query('COMMIT');committed=true;
+  assert.equal((await reply).status,200);
+ }finally{
+  if(!committed)await worker.query('ROLLBACK');
+  worker.release();await reply?.catch(()=>{});
+ }
+ assert.deepEqual((await db.pool.query('SELECT status,claim_id FROM remote_configuration_jobs')).rows,[{status:'running',claim_id:claim}]);
+});
+
+
+test('repeated Check again requests preserve retry timing once the notice clears',async()=>{
+ const hostname=await movedStaffRecord();
+ let lookups=0;
+ resolve=async name=>{lookups++;return name===hostname?[assigned]:[];};
+ assert.equal((await request('recheck',{kind:'staff'})).status,200);
+ await db.pool.query(`UPDATE remote_configuration_jobs SET attempts=7,last_error='challenge_not_answerable',
+  available_at=clock_timestamp()+interval '15 minutes' WHERE kind='certificate_staff'`);
+ const before=(await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows;
+ for(let press=0;press<2;press++){
+  const reply=await request('recheck',{kind:'staff'});
+  assert.equal(reply.status,200);
+  assert.equal((await reply.json()).names.staff.recordMoved,false);
+ }
+ assert.equal(lookups,1);
+ assert.deepEqual((await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows,before);
 });

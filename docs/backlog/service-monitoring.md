@@ -118,6 +118,10 @@ awaits plan approval; implementation, enablement and deployed external checks re
 The [local monitor](../local-monitoring.md) now records missing contact, stale snapshots
 and failed verification for configured test installations. The portal shows incident
 evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
+The [custom DNS notice](../local-monitoring.md#run-the-monitor) uses the same
+opening and recovery flow. PostgreSQL tests in
+`packages/registration/test/monitoring.test.ts` check delivery in each language and
+the recovery after the record points at Cloud again. Live DNS remains open.
 Alert preferences can be saved only after a choice changes from the last
 confirmed reply. A confirmed save disables Save again; an uncertain save stays
 retryable, even after reverting the choices. Pending requests, rate-limit waits

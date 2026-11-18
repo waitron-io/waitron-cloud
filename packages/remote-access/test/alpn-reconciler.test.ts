@@ -106,3 +106,22 @@ test('an unavailable check folder refuses before the custom staff issuer is call
   assert.deepEqual(job,{status:'pending',last_error:'challenge_not_answerable'});
  }
 });
+
+test('an older DNS failure cannot restore a warning cleared while the lookup ran',async t=>{
+ const f=await customStaff(t);
+ const {venueId}=f.venue;
+ await f.db.pool.query("UPDATE remote_hostnames SET record_moved_at=clock_timestamp() WHERE venue_id=$1 AND kind='staff'",[venueId]);
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{
+  gatewayStatus:{async read(){return [];}},
+  async resolveCname(){
+   await f.db.secondPool.query("UPDATE remote_hostnames SET record_moved_at=NULL WHERE venue_id=$1 AND kind='staff'",[venueId]);
+   return ['elsewhere.example.test'];
+  },
+  async issueCertificate(){throw Error('unverified DNS must refuse before ordering');},
+ });
+ await f.run(worker);
+ const {rows}=await f.db.pool.query("SELECT record_moved_at FROM remote_hostnames WHERE venue_id=$1 AND kind='staff'",[venueId]);
+ assert.equal(rows[0].record_moved_at,null);
+ const job=(await f.db.pool.query("SELECT last_error FROM remote_configuration_jobs WHERE target_id=$1 AND kind='certificate_staff'",[f.venue.installationId])).rows[0];
+ assert.equal(job.last_error,'dns_not_verified');
+});

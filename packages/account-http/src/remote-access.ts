@@ -15,12 +15,12 @@ import type {RateRule} from './rate-limit.ts';
 export type RemoteResolver=ResolveCname;
 export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string}):Promise<Response>{
  const {pool,origin,consume}=options,action=c.req.path.slice('/api/account/remote-access/'.length);
- if(!['status','dns','apply'].includes(action))throw new AccountHttpError(404,'not_found');
+ if(!['status','dns','apply','recheck'].includes(action))throw new AccountHttpError(404,'not_found');
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
  if(c.req.header('origin')!==origin)throw new AccountHttpError(403,'forbidden');
- const fields=action==='status'?['installationId']:action==='dns'?['installationId','kind','hostname']:['installationId','kind','hostname','expectedRevision'];
+ const fields=action==='status'?['installationId']:action==='recheck'?['installationId','kind']:action==='dns'?['installationId','kind','hostname']:['installationId','kind','hostname','expectedRevision'];
  const body=await readAccountBody(c.req.raw,fields),id=body.installationId!;
- if(!isUuid(id)||(action!=='status'&&(!['staff','public'].includes(body.kind!)||!isHostname(body.hostname)))||(action==='apply'&&(!/^\d+$/.test(body.expectedRevision!)||!Number.isSafeInteger(Number(body.expectedRevision)))))throw new AccountHttpError(400,'invalid_input');
+ if(!isUuid(id)||(action!=='status'&&!['staff','public'].includes(body.kind!))||((action==='dns'||action==='apply')&&!isHostname(body.hostname))||(action==='apply'&&(!/^\d+$/.test(body.expectedRevision!)||!Number.isSafeInteger(Number(body.expectedRevision)))))throw new AccountHttpError(400,'invalid_input');
  const token=readSessionCookie(c,new URL(origin).protocol==='https:')??'',csrfToken=c.req.header('x-csrf-token')??'';
  const ownership=async(client:PoolClient,accountId:string)=>{
   // Match revocation's account/session/membership/installation order; hold ownership through commit.
@@ -50,13 +50,21 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
   const paid=permission?permission.level==='connected'||permission.level==='hosted':await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
-  const p=(await client.query(`SELECT p.venue_id,s.assigned_hostname AS staff_assigned,u.assigned_hostname AS public_assigned,s.hostname AS staff,u.hostname AS public FROM remote_placements p JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.installation_id=$1`,[id])).rows[0];
+  const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at
+   FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id
+   WHERE p.installation_id=$1`,[id])).rows;
+  const name=(kind:'staff'|'public')=>{
+   const row=names.find(r=>r.kind===kind);
+   return row?{assigned:row.assigned_hostname,current:row.hostname,recordMoved:row.hostname!==row.assigned_hostname&&row.record_moved_at!==null}:null;
+  };
+  const staff=name('staff'),publicName=name('public');
   const service=(await client.query("SELECT s.state,o.health,o.observed_at,o.received_at,o.revision FROM installation_services s LEFT JOIN installation_observations o USING(installation_id,service) WHERE s.installation_id=$1 AND s.service='remote_access'",[id])).rows[0];
-  const publicForward=action==='status'?await new ForwardObservationStore(pool,options.planMode).readCurrent(client,id):undefined;
+  const includeForward=action==='status'||action==='recheck';
+  const publicForward=includeForward?await new ForwardObservationStore(pool,options.planMode).readCurrent(client,id):undefined;
   await authorize(client);
   const deadline=Math.min(service?.observed_at?.getTime()+300000,service?.received_at?.getTime()+300000,installation.lease_expires_at?.getTime());
   const current=paid&&!installation.revoked_at&&service?.revision===installation.configuration_revision&&deadline>Date.now();
-  return {...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(action==='status'?{publicForward}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:p?{staff:{assigned:p.staff_assigned,current:p.staff},public:{assigned:p.public_assigned,current:p.public}}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
+  return {...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(includeForward?{publicForward}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
  });
  try{
   if(action==='status')return c.json(await status());
@@ -64,6 +72,10 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   if(action==='dns'){
    const records=await store.hostnameInstructions(id,kind,body.hostname!);await transaction(pool,authorize);
    return c.json({installationId:id,kind,hostname:body.hostname!,records});
+  }
+  if(action==='recheck'){
+   await store.recheckHostname(id,kind,options.resolve,authorize);
+   return c.json(await status());
   }
   await store.setHostname(id,kind,body.hostname!,Number(body.expectedRevision),name=>boundedResolveCname(name,options.resolve),authorize);
   return c.json(await status());

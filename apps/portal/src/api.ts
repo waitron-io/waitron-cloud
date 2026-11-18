@@ -47,7 +47,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/passkeys/registration/verify')return validPasskeySummary(value);
   if(path==='/passkeys/authentication/verify')return typeof data.accountId==='string'&&data.accountId.length>0;
   if(path.startsWith('/recovery/'))return validRecoveryView(value);
-  if(path==='/remote-access/status'||path==='/remote-access/apply')return validRemoteView(value);
+  if(path==='/remote-access/status'||path==='/remote-access/apply'||path==='/remote-access/recheck')return validRemoteView(value);
   if(path==='/remote-access/dns')return validRemoteDns(value);
   if(path==='/guest-menu/takedown'||path==='/guest-menu/enable')return status===200&&validGuestMenuView(value);
   if(path==='/translation-consent')return status===200&&validTranslationConsents(value);
@@ -94,7 +94,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     if(path.startsWith('/operator/actions/')&&response.status===409)codes.push('conflict');
     if(path.startsWith('/billing/')&&response.status===409)codes.push('conflict');
     if(response.status===400&&path.startsWith('/authenticator/'))codes.push('setup_unavailable','factor_not_active');
-    if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
+    if(response.status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply','/remote-access/recheck'].includes(path))codes.push('remote_plan_required','remote_setup_required','remote_test_only','revoked');
     if(path.startsWith('/recovery/')){
       if(response.status===400)codes.push('confirmation_required','unverified');
       if(response.status===409)codes.push('approval_required','conflict','target_not_fresh','recovery_active');

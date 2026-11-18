@@ -236,6 +236,12 @@ export class RemoteConfigurationReconciler {
   };
   let validation:CheckValidation={type:'dns-01',dnsName:target.dnsName};
   if(hostname!==assigned&&status){
+   // Keep the full database timestamp so a DNS lookup cannot undo a newer notice change.
+   const before=(await this.#pool.query(`SELECT h.record_moved_at::text AS moved_at
+    FROM remote_hostnames h JOIN installations i ON i.venue_id=h.venue_id
+    WHERE i.id=$1 AND i.configuration_revision=$4 AND h.kind=$2 AND h.hostname=$3`,
+    [target.installationId,target.kind,hostname,target.revision])).rows[0];
+   if(!before)throw new Error('placement_changed');
    let answers:string[];
    try{answers=await boundedResolveCname(hostname,this.#resolveCname);}
    catch(error){
@@ -248,7 +254,8 @@ export class RemoteConfigurationReconciler {
    await this.#complete(job,async client=>{
     await client.query(`UPDATE remote_hostnames h SET record_moved_at=CASE WHEN $4 THEN COALESCE(h.record_moved_at,clock_timestamp()) ELSE NULL END
      FROM installations i WHERE i.id=$1 AND i.configuration_revision=$5 AND i.revoked_at IS NULL
-     AND h.venue_id=i.venue_id AND h.kind=$2 AND h.hostname=$3`,[target.installationId,target.kind,hostname,moved,target.revision]);
+     AND h.venue_id=i.venue_id AND h.kind=$2 AND h.hostname=$3 AND h.record_moved_at IS NOT DISTINCT FROM $6::timestamptz`,
+     [target.installationId,target.kind,hostname,moved,target.revision,before.moved_at]);
    },true);
    if(moved)throw new Error('dns_not_verified');
 

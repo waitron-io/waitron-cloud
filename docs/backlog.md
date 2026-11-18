@@ -719,7 +719,6 @@ the Amazon test Cloud's own-domain adapter still need qualification.
 Remaining work:
 
 - Qualify automatic staff certificate installation on the appliance.
-- Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 
 Waitron’s part, taking its staff name from Cloud, is a separate plan in Waitron
 that can start after Cloud PR1. Live Let’s Encrypt, Route53, production keys and

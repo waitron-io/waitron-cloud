@@ -53,3 +53,32 @@ for(const locale of ['en','es'] as const)test('reminder renders the agreed '+loc
 for(const issue of ['public_certificate_expiring','staff_certificate_expiring'])test(issue+' is refused as an owner alert',()=>{
  assert.equal(validServiceAlert({...message,issue,checkedAt,certificateNotAfter}),false);
 });
+
+const movedAlert = {
+  ...message,
+  issue: 'staff_record_moved',
+  hostname: 'staff.cafe.example.test',
+  target: 'staff-123.cloud.example.test',
+};
+test('record-moved alerts require two hostnames and refuse probe expiry evidence', () => {
+  assert.equal(validServiceAlert(movedAlert), true);
+  assert.equal(validServiceAlert({...movedAlert, certificateNotAfter}), false);
+  assert.equal(validServiceAlert({...movedAlert, issue: 'public_record_moved'}), true);
+  for (const patch of [
+    {target: undefined}, {hostname: 'https://staff.cafe.example.test'}, {target: 'a..example.test'},
+    {certificateNotAfter: '2026-10-01'}, {checkedAt}, {issue: 'disconnected'},
+  ]) assert.equal(validServiceAlert({...movedAlert, ...patch}), false);
+});
+
+test('record-moved opening mail gives the owner the DNS target in their language', () => {
+  const expected = [
+    ['en', 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff-123.cloud.example.test, or this address stops working when its certificate expires.'],
+    ['es', 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff-123.cloud.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado.'],
+  ] as const;
+  for (const [locale, text] of expected) {
+    const mail = accountMail(new URL('https://cloud.example.test'), 'service_alert', {
+      ...movedAlert, locale,
+    });
+    assert(mail.text.split('\n').includes(text), mail.text);
+  }
+});
