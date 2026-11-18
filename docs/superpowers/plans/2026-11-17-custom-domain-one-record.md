@@ -291,7 +291,7 @@ The tasks are ordered so every commit is green: new artifact methods are added b
   - File artifacts keep `<keyDirectory>/<installationId>.public.pem` and `<keyDirectory>/<installationId>.public.csr` (mode 0600), and write `<publicCertificates>/<venueId>.pem` for each named cell, each atomically. A cell with no mapping fails with `route_mapping_missing` before any write.
 
 - [ ] **Step 1: Write the failing tests**:
-  - `public-certificates.test.ts` (a fake `issueCertificate` signs the CSR with a local test CA, as `deploy/test-cloud/remote-runtime.mjs` does): `a newly placed venue gets a public certificate with no configuration entry and no operator command`. One pass publishes `<cell>/<installationId>.pem`; its chain covers the stored public name, and its key matches the stored CSR.
+  - `public-certificates.test.ts` (a fake `issueCertificate` signs the CSR with a local test CA, as `deploy/test-cloud/remote-runtime.mjs` does): `a newly placed venue gets a public certificate with no configuration entry and no operator command`. One pass publishes `<cell>/<venueId>.pem`; its chain covers the stored public name, and its key matches the stored CSR.
   - `public-certificates.test.ts`: `a failed issuance keeps the last good copy` (the bytes are unchanged).
   - `reconciler-files.test.ts`: `publishes key and chain to every named cell and keeps key and CSR private` (mode 0600).
   - `reconciler-files.test.ts`: `an unmapped cell writes nothing`.
@@ -750,3 +750,5 @@ Copy: `remoteRecordMoved` and `remoteRecordMovedNoDate` use Task 7.1's exact EN/
 - [ ] **Step 1: Write the failing verifier test**: a receipt without `customNames.renewed===true`, or with `cnameUntouched!==true`, is refused.
 - [ ] **Step 2: Run** `node --test scripts/verify-cell-movement-receipt.test.mjs`; FAIL. **Extend the proof**; run the proof and both verifiers; PASS. Edit the docs; `node --test scripts/ci-docs.test.mjs`.
 - [ ] **Step 3: Commit** `git commit -s -m "Prove a two-cell move keeps the owner's record and the venue's names"`.
+
+PR4 run-it corrections cleared by the watcher on 2026-11-18 at 04:03: public jobs keep retrying with the existing 900-second backoff cap; move readiness uses the destination copy even when its old source is unavailable; the worker removes venue-named gateway copies from mapped cells without the route. Staff and route parking remain unchanged. No new table or delivery ledger.

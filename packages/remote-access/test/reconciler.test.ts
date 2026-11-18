@@ -65,7 +65,7 @@ function memoryArtifacts(target:{installationId:string;placement:{staffHostname:
  async function readCertificate(id:string,kind:'staff'|'public'){return kind==='public'?certificates.get(`${id}:public`):(await db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[id])).rows[0]?.certificate;}
  return {csrs,certificates,setCsr,setCertificate,readCertificate,async publications(){const value=await readCertificate(target.installationId,'staff');return [...publications,...(value&&value!==certificates.get(`${target.installationId}:staff`)?[`${target.installationId}:staff`]:[])];},adapter:{
   async readPublicCertificate(id:string){const csr=csrs.get(`${id}:public`),certificate=certificates.get(`${id}:public`);return csr&&certificate?{csr,pem:csrKeys.get(csr)!+certificate}:undefined;},
-  async publishPublicCertificate(id:string,_venueId:string,_cells:string[],copy:{pem:string;csr:string}){publications.push(`${id}:public`);csrs.set(`${id}:public`,copy.csr);csrKeys.set(copy.csr,createPrivateKey(copy.pem).export({type:'pkcs8',format:'pem'}).toString());certificates.set(`${id}:public`,copy.pem.slice(copy.pem.indexOf('-----BEGIN CERTIFICATE-----')));},
+  async publishPublicCertificate(id:string,_venueId:string,_cells:string[],copy:{pem:string;csr:string}){publications.push(`${id}:public`);csrs.set(`${id}:public`,copy.csr);csrKeys.set(copy.csr,createPrivateKey(copy.pem).export({type:'pkcs8',format:'pem'}).toString());certificates.set(`${id}:public`,copy.pem.slice(copy.pem.indexOf('-----BEGIN CERTIFICATE-----')));return true;},
   async publishManifest(){throw new Error('unexpected_route');},
  },target};
 }
@@ -96,17 +96,17 @@ test('an expired eighth claim is parked instead of becoming invisible to workers
 });
 
 test('eight failures park one target while another target progresses',async()=>{
- const current=await onePlacement(43);let publicRuns=0,staffRuns=0;
- const worker=new RemoteConfigurationReconciler(db.pool,{execute:async job=>{if(job.kind==='certificate_public'){publicRuns++;throw new Error('private provider detail');}if(job.kind==='certificate_staff')staffRuns++;}});await worker.schedule();
- await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_public' OR target_id<>$1",[current.installationId]);
+ const current=await onePlacement(43);let failedRuns=0,otherRuns=0;
+ const worker=new RemoteConfigurationReconciler(db.pool,{execute:async job=>{if(job.kind==='certificate_staff'){failedRuns++;throw new Error('private provider detail');}if(job.kind==='certificate_public')otherRuns++;}});await worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff' OR target_id<>$1",[current.installationId]);
  for(let attempt=0;attempt<8;attempt++){
-  await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[current.installationId]);
+  await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
   assert.equal(await worker.runOnce(),true);
  }
- const failed=(await db.pool.query("SELECT status,attempts,failures,last_error FROM remote_configuration_jobs WHERE kind='certificate_public' AND target_id=$1",[current.installationId])).rows[0];
- assert.deepEqual(failed,{status:'failed',attempts:8,failures:'8',last_error:'reconcile_failed'});assert.equal(publicRuns,8);
- await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
- assert.equal(await worker.runOnce(),true);assert.equal(staffRuns,1);
+ const failed=(await db.pool.query("SELECT status,attempts,failures,last_error FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[current.installationId])).rows[0];
+ assert.deepEqual(failed,{status:'failed',attempts:8,failures:'8',last_error:'reconcile_failed'});assert.equal(failedRuns,8);
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[current.installationId]);
+ assert.equal(await worker.runOnce(),true);assert.equal(otherRuns,1);
 });
 
 test('changed desired state resets a parked target and revocation disables certificate work',async()=>{

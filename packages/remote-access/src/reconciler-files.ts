@@ -28,12 +28,19 @@ export class FileReconcilerArtifacts implements ReconcilerArtifacts {
   const pem=await optional(join(this.#keyDirectory,installationId+'.public.pem')),csr=await optional(join(this.#keyDirectory,installationId+'.public.csr'));
   return pem!==undefined&&csr!==undefined?{pem,csr}:undefined;
  }
- async publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string}){
+ async publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string},requiredCellIds=cellIds){
   if(!isUuid(installationId)||!isUuid(venueId)||!this.#keyDirectory)throw new Error('invalid_reconciler_files');
-  const outputs=cellIds.map(id=>{const directory=this.#publicCertificates.get(id);if(!directory)throw new Error('route_mapping_missing');return join(directory,venueId+'.pem');});
-  for(const output of outputs)await atomic(output,copy.pem);
+  const required=requiredCellIds.map(id=>{const directory=this.#publicCertificates.get(id);if(!directory||!cellIds.includes(id))throw new Error('route_mapping_missing');return join(directory,venueId+'.pem');});
+  for(const output of required)await atomic(output,copy.pem);
   await mkdir(this.#keyDirectory,{recursive:true,mode:0o700});
   await atomic(join(this.#keyDirectory,installationId+'.public.pem'),copy.pem);await atomic(join(this.#keyDirectory,installationId+'.public.csr'),copy.csr);
+  let complete=true;
+  for(const id of cellIds.filter(id=>!requiredCellIds.includes(id))){
+   const directory=this.#publicCertificates.get(id);
+   try{if(!directory)throw new Error('route_mapping_missing');await atomic(join(directory,venueId+'.pem'),copy.pem);}catch{complete=false;}
+  }
+  for(const [id,directory]of this.#publicCertificates)if(!cellIds.includes(id))try{await rm(join(directory,venueId+'.pem'),{force:true});}catch{complete=false;}
+  return complete;
  }
  async publishManifest(cellId:string,envelope:string){const output=this.#routes.get(cellId);if(!output)throw new Error('route_mapping_missing');await atomic(output,envelope);}
 }

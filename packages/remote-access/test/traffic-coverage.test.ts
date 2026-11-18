@@ -81,6 +81,7 @@ test('signed process retries preserve start and ending facts without closing a p
   assert.equal(ended.find(r=>r.process_id===next.processId).ended_at,null);
   assert.equal((await f.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence,'0');
   assert.equal((await f.pool.query('SELECT count(*) FROM usage_events')).rows[0].count,'0');
+  assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_coverage')).rows[0].count,'2','a successor under the same manifest adds no coverage row');
  }finally{await f.close();}
 });
 

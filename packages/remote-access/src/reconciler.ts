@@ -18,7 +18,7 @@ interface ExecuteContext {signal:AbortSignal;isCurrent:()=>Promise<boolean>}
 export interface PublicCertificateCopy {pem:string;csr:string}
 export interface ReconcilerArtifacts {
  readPublicCertificate:(installationId:string)=>Promise<PublicCertificateCopy|undefined>;
- publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy)=>Promise<void>;
+ publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy,requiredCellIds?:string[])=>Promise<boolean>;
  publishManifest:(cellId:string,envelope:string)=>Promise<void>;
 }
 export interface CertificateIssueTarget extends CertificateAuthorization {installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal}
@@ -152,11 +152,11 @@ export class RemoteConfigurationReconciler {
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
   const claimed=await transaction(this.#pool,async client=>{
-   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND kind<>'name' AND status='running' AND attempts>=8
+   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND kind NOT IN ('name','certificate_public') AND status='running' AND attempts>=8
     AND lease_until<=clock_timestamp() ORDER BY lease_until,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
    if(exhausted){await client.query(`UPDATE remote_configuration_jobs SET status='failed',claim_id=NULL,lease_until=NULL,failures=failures+1,
     last_error='reconcile_failed',updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2`,[exhausted.kind,exhausted.target_id]);return {parked:true as const};}
-   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND (attempts<8 OR kind='name') AND
+   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND (attempts<8 OR kind IN ('name','certificate_public')) AND
     ((status='pending' AND available_at<=clock_timestamp()) OR (status='running' AND lease_until<=clock_timestamp()))
     ORDER BY available_at,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];if(!row)return;
    return {parked:false as const,job:rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',
@@ -202,19 +202,29 @@ export class RemoteConfigurationReconciler {
   const cells=await transaction(this.#pool,client=>routeCells(client,job.targetId)),copy=await this.#artifacts.readPublicCertificate(job.targetId);
   let usable=false;
   if(copy)try{validateCsr(copy.csr,target.hostname);usable=!certificateNeedsRenewal(copy.pem,copy.csr,target.hostname,this.#now(),false)&&new X509Certificate(copy.pem).checkPrivateKey(createPrivateKey(copy.pem));}catch{}
-  const publish=async(value:PublicCertificateCopy,authority:CertificateAuthorization,keepClaim=false)=>this.#complete(job,async client=>{
-   await this.#store.publishAuthorizedCertificate(client,job.targetId,'public',value.csr,authority,async()=>{
-    if(!await this.#current(job,client))throw new Error('stale_claim');signal.throwIfAborted();
-    if(certificateDigest(job.targetId,'public',authority,await routeCells(client,job.targetId))!==job.desiredDigest)throw new Error('placement_changed');
-    if(certificateNeedsRenewal(value.pem,value.csr,authority.hostname,this.#now(),false))throw new Error('invalid_certificate');
-    await this.#artifacts!.publishPublicCertificate(job.targetId,target.venue_id,cells,value);
-   });
-  },keepClaim);
+  const publish=async(value:PublicCertificateCopy,authority:CertificateAuthorization,renewal=false)=>{
+   let complete=false;
+   await this.#complete(job,async client=>{
+    await this.#store.publishAuthorizedCertificate(client,job.targetId,'public',value.csr,authority,async()=>{
+     if(!await this.#current(job,client))throw new Error('stale_claim');signal.throwIfAborted();
+     if(certificateDigest(job.targetId,'public',authority,await routeCells(client,job.targetId))!==job.desiredDigest)throw new Error('placement_changed');
+     if(certificateNeedsRenewal(value.pem,value.csr,authority.hostname,this.#now(),false))throw new Error('invalid_certificate');
+     const destinations=(await client.query("SELECT target_cell_id FROM remote_cell_moves WHERE installation_id=$1 AND state IN ('staged','ready') AND expected_revision=$2",[job.targetId,authority.revision])).rows.map(row=>row.target_cell_id);
+     const required=destinations.length?destinations:cells;
+     complete=await this.#artifacts!.publishPublicCertificate(job.targetId,target.venue_id,cells,value,required);
+     // A copied destination can qualify a move while an unavailable source keeps retrying.
+     await client.query('UPDATE remote_configuration_jobs SET applied_digest=$3,last_success_at=clock_timestamp() WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId,certificateDigest(job.targetId,'public',authority,complete?cells:required)]);
+    });
+   },true);
+   if(!complete)throw new Error('public_copy_incomplete');
+   if(!renewal)await this.#complete(job,async()=>{});
+  };
   if(copy&&usable){
    const authority=await this.#store.authorizeCertificate(job.targetId,'public',copy.csr);
    if(certificateDigest(job.targetId,'public',authority,cells)!==job.desiredDigest)throw new Error('stale_configuration');
    const renewal=certificateNeedsRenewal(copy.pem,copy.csr,authority.hostname,this.#now());await publish(copy,authority,renewal);if(!renewal)return;
   }
+  if(!usable)await this.#complete(job,async client=>{await client.query('UPDATE remote_configuration_jobs SET applied_digest=NULL WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId]);},true);
   const [key,csrBytes]=await acmeCrypto.createCsr({commonName:target.hostname,altNames:[target.hostname]}),csr=csrBytes.toString(),authority=await this.#store.authorizeCertificate(job.targetId,'public',csr);
   if(certificateDigest(job.targetId,'public',authority,cells)!==job.desiredDigest)throw new Error('stale_configuration');
   signal.throwIfAborted();const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind:'public',csr,signal});signal.throwIfAborted();
@@ -244,17 +254,17 @@ export class RemoteConfigurationReconciler {
    const live=(await client.query(`SELECT 1 FROM remote_configuration_jobs WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4
     AND enabled AND status='running' AND lease_until>clock_timestamp() FOR UPDATE`,[job.kind,job.targetId,job.desiredDigest,job.claimId])).rows[0];
    if(!live)throw new Error('stale_claim');await action(client);
-   if(keepClaim){await client.query('UPDATE remote_configuration_jobs SET applied_digest=desired_digest,last_success_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 AND claim_id=$3',[job.kind,job.targetId,job.claimId]);return;}
+   if(keepClaim)return;
    await client.query(`UPDATE remote_configuration_jobs SET status='pending',applied_digest=desired_digest,available_at=clock_timestamp()+$5::interval,
     claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,last_success_at=clock_timestamp(),updated_at=clock_timestamp()
     WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4`,[job.kind,job.targetId,job.desiredDigest,job.claimId,interval]);
   });
  }
  async #release(job:RemoteConfigurationJob,cancelled:boolean){
-  const attempts=job.attempts,status=job.kind!=='name'&&!cancelled&&attempts>=8?'failed':'pending';
+  const attempts=job.attempts,status=job.kind!=='name'&&job.kind!=='certificate_public'&&!cancelled&&attempts>=8?'failed':'pending';
   const seconds=cancelled?0:Math.min(900,30*2**Math.max(0,attempts-1));
   await this.#pool.query(`UPDATE remote_configuration_jobs SET status=$5,available_at=clock_timestamp()+$6*interval '1 second',claim_id=NULL,lease_until=NULL,
-   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) WHEN kind='name' THEN LEAST(attempts,7) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
+   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) WHEN kind IN ('name','certificate_public') THEN LEAST(attempts,7) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
    last_error=CASE WHEN $7 THEN last_error ELSE 'reconcile_failed' END,updated_at=clock_timestamp()
    WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4 AND status='running'`,[job.kind,job.targetId,job.desiredDigest,job.claimId,status,seconds,cancelled]);
  }

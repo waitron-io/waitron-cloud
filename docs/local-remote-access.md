@@ -204,7 +204,9 @@ Private copies and requests stay in `keyDirectory` with mode 0600. You do not li
 venues or staff certificate files; old `certificates` and `staffExchange` settings
 are refused. The DNS module exports async `present(name, value)`,
 `remove(name, value)` and `point(name, target)` methods. Every path is absolute.
-An unmapped cell is refused before any public-certificate write.
+Create each configured `publicCertificates` folder before starting the worker;
+it must be writable by that worker. An unmapped cell is refused before any
+public-certificate write.
 
 For a Route 53 zone, set `acme.dnsModule` to the absolute path of
 `packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
@@ -254,7 +256,9 @@ DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json
 
 Certificate publication rechecks the current hostname, ACME delegation name,
 configuration revision and claim lease after ACME completes. A stale result is refused.
-Each file is replaced atomically. Failed issuance keeps the last good copy;
+Each file is replaced atomically. Public-certificate failures retry indefinitely, with
+backoff capped at 900 seconds; staff and route jobs still park after eight failures.
+Failed issuance keeps the last good copy;
 a failed write does not partly overwrite that file. Cloud reads staff requests from the database exchange below and returns
 only the chain; the private key remains in Waitron. Automatic production appliance scheduling remains a Waitron dependency.
 
@@ -272,7 +276,7 @@ WAITRON_CHECKOUT=/absolute/path/to/waitron pnpm proof:remote-reconciler
 
 The receipt uses PostgreSQL plus the local Pebble and DNS fixtures. It proves signed
 two-venue route publication, expired-lease restart and duplicate-worker recovery, bounded
-failure parking, initial public and
+staff failure parking, initial public and
 staff issuance without per-venue operator files, public key regeneration, replacement staff
 requests through the database, Waitron's existing staff install command,
 retention after failed renewal, and hostname and expired-lease fences. It creates no live
@@ -351,7 +355,9 @@ the account/control API.
    command refuses a sequence that was not generated after this move was staged.
 4. Run `move-commit` with the same operation and revision. It refuses
    `move_destination_incomplete` until the enabled public-certificate job records a
-   copy for the current name, revision and route cells. Then export and apply newer
+   destination copy for the current name and revision. An unavailable source does not
+   block that destination. The worker retries source delivery and removes its venue
+   certificate files from mapped cells that no longer hold the route. Then export and apply newer
    manifests for both cells. The destination keeps the active route and the source removes
    it. Do not treat the move as complete while either gateway still reports the older
    sequence.

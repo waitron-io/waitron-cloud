@@ -96,7 +96,7 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote}){
    const key=createPrivateKey(copy.pem).export({format:'pem',type:'pkcs8'}),chain=copy.pem.slice(begin);
    await atomic(join(directory,'public-certs',venueId+'.pem'),copy.pem);await mkdir(target,{recursive:true,mode:0o700});
    await atomic(join(target,'key.pem'),key);await atomic(join(target,'request.pem'),copy.csr);await atomic(join(target,'certificate.pem'),chain);
-   if(id!==venueId)await rm(join(directory,'public-certs',id+'.pem'),{force:true});
+   if(id!==venueId)await rm(join(directory,'public-certs',id+'.pem'),{force:true});return true;
   },
   async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');await atomic(join(directory,'gateway-manifest.json'),text);}
  };
