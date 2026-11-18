@@ -64,8 +64,13 @@ jobs:
       - name: Check for the emulator tests on the checked-out head
         id: presence
         run: |
-          if [[ -f packages/remote-access/test/emulator/route53-dns.test.ts ]]; then
+          route53=packages/remote-access/test/emulator/route53-dns.test.ts
+          sqs=packages/registration/test/emulator/ses-feedback-queue.test.ts
+          if [[ -f "$route53" && -f "$sqs" ]]; then
             echo 'present=true' >> "$GITHUB_OUTPUT"
+          elif [[ -f "$route53" || -f "$sqs" ]] || grep -Fq '"test:aws-emulator"' package.json; then
+            echo 'AWS Emulator tests are incomplete. Both adapter test files are required.'
+            exit 1
           else
             echo 'present=false' >> "$GITHUB_OUTPUT"
             echo 'Skipping: this head predates the AWS Emulator tests.'
