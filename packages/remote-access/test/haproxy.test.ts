@@ -15,3 +15,14 @@ test('staff routing is exact and public TLS terminates on a separate trusted pro
 test('WireGuard exports only exact peer addresses and no private venue keys',()=>{
  const config=renderWireGuard([route]);assert.match(config,/AllowedIPs = 10.77.0.2\/32/);assert.match(config,/PublicKey = /);assert.doesNotMatch(config,/PrivateKey|0.0.0.0/);
 });
+
+test('ACME checks select the loopback backend before staff and public routes in both modes', () => {
+ const options={port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/run/public-certs'};
+ for(const traffic of [undefined,{socket:'/run/gateway.sock',operationalSources:['127.0.0.1']}]) {
+  const config=renderHaproxy([route],{...options,traffic});
+  assert.match(config.match(/^  use_backend .*$/m)?.[0] ?? '', /^  use_backend acme_alpn if \{ req\.ssl_alpn -m str acme-tls\/1 \}$/);
+  assert.match(config,/^backend acme_alpn\n  timeout server 3s\n  server alpn 127\.0\.0\.1:8445 maxconn 16$/m);
+ }
+ assert.throws(()=>renderHaproxy([],{...options,alpnPort:options.gatePort}),/invalid_gateway_options/);
+ assert.throws(()=>renderHaproxy([],{...options,publicTlsPort:8445}),/invalid_gateway_options/);
+});

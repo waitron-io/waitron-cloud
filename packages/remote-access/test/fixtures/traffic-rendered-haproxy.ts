@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
 import {chmod,lstat,mkdir,mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {createServer as httpServer} from 'node:http';
 import {createServer as httpsServer,request} from 'node:https';
 import {type Socket} from 'node:net';
+import {connect as tlsConnect} from 'node:tls';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
+import {AlpnResponder} from '../../src/alpn-responder.ts';
 import {renderHaproxy} from '../../src/config.ts';
 import {GatewayTrafficRuntime} from '../../src/gateway-traffic-runtime.ts';
 import {signManifest,type ReportingGatewayManifest} from '../../src/manifest.ts';
@@ -31,11 +33,13 @@ async function waitFor<T>(read:()=>Promise<T>):Promise<T>{
 test('rendered TLS gateway separates real trusted probes and both venues user bytes through reload and crash',async t=>{
  const root=await realpath(await mkdtemp(join(tmpdir(),'g-tls-'))),sockets=new Set<Socket>();
  const servers:Array<ReturnType<typeof httpServer>|ReturnType<typeof httpsServer>>=[];
+ let responder:AlpnResponder|undefined;
  let runtime:GatewayTrafficRuntime|undefined,country:Awaited<ReturnType<typeof serveTrafficLifetimes>>|undefined;
  const pids:number[]=[],addresses:string[]=[],lifetimes:unknown[]=[],held=new Set<()=>void>();
  t.after(async()=>{
   for(const socket of sockets)socket.destroy();
   try{await runtime?.stop();}finally{
+   await responder?.close();
    await country?.close();
    await Promise.all(servers.map(async server=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}));
    for(const address of addresses)execFileSync('ip',['address','del',address+'/32','dev','lo']);
@@ -55,13 +59,32 @@ test('rendered TLS gateway separates real trusted probes and both venues user by
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=sol.example.test','-addext',`subjectAltName=${routes.flatMap(r=>[r.staffHostname,r.publicHostname]).map(h=>'DNS:'+h).join(',')}`,'-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
  const key=await readFile(join(root,'key.pem')),cert=await readFile(join(root,'cert.pem'));
  await writeFile(join(certs,'venues.pem'),Buffer.concat([key,cert]));
+ const staffName=routes[0]!.staffHostname,checkFolder=join(root,'checks');
+ await mkdir(checkFolder,{mode:0o700});
+ execFileSync('openssl',['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:prime256v1','-nodes','-days','1',
+  '-subj','/CN='+staffName,'-addext','subjectAltName=DNS:'+staffName,
+  '-addext','1.3.6.1.5.5.7.1.31=critical,DER:04:20:'+Array(32).fill('ab').join(':'),
+  '-keyout',join(root,'check-key.pem'),'-out',join(root,'check-cert.pem')],{stdio:'ignore'});
+ const checkCert=await readFile(join(root,'check-cert.pem'),'utf8');
+ await writeFile(join(checkFolder,staffName+'.json'),JSON.stringify({
+  hostname:staffName,expiresAt:Date.now()+60_000,certificate:checkCert,key:await readFile(join(root,'check-key.pem'),'utf8'),
+ }),{mode:0o600});
+ responder=new AlpnResponder({folder:checkFolder,routeNames:()=>new Set([staffName])});
+ const checkPort=await responder.listen(8445);
+ await responder.refresh();
+ assert.deepEqual(responder.answerable(),[staffName]);
+ let staffConnections=0;
  const observed:Array<{venueId:string;path:string|undefined;host:string|undefined}>=[];
- for(const route of routes)await listen(httpsServer({key,cert},(req,res)=>{
+ for(const route of routes){
+  const venue=httpsServer({key,cert},(req,res)=>{
   observed.push({venueId:route.venueId,path:req.url,host:req.headers.host});res.setHeader('Content-Type','application/json');
   if(req.url==='/held'){
    res.write('{"venueId":');const finish=()=>{held.delete(finish);res.end(JSON.stringify(route.venueId)+'}');};held.add(finish);res.once('close',()=>held.delete(finish));
   }else res.end(JSON.stringify({venueId:route.venueId}));
- }),route.port,route.address);
+  });
+  venue.on('connection',()=>{staffConnections++;});
+  await listen(venue,route.port,route.address);
+ }
  const gate=createPublicGate({key:randomBytes(32),ca:cert,routes:()=>routes,difficulty:8});
  await listen(httpServer(gate.handle),19083,'127.0.0.1');
  const issuer=generateKeyPairSync('ed25519'),reporter=generateKeyPairSync('ed25519'),cellId=randomUUID();
@@ -77,7 +100,7 @@ test('rendered TLS gateway separates real trusted probes and both venues user by
  const backends=(kind:'user'|'ops')=>new Map(routes.flatMap((_,i)=>(['staff','public'] as const).map(channel=>[backend(kind,channel,i),`${i}:${channel}`])));
  const start=async(predecessorId:string|null)=>{
   const processId=randomUUID(),socket=join(root,processId+'.sock'),config=join(root,processId+'.cfg');
-  await writeFile(config,renderHaproxy(routes,{port:19080,publicTlsPort:19082,gatePort:19083,certificateDirectory:certs,traffic:{socket,operationalSources:['127.0.0.1']}}));
+  await writeFile(config,renderHaproxy(routes,{port:19080,publicTlsPort:19082,gatePort:19083,alpnPort:checkPort,certificateDirectory:certs,traffic:{socket,operationalSources:['127.0.0.1']}}));
   // Validation and traffic use the exact renderer output, including both TLS hops and shared limits.
   execFileSync('haproxy',['-c','-f',config],{stdio:'pipe'});
   const startedAt=new Date(now).toISOString();
@@ -136,9 +159,28 @@ test('rendered TLS gateway separates real trusted probes and both venues user by
   assert.equal((await send(1-index,'public','/public/availability',undefined,answer.cookie)).status,403,'sibling cookie must not authorize a venue');
  };
  const first=await start(null);
+ for(const protocols of [['acme-tls/1'],['h2','acme-tls/1']]){
+  const answer=await new Promise<{protocol:string|false|null;fingerprint:string;bytes:number}>((resolve,reject)=>{
+   const socket=tlsConnect({host:'127.0.0.1',port:19080,servername:staffName,ALPNProtocols:protocols,rejectUnauthorized:false});
+   let bytes=0;
+   socket.setTimeout(4000,()=>socket.destroy(new Error('certificate check timed out')));
+   socket.once('error',reject);
+   socket.on('data',chunk=>{bytes+=chunk.length;});
+   socket.once('secureConnect',()=>{
+    const protocol=socket.alpnProtocol,fingerprint=socket.getPeerCertificate().fingerprint256;
+    if(protocol!=='acme-tls/1')socket.end();
+    socket.once('end',()=>resolve({protocol,fingerprint,bytes}));
+   });
+  }).catch(error=>({error}));
+  assert.equal(staffConnections,0,'the check handshake must never connect to a venue backend');
+  if('error' in answer)throw answer.error;
+  assert.deepEqual(answer,{protocol:'acme-tls/1',fingerprint:new X509Certificate(checkCert).fingerprint256,bytes:0});
+ }
  await probe();positive(await settled(first,'ops'));allZero(await counters(first,'user'));await tick();
  allZero((await totals(first.processId)).sums);assert.ok(observed.some(v=>v.venueId===routes[0]!.venueId)&&observed.some(v=>v.venueId===routes[1]!.venueId));
- await user(0);const onlyFirst=await settled(first,'user');assert.deepEqual(onlyFirst.get('1:staff'),{ingress:'0',egress:'0'},'a sibling staff route must remain unused');
+ const beforeStaff=staffConnections;await user(0);
+ assert.ok(staffConnections>beforeStaff,'a normal staff TLS connection still reaches the venue');
+ const onlyFirst=await settled(first,'user');assert.deepEqual(onlyFirst.get('1:staff'),{ingress:'0',egress:'0'},'a sibling staff route must remain unused');
  await user(1);
  let expected=await settled(first,'user');positive(expected);await tick();
  assert.deepEqual((await totals(first.processId)).sums,expected,'signed user ingress/egress must equal only the four mapped outer backends');

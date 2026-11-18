@@ -1,10 +1,18 @@
 # Custom domains with one DNS record, and names that follow the venue
 
-Status: approved by the owner on 2026-11-17 ("yes"), in the session that produced it.
+The owner approved this design on 17 November 2026, answering “yes” at 16:49 CET in session
+`29fb1f67-404b-49ce-b2e6-54ede24542d9`. The watcher released the corrected plan at 18:21 CET
+after the owner landed #1273 and #1275.
 
-The owner's decisions so far were made in the session of 2026-11-17 that produced this document:
-use one DNS record per custom name, check the name on port 443, and have Cloud answer no plain
-`http://` address ("no" to opening port 80).
+The owner approved these decisions in that session:
+
+- Use one DNS record per custom name and answer the certificate check on port 443.
+- Keep the venue’s names fixed across cell moves.
+- Tell the owner in their language when their record stops pointing at Cloud.
+- Renew certificates automatically and stop sending certificate-expiry emails to owners.
+
+At 15:55 CET in the same session, the owner answered “no” to serving plain `http://`.
+Keep port 80 closed.
 
 ## Why
 
@@ -135,13 +143,10 @@ Within approach 3 there are three places the answer could live:
   worker writes a small file for each name being checked into the check folder of every cell that
   serves the venue, and each gateway reads that folder in its existing loop. Routes, HAProxy and
   traffic coverage are untouched by a check, and there is no new service or network path. The files
-  are not signed, because public certificates and their keys already reach the gateway as plain,
-  unsigned files in `/input/public-certs`
-  ([`gateway-cli.ts`](../../../packages/remote-access/src/gateway-cli.ts)): anyone who could write
-  the gateway's input could already plant a public certificate, so signing the far less sensitive
-  check files would add no protection. The first version of this design chose a signed, numbered
-  check list; a plain file per name also removes that list's weakness of an older list being
-  accepted after a gateway restart.
+  are plain and live in an explicitly configured private directory. Only the role
+  allowed to present checks can write there. Mount it read-only in the gateway because
+  a check can prove control of a routed staff or public name. An unset
+  `GATEWAY_CHALLENGES` setting leaves the responder disabled.
 - **c. One responder per cell that gateways forward check connections to.** This gives one answer,
   so there's no "has every gateway got it yet" question. But it's a new service holding state,
   reached from internet-facing gateways, that needs its own database access or a push path.
@@ -218,7 +223,7 @@ public address, exactly as today. `validateCsr` and the publication rechecks
   only by what restarts it today: a new manifest, and, with `GATEWAY_CERTIFICATE_REFRESH=1`,
   changed public certificate files.
 - `status.json` gains the names the gateway can answer right now: unexpired file, loaded
-  certificate, and a route name in the accepted manifest.
+  certificate, running HAProxy and a route name in the accepted manifest.
 
 ### When to tell Let's Encrypt it is ready
 

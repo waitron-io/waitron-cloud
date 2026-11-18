@@ -1,7 +1,8 @@
 import {isAddress,isHostname,isPeerKey,isUuid,type GatewayRoute} from './manifest.ts';
 import {isIP} from 'node:net';
 export interface TrafficRenderOptions {socket:string;operationalSources:readonly string[]}
-interface HaproxyOptions {port:number;publicTlsPort:number;gatePort:number;certificateDirectory:string;traffic?:TrafficRenderOptions;proxySource?:string}
+export const gatewayAlpnPort=8445;
+interface HaproxyOptions {alpnPort?:number;port:number;publicTlsPort:number;gatePort:number;certificateDirectory:string;traffic?:TrafficRenderOptions;proxySource?:string}
 export function validateTrafficRenderOptions(value:TrafficRenderOptions):void{
  if(!value||typeof value.socket!=='string'||value.socket.length>100||!/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.sock$/.test(value.socket)
   ||!Array.isArray(value.operationalSources)||value.operationalSources.length<1||value.operationalSources.length>64
@@ -14,7 +15,8 @@ function validate(routes:GatewayRoute[]){
   hosts.add(r.staffHostname);hosts.add(r.publicHostname);addresses.add(r.address);}
 }
 export function renderHaproxy(routes:GatewayRoute[],o:HaproxyOptions):string{
- validate(routes);if(![o.port,o.publicTlsPort,o.gatePort].every(p=>Number.isInteger(p)&&p>0&&p<=65535)||new Set([o.port,o.publicTlsPort,o.gatePort]).size!==3||!/^\/[A-Za-z0-9_/-]+$/.test(o.certificateDirectory))throw new Error('invalid_gateway_options');
+ const alpnPort=o.alpnPort??gatewayAlpnPort,ports=[o.port,o.publicTlsPort,o.gatePort,alpnPort];
+ validate(routes);if(!ports.every(p=>Number.isInteger(p)&&p>0&&p<=65535)||new Set(ports).size!==ports.length||!/^\/[A-Za-z0-9_/-]+$/.test(o.certificateDirectory))throw new Error('invalid_gateway_options');
  if(o.traffic)validateTrafficRenderOptions(o.traffic);
  if(o.proxySource!==undefined&&isIP(o.proxySource)!==4)throw new Error('invalid_gateway_options');
  // PROXY headers are decoded after connection rules; session rules see the caller.
@@ -54,10 +56,14 @@ ${o.proxySource?`  tcp-request connection expect-proxy layer4 if { src ${o.proxy
   tcp-request ${sourcePhase} reject if { sc0_conn_rate gt 60 }
   tcp-request inspect-delay 5s
 ${limits}  tcp-request content accept if { req.ssl_hello_type 1 }
-${o.traffic?`  acl traffic_operational src ${o.traffic.operationalSources.join(' ')}\n`:''}${selectors}
+${o.traffic?`  acl traffic_operational src ${o.traffic.operationalSources.join(' ')}\n`:''}  use_backend acme_alpn if { req.ssl_alpn -m str acme-tls/1 }
+${selectors}
   default_backend denied
 backend denied
   tcp-request content reject
+backend acme_alpn
+  timeout server 3s
+  server alpn 127.0.0.1:${alpnPort} maxconn 16
 backend public_tls
   server edge 127.0.0.1:${o.publicTlsPort} send-proxy-v2 maxconn 128
 frontend public_https

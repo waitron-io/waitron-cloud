@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict';
 import {spawn,type ChildProcess} from 'node:child_process';
-import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
 import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
+import {connect} from 'node:tls';
+import {gatewayAlpnPort} from '../src/config.ts';
 import {signManifest,type ReportingGatewayManifest} from '../src/manifest.ts';
 import {serveTrafficLifetimes} from '../src/traffic-lifetime-transport.ts';
 import {verifyTrafficReport} from '../src/traffic-report.ts';
+import {challengeCertificate} from './fixtures/challenge-certificate.ts';
 import {verifyTrafficLifecycle} from '../src/traffic-lifecycle.ts';
 
 async function waitFor<T>(read:()=>Promise<T>,milliseconds=8000):Promise<T>{
  const until=Date.now()+milliseconds;for(;;){try{return await read();}catch(e){if(Date.now()>until)throw e;await delay(10);}}
 }
-async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:string)=>void},ttl=60000){
+async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:string)=>void},ttl=60000, checks=false){
  const root=await realpath(await mkdtemp('/tmp/gtc-')),state=join(root,'traffic'),reports=join(root,'reports'),stats=join(root,'stats'),country=join(root,'country'),base=join(root,'gateway'),bin=join(root,'bin');
  for(const p of [state,reports,stats,country,base,bin])await mkdir(p,{mode:0o700});await chown(reports,process.geteuid!(),process.getegid!());await chmod(reports,0o2750);
  const issuer=generateKeyPairSync('ed25519'),reporter=generateKeyPairSync('ed25519'),cellId=randomUUID(),input=join(root,'manifest.json');
@@ -28,20 +31,22 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:strin
  for(const name of ['ip','iptables','wg','haproxy'])await writeFile(join(bin,name),`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(root,'system.ts'))} ${name} "$@"\n`,{mode:0o700});
  const env={PATH:bin+':'+process.env.PATH,GATEWAY_FIXTURE_ROOT:root,GATEWAY_STATE_DIR:base,GATEWAY_MANIFEST:input,GATEWAY_PUBLIC_CERTIFICATES:join(root,'public-certificates'),GATEWAY_CELL_ID:cellId,GATEWAY_TRUST_KEY:join(root,'issuer.pem'),GATEWAY_WIREGUARD_KEY:join(root,'wg.key'),GATEWAY_BOT_KEY:join(root,'bot.key'),
   GATEWAY_TRAFFIC_MODE:'test',GATEWAY_TRAFFIC_COUNTRY:'ES',GATEWAY_TRAFFIC_ENVIRONMENT:'test',GATEWAY_TRAFFIC_SOCKET_DIRECTORY:stats,GATEWAY_TRAFFIC_OPERATIONAL_SOURCES:'["127.0.0.2"]',GATEWAY_TRAFFIC_STATE_DIRECTORY:state,GATEWAY_TRAFFIC_REPORTER_KEY:join(root,'reporter.pem'),GATEWAY_TRAFFIC_REPORT_DIRECTORY:reports,GATEWAY_TRAFFIC_LIFETIME_SOCKET:join(country,'life.sock'),GATEWAY_TRAFFIC_READER_GID:String(process.getegid!()),GATEWAY_TRAFFIC_MAX_BYTES:'32768'};
+ const checkDirectory=join(root,'checks');await mkdir(checkDirectory,{mode:0o700});
+ const status=async()=>JSON.parse(await readFile(join(base,'status.json'),'utf8'));
  const children=async():Promise<Array<{pid:number;processId:string;prepared:boolean;args:string[];at:number}>>=>{try{return (await readFile(join(root,'children'),'utf8')).trim().split('\n').map(s=>JSON.parse(s));}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return [];throw e;}};
  let gateway:ChildProcess|undefined,output='',release:()=>void=()=>{},server:Awaited<ReturnType<typeof serveTrafficLifetimes>>|undefined;const lifetimes:unknown[]=[];
  t.after(async()=>{
   release();if(gateway?.exitCode===null&&gateway.signalCode===null){if(!gateway.killed)gateway.kill('SIGTERM');try{await waitFor(async()=>assert.ok(gateway!.exitCode!==null||gateway!.signalCode!==null),10000);}catch{gateway.kill('SIGKILL');await waitFor(async()=>assert.ok(gateway!.signalCode));}}
   try{await server?.close();}finally{for(const c of await children()){t.diagnostic(`owned child PID ${c.pid}`);try{process.kill(c.pid,'SIGKILL');}catch(e){assert.equal((e as NodeJS.ErrnoException).code,'ESRCH');}await waitFor(async()=>assert.throws(()=>process.kill(c.pid,0),/ESRCH/));}await rm(root,{recursive:true,force:true});}
  });
- const launch=()=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env,stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
+ const launch=()=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env:{...env,...(checks?{GATEWAY_CHALLENGES:checkDirectory}:{})},stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
  const holdCountry=async()=>{
   const gate=new Promise<void>(r=>{release=r;});
   server=await serveTrafficLifetimes({socket:env.GATEWAY_TRAFFIC_LIFETIME_SOCKET,mappings:[{country:'ES',environment:'test',cellId,directory:reports,writerUid:process.geteuid!(),readerGid:process.getegid!()}],store:{async recordLifecycle(_m,e){lifetimes.push(e);await gate;}}});
   return {accepted:()=>waitFor(async()=>assert.ok(lifetimes.length,'country command must receive a signed start')),release:()=>release()};
  };
  const prepared=()=>waitFor(async()=>{const cs=await children();assert.ok(cs.length>0,output);assert.equal(cs[0]!.prepared,true,'command must use durable owned traffic preparation');await readFile(join(root,cs[0]!.processId+'.ready'));return cs[0]!;});
- return {root,state,reports,manifest,reporter,publish,children,launch,holdCountry,prepared,lifetimes,output:()=>output};
+ return {root,state,reports,checkDirectory,status,manifest,reporter,publish,children,launch,holdCountry,prepared,lifetimes,output:()=>output};
 }
 
 // Omitting command consumption leaves no signed lifetime, sample or durable preparation.
@@ -141,4 +146,41 @@ test('default certificate refresh starts one successor under the same signed man
  const start=async(id:string)=>verifyTrafficLifecycle(JSON.parse(await readFile(join(f.state,id,'journal','prepared.json'),'utf8')).start,f.reporter.publicKey);
  const a=await start(first.processId),b=await start(second.processId);assert.equal(b.manifestDigest,a.manifestDigest);assert.equal(b.predecessorId,first.processId);
  gateway.kill('SIGTERM');await waitFor(async()=>assert.equal(gateway.exitCode,0),10000);assert.equal((await f.children()).length,2);
+});
+
+test('publishing a check updates status without starting HAProxy or a traffic lifetime', async t => {
+ const f=await fixture(t,60_000,true),held=await f.holdCountry(),gateway=f.launch();
+ await f.prepared();await held.accepted();held.release();
+ const route=f.manifest.routes[0]!.staffHostname;
+ const check=await challengeCertificate(route);
+ for(const entry of [check,await challengeCertificate('unrouted.example.test')]) {
+  await writeFile(join(f.checkDirectory,entry.hostname+'.json'),JSON.stringify(entry));
+ }
+ await waitFor(async()=>assert.deepEqual((await f.status()).challenges?.answerable,[route]),3000);
+ const presented=await new Promise<string>((resolve,reject)=>{
+  const socket=connect({host:'127.0.0.1',port:gatewayAlpnPort,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
+  socket.setTimeout(2000,()=>socket.destroy(new Error('gateway certificate check timed out')));
+  socket.once('error',reject);
+  socket.once('secureConnect',()=>{resolve(socket.getPeerCertificate().fingerprint256);socket.end();});
+ });
+ assert.equal(presented,new X509Certificate(check.certificate).fingerprint256);
+ assert.equal((await f.children()).length,1);
+ assert.deepEqual(f.lifetimes.map(e=>verifyTrafficLifecycle(e,f.reporter.publicKey).kind),['start']);
+ await f.publish({...f.manifest,sequence:2,routes:[]});
+ await waitFor(async()=>{
+  const status=await f.status();assert.equal(status.ready,false);
+  assert.deepEqual(status.challenges.answerable,[]);
+ });
+ gateway.kill('SIGTERM');await waitFor(async()=>assert.equal(gateway.exitCode,0));
+});
+
+test('the gateway answers no checks with no explicit private directory', async t => {
+ const f=await fixture(t),held=await f.holdCountry();
+ const route=f.manifest.routes[0]!.staffHostname;
+ await writeFile(join(f.checkDirectory,route+'.json'),JSON.stringify(await challengeCertificate(route)));
+ f.launch();await f.prepared();await held.accepted();held.release();
+ await waitFor(async()=>{
+  const status=await f.status();assert.equal(status.ready,true);
+  assert.deepEqual(status.challenges?.answerable,[]);
+ },3000);
 });

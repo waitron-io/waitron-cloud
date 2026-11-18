@@ -167,6 +167,18 @@ marker and accepted configuration. Missing or corrupt established state needs op
 recovery; do not delete the marker to make an old export acceptable.
 Keep the signing key outside the gateway; mount only its public key.
 
+### Answer a certificate authority's TLS check
+
+Set `GATEWAY_CHALLENGES` to a private, read-only mount. Give write access only to the role that presents checks, since it can prove control of routed staff and public names.
+The gateway answers no checks with the setting unset. When enabled, loopback port 8445 must be free.
+
+Each `<hostname>.json` holds `hostname`, an RFC 8737 `certificate`, its matching PEM `key`, and `expiresAt` in epoch milliseconds.
+The gateway reads up to 128 files of at most 16 KiB each per second. A failed directory read clears the list.
+It skips invalid files, including filenames too long for the filesystem. Route withdrawal and expiry take effect immediately.
+
+HAProxy sends connections offering `acme-tls/1` on port 443 to the loopback TLS 1.3 listener.
+Read ready names in `status.json` under `challenges.answerable`. Worker orders, live qualification and multi-gateway delivery are open.
+
 ## Reconcile routes and certificates
 
 Use the durable reconciler after migrations have run and placements have been assigned.
@@ -448,7 +460,7 @@ configured resolver path, not universal router support.
 A public 403 asks the browser to complete the challenge; a 429 means the source or
 upstream concurrency limit has been reached. A 503 means the venue could not provide
 its public response. Unknown names and expired route authority close the TLS connection.
-`/state/status.json` reports process readiness, active route count, sequence and challenge/rejection/forward/failure
+`/state/status.json` reports process readiness, active route count, sequence and bot challenge/rejection/forward/failure
 counters without request contents. Service health is separate from desired configuration;
 the integration reports health only after the real HTTPS probes succeed.
 

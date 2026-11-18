@@ -6,10 +6,11 @@ import {spawn,execFileSync,type ChildProcess} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {GatewayForwardReports} from './gateway-forward-reports.ts';
 import {GatewayAuthority} from './authority.ts';
-import {renderHaproxy,renderWireGuard} from './config.ts';
+import {gatewayAlpnPort,renderHaproxy,renderWireGuard} from './config.ts';
 import {gatewayTrafficOptions,trafficManifestOptions,gatewayTrafficFingerprint} from './gateway-traffic-options.ts';
 import {gatewayTrafficRuntimeConfiguration,gatewayTrafficRuntimeOptions} from './gateway-traffic-runtime-options.ts';
 import {GatewayTrafficRuntime} from './gateway-traffic-runtime.ts';
+import {AlpnResponder} from './alpn-responder.ts';
 import {createPublicGate} from './public-gate.ts';
 import {isUuid,isPeerKey,type GatewayRoute} from './manifest.ts';
 const root=process.env.GATEWAY_STATE_DIR??'/state',input=process.env.GATEWAY_MANIFEST??'/input/manifest.json',cell=process.env.GATEWAY_CELL_ID??'';
@@ -73,6 +74,10 @@ async function apply(routes:GatewayRoute[]){
  current=child;lastRoutes=fingerprint;
 }
 const authority=new GatewayAuthority(trust,cell,{persist:async envelope=>{await atomic('accepted.json',JSON.stringify(envelope));await atomic('initialized','1\n');},apply,close:stop});
+const checkFolder=process.env.GATEWAY_CHALLENGES;
+const challenges=checkFolder?new AlpnResponder({folder:checkFolder,
+ routeNames:()=>new Set(!stopping&&alive()?authority.routes.flatMap(route=>[route.staffHostname,route.publicHostname]):[]),
+}):undefined;
 const forwardReports=new GatewayForwardReports(authority,{directory:process.env.GATEWAY_FORWARD_REPORT_DIR,keyFile:process.env.GATEWAY_FORWARD_REPORT_KEY,issuerKey:trust,otherKeyFiles:[wireGuardKeyFile,botKeyFile]});
 const gate=createPublicGate({beginForward:(route,startedAt)=>forwardReports.beginForward(route,startedAt),key:await readFile(botKeyFile),ca:process.env.GATEWAY_UPSTREAM_CA?await readFile(process.env.GATEWAY_UPSTREAM_CA):undefined,routes:()=>authority.routes});
 const server=createServer({maxHeaderSize:8192,requestTimeout:10000,headersTimeout:5000,connectionsCheckingInterval:1000},gate.handle);server.maxConnections=128;
@@ -85,6 +90,7 @@ const trafficTimer=trafficRuntime?setInterval(()=>{
 },1000):undefined;
 trafficTimer?.unref();
 try{
+await challenges?.listen(gatewayAlpnPort);
 let initialized=false;try{const marker=await readFile(join(root,'initialized'),'utf8');if(marker!=='1\n')throw new Error('gateway.cache_unavailable');initialized=true;}catch(error){if(!(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT'))throw error;}
 try{await authority.restore(JSON.parse(await readFile(join(root,'accepted.json'),'utf8')));}catch(error){if(initialized||!(error&&typeof error==='object'&&'code' in error&&error.code==='ENOENT'))throw new Error('gateway.cache_unavailable');}
 let lastInput='';
@@ -95,11 +101,12 @@ while(!stopping){
  if(authority.hasAuthority&&(!alive()||certificateRefresh==='1')){
   try{await apply(authority.routes);}catch{await stop();console.error('gateway.restart_unavailable');}
  }
+ await challenges?.refresh().catch(()=>console.error('gateway.challenges_unavailable'));
  await forwardReports.flush(Date.now());
  const ready=authority.hasAuthority&&alive();
- await atomic('status.json',JSON.stringify({sequence:authority.sequence,ready,routes:ready?authority.routes.length:0,...gate.stats()}));
+ await atomic('status.json',JSON.stringify({sequence:authority.sequence,ready,routes:ready?authority.routes.length:0,challenges:{answerable:challenges?.answerable()??[]},...gate.stats()}));
  await delay(1000);
 }}finally{
  clearInterval(trafficTimer);
- try{await stop();}finally{try{await trafficRuntime?.stop();}finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}}
+ try{await stop();}finally{try{await trafficRuntime?.stop();}finally{server.closeAllConnections();await Promise.all([challenges?.close(),new Promise<void>(resolve=>server.close(()=>resolve()))]);}}
 }
