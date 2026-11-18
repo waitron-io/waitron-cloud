@@ -402,6 +402,8 @@ retaining the prior placement in `configuration`. Disconnect based on state.
 An automatic retry preserves that stop when the saved peer key matches.
 An explicit operator enable restores setup. A billing lapse clears setup, so
 an automatic retry after Connected returns can restore it with the same key.
+If Cloud returns `403 permission_denied` while the venue is Registered, retry
+on the box's normal refresh. A later Connected trial can make that key eligible.
 
 If you lose the reply, retry with a fresh proof and your persisted peer key.
 The same key, cell and port keep the allocation. Restoring setup advances the

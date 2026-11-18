@@ -406,8 +406,8 @@ Only the current organisation owner can read it.
 
 An unsuccessful application response, a connection timeout, a response that exceeds
 the gateway limit, a lost connection and an internal forwarding failure have
-separate explanations. Check the venue application and its connection. Gateway
-configuration still requires the operator tools. A non-200 application response
+separate explanations. Check the venue application and its connection.
+A non-200 application response
 alone does not establish a Cloud routing fault.
 
 Use **Refresh status / Actualizar estado** to read the stored observation again.
