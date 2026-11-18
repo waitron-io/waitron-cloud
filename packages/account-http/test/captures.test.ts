@@ -105,6 +105,13 @@ test('publish refuses wrong bytes and another installation; missing runtime stay
  assert.equal((await db.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
  app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer});assert.equal((await request('backup-reserve',proof('backup-reserve'))).status,503);
 });
+test('a signed publication timeout uses the account retry hint',async()=>{
+ app=createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer,captures:captureOptions,planMode:'test-venue-levels'});
+ const response=await request('backup-publish',proof('backup-publish',randomUUID(),metadata(Buffer.from('archive')),id,lease,Date.now()-56_000));
+ assert.equal(response.status,503);
+ assert.equal(response.headers.get('retry-after'),'1');
+ assert.deepEqual(await response.json(),{error:'temporarily_unavailable'});
+});
 test('configured captures require an issuer at app creation',()=>{
  assert.throws(()=>createAccountApp({pool:db.pool,outbox:db.outbox,config:config(),captures:captureOptions}),/^Error: backup.installation_issuer_required$/);
 });

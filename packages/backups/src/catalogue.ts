@@ -89,22 +89,27 @@ async function publicationSession<T>(pool:Pool,id:string,deadline:PublicationDea
   const transact:PublicationTransaction=work=>run(async()=>{
     await client.query('BEGIN');
     try{
+      // PostgreSQL must stop waiting for locks even if the client has already disconnected.
+      if(deadline)await client.query("SELECT set_config('transaction_timeout',$1,true)",[`${deadline.remaining()}ms`]);
       const result=await work(client);
       deadline?.remaining();
       await client.query('COMMIT');
       return result;
     }catch(error){
       try{await client.query('ROLLBACK');}catch{}
+      if(deadline&&(error as {code?:string}|undefined)?.code==='25P04')backupFail('cancelled');
       throw error;
     }
   });
   try{
-    // One capture's canonical object stays exclusive while authority transactions release their locks.
-    await run(()=>client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]));
+    // One capture's session lock stays held when its authority transactions release their locks.
+    const acquire=()=>client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
+    if(deadline)await transact(acquire);
+    else await acquire();
     return await action(transact);
   }catch(error){discard=true;throw error;}
   finally{
-    // On deadline, close the connection to release the lock and cancel any database work.
+    // Discard a timed-out session so its advisory lock cannot follow the pooled connection.
     try{if(!discard)await run(()=>client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]));}
     catch(error){discard=true;throw error;}
     finally{client.release(discard);client.removeListener('error',onError);}

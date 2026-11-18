@@ -58,8 +58,12 @@ Include the current bound control lease. Browser Origin headers are refused.
 Both endpoints share existing installation/IP allowances and return no-store responses.
 In test venue-level mode, publication has up to 45 seconds from the account
 request. Only a currently verified proof can admit the copy, and its issued time
-can shorten the work budget to 55 seconds after signing. Cloud rechecks live
-authority and proof age before committing the point.
+can shorten the work budget to 55 seconds after signing. Keep your box clock
+in sync with Cloud. A clock 55 seconds behind leaves no time to publish. The
+box receives HTTP 503 with `temporarily_unavailable` and `Retry-After: 1`.
+Cloud rechecks live authority and proof age before committing the point.
+If the point commits and upload cleanup takes the request past its time limit,
+retry with the same capture ID and metadata to retrieve the saved point.
 
 Invalid proof returns 401, revoked/disabled/non-test authority 403, changed capture or
 object metadata 409, expired capture 410, shared rate limits 429 and temporary

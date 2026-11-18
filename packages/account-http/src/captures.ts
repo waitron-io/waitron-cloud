@@ -9,15 +9,12 @@ export async function captureResponse(c:Context,options:{captures?:BackupCapture
  if(!options.captures)throw new AccountHttpError(503,'temporarily_unavailable');
  await options.consume([{scope:'installation-ip',subject:options.ip,limit:60,windowSeconds:60}]);
  const envelope=await readAccountBody(c.req.raw,['payload','signature']);const action=c.req.path.slice('/api/installations/'.length) as CaptureAction;
- try{
-  const claims=await options.captures.authenticate(action,envelope,options.startedAt);
-  await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
-  return c.json(await options.captures.execute(action,envelope,options.startedAt));
- }
+ const claims=await options.captures.authenticate(action,envelope,options.startedAt);
+ await options.consume([{scope:'installation-key',subject:claims.installationId,limit:30,windowSeconds:60}]);
+ try{return c.json(await options.captures.execute(action,envelope,options.startedAt));}
  catch(error){
   const code=error instanceof Error?error.message:'';
   const status:Record<string,400|403|409|410>={'backup.invalid_metadata':400,'backup.object_mismatch':409,'backup.conflict':409,'backup.capture_expired':410,'backup.permission_denied':403,'backup.revoked':403,'backup.local_integration_only':403};
-  if(code==='backup.cancelled')throw new AccountHttpError(503,'temporarily_unavailable');
   if(status[code])throw new AccountHttpError(status[code],code.slice(7));throw error;
  }
 }

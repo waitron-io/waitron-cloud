@@ -80,9 +80,11 @@ export LOCAL_BACKUP_WORKER_STAGE="$stages/worker/work"
 The 5 GiB images limit total disk writes even during simultaneous staging. Use
 the container process's UID for the private directory if it runs as a different
 user. Append `-f deploy/test-cloud/compose.backup-stage.yaml` to the local Compose
-command so it mounts those existing directories. Use the venue-level fixture
-settings for the test account and its storage service. The override supplies
-disk paths. After the trial, stop the services using the mounts before
+command so it mounts those existing directories. In test Cloud, the venue-level
+account worker uses the account mount. In the base local stack, the backup
+worker uses the worker mount. Use the venue-level fixture settings for the test
+account and its storage service. The account stage fits one near-2 GiB
+publication at a time. After the trial, stop the services using the mounts before
 unmounting the two filesystems. Remove only the stage directory you created.
 
 Run the signed TLS publication and retry proof.

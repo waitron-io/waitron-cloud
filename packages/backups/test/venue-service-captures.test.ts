@@ -130,6 +130,12 @@ test('signed publication runs out of time while another connection holds the cap
   await locker.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
   pending=f.captures.execute('backup-publish',f.proof('backup-publish',id,metadata,{issuedAt:Date.now()-53500}));
   await assert.rejects(Promise.race([pending,delay(3000,undefined,{ref:false}).then(()=>{throw Error('capture lock still waiting');})]),{message:'backup.cancelled'});
+  let waiting=true;
+  for(let n=0;n<40&&waiting;n++){
+   waiting=!!(await f.admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[f.schema])).rowCount;
+   if(waiting)await delay(25);
+  }
+  assert.equal(waiting,false,'the expired server-side lock wait must end while the holder still owns the lock');
   assert.deepEqual((await state(f)).backup_points,[]);
   assert.deepEqual([...f.objects.keys()],['incoming/'+id]);
   await locker.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);
