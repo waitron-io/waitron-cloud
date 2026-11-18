@@ -11,7 +11,7 @@ export class AccountActionProofController{
   account(account:string|undefined){if(account===this.#account)return;this.#account=account;this.fence();}
   #failure(r:Extract<ApiResult<unknown>,{ok:false}>){this.#retryUntil=Math.max(this.#retryUntil,performance.now()+r.retryAfterMs);this.error=r.status===429?'limited':'actionProofUnavailable';}
   async load(){
-    if(!this.#account||this.pending||this.waiting)return Promise.resolve();
+    if(!this.#account||this.pending||this.waiting)return;
     const generation=this.#generation;this.pending=true;this.error=undefined;this.#changed();
     const reading=this.#request<ActionProofStatus>('/action-proof').then(result=>{
       if(generation!==this.#generation)return;this.pending=false;this.loaded=true;
