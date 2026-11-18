@@ -47,6 +47,21 @@ node scripts/test-postgres.mjs exec node --test --test-timeout=15000 \
   packages/account-http/test/mail-capture-connection.test.ts
 ```
 
+## Package-test Mailpit send timeout
+
+[Pull request CI](https://github.com/waitron-io/waitron-cloud/actions/runs/44401032178/job/135144301324)
+rejected a sign-in check after 5,003 ms.
+[Merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/44404647763/job/135156758305)
+rejected an owner-transfer email after 5,002 ms. Both left mail pending.
+The logs show rejection and elapsed time. The SMTP stage is unknown.
+
+On Linux, a resolver that deliberately withheld reverse DNS replies left Mailpit's
+HTTP inbox ready while its SMTP greeting stalled past the five-second send deadline.
+The package-test launcher now starts Mailpit with `MP_SMTP_DISABLE_RDNS=true` so
+its local SMTP greeting does not depend on resolving the SMTP client's IP address.
+With that setting, the same Linux launcher check delivered both emails in 123 ms
+while the resolver remained unresponsive. Capture the SMTP stage if a send fails again.
+
 ## Account HTTP reset-mail capture
 
 [CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)

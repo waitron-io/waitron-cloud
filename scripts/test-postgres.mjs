@@ -87,7 +87,8 @@ try {
   if (!ready) throw new Error('Test PostgreSQL did not become ready within 30 seconds');
   const port = docker('port', name, '5432/tcp').split(':').at(-1);
   docker('run', '--pull=never', '--detach', '--rm', '--name', `${name}-mail`, '--publish', '127.0.0.1::1025',
-    '--publish', '127.0.0.1::8025', '--env', 'MP_MAX_MESSAGE_SIZE=1', 'axllent/mailpit:v1.31.1');
+    '--publish', '127.0.0.1::8025', '--env', 'MP_MAX_MESSAGE_SIZE=1',
+    '--env', 'MP_SMTP_DISABLE_RDNS=true', 'axllent/mailpit:v1.31.1');
   mailRunning = true;
   const smtpPort = docker('port', `${name}-mail`, '1025/tcp').split(':').at(-1);
   const inboxPort = docker('port', `${name}-mail`, '8025/tcp').split(':').at(-1);

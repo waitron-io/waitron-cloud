@@ -2268,6 +2268,8 @@ cover exhausted pools, blocked outbox reads and terminated backends. Controlled
 TCP peers cover a simulated stalled handshake and abrupt connection loss. A late
 connection is returned without a query, and repeated misses keep at most one
 connection request. The natural missing-mail cause remains open.
+See the [separate five-second Mailpit send failures](backlog/mail-capture.md#package-test-mailpit-send-timeout)
+for the launcher fix and what to capture if a send fails again.
 
 ## Account HTTP reset-mail capture
 

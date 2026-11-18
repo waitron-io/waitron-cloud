@@ -187,6 +187,17 @@ test('cached images run without registry pulls and preserve command arguments, s
     [runs[1].name, runs[0].name]);
 });
 
+test('launcher disables reverse DNS only for the Mailpit container', async t => {
+  const result = await launch(t);
+  assert.equal(result.code, 0);
+  const runs = result.invocations.filter(({command, args}) => command === 'docker' && args[0] === 'run');
+  const setting = 'MP_SMTP_DISABLE_RDNS=true';
+  const hasSetting = image => runs.find(({args}) => args.at(-1) === image).args
+    .some((arg, index, args) => arg === '--env' && args[index + 1] === setting);
+  assert.equal(hasSetting(mailpit), true, 'Mailpit must start with SMTP reverse DNS disabled');
+  assert.equal(hasSetting(postgres), false, 'the Mailpit setting must stay out of PostgreSQL');
+});
+
 for (const image of [postgres, mailpit]) {
   test(`terminal pull refusal for ${image} stops before any container or package command starts`, async t => {
     const result = await launch(t, {cached: [], failureImage: image, failures: ['denied: requested access to the resource is denied']});
