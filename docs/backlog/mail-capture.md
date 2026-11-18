@@ -60,7 +60,9 @@ HTTP inbox ready while its SMTP greeting stalled past the five-second send deadl
 The package-test launcher now starts Mailpit with `MP_SMTP_DISABLE_RDNS=true` so
 its local SMTP greeting does not depend on resolving the SMTP client's IP address.
 With that setting, the same Linux launcher check delivered both emails in 123 ms
-while the resolver remained unresponsive. Capture the SMTP stage if a send fails again.
+while the resolver remained unresponsive. The local stack, test Cloud, Kubernetes
+checks, recovery receipts and cost conformance tests still use Mailpit's default
+reverse DNS behavior. Capture the SMTP stage if a send fails again.
 
 ## Account HTTP reset-mail capture
 
