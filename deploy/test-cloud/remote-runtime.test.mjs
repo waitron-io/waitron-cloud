@@ -41,13 +41,13 @@ test('volume-backed remote reconciler publishes paid routes and trusted certific
  for(const v of venues){
   const row=(await db.pool.query('SELECT * FROM staff_certificate_exchange WHERE installation_id=$1',[v.installationId])).rows[0];assert.equal(row.certificate_request_id,row.request_id);
   const cert=new X509Certificate(row.certificate);assert.equal(cert.checkHost(v.placement.staffHostname),v.placement.staffHostname);assert.ok(cert.verify(ca.publicKey));
-  const publicFile=join(directory,'public-certs',v.installationId+'.pem'),bytes=await readFile(publicFile,'utf8');publicBytes.push(bytes);
+  const publicFile=join(directory,'public-certs',v.placement.venueId+'.pem'),bytes=await readFile(publicFile,'utf8');publicBytes.push(bytes);
   const leaf=new X509Certificate(bytes);assert.equal(leaf.checkHost(v.placement.publicHostname),v.placement.publicHostname);assert.ok(leaf.verify(ca.publicKey));assert.ok(bytes.includes('PRIVATE KEY'),'gateway material must contain its private key');assert.equal((await stat(publicFile)).mode&0o777,0o600);
  }
  assert.ok(publicBytes[0]!==publicBytes[1],'venues must have distinct private certificate material');
  await plans.set(venues[0].organisationId,'free');const restarted=await api.openTestRemoteRuntime(options);await drain(restarted.worker);
  const after=await manifest();assert.ok(after.sequence>initial.sequence);assert.deepEqual(after.routes.map(r=>r.installationId),[venues[1].installationId]);
- assert.ok(await readFile(join(directory,'public-certs',venues[1].installationId+'.pem'),'utf8')===publicBytes[1],'the paid neighbour must retain its certificate and key');
+ assert.ok(await readFile(join(directory,'public-certs',venues[1].placement.venueId+'.pem'),'utf8')===publicBytes[1],'the paid neighbour must retain its certificate and key');
  await plans.set(venues[0].organisationId,'paid');await drain(restarted.worker);assert.equal((await manifest()).routes.length,1,'upgrade alone must not restore setup');
  await store.provision(venues[0].installationId,runtime.cellId,venues[0].placement.peerPublicKey);await drain(restarted.worker);assert.equal((await manifest()).routes.length,2);
  await assert.rejects(api.openTestRemoteRuntime({...options,mode:'invalid'}),/test_cloud.plan_mode/);

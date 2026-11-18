@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
@@ -30,7 +31,7 @@ test('the installation configuration reply carries the current staff name after 
   await remote.setHostname(installed.installationId,'staff',custom,1,async name=>[instructions.find(record=>record.name===name)!.value]);
   assert.equal(await staffName(),custom);
   const operationId=randomUUID();await remote.stageMove({operationId,installationId:installed.installationId,targetCellId:cells[1]!,targetPeerPublicKey:peer(),expectedRevision:2});
-  const manifest=await remote.manifest(cells[1]!);await remote.markMoveReady(operationId,2,manifest.sequence);await remote.completeMove(operationId,2);
+  const manifest=await remote.manifest(cells[1]!);await remote.markMoveReady(operationId,2,manifest.sequence);await recordPublicCopy(db.pool,operationId);await remote.completeMove(operationId,2);
   assert.equal(await staffName(),custom);
  }finally{await db.close();}
 });

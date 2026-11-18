@@ -1,6 +1,7 @@
 // Exact reader versions bound the reviewed runtime/data scans and inert directory values.
 // File references and package edges remain visible; changed bytes require another review.
 export const reviewedDirectoryReaders = Object.freeze({
+  "packages/remote-access/test/reconciler-files.test.ts": {"mode":"100644","type":"blob","id":"ad3e4636d9c1e84b7ba8e0066a8ee63593214e81","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/operations/test/status-page-cli.test.ts": {"mode":"100644","type":"blob","id":"e209a9baaac2ceacedb695d8b78811aa1882903f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "deploy/test-cloud/backup-worker.mjs": {"mode":"100644","type":"blob","id":"72dce8dbc475700bcfc79c04fec51411f83a11b3","nonSourceDirectoryReads":false,"directoryReferences":["../"],"sourceReferences":[]},
   "deploy/test-cloud/storage-authority.mjs": {"mode":"100644","type":"blob","id":"a484d5a7fe1f1161eac6934d955c6d3c97af79d5","nonSourceDirectoryReads":false,"directoryReferences":[".",".."],"sourceReferences":[]},
@@ -16,14 +17,14 @@ export const reviewedDirectoryReaders = Object.freeze({
   "packages/backups/test/object-transfer.test.ts": {"mode":"100644","type":"blob","id":"1d5db2e2675413299be1573f9ef43e20f85c4c5d","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/storage.test.ts": {"mode":"100644","type":"blob","id":"7a199d26834dc36b847268d4d4d4535d310fde30","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/waitron-verifier.test.ts": {"mode":"100644","type":"blob","id":"98f96f41e5210ef80bdb5d8b73ef78c8676bcb24","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
-  "packages/remote-access/src/gateway-cli.ts": {"mode":"100644","type":"blob","id":"909fa7b3ab269e1afcaa62450f3648c56868eed9","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/remote-access/src/gateway-cli.ts": {"mode":"100644","type":"blob","id":"d8c4623bdd55094d1d960e728815a4660320df91","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/gateway-traffic-runtime.ts": {"mode":"100644","type":"blob","id":"698be5aad916c32ab5b1d6d7fbb6c734fb52ad07","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/traffic-collector.ts": {"mode":"100644","type":"blob","id":"9842ef9c0a02c6cc7bced63c37146ea93055e1af","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/traffic-spool.ts": {"mode":"100644","type":"blob","id":"8c4dd9f6f5123a92d2316e7fea0f6cc2ca341c38","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/fixtures/traffic-collector-race.ts": {"mode":"100644","type":"blob","id":"9d288142752003d9d243e5e750f50326195dfa35","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/forward-report-writer.test.ts": {"mode":"100644","type":"blob","id":"114b5dfa5c7b0df1531c4e61f663707affd3483f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/gateway-forward-reports.test.ts": {"mode":"100644","type":"blob","id":"576b40ff0f6d1c17d909fd3b51f7c5ff397e687a","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
-  "packages/remote-access/test/gateway-traffic-command.test.ts": {"mode":"100644","type":"blob","id":"7d6df289eab4daa4a7356b9a6a704bc4ba75cd9f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/remote-access/test/gateway-traffic-command.test.ts": {"mode":"100644","type":"blob","id":"4e60cb93d1c9655a13df9cd1d468546f87098414","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/gateway-traffic-finish.test.ts": {"mode":"100644","type":"blob","id":"22972a324144c222376638e48d311cd5380c1220","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/gateway-traffic-runtime.test.ts": {"mode":"100644","type":"blob","id":"5cddb975c77f4eaf56e76467e0583509560bb235","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/test/traffic-child-finish.test.ts": {"mode":"100644","type":"blob","id":"72a4d2f3b4438b90dc102c42d5aabf0c6690664b","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},

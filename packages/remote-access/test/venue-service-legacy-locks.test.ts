@@ -1,3 +1,4 @@
+import {seedCurrentStaffRequest} from './fixtures/staff-certificate.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -107,7 +108,7 @@ for(const operation of ['manifest','reporting manifest','scheduler','reporting s
   const newcomer=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[f.production])).rows[0].id;
   const exporting=new RemoteAccessStore(wrapped,'test-free-paid'),worker=new RemoteConfigurationReconciler(wrapped,{planMode:'test-free-paid',forwardReports:operation==='reporting scheduler'});
   pending=operation==='manifest'?exporting.manifest(f.source):operation==='reporting manifest'?exporting.reportingManifest(f.source):worker.schedule();void pending.catch(()=>{});
-  await ready;await f.ordinary.provision(newcomer,f.source,peer());release();const result=await pending;
+  await ready;await f.ordinary.provision(newcomer,f.source,peer());await seedCurrentStaffRequest(f.pool,newcomer);release();const result=await pending;
   if(operation==='manifest'||operation==='reporting manifest')assert.deepEqual((result as {routes:{installationId:string}[]}).routes.map(r=>r.installationId),f.ids);
   else assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'0');
   assert.equal((await f.legacy.manifest(f.source)).routes.length,3);

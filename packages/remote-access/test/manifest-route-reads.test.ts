@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {afterEach,beforeEach,test} from 'node:test';
@@ -70,7 +71,7 @@ for(const publish of [false,true])test(`${publish?'published':'returned'} batche
  const staged=await measuredExport(target.id,'test-free-paid',publish);
  await store.markMoveReady(operationId,1,staged.manifest.sequence);
  const ready=await measuredExport(target.id,'test-free-paid',publish);assert.deepEqual(ready.manifest.routes,staged.manifest.routes);
- await store.completeMove(operationId,1);
+ await recordPublicCopy(db.pool,operationId);await store.completeMove(operationId,1);
  const completed=await measuredExport(target.id,'test-free-paid',publish);assert.deepEqual(completed.manifest.routes,staged.manifest.routes);
  assert.deepEqual((await measuredExport(source.id,'test-free-paid',publish)).manifest.routes,[]);
  assert.deepEqual((await measuredExport(empty.id,'test-free-paid',publish)).manifest.routes,[]);

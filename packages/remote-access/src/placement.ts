@@ -1,4 +1,5 @@
 import type {Pool,PoolClient} from 'pg';
+import {certificateDigest,routeCells} from './certificate-digest.ts';
 import {resolveCname} from 'node:dns/promises';
 import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
 import {requireRemotePlan,eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
@@ -170,6 +171,12 @@ export class RemoteAccessStore {
    const install=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[found.installation_id])).rows[0],current=(await move(client,operationId,true))!;
    if(current.expectedRevision!==expectedRevision)fail('move_conflict');if(current.state==='completed')return current;if(current.state==='cancelled')fail('move_conflict');if(current.state!=='ready')fail('move_not_ready');
    if(install.revoked_at)fail('revoked');if(install.configuration_revision!==expectedRevision)fail('revision_conflict');
+   const publicName=(await client.query("SELECT hostname,assigned_hostname FROM remote_hostnames WHERE venue_id=$1 AND kind='public'",[current.venueId])).rows[0];
+   const authority={hostname:publicName.hostname,assigned:publicName.assigned_hostname,dnsName:'_acme-challenge.'+publicName.assigned_hostname,revision:expectedRevision};
+   const expected=certificateDigest(current.installationId,'public',authority,await routeCells(client,current.installationId));
+   const destination=certificateDigest(current.installationId,'public',authority,[current.target.cellId]);
+   const copied=(await client.query("SELECT 1 FROM remote_configuration_jobs WHERE kind='certificate_public' AND target_id=$1 AND enabled AND applied_digest IN ($2,$3)",[current.installationId,expected,destination])).rowCount;
+   if(!copied)fail('move_destination_incomplete');
    await client.query('UPDATE remote_placements SET cell_id=$2,address=$3,peer_public_key=$4,port=$5 WHERE installation_id=$1',[current.installationId,current.target.cellId,current.target.address,current.target.peerPublicKey,current.target.port]);
    const result=(await placement(client,current.installationId))!;
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[current.installationId,{version:1,...result}]);

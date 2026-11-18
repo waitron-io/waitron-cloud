@@ -23,19 +23,20 @@ test('custom hostnames require both routing and DNS-01 delegation to the bound a
  await assert.rejects(verifyDelegation('staff.cafe.example','staff.sol.example.test',async()=>['foreign.example.test']),/dns_not_verified/);
  assert.throws(()=>dnsInstructions('127.0.0.1','staff.sol.example.test'),/invalid_hostname/);
 });
-test('explicit artifact mappings replace files atomically and retain old bytes on failure',async()=>{
+test('artifact mappings retain issued private material and old gateway bytes on a delivery failure',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-reconciler-files-')),blocked=join(root,'blocked'),installationId=randomUUID(),cellId=randomUUID();
  try{
-  await mkdir(blocked);const csrFile=join(root,'staff.csr'),certificateFile=join(blocked,'staff.crt'),manifestFile=join(blocked,'manifest.json');
+  await mkdir(blocked);const csrFile=join(root,installationId+'.public.csr'),certificateFile=join(root,installationId+'.public.pem'),manifestFile=join(blocked,'manifest.json');
   await writeFile(csrFile,'csr',{mode:0o600});await writeFile(certificateFile,'old certificate',{mode:0o600});
-  const artifacts=new FileReconcilerArtifacts({certificates:[{installationId,kind:'staff',csrFile,output:certificateFile}],routes:[{cellId,output:manifestFile}]});
-  assert.equal(await artifacts.readCsr(installationId,'staff'),'csr');assert.equal(await artifacts.readCertificate(installationId,'staff'),'old certificate');
-  await artifacts.publishCertificate(installationId,'staff','new certificate');await artifacts.publishManifest(cellId,'signed manifest');
+  const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{cellId,output:manifestFile,publicCertificates:blocked}]});
+  const venueId='00000000-0000-0000-0000-000000000001';
+  assert.deepEqual(await artifacts.readPublicCertificate(installationId),{csr:'csr',pem:'old certificate'});
+  await artifacts.publishPublicCertificate(installationId,venueId,[cellId],{csr:'csr',pem:'new certificate'});await artifacts.publishManifest(cellId,'signed manifest');
   assert.equal(await readFile(certificateFile,'utf8'),'new certificate');assert.equal(await readFile(manifestFile,'utf8'),'signed manifest');
-  await chmod(blocked,0o500);await assert.rejects(artifacts.publishCertificate(installationId,'staff','must not replace'));await chmod(blocked,0o700);
-  assert.equal(await readFile(certificateFile,'utf8'),'new certificate');
+  await chmod(blocked,0o500);assert.deepEqual(await artifacts.publishPublicCertificate(installationId,venueId,[cellId],{csr:'csr',pem:'issued replacement'}),{copied:[],complete:false});await chmod(blocked,0o700);
+  assert.equal(await readFile(certificateFile,'utf8'),'issued replacement');assert.equal(await readFile(join(blocked,venueId+'.pem'),'utf8'),'new certificate');
   await chmod(blocked,0o500);await assert.rejects(artifacts.publishManifest(cellId,'must not replace'));await chmod(blocked,0o700);assert.equal(await readFile(manifestFile,'utf8'),'signed manifest');
-  await assert.rejects(artifacts.readCsr(randomUUID(),'staff'),/certificate_mapping_missing/);
-  assert.throws(()=>new FileReconcilerArtifacts({certificates:[{installationId,kind:'staff',csrFile:'relative',output:certificateFile}],routes:[]}),/invalid_reconciler_files/);
+  assert.equal(await artifacts.readPublicCertificate(randomUUID()),undefined);
+  assert.throws(()=>new FileReconcilerArtifacts({keyDirectory:'relative',routes:[]}),/invalid_reconciler_files/);
  }finally{await chmod(blocked,0o700).catch(()=>{});await rm(root,{recursive:true,force:true});}
 });

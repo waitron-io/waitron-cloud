@@ -1,3 +1,4 @@
+import {seedCurrentStaffRequest,seedStaffCertificate} from './fixtures/staff-certificate.ts';
 import {completeEmailProof,emailLoginPolicy} from '../../account-http/test/fixtures.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
@@ -86,23 +87,23 @@ test('hostname DNS work rechecks a committed downgrade',async()=>{
 
 test('reconciler restart disables free certificate jobs and exports withdrawal from the same eligible set',async()=>{
  const v=await venue(),worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode});await worker.schedule();await plans.set(v.organisationId,'free');
- const published:string[]=[],key=generateKeyPairSync('ed25519'),restarted=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>key.privateKey,artifacts:{async readCsr(){throw Error('unstarted certificate');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('free certificate');},async publishManifest(_id,envelope){published.push(envelope);}}});
+ const published:string[]=[],key=generateKeyPairSync('ed25519'),restarted=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>key.privateKey,artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('free certificate');},async publishManifest(_id,envelope){published.push(envelope);}}});
  await due(restarted,'route',v.cellId);assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[v.installationId])).rows[0].n,0);
  assert.equal(await restarted.runOnce(),true);assert.equal(published.length,1);assert.deepEqual(verifyManifest(JSON.parse(published[0]!),key.publicKey,v.cellId).routes,[]);
 });
 
 test('late route signing cannot publish or complete paid work after downgrade without rescheduling',async()=>{
  const v=await venue(),b=barrier(),key=generateKeyPairSync('ed25519'),published:string[]=[];
- const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>{b.enter();await b.gate;return key.privateKey;},artifacts:{async readCsr(){throw Error('unexpected');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('unexpected');},async publishManifest(_id,envelope){published.push(envelope);}}});await due(worker,'route',v.cellId);
+ const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>{b.enter();await b.gate;return key.privateKey;},artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected');},async publishManifest(_id,envelope){published.push(envelope);}}});await due(worker,'route',v.cellId);
  const running=worker.runOnce();try{await b.started;await plans.set(v.organisationId,'free');}finally{b.release();await running;}
  assert.deepEqual(published,[]);assert.equal((await db.pool.query("SELECT applied_digest FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[v.cellId])).rows[0].applied_digest,null);
 });
 
 test('late certificate issuance cannot publish or complete after downgrade without rescheduling',async()=>{
- const v=await venue(),c=await certificate(v),b=barrier();let published=0;
- const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,issueCertificate:async()=>{b.enter();await b.gate;return c.chain;},artifacts:{async readCsr(){return c.csr;},async readCertificate(){return undefined;},async publishCertificate(){published++;},async publishManifest(){throw Error('unexpected');}}});await due(worker,'certificate_staff',v.installationId);
+ const v=await venue(),c=await certificate(v),b=barrier();await seedStaffCertificate(db.pool,v.installationId,c.csr);
+ const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,issueCertificate:async()=>{b.enter();await b.gate;return c.chain;},artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected public certificate');},async publishManifest(){throw Error('unexpected');}}});await due(worker,'certificate_staff',v.installationId);
  const running=worker.runOnce();try{await b.started;await plans.set(v.organisationId,'free');}finally{b.release();await running;}
- assert.equal(published,0);assert.equal((await db.pool.query("SELECT applied_digest FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[v.installationId])).rows[0].applied_digest,null);
+ assert.equal((await db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[v.installationId])).rows[0].certificate,null);assert.equal((await db.pool.query("SELECT applied_digest FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[v.installationId])).rows[0].applied_digest,null);
 });
 
 test('signed submit and status refuse a free plan even when old setup remains stored',async()=>{
@@ -133,7 +134,7 @@ test('gateway drops the last paid route at signed authority expiry even across r
 });
 
 test('a stale unstarted job cannot execute through the trusted adapter',async()=>{
- const v=await venue();let executed=0;const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,execute:async()=>{executed++;}});await due(worker,'certificate_staff',v.installationId);await plans.set(v.organisationId,'free');
+ const v=await venue();await seedCurrentStaffRequest(db.pool,v.installationId);let executed=0;const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,execute:async()=>{executed++;}});await due(worker,'certificate_staff',v.installationId);await plans.set(v.organisationId,'free');
  assert.equal(await worker.runOnce(),true);assert.equal(executed,0);
 });
 
@@ -180,7 +181,7 @@ test('a ready move cannot complete or replay after downgrade',async()=>{
 test('paid reconciler signs active and staged routes from the same desired set',async()=>{
  const v=await venue(),target=await cell(),key=generateKeyPairSync('ed25519'),published:string[]=[];
  await store.stageMove({operationId:randomUUID(),installationId:v.installationId,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:1});
- const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>key.privateKey,artifacts:{async readCsr(){throw Error('unexpected');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('unexpected');},async publishManifest(_id,value){published.push(value);}}});
+ const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,signingKeyForCell:async()=>key.privateKey,artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected');},async publishManifest(_id,value){published.push(value);}}});
  for(const id of [v.cellId,target]){await due(worker,'route',id);await worker.runOnce();const value=verifyManifest(JSON.parse(published.at(-1)!),key.publicKey,id);assert.deepEqual(value.routes.map(r=>r.installationId),[v.installationId]);}
  assert.equal(published.length,2);
 });
@@ -189,7 +190,7 @@ test('paid signed staff exchange publishes a usable chain and denies reads after
  const v=await venue(),c=await certificate(v),server=app(),lifecycle=await new InstallationStore(db.pool,issuer,origin).execute('renew',v.proof('renew')),id=randomUUID();
  const request=(action:string,body:unknown,operationId=randomUUID())=>server.request(origin+'/api/installations/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(v.proof(action,body,operationId,lifecycle.lease!))},bindings);
  const submit=await request('staff-certificate-submit',{version:1,hostname:v.placement!.staffHostname,revision:1,csr:c.csr,previousRequestId:null},id);assert.equal(submit.status,200);assert.equal((await submit.json()).state,'pending');
- const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,staffExchange:true,issueCertificate:async()=>c.chain});await due(worker,'certificate_staff',v.installationId);await worker.runOnce();
+ const worker=new RemoteConfigurationReconciler(db.pool,{planMode:mode,issueCertificate:async()=>c.chain});await due(worker,'certificate_staff',v.installationId);await worker.runOnce();
  const ready=await request('staff-certificate-status',{version:1,requestId:id});assert.equal(ready.status,200);assert.equal((await ready.json()).certificate,c.chain);
  await plans.set(v.organisationId,'free');const refused=await request('staff-certificate-status',{version:1,requestId:id});assert.equal(refused.status,403);assert.deepEqual(await refused.json(),{error:'permission_denied'});
  assert.equal((await db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[v.installationId])).rows[0].certificate,c.chain);
@@ -205,7 +206,7 @@ test('a free plan cannot export retained active setup through either operator ru
   const run=(file:string,args:string[])=>{const result=spawnSync(process.execPath,[file,...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:url.toString(),CLOUD_TEST_SERVICE_PLANS:'1'}});assert.equal(result.status,0,result.stderr);};
   run('src/operator-cli.ts',['export',configFile]);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
   await due(new RemoteConfigurationReconciler(db.pool,{planMode:mode}),'route',v.cellId);
-  await writeFile(configFile,JSON.stringify({routes:[{cellId:v.cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'operator@example.test',accountKeyFile,dnsModule}}));
+  await writeFile(configFile,JSON.stringify({routes:[{cellId:v.cellId,output,signingKeyFile,publicCertificates:root}],keyDirectory:join(root,'keys'),acme:{directoryUrl:'https://acme.example.test/directory',email:'operator@example.test',accountKeyFile,dnsModule}}));
   await rm(output);
   run('src/reconciler-cli.ts',[configFile,'--once']);assert.deepEqual(verifyManifest(JSON.parse(await readFile(output,'utf8')),key.publicKey,v.cellId).routes,[]);
  }finally{await rm(root,{recursive:true,force:true});}

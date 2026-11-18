@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -94,7 +95,7 @@ test('staged_move_not_current and old source after completion never count as act
   const r=f.report();r.cellId=target;r.gatewayId=gatewayId;Object.assign(r.observations[0]!,{cellId:target,gatewayId,manifestSequence:staged.sequence,routeBinding:routeBinding(staged.routes[0]!)});
   assert.equal(await f.store.record({...f.mapping,cellId:target},signForwardReport(r,keys.privateKey)),'accepted');assert.equal(await f.read(),null);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
-  assert.equal(await f.send(),'accepted');await f.remote.markMoveReady(moveId,1,staged.sequence);await f.remote.completeMove(moveId,1);assert.equal(await f.read(),null);
+  assert.equal(await f.send(),'accepted');await f.remote.markMoveReady(moveId,1,staged.sequence);await recordPublicCopy(f.db.pool,moveId);await f.remote.completeMove(moveId,1);assert.equal(await f.read(),null);
   await f.budget();await f.send(f.report(2));assert.equal(await f.read(),null);
  }finally{await f.db.close();}
 });
@@ -111,7 +112,7 @@ test('opted-in reconciler publishes verifiable v2 authority and defaults still p
  for(const enabled of [false,true]){const f=await forwardFixture();try{
   const issuer=generateKeyPairSync('ed25519');let published='';
   const worker=new RemoteConfigurationReconciler(f.db.pool,{forwardReports:enabled,planMode:'test-free-paid',signingKeyForCell:async()=>issuer.privateKey,
-   artifacts:{readCsr:async()=>{throw new Error('unused');},readCertificate:async()=>undefined,publishCertificate:async()=>{throw new Error('unused');},publishManifest:async(cell,envelope)=>{assert.equal(cell,f.cellId);published=envelope;}}});
+   artifacts:{readPublicCertificate:async()=>{throw Error('unexpected public certificate');},publishPublicCertificate:async()=>{throw new Error('unused');},publishManifest:async(cell,envelope)=>{assert.equal(cell,f.cellId);published=envelope;}}});
   await worker.schedule();await f.db.pool.query("DELETE FROM remote_configuration_jobs WHERE kind<>'route'");assert.equal(await worker.runOnce(),true);
   assert(published,'route digest must match the actual published manifest');const manifest=verifyManifest(JSON.parse(published),issuer.publicKey,f.cellId);
   assert.equal(manifest.version,enabled?2:1);if(manifest.version===2){assert.deepEqual(manifest.reporter,{gatewayId:f.gatewayId,generation:1});assert.equal(manifest.routes[0]!.revision,1);}else assert.equal('revision'in manifest.routes[0]!,false);
@@ -123,7 +124,7 @@ test('reporting cell jobs do not lock installations in an unrelated cell',async(
  const cell=(await f.db.pool.query("SELECT id FROM remote_cells WHERE subnet=21")).rows[0].id;
  const issuer=generateKeyPairSync('ed25519');let published='';
  const worker=new RemoteConfigurationReconciler(f.db.pool,{forwardReports:true,planMode:'test-free-paid',signingKeyForCell:async()=>issuer.privateKey,
-  artifacts:{readCsr:async()=>{throw Error('unused');},readCertificate:async()=>undefined,publishCertificate:async()=>{throw Error('unused');},publishManifest:async(id,envelope)=>{assert.equal(id,cell);published=envelope;}}});
+  artifacts:{readPublicCertificate:async()=>{throw Error('unexpected public certificate');},publishPublicCertificate:async()=>{throw Error('unused');},publishManifest:async(id,envelope)=>{assert.equal(id,cell);published=envelope;}}});
  const held=await f.db.secondPool.connect();let running:Promise<unknown>|undefined;
  try{
   await worker.schedule();await f.db.pool.query("DELETE FROM remote_configuration_jobs WHERE kind<>'route' OR target_id<>$1",[cell]);
@@ -160,7 +161,7 @@ test('staged reporting move changes both cell digests and publishes the current 
   await f.remote.stageMove({operationId,installationId:f.installed.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
   await worker.schedule();const stagedDigests=await digests();assert.equal(stagedDigests[f.cellId],initial[f.cellId]);assert.notEqual(stagedDigests[target],initial[target]);
   const staged=await f.remote.reportingManifest(target);assert.equal(staged.version,2);if(staged.version!==2)throw Error('missing reporting authority');assert.equal(staged.routes[0]!.revision,1);
-  await f.remote.markMoveReady(operationId,1,staged.sequence);await f.remote.completeMove(operationId,1);await worker.schedule();
+  await f.remote.markMoveReady(operationId,1,staged.sequence);await recordPublicCopy(f.db.pool,operationId);await f.remote.completeMove(operationId,1);await worker.schedule();
   const completed=await digests();assert.notEqual(completed[f.cellId],stagedDigests[f.cellId]);assert.notEqual(completed[target],stagedDigests[target]);
   assert.deepEqual((await f.remote.reportingManifest(f.cellId)).routes,[]);const moved=await f.remote.reportingManifest(target);assert.equal(moved.version,2);if(moved.version!==2)throw Error('missing reporting authority');assert.equal(moved.routes[0]!.revision,2);
   assert.deepEqual(moved.reporter,{gatewayId,generation:1});

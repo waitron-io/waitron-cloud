@@ -1,3 +1,4 @@
+import {seedCurrentStaffRequest} from './fixtures/staff-certificate.ts';
 import assert from 'node:assert/strict';
 import {createHash,generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {afterEach,beforeEach,test} from 'node:test';
@@ -22,7 +23,7 @@ async function venue(cellId:string){
  await new OrganisationPlanStore(db.pool).set(owner.organisationId,'paid');
  const registration=new RegistrationStore(db.pool),binding={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};
  await registration.start(binding);await registration.approveCloud(binding,owner.accountId);await registration.approveLocal(binding,randomUUID());
- const installed=await registration.complete(binding);await store.provision(installed.installationId,cellId,peer());
+ const installed=await registration.complete(binding);await store.provision(installed.installationId,cellId,peer());await seedCurrentStaffRequest(db.pool,installed.installationId);
  return {...owner,...installed};
 }
 async function measuredSchedule(){
@@ -81,6 +82,7 @@ for(const change of ['revision','revocation'] as const)test(`batched incoming ro
  const source=await cell(),target=await cell(),moving=await venue(source),resident=await venue(target);
  await store.stageMove({operationId:randomUUID(),installationId:moving.installationId,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:1});
  await db.pool.query(change==='revision'?'UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1':'UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[moving.installationId]);
+ if(change==='revision')await seedCurrentStaffRequest(db.pool,moving.installationId);
  await new RemoteConfigurationReconciler(db.pool).schedule();
  await assertRoutes(source,change==='revision'?[moving.installationId]:[]);await assertRoutes(target,[resident.installationId]);
  const certificates=(await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND target_id=$1 AND enabled",[moving.installationId])).rows[0].n;
@@ -152,7 +154,7 @@ test('an empty eligibility list withdraws routes and certificates while ordinary
  assert.deepEqual(empty,{lists:1,idReads:0,eligibleCount:0,arrayScans:0});
  await assertRoutes(home,[],'test-free-paid');
  assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,0);
- const ordinary=await measuredEligibilitySchedule('existing');
+ await seedCurrentStaffRequest(db.pool,resident.installationId);const ordinary=await measuredEligibilitySchedule('existing');
  assert.deepEqual(ordinary,{lists:0,idReads:0,eligibleCount:0,arrayScans:0});
  await assertRoutes(home,[resident.installationId]);
  assert.equal((await db.pool.query("SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE kind<>'route' AND enabled")).rows[0].n,3);

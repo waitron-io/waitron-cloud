@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
@@ -38,7 +39,7 @@ test('a tested destination route cuts over once and preserves customer-facing na
  assert.equal(targetManifest.routes[0]!.staffHostname,active.staffHostname);assert.equal(targetManifest.routes[0]!.publicHostname,active.publicHostname);
  await assert.rejects(store.completeMove(operationId,1),/move_not_ready/);
  const ready=await store.markMoveReady(operationId,1,targetManifest.sequence);assert.equal(ready.state,'ready');assert.equal(ready.readinessSequence,targetManifest.sequence);
- const completed=await store.completeMove(operationId,1);assert.equal(completed.state,'completed');assert.equal(completed.revision,2);assert.equal(completed.target.cellId,target.id);
+ await recordPublicCopy(db.pool,operationId);const completed=await store.completeMove(operationId,1);assert.equal(completed.state,'completed');assert.equal(completed.revision,2);assert.equal(completed.target.cellId,target.id);
  assert.deepEqual(await store.completeMove(operationId,1),completed);
  assert.deepEqual((await store.manifest(source.id)).routes,[]);
  const destination=await store.manifest(target.id);assert.deepEqual(destination.routes.map(route=>route.installationId),[installed.installationId]);
@@ -82,7 +83,7 @@ test('a late peer-key conflict is reported as a move conflict without changing t
  await store.stageMove({operationId,installationId:selected.installationId,targetCellId:target.id,targetPeerPublicKey:reservedKey,expectedRevision:1});
  await db.pool.query('UPDATE remote_placements SET peer_public_key=$2 WHERE installation_id=$1',[claimant.installationId,reservedKey]);
  const exported=await store.manifest(target.id);await store.markMoveReady(operationId,1,exported.sequence);
- await assert.rejects(store.completeMove(operationId,1),/move_conflict/);
+ await recordPublicCopy(db.pool,operationId);await assert.rejects(store.completeMove(operationId,1),/move_conflict/);
  const current=(await db.pool.query('SELECT cell_id,host(address) AS address FROM remote_placements WHERE installation_id=$1',[selected.installationId])).rows[0];
  assert.deepEqual(current,{cell_id:source.id,address:active.address});
  assert.equal((await store.cancelMove(operationId,1)).state,'cancelled');

@@ -2893,8 +2893,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   Native mail and stubbed-browser checks cover the guidance, read-only setup/status
   requests and later healthy evidence. The local monitoring guide explains the
   checks and their limits; refreshing neither starts a probe nor repairs a route.
-  Gateway assignment, renewal configuration and certificate installation remain
-  operator tooling. Owner-facing repair controls, appliance certificate delivery
+  Gateway assignment remains operator tooling. Public keys and renewal come from the
+  worker; staff requests use the database exchange. Production certificate delivery
+  still needs qualification. Owner-facing repair controls, appliance certificate delivery
   and live provider activation remain unfinished. No monitoring, certificate,
   gateway, permission or delivery rule changes. Real database/gateway qualification
   remains in CI and the Docker-based local proof.

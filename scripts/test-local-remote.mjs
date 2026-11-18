@@ -5,15 +5,17 @@ import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath,access} from 'node:f
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
-import {generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
 import {request,Agent} from 'node:https';
 import {connect as tlsConnect} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
-import {startPortalFixture} from '../apps/portal/test/fixtures.ts';
+import {startPortalFixture,contextSignIn} from '../apps/portal/test/fixtures.ts';
 import {SignupStore,PairingStore,InstallationStore,MonitorWorker} from '../packages/registration/src/index.ts';
 import {login} from '../packages/identity/src/index.ts';
 import {transaction} from '../packages/registration/src/transaction.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
+import {RemoteConfigurationReconciler} from '../packages/remote-access/src/reconciler.ts';
+import {FileReconcilerArtifacts} from '../packages/remote-access/src/reconciler-files.ts';
 import {RemoteProbeStore} from '../packages/remote-access/src/probe-targets.ts';
 import {RemoteProbeObservationStore} from '../packages/remote-access/src/probe-observations.ts';
 import {probeTarget} from '../packages/remote-access/src/probe.ts';
@@ -30,7 +32,7 @@ assert.ok(process.env.WAITRON_CHECKOUT,'Set WAITRON_CHECKOUT');
 const require=createRequire(join(waitron,'apps/server/package.json'));
 const acmeRequire=createRequire(new URL('../packages/remote-access/package.json',import.meta.url));
 const {crypto:acmeCrypto}=acmeRequire('acme-client');
-const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID();
+const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID(),gatewayImage=process.env.REMOTE_GATEWAY_IMAGE??'waitron-cloud-local-remote:dev';
 const owned=new Set(),children=[],roots=[],checks=[],backupObjectClients=[],backupClients=new Map();
 let limitsReceipt;
 let f,acme,s3,catalogue,network=false,gatewayPort,gatewayIp,targetGatewayPort,targetGatewayIp;
@@ -41,6 +43,10 @@ const wgKey=()=>{const key=generateKeyPairSync('x25519');return {privateKey:key.
 const gatewayKey=wgKey(),targetGatewayKey=wgKey();
 checks.push=(...values)=>{for(const value of values)console.log('PASS:',value);return Array.prototype.push.apply(checks,values);};
 const input=join(root,'input'),state=join(root,'state'),targetInput=join(root,'target-input'),targetState=join(root,'target-state');
+async function gatewayFile(directory,file){
+ if(process.platform==='linux')return docker('exec',name+(directory===state?'-gateway':'-gateway-target'),'node','-e',"process.stdout.write(require('node:fs').readFileSync('/state/'+process.argv[1],'utf8'))",file);
+ return readFile(join(directory,file),'utf8');
+}
 async function launch(venueRoot){
  await rm(join(venueRoot,'ready.json'),{force:true});
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-integration-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:venueRoot,CLOUD_TEST_ORIGIN:f.origin,CLOUD_TEST_EXTERNAL:'1',CLOUD_TEST_BACKUP_STATE:'1'},stdio:['ignore','pipe','pipe','ipc']});
@@ -67,17 +73,17 @@ async function publishTarget(manifest){await secret(join(targetInput,'manifest.n
 function startGateway(){
  const args=['run','-d','--name',name+'-gateway','--network',name,'--cap-add','NET_ADMIN','--sysctl','net.ipv4.ip_forward=1','-p',`127.0.0.1:${gatewayPort??''}:443`,'-v',input+':/input:ro','-v',state+':/state','-e','GATEWAY_CELL_ID='+cellId,'-e','GATEWAY_SUBNET=17','-e','GATEWAY_UPSTREAM_CA=/input/venue-ca.pem'];
  if(gatewayIp)args.push('--ip',gatewayIp);
- docker(...args,'waitron-cloud-local-remote:dev');owned.add(name+'-gateway');
+ docker(...args,gatewayImage);owned.add(name+'-gateway');
  gatewayPort=Number(docker('port',name+'-gateway','443/tcp').split(':').at(-1));gatewayIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',name+'-gateway');
 }
 function startTargetGateway(){
  const args=['run','-d','--name',name+'-gateway-target','--network',name,'--cap-add','NET_ADMIN','--sysctl','net.ipv4.ip_forward=1','-p',`127.0.0.1:${targetGatewayPort??''}:443`,'-v',targetInput+':/input:ro','-v',targetState+':/state','-e','GATEWAY_CELL_ID='+targetCellId,'-e','GATEWAY_SUBNET=18','-e','GATEWAY_UPSTREAM_CA=/input/venue-ca.pem'];
  if(targetGatewayIp)args.push('--ip',targetGatewayIp);
- docker(...args,'waitron-cloud-local-remote:dev');owned.add(name+'-gateway-target');
+ docker(...args,gatewayImage);owned.add(name+'-gateway-target');
  targetGatewayPort=Number(docker('port',name+'-gateway-target','443/tcp').split(':').at(-1));targetGatewayIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',name+'-gateway-target');
 }
 function startPeer(venue,index){
- const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN','-v',venue.peerInput+':/input:ro','waitron-cloud-local-remote:dev','node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
+ const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN',...(process.platform==='linux'?['--add-host','host.docker.internal:host-gateway']:[]),'-v',venue.peerInput+':/input:ro',gatewayImage,'node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
 }
 function remoteAt(port,host,path='/public/availability',options={}){
  return new Promise((resolve,reject)=>{
@@ -123,12 +129,24 @@ try{
  await operator('cell',{id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'remote.example.test',zone:'remote.example.test',subnet:17,publicKey:gatewayKey.publicKey,endpoint:'gateway.example.test:51820'});
  await operator('cell',{id:targetCellId,country:'ES',provider:'aws',environment:'test',suffix:'target.remote.example.test',zone:'remote.example.test',subnet:18,publicKey:targetGatewayKey.publicKey,endpoint:'target-gateway.example.test:51820'});
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
+ const certificateFiles=new FileReconcilerArtifacts({keyDirectory:join(root,'public-keys'),routes:[{cellId,output:join(root,'worker-source.json'),publicCertificates:join(input,'public-certs')},{cellId:targetCellId,output:join(root,'worker-target.json'),publicCertificates:join(targetInput,'public-certs')}]});
+ const certificateWorker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:certificateFiles,pointName:(name,target)=>acme.point(name,target),signingKeyForCell:async id=>{assert.ok([cellId,targetCellId].includes(id));return issuer.privateKey;},issueCertificate:async target=>{
+  const csrFile=join(root,randomUUID()+'.csr'),output=join(root,randomUUID()+'.crt');await secret(csrFile,target.csr);return acme.issue({hostname:target.hostname,csrFile,accountKeyFile,output,dnsName:target.dnsName});
+ }});
+ async function runCertificates(){await certificateWorker.schedule();let runs=0;while(await certificateWorker.runOnce()){assert.ok(++runs<=20,'bounded certificate projection');}}
+ async function staffCertificate(placement,csr){
+  const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[placement.installationId])).rows[0].configuration_revision,requestId=randomUUID();
+  await f.db.pool.query(`INSERT INTO staff_certificate_exchange(installation_id,request_id,request_digest,revision,hostname,csr) VALUES($1,$2,$3,$4,$5,$6)
+   ON CONFLICT(installation_id) DO UPDATE SET request_id=EXCLUDED.request_id,request_digest=EXCLUDED.request_digest,revision=EXCLUDED.revision,hostname=EXCLUDED.hostname,csr=EXCLUDED.csr`,[placement.installationId,requestId,createHash('sha256').update(csr).digest('hex'),revision,placement.staffHostname,csr]);
+  await runCertificates();const row=(await f.db.pool.query('SELECT certificate,certificate_request_id FROM staff_certificate_exchange WHERE installation_id=$1',[placement.installationId])).rows[0];assert.equal(row.certificate_request_id,requestId);assert.ok(row.certificate);return row.certificate;
+ }
  const venues=[];
  for(let n=0;n<2;n++){
   const scratch=await mkdtemp(join(tmpdir(),'cloud-integration-backup-'));roots.push(scratch);
   const venueRoot=join(scratch,'state');await mkdir(venueRoot);let server=await launch(venueRoot);
   const context=await f.browser.newContext({ignoreHTTPSErrors:true});const post=async(path,data={})=>{const result=await context.request.post(server.origin+path,{headers:{origin:server.origin},data});assert.equal(result.status(),200,await result.text());return result.json();};
   await post('/management-api/session',{email:'owner@example.test',password:'Local integration password'});
+  const fresh=await context.request.post(server.origin+'/management-api/session/me/fresh-sign-in',{headers:{origin:server.origin},data:{method:'password',password:'Local integration password'}});assert.equal(fresh.status(),204,await fresh.text());
   const pairing=await post('/management-api/cloud/start');
   await new PairingStore(f.db.pool).approve(pairing.requestId,pairing.code,owner.organisationId,owner.legalBusinessId,session.token,session.csrfToken);
   await post('/management-api/cloud/check');
@@ -136,13 +154,9 @@ try{
   const location=await s3.bucket('remote-venue-'+n);await catalogue.provision(paired.registration.installationId,location);
   const key=wgKey(),placement=JSON.parse(await operator('provision',{installationId:paired.registration.installationId,cellId,peerPublicKey:key.publicKey}));
   const csr=(await ipc(server,{csrHostname:placement.staffHostname})).csr;
-  const csrFile=join(root,`venue-${n}.csr`);await secret(csrFile,csr);
-  const certificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'staff'},hostname:placement.staffHostname,csrFile,accountKeyFile,output:join(root,`venue-${n}.crt`)});
+  const certificate=await staffCertificate(placement,csr);
   await ipc(server,{certificate,hostname:placement.staffHostname});await stop(server);server=await launch(venueRoot);
-  const [publicKey,publicCsr]=await acmeCrypto.createCsr({commonName:placement.publicHostname,altNames:[placement.publicHostname]});
-  const publicCsrFile=join(root,`public-${n}.csr`);await secret(publicCsrFile,publicCsr);
-  const publicCertificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'public'},hostname:placement.publicHostname,csrFile:publicCsrFile,accountKeyFile,output:join(root,`public-${n}.crt`)});
-  const publicMaterial=Buffer.concat([publicKey,Buffer.from(publicCertificate)]);await secret(join(input,'public-certs',`venue-${n}.pem`),publicMaterial);await secret(join(targetInput,'public-certs',`venue-${n}.pem`),publicMaterial);
+  const publicMaterial=await readFile(join(input,'public-certs',placement.venueId+'.pem'),'utf8');assert.equal(new X509Certificate(publicMaterial).checkHost(placement.publicHostname),placement.publicHostname);
   venues.push({root:venueRoot,scratch,server,key,placement,certificate,location});await context.close();
  }
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
@@ -155,7 +169,7 @@ try{
   startPeer(venue,n);
  }
  await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;});
- for(const venue of venues){const privateKey=await readFile(join(venue.root,'cloud-staff.key'),'utf8');const mounted=docker('exec',name+'-gateway','sh','-c','cat /input/public-certs/*.pem /state/* /input/* 2>/dev/null || true');assert.equal(mounted.includes(privateKey),false);}
+ for(const venue of venues){const privateKey=await readFile(join(venue.root,'cloud/staff.key'),'utf8');const mounted=docker('exec',name+'-gateway','sh','-c','cat /input/public-certs/*.pem /state/* /input/* 2>/dev/null || true');assert.equal(mounted.includes(privateKey),false);}
  checks.push('real WireGuard traffic and staff TLS passthrough; venue TLS keys absent from gateway');
  const cookies=[];
  for(const venue of venues){
@@ -168,7 +182,7 @@ try{
  const publicHost=venues[0].placement.publicHostname;
  assert.equal((await remote(publicHost)).status,403);assert.equal((await remote(publicHost,'/management-api/session')).status,404);
  assert.equal((await remote(publicHost,'/public/availability',{headers:{host:venues[1].placement.publicHostname,'X-Waitron-Client-IP':'127.0.0.2','X-Waitron-SNI':venues[1].placement.publicHostname}})).status,421);
- await delay(1200);assert.equal(JSON.parse(await readFile(join(state,'status.json'),'utf8')).forwarded,0);
+ await delay(1200);assert.equal(JSON.parse(await gatewayFile(state,'status.json')).forwarded,0);
  const cookie=await solve(publicHost);assert.equal((await remote(publicHost,'/public/availability',{headers:{cookie}})).status,200);
  assert.equal((await remote(venues[1].placement.publicHostname,'/public/availability',{headers:{cookie}})).status,403);
  checks.push('real browser Worker proof of work, rejected public calls have zero upstream requests, blocked manager paths, overwritten proxy headers, cross-host bot cookie refusal');
@@ -198,8 +212,7 @@ try{
  const firewall=docker('exec',name+'-gateway','iptables','-L','FORWARD','-v','-n');assert.match(firewall,/policy DROP [1-9]\d* packets/);
  checks.push('malicious peer route expansion cannot reach another venue; gateway DROP counter increased');
  // Renew at the venue, then verify a fresh connection sees the new certificate without a restart.
- const renewing=venues[1],csrFile=join(root,'renew.csr');await secret(csrFile,(await ipc(renewing.server,{csrHostname:renewing.placement.staffHostname})).csr);
- const renewed=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:renewing.placement.installationId,kind:'staff'},hostname:renewing.placement.staffHostname,csrFile,accountKeyFile,output:join(root,'renew.crt')});assert.notEqual(new X509Certificate(renewed).serialNumber,new X509Certificate(renewing.certificate).serialNumber);
+ const renewing=venues[1],renewed=await staffCertificate(renewing.placement,(await ipc(renewing.server,{csrHostname:renewing.placement.staffHostname})).csr);assert.notEqual(new X509Certificate(renewed).serialNumber,new X509Certificate(renewing.certificate).serialNumber);
  await ipc(renewing.server,{certificate:renewed,hostname:renewing.placement.staffHostname});
  const fingerprint=()=>new Promise((resolve,reject)=>{const socket=tlsConnect({host:'127.0.0.1',port:gatewayPort,servername:renewing.placement.staffHostname,ca:acme.certificateRoot},()=>{const value=socket.getPeerCertificate().fingerprint256;socket.end();resolve(value);});socket.on('error',reject);socket.setTimeout(3000,()=>socket.destroy(Error('TLS timeout')));});
  await waitFor(async()=>{await delay(1000);return await fingerprint()===new X509Certificate(renewed).fingerprint256;},20000);checks.push('real ACME renewal hot-reloaded by running Waitron');
@@ -216,7 +229,7 @@ try{
  const routeEvidence=values=>values.map(result=>({installationId:result.installationId,staffHostname:result.staffHostname,publicHostname:result.publicHostname,publicFingerprint:result.public.certificate.fingerprint256,staffFingerprint:result.staff.certificate.fingerprint256})).sort((a,b)=>a.installationId.localeCompare(b.installationId));
  const runMonitor=async(worker=monitor)=>{await f.db.pool.query('UPDATE venue_monitors SET next_check_at=clock_timestamp()');let count=0;while(await worker.runOnce()){if(++count>venues.length)throw Error('monitor processed too many venues');}return count;};
  const openIncidents=async()=>{const result=await f.db.pool.query("SELECT venue_id,kind FROM venue_incidents WHERE status='open' ORDER BY venue_id,kind");return result.rows;};
- const accountContext=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900},colorScheme:'light'});await accountContext.addCookies([{name:'cloud_browser',value:owner.browserToken,url:f.origin,httpOnly:true,sameSite:'Lax'}]);const accountLogin=await accountContext.request.post(f.origin+'/api/account/login',{headers:{origin:f.origin},data:{email,password}});assert.equal(accountLogin.status(),200,await accountLogin.text());
+ const accountContext=await f.browser.newContext({locale:'en',viewport:{width:1280,height:900},colorScheme:'light'});await accountContext.addCookies([{name:'cloud_browser',value:owner.browserToken,url:f.origin,httpOnly:true,sameSite:'Lax'}]);const accountLogin=await contextSignIn(f,accountContext,email,password);assert.equal(accountLogin.status(),200,await accountLogin.text());
  const csrf=(await accountContext.cookies()).find(cookie=>cookie.name.endsWith('cloud_csrf'))?.value;assert.ok(csrf);
  const preference=await accountContext.request.post(f.origin+'/api/account/alerts',{headers:{origin:f.origin,'x-csrf-token':csrf},data:{enabled:'on',locale:'en'}});assert.equal(preference.status(),200,await preference.text());
  const overview=async()=>{const response=await accountContext.request.get(f.origin+'/api/account/installations');assert.equal(response.status(),200,await response.text());return (await response.json()).installations;};
@@ -228,17 +241,17 @@ try{
  started=Date.now();docker('rm','-f',venues[0].peer);owned.delete(venues[0].peer);results=await probeAndRecord();const venueAFailure=resultFor(results,venues[0]),venueBHealthy=resultFor(results,venues[1]);assert.equal(venueAFailure.public.status,'failed');assert.equal(venueAFailure.staff.status,'failed');assert.equal(venueBHealthy.public.status,'healthy');assert.equal(venueBHealthy.staff.status,'healthy');await runMonitor();
  incidents=await phase('route_outage',started);const venueARoutes=incidents.filter(row=>row.venue_id===venues[0].placement.venueId&&row.kind.endsWith('_route_failed')),venueBRoutes=incidents.filter(row=>row.venue_id===venues[1].placement.venueId&&row.kind.endsWith('_route_failed')),routeFailureLimitedToVenueA=venueARoutes.length===2&&venueBRoutes.length===0;assert.deepEqual(venueARoutes.map(row=>row.kind).sort(),['public_route_failed','staff_route_failed']);assert.equal(routeFailureLimitedToVenueA,true);
  let accountInstallations=await overview(),venueAView=accountInstallations.find(item=>item.installationId===venues[0].placement.installationId),venueBView=accountInstallations.find(item=>item.installationId===venues[1].placement.installationId);assert.ok(venueAView);assert.ok(venueBView);assert.equal(venueAView.monitoring.remoteChecks.public.status,'failed');assert.equal(venueAView.monitoring.remoteChecks.staff.status,'failed');assert.equal(venueBView.monitoring.remoteChecks.public.status,'healthy');assert.equal(venueBView.monitoring.remoteChecks.staff.status,'healthy');
- const portalPage=await accountContext.newPage();await portalPage.goto(f.origin+'/account');await portalPage.getByText('The public website failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway and certificate changes still require operator tools.',{exact:true}).waitFor();
+ const portalPage=await accountContext.newPage();await portalPage.goto(f.origin+'/account');await portalPage.getByText('The public website failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway changes still require operator tools.',{exact:true}).waitFor();
  await f.drainMail();const routeOpenings=await mailCount(openingSubject);assert.equal(routeOpenings-baselineOpenings,2);await runMonitor();await f.drainMail();const repeatedRouteOpenings=await mailCount(openingSubject);duplicateMail+=repeatedRouteOpenings-routeOpenings;deduplicationChecks++;assert.equal(duplicateMail,0);
 
- started=Date.now();startPeer(venues[0],0);await waitFor(async()=>{try{return (await remote(venues[0].placement.staffHostname)).status===200;}catch{return false;}});results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));await runMonitor();incidents=await phase('route_recovery',started);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();const routeRecoveries=await mailCount(recoverySubject);assert.equal(routeRecoveries-baselineRecoveries,2);await portalPage.reload();await portalPage.getByText('The public website failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway and certificate changes still require operator tools.',{exact:true}).waitFor({state:'detached'});
+ started=Date.now();startPeer(venues[0],0);await waitFor(async()=>{try{return (await remote(venues[0].placement.staffHostname)).status===200;}catch{return false;}});results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));await runMonitor();incidents=await phase('route_recovery',started);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();const routeRecoveries=await mailCount(recoverySubject);assert.equal(routeRecoveries-baselineRecoveries,2);await portalPage.reload();await portalPage.getByText('The public website failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway changes still require operator tools.',{exact:true}).waitFor({state:'detached'});
 
  started=Date.now();await f.db.pool.query("UPDATE remote_probe_observations SET checked_at=clock_timestamp()-interval '301 seconds'");await runMonitor();incidents=await phase('stale_worker',started);assert.equal(incidents.filter(row=>row.kind.endsWith('_probe_stale')).length,4);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();results=await probeAndRecord();await runMonitor();incidents=await openIncidents();assert.equal(incidents.filter(row=>row.kind.endsWith('_probe_stale')).length,0);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();
 
  started=Date.now();const invalidTarget=monitoringTargets.find(target=>target.installationId===venues[1].placement.installationId);assert.ok(invalidTarget);const invalidTrust=await probeTarget(invalidTarget,{ca:venues[0].certificate,connect:fixtureConnect});assert.equal(invalidTrust.public.status,'failed');assert.equal(invalidTrust.staff.status,'failed');assert.equal(invalidTrust.public.failure,'tls');assert.equal(invalidTrust.staff.failure,'tls');assert.doesNotMatch(JSON.stringify(invalidTrust),/127\.0\.0\.1|ECONN|self.signed/i);await phase('invalid_trust',started);
 
  const beforeBackups=await captureBoth(venues),beforeGatewayEvidence=routeEvidence(results);started=Date.now();docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');results=await probeAndRecord();assert(results.every(result=>result.public.status==='failed'&&result.staff.status==='failed'));await runMonitor();incidents=await phase('gateway_outage',started);assert.equal(incidents.filter(row=>row.kind.endsWith('_route_failed')).length,4);await f.drainMail();
- const replacedAt=Date.now();startGateway();try{await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;},180000);}catch(error){const status=await readFile(join(state,'status.json'),'utf8').catch(readError=>String(readError)),wireguard=docker('exec',name+'-gateway','wg','show'),peers=venues.map((venue,index)=>`peer-${index} public=${venue.key.publicKey}\n${docker('exec',venue.peer,'wg','show')}`).join('\n');throw new Error(`replacement gateway unavailable; status=${status}; wireguard=${wireguard}; peers=${peers}`,{cause:error});}const replacementMs=Date.now()-replacedAt;results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));assert.deepEqual(routeEvidence(results),beforeGatewayEvidence);await runMonitor();incidents=await phase('gateway_recovery',replacedAt);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();checks.push('monitor detects and recovers one-route and whole-gateway failures while preserving other-venue isolation, stable certificates and fresh control contact');
+ const replacedAt=Date.now();startGateway();try{await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;},180000);}catch(error){const status=await gatewayFile(state,'status.json').catch(readError=>String(readError)),wireguard=docker('exec',name+'-gateway','wg','show'),peers=venues.map((venue,index)=>`peer-${index} public=${venue.key.publicKey}\n${docker('exec',venue.peer,'wg','show')}`).join('\n');throw new Error(`replacement gateway unavailable; status=${status}; wireguard=${wireguard}; peers=${peers}`,{cause:error});}const replacementMs=Date.now()-replacedAt;results=await probeAndRecord();assert(results.every(result=>result.public.status==='healthy'&&result.staff.status==='healthy'));assert.deepEqual(routeEvidence(results),beforeGatewayEvidence);await runMonitor();incidents=await phase('gateway_recovery',replacedAt);assert.equal(incidents.some(row=>row.kind.endsWith('_route_failed')),false);await f.drainMail();checks.push('monitor detects and recovers one-route and whole-gateway failures while preserving other-venue isolation, stable certificates and fresh control contact');
  const afterBackups=await captureBoth(venues),routesRecovered=(await Promise.all(venues.map(venue=>remote(venue.placement.staffHostname)))).every(response=>response.status===200),ownManagerAccess=(await remote(venues[1].placement.staffHostname,'/management-api/cloud/status',{headers:{cookie:cookies[1]}})).status===200,crossedManagerRefused=(await remote(venues[1].placement.staffHostname,'/management-api/cloud/status',{headers:{cookie:cookies[0]}})).status===401,venueSeparationPreserved=ownManagerAccess&&crossedManagerRefused;
  assert.equal(routesRecovered,true);assert.equal(venueSeparationPreserved,true);
  const backupContinuity={version:1,before:beforeBackups,after:afterBackups,gatewayReplaced:true,routesRecovered,venueSeparationPreserved};
@@ -249,17 +262,18 @@ try{
 
  const moving=venues[0],unchanged=venues[1],staffBefore=(await remote(moving.placement.staffHostname)).certificate,publicBefore=(await remote(moving.placement.publicHostname)).certificate;
  const initialSource=await placementStore.manifest(cellId);await publish(initialSource);
- await publishTarget(await placementStore.manifest(targetCellId));startTargetGateway();await waitFor(async()=>JSON.parse(await readFile(join(targetState,'status.json'),'utf8')).ready);
+ await publishTarget(await placementStore.manifest(targetCellId));startTargetGateway();await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).ready);
  const expectedRevision=Number((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[moving.placement.installationId])).rows[0].configuration_revision);
  const failedOperation=randomUUID(),failedStage=JSON.parse(await operator('move-stage',{operationId:failedOperation,installationId:moving.placement.installationId,targetCellId,targetPeerPublicKey:moving.key.publicKey,expectedRevision}));assert.equal(failedStage.state,'staged');
- const failedTarget=await placementStore.manifest(targetCellId);await publishTarget(failedTarget);await waitFor(async()=>JSON.parse(await readFile(join(targetState,'status.json'),'utf8')).routes===1);
+ const failedTarget=await placementStore.manifest(targetCellId);await publishTarget(failedTarget);await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).routes===1);
  await assert.rejects(remoteTarget(moving.placement.staffHostname));const sourceStayedHealthy=(await remote(moving.placement.staffHostname)).status===200;assert.equal(sourceStayedHealthy,true);
  const failedCancelled=JSON.parse(await operator('move-cancel',{operationId:failedOperation,expectedRevision}));assert.equal(failedCancelled.state,'cancelled');
- const cancelledTarget=await placementStore.manifest(targetCellId);await publishTarget(cancelledTarget);await waitFor(async()=>JSON.parse(await readFile(join(targetState,'status.json'),'utf8')).routes===0);
+ const cancelledTarget=await placementStore.manifest(targetCellId);await publishTarget(cancelledTarget);await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).routes===0);
  const destinationRemoved=await remoteTarget(moving.placement.staffHostname).then(()=>false,()=>true);assert.equal(destinationRemoved,true);
 
  const operationId=randomUUID(),staged=JSON.parse(await operator('move-stage',{operationId,installationId:moving.placement.installationId,targetCellId,targetPeerPublicKey:moving.key.publicKey,expectedRevision}));
- const stagedTarget=await placementStore.manifest(targetCellId);await publishTarget(stagedTarget);await waitFor(async()=>JSON.parse(await readFile(join(targetState,'status.json'),'utf8')).routes===1);
+ await runCertificates();
+ const stagedTarget=await placementStore.manifest(targetCellId);await publishTarget(stagedTarget);await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).routes===1);
  docker('rm','-f',moving.peer);owned.delete(moving.peer);
  const targetPeerInput=join(root,'peer-target-0');await mkdir(targetPeerInput);await secret(join(targetPeerInput,'peer.json'),JSON.stringify({address:staged.target.address,privateKey:moving.key.privateKey,gatewayPublicKey:targetGatewayKey.publicKey,gatewayEndpoint:targetGatewayIp+':51820',upstreamHost:'host.docker.internal',upstreamPort:moving.server.port}));await secret(join(targetPeerInput,'ca.pem'),acme.certificateRoot);moving.peerInput=targetPeerInput;
  const movingAt=Date.now();startPeer(moving,0);await waitFor(async()=>{try{return (await remoteTarget(moving.placement.staffHostname)).status===200;}catch{return false;}},180000);
@@ -283,13 +297,13 @@ try{
  // A short signed lease exercises the same expiry path as the normal ten-minute window.
  const expiring=await placementStore.manifest(cellId);expiring.expiresAt=Date.now()+3000;await publish(expiring);await delay(4500);await assert.rejects(remote(venues[1].placement.staffHostname));
  docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');startGateway();await delay(1500);await assert.rejects(remote(venues[1].placement.staffHostname));checks.push('expired signed cache closes routing and stays expired after restart');
- const dnsName=name+'-lan-dns';docker('run','-d','--name',dnsName,'--network',name,'--cap-add','NET_ADMIN','waitron-cloud-local-remote:dev','dnsmasq','--no-daemon','--no-resolv','--address=/'+venues[1].placement.staffHostname+'/'+venues[1].placement.address);owned.add(dnsName);
+ const dnsName=name+'-lan-dns';docker('run','-d','--name',dnsName,'--network',name,'--cap-add','NET_ADMIN',gatewayImage,'dnsmasq','--no-daemon','--no-resolv','--address=/'+venues[1].placement.staffHostname+'/'+venues[1].placement.address);owned.add(dnsName);
  const dnsIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',dnsName);
  await delay(500);
  const lan=docker('exec',venues[1].peer,'node','-e',`const r=new(require('dns').Resolver);r.setServers(['${dnsIp}']);const req=require('https').get({hostname:'${venues[1].placement.staffHostname}',port:443,path:'/public/availability',ca:require('fs').readFileSync('/input/ca.pem'),lookup:(name,options,done)=>r.resolve4(name,(error,ips)=>done(error,options.all?ips?.map(address=>({address,family:4})):ips?.[0],4))},res=>{if(res.statusCode!==200)process.exit(1);res.resume();res.on('end',()=>console.log('LAN HTTPS trusted'));});req.on('error',error=>{console.error(error.message);process.exit(1)});req.setTimeout(3000,()=>req.destroy(Error('timeout')));`);
  assert.equal(lan,'LAN HTTPS trusted');checks.push('fresh DNS client uses venue LAN override with gateway authority expired');
 
- docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');await secret(join(state,'accepted.json'),'{broken');startGateway();await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name+'-gateway')==='false');assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name+'-gateway'),'0');checks.push('corrupt gateway cache refuses startup');
+ docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');await rm(join(state,'accepted.json'));await secret(join(state,'accepted.json'),'{broken');startGateway();await waitFor(()=>docker('inspect','--format','{{.State.Running}}',name+'-gateway')==='false');assert.notEqual(docker('inspect','--format','{{.State.ExitCode}}',name+'-gateway'),'0');checks.push('corrupt gateway cache refuses startup');
  const receipt={version:2,cloudHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cloudDirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='',waitronHead:execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),checks,replacementMs,revocationMs,functionalProbes,monitoring,movement,backupContinuity};
  if(process.env.REMOTE_RECEIPT)await secret(process.env.REMOTE_RECEIPT,JSON.stringify(receipt,null,2));console.log(JSON.stringify(receipt,null,2));
  }

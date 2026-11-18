@@ -1,17 +1,14 @@
 import {readFile,open,rename,rm} from 'node:fs/promises';
-import {dirname,resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {dirname} from 'node:path';
 import {createPrivateKey,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
-import {parsePlanMode,transaction} from '@waitron-cloud/registration';
+import {parsePlanMode} from '@waitron-cloud/registration';
 import {RemoteAccessStore} from './placement.ts';
 import {signManifest} from './manifest.ts';
-import {issueCertificate,type DnsChallengeProvider} from './certificates.ts';
-import {certificateNeedsRenewal} from './renewal.ts';
 // This CLI is an operator boundary: its input files and DNS module must be trusted local files.
 const [command,file]=process.argv.slice(2);
-const commands=['cell','provision','move-stage','move-ready','move-commit','move-cancel','dns','hostname','export','certificate'];
+const commands=['cell','provision','move-stage','move-ready','move-commit','move-cancel','dns','hostname','export'];
 if(!file||!commands.includes(command??''))throw new Error(`Usage: operator-cli.ts ${commands.join('|')} trusted-input.json`);
 if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL required');
 const config=JSON.parse(await readFile(file,'utf8'));
@@ -36,16 +33,5 @@ try{
   do{try{await store[config.forwardReports===true?'publishReportingManifest':'publishManifest'](config.cellId,async manifest=>atomic(config.output,JSON.stringify(signManifest(manifest,key))));}catch{if(!config.watch)throw new Error('export_failed');console.error('remote.export_failed');}
    if(config.watch)for(let n=0;n<30&&!stopping;n++)await delay(1000);
   }while(config.watch&&!stopping);
- }
- if(command==='certificate'){
-  const csr=await readFile(config.csrFile,'utf8');const names=await store.authorizeCertificate(config.installationId,config.kind,csr);
-  let existing='';try{existing=await readFile(config.output,'utf8');}catch(error){if(!(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT'))throw error;}
-  if(config.force===true||certificateNeedsRenewal(existing,csr,names.hostname)){
-   const dns: DnsChallengeProvider=(await import(pathToFileURL(resolve(config.dnsModule)).href)).default;
-   if(typeof dns?.present!=='function'||typeof dns?.remove!=='function')throw new Error('invalid_dns_provider');
-   const certificate=await issueCertificate({directoryUrl:config.directoryUrl,accountKey:await readFile(config.accountKeyFile),email:config.email,csr,...names,dns});
-   // Recheck active placement after external ACME work, before publishing a usable chain.
-   await transaction(pool,client=>store.publishAuthorizedCertificate(client,config.installationId,config.kind,csr,names,()=>atomic(config.output,certificate)));
-  }
  }
 }catch{console.error('remote.command_failed');process.exitCode=1;}finally{await pool.end();}

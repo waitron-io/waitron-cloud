@@ -94,7 +94,7 @@ for(const refusal of ['none','journal','publication'] as const)test(`reconciled 
   const worker=new RemoteConfigurationReconciler(f.pool,{planMode:'test-venue-levels',forwardReports:true,
    trafficCoverage:{async expect(client,manifest){await f.coverage.expect(client,manifest);if(refusal==='journal')throw Error('fixture-journal-refusal');}},
    signingKeyForCell:async()=>f.keys.privateKey,
-   artifacts:{async readCsr(){throw Error('unexpected');},async readCertificate(){throw Error('unexpected');},async publishCertificate(){throw Error('unexpected');},
+   artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected');},
     async publishManifest(cellId,envelope){assert.equal(cellId,f.cellId);publications++;published=verifyManifest(JSON.parse(envelope),f.keys.publicKey,f.cellId);if(refusal==='publication')throw Error('fixture-publication-refusal');}},
   });
   await worker.schedule();await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'route'");
