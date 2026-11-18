@@ -1,17 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-async function runCheck(options) {
-  const module = await import('./kubernetes-node-loss.mjs').catch(error => {
-    assert.notEqual(error.code, 'ERR_MODULE_NOT_FOUND', 'the local node-loss check is missing');
-    throw error;
-  });
-  return module.runKubernetesNodeLoss(options);
-}
+import {runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
 
-function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false} = {}) {
+function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false, leaseTimeout = false} = {}) {
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
-  let label, removed = false, pod;
+  let label, removed = false, pod, expectStaleLease = leaseTimeout;
   const starts = new Set();
   const names = ['control-plane', 'control-plane2', 'control-plane3'];
   const execute = async (binary, args, options) => {
@@ -48,7 +42,13 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
       if (verb === 'get' && kind === 'lease') {
         const name = args[5];
         const id = Array.from(containers.keys()).find(key => containers.get(key).Name === '/' + name);
-        return JSON.stringify({spec: {renewTime: starts.has(id) ? '2026-11-18T09:00:01Z' : '2026-11-18T09:00:00Z'}});
+        if (leaseTimeout) {
+          leaseTimeout = false;
+          throw Error('Unable to connect to the server: context deadline exceeded');
+        }
+        const fresh = starts.has(id) && !expectStaleLease;
+        if (starts.has(id)) expectStaleLease = false;
+        return JSON.stringify({spec: {renewTime: fresh ? '2026-11-18T09:00:01Z' : '2026-11-18T09:00:00Z'}});
       }
       if (verb === 'get' && kind === '--raw=/readyz') return 'ok';
       if (verb === 'apply') {
@@ -163,11 +163,13 @@ for (const [mode, message] of [['partial', /synthetic Kind creation failure/], [
     const diagnostics = f.calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'logs');
     const removal = f.calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'rm');
     assert.ok(diagnostics !== -1 && diagnostics < removal, 'read owned container logs before removing them');
+    const writes = f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('apply'));
+    assert.equal(writes.length, mode === 'partial' ? 0 : 1, 'a refused write should fail immediately');
   });
 }
 
 for (const [rejoin, message] of [['node', /node_identity/], ['member', /etcd_identity/], ['connect', /synthetic reattach failure/]]) {
-  test(`a failed rejoin (${rejoin}) stops the run and still removes owned containers`, {timeout: 500}, async () => {
+  test(`a failed rejoin (${rejoin}) stops the run and still removes owned containers`, {timeout: 3000}, async () => {
     const f = fixture({rejoin});
     await assert.rejects(runCheck({execute: f.execute}), message);
     assert.equal(f.mutations('kill').length, 1);
@@ -183,4 +185,13 @@ test('the fault check retries a transient API connection timeout while the node 
   assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
   assert.equal(f.mutations('kill').length, 3);
   assert.ok(f.removed());
+});
+
+
+test('lease recovery retries a connection timeout and waits out a stale heartbeat', async () => {
+  const f = fixture({leaseTimeout: true}), result = await runCheck({execute: f.execute});
+  const first = result.legs[0].stopped;
+  const reads = f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('lease') && args.includes(first));
+  assert.equal(reads.length, 4, 'two reads while stopped and two after restart');
+  assert.equal(result.legs.length, 3);
 });

@@ -1189,7 +1189,8 @@ plane, run `node scripts/kubernetes-check.mjs --node-loss` in a Linux guest with
 Kind 0.31.0, kubectl 1.34.3, Docker, at least 10 GiB of RAM and 30 GiB of free
 disk. The command uses three control planes and a loopback API address. It stops
 each node in turn, writes and reads a ConfigMap, and checks that a fresh pod runs
-on a surviving node. It then starts the stopped node at its original address and
+on a surviving node. Connection errors are retried within the 90-second outage
+check. The command starts the stopped node at its original address and
 checks that all three original etcd members, which store the cluster state, are
 healthy. The check uses the pinned Kind image and needs no venue images.
 A Linux guest with 15.6 GiB of RAM completed the three outage checks in 17.4,

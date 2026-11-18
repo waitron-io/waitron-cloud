@@ -39,6 +39,14 @@ async function retry(check, signal, canRetry = () => true) {
   signal.throwIfAborted();
 }
 
+function retryApi(check, signal, stage) {
+  return retry(check, signal, error => {
+    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF/i.test(error.message)) return false;
+    process.stderr.write(`Waiting for the Kind API during ${stage}\n${error.message.slice(-2048)}\n`);
+    return true;
+  });
+}
+
 function parseMembers(output) {
   return Object.fromEntries(output.split('\n').map(line => {
     const [id, status, name] = line.split(', ');
@@ -173,11 +181,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
       const name = 'node-loss-' + (index + 1);
       // Success on one API connection does not settle the balancer for the next connection.
-      const duringFault = (args, input) => retry(() => kube(args, {...failover, input}), failover.signal, error => {
-        if (!/Unable to connect to the server:|connection reset by peer|unexpected EOF/i.test(error.message)) return false;
-        process.stderr.write(`Waiting for the Kind API during ${args.slice(0, 3).join(' ')}\n${error.message.slice(-2048)}\n`);
-        return true;
-      });
+      const duringFault = (args, input) => retryApi(() => kube(args, {...failover, input}), failover.signal, args.slice(0, 3).join(' '));
       const apply = manifest => duringFault(['apply', '-f', '-'], JSON.stringify({apiVersion: 'v1', metadata: {name}, ...manifest}));
       await apply({kind: 'ConfigMap', data: {stopped: node.name}});
       const config = JSON.parse(await duringFault(['get', 'configmap', name, '-o', 'json']));
@@ -191,7 +195,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       await expectStopped();
       const failoverMs = Math.round(performance.now() - started);
       const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
-      const leaseWhileStopped = await heartbeat(node.name, rejoin);
+      const leaseWhileStopped = await retryApi(() => heartbeat(node.name, rejoin), rejoin.signal, 'lease before restart');
       await verifyNetwork(rejoin);
       await docker(['network', 'disconnect', networkId, node.id], rejoin);
       await docker(['network', 'connect', networkId, '--ip', node.ip, node.id], rejoin);
@@ -200,8 +204,9 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       assert.equal(restarted.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_after_restart');
       // Ready can still hold its pre-outage value while the kubelet is absent.
       await retry(async () => assert.ok(await heartbeat(node.name, rejoin) > leaseWhileStopped, 'node_loss.stale_heartbeat'), rejoin.signal);
-      await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin);
-      assert.deepEqual(await readNodes(rejoin), nodeUids, 'node_loss.node_identity');
+      await retryApi(() => kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin), rejoin.signal, 'nodes Ready');
+      const restartedNodes = await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity');
+      assert.deepEqual(restartedNodes, nodeUids, 'node_loss.node_identity');
       assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
       legs.push({stopped: node.name, scheduledOn, failoverMs});
     }
