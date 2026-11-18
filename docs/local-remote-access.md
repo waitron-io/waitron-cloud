@@ -177,7 +177,7 @@ The gateway reads up to 128 files of at most 16 KiB each per second. A failed di
 It skips invalid files, including filenames too long for the filesystem. Route withdrawal and expiry take effect immediately.
 
 HAProxy sends connections offering `acme-tls/1` on port 443 to the loopback TLS 1.3 listener.
-Read ready names in `status.json` under `challenges.answerable`. Worker orders, live qualification and multi-gateway delivery are open.
+Read ready names in `status.json` under `challenges.answerable`. The two-cell proof and live qualification remain open.
 
 ## Reconcile routes and certificates
 
@@ -185,8 +185,9 @@ Use the durable reconciler after migrations have run and placements have been as
 It projects current PostgreSQL state into signed, expiring gateway manifests and checks
 public and staff certificates for renewal. Its leases survive a process restart, prevent
 two workers from completing the same claim and retry failures with a bounded backoff.
-After eight consecutive failures, a target is parked until its desired state changes or
-the target is disabled and enabled again.
+Route and staff jobs with ordinary failures park after eight consecutive failures.
+Name and public certificate jobs keep retrying. With gateway checks enabled, custom
+staff jobs also keep retrying through DNS failures and unavailable gateways.
 
 Create a trusted JSON file naming cells and the worker's private key directory:
 
@@ -309,6 +310,31 @@ Public certificate changes reload the gateway by default. Set
 reloads retain the same signed manifest and name their predecessor process.
 Its `peer-cli.ts` is a local bridge to `host.docker.internal`, not an installer for a
 customer appliance. Neither component changes the host's network interfaces.
+
+## Configure a custom-name certificate check
+
+Assigned names use a DNS challenge through the worker's DNS module. For a custom
+address, configure the worker with the gateway's private check folder so it can
+answer the certificate authority on port 443. When you construct
+`FileReconcilerArtifacts`, supply the absolute `challenges` directory per route cell.
+Pass a `gatewayStatus` reader to `RemoteConfigurationReconciler` that reports the
+answerable names from every gateway in each cell. Give that reader access to status
+data only. The command-line worker and account portal still use two DNS records
+for custom names until the local wiring and one-record switch are available.
+
+Before a gateway check, the worker verifies that the custom CNAME still points to
+the assigned address. If the record has moved, Cloud keeps the current certificate while
+the worker retries. A failed DNS lookup leaves the last known record state in place.
+Point the record back and allow up to 15 minutes for the next attempt. For a staged
+move, the worker writes the check into both cells and waits until all mapped
+gateways report that name ready. The certificate claim lasts five
+minutes. The worker stops accepting an order result 15 seconds before the claim ends.
+
+The worker reserves the name in PostgreSQL before contacting the certificate authority.
+A crashed worker leaves the reservation for one extra five-minute claim. The ACME
+client can still have a network request in flight after that reservation expires, so
+the reservation cannot exclude another request beyond that window. The worker checks
+the claim and installation revision again before publishing a certificate.
 
 ## Exchange staff certificates without shared files
 

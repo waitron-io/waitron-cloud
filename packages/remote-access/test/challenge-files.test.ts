@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtemp, rm, symlink, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, readdir, rm, stat, symlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import forge from 'node-forge';
-import {readChallengeFolder} from '../src/challenge-files.ts';
+import {deleteChallenge, readChallengeFolder, writeChallenge} from '../src/challenge-files.ts';
 import {challengeCertificate} from './fixtures/challenge-certificate.ts';
 
 const now = 100_000;
@@ -97,9 +97,35 @@ test('a symlink and FIFO cannot supply or stall a check', async t => {
   // A blocked open can outlive Node's in-process test timeout.
   const reader = new URL('../src/challenge-files.ts', import.meta.url).href;
   const size = execFileSync(process.execPath, ['--input-type=module', '-e', `
-    import {readChallengeFolder} from ${JSON.stringify(reader)};
+    import {deleteChallenge, readChallengeFolder, writeChallenge} from ${JSON.stringify(reader)};
     const [folder, name] = process.argv.slice(1);
     console.log((await readChallengeFolder(folder, new Set([name]), ${now})).size);
   `, folder, hostname], {encoding: 'utf8', timeout: 3000, killSignal: 'SIGKILL'});
   assert.equal(size.trim(), '0');
+});
+
+test('the gateway reads a real check certificate from a private file for a 237-character name',async t=>{
+ const folder=await mkdtemp(join(tmpdir(),'cloud-check-writer-'));
+ t.after(()=>rm(folder,{recursive:true,force:true}));
+ const hostname=['a'.repeat(63),'b'.repeat(63),'c'.repeat(63),'d'.repeat(45)].join('.');
+ assert.equal(hostname.length,237);
+ const now=Date.now(),check=await challengeCertificate(hostname,now+30_000);
+ await writeChallenge(folder,check,now);
+ const path=join(folder,hostname+'.json');
+ assert.equal((await stat(path)).mode&0o777,0o600);
+ assert.deepEqual(JSON.parse(await readFile(path,'utf8')),check);
+ assert.ok((await readChallengeFolder(folder,new Set([hostname]),now)).has(hostname));
+ await deleteChallenge(folder,hostname);
+ assert.deepEqual(await readdir(folder),[]);
+});
+test('writing a check sweeps expired files and keeps another live name',async t=>{
+ const folder=await mkdtemp(join(tmpdir(),'cloud-check-writer-'));
+ t.after(()=>rm(folder,{recursive:true,force:true}));
+ const now=Date.now(),expired=await challengeCertificate('expired.example.test',now+1000);
+ const live=await challengeCertificate('live.example.test',now+5000);
+ const incoming=await challengeCertificate('incoming.example.test',now+5000);
+ await writeChallenge(folder,expired,now);
+ await writeChallenge(folder,live,now);
+ await writeChallenge(folder,incoming,now+1001);
+ assert.deepEqual((await readdir(folder)).sort(),['incoming.example.test.json','live.example.test.json']);
 });

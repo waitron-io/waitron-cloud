@@ -51,3 +51,11 @@ also passed once in 9,418 ms through the authorised Mac Docker wrapper; that ARM
 run does not qualify the Linux runner or explain its delay. Preserve the command,
 test and migration-refusal checks. The startup cause remains open; another green
 CI execution qualifies that candidate without fixing this failure.
+
+
+On 18 November, [PR #1298's translation job](https://github.com/waitron-io/waitron-cloud/actions/runs/44284215135/job/134733197758)
+reported the same command ending with exit 255 and `ETIMEDOUT` after 20,007 ms.
+Bootstrap had exited successfully. PostgreSQL was still starting, and the
+migration and translation containers were still in the created state. The
+launcher and Compose inputs match the base revision. This occurrence happened
+before the migration container started. The startup cause remains open.

@@ -94,7 +94,7 @@ test('decision admission requires current operator, request-forgery token and fr
 });
 
 test('populatedUpgradePreservesRows: append action storage without changing existing accounts or migration digests',async()=>{
- assert.equal(migrationNames.at(66),'067_cloud_actions.sql');assert.equal(migrationNames.at(67),'068_owner_transfer.sql');assert.equal(migrationNames.at(68),'069_billing_tax_details.sql');assert.equal(migrationNames.at(69),'070_stable_remote_names.sql');assert.equal(migrationNames.at(70),'071_owner_recovery.sql');assert.equal(migrationNames.at(71),'072_remote_name_records.sql');assert.equal(migrationNames.at(-1),'073_retire_certificate_expiry_incidents.sql');
+ assert.equal(migrationNames.at(66),'067_cloud_actions.sql');assert.equal(migrationNames.at(67),'068_owner_transfer.sql');assert.equal(migrationNames.at(68),'069_billing_tax_details.sql');assert.equal(migrationNames.at(69),'070_stable_remote_names.sql');assert.equal(migrationNames.at(70),'071_owner_recovery.sql');assert.equal(migrationNames.at(71),'072_remote_name_records.sql');assert.equal(migrationNames.at(72),'073_retire_certificate_expiry_incidents.sql');assert.equal(migrationNames.at(-1),'074_remote_certificate_orders.sql');
  const old=`old_actions_${randomUUID().replaceAll('-','')}`,legacy=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${old}`});
  try{
   await admin.query(`CREATE SCHEMA ${old}`);await legacy.query('CREATE TABLE schema_migrations(name text PRIMARY KEY,digest text NOT NULL,applied_at timestamptz NOT NULL DEFAULT clock_timestamp())');

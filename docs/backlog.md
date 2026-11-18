@@ -715,9 +715,10 @@ stored names and signed reply. DNS movement is checked locally by
 `scripts/remote-reconciler-receipt.mjs`; live DNS qualification remains open.
 Remaining work:
 
-- Reduce an owner’s custom name to one CNAME. Connect the certificate worker to
-  the gateway’s local TLS-ALPN-01 responder and qualify issuance end to end.
-- Issue, renew and install every certificate automatically.
+- Wire a runnable worker to the private gateway check and status paths. Switch the
+  account portal and API to one CNAME in the same pull request. Prove issuance and
+  renewal through Pebble, then move the venue without changing the owner’s record.
+- Qualify automatic staff certificate installation on the appliance.
 - Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 
 Waitron’s part, taking its staff name from Cloud, is a separate plan in Waitron

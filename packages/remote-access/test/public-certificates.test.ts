@@ -7,7 +7,7 @@ import {afterEach,beforeEach,test} from 'node:test';
 import forge from 'node-forge';
 import {staffExchangeFixture} from './staff-exchange-fixture.ts';
 import {FileReconcilerArtifacts} from '../src/reconciler-files.ts';
-import {RemoteConfigurationReconciler,remoteConfigurationStatus} from '../src/reconciler.ts';
+import {RemoteConfigurationReconciler,remoteConfigurationStatus,type CertificateIssueTarget} from '../src/reconciler.ts';
 
 const ca=forge.pki.privateKeyFromPem(generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'}).toString());
 let f:Awaited<ReturnType<typeof staffExchangeFixture>>,root:string;
@@ -23,10 +23,11 @@ async function fixture(){
  const venue=await f.venue(),target=randomUUID();await f.store.createCell({id:target,country:'ES',provider:'aws',environment:'test',suffix:'destination.example.test',subnet:53,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.destination.example.test:51820'});
  const routes=await Promise.all([venue.placement.cellId,target].map(async cellId=>{const publicCertificates=join(root,cellId);await mkdir(publicCertificates);return {cellId,output:join(root,cellId+'.json'),publicCertificates};}));
  const files=new FileReconcilerArtifacts({keyDirectory:join(root,'keys'),routes});let now=Date.now(),issues=0,fail=false;
- const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:files,now:()=>now,issueCertificate:async value=>{issues++;if(fail)throw Error('synthetic issuer unavailable');return chain(value.csr,value.hostname,now);}});
+ const validations:CertificateIssueTarget['validation'][]=[];
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:files,now:()=>now,issueCertificate:async value=>{issues++;validations.push(value.validation);if(fail)throw Error('synthetic issuer unavailable');return chain(value.csr,value.hostname,now);}});
  async function run(selected=worker){await selected.schedule();await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[venue.installationId]);assert.equal(await selected.runOnce(),true);}
  async function stage(){const move=await f.store.stageMove({operationId:randomUUID(),installationId:venue.installationId,targetCellId:target,targetPeerPublicKey:venue.placement.peerPublicKey,expectedRevision:1});await f.store.markMoveReady(move.operationId,1,(await f.store.manifest(target)).sequence);return move;}
- return {venue,target,routes,files,worker,run,stage,issues:()=>issues,fail:()=>{fail=true;},recover:()=>{fail=false;},advance:()=>{now+=61*86400000;},copy:()=>files.readPublicCertificate(venue.installationId),read:(cell:string)=>readFile(join(root,cell,venue.venueId+'.pem'),'utf8')};
+ return {venue,target,routes,files,worker,run,stage,validations,issues:()=>issues,fail:()=>{fail=true;},recover:()=>{fail=false;},advance:()=>{now+=61*86400000;},copy:()=>files.readPublicCertificate(venue.installationId),read:(cell:string)=>readFile(join(root,cell,venue.venueId+'.pem'),'utf8')};
 }
 
 test('a newly placed venue gets its public certificate without per-venue files or an operator command',async()=>{
@@ -40,6 +41,9 @@ test('changing the public name makes a new matching key and chain instead of par
  const s=await fixture();await s.run();const old=await s.copy();assert.ok(old);
  await f.store.setHostname(s.venue.installationId,'public','menu.cafe.example.test',1,async name=>[name.startsWith('_acme-challenge.')?'_acme-challenge.'+s.venue.placement.publicHostname:s.venue.placement.publicHostname]);
  await s.run();const copy=await s.copy();assert.ok(copy);assert.notEqual(copy.csr,old.csr);assert.equal(new X509Certificate(copy.pem).checkHost('menu.cafe.example.test'),'menu.cafe.example.test');assert.equal(s.issues(),2);
+ assert.deepEqual(s.validations.map(validation=>validation.type),['dns-01','dns-01']);
+ assert.deepEqual(s.validations.at(-1),{type:'dns-01',dnsName:'_acme-challenge.'+s.venue.placement.publicHostname});
+
 });
 
 test('a staged move copies a usable public certificate without another order',async()=>{

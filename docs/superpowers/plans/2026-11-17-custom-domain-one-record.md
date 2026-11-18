@@ -4,7 +4,7 @@
 
 **Goal:** An owner's own staff or public name needs one CNAME; Cloud gets its certificate with Let's Encrypt's TLS-ALPN-01 check on port 443; every venue keeps the same assigned names when it moves cell; every certificate is issued and renewed with nobody acting; an owner whose record has moved is told in their language.
 
-**Architecture:** Eight Cloud pull requests, landed in order. Names are stored once at placement under a configured country zone (PR 1) and Cloud keeps one CNAME per stable name pointing at the venue's current cell (PR 2). Owner certificate-expiry alerts go (PR 3). The renewal worker makes and publishes public keys and certificates itself, staff certificates use only the database exchange, and a move cannot commit before the destination holds the certificate (PR 4). Plain check files (one per name, delivered like public certificates) and a loopback TLS responder in the gateway answer `acme-tls/1` connections (PR 5); the worker uses them for custom names and the owner's instructions shrink to one record (PR 6). The record-moved notice and email follow (PR 7), then the local Pebble proof (PR 8).
+**Architecture:** Eight Cloud pull requests, landed in order. Names are stored once at placement under a configured country zone (PR 1) and Cloud keeps one CNAME per stable name pointing at the venue's current cell (PR 2). Owner certificate-expiry alerts go (PR 3). The renewal worker makes and publishes public keys and certificates itself, staff certificates use only the database exchange, and a move cannot commit before the destination holds the certificate (PR 4). Plain check files (one per name, delivered like public certificates) and a loopback TLS responder in the gateway answer `acme-tls/1` connections (PR 5); the worker gains support for them (PR 6). The record-moved notice and email follow (PR 7). PR 8 wires a runnable worker, switches the portal and API to one record, and runs the local Pebble proof.
 
 **Tech Stack:** Node 26 TypeScript (type stripping), Node 24 in the gateway image, `node:test`, PostgreSQL through `scripts/test-postgres.mjs`, `acme-client` 5.4.0, HAProxy 3.2.26 (Alpine 3.23 `apk add haproxy`, measured), Docker, Pebble and pebble-challtestsrv (digests pinned in `scripts/remote-fixtures.mjs`), Lit portal.
 
@@ -22,9 +22,9 @@
   - The gateway's check listener is `127.0.0.1:8445`, ALPN protocol `acme-tls/1`, behind the HAProxy rule `use_backend acme_alpn if { req.ssl_alpn -m str acme-tls/1 }`, placed before every other `use_backend`.
   - Each check gets a throwaway ECDSA P-256 key.
   - Custom names keep the **237**-character limit.
-  - Certificate jobs (`certificate_staff`, `certificate_public`) hold a **300**-second claim; route and name jobs keep **120** seconds (Task 6.3, builder's call 13).
+  - Certificate jobs (`certificate_staff`, `certificate_public`) hold a **300**-second claim; route jobs hold **120** seconds and name jobs hold **180** seconds (Task 6.3, builder's call 13).
 - Incident kinds added: `public_record_moved`, `staff_record_moved`. Incident kinds no longer raised: `public_certificate_expiring`, `staff_certificate_expiring`.
-- Copy is fixed in Tasks 6.8 and 7.1; English and Spanish change together.
+- Copy is fixed in Tasks 8.2 and 7.1; English and Spanish change together.
 - By construction, a gateway never serves a public certificate for a name that is not a route: HAProxy sends a name to the public TLS frontend only through a `use_backend public_tls if { req.ssl_sni -m str <publicHostname> }` line rendered per route (`packages/remote-access/src/config.ts:25-26`). Every other name falls to `default_backend denied`. Public certificate files sitting in `/input/public-certs` therefore never widen what is served.
 
 ## Builder's calls made in this plan (one line each)
@@ -40,8 +40,8 @@
 9. **Check files (revised design, approach b):** one plain `<hostname>.json` for each routed name. Only the authorised check writer can create these files in the private directory; staff names also use this responder. PR 6 writes atomically (temporary file, then rename, mode 0600), deletes a file when the order ends and sweeps expired files on write. The file's `expiresAt` is the job's `lease_until`. The gateway refreshes files in its existing one-second loop.
 10. **Loopback listener:** a sibling of the public gate inside the gateway process (`AlpnResponder`), not part of `public-gate.ts`.
 11. **Restart:** a gateway holds no check state of its own. After a restart it reads the folder again and answers only unexpired files for current route names, so there is no older list to fall back to.
-12. **What "answerable" means, and how the proof reads it:** each gateway's `status.json` gains `challenges: {answerable: string[]}`. A name is answerable only when its file is unexpired and well formed, its secure context was built, HAProxy is running, and the name is a route in the gateway's currently accepted manifest. The worker waits until its own name is answerable on every gateway of every cell it wrote to, so one venue's unanswerable file never holds up another's. The worker reads those status files through a `gatewayStatusFiles` list per cell; the local proof mounts each gateway's state folder, as it already does.
-13. **Claim and deadline:** bounded, not renewed. Certificate jobs get a 300-second claim, and route and name jobs keep 120 s. The order's deadline is `lease_until` − 15 s, which leaves 285 s.
+12. **What "answerable" means, and how the proof reads it:** each gateway's `status.json` gains `challenges: {answerable: string[]}`. A name is answerable only when its file is unexpired and well formed, its secure context was built, HAProxy is running, and the name is a route in the gateway's currently accepted manifest. The worker waits until its own name is answerable on every gateway of every cell it wrote to, so one venue's unanswerable file never holds up another's. The worker uses an injected `GatewayChallengeStatus`; the local proof reads each status file through its existing gateway reader.
+13. **Claim and deadline:** bounded, not renewed. Certificate jobs get a 300-second claim, route jobs keep 120 s, and name jobs get 180 s for two Route 53 writes of up to 75 s each. The order's deadline is `lease_until` − 15 s, which leaves 285 s.
     - **DNS-01 worst case, about 110 s:**
       - Route 53 publication: up to 75 s (`route53-dns.ts:14`);
       - Let's Encrypt validation wait: about 10 s (`issueCertificate`'s client backoff, 5 attempts between 0.5 and 3 s, so 0.5+1+2+3+3 = 9.5 s, plus requests);
@@ -50,15 +50,15 @@
       - account, order and authorization requests: about 5 s.
     - **TLS-ALPN-01 worst case, about 81 s:** writing the files (about 1 s), the 45-second gateway wait, about 10 s of validation, deleting the files (about 1 s), about 10 s to finalize, and about 5 s of requests, plus 10 s for one slow status read.
     - Both leave at least 175 s of margin inside the 285-second deadline. The gateway wait still gives up at the earlier of 45 s and the deadline minus 30 s.
-14. **One order per name, for both checks:** a `remote_certificate_orders(hostname)` row is written before any order, DNS-01 or TLS-ALPN-01. It records the cells its check files went to (`cell_ids`, empty for DNS-01) and lives until the job's `lease_until` + 300 s, one more certificate claim. A worker that finds a live row from another claim refuses with `order_in_flight` and starts no order. `acme-client`'s `auto()` takes no abort signal, so this time-based row is the real protection. The gap left is one ACME call that hangs for longer than the row lives. The same row is what the move gate reads (Task 6.7), so no separate entries table exists.
-15. **`dns_not_verified` retries:** the job is released with the existing 900-second ceiling and never parked, because only the owner can fix it and it spends no Let's Encrypt allowance.
-16. **Where the moved state lives:** a `record_moved_at` column on `remote_hostnames`, scoped to the venue's name row. `schedule()` resets `last_error` whenever a job's desired digest changes (any revision bump), and a staff request at an old revision disables the staff job (`reconciler.ts:101`), so `last_error` would make the notice flicker. The column is cleared only by a successful record check, a successful certificate for that name, or a change of name. The date shown is the latest probe observation's `certificate_not_after` for that service; with no observation the notice uses the no-date variant.
+14. **One order per name, for both checks:** a `remote_certificate_orders(hostname)` row is written before any order, DNS-01 or TLS-ALPN-01. It records the claim ID and lives until the job's `lease_until` + 300 s, one more certificate claim. A worker that finds a live row from another claim refuses with `order_in_flight` and starts no order. `acme-client`'s `auto()` takes no abort signal, so this time-based row is the real protection. The gap left is one ACME call that hangs for longer than the row lives.
+15. **Custom-name retries:** a moved record or a gateway that cannot yet answer a check uses the existing 900-second ceiling without parking the job.
+16. **Where the moved state lives:** a `record_moved_at` column on `remote_hostnames`, scoped to the venue's name row. `schedule()` resets `last_error` whenever a job's desired digest changes (any revision bump), and a staff request at an old revision disables the staff job (`reconciler.ts:101`), so `last_error` would make the notice flicker. A wrong or missing DNS record sets the column. A lookup failure leaves that state in place and retries. A successful record check or a change of name clears it. The date shown is the latest probe observation's `certificate_not_after` for that service; with no observation the notice uses the no-date variant.
 17. **237-character limit:** kept.
 18. **Leftover expiry incidents:** a PR 3 migration suppresses open `*_certificate_expiring` incidents, their open episodes and their waiting reminders (chosen over a lasting filter in `diagnostics.ts`). The CHECK keeps the two kinds, so no rows are deleted.
 19. **Proof staff issuance before Waitron's change:** `scripts/test-local-remote.mjs` seeds the request row in `staff_certificate_exchange` from the box's CSR (taken over the fixture's existing `csrHostname` IPC), runs the worker, and installs over the existing `certificate` IPC. The signed HTTP endpoints stay proved by `scripts/staff-certificate-receipt.mjs`.
 20. **HAProxy pin:** none. HAProxy 3.2.26 from the image accepts `req.ssl_alpn` (`haproxy -c` passed; a control with an unknown fetch failed), and the gateway already runs `haproxy -c` on every configuration it writes.
 21. **Worker DNS lookups:** `verifyDelegation` in the worker and in **Check again** uses `boundedResolveCname` (1-second resolver timeout, 1 try, 3-second overall bound). It moves from account-http's private `boundedResolve` (`packages/account-http/src/remote-access.ts:15-19`) into `packages/remote-access/src/dns-lookup.ts`, and account-http imports it from there.
-22. **Move gate:** `completeMove` refuses `move_destination_incomplete` unless the destination holds the public certificate (Task 4.8) and no live order of the venue has check files that left out the destination cell (Task 6.7). The route part is the existing readiness sequence.
+22. **Move gate:** `completeMove` refuses `move_destination_incomplete` unless the destination holds the public certificate (Task 4.8). The existing readiness sequence checks the route. A move increments the revision, so an order for the previous revision cannot publish.
 
 ## Review Focus
 
@@ -79,9 +79,9 @@
 | 3 | No owner certificate-expiry alerts | — (may land any time) | 2 | ~+30 / −150 (migration ~15) | ~150 changed | docs ~30 | Yes: migration (light otherwise) |
 | 4 | Public certificates are Cloud's alone; staff only through the database exchange; move gate | 1 | 8 | ~330 | ~500 | proofs ~250, docs ~80 | Yes: certificates and keys; cell moves |
 | 5 | Plain check files and the gateway's check responder | 4 (shares `gateway-cli.ts`) | 4 | ~200 | ~380 | docs ~40 | Yes: keys; gateway routing decides who reaches a venue |
-| 6 | One DNS record: TLS-ALPN-01 for custom names | 1, 4, 5 | 8 | ~420 (migration ~12) | ~700 | docs ~60 | Yes: certificates; name checks; migration; portal/API |
+| 6 | Worker support for TLS-ALPN-01 with the existing DNS path retained | 1, 4, 5 | 7 | ~300 (migration ~8) | ~575 | docs ~90 | Yes: certificates; name checks; migration |
 | 7 | Telling the owner their record moved | 3, 6 | 4 | ~330 | ~500 | docs ~30 | Yes: owner-only reads; migration |
-| 8 | Local proof through Pebble TLS-ALPN-01 and a two-cell move | 2, 6 | 3 | 0 | ~40 (verifier) | proof ~280, docs ~40 | No |
+| 8 | Runnable worker, one-record portal and API, and the two-cell Pebble proof | 2, 6 | 3 | ~130 | ~280 | proof ~280, docs ~70 | Yes: worker configuration and portal/API contract |
 
 The estimates are judged from each PR's tasks and the files they touch, not measured. They count added and changed lines, and leave out lockfiles and test fixtures copied verbatim.
 
@@ -421,43 +421,34 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
 
 ---
 
-## PR 6 — One DNS record: TLS-ALPN-01 for custom names
+## PR 6 — Worker support for TLS-ALPN-01 custom names
 
-### Task 6.1: One record, and a check choice in `issueCertificate`
+A worker with injected gateway status and private check folders can present the gateway's port-443 check. The command-line worker keeps DNS-01 for custom names and the account portal and API keep their two records. The watcher cleared this smaller cut on 18 November at 11:08 CET after both branch reviews. PR 8 adds the runnable wiring and changes the portal and API together. The Amazon test Cloud adapter has its own queued work.
+
+### Task 6.1: Choose the ACME check in `issueCertificate`
 
 **Files:**
-- Modify: `packages/remote-access/src/certificates.ts`; callers in `packages/remote-access/src/reconciler-cli.ts` and `scripts/remote-acme-worker.mjs`
-- Test: `packages/remote-access/test/certificates.test.ts`
+- Modify: `packages/remote-access/src/certificates.ts` and its callers in `reconciler-cli.ts` and `scripts/remote-acme-worker.mjs`.
+- Test: `packages/remote-access/test/certificates.test.ts`.
 
 **Interfaces:**
-- Produces:
-  - `dnsInstructions(custom:string,assigned:string):[{type:'CNAME';name:string;value:string}]`
-  - `verifyDelegation(custom,assigned,resolve)`: exactly one answer for `custom`, equal to `assigned` (trailing dot and case ignored), else `dns_not_verified`
-  - `type CertificateValidation = {type:'dns-01'; dnsName:string; dns:DnsChallengeProvider} | {type:'tls-alpn-01'; present:(entry:{hostname:string;certificate:string;key:string},signal?:AbortSignal)=>Promise<void>; withdraw:(hostname:string)=>Promise<void>}`
-  - `issueCertificate(options:{directoryUrl;accountKey;email;hostname;csr;validation:CertificateValidation;signal?})`, which uses `challengePriority:[validation.type]`
-  - `challengeHandlers(options):{challengeCreateFn,challengeRemoveFn}`, exported for tests
+- `CertificateValidation` is either DNS-01 with a challenge name and DNS provider or TLS-ALPN-01 with callbacks to present and withdraw a check file.
+- `issueCertificate` requests only the selected check. Its handlers refuse a different hostname or challenge type. The TLS-ALPN-01 certificate uses a temporary P-256 key.
+- Keep both CNAMEs in `dnsInstructions` and `verifyDelegation`. PR 8 changes the shared response and the portal together.
 
-- [ ] **Step 1: Write the failing tests**:
-  - `dnsInstructions returns only the routing CNAME`.
-  - `verifyDelegation passes with one correct record and needs no _acme-challenge lookup` (the resolver is called once).
-  - `verifyDelegation refuses a missing, wrong or two-answer record with dns_not_verified`.
-  - `a tls-alpn-01 order presents an entry for exactly the ordered name` — it passes `isAlpnCertificateAuthorizationValid` and its key is ECDSA P-256.
-  - A different identifier, or a `dns-01` challenge under `tls-alpn-01`, gives `unexpected_challenge`.
-
-  The two-record assertions change deliberately (Changed test checks).
-- [ ] **Step 2: Run** `pnpm --dir packages/remote-access exec node --test test/certificates.test.ts`; FAIL. **Implement**; update the callers to `validation:{type:'dns-01',dnsName,dns}`.
-- [ ] **Step 3: Run** it again and `node scripts/test-local-acme.mjs`; PASS. **Commit** `git commit -s -m "Ask owners for one record and choose the ACME check per name"`.
+- [ ] **Step 1:** Write the callback checks for a valid temporary certificate, wrong name and wrong challenge type. Preserve the two-record test.
+- [ ] **Step 2:** Run the focused tests before and after the change, then run `node scripts/test-local-acme.mjs` to verify the existing DNS path.
 
 ### Task 6.2: Migration — certificate orders and the moved-record column
 
 **Files:**
 - Create: `packages/registration/migrations/NNN_remote_certificate_orders.sql`:
-  - `remote_certificate_orders(hostname text PRIMARY KEY, installation_id uuid NOT NULL REFERENCES installations(id), claim_id uuid NOT NULL, cell_ids uuid[] NOT NULL DEFAULT '{}', expires_at timestamptz NOT NULL)`
+  - `remote_certificate_orders(hostname text PRIMARY KEY, claim_id uuid NOT NULL, expires_at timestamptz NOT NULL)`
   - `remote_hostnames.record_moved_at timestamptz`
 - Modify: `packages/registration/src/migrate.ts` and the three pinned migration tests
 - Test: `packages/registration/test/certificate-orders-migration.test.ts`
 
-- [ ] **Step 1: Write the failing test** `the certificate orders table holds one row per hostname`: a second insert for the same hostname fails with `23505`; `cell_ids` defaults to `{}`; `record_moved_at` is null on existing `remote_hostnames` rows.
+- [ ] **Step 1: Write the failing test** `the certificate orders table holds one row per hostname`: a second insert for the same hostname fails with `23505`; `record_moved_at` is null on existing `remote_hostnames` rows.
 - [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/certificate-orders-migration.test.ts`; FAIL. **Write the migration**; run it and the pinned tests; PASS.
 - [ ] **Step 3: Commit** `git commit -s -m "Add certificate order rows and the moved-record column"`.
 
@@ -465,7 +456,7 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
 
 **Files:**
 - Modify: `packages/remote-access/src/reconciler.ts`:
-  - the claim at line 157 becomes `lease_until = clock_timestamp() + CASE WHEN kind LIKE 'certificate_%' THEN interval '300 seconds' ELSE interval '120 seconds' END`;
+  - the claim at line 157 becomes `lease_until = clock_timestamp() + CASE WHEN kind LIKE 'certificate_%' THEN interval '300 seconds' WHEN kind = 'name' THEN interval '180 seconds' ELSE interval '120 seconds' END`;
   - `RemoteConfigurationJob.leaseUntil` is read from `lease_until`;
   - an order guard goes around every `issueCertificate` call;
   - the order's deadline is checked against the reconciler's injected `now` and backed by a real timer.
@@ -475,13 +466,15 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
 **Interfaces:**
 - Produces:
   - `RemoteConfigurationJob.leaseUntil:number`.
-  - Before ordering, the job inserts `remote_certificate_orders(hostname, installation_id, claim_id, cell_ids, expires_at = lease_until + 300 s)`, replacing an expired row. `cell_ids` is the cells its check files go to (empty for DNS-01). A live row from another claim refuses `order_in_flight`, and no order starts. The row is deleted in `finally`.
+  - Before ordering, the job inserts `remote_certificate_orders(hostname, claim_id, expires_at = lease_until + 300 s)`, replacing an expired row. A live row from another claim refuses `order_in_flight`, and no order starts. The row is deleted in `finally`.
   - `deadline = leaseUntil − 15 000` ms. The order's signal is `AbortSignal.any([signal, AbortSignal.timeout(deadline − now())])`. In addition, `deadline` is compared with `this.#now()` after each order step (publication, wait, validation) and before `#complete`; past it, the job ends the order without publishing.
+
+- Give `#release` an explicit reason code. For `challenge_not_answerable` and `dns_not_verified`, reuse the bounded retry with a 900-second ceiling and cap attempts at 7 so staff jobs never park for either reason.
 
 - [ ] **Step 1: Write the failing tests** (a fake issuer that blocks until released; an injected `now`):
   - `two workers never hold orders for one name at once, for DNS-01 and for TLS-ALPN-01` — the first blocks inside the order; force its `lease_until` into the past; the second claims and refuses `order_in_flight`; the issuer was called once.
   - `the order row is removed after success and after failure`.
-  - `certificate jobs claim 300 seconds and route and name jobs keep 120` — read `lease_until − updated_at` after each claim.
+  - `certificate jobs claim 300 seconds, name jobs claim 180 and route jobs claim 120` — read `lease_until − updated_at` after each claim.
   - `a DNS-01 order whose Route 53 step takes the full 75 seconds still completes and publishes inside its claim`. The fake DNS `present` advances the injected clock by 75 000 ms; the fake validation and finalize advance it by another 30 000 ms. The order is not cut short, the certificate is published, and the job completes while its claim is still live.
   - `an order past its deadline ends without publishing` — the injected clock passes `leaseUntil − 15 000`.
 - [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/certificate-orders.test.ts`; FAIL. **Implement**; run it again plus `test/public-certificates.test.ts test/staff-reconciler.test.ts test/reconciler.test.ts test/name-records.test.ts`; PASS.
@@ -496,95 +489,63 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
 **Interfaces:**
 - Produces:
   - `interface GatewayChallengeStatus {read(cellId:string):Promise<ReadonlySet<string>[]>}` — one set of answerable names per known gateway.
-  - `class FileGatewayStatus implements GatewayChallengeStatus` — constructed from `Map<cellId,string[]>` of status files. A missing or unreadable file counts as a gateway that answers nothing.
   - `awaitAnswerable(status:GatewayChallengeStatus,cellIds:string[],hostname:string,options:{signal:AbortSignal;giveUpAt:number;pollMs?:number}):Promise<void>` — resolves once every gateway of every cell in `cellIds` lists `hostname` as answerable; otherwise rejects `challenge_not_answerable` at `giveUpAt`. Default poll is 500 ms.
 
 - [ ] **Step 1: Write the failing tests**:
   - `waits until every gateway reports the name answerable`.
   - `a gateway that has the file but does not list the name keeps it waiting` — this is the file-present, route-absent case.
   - `gives up with challenge_not_answerable at the deadline`.
-  - `a missing status file counts as not ready`.
+  - `a cell without gateway status stays unready`.
 - [ ] **Step 2: Run** `pnpm --dir packages/remote-access exec node --test test/gateway-status.test.ts`; FAIL. **Implement**; run again; PASS.
 - [ ] **Step 3: Commit** `git commit -s -m "Read the gateways' answerable check names"`.
 
 ### Task 6.5: The worker orders custom names with TLS-ALPN-01
 
 **Files:**
-- Modify: `packages/remote-access/src/reconciler.ts` (`CertificateIssueTarget.validation`, `#certificate`, `#staffCertificate`; option `gatewayStatus:GatewayChallengeStatus`)
-- Modify: `packages/remote-access/src/reconciler-cli.ts`, `packages/remote-access/src/reconciler-files.ts` — routes gain `challenges:string` (the cell's check folder, absolute) and `gatewayStatusFiles:string[]` (absolute), both required; `ReconcilerArtifacts` gains `writeChallenge(cellId:string,file:ChallengeFile):Promise<void>` and `deleteChallenge(cellId:string,hostname:string):Promise<void>`, which call Task 5.1's helpers (`writeChallenge` sweeps expired files first)
-- Test: `packages/remote-access/test/alpn-reconciler.test.ts`
+- Modify: `packages/remote-access/src/reconciler.ts` (`CertificateIssueTarget.validation`, `#certificate`, `#staffCertificate`; option `gatewayStatus:GatewayChallengeStatus`). Keep `CertificateIssueTarget.dnsName` for the existing injected DNS issuers.
+- Modify: `packages/remote-access/src/reconciler-files.ts`. Accept an optional absolute `challenges` directory per route when constructing `FileReconcilerArtifacts`. Injecting gateway status enables TLS-ALPN-01 for custom names. If that worker lacks a writable folder for any route cell, it refuses with `challenge_not_answerable` before ordering. A worker without that injection keeps its existing DNS path.
+- Modify: `packages/remote-access/src/challenge-files.ts`. Write the four existing `ChallengeFile` fields through a mode-0600 temporary file named independently of the hostname, then rename. Sweep expired files on write, and delete the order's file on withdrawal. Expose these operations through `ReconcilerArtifacts` as `writeChallenge(cellId,file)` and `deleteChallenge(cellId,hostname)`.
+- Test: `packages/remote-access/test/alpn-reconciler.test.ts`, `packages/remote-access/test/challenge-files.test.ts`.
 
 **Interfaces:**
-- Consumes: `ChallengeFile` and its helpers (5.1), the order guard and deadline (6.3), `awaitAnswerable` (6.4), `routeCells` (4.2), `CertificateValidation` (6.1).
-- Produces:
-  - A name equal to the venue's stored assigned name uses `dns-01` with `_acme-challenge.<assigned>`; any other name uses `tls-alpn-01`.
-  - `present` takes `cells = routeCells(...)` and records them in the order row's `cell_ids`. It then calls `writeChallenge` for each cell with `expiresAt = leaseUntil`, followed by `awaitAnswerable(status, cells, hostname, {giveUpAt: min(now + 45 000, deadline − 30 000)})`.
-  - `withdraw` calls `deleteChallenge` for each cell in `cell_ids`, which also runs in `finally`.
+- Assigned names and custom names on the existing worker use `dns-01` with `_acme-challenge.<assigned>`. A worker with injected gateway status uses `tls-alpn-01` for its custom names.
+- `present` writes to each cell from `routeCells` with `expiresAt = leaseUntil`, then waits for all their gateways with `awaitAnswerable` until the earlier of 45 seconds and 30 seconds before the order deadline.
+- `withdraw` deletes the files in those cells. The order's `finally` also cleans them up.
 
-- [ ] **Step 1: Write the failing tests** (a fake issuer that calls `present`/`withdraw` like `acme-client` and records "ready" only after `present` resolves; a fake `gatewayStatus`; real check folders in a temporary directory):
-  - `an order for a custom name uses TLS-ALPN-01 only, and one for an assigned name DNS-01 only`.
-  - `ready is never sent while the file is present but not answerable`.
-  - `ready is never sent while the file is present but its route has not reached the gateway`. Do `setHostname`, then run the certificate job before the route job: both are due, and the certificate job's kind sorts first. The status leaves the name out until the fake applies the new manifest, and "ready" is recorded only after that.
-  - `a timed-out wait sends nothing and retries` (job `pending`, backoff applied).
-  - `the check files are deleted after success and after failure`.
-  - `a venue with a staged move gets the check file in both cells, and the order row records both`.
-- [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/alpn-reconciler.test.ts`; FAIL. **Implement**; run it plus `test/reconciler.test.ts test/reconciler-cli.test.ts test/public-certificates.test.ts test/staff-reconciler.test.ts`; PASS.
+- [ ] **Step 1: Write the failing tests**:
+  - A custom order for a venue with a staged move writes to both cells and sends ready only once the gateway status includes its name. Both files are removed when the order ends, including after failure. Assigned names and custom names on the existing worker keep DNS-01.
+  - A custom staff job with an unanswerable gateway keeps retrying after eight attempts.
+  - A real `createAlpnCertificate` result survives a write and read through `readChallengeFolder`. A 237-character hostname fits on disk. Withdrawal and expiry sweep remove the intended files.
+- [ ] **Step 2: Run** `test/alpn-reconciler.test.ts` through PostgreSQL and `test/challenge-files.test.ts` directly. Implement after RED. Re-run both, plus the affected public, staff and route tests.
 - [ ] **Step 3: Commit** `git commit -s -m "Order custom-name certificates with the gateway's check"`.
 
 ### Task 6.6: A moved record stops renewal before any order
 
 **Files:**
 - Create: `packages/remote-access/src/dns-lookup.ts` (`boundedResolveCname`, moved from `packages/account-http/src/remote-access.ts:15-19`; add `"./dns-lookup"` to the package `exports`)
-- Modify: `packages/account-http/src/remote-access.ts` (import it), `packages/remote-access/src/reconciler.ts` (`verifyDelegation` with `boundedResolveCname` before ordering a custom name; `#release(job,cancelled,code)`; write and clear `record_moved_at`)
+- Modify: `packages/account-http/src/remote-access.ts` (import it), `packages/remote-access/src/reconciler.ts` (a routing CNAME check with `boundedResolveCname` before a TLS-ALPN-01 order; accept `resolveCname` in `ReconcilerOptions`; write and clear `record_moved_at`)
 - Modify: `packages/remote-access/src/placement.ts` (`setHostname`'s UPDATE also sets `record_moved_at = NULL`)
-- Test: `packages/remote-access/test/record-moved-renewal.test.ts`
+- Test: `packages/remote-access/test/record-moved-renewal.test.ts` and `packages/remote-access/test/dns-lookup.test.ts`. The existing account HTTP refusal test stays.
 
 **Interfaces:**
 - Produces:
-  - `boundedResolveCname(name:string):Promise<string[]>` (1 s per try, 1 try, 3 s overall, rejecting `dns_not_verified`).
-  - `#release(job,cancelled,code:'reconcile_failed'|'dns_not_verified')`. With `dns_not_verified` it sets `last_error`, status `pending`, `available_at` = now + `min(900, 30*2^(attempts-1))` s and `attempts = least(attempts,7)`.
-  - `remote_hostnames.record_moved_at` is set at the first `dns_not_verified`. It is cleared by a passing record check, a published certificate for that name, or `setHostname`.
+  - `boundedResolveCname(name:string, custom?):Promise<string[]>` (1 s per try, 1 try, 3 s overall, rejecting `dns_not_verified`). Keep the existing resolver injection for the account API.
+  - Use the reason-aware retry from Task 6.3 for `dns_not_verified`.
+  - `remote_hostnames.record_moved_at` is set when DNS confirms a wrong or missing record. A failed lookup retries without changing the column. A passing record check or `setHostname` clears it.
 
 - [ ] **Step 1: Write the failing tests**:
   - `a renewal for a custom name whose CNAME has moved starts no order and records dns_not_verified` — the issuer is called 0 times; `record_moved_at` is set; the last good chain stays.
   - `after eight moved-record failures the job is still pending and retries within 900 seconds` (Review Focus 1).
   - `a revision bump while the record is still moved keeps record_moved_at` — `schedule()` resets `last_error`; the column stays.
   - `once the record is right again the next pass orders and clears record_moved_at`.
-  - `a resolver that never answers is cut off at 3 seconds`.
+  - The DNS lookup test checks a resolver that never answers is cut off at 3 seconds.
 - [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/record-moved-renewal.test.ts`; FAIL. **Implement**; run it plus `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/remote-access.test.ts`; PASS.
 - [ ] **Step 3: Commit** `git commit -s -m "Check a custom name's record before renewing it"`.
 
-### Task 6.7: The move gate waits for live check files
+### Task 6.8: Document the worker's two configurations
 
-**Files:**
-- Modify: `packages/remote-access/src/placement.ts` (`completeMove`)
-- Test: `packages/remote-access/test/movement.test.ts`
+Describe the injected gateway status reader, the private check folders, readiness and the order reservation in `docs/local-remote-access.md`. Keep the existing owner instructions for two records. Explain in the integration contract that the box supplies the same CSR for either challenge. Update the backlog and service candidates with the wiring and one-record switch still open.
 
-- [ ] **Step 1: Write the failing test** `a ready move whose live order wrote check files without the destination refuses move_destination_incomplete`: insert an unexpired `remote_certificate_orders` row for the installation with `cell_ids = {source}`, and the commit fails; set `cell_ids = {source,target}`, and the commit succeeds. A live DNS-01 order (`cell_ids = {}`) does not block.
-- [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/movement.test.ts`; FAIL. **Implement**: an unexpired order row for the installation whose non-empty `cell_ids` lacks the target refuses. Run again; PASS.
-- [ ] **Step 3: Commit** `git commit -s -m "Commit a move only once the destination holds every live check file"`.
-
-### Task 6.8: Portal, account API and operator CLI show one record; docs
-
-**Files:**
-- Modify: `apps/portal/src/remote-types.ts` (`validRemoteDns`: exactly one record, `name===hostname`, `remoteHostname(value)`; `remoteHostname` keeps 237), `apps/portal/src/remote-screen.ts` (one row), `apps/portal/src/locale.ts`
-- Modify: `packages/account-http/src/remote-access.ts` (`dns` passes one record), `packages/remote-access/src/operator-cli.ts` (`dns` prints one record)
-- Modify: `docs/local-remote-access.md` ("Set up your venue in the account portal": one record; the custom-name flow; worker settings `challenges` and `gatewayStatusFiles`; the readiness rule and its limits; the order guard's remaining gap), `docs/waitron-integration-contract.md` (custom staff names are checked with TLS-ALPN-01; the box's CSR is unchanged), `docs/backlog.md` ("Remote hostname save qualification", "Remote status and DNS-preview deployment qualification"), `docs/backlog/service-candidates.md`
-- Test: `apps/portal/test/remote-controller.test.ts`, `apps/portal/test/remote-browser.test.ts`, `packages/account-http/test/remote-access.test.ts`, `packages/remote-access/test/operator-cli.test.ts`
-
-Copy (EN / ES):
-- `remoteDnsHelp`: "Create this CNAME record with your domain provider. It directs your name to the venue, and lets Cloud get its certificate." / "Crea este registro CNAME con tu proveedor de dominio. Dirige tu nombre al local y permite que Cloud obtenga su certificado."
-- `remoteDnsApex`: "Use a subdomain such as staff.your-cafe.es. Keep this record while you use this name. DNS updates may take time to appear." / "Usa un subdominio como personal.tu-cafe.es. Conserva este registro mientras uses este nombre. Los cambios de DNS pueden tardar en aparecer."
-- `remoteDnsWait`: "The DNS record must point to the shown target. Check it with your provider, allow time for propagation, then try again." / "El registro DNS debe apuntar al destino indicado. Compruébalo con tu proveedor, espera a que se propague y vuelve a intentarlo."
-- Any other "both records" / "ambos registros" / `_acme-challenge` string: find with `grep -n "both\|ambos\|_acme-challenge" apps/portal/src/locale.ts`.
-
-- [ ] **Step 1: Write the failing tests**:
-  - `remote-controller.test.ts`: `a DNS reply with one CNAME is accepted and one with two is refused`.
-  - `account-http remote-access.test.ts`: `the dns action returns one record pointing at the stored assigned name`.
-  - `account-http remote-access.test.ts`: `apply saves with one correct record and refuses a missing one with dns_not_verified`.
-  - `operator-cli.test.ts`: `dns prints one record`.
-- [ ] **Step 2: Run** the four files (portal and account-http through `test-postgres.mjs`); FAIL. **Implement**; edit the docs; run again with `node --test scripts/ci-docs.test.mjs`; PASS. Look at the screen in EN/ES, light/dark, at 390 and 1280 wide.
-- [ ] **Step 3: Commit** `git commit -s -m "Show owners one DNS record"`.
 
 ---
 
@@ -665,7 +626,7 @@ Copy: `remoteRecordMoved` and `remoteRecordMovedNoDate` use Task 7.1's exact EN/
 
 ---
 
-## PR 8 — Local proof through Pebble TLS-ALPN-01 and a two-cell move
+## PR 8 — Wire the worker, switch to one record and run the two-cell Pebble proof
 
 ### Task 8.1: Pebble checks on 443; measure CNAME following
 
@@ -675,10 +636,24 @@ Copy: `remoteRecordMoved` and `remoteRecordMovedNoDate` use Task 7.1's exact EN/
 - [ ] **Step 1: Measure.** Set `setCname('staff.cafe.example.test','staff-v-<id>.venues.example.test')` and `addA('staff-v-<id>.venues.example.test',<gateway IP>)`, then order TLS-ALPN-01 for `staff.cafe.example.test`. Rule: if Pebble reaches the gateway through the CNAME, the proof uses CNAME + A. If not, it also adds an A record for the custom name and records `"cnameFollowed": false` in the receipt and the doc.
 - [ ] **Step 2: Run** `node scripts/test-local-acme.mjs`; read the `PASS` lines. **Commit** `git commit -s -m "Let local Pebble check TLS-ALPN-01 on the gateway's 443"`.
 
-### Task 8.2: Custom names issued and renewed through the real gateway
+### Task 8.2: Wire custom issuance and switch the portal and API together
 
-**Files:**
-- Modify: `scripts/test-local-remote.mjs` — the worker gets `challenges` and `gatewayStatusFiles` for both cells; one venue's custom staff and public names are saved through `setHostname` with one CNAME; issuance goes through the real gateway; one of them is renewed
+Give the runnable worker its own status-only path. The gateway writes the answerable-name status there and the worker reads it. The worker never reads the gateway's WireGuard key directory. Mount check folders read-only on the gateways and writable only by the worker that presents certificates.
+
+In the same pull request, change `dnsInstructions` to return only the routing CNAME and make `verifyDelegation` check that record. Share the response shape with `validRemoteDns`. Preserve the 237-character limit, refusal of incorrect or missing targets, and every venue and owner check. Update the operator DNS command test, the account API response and apply tests, and the portal and browser fixtures together. Verify that a venue with an existing two-record setup still renews after the switch. Reloading the portal updates an open old form.
+
+Copy (EN / ES):
+- `remoteDnsHelp`: "Create this CNAME record with your domain provider. It directs your name to the venue, and lets Cloud get its certificate." / "Crea este registro CNAME con tu proveedor de dominio. Dirige tu nombre al local y permite que Cloud obtenga su certificado."
+- `remoteDnsApex`: "Use a subdomain such as staff.your-cafe.es. Keep this record while you use this name. DNS updates may take time to appear." / "Usa un subdominio como personal.tu-cafe.es. Conserva este registro mientras uses este nombre. Los cambios de DNS pueden tardar en aparecer."
+- `remoteDnsWait`: "The DNS record must point to the shown target. Check it with your provider, allow time for propagation, then try again." / "El registro DNS debe apuntar al destino indicado. Compruébalo con tu proveedor, espera a que se propague y vuelve a intentarlo."
+- Any other "both records" / "ambos registros" / `_acme-challenge` string: find with `grep -n "both\|ambos\|_acme-challenge" apps/portal/src/locale.ts`.
+
+Run the setup and browser tests before and after the switch. Look at English and Spanish in light and dark at 390 and 1280 pixels.
+
+**Proof wiring:**
+- Modify: `scripts/test-local-remote.mjs` — the worker gets the two private check folders in `FileReconcilerArtifacts`, an injected `gatewayStatus` and a `resolveCname` that uses Pebble's test DNS; one venue's custom staff and public names are saved through `setHostname` with one CNAME; issuance goes through the real gateway; one of them is renewed
+- In that script, wire both `startGateway` (source) and `startTargetGateway` (destination) to set `GATEWAY_CHALLENGES` and mount their own private check folder read-only. Only the proof worker writes the folders. Read only each cell's `status.json` through the existing `gatewayFile` path, including its Linux fallback. Check both launches for the setting and read-only mount, and include the new mount in the existing box-key absence check.
+- The custom-name proof issues in the reconciler's process so the issuer can call its check-file callbacks. Trust Pebble's test root in that process and verify it against the pinned image. Give the worker a `GatewayChallengeStatus` backed by the proof's `gatewayFile` reader so the Linux fallback is exercised.
 
 - [ ] **Step 1:** Add the phase. It asserts that both custom names answer with certificates from Pebble's root, that the renewed one has a new serial, and that the box's private key is absent from the gateway (the existing check).
 - [ ] **Step 2: Run** the proof (as in "Run the proof"); read every `PASS`. **Commit** `git commit -s -m "Prove one-record custom names through the real gateway"`.

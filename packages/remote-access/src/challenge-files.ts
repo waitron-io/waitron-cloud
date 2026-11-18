@@ -1,12 +1,20 @@
-import {createPrivateKey, X509Certificate} from 'node:crypto';
+import {createPrivateKey, randomUUID, X509Certificate} from 'node:crypto';
 import {constants} from 'node:fs';
-import {access, open} from 'node:fs/promises';
+import {access, open, readdir, rename, rm, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createSecureContext, type SecureContext} from 'node:tls';
 import {isHostname} from './manifest.ts';
 
 const maxBytes = 16_384;
 const identifierOid = Buffer.from('2b0601050507011f', 'hex');
+
+
+export interface ChallengeFile {
+  hostname: string;
+  certificate: string;
+  key: string;
+  expiresAt: number;
+}
 
 interface LoadedChallenge {
   text: string;
@@ -102,4 +110,36 @@ export async function readChallengeFolder(folder: string, names: ReadonlySet<str
     if (loaded && loaded.expiresAt > now) result.set(hostname, loaded);
   }));
   return result;
+}
+
+export async function deleteChallenge(folder: string, hostname: string): Promise<void> {
+  if (!isHostname(hostname) || hostname.length > 237) throw new Error('invalid_hostname');
+  await rm(join(folder, hostname + '.json'), {force: true});
+}
+
+export async function writeChallenge(folder: string, file: ChallengeFile, now = Date.now()): Promise<void> {
+  if (!isHostname(file.hostname) || file.hostname.length > 237
+    || !Number.isSafeInteger(file.expiresAt) || file.expiresAt <= now) throw new Error('invalid_challenge');
+  for (const name of await readdir(folder)) {
+    if (!name.endsWith('.json')) continue;
+    const hostname = name.slice(0, -5);
+    if (!isHostname(hostname) || hostname.length > 237) continue;
+    const text = await readRegularFile(join(folder, name));
+    if (text === undefined) continue;
+    let expired = false;
+    try {
+      const fields = JSON.parse(text);
+      expired = fields?.hostname === hostname && Number.isSafeInteger(fields.expiresAt) && fields.expiresAt <= now;
+    } catch {}
+    if (expired) await deleteChallenge(folder, hostname);
+  }
+  // The temporary basename must also fit when the hostname is 237 characters.
+  const temporary = join(folder, '.' + randomUUID() + '.tmp');
+  const {hostname, certificate, key, expiresAt} = file;
+  try {
+    await writeFile(temporary, JSON.stringify({hostname, certificate, key, expiresAt}), {flag: 'wx', mode: 0o600});
+    await rename(temporary, join(folder, hostname + '.json'));
+  } finally {
+    await rm(temporary, {force: true});
+  }
 }

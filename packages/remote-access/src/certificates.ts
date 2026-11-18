@@ -1,5 +1,5 @@
 import {resolveCname} from 'node:dns/promises';
-import {Client,crypto as acmeCrypto} from 'acme-client';
+import {Client,crypto as acmeCrypto,type Authorization} from 'acme-client';
 import forge from 'node-forge';
 import {isHostname} from './manifest.ts';
 export function validateCsr(pem:string,hostname:string):void {
@@ -17,22 +17,52 @@ export function dnsInstructions(custom:string,assigned:string){
  if(!isHostname(custom)||custom.length>237||!isHostname(assigned)||assigned.length>237||custom===assigned)throw new Error('invalid_hostname');
  return [{type:'CNAME',name:custom,value:assigned},{type:'CNAME',name:`_acme-challenge.${custom}`,value:`_acme-challenge.${assigned}`}];
 }
+export function matchesCname(answers:string[],target:string){
+ return answers.length===1&&answers[0]!.replace(/\.$/,'').toLowerCase()===target;
+}
 export async function verifyDelegation(custom:string,assigned:string,resolve:typeof resolveCname=resolveCname){
- try{for(const record of dnsInstructions(custom,assigned)){const values=await resolve(record.name);if(values.length!==1||values[0]!.replace(/\.$/,'').toLowerCase()!==record.value)throw Error();}}
+ try{for(const record of dnsInstructions(custom,assigned)){const values=await resolve(record.name);if(!matchesCname(values,record.value))throw Error();}}
  catch{throw new Error('dns_not_verified');}
 }
 export interface DnsChallengeProvider {present:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;remove:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;point:(name:string,target:string,signal?:AbortSignal)=>Promise<void>}
-export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:Pick<DnsChallengeProvider,'present'|'remove'>;signal?:AbortSignal}):Promise<string>{
- options.signal?.throwIfAborted();
+export type CertificateValidation =
+ | {type:'dns-01';dnsName:string;dns:Pick<DnsChallengeProvider,'present'|'remove'>}
+ | {type:'tls-alpn-01';present:(entry:{hostname:string;certificate:string;key:string},signal?:AbortSignal)=>Promise<void>;withdraw:(hostname:string)=>Promise<void>};
+
+export function challengeHandlers({hostname,validation,signal}:{hostname:string;validation:CertificateValidation;signal?:AbortSignal}){
+ function check(authorization:Authorization,challenge:{type:string}){
+  if(authorization.identifier.type!=='dns'||authorization.identifier.value!==hostname||challenge.type!==validation.type)throw new Error('unexpected_challenge');
+ }
+ return {
+  async challengeCreateFn(authorization:Authorization,challenge:{type:string},value:string){
+   signal?.throwIfAborted();check(authorization,challenge);
+   if(validation.type==='dns-01')await validation.dns.present(validation.dnsName,value,signal);
+   else{
+    const key=await acmeCrypto.createPrivateEcdsaKey('P-256');
+    const [,certificate]=await acmeCrypto.createAlpnCertificate(authorization,value,key);
+    signal?.throwIfAborted();
+    await validation.present({hostname,certificate:certificate.toString(),key:key.toString()},signal);
+   }
+   signal?.throwIfAborted();
+  },
+  async challengeRemoveFn(authorization:Authorization,challenge:{type:string},value:string){
+   check(authorization,challenge);
+   if(validation.type==='dns-01')await validation.dns.remove(validation.dnsName,value);
+   else await validation.withdraw(hostname);
+  },
+ };
+}
+
+export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;validation:CertificateValidation;signal?:AbortSignal}):Promise<string>{
+ const {validation,signal}=options;
+ signal?.throwIfAborted();
  validateCsr(options.csr,options.hostname);
- if(!options.dnsName.startsWith('_acme-challenge.')||!isHostname(options.dnsName.slice('_acme-challenge.'.length)))throw new Error('invalid_dns_name');
+ if(validation.type==='dns-01'&&(!validation.dnsName.startsWith('_acme-challenge.')||!isHostname(validation.dnsName.slice('_acme-challenge.'.length))))throw new Error('invalid_dns_name');
  const directory=new URL(options.directoryUrl);if(directory.protocol!=='https:'||directory.username||directory.password)throw new Error('invalid_acme_directory');
  const client=new Client({directoryUrl:options.directoryUrl,accountKey:options.accountKey,backoffAttempts:5,backoffMin:500,backoffMax:3000});
- const certificate=await client.auto({csr:options.csr,email:options.email,termsOfServiceAgreed:true,challengePriority:['dns-01'],
-  // The ACME server performs DNS validation. Local Pebble uses its isolated resolver.
-  skipChallengeVerification:true,
-  challengeCreateFn:async(authz,challenge,value)=>{options.signal?.throwIfAborted();if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.present(options.dnsName,value,options.signal);options.signal?.throwIfAborted();},
-  challengeRemoveFn:async(authz,challenge,value)=>{if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.remove(options.dnsName,value);options.signal?.throwIfAborted();},
+ const certificate=await client.auto({csr:options.csr,email:options.email,termsOfServiceAgreed:true,challengePriority:[validation.type],
+  // The ACME server validates against its own resolver and ingress.
+  skipChallengeVerification:true,...challengeHandlers(options),
  });
- options.signal?.throwIfAborted();return certificate;
+ signal?.throwIfAborted();return certificate;
 }

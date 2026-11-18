@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createPrivateKey,randomUUID,X509Certificate} from 'node:crypto';
 import {chmod,mkdir,mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {crypto} from 'acme-client';
-import {validateCsr,dnsInstructions,verifyDelegation} from '../src/certificates.ts';
+import * as certificates from '../src/certificates.ts';
+const {validateCsr,dnsInstructions,verifyDelegation}=certificates;
 import {FileReconcilerArtifacts} from '../src/reconciler-files.ts';
 test('certificate signing accepts only a valid signature for the exact authorised DNS name',async()=>{
  const [,csr]=await crypto.createCsr({commonName:'staff.sol.example.test',altNames:['staff.sol.example.test']});
@@ -22,6 +23,29 @@ test('custom hostnames require both routing and DNS-01 delegation to the bound a
  await verifyDelegation('staff.cafe.example','staff.sol.example.test',async name=>[expected.find(r=>r.name===name)!.value]);
  await assert.rejects(verifyDelegation('staff.cafe.example','staff.sol.example.test',async()=>['foreign.example.test']),/dns_not_verified/);
  assert.throws(()=>dnsInstructions('127.0.0.1','staff.sol.example.test'),/invalid_hostname/);
+});
+test('TLS-ALPN presents an ephemeral key and certificate only for the ordered name',async()=>{
+ const hostname='staff.cafe.example.test',value='synthetic-token.synthetic-thumbprint';
+ const authorization={identifier:{type:'dns',value:hostname},url:'https://acme.example.test/authz',status:'pending' as const,challenges:[]};
+ const challenge={type:'tls-alpn-01',url:'https://acme.example.test/challenge',status:'pending' as const,token:'synthetic-token'};
+ const presentations:{hostname:string;certificate:string;key:string}[]=[],withdrawals:string[]=[];
+ assert.equal(typeof certificates.challengeHandlers,'function');
+ const handlers=certificates.challengeHandlers({hostname,validation:{type:'tls-alpn-01',
+  async present(entry){presentations.push(entry);},async withdraw(name){withdrawals.push(name);}}});
+ await assert.rejects(handlers.challengeCreateFn({...authorization,identifier:{type:'dns',value:'other.example.test'}},challenge,value),/unexpected_challenge/);
+ await assert.rejects(handlers.challengeCreateFn(authorization,{...challenge,type:'dns-01'},value),/unexpected_challenge/);
+ assert.equal(presentations.length,0);
+ await handlers.challengeCreateFn(authorization,challenge,value);
+ assert.equal(presentations.length,1);
+ const [entry]=presentations;
+ assert.equal(entry!.hostname,hostname);
+ const key=createPrivateKey(entry!.key),certificate=new X509Certificate(entry!.certificate);
+ assert.equal(key.asymmetricKeyDetails?.namedCurve,'prime256v1');
+ assert.equal(certificate.subjectAltName,'DNS:'+hostname);
+ assert.ok(certificate.checkPrivateKey(key));
+ assert.ok(crypto.isAlpnCertificateAuthorizationValid(entry!.certificate,value));
+ await handlers.challengeRemoveFn(authorization,challenge,value);
+ assert.deepEqual(withdrawals,[hostname]);
 });
 test('artifact mappings retain issued private material and old gateway bytes on a delivery failure',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-reconciler-files-')),blocked=join(root,'blocked'),installationId=randomUUID(),cellId=randomUUID();

@@ -208,10 +208,10 @@ test('a changed CSR or expired claim cannot publish a completed issuance',async(
  await memory.setCsr(current.installationId,'staff',original.csr);await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
  gate=new Promise<void>(resolve=>{release=resolve;});started=new Promise<void>(resolve=>{entered=resolve;});worker=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{entered();await gate;return renewed;}});
  running=worker.runOnce();await started;await db.pool.query("UPDATE remote_configuration_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
- let replacementEntered!:()=>void,releaseReplacement!:()=>void;const replacementStarted=new Promise<void>(resolve=>{replacementEntered=resolve;}),replacementGate=new Promise<void>(resolve=>{releaseReplacement=resolve;});
- const replacement=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>{replacementEntered();await replacementGate;return renewed;}}).runOnce();await replacementStarted;
  release();await running;assert.deepEqual(await memory.publications(),[]);assert.equal(await memory.readCertificate(current.installationId,'staff'),original.certificate);
- releaseReplacement();await replacement;assert.deepEqual(await memory.publications(),[`${current.installationId}:staff`]);
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[current.installationId]);
+ const replacement=new RemoteConfigurationReconciler(db.pool,{artifacts:memory.adapter,issueCertificate:async()=>renewed});
+ assert.equal(await replacement.runOnce(),true);assert.deepEqual(await memory.publications(),[`${current.installationId}:staff`]);
 });
 
 test('route workers publish one signed current manifest and refresh it after five minutes',async()=>{

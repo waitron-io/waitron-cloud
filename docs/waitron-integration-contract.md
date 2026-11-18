@@ -1028,11 +1028,14 @@ revision and CSR digest with its still-current local intent, then use the existi
 `cloud-certificate.ts install` command. That command checks hostname, validity and
 private-key matching and atomically replaces its certificate file. It does not
 establish trust in an arbitrary supplied issuer; obtain the chain through the
-trusted Cloud HTTPS origin. Cloud uses the configured ACME issuer and rechecks
-hostname, key and validity before publication. Issuance does not mean the appliance
+trusted Cloud HTTPS origin. Cloud rechecks hostname, key and validity before
+publication. A configured certificate worker can use the gateway to answer the
+issuer's TLS-ALPN-01 check on port 443 for a custom staff name. The command-line
+worker uses the existing DNS check until that wiring is available. The appliance
+sends the same CSR and signed request for either check. Issuance does not mean the appliance
 has installed or reloaded the chain.
 
-The Cloud exchange and optional database staff reconciler mode are implemented.
+The Cloud reconciler uses the database exchange for staff certificates.
 The Waitron dependency is an adapter that discovers or retains pending request IDs,
 signs these two actions, renews its lease, polls with backoff, discards replies after local
 configuration/revocation/key changes, invokes the install command and reloads TLS.

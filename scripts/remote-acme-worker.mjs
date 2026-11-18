@@ -14,8 +14,8 @@ try{
   const {Client}=createRequire(new URL('../packages/remote-access/package.json',import.meta.url))('acme-client');
   stage='account-readback';const account=await new Client({directoryUrl:config.directoryUrl,accountKey}).createAccount({onlyReturnExisting:true});
   await writeFile(config.output+'.account.json',JSON.stringify({contact:account.contact??[]}),{mode:0o600});
- }else cert=await issueCertificate({directoryUrl:config.directoryUrl,accountKey:await readFile(config.accountKeyFile),email:'local-test@example.test',hostname:config.hostname,csr:await readFile(config.csrFile,'utf8'),dnsName:config.dnsName,
-  dns:{present:async(name,value)=>{if(!config.omitDns)await call('/set-txt',{host:name+'.',value});},remove:async name=>call('/clear-txt',{host:name+'.'})}});
+ }else cert=await issueCertificate({directoryUrl:config.directoryUrl,accountKey:await readFile(config.accountKeyFile),email:'local-test@example.test',hostname:config.hostname,csr:await readFile(config.csrFile,'utf8'),validation:{type:'dns-01',dnsName:config.dnsName,
+  dns:{present:async(name,value)=>{if(!config.omitDns)await call('/set-txt',{host:name+'.',value});},remove:async name=>call('/clear-txt',{host:name+'.'})}}});
  await writeFile(config.output,cert,{mode:0o600});
 }catch(error){console.error('certificate_issuance_failed '+JSON.stringify({stage,error:error?.name,aborted:stop.signal.aborted,reason:/^(test_cloud\.[a-z_]+|invalid_csr)$/.test(error?.message??'')?error.message:undefined,localProblem:config.http&&new URL(config.directoryUrl).hostname==='localhost'&&error?.stack?.includes('acme-client/src/api.js')?error.message.replace(/https?:\/\/[^\s]+/g,'[url]').replace(/[A-Za-z0-9_-]{20,}/g,'[value]').slice(0,400):undefined,frame:error?.stack?.split('\n')[1]?.trim(),code:/^[A-Z_]{1,40}$/.test(error?.code??'')?error.code:undefined,status:error?.response?.status,problemType:error?.response?.data?.type}));process.exitCode=1;}
 finally{clearInterval(observer);}
