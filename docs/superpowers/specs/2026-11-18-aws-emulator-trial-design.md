@@ -1,0 +1,73 @@
+# Trial: Route 53 and SQS tests against AWS Emulator
+
+Status: approved by the owner, 2026-11-18 (the conversation's "ok" to the short design).
+
+## Why
+
+Cloud's Route 53 adapter (`packages/remote-access/src/route53-dns.ts`) and SQS adapter
+(`packages/registration/src/ses-feedback-queue.ts`) are tested only against hand-written fakes:
+an HTTP server on loopback for Route 53, and an injected transport for SQS. A fake answers what we
+told it to, so it cannot show that Amazon would refuse a request or answer it differently. AWS
+Emulator is Amazon's local stand-in for its services, public domain (CC0 1.0), free, with no AWS
+account. The trial checks whether our fakes' picture of these two services matches the emulator's,
+and keeps checking as the adapters change.
+
+## Goals
+
+- Run the calls these two adapters really make against the emulator, in CI.
+- Keep every existing fake-server test. The new tests are additional.
+- Report where the emulator and our fakes agree and differ, with a keep-or-drop recommendation,
+  in the pull request.
+
+## Non-goals and anti-goals
+
+- No Mac support: the emulator runs natively on Linux only. The new test files skip locally and say
+  why.
+- No product change. In particular the SQS adapter stays locked to
+  `https://sqs.<region>.amazonaws.com` with configured endpoints ignored; the test reaches the
+  emulator through the adapter's existing `requestHandler` option, which its own comment reserves
+  for local qualification.
+- No real AWS access, no stored credential: the emulator's keys are generated per run, read from the
+  file it writes, and never become a workflow secret.
+- No telemetry from CI to Amazon: start the emulator with `-t off`.
+- Not a replacement for the separately authorised live rehearsals.
+- A CI run with the emulator missing must fail, never silently skip.
+
+## Approaches
+
+1. **New emulator test files in each package, run by a dedicated CI job when either package
+   changes and nightly (chosen).** Small, keeps catching drift, no change to the existing suites.
+2. Point the existing tests at the emulator. Rejected: they rely on what only a fake can do —
+   hanging on purpose, counting requests, returning malformed replies.
+3. A one-off script. Rejected: cheaper, but catches nothing after the day it runs.
+
+## Design
+
+- **Tests.** One emulator test file per package (naming left to the builder, but it must not be
+  picked up by the package's normal `test` script, so the package suites stay unchanged).
+  - Route 53: create a hosted zone for a synthetic suffix; through `createRoute53DnsProvider` with a
+    client pointed at the emulator: publish a challenge TXT and see the adapter return only after
+    `INSYNC`; remove it by exact value; see a remove with a different value refused
+    (`InvalidChangeBatch`) and the newer value survive; point a venue CNAME and wait for `INSYNC`.
+  - SQS: create the queue the validated config names, using account `000000000000` and region
+    `eu-north-1` (the account passes the 12-digit check in `ses-feedback-config.ts`); through
+    `createSesFeedbackQueue` with a `requestHandler` that forwards to the emulator: send a message,
+    receive it, see it hidden while in flight, delete it, and see it gone.
+- **Route 53 timing.** The emulator has no control to complete a change; one change measured on
+  2026-11-18 was `PENDING` straight after the write and `INSYNC` within one to two minutes. The
+  adapter's publish deadline is 75 seconds (`route53-dns.ts`). The first task measures the
+  emulator's delay. If it exceeds 75 seconds, that is a finding to report, not something to hide by
+  changing the deadline.
+- **CI job.** Installs a pinned Debian package
+  (`https://downloads.aws.com/aws-emulator/packages/aws-emulator/LTS/aws-emulator_<version>-1_amd64.deb`,
+  about 200 MB), checks its SHA-256 before installing, starts the emulator on loopback with
+  telemetry off and an idle timeout, waits on `/__admin/health`, runs the two emulator files, and
+  stops it. It follows the repository's existing CI conventions (timeouts, retries, selection,
+  `summary`).
+- **Locally.** Without the emulator the files skip with a message naming the reason.
+
+## Left to the builder
+
+File names, how the job is selected by the CI planner, whether to cache the package, the exact
+pinned version, and how the test locates the emulator (its startup line gives the endpoint and CA
+file).
