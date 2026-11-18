@@ -223,6 +223,11 @@
     "^trial dates grant only the stored half open interval$",
     "^venue levels have exact service floors$"
   ],
+  "packages/remote-access/test/emulator/route53-dns.test.ts": [
+    "^emulator: a challenge TXT is published only after INSYNC, read back as one quoted value with TTL 60, and removed by its exact value$",
+    "^emulator: a remove with a stale value is refused and the newer challenge survives$",
+    "^emulator: a venue CNAME is pointed at its cell with TTL 60 only after INSYNC$"
+  ],
   "packages/remote-access/test/forward-observations.test.ts": [
     "^reporting cell jobs do not lock installations in an unrelated cell$",
     "^rollback_allows_identical_retry and older observation never replaces newer success$",
