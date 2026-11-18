@@ -88,6 +88,7 @@ test(`venue direct DNS wait refuses changed ${change} without hostname writes`,a
   await set({...f,store:f.billingStore},'connected',f.venues[1]);
   const before=(await f.pool.query('SELECT * FROM remote_hostnames ORDER BY hostname')).rows;let calls=0;
   const resolver=async(name:string)=>{
+   assert.equal(name,'custom.example.test');
    if(calls++===0){
     if(change==='key')await f.pool.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.id,randomUUID()]);
     if(change==='venue'){
@@ -98,10 +99,10 @@ test(`venue direct DNS wait refuses changed ${change} without hostname writes`,a
     if(change==='revision')await f.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[f.id]);
     if(change==='revocation')await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.id]);
    }
-   return [name.startsWith('_acme-challenge.')?'_acme-challenge.'+f.placement.staffHostname:f.placement.staffHostname];
+   return [f.placement.staffHostname];
   };
   await assert.rejects(f.store.setHostname(f.id,'staff','custom.example.test',f.revision,resolver),change==='revision'?/revision_conflict/:change==='revocation'?/revoked/:/permission_denied/);
-  assert.equal(calls,2);
+  assert.equal(calls,1);
   assert.deepEqual((await f.pool.query('SELECT * FROM remote_hostnames ORDER BY hostname')).rows,before);
   assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+(change==='revision'?1:0));
   assert.equal((await f.pool.query('SELECT count(*) AS n FROM remote_hostname_changes')).rows[0].n,'0');
@@ -132,9 +133,10 @@ test('venue direct DNS wait accepts unchanged installation identity',async()=>{
  const f=await fixture();try{
   let calls=0;
   const changed=await f.store.setHostname(f.id,'staff','custom.example.test',f.revision,async name=>{
-   calls++;return [name.startsWith('_acme-challenge.')?'_acme-challenge.'+f.placement.staffHostname:f.placement.staffHostname];
+   assert.equal(name,'custom.example.test');
+   calls++;return [f.placement.staffHostname];
   });
-  assert.equal(calls,2);assert.equal(changed.staffHostname,'custom.example.test');
+  assert.equal(calls,1);assert.equal(changed.staffHostname,'custom.example.test');
   assert.equal(changed.installationId,f.id);assert.equal(changed.venueId,f.venues[0]);
   assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+1);
  }finally{await f.close();}
