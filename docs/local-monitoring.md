@@ -49,8 +49,8 @@ service again; known old contact or snapshot evidence retains its age.
 Open the Account link in the email and find the venue with the ID shown in the alert.
 Public website and staff access have separate check results and dates.
 
-- If a recent check failed, check the venue's internet connection. Open **Set up
-  remote access** for that venue and check **Selected hostname** and the setup
+- If a recent check failed, check the venue's internet connection. Open **Remote
+  access** for that venue and check **Selected hostname** and the setup
   status. The [remote setup guide](local-remote-access.md#set-up-your-venue-in-the-account-portal)
   explains how to review a custom name's DNS record. Do not change a working
   name merely because an external check failed; changing it can interrupt access.
@@ -58,15 +58,13 @@ Public website and staff access have separate check results and dates.
   for new observations. A missing recent check does not establish an outage, and
   refreshing does not start a probe or repair the route.
 
-In Spanish, the controls are **Configurar acceso remoto** and **Actualizar estado**.
+In Spanish, the controls are **Acceso remoto** and **Actualizar estado**.
 You must still own the organisation to open remote setup for an active venue.
-These checks show the configuration and observations available to you; they do not
-prove the cause or resolve every alert. Gateway assignment, certificate renewal
-configuration and installation still use the local
-[operator tools](local-remote-access.md#keep-a-local-gateway-configured).
-Account does not offer those operations. Automatic delivery to customer appliances
-and live provider activation remain unfinished; these are product capabilities to
-build, not a paid support path.
+These checks show your configuration and the latest observations. On the local
+proof stack, use the [operator tools](local-remote-access.md#keep-a-local-gateway-configured)
+for gateway assignment and certificate administration. The
+[Amazon test Cloud](test-cloud.md#configure-a-separate-https-test-name) assigns
+addresses when an eligible box submits its signed tunnel key.
 
 The focused browser check exercises both languages, themes and screen widths with
 synthetic server replies. It follows the named setup and refresh controls, checks
@@ -190,7 +188,7 @@ the route or revoke the installation. The portal presents the public and staff r
 separately. If you opt in to service alerts, Cloud sends the opening and recovery emails
 in your saved language. When a DNS record has moved, the opening email gives you the
 address and its expected target. If you fix the record before the notice goes out,
-Cloud skips that notice. Open **Set up remote access** to check a corrected record.
+Cloud skips that notice. Open **Remote access** to check a corrected record.
 See [Local remote access](local-remote-access.md).
 
 For local delivery, start Mailpit and run the existing mail worker with local transport:
@@ -400,10 +398,10 @@ reporting remains disabled in deployments.
 
 ### Inspect the last recorded attempt in Account
 
-If a venue page is unavailable, open **Set up remote access** for that venue in
+If a venue page is unavailable, open **Remote access** for that venue in
 Account. **Last recorded forwarding attempt** shows the latest accepted gateway
 result, its observation time and its expiry. In Spanish these labels are
-**Configurar acceso remoto** and **Último intento de conexión registrado**.
+**Acceso remoto** and **Último intento de conexión registrado**.
 Only the current organisation owner can read it.
 
 An unsuccessful application response, a connection timeout, a response that exceeds

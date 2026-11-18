@@ -6,10 +6,36 @@ import {database} from '../../account-http/test/fixtures.ts';
 import {crypto} from 'acme-client';
 import {RemoteAccessStore} from '../src/placement.ts';
 import {guestMenuFixture} from './fixtures/guest-menu.ts';
+import {rows,set,venueServiceFixture} from '../../registration/test/fixtures/venue-service.ts';
 const publicKey=()=>randomBytes(32).toString('base64');
 let db:Awaited<ReturnType<typeof database>>,store:RemoteAccessStore;
 before(async()=>{db=await database();store=new RemoteAccessStore(db.pool);});
 after(async()=>db?.close());
+test('automatic retries preserve an operator stop but restore setup cleared by a billing lapse',async()=>{
+ const f=await venueServiceFixture();try{
+  const venueId=f.venues[0],current=(await rows(f)).installations.find(({row})=>row.revoked_at===null)!.row;
+  const id=current.id,cellId=randomUUID(),key=publicKey(),remote=new RemoteAccessStore(f.pool,'test-venue-levels');
+  await set(f);
+  await remote.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'automatic.example.test',subnet:52,publicKey:publicKey(),endpoint:'gateway.example.test:51820'});
+  const placement=await remote.provision(id,cellId,key);
+  const stop=()=>f.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1 AND service='remote_access'",[id]);
+  const service=async()=>(await rows(f,venueId)).services.find(row=>row.installation_id===id&&row.service==='remote_access');
+  const retry=()=>transaction(f.peer,client=>remote.provisionInTransaction(client,id,cellId,key,443,'restore-cleared'));
+  await stop();
+  assert.deepEqual(await retry(),placement);
+  assert.equal((await service())?.state,'unconfigured');
+  assert.equal((await service())?.configuration.peerPublicKey,key);
+  await remote.provision(id,cellId,key);
+  assert.equal((await service())?.state,'provisioning');
+  await stop();
+  await set(f,'registered');
+  assert.deepEqual((await service())?.configuration,{});
+  await set(f);
+  assert.deepEqual(await retry(),placement);
+  assert.equal((await service())?.state,'provisioning');
+  assert.equal((await service())?.configuration.peerPublicKey,key);
+ }finally{await f.close();}
+});
 test('two venues share one cell with distinct stable routes, independent configuration and revocation',async()=>{
  const signup=new SignupStore(db.pool,db.outbox);await signup.request('remote@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
  const owner=await signup.complete(mail.token,{password:'a long enough test password',organisationName:'Cafés',legalBusinessName:'Cafés SL',countryCode:'ES'});

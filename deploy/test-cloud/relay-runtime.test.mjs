@@ -13,6 +13,7 @@ import {RelayGrantStore} from '../../packages/registration/src/relay-grants.ts';
 import {connectedVenue,database} from '../../packages/translation/test/fixtures.ts';
 import {bootstrapTestCloudIdentity} from './bootstrap.mjs';
 import {bootstrapStorageIssuer} from './storage-issuer.mjs';
+import {loadRuntime} from '../local-stack/runtime.mjs';
 
 const origin='https://cloud.example.test',mode='test-venue-levels';
 async function api(){
@@ -25,12 +26,19 @@ async function setup(t){
  const issuerKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'),issuer=createLeaseIssuer(issuerKey);
  return {db,context:{pool:db.pool,directory,issuer,issuerKey,origin,mode,smtpPort:Number(process.env.MAILPIT_TEST_SMTP_PORT)}};
 }
-async function startAccount(db,context){
+async function prepareAccount(t,context){
+ await bootstrapTestCloudIdentity(context.directory,origin);await bootstrapStorageIssuer(context.directory);
+ const reload=createServer((_req,res)=>{res.writeHead(204);res.end();});
+ await new Promise(resolve=>reload.listen(join(context.directory,'storage-authority/reload.sock'),resolve));
+ t.after(()=>new Promise(resolve=>reload.close(resolve)));
+ return loadRuntime(context.directory);
+}
+async function startAccount(db,context,environment={}){
  const connection=new URL(process.env.TEST_DATABASE_URL);connection.searchParams.set('options','-c search_path='+db.schema);
  const child=spawn(process.execPath,[new URL('./account-worker.mjs',import.meta.url).pathname],{env:{PATH:process.env.PATH,
   DATABASE_URL:connection.href,LOCAL_STACK_CONFIG_DIR:context.directory,CLOUD_PORTAL_ORIGIN:origin,CLOUD_HTTP_RATE_KEY:db.rateKey,
   CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(db.keys),CLOUD_INSTALLATION_ISSUER_KEY:context.issuerKey,
-  CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_HTTP_PORT:'0'},stdio:['ignore','pipe','pipe']});
+  CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_HTTP_PORT:'0',...environment},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
  const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
  const close=async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;};
@@ -40,13 +48,31 @@ async function startAccount(db,context){
   return {server:{address:()=>({port})},close};
  }catch(error){await close();throw error;}
 }
-function accountRequest(running,path,body){
+function accountRequest(running,path,body,headers={}){
  return new Promise((resolve,reject)=>{
-  const req=request({hostname:'127.0.0.1',port:running.server.address().port,path,method:body?'POST':'GET',headers:{host:'cloud.example.test','content-type':'application/json'}},res=>{
+  const req=request({hostname:'127.0.0.1',port:running.server.address().port,path,method:body?'POST':'GET',headers:{host:'cloud.example.test','content-type':'application/json',...headers}},res=>{
    let text='';res.on('data',chunk=>text+=chunk);res.once('end',()=>resolve({status:res.statusCode,body:JSON.parse(text)}));res.once('error',reject);
   });req.once('error',reject);req.end(body&&JSON.stringify(body));
  });
 }
+
+test('the test Cloud account worker lets an allowlisted owner start Connected before automatic setup',async t=>{
+ const {db,context}=await setup(t);
+ const box=await connectedVenue(db,context.issuer,origin),session=await transaction(db.pool,c=>createSession(c,box.accountId));
+ const config=await prepareAccount(t,context);
+ const {RemoteAccessStore}=await import('../../packages/remote-access/src/placement.ts');
+ await new RemoteAccessStore(db.pool,mode).createCell({id:config.gateway.cellId,country:'ES',provider:'aws',environment:'test',suffix:'gateway.example.test',subnet:19,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'});
+ const running=await startAccount(db,context,{CLOUD_BILLING_ACCOUNT_TEST_IDS:box.accountId,TEST_CLOUD_TUNNEL_CELL_ID:config.gateway.cellId});
+ try{
+  const trial=await accountRequest(running,'/api/account/billing/start-trial',{venueId:box.venueId},{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken});
+  assert.equal(trial.status,200,JSON.stringify(trial.body));
+  assert.equal(trial.body.venues.find(venue=>venue.venueId===box.venueId).level,'connected');
+  const response=await accountRequest(running,'/api/installations/tunnel-provision',
+   box.proof('tunnel-provision',{peerPublicKey:randomBytes(32).toString('base64')},randomUUID(),box.lease));
+  assert.equal(response.status,200,JSON.stringify(response.body));
+  assert.equal(response.body.services.find(service=>service.service==='remote_access').configuration.cellId,config.gateway.cellId);
+ }finally{await running.close();}
+});
 
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{
  const {openTestRelayRuntime}=await api(),{context}=await setup(t);
@@ -75,9 +101,7 @@ test('composed signed account submission survives worker restart and reaches Mai
  const grant=await new RelayGrantStore(db.pool,runtime.admission.grants,mode).approve(session.token,session.csrfToken,
   {installationId:box.installationId,expectedRevision:0,consent:true,consentVersion:'local-v1',managementOrigin:'https://waitron.local:3000',expiresAt:new Date(Date.now()+1800000).toISOString()},statement);
  const body={version:1,messageId:randomUUID(),grantId:grant.id,grantRevision:grant.revision,class:'invitation',recipient:`${randomUUID()}@example.test`,displayName:'Cafe Sol',locale:'en',timeZone:'Europe/Madrid',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url')};
- await bootstrapTestCloudIdentity(context.directory,origin);await bootstrapStorageIssuer(context.directory);
- const reload=createServer((_req,res)=>{res.writeHead(204);res.end();});await new Promise(resolve=>reload.listen(join(context.directory,'storage-authority/reload.sock'),resolve));
- t.after(()=>new Promise(resolve=>reload.close(resolve)));
+ await prepareAccount(t,context);
  const running=await startAccount(db,context);
  try{
   const response=await accountRequest(running,'/v1/installations/email/submit',box.proof('email-submit',body,body.messageId,box.lease));

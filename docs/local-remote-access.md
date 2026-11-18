@@ -105,10 +105,9 @@ challenge record is absent. Pebble images are pinned by digest in
 
 ## Set up your venue in the account portal
 
-Open **Your venues**, then **Set up remote access** for your venue. You must be an
-organisation owner. Start with the assigned staff and public addresses; they avoid
-changing your own domain. If no gateway has been assigned, the screen says so instead
-of offering an address that cannot work.
+Open **Your venues**, then **Remote access** for your venue. You must be an
+organisation owner. Start with the assigned staff and public addresses. If your
+server is still waiting for an address, the panel shows that status.
 
 To use a name such as `staff.your-cafe.es`, choose the address to change, enter the name
 and select **Review DNS settings**. Create the displayed CNAME record at your domain
@@ -348,7 +347,7 @@ HTTPS path. See [the Amazon test setup](test-cloud.md#configure-a-separate-https
 Before a gateway check, the worker verifies that the custom CNAME still points to
 the assigned address. If the record has moved, Cloud keeps the current certificate while
 the worker retries. A failed DNS lookup leaves the last known record state in place.
-Look for the warning next to the affected address in **Set up remote access**.
+Look for the warning next to the affected address in **Remote access**.
 Point the record back to the target shown, then choose **Check again**. Cloud
 clears the warning once it verifies the record and makes the certificate job due
 if it is waiting. If the certificate is already being checked, let that attempt finish.

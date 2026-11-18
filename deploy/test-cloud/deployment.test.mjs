@@ -44,9 +44,12 @@ test('unavailable backup profile has its own writable controller volume and read
 });
 
 test('Amazon override configures HTTPS without publishing database, mail or internal storage',async()=>{
- const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'}}));
+ const accountId='f3a33048-3e2b-498a-b8b5-66e1d143cb5b';
+ const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates',CLOUD_BILLING_ACCOUNT_TEST_IDS:accountId}}));
  const{validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');assert.equal(validateDeployment(value,{image:value.services.account.image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/tmp/synthetic-certificates'}).ready,true);
  assert.equal(value.services.account.environment.CLOUD_VENUE_SERVICE_LEVELS,'test');
+ assert.equal(value.services.account.environment.CLOUD_BILLING_ACCOUNT_TEST_IDS,accountId);
+ for(const [name,service] of Object.entries(value.services))if(name!=='account')assert.equal(service.environment?.CLOUD_BILLING_ACCOUNT_TEST_IDS,undefined,name);
  assert.deepEqual(value.services.proxy.ports.map(p=>[p.host_ip,p.published,p.target]),[['0.0.0.0','443',443]]);
  for(const name of ['account','postgres','mailpit','storage'])assert.equal(value.services[name].ports,undefined,name);
  assert.deepEqual(value.services.gateway.ports.map(p=>[p.host_ip,p.published,p.target,p.protocol]),[['0.0.0.0','51820',51820,'udp']]);

@@ -8,22 +8,22 @@ import {AccountHttpError} from './errors.ts';
 import {readAccountBody} from './request.ts';
 import type {RateRule} from './rate-limit.ts';
 
-export type TunnelProvisionOptions={installationId:string;cellId:string};
+export type TunnelProvisionOptions={mode?:'pinned';installationId:string;cellId:string}|{mode:'automatic';cellId:string};
 export class TunnelProvisionMachine{
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;
  readonly #trial:TunnelProvisionOptions;readonly #store:RemoteAccessStore;
  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trial:TunnelProvisionOptions,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){
-  if(!trial||!isUuid(trial.installationId)||!isUuid(trial.cellId))throw Error('invalid_tunnel_provision_configuration');
+  if(!trial||!isUuid(trial.cellId)||(trial.mode==='automatic'?planMode!=='test-venue-levels':!isUuid(trial.installationId)))throw Error('invalid_tunnel_provision_configuration');
   this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#trial={...trial};this.#store=new RemoteAccessStore(pool,planMode);
  }
  async authenticate(envelope:SignedEnvelope){
   const claims=await new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate('tunnel-provision',envelope);
-  if(claims.installationId!==this.#trial.installationId)throw new InstallationError('permission_denied');
+  if(this.#trial.mode!=='automatic'&&claims.installationId!==this.#trial.installationId)throw new InstallationError('permission_denied');
   return claims;
  }
- async #authorize(client:PoolClient,envelope:SignedEnvelope,venueId?:string){
+ async #authorize(client:PoolClient,envelope:SignedEnvelope,id:string,venueId?:string){
   // Installation locks do not protect the venue's environment during allocation waits.
-  const row=(await client.query(`SELECT i.*,v.environment,clock_timestamp() AS now FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[this.#trial.installationId])).rows[0];
+  const row=(await client.query(`SELECT i.*,v.environment,clock_timestamp() AS now FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[id])).rows[0];
   if(!row)throw new AccountHttpError(503,'temporarily_unavailable',1);
   if(venueId!==undefined&&row.venue_id!==venueId)throw new InstallationError('permission_denied');
   const claims=verifyMachine(envelope,row.public_key,this.#origin,'tunnel-provision',row.now.getTime());
@@ -41,14 +41,16 @@ export class TunnelProvisionMachine{
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).join(',')!=='peerPublicKey'
    ||!isPeerKey((body as {peerPublicKey:unknown}).peerPublicKey)||JSON.stringify(body)!==claims.body)throw new AccountHttpError(400,'invalid_input');
   try{return await transaction(this.#pool,async client=>{
-   const initial=await this.#authorize(client,envelope);
-   try{await this.#store.provisionInTransaction(client,this.#trial.installationId,this.#trial.cellId,(body as {peerPublicKey:string}).peerPublicKey,443);}
+   const automatic=this.#trial.mode==='automatic';
+   const id=this.#trial.mode==='automatic'?claims.installationId:this.#trial.installationId;
+   const initial=await this.#authorize(client,envelope,id);
+   try{await this.#store.provisionInTransaction(client,id,this.#trial.cellId,(body as {peerPublicKey:string}).peerPublicKey,443,automatic?'restore-cleared':'restore-any');}
    catch(error){
-    if(error instanceof Error&&error.message==='cell_unavailable')await this.#authorize(client,envelope,initial.venue_id);
+    if(error instanceof Error&&error.message==='cell_unavailable')await this.#authorize(client,envelope,id,initial.venue_id);
     throw error;
    }
-   const result=await installationView(client,this.#trial.installationId);
-   await this.#authorize(client,envelope,initial.venue_id);
+   const result=await installationView(client,id);
+   await this.#authorize(client,envelope,id,initial.venue_id);
    return result;
   });}catch(error){
    if(error instanceof Error){

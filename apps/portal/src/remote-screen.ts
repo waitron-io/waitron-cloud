@@ -1,5 +1,5 @@
 import {permissionActions} from './permission-actions.ts';
-import {html,nothing} from 'lit';
+import {html,nothing,type LitElement} from 'lit';
 import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {PortalApp} from './app.ts';
 import {remoteReady,type RemoteKind,type ForwardCause} from './remote-types.ts';
@@ -8,13 +8,20 @@ export function remoteScreen(app:PortalApp,id:string,revoked=false){
  const c=app.copy,r=app.remote;
  if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${revoked?c.guestMenuTitle:c.remoteSetup}</wt-button>`;
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
+ const venueId=app.installations.installations.find(installation=>installation.installationId===id)?.venueId;
+ const canStart=app.billing.venues.some(venue=>venue.venueId===venueId&&venue.canStartTrial);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.error==='pairEnrollment'?html`<a href="#account-security-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#account-security-heading')?.focus();}}>${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'||r.error==='remoteProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
   ${r.error&&['remotePlanRequired','remoteSetupRequired','remoteTestOnly','remoteRevoked'].includes(r.error)?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.permissionBack}</a>`:nothing}
   ${r.error==='remoteRevoked'?html`<wt-button .disabled=${disabled||!!app.installations.waiting} @click=${()=>{void app.installations.load();}}>${c.remoteRefreshInstallations}</wt-button>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
-  ${v?html`<p role="status">${v.revoked?c.remoteRevoked:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
+  ${v?html`<p role="status">${v.revoked?c.remoteRevoked:v.connectedRequired?c.remoteConnectedRequired:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
+  ${v?.connectedRequired&&!v.revoked&&canStart&&venueId?html`<a href="#connected-trial" @click=${async(event:MouseEvent)=>{
+    event.preventDefault();app.billing.select(venueId);
+    const start=app.root.querySelector<LitElement>('#connected-trial-start');
+    await start?.updateComplete;start?.shadowRoot?.querySelector('button')?.focus();
+   }}>${c.billingStart}</a>`:nothing}
   ${v?.guestMenu?html`<section aria-label=${c.guestMenuTitle}><h5>${c.guestMenuTitle}</h5>
    <p role="status">${v.guestMenu.state==='current'?c.guestMenuCurrent:v.guestMenu.state==='blocked'?c.guestMenuBlocked:c.guestMenuOff}</p>
    <p><a href=${v.guestMenu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>
@@ -26,7 +33,7 @@ export function remoteScreen(app:PortalApp,id:string,revoked=false){
    <p>${!v.publicForward?c.forwardUnknown:v.publicForward.category===null?c.forwardSuccess:c[forwardCopy[v.publicForward.category]]}</p>
    ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}
   </section>`:nothing}
-  ${v?.names?html`<p>${c.remotePrivacy}</p>
+  ${v?.names&&!v.connectedRequired?html`<p>${c.remotePrivacy}</p>
    ${(['staff','public'] as const).map(kind=>{
     const name=v.names![kind],heading='remote-name-'+kind;
     const notice=c.remoteRecordMoved.replace('{hostname}',name.current).replace('{target}',name.assigned);
@@ -43,7 +50,7 @@ export function remoteScreen(app:PortalApp,id:string,revoked=false){
     ${r.confirmation?html`<div role="group" aria-label=${c.remoteConfirmTitle}><h5>${c.remoteConfirmTitle}</h5><p>${c.remoteInterruption}</p><p><strong>${r.confirmation.hostname}</strong></p>
      ${r.confirmation.records.length?html`<p>${c.remoteDnsHelp}</p>${r.confirmation.records.map(record=>html`<dl><dt>${c.remoteRecord}</dt><dd>CNAME</dd><dt>${c.remoteRecordName}</dt><dd>${record.name}</dd><dt>${c.remoteRecordValue}</dt><dd>${record.value}</dd></dl>`)}<p class="help">${c.remoteDnsApex}</p>`:html`<p>${c.remoteAssignedHelp}</p>`}
      <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.applyRemote();}}>${c.remoteConfirm}</wt-button></div>`:nothing}`:nothing}`:nothing}
-  <p class="help">${c.remoteLocalTrial}</p>
+  ${v&&!v.revoked&&!v.connectedRequired?html`<p class="help">${c.remoteBoxSwitch}</p>`:nothing}
   <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void r.load();}}>${c.refreshStatus}</wt-button><wt-button @click=${()=>{r.close();app.draw();}}>${c.remoteClose}</wt-button></div>
  </section>`;
 }

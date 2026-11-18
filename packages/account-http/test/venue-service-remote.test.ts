@@ -40,6 +40,7 @@ test('venue remote HTTP status masks downgraded setup and needs explicit reprovi
   await f.healthy();const response=await f.request('status');assert.equal(response.status,200,await response.clone().text());const initial=await response.json();assert.equal(initial.service.health,'healthy');assert.equal(initial.service.state,'ready');assert(initial.service.validUntil);
   await f.level('registered');await f.healthy();
   const denied=await f.request('status');assert.equal(denied.status,200,await denied.clone().text());const hidden=await denied.json();assert.equal(hidden.service.state,'unconfigured');assert.equal(hidden.service.health,'unknown');assert.equal(hidden.service.validUntil,null);assert.equal(hidden.publicForward,null);
+  assert.equal(hidden.connectedRequired,true);assert.equal(initial.connectedRequired,undefined);
   // Restore the real downgrade's unconfigured state after probing a retained stale row.
   await f.db.pool.query("UPDATE installation_services SET state='unconfigured',configuration='{}' WHERE installation_id=$1 AND service='remote_access'",[f.installed.installationId]);
   await f.level('connected');const upgraded=await f.request('status');assert.equal(upgraded.status,200,await upgraded.clone().text());assert.equal((await upgraded.json()).service.state,'unconfigured');

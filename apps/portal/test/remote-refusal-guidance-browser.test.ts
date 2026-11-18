@@ -5,6 +5,7 @@ import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
 const id='20000000-0000-4000-8000-000000000001';
+const otherVenue='10000000-0000-4000-8000-000000000001';
 const view={installationId:id,revision:1,revoked:false,names:{staff:{assigned:'staff.venue.example',current:'staff.venue.example'},public:{assigned:'venue.example',current:'venue.example'}},service:{state:'provisioning',health:'unknown',observedAt:null,validUntil:null}};
 const installation={installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
  overview:{organisationName:'Harbour Kitchen',businessName:'Harbour Kitchen',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},
@@ -16,16 +17,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const browser=await chromium.launch({headless:true});
   try{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
-   const c=translations[locale];let denied='',code='',revoked=false,statusRevoked=false,installationReads=0;const writes:string[]=[];
+   const c=translations[locale];let denied='',code='',revoked=false,statusRevoked=false,connectedRequired=false,installationReads=0;const writes:string[]=[];
    await page.route('https://portal.test/**',async route=>{
     const request=route.request(),path=new URL(request.url()).pathname;
     if(!path.startsWith('/api/account/'))return route.fulfill({contentType:'text/html',body:`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles}</style><div id="portal" class="portal"></div><script>${bundle.outputFiles[0]!.text}</script>`});
     const endpoint=path.slice('/api/account/'.length);
     if(endpoint==='action-proof')return route.fulfill({json:{methods:['passkey','recovery'],freshUntil:'2099-01-01T00:00:00Z'}});
-    if(endpoint==='session'||endpoint==='session/activity')return route.fulfill({json:{accountId:id,expiresAt:'2099-01-01T00:00:00Z'}});
+    if(endpoint==='session'||endpoint==='session/activity')return route.fulfill({json:{accountId:id,expiresAt:'2099-01-01T00:00:00Z',...(connectedRequired?{billingTrialAvailable:true}:{})}});
+    if(endpoint==='billing/read'&&connectedRequired)return route.fulfill({json:{venues:[otherVenue,id].map(venueId=>({venueId,level:'registered',canStartTrial:true,trial:null}))}});
     if(endpoint==='installations'){installationReads++;return route.fulfill({json:{installations:[{...installation,revokedAt:revoked?'2026-01-01T00:00:00Z':null}]}});}
     if(endpoint===denied){writes.push(endpoint);return route.fulfill({status:403,json:{error:code}});}
-    if(endpoint==='remote-access/status')return route.fulfill({json:{...view,revoked:statusRevoked||revoked}});
+    if(endpoint==='remote-access/status')return route.fulfill({json:connectedRequired?{...view,connectedRequired:true,names:null,service:{...view.service,state:'unconfigured'}}:{...view,revoked:statusRevoked||revoked}});
     if(endpoint==='remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:view.names.staff.assigned}]}});
     if(endpoint==='remote-access/apply'||endpoint==='installations/revoke')writes.push(endpoint);
     return route.fulfill({status:503,json:{error:'unavailable'}});
@@ -63,5 +65,19 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await page.locator('.remote-setup a[target=_blank]').count(),0);
    assert.equal(writes.filter(path=>path==='remote-access/apply').length,4,'one deliberate save refusal per cause; no automatic replay');
    assert.equal(writes.includes('installations/revoke'),false);
+   connectedRequired=true;await page.goto('https://portal.test/account');
+   await page.getByRole('button',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true}).click();
+   const panel=page.locator('.remote-setup');
+   await panel.getByRole('status').filter({hasText:locale==='en'?'Remote access comes with Connected.':'El acceso remoto está incluido en Connected.'}).waitFor();
+   assert.equal(await panel.locator('input').count(),0);
+   if(process.env.REMOTE_REFUSAL_RECEIPT_DIR){
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({path:`${process.env.REMOTE_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}-connected.png`});
+   }
+   await panel.getByRole('link',{name:c.billingStart,exact:true}).click();
+   const start=page.getByRole('button',{name:c.billingStart,exact:true});
+   await start.waitFor();
+   assert.equal(await page.getByLabel(c.billingVenue,{exact:true}).inputValue(),id);
+   assert.equal(await start.evaluate(element=>element.matches(':focus-within')),true);
   }finally{await browser.close();}
  });

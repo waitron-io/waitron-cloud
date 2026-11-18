@@ -62,14 +62,13 @@ This requires a previously provisioned connected or hosted test installation. Th
 `{"enabled":true}`; route and certificate workers apply the restored setup.
 Repeated on or off leaves the configuration revision unchanged.
 
-Off retains the peer configuration so the box's ordinary refresh sees its current
-key and does not request new provisioning. It still sees unconfigured setup and
-removes its tunnel configuration. Explicit trusted provisioning can restore setup,
-including the optional signed `POST /api/installations/tunnel-provision` trial
-endpoint. Test account startup keeps that endpoint closed. This switch does not
-revoke the installation or its keys. A level reset, recovery or re-pairing needs
-fresh provisioning. After any fresh provisioning, run off again if needed.
-Production, revoked and replaced installations refuse these commands.
+Off retains the peer key and reports unconfigured setup so the box disconnects.
+An automatic retry with the same key respects the stop. Use `enabled:true`
+to restore it explicitly. A billing lapse clears setup, including a previous
+operator stop. When Connected returns, the box can retry with its existing key.
+Recovery and re-pairing need fresh provisioning. The installation keeps its
+keys when you turn this switch off. Production, revoked and replaced
+installations refuse these commands.
 
 For backups, use the same command with a private input file containing:
 

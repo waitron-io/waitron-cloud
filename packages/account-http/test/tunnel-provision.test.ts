@@ -4,7 +4,8 @@ import {request as httpRequest} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
-import {createLeaseIssuer,OrganisationPlanStore,type PlanMode} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,OrganisationPlanStore,type PlanMode} from '@waitron-cloud/registration';
+import {event} from '../../registration/test/fixtures/venue-service.ts';
 import {RemoteAccessStore} from '@waitron-cloud/remote-access/placement';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
@@ -50,6 +51,41 @@ test('the configured box allocates once and concurrent fresh-proof retries retur
   assert.deepEqual(await f.store.provision(f.v.installationId,f.cellId,f.key),Object.fromEntries(Object.entries(remote.configuration).filter(([key])=>key!=='version')));
   const changed=await f.request(f.proof({peerPublicKey:peer()}));assert.equal(changed.status,409);assert.deepEqual(await changed.json(),{error:'placement_conflict'});
   assert.equal(responses[0]!.headers.get('cache-control'),'no-store');
+ }finally{await f.db.close();}
+});
+test('automatic mode provisions only eligible signed boxes and preserves a stopped setup on retry',async()=>{
+ const f=await fixture('test-venue-levels');try{
+  const automatic={mode:'automatic' as const,cellId:f.cellId};
+  const app=createAccountApp({...f.options,tunnelProvision:automatic});
+  const other=await connectedVenue(f.db,f.issuer,origin),otherKey=peer();
+  const postOther=()=>f.request(other.proof('tunnel-provision',{peerPublicKey:otherKey},randomUUID(),other.lease),app);
+  const denied=await postOther();assert.equal(denied.status,403,await denied.clone().text());
+  assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM remote_placements')).rows[0].n,0);
+  const billing=new BillingStore(f.db.pool);
+  for(const venue of [f.v,other]){
+   const scope={organisationId:venue.organisationId,legalBusinessId:venue.legalBusinessId};
+   await billing.execute(scope,event(),{type:'ensure_business'});
+   await billing.transition(scope,event(),{type:'start_trial',venueId:venue.venueId,level:'connected',on:new Date().toISOString().slice(0,10)});
+  }
+  const postFirst=()=>f.request(f.proof(),app);
+  const responses=await Promise.all([postFirst(),postFirst(),postOther()]);
+  for(const r of responses)assert.equal(r.status,200,await r.clone().text());
+  const [first,retry,second]=await Promise.all(responses.map(r=>r.json()));
+  assert.deepEqual(retry,first);
+  assert.equal(first.installationId,f.v.installationId);assert.equal(second.installationId,other.installationId);
+  const remote=(view:typeof first)=>view.services.find((s:{service:string})=>s.service==='remote_access');
+  assert.notEqual(remote(first).configuration.address,remote(second).configuration.address);
+  assert.equal(remote(second).configuration.staffHostname,`staff-v-${other.venueId}.cell.example.test`);
+  assert.equal((await f.db.pool.query('SELECT next_address FROM remote_cells WHERE id=$1',[f.cellId])).rows[0].next_address,4);
+  await f.db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1 AND service='remote_access'",[f.v.installationId]);
+  const stopped=await postFirst();assert.equal(stopped.status,200,await stopped.clone().text());
+  assert.equal(remote(await stopped.json()).state,'unconfigured');
+ }finally{await f.db.close();}
+});
+test('automatic tunnel setup cannot start outside test venue levels',async()=>{
+ const f=await fixture();try{
+  for(const planMode of ['existing','test-free-paid'] as const)
+   assert.throws(()=>createAccountApp({...f.options,planMode,tunnelProvision:{mode:'automatic',cellId:f.cellId}}),/invalid_tunnel_provision_configuration/);
  }finally{await f.db.close();}
 });
 test('disabled and browser requests refuse before parsing; incomplete options cannot start',async()=>{

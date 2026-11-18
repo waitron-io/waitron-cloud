@@ -24,7 +24,9 @@ services:
     environment: *amazon-environment
     ports: !reset []
   account:
-    environment: *amazon-environment
+    environment:
+      <<: *amazon-environment
+      CLOUD_BILLING_ACCOUNT_TEST_IDS: ${CLOUD_BILLING_ACCOUNT_TEST_IDS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "require('node:http').get('http://localhost:3000/api/health/ready',{headers:{host:new URL(process.argv[1]).host}},r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))", "${TEST_CLOUD_ORIGIN}"]
   email-worker:
