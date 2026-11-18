@@ -1,34 +1,50 @@
-# D621 run 9, PR 2 — PostgreSQL copies and ordered startup
+# D621 run 9, PR 2 — Local node loss and PostgreSQL
 
-One opt-in local check proves an acknowledged PostgreSQL write survives primary loss with three copies and that the schema gates a real consumer.
-It includes [PR 1’s fixed-address Kind check](2026-11-18-d621-stockholm-control-plane.md) and [P1 Task 5](2026-10-22-cloud-country-cell.md#task-5-replicate-the-country-database-and-order-migrations-4065-calls).
-The Stockholm fixture still needs A’s network mount (`deploy/kubernetes/bounded-amazon/bootstrap.sh:104–120`). Stockholm volume provisioning, real services, machine-loss qualification and cold restart stay with later slices.
+This follows the [three-member control-plane setup](2026-11-18-d621-stockholm-control-plane.md)
+and [P1 Task 5](2026-10-22-cloud-country-cell.md#task-5-replicate-the-country-database-and-order-migrations-4065-calls).
+The Stockholm fixture still mounts storage from A. PR 3 installs the PostgreSQL operator and
+provisions per-node volumes on Stockholm. Real machine loss and cold restart are later slices.
 
-Add `--database-loss` to `scripts/kubernetes-check.mjs`. The same run checks Kubernetes and PostgreSQL while preserving the existing fixture’s entry points.
-Use `scripts/kubernetes-node-loss.mjs` for the shared loop and `scripts/kubernetes-database.mjs` for database setup and checks.
-Put `{artifacts.json,cluster.yaml,migrate.yaml,probe.mjs}` in `deploy/kubernetes/database/`. Use the existing `deploy/local-stack/Dockerfile` Cloud image for the Job and probe.
-Add `scripts/kubernetes-node-loss.test.mjs` to `package.json`’s local-stack list and extend `scripts/kubernetes-check.test.mjs`. Update the backlog and AWS guide with measured scope.
+## PR 2a — Check three Kubernetes control planes in Kind
 
-1. Use an owned fixed-subnet network via Kind’s child-process environment, the existing node image digest, three schedulable control planes, the loopback balancer and a private kubeconfig.
-   Record container, node, etcd member, network and balancer IDs. On each leg, stop the exact node container with SIGKILL and verify it stays stopped.
-   Through the API, create and read a ConfigMap and schedule a fresh pod with a preloaded image and affinity that excludes the stopped node.
-   Disconnect the stopped container, reconnect it with its original IP, then start it. Verify its IP and the health and identity of all three original etcd members.
-   Check owned IDs before changes and cleanup. Use bounded commands, a 90 s failover check and a 180 s rejoin check. Retain diagnostics on failure. Preserve pre-existing images.
-2. Pin the CloudNativePG 1.29.2 manifest and PostgreSQL 18.4 images by digest. Use two operator replicas on separate nodes and three PostgreSQL instances on distinct hosts.
-   Use Kind’s local-path `standard` class with a separate volume claim per instance. Check the former primary retains the same claim and data.
-   Require `synchronous_commit=on` and `postgresql.synchronous={method:any,number:1,dataDurability:required,failoverQuorum:true}`.
-   Before primary loss, pause the two WAL receiver processes in the owned pods for less than their timeout. Check the commit waits on synchronous replication and neither receiver has reached the recorded write position.
-   Resume one receiver and kill the primary as soon as the commit returns. Once the node is confirmed down, resume the second receiver before waiting for promotion.
-   While the node stays down, require the old row and a fresh committed write through `cloud-db-rw:5432`. Keep the client on a survivor.
-   On return, check the write Service excludes the former primary. Pause its replay and require a direct INSERT with the writer role to fail with SQLSTATE `25006`.
-   Verify it is a replica and behind a new write on the primary. Resume replay and require catch-up. Prove writes through a separate standby loss in the same loop.
-3. Once the database and probe role are ready, run the unchanged `packages/registration/src/migrate-cli.ts` in a release-digest-named Job. Keep remote superuser access disabled.
-   Give the Job the operator’s database-owner Secret. Generate a separate Secret for the managed probe role. The Job grants it SELECT only on the ledger and probe table.
-   Mount the cluster CA, verify hostnames on TLS connections and run the probe from `/app` through `deploy/local-stack/schema-consumer.mjs`.
-   Test that an unfinished or failed Job starts no consumer, and that a real probe reads a migrated table after Job success. Corrupt one digest and show the wrapper refuses to start it.
-4. Observe RED, then GREEN with `node --test scripts/kubernetes-node-loss.test.mjs scripts/kubernetes-check.test.mjs`. These command tests cover ownership, Job order, stop, rejoin and cleanup.
-   Run `node scripts/kubernetes-check.mjs --database-loss` for real SQL, new Kubernetes workloads and three recoveries. In the same owned cluster, disable sync for a control and require the pending-commit check to fail, then restore it before the fault legs.
-   Use the approved runner after checking capacity. Use the existing 10 GiB memory and 30 GiB disk minimum as an initial floor and record headroom for the extra control planes and database pods.
+Run \`node scripts/kubernetes-check.mjs --node-loss\` to stop each control plane in turn and
+check that the other nodes accept API writes and schedule new work. Add the loop in
+\`scripts/kubernetes-node-loss.mjs\`. Reuse the pinned Kind node image and its preloaded pause
+image. Give Kind an owned fixed-subnet Docker network, a loopback balancer and a private
+kubeconfig. Make all three nodes schedulable. Keep the existing check targets.
 
-Use main’s tools. The parked country-cell branch’s tools, release helpers and Kind lifecycle stay outside this slice. All inputs are synthetic and all workloads are local.
-Estimate 400–560 implementation and 200–320 test lines. Count authored fixtures separately from fetched files. Return for scope review above 840 implementation or 480 test lines.
+Record the Docker container and network IDs, Kubernetes node UIDs and etcd member IDs.
+Disable automatic restart on the selected container before SIGKILL. Confirm it stays stopped
+through an API ConfigMap write and read and a fresh pod scheduled away from that node. Reconnect
+it at its original IP before starting it, then check the original members and their health.
+Allow 90 seconds for failover and 180 seconds for rejoin. Keep failure diagnostics and remove
+only owned resources. Leave cached images in place.
+
+Start with failing command checks in \`scripts/kubernetes-node-loss.test.mjs\` and add that file
+to the local-stack suite in \`package.json\`. Command tests cover ownership refusals and cleanup.
+The live run covers scheduling and rejoin. Measure memory during the live run on the approved
+rented CI server, with at least 10 GiB RAM and 30 GiB free disk. Update the backlog and AWS guide
+with the scope verified. Estimate 200–290 implementation lines and 100–160 test lines.
+
+## PR 2b — Check PostgreSQL loss in the same cluster
+
+Add \`--database-loss\` and \`scripts/kubernetes-database.mjs\`. Pin and digest-check the downloaded
+CloudNativePG 1.29.2 manifest and PostgreSQL 18.4 images. Patch the operator to two replicas on
+separate nodes with a digest-pinned image. Place three instances on distinct hosts with separate
+Kind local-path claims. Use synchronous commit, any one standby, required durability and
+failover quorum. Use the existing Cloud image with a release-digest migration Job and
+\`schema-consumer.mjs\` for the probe. Give the Job the database-owner Secret and keep remote
+superuser access disabled. Use a separate Secret and a CloudNativePG-managed \`pg_read_all_data\`
+role for the probe. Verify TLS hostnames. Start the probe before the Job finishes and have it
+retry. Show that the consumer can read only after migration success. The existing wrapper tests
+own the digest refusal.
+
+Pause both WAL receivers and show the commit waits. Raise only \`wal_sender_timeout\` to 30s
+while pausing, then restore it. For the sync-off control require the pending check to fail, then
+restore sync and wait for FailoverQuorum to report both standbys. Resume one receiver, stop the
+primary after acknowledgment, and resume the remaining receiver once the node is down. Verify
+the row and a new committed write through the write Service. After restart, sample that Service
+until the former primary is confirmed a replica. Pause its replay and use \`host=cloud-db-rw\`
+with \`hostaddr\` set to its pod IP, \`sslmode=verify-full\`, and the writer role. Require a direct
+INSERT to fail with SQLSTATE \`25006\`. Verify the same claim, lag, catch-up, and a successful
+write through a separate standby loss. The real run owns Job ordering and fault results.
