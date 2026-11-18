@@ -15,7 +15,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const id = '12345678-1234-4234-8234-123456789abc';
-const checkedAt = '2026-10-24T12:00:00Z', expiresAt = '2026-10-29T12:00:00Z';
+const checkedAt = '2026-10-24T12:00:00Z';
 
 for (const setupDelay of [0, 1100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -29,7 +29,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-24T12:01:01Z'));
       const c = translations[locale], writes: string[] = [], reads: unknown[] = [];
-      let condition: 'failed' | 'stale' | 'certificate' | 'healthy' = 'failed';
+      let condition: 'failed' | 'stale' | 'healthy' = 'failed';
       const installation = (): AccountInstallation => ({
         installationId: id, venueId: id, organisationId: id, legalBusinessId: id, environment: 'test',
         revision: 1, revokedAt: null, lastContactAt: checkedAt, leaseExpiresAt: null, canRevoke: true,
@@ -37,13 +37,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           service, state: 'ready', health: 'healthy', failure: null, observedAt: checkedAt,
         })),
         monitoring: {enabled: true, fresh: true, checkedAt, incidents: (['public', 'staff'] as const).flatMap(kind =>
-          condition === 'healthy' ? [] : [{kind: `${kind}_${condition === 'failed' ? 'route_failed' : condition === 'stale' ? 'probe_stale' : 'certificate_expiring'}` as const,
+          condition === 'healthy' ? [] : [{kind: `${kind}_${condition === 'failed' ? 'route_failed' : 'probe_stale'}` as const,
             openedAt: checkedAt, changedAt: checkedAt}]),
           remoteChecks: {
             public: {status: condition === 'failed' || condition === 'stale' ? 'failed' : 'healthy', checkedAt,
-              certificateNotAfter: condition === 'certificate' ? expiresAt : null},
+              certificateNotAfter: null},
             staff: condition === 'stale' ? null : {status: condition === 'failed' ? 'failed' : 'healthy', checkedAt,
-              certificateNotAfter: condition === 'certificate' ? expiresAt : null},
+              certificateNotAfter: null},
           }},
       });
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
@@ -66,14 +66,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const venue = page.locator('article.installation'), monitoring = venue.getByRole('group', {name: c.monitoring, exact: true});
       await monitoring.waitFor();
-      for (const scenario of ['failed', 'stale', 'certificate'] as const) await t.test(scenario, async () => {
+      for (const scenario of ['failed', 'stale'] as const) await t.test(scenario, async () => {
         condition = scenario;
         const response = page.waitForResponse('**/api/account/installations');
         await page.getByRole('button', {name: c.refreshStatus, exact: true}).last().click();
         await response;
         for (const kind of ['Public', 'Staff'] as const) {
           const group = monitoring.getByRole('group', {name: c[`monitor${kind}`], exact: true});
-          const message = group.getByText(c[`monitor${kind}${scenario === 'failed' ? 'Failed' : scenario === 'stale' ? 'Unknown' : 'Certificate'}`], {exact: true});
+          const message = group.getByText(c[`monitor${kind}${scenario === 'failed' ? 'Failed' : 'Unknown'}`], {exact: true});
           await message.waitFor();
           const text = await message.innerText();
           if (scenario === 'stale') {
@@ -85,12 +85,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             assert.ok(text.includes(c.remoteSetup));
             assert.match(text, locale === 'en' ? /selected hostname and status/ : /nombre seleccionado y el estado/);
             assert.match(text, locale === 'en' ? /require operator tools/ : /requieren herramientas de operador/);
-            if (scenario === 'certificate') {
-              assert.ok(text.includes(c.refreshStatus));
-              assert.match(text, locale === 'en' ? /Refresh status below the venue list/ : /Actualizar estado debajo de la lista de locales/);
-              assert.equal(await group.getByText(c[`monitor${kind}Healthy`], {exact: true}).isVisible(), true);
-              assert.deepEqual(await group.locator('time').evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime'))), [checkedAt, expiresAt]);
-            }
+
           }
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -121,7 +116,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         for (const kind of ['Public', 'Staff'] as const) {
           const group = monitoring.getByRole('group', {name: c[`monitor${kind}`], exact: true});
           assert.equal(await group.getByText(c[`monitor${kind}Healthy`], {exact: true}).isVisible(), true);
-          assert.equal(await group.getByText(c[`monitor${kind}Certificate`], {exact: true}).count(), 0);
         }
         assert.deepEqual(writes, []);
       });

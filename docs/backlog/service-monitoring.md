@@ -178,7 +178,7 @@ allocations inside global unicast space remain unqualified. See the
 [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
 The monitor rejects
 late results after hostname changes, replacement or revocation, treats stale evidence as
-unknown, and records deduplicated route-failure, certificate-expiry and recovery
+unknown, and records deduplicated route-failure and recovery
 transitions independently from installation contact. The local two-venue gateway proof
 now persists real observations while breaking one venue route and the whole gateway,
 proves recovery, stale/invalid-certificate handling, current control contact, portal and
@@ -193,7 +193,7 @@ versioned receipt includes empty cleanup and CI refusal checks. These are single
 local observations, not deployment targets. Waitron still needs a scoped automatic
 appliance trigger and joint outage/active-connection proof; choose and prove the
 launch recovery target before making an availability promise. The portal now shows
-separate redacted public/staff evidence and certificate warnings in English and Spanish.
+separate redacted public/staff evidence in English and Spanish.
 Opted-in owners receive bilingual remote
 incident and recovery messages; delivery rechecks route authority, and opt-out or
 revocation suppresses queued mail. Current incident and observation tables are bounded

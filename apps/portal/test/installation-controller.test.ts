@@ -42,7 +42,7 @@ test('overview accepts database character limits for Unicode names',()=>{
 test('remote monitoring accepts only redacted route evidence and known incidents',()=>{
  const checkedAt='2026-09-25T12:00:00.000Z',certificateNotAfter='2026-10-01T12:00:00.000Z';
  const item={...view,services:['remote_access','continuous_backup','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',observedAt:checkedAt})),monitoring:{enabled:true,fresh:true,checkedAt,incidents:[
-  {kind:'public_route_failed',openedAt:checkedAt,changedAt:checkedAt},{kind:'staff_probe_stale',openedAt:checkedAt,changedAt:checkedAt},{kind:'public_certificate_expiring',openedAt:checkedAt,changedAt:checkedAt},
+  {kind:'public_route_failed',openedAt:checkedAt,changedAt:checkedAt},{kind:'staff_probe_stale',openedAt:checkedAt,changedAt:checkedAt},
  ],remoteChecks:{public:{status:'failed',checkedAt,certificateNotAfter},staff:{status:'healthy',checkedAt,certificateNotAfter:null}}}};
  assert.equal(validInstallation(item),true);
  assert.equal(validInstallation({...item,monitoring:{...item.monitoring,remoteChecks:undefined}}),true);
@@ -78,4 +78,10 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  c.account('owner');c.installations=[view];c.choose(id);await c.revoke();
  assert.equal(c.error,`installationsRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.confirming,id);assert.equal(c.installations[0]?.revokedAt,null);
  assert.deepEqual(calls,[{path:'/installations/revoke',body:{installationId:id}}]);
+});
+
+for(const kind of ['public_certificate_expiring','staff_certificate_expiring'])test('an installation reply naming '+kind+' is refused',()=>{
+ const checkedAt='2026-11-01T12:00:00.000Z';
+ const item={...view,services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',failure:null,observedAt:checkedAt})),monitoring:{enabled:true,fresh:true,checkedAt,incidents:[]}};assert.equal(validInstallation(item),true);
+ assert.equal(validInstallation({...item,monitoring:{...item.monitoring,incidents:[{kind,openedAt:checkedAt,changedAt:checkedAt}]}}),false);
 });

@@ -45,7 +45,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         monitoring: {enabled: true, fresh, checkedAt: monitorCheckedAt, incidents: (['public', 'staff'] as const).flatMap(kind => [
           ...(incident ? [{kind: `${kind}_route_failed` as const, openedAt, changedAt: checkedAt}] : []),
           ...(stale ? [{kind: `${kind}_probe_stale` as const, openedAt, changedAt: checkedAt}] : []),
-          {kind: `${kind}_certificate_expiring` as const, openedAt, changedAt: checkedAt},
         ]), remoteChecks: {
           public: missing ? null : {status, checkedAt, certificateNotAfter: expiresAt},
           staff: missing ? null : {status: staffStatus, checkedAt, certificateNotAfter: expiresAt},
@@ -99,8 +98,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           for (const other of ['Healthy', 'Failed', 'Unknown'] as const) {
             assert.equal(await group.getByText(c[`monitor${kind}${other}`], {exact: true}).count(), other === want ? 1 : 0);
           }
-          assert.equal(await group.getByText(c[`monitor${kind}Certificate`], {exact: true}).isVisible(), true);
-          assert.deepEqual(await group.locator('time').evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime'))), missing ? [] : [checkedAt, expiresAt]);
+          assert.deepEqual(await group.locator('time').evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime'))), missing ? [] : [checkedAt]);
         }
         assert.deepEqual(writes, []);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);

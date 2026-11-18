@@ -19,14 +19,13 @@ for(const locale of ['en','es'] as const)test('service mail renders fixed '+loca
 const checkedAt='2026-09-25T12:00:00.000Z',certificateNotAfter='2026-10-01T12:00:00.000Z';
 const remote=[
  ['public_route_failed',{checkedAt}],['staff_route_failed',{checkedAt}],['public_probe_stale',{checkedAt}],['staff_probe_stale',{}],
- ['public_certificate_expiring',{checkedAt,certificateNotAfter}],['staff_certificate_expiring',{checkedAt,certificateNotAfter}],
 ] as const;
 for(const [issue,evidence] of remote)test(`${issue} payload and bilingual mail expose only bounded evidence`,()=>{
  const alert={...message,issue,...evidence};assert.equal(validServiceAlert(alert),true);
  for(const locale of ['en','es'] as const)for(const state of ['open','recovered'] as const){
   const mail=accountMail(new URL('https://cloud.example.test'),'service_alert',{...alert,locale,state});
   assert(mail.text.includes(locale==='en'?(issue.startsWith('public_')?'Public website':'Staff access'):(issue.startsWith('public_')?'Sitio público':'Acceso del personal')));
-  if('checkedAt' in evidence)assert(mail.text.includes(locale==='en'?'Sep 25, 2026, 12:00:00 PM UTC':'25 sept 2026, 12:00:00 UTC'));if('certificateNotAfter' in evidence)assert(mail.text.includes(locale==='en'?'certificate expires':'certificado caduca'));
+  if('checkedAt' in evidence)assert(mail.text.includes(locale==='en'?'Sep 25, 2026, 12:00:00 PM UTC':'25 sept 2026, 12:00:00 UTC'));
   assert(!mail.text.includes('AA:BB'));assert(!mail.text.includes('timeout'));
  }
 });
@@ -42,11 +41,15 @@ test('reminder discriminator accepts only an open reminder with canonical eviden
  for(const patch of [{notification:null},{notification:['reminder']},{notification:'transition'},{notification:'other'},{notification:'reminder',state:'recovered'},{notification:'reminder',failure:'timeout'},{notification:'reminder',issue:'public_route_failed',checkedAt:'2026-09-25T12:00:00Z'}])assert.equal(validServiceAlert({...message,...patch}),false);
 });
 for(const locale of ['en','es'] as const)test('reminder renders the agreed '+locale+' copy and bounded evidence',()=>{
- const alert={...message,locale,issue:'public_certificate_expiring' as const,state:'open' as const,notification:'reminder' as const,checkedAt,certificateNotAfter};
+ const alert={...message,locale,issue:'public_route_failed' as const,state:'open' as const,notification:'reminder' as const,checkedAt};
  const mail=accountMail(new URL('https://cloud.example.test'),'service_alert',alert);
  assert.equal(mail.subject,locale==='en'?'Waitron Cloud: a venue still needs attention':'Waitron Cloud: un local sigue necesitando atención');
  assert(mail.text.includes(locale==='en'?'This issue is still open. Check your account for current service status.':'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.'));
  assert(mail.text.includes(message.venueId));assert(mail.text.includes('https://cloud.example.test/account'));
  assert(mail.text.includes(locale==='en'?'Public website':'Sitio público'));assert(mail.text.includes(locale==='en'?'Sep 25, 2026, 12:00:00 PM UTC':'25 sept 2026, 12:00:00 UTC'));
  assert(!mail.text.includes(message.incidentId));assert(!mail.text.includes('reminder'));assert(!mail.text.includes('token='));
+});
+
+for(const issue of ['public_certificate_expiring','staff_certificate_expiring'])test(issue+' is refused as an owner alert',()=>{
+ assert.equal(validServiceAlert({...message,issue,checkedAt,certificateNotAfter}),false);
 });

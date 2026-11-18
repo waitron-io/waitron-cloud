@@ -30,16 +30,13 @@ The local monitor checks configured services on test installations once a minute
   the staff TLS handshake. A fresh failed check opens a route incident even when the
   installation still has current control contact. Missing results and results older than
   five minutes are unknown, not healthy.
-- **Remote certificates:** a certificate from a fresh successful check opens an expiry
-  incident when it has 30 days or less remaining. The stored expiry date tells you whether
-  the certificate is approaching expiry or has already expired.
 
 The first three checks use received control contact and the retained snapshot catalogue.
 The route checks use only the external probe evidence. None of them establishes
 continuous-server recoverability or permission to trade. When the venue monitor stops
 for five minutes, the portal shows its existing contact and snapshot view as unknown and
 keeps the last incident evidence visible. The portal also shows the latest public and
-staff checks separately, including an approaching certificate expiry. Missing or stale
+staff checks separately. Missing or stale
 remote evidence appears as unknown. It never exposes hostnames, certificate fingerprints,
 fixed failure codes or raw network errors.
 
@@ -60,10 +57,6 @@ Public website and staff access have separate check results and dates.
 - If monitoring is unknown, use **Refresh status** below the venue list to look
   for new observations. A missing recent check does not establish an outage, and
   refreshing does not start a probe or repair the route.
-- If a certificate expires soon, compare **Last external check** with **Verified
-  certificate expiry**. Check the selected hostname in remote setup, then refresh
-  the venue list to look for a newer observed expiry date. An expiry warning can
-  appear while the latest route check still passes.
 
 In Spanish, the controls are **Configurar acceso remoto** and **Actualizar estado**.
 You must still own the organisation to open remote setup for an active venue.
@@ -78,7 +71,7 @@ build, not a paid support path.
 The focused browser check exercises both languages, themes and screen widths with
 synthetic server replies. It follows the named setup and refresh controls, checks
 the hostname and pending status, and preserves the distinction between failed,
-unknown and expiring-certificate results:
+unknown and healthy results:
 
 ```sh
 node --test apps/portal/test/monitoring-action-guidance-browser.test.ts
@@ -91,7 +84,7 @@ they need Docker and do not run as part of these focused commands.
 
 ## Run the monitor
 
-Apply every migration through `037_monitoring_quiet_escalation.sql`. Configure `DATABASE_URL` and the
+Apply every migration through `073_retire_certificate_expiry_incidents.sql`. Configure `DATABASE_URL` and the
 same `CLOUD_EMAIL_KEYS` and `CLOUD_EMAIL_ACTIVE_KEY_ID` used by the account email queue.
 The monitor encrypts notification payloads using those keys. It needs no backup master
 key, storage credentials or SMTP credentials.
@@ -112,17 +105,16 @@ for the same interval, without marking their check fresh. A failing venue does n
 stop the continuous process or hold up other due venues. `--once` schedules and processes at most one venue.
 The continuous command stops claiming new work on shutdown and finishes the active batch.
 
-The route freshness and certificate warning thresholds have conservative defaults. Change
-them only when your local schedule needs different bounds:
+The route freshness threshold defaults to five minutes. Change it only when your
+local schedule needs a different bound:
 
 ```sh
 CLOUD_REMOTE_PROBE_STALE_SECONDS=300 \
-CLOUD_REMOTE_CERTIFICATE_WARNING_DAYS=30 \
 pnpm monitor:worker
 ```
 
-Probe freshness accepts 1 to 86,400 seconds. The certificate warning accepts 1 to 3,650
-days. Invalid values stop the worker instead of silently changing incident behavior.
+Probe freshness accepts 1 to 86,400 seconds. Invalid values stop the worker instead
+of silently changing incident behavior.
 
 Status needs only database access. It reports venue and due counts, unknown checks,
 open incidents and the oldest completed check. Use `pnpm mail:status` separately to

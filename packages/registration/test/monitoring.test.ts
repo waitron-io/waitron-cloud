@@ -131,13 +131,13 @@ test('unconfigured and production installations are not scheduled; stale checks 
  await db.pool.query("UPDATE venue_monitors SET checked_at=clock_timestamp()-interval '5 minutes 1 second'");assert.equal((await monitor.status()).unknown,1);
 });
 
-test('stale route evidence keeps its verified certificate warning separate',async()=>{
+test('stale route evidence reports stale probes without certificate warnings',async()=>{
  await remoteRoute();await remoteObservation('public','healthy',301,5);await remoteObservation('staff','healthy',301,60);await monitor.schedule();await contact(0);await monitor.runOnce();
- assert.deepEqual(await kinds(),['public_certificate_expiring','public_probe_stale','staff_probe_stale']);
- const notices=await alerts();assert.deepEqual(notices.map(row=>(db.outbox.open(row) as {issue:string}).issue).sort(),['public_certificate_expiring','public_probe_stale','staff_probe_stale']);
+ assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);
+ const notices=await alerts();assert.deepEqual(notices.map(row=>(db.outbox.open(row) as {issue:string}).issue).sort(),['public_probe_stale','staff_probe_stale']);
 });
 
-test('remote evidence records unknown, failure, recovery, certificate expiry and revocation independently of contact',async()=>{
+test('remote evidence records unknown, failure, recovery and revocation independently of contact',async()=>{
  await remoteRoute();await monitor.schedule();await contact(0);await monitor.runOnce();
  assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);let notices=await alerts();assert.deepEqual(notices.map(row=>(db.outbox.open(row) as {issue:string}).issue).sort(),['public_probe_stale','staff_probe_stale']);
 
@@ -149,7 +149,7 @@ test('remote evidence records unknown, failure, recovery, certificate expiry and
  await db.pool.query("UPDATE remote_probe_observations SET checked_at=clock_timestamp()-interval '301 seconds'");await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_probe_stale','staff_probe_stale']);
 
  await remoteObservation('public','healthy',0,-1);await remoteObservation('staff','healthy',0,29);await due();
- const concurrent=new MonitorWorker(db.secondPool,db.outbox,{probeStaleSeconds:300,certificateWarningDays:30});
+ const concurrent=new MonitorWorker(db.secondPool,db.outbox,{probeStaleSeconds:300});
  await db.pool.query(`CREATE TABLE remote_incident_gate(id integer PRIMARY KEY);INSERT INTO remote_incident_gate VALUES(1);
   CREATE FUNCTION pause_remote_incident() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM id FROM remote_incident_gate WHERE id=1 FOR UPDATE;RETURN NEW;END $$;
   CREATE TRIGGER pause_remote_incident BEFORE INSERT ON venue_incidents FOR EACH ROW EXECUTE FUNCTION pause_remote_incident()`);
@@ -162,20 +162,20 @@ test('remote evidence records unknown, failure, recovery, certificate expiry and
   if(!released)await gate.query('ROLLBACK');gate.release();await first?.catch(()=>{});
   await db.pool.query('DROP TRIGGER IF EXISTS pause_remote_incident ON venue_incidents;DROP FUNCTION IF EXISTS pause_remote_incident();DROP TABLE IF EXISTS remote_incident_gate');
  }
- assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
- const revisions=await db.pool.query("SELECT kind,revision FROM venue_incidents WHERE kind LIKE '%certificate_expiring' ORDER BY kind");assert.deepEqual(revisions.rows.map(row=>[row.kind,row.revision]),[['public_certificate_expiring',1],['staff_certificate_expiring',1]]);
+ assert.deepEqual(await kinds(),[]);
+ const revisions=await db.pool.query("SELECT kind,revision FROM venue_incidents WHERE kind LIKE '%probe_stale' ORDER BY kind");assert.deepEqual(revisions.rows.map(row=>[row.kind,row.revision]),[['public_probe_stale',4],['staff_probe_stale',4]]);
  assert.throws(()=>new MonitorWorker(db.pool,db.outbox,{probeStaleSeconds:0}),/invalid_monitor_config/);
 
- await remoteObservation('public','failed');await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','public_route_failed','staff_certificate_expiring']);
+ await remoteObservation('public','failed');await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_route_failed']);
  await remoteObservation('public','healthy',0,-1);await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
- await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+ await db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[venue.installationId]);await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
  const hostnames=(await db.pool.query('DELETE FROM remote_hostnames WHERE venue_id=$1 RETURNING *',[venue.venueId])).rows,placement=(await db.pool.query('DELETE FROM remote_placements WHERE installation_id=$1 RETURNING *',[venue.installationId])).rows[0];await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
  await db.pool.query('INSERT INTO remote_placements(venue_id,installation_id,cell_id,address,peer_public_key,port,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',[placement.venue_id,placement.installation_id,placement.cell_id,placement.address,placement.peer_public_key,placement.port,placement.created_at]);
  for(const hostname of hostnames)await db.pool.query('INSERT INTO remote_hostnames(hostname,venue_id,kind,assigned_hostname) VALUES($1,$2,$3,$4)',[hostname.hostname,hostname.venue_id,hostname.kind,hostname.assigned_hostname]);
- await due();await restarted.runOnce();assert.deepEqual(await kinds(),['public_certificate_expiring','staff_certificate_expiring']);
+ await due();await restarted.runOnce();assert.deepEqual(await kinds(),[]);
 
  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[venue.installationId]);await due();await restarted.runOnce();
- assert.deepEqual(await kinds(),[]);assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE kind LIKE 'public_%' OR kind LIKE 'staff_%'")).rows[0].count,'5');
+ assert.deepEqual(await kinds(),[]);assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE kind LIKE 'public_%' OR kind LIKE 'staff_%'")).rows[0].count,'3');
  assert.equal((await db.pool.query("SELECT count(*) FROM venue_incidents WHERE (kind LIKE 'public_%' OR kind LIKE 'staff_%') AND status<>'suppressed'")).rows[0].count,'0');
 });
 
@@ -420,4 +420,11 @@ test('only_completed_invalid_alerts: an inconclusive recheck preserves a complet
  await db.pool.query("UPDATE venue_monitors SET failure_since=clock_timestamp()-interval '301 seconds'");await due();await monitor.runOnce();
  await deliver();assert.equal(sent.length,1);assert.equal((sent[0] as {issue:string}).issue,'verification_failed');
  assert.equal((await db.pool.query('SELECT current_verification,last_reason FROM backup_point_qualification WHERE point_id=$1',[id])).rows[0].current_verification,'failed');
+});
+
+test('certificates inside the former warning window raise no owner incident or mail',async()=>{
+ await remoteRoute();await remoteObservation('public','healthy',0,5);await remoteObservation('staff','healthy',0,1);
+ await monitor.schedule();await contact(0);assert.equal(await monitor.runOnce(),true);
+ assert.equal((await alerts()).length,0);
+ assert.deepEqual((await db.pool.query("SELECT kind FROM venue_incidents WHERE kind LIKE '%certificate_expiring'")).rows,[]);
 });

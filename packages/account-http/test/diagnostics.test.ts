@@ -7,6 +7,8 @@ import {setTimeout as delay} from 'node:timers/promises';
 import type {HttpBindings} from '@hono/node-server';
 import {createSession} from '@waitron-cloud/identity';
 import {transaction} from '@waitron-cloud/registration';
+import {migrate} from '../../registration/src/migrate.ts';
+import {migrationRelease} from '../../registration/test/fixtures/migration-release.ts';
 import {createAccountApp} from '../src/app.ts';
 import {database} from './fixtures.ts';
 
@@ -129,4 +131,26 @@ test('legacy_rows_never_drive_default_or_healthy: diagnostic and overview timest
 test('recovered scope: diagnostics refuse outside authority before returning venue data',async()=>{
  await setRecoveryScope(db.pool,owner);assert.equal((await call({installationId:installation})).status,403);
  await setRecoveryScope(db.pool,owner,organisation);assert.equal((await call({installationId:installation})).status,200);
+});
+
+
+test('a leftover open expiry incident is suppressed by the migration and not listed',async()=>{
+ const old=await migrationRelease(72);
+ try{
+  await db.pool.query(`DROP SCHEMA "${db.schema}" CASCADE; CREATE SCHEMA "${db.schema}"`);await old.migrate(db.pool);
+  const business=id();
+  await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[owner]);await db.pool.query('INSERT INTO organisations(id) VALUES($1)',[organisation]);
+  await db.pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[business,organisation]);
+  await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'test')",[venue,organisation,business]);
+  await db.pool.query("INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,'synthetic-old-installation-key')",[installation,venue]);
+  await db.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','ready')",[installation]);
+  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,true,true)',[owner,organisation]);
+  await db.pool.query('INSERT INTO venue_monitors(venue_id,checked_at) VALUES($1,clock_timestamp())',[venue]);
+  await db.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'public_certificate_expiring','open',1),($1,'staff_certificate_expiring','open',1),($1,'disconnected','open',1)",[venue]);
+  ownerSession=await transaction(db.pool,client=>createSession(client,owner));
+  await migrate(db.pool);
+  const response=await call({installationId:installation});assert.equal(response.status,200,await response.clone().text());
+  assert.deepEqual((await response.json()).installation.monitoring.incidents.map((incident:{kind:string})=>incident.kind),['disconnected']);
+  assert.deepEqual((await db.pool.query("SELECT status,revision FROM venue_incidents WHERE kind LIKE '%certificate_expiring' ORDER BY kind")).rows,[{status:'suppressed',revision:2},{status:'suppressed',revision:2}]);
+ }finally{await old.close();}
 });

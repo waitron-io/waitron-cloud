@@ -23,8 +23,8 @@ const auditedInputs = [
   '100644 blob 40ad1f612609f31f427aa150f0e47df04c802ac6\tscripts/verify-backup-transfer-receipt.mjs',
   '100644 blob b6a7d5881d3b1ac01c63db82d659ca17248df351\tscripts/verify-managed-recovery-receipt.mjs',
   '100644 blob deea5a57d198528cfe7a3c01e6f72ff228bf6e65\tscripts/verify-managed-recovery-receipt.test.mjs',
-  '100644 blob 50c6c90d396af2d2b60bd5ab467007960af4c178\tscripts/verify-two-venue-milestone-receipt.mjs',
-  '100644 blob c9c926755c5a6a80653c2c8b0e07f3a2376a6f84\tscripts/verify-two-venue-milestone-receipt.test.mjs',
+  '100644 blob 15602f02e3bc657866de171d1d943cebd75305e5\tscripts/verify-two-venue-milestone-receipt.mjs',
+  '100644 blob 12485972158a5800f99552f9d6060664568adc02\tscripts/verify-two-venue-milestone-receipt.test.mjs',
 ];
 
 function milestoneReceiptPlan(receipts, scope, base, head, git) {
