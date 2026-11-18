@@ -39,9 +39,9 @@ async function retry(check, signal, canRetry = () => true) {
   signal.throwIfAborted();
 }
 
-function retryApi(check, signal, stage) {
+export function retryApi(check, signal, stage) {
   return retry(check, signal, error => {
-    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF/i.test(error.message)) return false;
+    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF|^error: EOF$/im.test(error.message)) return false;
     process.stderr.write(`Waiting for the Kind API during ${stage}\n${error.message.slice(-2048)}\n`);
     return true;
   });

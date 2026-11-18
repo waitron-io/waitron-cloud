@@ -3,6 +3,7 @@ import {createHash, randomBytes} from 'node:crypto';
 import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {retryApi} from './kubernetes-node-loss.mjs';
 
 const operatorImage = 'ghcr.io/cloudnative-pg/cloudnative-pg:1.29.2@sha256:4710b10a4897a4f888cbe80bce8b279475315590fb9f2cb0ebb516f2f40ebf06';
 const postgresImage = 'ghcr.io/cloudnative-pg/postgresql:18.4-standard-trixie@sha256:ebf3919504d7523a63e8e2fee9b051211de714644b36469275558c624afd50ec';
@@ -159,7 +160,11 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
   });
   const writeRow = name => `INSERT INTO failover_probe VALUES ('${name}') ON CONFLICT (marker) DO UPDATE SET marker=excluded.marker RETURNING marker`;
   const readRow = name => `SELECT marker FROM failover_probe WHERE marker = '${name}'`;
-  const verifyWrite = async (name, options) => assert.equal(await sql(writeRow(name), options), name, 'database_loss.written_row');
+  async function verifyWrite(name, options) {
+    // The marker is idempotent if the API connection drops after the database commits.
+    const row = await retryApi(() => sql(writeRow(name), options), options.signal, name);
+    assert.equal(row, name, 'database_loss.written_row');
+  }
 
   async function identities(instances, options) {
     assert.deepEqual(instances.map(pod => pod.spec.nodeName).sort(), [...nodes].sort(), 'database_loss.one_instance_per_node');

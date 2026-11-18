@@ -67,8 +67,9 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
         return '';
       }
       if (verb === 'get' && kind === 'configmap' && readTimeout) {
+        const message = readTimeout === 'eof' ? 'kubectl failed\nerror: EOF\n' : 'Unable to connect to the server: context deadline exceeded';
         readTimeout = false;
-        throw Error('Unable to connect to the server: context deadline exceeded');
+        throw Error(message);
       }
       if (verb === 'get' && (kind === 'configmap' || kind === 'pod')) return JSON.stringify(pod);
       if (verb === 'taint' || verb === 'wait' || kind === 'events') return '';
@@ -226,4 +227,12 @@ test('a database fault runs its checks around the stop and restart of the select
   assert.equal(result.database.rejoined, result.nodes[0].name);
   assert.equal(f.remaining(), 0);
   assert.ok(f.removed());
+});
+
+test('the fault check retries a bare Kubernetes API EOF while the node stays down', async () => {
+  const f = fixture({readTimeout: 'eof'});
+  const result = await runCheck({execute: f.execute});
+  assert.equal(result.legs.length, 3);
+  assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
+  assert.deepEqual(f.mutations('start'), f.mutations('kill'));
 });
