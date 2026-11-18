@@ -521,7 +521,7 @@ export class BackupCatalogue {
       }
       try{source=await staged(objects,attempt.point.objectKey,options);}
       catch(error){
-        if(!signal.aborted&&stagingCutoff!==undefined&&Date.now()>=stagingCutoff)throw Error('backup.verifier_timeout');
+        if(options.signal?.aborted&&!signal.aborted)throw Error('backup.verifier_timeout');
         throw error;
       }
       signal.throwIfAborted();

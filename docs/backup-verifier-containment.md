@@ -41,7 +41,8 @@ allocate a 16 GiB filesystem for the named scratch volume. The filesystem bounds
 writes, including the input, the unpacked archive and the restored database.
 
 ```sh
-scratch=$(realpath "$(mktemp -d)")
+scratch=/absolute/path/to/worker-verifier-scratch
+mkdir -m 0700 "$scratch"
 mkdir "$scratch/mount"
 fallocate -l 16G "$scratch/disk"
 mkfs.ext4 -q -m 0 "$scratch/disk"
@@ -52,19 +53,61 @@ docker volume create --driver local --label cloud.backup-verifier.scratch=waitro
 ```
 
 Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
-Run the venue-level test worker on that same Linux host with its pinned image ID in
+Run the venue-level test worker as uid 1000 on the same Linux host as its database
+so the worker can clear scratch and both use the same clock. Put the pinned image ID in
 `CLOUD_VERIFIER_IMAGE`, its own controller state directory in `CLOUD_VERIFIER_STATE_DIR`,
 the volume name in `CLOUD_VERIFIER_SCRATCH_VOLUME` and the worker's separate 5 GiB
 [staging directory](local-backups.md#use-disk-stages-for-the-local-publication-trial) in
 `CLOUD_BACKUP_STAGE_ROOT`. The trusted worker accesses the mounted directory on
-the host. The child sees it as its only writable mount at `/scratch`.
+the host. Keep the loop mount's `nodev,nosuid,noexec` flags when remounting it. The
+child sees the volume as its only writable mount at `/scratch`.
+
+Before starting the worker, set its disposable database's verification policy to
+the streamed target. The policy pins the target and image together so a different
+image cannot qualify a snapshot. With `DATABASE_URL` pointing at the venue-level
+test database and the same `CLOUD_VERIFIER_IMAGE` set, run this from the repository root.
+
+```sh
+node --input-type=module <<'JS'
+import {createRequire} from 'node:module';
+import {transaction} from './packages/registration/src/index.ts';
+import {setVerificationPolicy} from './packages/backups/src/verification-admission.ts';
+import target from './deploy/backup-verifier/streamed-target.json' with {type:'json'};
+
+const {DATABASE_URL, CLOUD_VERIFIER_IMAGE} = process.env;
+if (!DATABASE_URL || !/^sha256:[a-f0-9]{64}$/.test(CLOUD_VERIFIER_IMAGE ?? ''))
+  throw Error('Set the test database URL and the pinned verifier image ID');
+const {Pool} = createRequire(new URL('./packages/registration/package.json', import.meta.url))('pg');
+const pool = new Pool({connectionString: DATABASE_URL});
+try {
+  await transaction(pool, client =>
+    setVerificationPolicy(client, target, 'local.waitron-verifier@' + CLOUD_VERIFIER_IMAGE, true));
+} finally {
+  await pool.end();
+}
+JS
+CLOUD_VENUE_SERVICE_LEVELS=test node deploy/test-cloud/backup-worker.mjs --once
+```
 
 The worker has six minutes to keep its claim on a job. Verification has five
 minutes, with the final 30 seconds reserved for cleanup and recording the result.
-The controller confirms the exact child is gone, then clears the volume without
-following links before it releases the slot. A restart uses the same volume and
-controller state to reclaim an expired job. If the controller cannot confirm the
-child's removal or the volume's emptiness, it withholds the result.
+The controller confirms the exact child is gone, restores write permission on any
+read-only scratch directories and removes their contents without following links.
+After a worker restart, use the same volume and controller state to reclaim expired
+work. If you reboot the host, remount the same filesystem at the same path before
+starting the worker. If the controller cannot confirm the child's removal or the
+volume's emptiness, it withholds the result.
+
+Use a separate 64 MiB filesystem, created with `fallocate -l 64M`, for the test
+that deliberately fills scratch. Name the test volume `streamed-verifier-test-scratch` and pass its name as
+`TEST_CLOUD_VERIFIER_SCRATCH_VOLUME` when you run the focused Linux test. This case
+runs locally on demand because it needs a disposable loop mount.
+
+```sh
+TEST_CLOUD_VERIFIER_SCRATCH_VOLUME=streamed-verifier-test-scratch \
+  node --test --test-name-pattern='disk-backed verification exposes' \
+  packages/backups/test/bound-container-verifier.test.ts
+```
 
 ## Failure and restart
 

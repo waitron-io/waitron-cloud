@@ -76,20 +76,28 @@ test('the disk-backed worker gives verification five minutes inside a six-minute
  assert.equal((await f.state()).point.verification, 'verified');
 });
 
-test('disk-backed verification stops staging in time to record the expired work', async () => {
+test('disk-backed verification stops staging in time to record the expired work', async t => {
  const f = await fixture();
  await db.pool.query("UPDATE backup_jobs SET status='running', claim_id=$1, attempts=1, lease_until=clock_timestamp()+interval '31 seconds' WHERE id=$2",
   [f.claim.claimId, f.claim.id]);
+ const wallClock = Date.now();
+ t.mock.method(Date, 'now', () => wallClock);
+ let timedOut: number | undefined, aborted = false, verifierCalls = 0;
  const catalogue = f.catalogue(() => ({
   async stage(_key, _expected, options) {
-   await delay(2500, undefined, {signal: options?.signal});
-   assert.fail('staging continued into the cleanup reserve');
+   timedOut = options?.timeoutMs;
+   try { await delay(2500, undefined, {signal: options?.signal}); }
+   finally { aborted = options?.signal?.aborted === true; }
+   throw Error('staging continued into the cleanup reserve');
   },
   async putStaged() { assert.fail('verification does not publish'); },
   async remove() { assert.fail('verification does not delete'); },
  }));
  assert.equal(await catalogue.verifyClaim({...f.claim, diskBackedVerification:true},
-  async () => assert.fail('the verifier must wait for complete staging')), 'unavailable');
+  async (_source, _key, request) => { verifierCalls++; return output(request); }), 'unavailable');
+ assert(timedOut !== undefined && timedOut > 0 && timedOut < 2500);
+ assert.equal(aborted, true);
+ assert.equal(verifierCalls, 0);
  const {attempts, point} = await f.state();
  assert.equal(attempts[0].reason, 'deadline');
  assert.equal(point.verification, 'pending');

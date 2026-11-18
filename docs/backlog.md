@@ -1870,9 +1870,9 @@ implementation or production evidence.
   explicitly selected 3ff92a10 Waitron images; the latter also passes
   `scripts/test-cloud-paid-continuous-recovery.test.mjs`. Production custody, release
   qualification, provider isolation, capacity and lifecycle policies remain open.
-  Whole-year backups still need the large verifier and a genuine recovery. See
-  [the complete requirements and deliberate limits](backlog/data-lifecycle.md), including
-  unresolved verifier failures.
+  The venue-level test worker can use bounded disk scratch. Raising the 512 MiB
+  ceiling still needs year-sized recovery, and fiscal verification still needs
+  VERIFIER-CERT-OPEN. See [the requirements and deliberate limits](backlog/data-lifecycle.md).
 
 
 ## Backup catalogue qualification

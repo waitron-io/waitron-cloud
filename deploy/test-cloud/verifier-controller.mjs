@@ -2,7 +2,7 @@ import {execFile} from 'node:child_process';
 import {constants} from 'node:fs';
 import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
-import {mkdir,open,rm,lstat,realpath,readdir,statfs} from 'node:fs/promises';
+import {chmod,mkdir,open,rm,rmdir,lstat,realpath,readdir,statfs,unlink} from 'node:fs/promises';
 import {isAbsolute,join} from 'node:path';
 import {atomicPrivateFile} from './storage-authority.mjs';
 import {readBackupVerificationRequest,backupVerificationRequestDigest,parseBackupVerificationJson} from '../../packages/backups/src/verification-protocol.ts';
@@ -31,10 +31,20 @@ async function scratchDirectory(volume,owner){
      info.Labels?.['cloud.backup-verifier.scratch']!==owner||info.Options?.type!=='none'||info.Options?.o!=='bind'||
      typeof path!=='string'||!isAbsolute(path)||await realpath(path)!==path)throw Error();
   const entry=await lstat(path),fs=await statfs(path);
-  if(!entry.isDirectory()||entry.uid!==1000||entry.gid!==1000||(entry.mode&0o777)!==0o700||
+  if(!entry.isDirectory()||entry.uid!==1000||entry.gid!==1000||
      fs.type!==0xef53||fs.blocks*fs.bsize>16*1024**3)throw Error();
   return path;
  }catch{throw Error('test_cloud.verifier_configuration');}
+}
+async function clearScratchDirectory(path){
+ await chmod(path,0o700);
+ for(const name of await readdir(path)){
+  const entry=join(path,name);
+  if((await lstat(entry)).isDirectory()){
+   await clearScratchDirectory(entry);
+   await rmdir(entry);
+  }else await unlink(entry);
+ }
 }
 export async function openVerifierController({directory,owner,image,scratchVolume}){
  if(!imagePattern.test(image??'')||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(owner??''))throw Error('test_cloud.verifier_configuration');
@@ -51,10 +61,9 @@ export async function openVerifierController({directory,owner,image,scratchVolum
   if(scratch===undefined)return;
   try{
    if(await scratchDirectory(scratchVolume,owner)!==scratch)throw Error();
-   if(clear){
-    // The exact child is already absent, so it cannot swap paths during removal.
-    for(const name of await readdir(scratch))await rm(join(scratch,name),{recursive:true,force:true});
-   }
+   // Once the exact child is gone it cannot swap paths while we repair directory modes.
+   if(clear)await clearScratchDirectory(scratch);
+   if(((await lstat(scratch)).mode&0o777)!==0o700)throw Error();
    if((await readdir(scratch)).length!==0)throw Error();
   }catch{throw Error('test_cloud.verifier_ownership');}
  }
