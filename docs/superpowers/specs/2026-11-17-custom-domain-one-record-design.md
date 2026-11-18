@@ -433,8 +433,9 @@ DNS record, and must not break printed QR links.
     the value and says how long a switch can take with it.
 - **A move or failover switches only Cloud's record**, at the point the move commits to the new
   cell.
-  - Before the switch, the new cell must already hold the venue's route, the public certificate and
-    any check file. A staged move already publishes the route to the destination cell.
+  - Before the switch, the new cell must already hold the venue's route and public certificate.
+    A staged move publishes the route to the destination cell. The move advances the revision,
+    so an order from the old revision cannot publish.
   - The owner's CNAME and the QR links are unchanged throughout.
   - Deciding *when* to fail over, and getting a replacement cell ready when a cell is lost, stay
     with the cell-move work. This design only guarantees that the names never need to change.
