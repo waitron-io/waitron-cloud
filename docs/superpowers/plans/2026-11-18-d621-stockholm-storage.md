@@ -46,10 +46,9 @@ and raw S3 for listings and the multipart missing-part case. Use a private NodeP
 on the contacted host and matching TLS names. Within the 90-second outage, check old bytes, list,
 new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
 the stop. During it, reject completion that references a missing part, then upload
-that part, complete and compare bytes. PR 5 starts by diagnosing why MinIO
-sometimes misses repair after a machine returns. It must prove returned-disk
-repair and a pending multipart upload through consecutive outages before run 9.
-See the Cloud services task in the country-cell plan.
+that part, complete and compare bytes. The Cloud services task in the
+country-cell plan tracks returned-disk repair and multipart through consecutive
+outages.
 
 Start with the placement checks and name the live fault cases in
 `scripts/kubernetes-storage.test.mjs`. Check the launcher store install order and
@@ -60,3 +59,25 @@ store install off if the slice exceeds one and a half times its estimate. Remove
 `two_node_loss_refuses_writes` from P1 Task 6 in this slice. Update the backlog and AWS
 guide after each slice. PRs 4, 5, 7 and 8 still own temporary credentials, Cloud cutover,
 the 15-minute full-service fault legs and cold restart. Paid work stays behind its gates.
+
+## Limits found in the Linux rehearsal
+
+On 18 November, two runs of the unpublished repair candidates used
+`TEST_KUBERNETES_STOCKHOLM_STORAGE=1 node --test scripts/kubernetes-storage.test.mjs`
+in disposable three-machine Kind clusters and found two limits for run 9:
+
+- The store did not always repair a returned machine. Both serving peers reported
+  six online drives once the machine returned, but the repair check still found a
+  missing object shard on a returned disk. The local
+  `repair-reconnect-capture-01.log` records the drive counts at lines 95–98 and
+  the failed disk check at line 647.
+- In a separate run, both serving peers reported four of six drives online
+  during the first outage. The read of an object written before the outage
+  received HTTP 503 `SlowDownRead`. The run stopped before the machine returned
+  or the check requested repair. The local `repair-peer-refresh-live-01.log`
+  records the drive counts at line 83 and the read refusal at lines 423–445.
+
+Each run passed six focused checks and failed the live case. The cause of the
+read refusal remains open. PR 4 can qualify scoped credentials on the existing
+store. Returned-drive repair and multipart through consecutive outages remain
+unqualified.

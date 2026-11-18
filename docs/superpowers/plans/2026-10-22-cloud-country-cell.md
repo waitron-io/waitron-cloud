@@ -181,7 +181,17 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
 
 ### Task 7: Deploy API, email, usage, monitor, probe and operations (40–60 calls)
 
-- [ ] Start PR 5 by finding why the first outage can miss disk repair despite six online drives. Read MinIO's healing state and logs on a failing run, then fix the demonstrated cause. Prove both outage objects repair onto both returned disks and read the acknowledged bytes through the returned machine. Extend the rehearsal through consecutive outages. After the first repair, start a multipart upload and stop the next machine before completing it. Require missing-part refusal, then complete the upload and verify its bytes. Check earlier acknowledged objects and repair onto both returned disks before advancing. Both gates must pass before run 9. Keep the approved spending check and $10 stop.
+- Carry the [observed storage limits](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
+  into the run 9 decision. The store did not always repair a returned machine,
+  and a baseline object read once received HTTP 503 during the first outage.
+  PR 4 can qualify scoped storage access on the existing store.
+- [ ] Returned-drive repair remains open. Before declaring redundancy restored,
+  verify both outage objects on both returned disks and read their acknowledged
+  bytes through the returned machine. Consecutive-outage multipart also remains
+  open. After verifying the first repair, start a multipart upload and stop the
+  next machine before completing it. Require missing-part refusal, then complete
+  the upload and verify its bytes. Check earlier acknowledged objects and both
+  returned disks. Keep the approved spending check and $10 stop for run 9.
 
 
 **Files:** `base/services/account.yaml`, `base/workers/{email,usage,monitor,probe,operations}.yaml`; mail/runtime/operations adapters and tests; `local/mail/{sink,service}.yaml`.
