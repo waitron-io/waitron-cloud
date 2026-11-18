@@ -32,9 +32,11 @@ test('reset link recovers through the real Cloud box decision, then enrolls a ne
   const request=(await read.json()).requests[0];assert.equal(request.accountId,box.accountId);
   const approved=await context.request.post(f.origin+'/api/installations/owner-recovery-approve',{data:box.proof('owner-recovery-approve',{request,approvedBy:randomUUID()},request.requestId,box.lease)});assert.equal(approved.status(),200);
   await page.getByRole('button',{name:'Check approval',exact:true}).click();await page.locator('input[name=ownerRecoveryPassword]').waitFor();await look('approved');
+  let requested!:()=>void,resume!:()=>void,continued!:()=>void;const held=new Promise<void>(r=>{requested=r;}),release=new Promise<void>(r=>{resume=r;}),resumed=new Promise<void>(r=>{continued=r;});
+  const holdProof=async(route:import('playwright').Route)=>{requested();await release;await route.continue();continued();};await page.route('**/api/account/action-proof',holdProof);
   await page.locator('input[name=ownerRecoveryPassword]').fill('A fresh box recovered password');await page.locator('input[name=ownerRecoveryPassword]').press('Enter');
   await page.getByText(translations.en.enrollmentRequiredHelp,{exact:true}).waitFor();assert.equal(await page.locator('#installations-section').count(),0);
-  await page.getByRole('button',{name:translations.en.passkeyAdd,exact:true}).click();await page.getByText(translations.en.accountIntro,{exact:true}).waitFor();
+  await held;await page.getByRole('button',{name:translations.en.passkeyAdd,exact:true}).click();resume();await resumed;await page.unroute('**/api/account/action-proof',holdProof);await page.getByText(translations.en.accountIntro,{exact:true}).waitFor();
   assert.equal((await f.db.pool.query('SELECT recovery_organisation_id FROM cloud_accounts WHERE id=$1',[box.accountId])).rows[0].recovery_organisation_id,box.organisationId);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1',[box.accountId])).rows[0].count,'1');
 

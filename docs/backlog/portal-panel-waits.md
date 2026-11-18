@@ -65,3 +65,30 @@ weakness in the fixture; the original CI response was not retained, so it does
 not establish that run's cause. The Mac result does not qualify Linux. Keep the
 enrolment, session, membership and explicit acceptance checks while investigating
 the fixture's code timing; a later green CI run is not a repair.
+
+## Owner recovery enrolment wait
+
+[PR #1284's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44200297572/job/134452537917)
+and [its merge job](https://github.com/waitron-io/waitron-cloud/actions/runs/44204279476/job/134466278119)
+exceeded six seconds waiting for Account after adding a passkey. Neither saved
+the proof-status response. The unchanged Linux journey passed between failures.
+
+Holding its initial proof-status reply reproduces the same wait: `ensure()`
+returned false while its own status read was pending, discarding the enabled
+click. It now awaits that read, retaining account fencing and server permission
+checks. The deferred-read controller case and the real recovery journey fail
+before the fix and pass after it with the original six-second deadline. Run
+`node --test apps/portal/test/account-action-proof-controller.test.ts` and the
+portal's `test/owner-recovery-browser.test.ts` through the PostgreSQL wrapper.
+This fixes the reproduced race; the original CI response remains untraced.
+
+## Changed-email sign-in wait
+
+[The same merge's second portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44204279476/job/134466278462)
+exceeded five seconds waiting for Spanish “Inicia sesión” after confirming an
+email change (`account-security-browser.test.ts:35`). No refusal was recorded
+for that case. The confirmation button already waits for its session-list read
+through its disabled state; holding those reads for one second still passes all
+eight language, theme and width journeys on Linux (one test case). That control
+does not reproduce or repair this different wait. Preserve its checks and
+deadline; diagnose a recurrence rather than assuming the proof-status race.

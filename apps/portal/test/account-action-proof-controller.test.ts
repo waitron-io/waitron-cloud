@@ -36,3 +36,11 @@ test('authorisation begun for one account cannot borrow another account fresh wi
  c.account('old');const work=c.ensure();c.account('new');await c.load();release({ok:true,value:{methods:['app'],freshUntil:new Date(Date.now()+600000).toISOString()}});
  assert.equal(await work,false);
 });
+
+
+test('ensure waits for the initial status read without another request',async()=>{
+ assert.ok(module);let release!:(result:ApiResult<unknown>)=>void,calls=0,settled=false;
+ const c=new module.AccountActionProofController(()=>{},<T>()=>{calls++;return new Promise<ApiResult<T>>(resolve=>{release=resolve as typeof release;});});c.account('owner');const loading=c.load(),proof=c.ensure().then(value=>{settled=true;return value;});
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.equal(calls,1);
+ release({ok:true,value:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00.000Z'}});await loading;assert.equal(await proof,true);assert.equal(calls,1);
+});
