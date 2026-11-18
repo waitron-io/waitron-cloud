@@ -1693,7 +1693,9 @@ implementation or production evidence.
   The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
   covers the test-account chooser for the existing Connected trial, discovered only
   for configured synthetic accounts. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
-  covers test-only saved methods. Paid-plan tax collection and Spanish tax-number
+  covers test-only saved methods. The [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
+  records SumUp card and Stripe SEPA test paths; both suppliers and their live country
+  flows remain unqualified. Paid-plan tax collection and Spanish tax-number
   validation, paid-plan choices, cancellation, account closure, hosting enrolment,
   supplier qualification and production billing remain open.
 - **Venue and node registration.** The agreed Waitron signup and connection journey uses

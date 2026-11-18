@@ -157,3 +157,5 @@ After the review removed the unmeasured `data:` image allowance, the same comman
 ran again. `sandbox-policy-tightened.log` records card selection at 00:11:36 UTC
 and mandate selection at 00:11:49 UTC on 8 November, with zero policy violations
 and successful fixture cleanup.
+
+Before you send live data, use the [billing-provider inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths) to qualify the SumUp and Stripe supplier records and their country flows. Both remain unqualified; these sandbox results establish no live permission.

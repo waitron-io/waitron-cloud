@@ -48,7 +48,7 @@ remains open, and encryption alone does not settle a role.
 | `cloud-support` | Approved read/command/decrypt assistance involving only the action's required s/c/d categories | Cloud processor for venue work | Named eligible operator with per-session approval, at most 24 hours; narrower emergency route requires both facts | Service instruction and D101 exit; any surviving support record needs lawyer-approved authority, scope and cutoff | `ev-support-access-v1`: unqualified; active cancellation/every-action evidence unbuilt |
 | `cloud-audit` | Minimal actors, approvals, refusals and outcomes; no payloads or secrets | Processor for venue evidence; separate Cloud security purpose requires role review | Venue-authorised evidence viewers and narrowly authorised security staff | No blanket security exception; legal basis, expiry and notice unresolved under questions 2/4 | `ev-cloud-audit-v1`: unqualified; existing fixed events are narrower than proposed full audit |
 | `cloud-usage` | Metering and service usage associated with an account/venue | Cloud controller for subscriptions; content processing remains separate | Scoped service metering and account billing access; no raw venue content | Necessary evidence only; schedule and link to billing need legal review | `ev-cloud-usage-v1`: unqualified; no general content-retention permission |
-| `cloud-billing` | Cloud's own invoice/payment evidence for subscribers and billing contacts | Cloud controller | Restricted billing personnel and actual contracted payment/accounting recipients, still unnamed | Sole routine exit exception; exact necessary fields, recipients and period unresolved under question 2 | `ev-cloud-billing-v1`: unqualified; no invented statutory period |
+| `cloud-billing` | Cloud's own invoice/payment evidence for subscribers and billing contacts | Cloud controller | Restricted billing personnel; proposed SumUp card and Stripe SEPA surfaces below; contracting entities and accounting recipients unknown | Sole routine exit exception; exact necessary fields, recipients and period unresolved under question 2 | `ev-cloud-billing-v1`: unqualified; depends on the applicable `ev-sumup-card-v1` or `ev-stripe-sepa-v1` record; no invented statutory period |
 | `cloud-gateway-security` | Transport/security metadata for connected devices, addresses and identifiable users; A980 r10 and relevant d1/d4–d8 | Cloud-purpose security role unresolved; payload purpose stays separate | Gateway and narrowly authorised operations staff; provider support/global metadata require separate evidence | Minimal approved security schedule unresolved; a useful log is not a billing record | `ev-aws-gateway-metadata-v1`: unqualified; P8 confirmation and provider evidence open |
 | `cloud-incidents` | Awareness, affected categories, containment, contact and delivery/acknowledgement evidence for affected people | Processor for venue incidents; separate controller purpose for Cloud-own incidents | Verified venue contact and D104 on-call path; public status excludes identifiers and payloads | Minimal private incident evidence; legal schedule/exception unresolved | `ev-cloud-incidents-v1`: unqualified; runbook exists, delivery/paging qualification open |
 | `cloud-export-delivery` | Full exit bundle, keys and delivery metadata for an authenticated current owner; applicable s/c/d through r1–r3 | Cloud processor | Freshly authenticated current owner; billing contact alone cannot download; expiring venue-bound readers | Fixed instructed exit deadline or earlier verified delete after exception review; downloaded customer copies leave Cloud custody | `ev-cloud-export-v1`: blocked; portable export, lifecycle and full cleanup unbuilt |
@@ -69,7 +69,7 @@ no qualified supplier, purpose evidence or production permission in this registe
 
 These `supplierId` values are stable inventory names, not legal entity names:
 `aws-infrastructure`, `amazon-ses`, `openai-api`, `anthropic-candidate` and
-`google-candidate`. AWS infrastructure and EU SES are owner-selected; OpenAI is
+`google-candidate`, `sumup-payments` and `stripe-payments`. AWS infrastructure and EU SES are owner-selected; OpenAI is
 the actual translation adapter. Anthropic and Google remain candidates only.
 Selection does not qualify an account or service. Local Mailpit, SeaweedFS and
 fake model endpoints supply local tests, not production supplier evidence.
@@ -91,6 +91,8 @@ private evidence under access control and reference its immutable version/digest
 | `ev-aws-gateway-metadata-v1`, `ev-cloud-audit-v1` | Intended AWS logs/telemetry and Cloud audit stores; actual services/recipients unknown | Spain venue logs stay home; telemetry, global control metadata and provider support access need distinct qualification | Log fields/sinks, processing/access countries, purpose role, justified cutoffs and deletion evidence; bucket region is insufficient |
 | `ev-ses-account-mail-v1`, `ev-ses-venue-mail-v1` | `amazon-ses`; account and venue mail are separate purposes | Selected EU exception; Stockholm `eu-north-1` configured default or Paris `eu-west-3`, both owner-accepted; exact account/provider qualification unresolved by D102; recipient mail systems/transit separately disclosed | D102 sender, domain, tracking-off, bounce/complaint authentication, suppression, alerts and controlled live delivery; exact entities/chain/terms and content/metadata retention |
 | `ev-openai-translation-v1` | `openai-api`; model memory processing, provider logs and system/abuse metadata | Exact project/model/endpoint, processing/access locations and retention approval unqualified | Separate accepted eligibility rule/examples/limits, supplier/location/terms evidence and later enabling change; `store: false` is insufficient |
+| `ev-sumup-card-v1` | `sumup-payments`; card setup API, embedded card widget and authentication frames | Processing region/location identifier, support/access countries and onward recipients unknown; sandbox hostnames prove no country | **UNQUALIFIED**. Exact account, entities, endpoint/data-class/location bindings, agreements, retention for card/setup/token/metadata and support, and browser/onward-recipient evidence remain missing |
+| `ev-stripe-sepa-v1` | `stripe-payments`; customer/setup API, hosted Checkout, payment method and SEPA mandate | Processing region/location identifier, support/access countries and onward recipients unknown; global API hostname proves no country | **UNQUALIFIED**. Exact account, entities, endpoint/data-class/location bindings, agreements, retention for customer/setup/method/mandate/metadata and support, and hosted-browser evidence remain missing |
 | No qualified evidence ID allocated | `anthropic-candidate`, `google-candidate`; unspecified candidate AI services | All processing, retention, support and transfer locations unknown | New selection decision and complete purpose/service evidence first; no fallback from the actual denied adapter |
 
 The remaining `ev-cloud-*` IDs in the purpose table are first-party evidence
@@ -101,6 +103,46 @@ qualification. They do not inherit AWS evidence from unrelated flows. The
 owns the source links and their original limitations; this register makes no new
 claim about current supplier terms.
 
+### Trace the current payment test paths
+
+Use the [test-provider receipt](billing-provider-test.md#local-account-panel-78-november-2026)
+for the measured sandbox journey and its source links. This inventory was added on
+18 November 2026 from the [provider adapter](../packages/account-http/src/billing-method-providers.ts),
+[local bindings](../packages/account-http/src/billing-method-binding.ts),
+[request authority](../packages/account-http/src/billing-methods.ts),
+[card widget](../apps/portal/src/billing-card.ts) and
+[browser policy](../packages/account-http/src/portal.ts). It qualifies no supplier.
+
+For SumUp, your browser enters card details in the provider widget and handles its
+consent/authentication screens. Cloud sends synthetic customer names/email, a
+synthetic customer ID, setup/checkout reference, merchant reference, amount,
+currency, description and recurring-setup purpose to `api.sumup.com/v0.1`.
+Cloud retrieves the checkout and saved-card token/active state. The browser loads
+`gateway.sumup.com` and the receipt lists the observed API, authentication-frame
+and static-asset origins. These direct browser requests never pass through the
+generic country-matching function; each recipient needs separate evidence, including its onward chain.
+
+For Stripe SEPA, your browser enters the IBAN and mandate consent in hosted
+`checkout.stripe.com`. Cloud sends a synthetic customer name/email, customer
+reference, setup mode, currency, payment type and Cloud return URLs to
+`api.stripe.com/v1`. It retrieves checkout/setup-intent, payment-method and mandate
+references and their status. Cloud stores the verified method and mandate IDs;
+it does not treat them as payment or renewal evidence.
+
+Provider JSON also reaches Cloud memory before the adapter selects the references
+it stores. Extra response fields, provider metadata and support access still need
+an inventory and retention evidence; the selected IDs are not the whole surface.
+
+The organisation, legal-business, owner, session and security-revision bindings
+stay in Cloud’s [local setup row](../packages/account-http/src/billing-method-binding.ts).
+The setup ID does cross the SumUp boundary as its checkout/customer reference.
+The adapter’s fixed names and email are synthetic test fields; live identity
+fields are undecided. Qualify the applicable supplier record before qualifying
+`ev-cloud-billing-v1`; neither inherits status from the other. Live accounts,
+processing/access locations, data-class names, retention and support terms remain
+unknown. Choose no location from an API hostname and no retention period from a
+successful sandbox run.
+
 ## Walk a proposed flow to its stopping point
 
 | Example | Exact purpose/evidence | Decision today |
@@ -109,6 +151,7 @@ claim about current supplier terms.
 | Cloud password-reset email | `cloud-account-email` / `ev-ses-account-mail-v1` | Block production SES use pending D102; local Mailpit proof stays local |
 | Venue booking confirmation | `venue-email` / `ev-ses-venue-mail-v1` | Block pending D102 and accepted venue caller; never reuse account-reset purpose as venue authority |
 | Support operator reads a backup | `cloud-support` / `ev-support-access-v1`, plus `venue-key-custody` | Block production qualification until approval/current scope, expiry, active cancellation and audit/decrypt evidence is complete |
+| Save a card or SEPA mandate | `cloud-billing` / `ev-cloud-billing-v1`, with `ev-sumup-card-v1` or `ev-stripe-sepa-v1` as applicable | **UNQUALIFIED**. Inventory above records test paths only; qualify exact server and browser recipients, account, data classes, locations, terms and retention before live data |
 | AI translates “Croquetas” | `venue-translation` / `ev-openai-translation-v1` | Production adapter refuses even apparently clean text; no eligibility or supplier exception is inferred |
 
 ## Keep every legal decision open until answered
