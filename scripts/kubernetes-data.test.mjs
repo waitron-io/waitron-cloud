@@ -16,7 +16,8 @@ test('Stockholm volumes use the private bootstrap path and bind on the selected 
     },
   });
   const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
-  const [, path] = bootstrap.match(/^  install -d -m 0700 -o 26 -g 26 (\S+)$/m);
+  const path = bootstrap.match(/^\s+install -d -m 0700 -o 26 -g 26 (\S+)$/m)?.[1];
+  assert.ok(path, 'The bootstrap must prepare a PostgreSQL directory owned by 26:26');
   const storage = resources.find(row => row.kind === 'StorageClass');
   assert.equal(storage.volumeBindingMode, 'WaitForFirstConsumer');
   assert.equal(storage.provisioner, 'kubernetes.io/no-provisioner');
@@ -32,18 +33,17 @@ test('Stockholm volumes use the private bootstrap path and bind on the selected 
   }
 });
 
-test('operator startup failure reads operator events before returning the error', async () => {
+test('operator startup failure prints events before returning the error', async t => {
   const failure = Error('operator startup failed');
-  const eventNamespaces = [];
+  const stderr = t.mock.method(process.stderr, 'write', () => true);
   await assert.rejects(installStockholmDatabase({nodes: ['a', 'b', 'c'], directory: tmpdir(),
     run() {throw failure;},
     async kube(args) {
       assert.equal(args[3], 'events');
-      eventNamespaces.push(args[1]);
-      return '';
+      return args[1] === 'cnpg-system' ? 'synthetic image pull failure' : '';
     },
   }), error => error === failure);
-  assert.ok(eventNamespaces.includes('cnpg-system'));
+  assert.match(stderr.mock.calls.map(call => call.arguments[0]).join(''), /cnpg-system events:\nsynthetic image pull failure/);
 });
 
 test('Stockholm database setup starts one ready PostgreSQL copy on each machine-local volume', {

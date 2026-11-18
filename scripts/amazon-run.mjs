@@ -235,8 +235,9 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           assert.equal(found, 'present', 'amazon.flannel_plugin: machine ' + index + ' has no flannel network plugin in /opt/cni/bin, where containerd looks');
         }
         for (let index = 0; index < 3; index++) await bootstrap(index, 'database-storage');
+        // Leave the remote installer time for both rollouts and their failure diagnostics.
         await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-data.mjs',
-          '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes], undefined, 720_000);
+          '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes], undefined, 750_000);
       },
       journey: async phase => {
         target.phase = phase;

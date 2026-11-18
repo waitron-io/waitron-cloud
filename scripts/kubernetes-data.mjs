@@ -39,10 +39,10 @@ export async function installStockholmDatabase({nodes, directory, run, kube, ins
       '-l', 'cnpg.io/cluster=' + cluster.metadata.name + ',cnpg.io/podRole=instance', '-o', 'json']));
     assert.deepEqual(pods.map(pod => pod.spec.nodeName).sort(), [...nodes].sort(), 'stockholm.database_placement');
   } catch (error) {
-    await Promise.all(['cnpg-system', namespace].map(async name => {
+    for (const name of ['cnpg-system', namespace]) {
       const output = await kube(['-n', name, 'get', 'events', '--sort-by=.lastTimestamp']).catch(() => '');
       if (output) process.stderr.write(name + ' events:\n' + output + '\n');
-    }));
+    }
     throw error;
   }
 }
