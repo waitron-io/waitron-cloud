@@ -61,21 +61,21 @@ function storeMetrics(ip, {ca, credentials}, signal) {
   });
 }
 
-export async function waitForRepairPeers(read, expected, signal) {
+export async function waitForStorePeers(read, expected, signal, connected = 6) {
   const counts = new Map(expected.map(peer => [peer, 'unseen']));
   const summary = () => [...counts].map(([peer, count]) => peer + '=' + count).join(', ');
   try {
-    while ([...counts.values()].some(count => count !== 6)) {
+    while ([...counts.values()].some(count => count !== connected)) {
       signal.throwIfAborted();
       const text = await read(signal);
       const metric = /^minio_cluster_nodes_online_total\{server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000"\} (\d+)$/m.exec(text);
       assert.ok(metric && counts.has(metric[1]), 'storage_loss.unexpected_peer_metric');
       counts.set(metric[1], Number(metric[2]));
-      if ([...counts.values()].some(count => count !== 6)) await delay(1000, undefined, {signal});
+      if ([...counts.values()].some(count => count !== connected)) await delay(1000, undefined, {signal});
     }
   } catch (error) {
     if (!signal.aborted) throw error;
-    throw Error('storage_loss.peers not reconnected (' + summary() + ')', {cause: error});
+    throw Error('storage_loss.expected ' + connected + ' connected peers (' + summary() + ')', {cause: error});
   }
   return summary();
 }
@@ -160,7 +160,13 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       const survivorNodes = nodes.filter(machine => machine.name !== node.name);
       const survivors = survivorNodes.map(machine => clients.get(machine.name));
       const [client] = survivors;
+      const survivor = survivorNodes[0], ordinal = names.indexOf(survivor.name) * 2;
+      const waitForPeers = (connected, deadline) => waitForStorePeers(requestSignal => storeMetrics(survivor.ip, account, requestSignal),
+        ['store-' + ordinal, 'store-' + (ordinal + 1)], deadline, connected);
       const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
+        // MinIO must see the four surviving peers before it can assess a multipart write.
+        const peerCounts = await waitForPeers(4, stopped);
+        process.stderr.write('Store peers after stop on ' + survivor.name + ' (' + peerCounts + ')\n');
         for (const survivor of survivors) {
           assert.deepEqual(await readObject(survivor, 'baseline', key, stopped), old.get('baseline'));
         }
@@ -182,10 +188,7 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
       try {
         await waitForStore({nodes: names, kube, signal: repair});
-        const survivor = survivorNodes[0];
-        const ordinal = names.indexOf(survivor.name) * 2;
-        const peerCounts = await waitForRepairPeers(requestSignal => storeMetrics(survivor.ip, account, requestSignal),
-          ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
+        const peerCounts = await waitForPeers(6, repair);
         process.stderr.write('Store peers reconnected on ' + survivor.name + ' (' + peerCounts + ')\n');
         // A survivor has the acknowledged bytes while the returned volumes are still missing them.
         assert.deepEqual(await readObject(client, name, key, repair), bytes, name);

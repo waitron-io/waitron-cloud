@@ -61,21 +61,26 @@ test('multipart upload refuses a part response without the requested encryption'
     /storage_loss.multipart_encryption/);
 });
 
-test('repair waits for both survivor peers to reconnect before reading', async () => {
-  const {waitForRepairPeers} = await import('./kubernetes-storage-proof.mjs');
-  assert.equal(typeof waitForRepairPeers, 'function', 'repair must wait for the store view');
+test('both survivor peers must see four connections during the outage and six after rejoin', async () => {
+  const {waitForStorePeers} = await import('./kubernetes-storage-proof.mjs');
+  assert.equal(typeof waitForStorePeers, 'function', 'repair must wait for the store view');
   const reading = (peer, count) =>
     'minio_cluster_nodes_online_total{server="store-' + peer + '.store-peers.d621-store.svc.cluster.local:9000"} ' + count;
   const samples = [reading(2, 5), reading(3, 6), reading(2, 6)];
-  await waitForRepairPeers(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
+  await waitForStorePeers(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
   assert.deepEqual(samples, []);
+
+  const afterStop = [reading(2, 5), reading(3, 4), reading(2, 4)];
+  assert.equal(await waitForStorePeers(async () => afterStop.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000), 4),
+    'store-2=4, store-3=4');
+  assert.deepEqual(afterStop, []);
 
   const stop = new AbortController();
   async function short() {
     stop.abort();
     return reading(2, 5);
   }
-  await assert.rejects(waitForRepairPeers(short, ['store-2', 'store-3'], stop.signal),
+  await assert.rejects(waitForStorePeers(short, ['store-2', 'store-3'], stop.signal),
     /store-2=5, store-3=unseen/);
 });
 
