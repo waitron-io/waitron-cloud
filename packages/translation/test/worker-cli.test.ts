@@ -190,17 +190,27 @@ test('DATABASE_URL is required even when PostgreSQL fallback settings can connec
 test('disconnected database clients exit with one fixed line and no raw error',async()=>{
  for(let repeat=0;repeat<3;repeat++){
   const run=command([]);
+  let disconnectCheck='idle-backend';
+  let backends:{pid:number;killed:boolean}[]=[];
   try{
    await until(async()=>Number((await db.pool.query(`SELECT count(*) AS n FROM pg_stat_activity
     WHERE application_name=$1 AND state='idle' AND xact_start IS NULL`,[run.applicationName])).rows[0].n)>0);
-   const killed=await db.pool.query('SELECT pid,pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
-   assert.ok(killed.rows.length>0);assert.ok(killed.rows.every(row=>row.killed));
+   disconnectCheck='stop-query';
+   const killed=await db.pool.query<{pid:number;killed:boolean}>('SELECT pid,pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
+   backends=killed.rows;
+   disconnectCheck='backends-selected';
+   assert.ok(killed.rows.length>0);
+   disconnectCheck='backends-terminated';
+   assert.ok(killed.rows.every(row=>row.killed));
+   disconnectCheck='worker-exit';
    const out=await run.exited;
-   try{assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);}
-   catch(error){
-    // The proof can retain numeric backend facts without exposing connection settings.
-    Object.assign(error as object,{termination:{iteration:repeat,backends:killed.rows}});throw error;
-   }
+   assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+  }catch(error){
+   const {stdout,stderr}=run.output();
+   // The proof filters worker output before it reports the connection facts.
+   Object.assign(error as object,{disconnectCheck,termination:{iteration:repeat,backends},
+    workerActual:[run.child.exitCode,run.child.signalCode,stdout,stderr]});
+   throw error;
   }finally{await run.dispose();}
  }
 });

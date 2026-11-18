@@ -265,22 +265,20 @@ PostgreSQL self-termination during cleanup passes three times with the guard and
 with the guard deleted. Treat that as qualification of the fatal-then-retry mechanism,
 not proof that every intermittent disconnect failure is resolved. On recurrence, keep the
 complete assertion output, selected backend ids and termination results before changing
-the original check. The venue proof now retains the actual and expected four-value
-assertion for this case when its output contains only the worker’s fixed messages
-(`node --test scripts/translation-disconnect-diagnostics.test.mjs`). Other output
-remains private. Details beyond 400 output characters or the proof’s existing
-16 failure slots are omitted; the ordinary failure row keeps priority. The next
-assertion failure also retains its zero-based iteration and up to four selected
-backend IDs with their termination results, which have already passed the test’s
-`true` assertion. These limits match the case’s three iterations and the worker’s
-four connections; update this diagnostic if either producer limit changes.
-The sender and parent accept only
-bounded integer IDs and booleans; other fields and private output remain refused.
+the disconnect or binding checks. The venue proof records the failed check, the zero-based iteration
+and up to four backend IDs with their termination results. It retains the worker's
+exit status and fixed messages when available. For an earlier check, the worker
+can still be running when its status is recorded. Other output is marked
+`output withheld` (`node --test scripts/translation-disconnect-diagnostics.test.mjs`).
+The ordinary failure row keeps priority within the proof's 16 failure slots.
+Update the diagnostic if the case's three iterations or the worker's four
+connections change. An oversized list is refused. The earlier failure keeps
+its ordinary failure row, and a fixed-output failure can still include the exit
+comparison without connection details.
 Run `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/translation-disconnect-binding.test.mjs`
-to force this exact assertion to fail after a real backend termination and check
-that its safe details survive the proof. This qualifies evidence capture, not the
-historical cause. Active-job failure ordering at direct pool queries remains
-separately unqualified; the reviewed idle scenario leases no job.
+to force the fixed-output assertion to fail after a real backend termination and
+check that its diagnostic survives the proof. Active-job failure ordering at
+direct pool queries remains separately unqualified. The idle case leases no job.
 
 [Main run 42395447647, job 128479291385](https://github.com/waitron-io/waitron-cloud/actions/runs/42395447647/job/128479291385)
 checks out `674eac0661687fdfe59317348b722d3f41de4700` and reports 684 passes
@@ -288,9 +286,17 @@ and one failure among 685 tests. The same disconnect case fails earlier, at
 `worker-cli.test.ts:192`: not every selected backend reports successful termination.
 That assertion runs before the fixed-output diagnostic capture, so this log has
 no selected backend IDs or termination results. It does not establish whether
-this recurrence shares the open disconnect cause. Reproduce this earlier failure
-and retain its backend facts before changing either assertion; it remains a
-priority in this existing investigation.
+this recurrence shares the open disconnect cause.
+
+[PR #1299 job 134794387767, attempt 1](https://github.com/waitron-io/waitron-cloud/actions/runs/44302084131/job/134794387767)
+reports 1,852 passes, one failure and 30 skips. The binding test failed when its
+nested runner returned only the inner case's opening line, a generic assertion
+code and a failed-suite refusal. The report cannot identify the inner check.
+A scratch Linux run of that binding command paused between two stops in one
+PostgreSQL statement. The first reported success, the second reported false,
+and the worker exited with status 1 and no connections remaining. The unchanged
+termination assertion failed and the binding report named it. The pause
+reproduces a possible ordering. The two historical CI orderings remain unknown.
 
 A later CI disconnect failure retains the reverse output: a pass-retry line before
 that fatal line. A local real PostgreSQL lease-query termination reproduces this

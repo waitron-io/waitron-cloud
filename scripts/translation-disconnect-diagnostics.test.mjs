@@ -20,7 +20,8 @@ function refusal(actual,name=title,options={}){
   const file=join(directory,'packages/translation/test',options.file??'worker-cli.test.ts');
   writeFileSync(file,`import {test} from 'node:test';import assert from 'node:assert/strict';
  ${options.prior?`for(let n=0;n<${options.prior};n++)test('earlier failure '+n,()=>assert.fail());`:''}
- test(${JSON.stringify(name)},()=>{try{${options.code?`throw Object.assign(new Error('private-error'),{code:${JSON.stringify(options.code)},actual:${JSON.stringify(actual)},expected:[1,null,'',${JSON.stringify(failed)}]});`:`assert.deepEqual(${JSON.stringify(actual)},${JSON.stringify(options.expected??[1,null,'',failed])});`}}catch(error){Object.assign(error,${JSON.stringify(options.termination===undefined?{}:{termination:options.termination})});throw error;}});`);
+ test(${JSON.stringify(name)},()=>{try{${options.check==='backends-terminated'?`assert.ok(${JSON.stringify(options.termination?.backends)}.every(row=>row.killed));`:options.code?`throw Object.assign(new Error('private-error'),{code:${JSON.stringify(options.code)},actual:${JSON.stringify(actual)},expected:[1,null,'',${JSON.stringify(failed)}]});`:`assert.deepEqual(${JSON.stringify(actual)},${JSON.stringify(options.expected??[1,null,'',failed])});`}}
+ catch(error){Object.assign(error,${JSON.stringify({termination:options.termination,disconnectCheck:options.check,workerActual:options.check==='backends-terminated'?actual:undefined})});throw error;}});`);
   const driver=join(directory,'driver.mjs');
   writeFileSync(driver,`import {run} from 'node:test';import {summariseServiceMatrix} from './scripts/test-cloud-free-services.mjs';
  try{await summariseServiceMatrix(run({files:[${JSON.stringify(file)}],execArgv:[]}),[{id:'translation',files:[${JSON.stringify(file)}]}]);}catch{process.exitCode=1;}`);
@@ -132,5 +133,50 @@ test('the parent preserves valid termination facts and rejects private or malfor
   assert.equal(result.status,1);assert.ok(!result.stderr.includes('private-sentinel'),result.stderr);
   const diagnostic=result.stderr.trim().split('\n').map(parseServiceProofFailure).find(value=>value?.kind==='translation-disconnect');
   assert.deepEqual(diagnostic,{kind:'translation-disconnect',actual:row.actual,expected:row.expected});
+ }
+});
+
+test('the proof reports which termination check failed before the worker exit assertion',()=>{
+ const result=refusal([null,null,'',''],title,{termination,check:'backends-terminated'});
+ assert.equal(result.status,1,result.stderr);
+ assert.equal(result.stdout,'');
+ const rows=result.stderr.trim().split('\n').map(parseServiceProofFailure).filter(Boolean);
+ assert.deepEqual(rows.map(row=>row.kind),['case','translation-disconnect','refusal'],result.stderr);
+ assert.deepEqual(rows[1],{
+  kind:'translation-disconnect',check:'backends-terminated',actual:[null,null,'',''],expected:[1,null,'',failed],termination,
+ });
+});
+
+test('a failed worker exit check keeps connection facts when its output is private',()=>{
+ const result=refusal([1,null,'private-stdout','private-stderr'],title,{termination,check:'worker-exit'});
+ assert.equal(result.status,1,result.stderr);
+ assert.equal(result.stdout,'');
+ assert.ok(!result.stderr.includes('private-'),result.stderr);
+ const rows=result.stderr.trim().split('\n').map(parseServiceProofFailure).filter(Boolean);
+ assert.deepEqual(rows.find(row=>row.kind==='translation-disconnect'),{
+  kind:'translation-disconnect',check:'worker-exit',actual:[1,null,'','output withheld'],expected:[1,null,'',failed],termination,
+ },result.stderr);
+ const diagnostic=rows.find(row=>row.kind==='translation-disconnect');
+ for(const invalid of [
+  {...diagnostic,check:'private-check'},
+  {...diagnostic,check:undefined},
+  {...diagnostic,termination:undefined},
+  {...diagnostic,actual:[1,null,'','private-output']},
+ ])assert.equal(parseServiceProofFailure('SERVICE_PROOF_FAILURE '+JSON.stringify(invalid)),undefined);
+});
+
+test('the sender omits oversized backend facts even for named checks',()=>{
+ const oversized={iteration:0,backends:[...termination.backends,
+  {pid:701,killed:true},{pid:702,killed:true},{pid:703,killed:true}]};
+ const actual=[1,null,'',retry+failed];
+ for(const check of ['backends-terminated','worker-exit']){
+  const result=refusal(actual,title,{termination:oversized,check});
+  assert.equal(result.status,1,result.stderr);
+  assert.equal(result.stdout,'');
+  const rows=result.stderr.trim().split('\n')
+   .filter(line=>line.startsWith('SERVICE_PROOF_FAILURE '))
+   .map(line=>JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length)));
+  const expected=check==='worker-exit'?[{kind:'translation-disconnect',actual,expected:[1,null,'',failed]}]:[];
+  assert.deepEqual(rows.filter(row=>row.kind==='translation-disconnect'),expected,result.stderr);
  }
 });
