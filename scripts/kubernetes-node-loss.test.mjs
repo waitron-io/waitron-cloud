@@ -195,3 +195,35 @@ test('lease recovery retries a connection timeout and waits out a stale heartbea
   assert.equal(reads.length, 4, 'two reads while stopped and two after restart');
   assert.equal(result.legs.length, 3);
 });
+
+test('the database check can stop only an owned node and leaves cleanup to the Kind fixture', async () => {
+  const f = fixture();
+  await assert.rejects(runCheck({execute: f.execute, async database({nodes, stopNode}) {
+    assert.equal(nodes.length, 3);
+    assert.equal(f.mutations('kill').length, 0);
+    await stopNode('unrelated-node', () => assert.fail('foreign fault started'));
+  }}), /node_loss\.unknown_node/);
+  assert.deepEqual(f.mutations('kill'), []);
+  assert.equal(f.remaining(), 0);
+  assert.ok(f.removed());
+});
+
+test('a database fault runs its checks around the stop and restart of the selected node', async () => {
+  const f = fixture();
+  const result = await runCheck({execute: f.execute, async database({nodes, stopNode}) {
+    const [node] = nodes;
+    await stopNode(node, {
+      whileStopped: async () => {
+        assert.deepEqual(f.mutations('kill'), ['1'.repeat(64)]);
+        assert.deepEqual(f.mutations('start'), []);
+      },
+      afterRestart: async () => {
+        assert.deepEqual(f.mutations('start'), ['1'.repeat(64)]);
+      }
+    });
+    return {rejoined: node};
+  }});
+  assert.equal(result.database.rejoined, result.nodes[0].name);
+  assert.equal(f.remaining(), 0);
+  assert.ok(f.removed());
+});

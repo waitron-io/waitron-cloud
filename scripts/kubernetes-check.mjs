@@ -2,6 +2,7 @@
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --node-loss checks three control planes without venue images.
+// --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
 // Both need three owned nodes, 10 GiB RAM and 30 GiB disk, using the approved shared Docker wrapper.
 // Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
@@ -90,6 +91,12 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
+if (target === 'kind-database-loss') {
+  const image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
+  assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, 'database_loss.cloud_image_id');
+  const {runKubernetesDatabase} = await import('./kubernetes-database.mjs');
+  return runKubernetesNodeLoss({database: context => runKubernetesDatabase({...context, image})});
+}
 const amazon = typeof target === 'object' ? target : undefined;
 if (amazon) assertAmazonBinding(amazon);
 else assert.ok(['kind', 'kind-worker-loss', 'kind-worker-observer'].includes(target), 'kubernetes.target');
@@ -343,7 +350,7 @@ return result;
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
-    ['--node-loss', 'kind-node-loss']]);
+    ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss']]);
   const target = extra.length ? undefined : file !== undefined ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');
