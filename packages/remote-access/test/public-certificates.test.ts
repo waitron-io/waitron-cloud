@@ -64,7 +64,7 @@ test('a ready move without a copied public certificate keeps the source placemen
 });
 
 test('an expired copy cannot make a destination ready when its replacement fails',async()=>{
- const s=await fixture();await s.run();s.advance();s.advance();s.fail();const move=await s.stage();await s.run();
+ const s=await fixture();await s.run();s.advance();s.advance();s.fail();const move=await s.stage();await s.run();assert.equal(s.issues(),2,'an expired copy must attempt renewal');
  await assert.rejects(s.read(s.target),{code:'ENOENT'});await assert.rejects(f.store.completeMove(move.operationId,1),/move_destination_incomplete/);
 });
 
