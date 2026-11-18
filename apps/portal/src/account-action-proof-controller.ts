@@ -4,20 +4,22 @@ export type ActionProofStatus={methods:('email'|'app'|'passkey'|'recovery')[];fr
 type Request=<T>(path:string,body?:Record<string,unknown>)=>Promise<ApiResult<T>>;
 export class AccountActionProofController{
   status:ActionProofStatus|undefined;challengeToken:string|undefined;code='';pending=false;loaded=false;error:keyof Copy|undefined;
-  #account:string|undefined;#generation=0;#changed:()=>void;#request:Request;#retryUntil=0;
+  #reading:Promise<void>|undefined;#account:string|undefined;#generation=0;#changed:()=>void;#request:Request;#retryUntil=0;
   constructor(changed:()=>void,request:Request=accountRequest){this.#changed=changed;this.#request=request;}
   get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
-  fence(){this.#generation++;this.status=undefined;this.challengeToken=undefined;this.code='';this.pending=false;this.loaded=false;this.error=undefined;}
+  fence(){this.#generation++;this.#reading=undefined;this.status=undefined;this.challengeToken=undefined;this.code='';this.pending=false;this.loaded=false;this.error=undefined;}
   account(account:string|undefined){if(account===this.#account)return;this.#account=account;this.fence();}
   #failure(r:Extract<ApiResult<unknown>,{ok:false}>){this.#retryUntil=Math.max(this.#retryUntil,performance.now()+r.retryAfterMs);this.error=r.status===429?'limited':'actionProofUnavailable';}
   async load(){
     if(!this.#account||this.pending||this.waiting)return;
     const generation=this.#generation;this.pending=true;this.error=undefined;this.#changed();
-    const result=await this.#request<ActionProofStatus>('/action-proof');
-    if(generation!==this.#generation)return;this.pending=false;this.loaded=true;
-    if(result.ok)this.status=result.value;else{this.status=undefined;this.#failure(result);}this.#changed();
+    const reading=this.#request<ActionProofStatus>('/action-proof').then(result=>{
+      if(generation!==this.#generation)return;this.pending=false;this.loaded=true;
+      if(result.ok)this.status=result.value;else{this.status=undefined;this.#failure(result);}this.#changed();
+    }).finally(()=>{if(this.#reading===reading)this.#reading=undefined;});
+    this.#reading=reading;return reading;
   }
-  async ensure(){const generation=this.#generation;await this.load();return generation===this.#generation&&!!this.status?.freshUntil&&!this.pending&&!this.waiting;}
+  async ensure(){const generation=this.#generation;await(this.#reading??this.load());return generation===this.#generation&&!!this.status?.freshUntil&&!this.pending&&!this.waiting;}
   async email(locale?:'en'|'es'){
     if(!this.#account||this.pending||this.waiting)return;
     const generation=this.#generation;this.pending=true;this.error=undefined;this.code='';this.#changed();

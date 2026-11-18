@@ -2258,6 +2258,10 @@ attributing the initial signed-in timeout. See the [investigation and diagnostic
 
 ## Recovery and remote browser waits (D530)
 
+The owner-recovery proof-status race now has a deferred-read regression check;
+the original CI reply and a separate changed-email sign-in wait remain untraced.
+See [the recovery and changed-email evidence](backlog/portal-panel-waits.md#owner-recovery-enrolment-wait).
+
 PR #1282 also exposed an owner-handover enrolment wait. A controlled request delay
 reproduces it across an authenticator-code boundary; the original CI cause remains
 unproved. See [the recorded timing probe](backlog/portal-panel-waits.md#owner-handover-enrolment-wait).
