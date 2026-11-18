@@ -59,16 +59,18 @@ Each test file reads the two `AWS_EMULATOR_*` variables itself (about ten lines:
   `node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=./scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 packages/remote-access/test/emulator/*.test.ts packages/registration/test/emulator/*.test.ts`
   (Task 2 adds no script; its file is picked up by the second glob. `scripts/ci-required-cases-routes.test.mjs` accepts a required file only when a root script or package `test` script with this reporter names it through a `*.test.ts` pattern.)
 
-Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fresh suffix such as `<8 random hex>.emulator.test.waitron.io`, `CallerReference` = `randomUUID()`), takes the zone id as the last path segment of `HostedZone.Id` (it matches the adapter's `/^Z[A-Z0-9]+$/`), and builds the provider with a `Route53Client({region:'us-east-1', endpoint, credentials})`. Read records back with `ListResourceRecordSetsCommand`. Challenge name: `_acme-challenge.staff-v-11111111-1111-4111-8111-111111111111.<suffix>`; token `'A'.repeat(43)`, newer token `'B'.repeat(43)`.
+Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fresh suffix such as `<8 random hex>.emulator.test.waitron.io`, `CallerReference` = `randomUUID()`), takes the zone id as the last path segment of `HostedZone.Id` (it matches the adapter's `/^Z[A-Z0-9]+$/`), and builds the provider with a `Route53Client({region:'us-east-1', endpoint, credentials})`. Read records back with `ListResourceRecordSetsCommand`; real Route 53 returns record names with a trailing dot, so compare names after removing one trailing dot (values are compared exactly). Challenge name: `_acme-challenge.staff-v-11111111-1111-4111-8111-111111111111.<suffix>`; token `'A'.repeat(43)`, newer token `'B'.repeat(43)`.
+
+**Recording the propagation wait.** The client handed to the provider is wrapped so the test sees each command the adapter sends and, for `GetChangeCommand`, the `ChangeInfo.Status` it got back (wrap `client.send`, or add a `client.middlewareStack` step; either is fine). After `present` or `point` resolves, assert: at least one `GetChange` was sent; its statuses are zero or more `'PENDING'` followed by exactly one `'INSYNC'`, which is the last command sent. This is what fails if the adapter stopped waiting for `INSYNC`, which a record read-back alone cannot show.
 
 - [ ] **Step 1: Write the test file with these three cases**
 
-  - `emulator: a challenge TXT is published, read back as one quoted value with TTL 60, and removed by its exact value`
-    — `await dns.present(name, tokenA)` resolves; the zone holds one TXT for `name` with `TTL === 60` and one value `'"' + tokenA + '"'`; `await dns.remove(name, tokenA)` resolves; no TXT for `name` remains.
+  - `emulator: a challenge TXT is published only after INSYNC, read back as one quoted value with TTL 60, and removed by its exact value`
+    — `await dns.present(name, tokenA)` resolves; the propagation-wait assertion holds; the zone holds one TXT for `name` with `TTL === 60` and one value `'"' + tokenA + '"'`; `await dns.remove(name, tokenA)` resolves and sends no `GetChange`; no TXT for `name` remains.
   - `emulator: a remove with a stale value is refused and the newer challenge survives`
-    — `present(name, tokenA)`; then write `tokenB` straight through the client (UPSERT, same name, TXT, TTL 60); `await assert.rejects(dns.remove(name, tokenA), {name: 'InvalidChangeBatch'})`; `console.error` (mocked with `t.mock.method`) was called exactly once with `'remote.dns_cleanup_failed'`; the zone still holds `'"' + tokenB + '"'`.
-  - `emulator: a venue CNAME points at its cell with TTL 60`
-    — `await dns.point('staff-v-11111111-1111-4111-8111-111111111111.' + suffix, 'gw.cell-b.example.test')` resolves; the zone holds one CNAME for that name with `TTL === 60` and value `'gw.cell-b.example.test'` exactly.
+    — `present(name, tokenA)`; then write `tokenB` straight through an unwrapped client (UPSERT, same name, TXT, TTL 60); `await assert.rejects(dns.remove(name, tokenA), {name: 'InvalidChangeBatch'})`; `console.error` (mocked with `t.mock.method`) was called exactly once, with `'remote.dns_cleanup_failed'`; the zone still holds `'"' + tokenB + '"'`.
+  - `emulator: a venue CNAME is pointed at its cell with TTL 60 only after INSYNC`
+    — `await dns.point('staff-v-11111111-1111-4111-8111-111111111111.' + suffix, 'gw.cell-b.example.test')` resolves; the propagation-wait assertion holds; the zone holds one CNAME for that name with `TTL === 60` and value `'gw.cell-b.example.test'` exactly.
 
   All three take `{skip}` from the environment contract above.
 
@@ -79,9 +81,9 @@ Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fre
 - [ ] **Step 3: Without an emulator, see the file skip and the CI command refuse**
 
   Run: `node --test packages/remote-access/test/emulator/route53-dns.test.ts`
-  Expected: `# skipped 3`, `# pass 0`, each skip carrying the reason text above.
+  Expected: `ℹ skipped 3`, `ℹ pass 0`, each skip carrying the reason text above.
   Run: `pnpm test:aws-emulator`
-  Expected: exit status not 0, with three `# Required case did not pass exactly once: packages/remote-access/test/emulator/route53-dns.test.ts: …` lines.
+  Expected: exit status not 0, with three `# Required case did not pass exactly once: <absolute path>/packages/remote-access/test/emulator/route53-dns.test.ts: …` lines.
 
 - [ ] **Step 4: Against an emulator (optional local Docker run, otherwise CI in Task 3), see all three pass**
 
@@ -101,7 +103,7 @@ Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fre
 
 **Files:**
 - Create: `packages/registration/test/emulator/ses-feedback-queue.test.ts`
-- Modify: `scripts/ci-required-cases.json`: add this file's two case names
+- Modify: `scripts/ci-required-cases.json`: add this file's one case name
 
 **Interfaces:**
 - Consumes: `createSesFeedbackQueue(config, {credentials, requestHandler})` from `packages/registration/src/ses-feedback-queue.ts`; `config(region, country, providerAccountId)` from `packages/registration/test/fixtures/mail-attempt.ts`, called as `config('eu-north-1', 'ES', '000000000000')` (its `queueUrl` is `https://sqs.eu-north-1.amazonaws.com/000000000000/mail-feedback`); root script `test:aws-emulator` from Task 1.
@@ -109,29 +111,27 @@ Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fre
 
 **The forwarding transport** (in the test file): an object `{handle(request, {abortSignal}), destroy()}` whose `handle` sends `request.method`, `request.path` (plus `request.query` when present) and `request.headers` unchanged, with `request.body`, through `node:https` `request` to `host: '127.0.0.1'`, `port` from `AWS_EMULATOR_ENDPOINT`, `signal: abortSignal`, `servername: ''`, and `checkServerIdentity: (_host, cert) => tls.checkServerIdentity('127.0.0.1', cert)`. It resolves `{response: {statusCode, headers, body: res}}`. Why the two TLS options: the signed `Host` header names `sqs.eu-north-1.amazonaws.com`, Node takes the TLS name from it, and the emulator's certificate names only `localhost`, `127.0.0.1` and `::1`. Measured 2026-11-18 on 1.0.512: without them `receive` refused with `ses_feedback_receive_failed`; with them it received and deleted a message. The CA check itself stays on, through `NODE_EXTRA_CA_CERTS`.
 
-A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the queue (`CreateQueueCommand`, `QueueName: 'mail-feedback'`) in a `before` hook, sends messages and reads attributes. Run the cases in order (the default within a file); each leaves the queue empty.
+A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the queue (`CreateQueueCommand`, `QueueName: 'mail-feedback'`) inside the case, sends the message and reads attributes.
 
-- [ ] **Step 1: Write the test file with these two cases**
+- [ ] **Step 1: Write the test file with this one case**
 
   - `emulator: the adapter receives a sent message, sees nothing while it is in flight, and deletes it`
-    — send `'synthetic envelope'` directly; `await q.receive(signal)` deep-equals `[{body: 'synthetic envelope', receiptHandle: <the handle>}]` with a non-empty string handle; a second `receive` returns `[]`; `await q.delete(handle, signal)` resolves; `GetQueueAttributes` reports `ApproximateNumberOfMessages === '0'` and `ApproximateNumberOfMessagesNotVisible === '0'`.
-  - `emulator: the queue refuses a malformed receipt handle and the adapter reports it`
-    — `await assert.rejects(q.delete('not-a-receipt-handle', signal), /^Error: ses_feedback_acknowledgement_failed$/)`.
+    — send `'synthetic envelope'` directly; `await q.receive(signal)` deep-equals `[{body: 'synthetic envelope', receiptHandle: <the handle>}]` with a non-empty string handle; a second `receive` returns `[]` (one 10-second long poll, inside the 30-second case limit); `await q.delete(handle, signal)` resolves; `GetQueueAttributes` reports `ApproximateNumberOfMessages === '0'` and `ApproximateNumberOfMessagesNotVisible === '0'`.
 
-  Close the adapter in `finally`. Both cases take `{skip}` from the environment contract.
+  Close the adapter in `finally`. The case takes `{skip}` from the environment contract. (A malformed-handle case was considered and left out: the adapter reports every failure, a broken connection included, as `ses_feedback_acknowledgement_failed`, so that case could not tell the queue's refusal from no answer at all, and the spec does not ask for it.)
 
-- [ ] **Step 2: Add the two required-case entries**
+- [ ] **Step 2: Add the required-case entry**
 
 - [ ] **Step 3: Without an emulator, see the file skip and the CI command refuse**
 
   Run: `node --test packages/registration/test/emulator/ses-feedback-queue.test.ts`
-  Expected: `# skipped 2`, `# pass 0`.
+  Expected: `ℹ skipped 1`, `ℹ pass 0`.
   Run: `pnpm test:aws-emulator`
-  Expected: exit status not 0, with five `Required case did not pass exactly once` lines (three from Task 1, two from this file).
+  Expected: exit status not 0, with four `Required case did not pass exactly once` lines (three from Task 1, one from this file).
 
-- [ ] **Step 4: Against an emulator (optional local run, otherwise CI), see all five pass**
+- [ ] **Step 4: Against an emulator (optional local run, otherwise CI), see all four pass**
 
-  Expected: `# Required cases: 5 passed`, `# fail 0`.
+  Expected: `# Required cases: 4 passed`, `# fail 0`.
 
 - [ ] **Step 5: Confirm the package suite is unchanged**
 
@@ -152,10 +152,11 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 **Interfaces:**
 - Consumes: root script `test:aws-emulator` (Task 1); the environment contract above.
 
-**Workflow shape.** Name `AWS Emulator tests`. Triggers: `pull_request` and `push` to `main`, each with this `paths` list; plus `schedule: - cron: '47 4 * * *'` and `workflow_dispatch`.
+**Workflow shape.** Name `AWS Emulator tests`. Triggers: `pull_request` and `push` to `main`, each with this `paths` list, plus `workflow_dispatch`. No schedule: the emulator version is pinned, so a run on unchanged inputs repeats the last answer, and the path list names every input (a deliberate departure from the spec's "nightly", stated in the pull request).
 
 ```
 - 'packages/remote-access/src/route53-dns.ts'
+- 'packages/remote-access/src/manifest.ts'
 - 'packages/remote-access/test/emulator/**'
 - 'packages/remote-access/package.json'
 - 'packages/registration/src/ses-feedback-*.ts'
@@ -164,7 +165,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 - 'packages/registration/test/fixtures/ses-feedback.ts'
 - 'packages/registration/package.json'
 - 'package.json'
-- 'pnpm-lock.yaml'
+- '*pnpm-lock.yaml'
 - 'scripts/ci-required-cases.json'
 - 'scripts/ci-required-cases.mjs'
 - 'scripts/ci-setup-pnpm.mjs'
@@ -172,12 +173,14 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 - '.github/workflows/aws-emulator.yml'
 ```
 
-`permissions: contents: read, packages: read`. Concurrency as in `kubernetes-proof.yml` (group `aws-emulator-<ref or run id>`, cancel in progress on pull requests). One job, `emulator-tests`, `runs-on: ubuntu-latest`, `timeout-minutes: 10`. Steps, in order:
+The lockfile is written `'*pnpm-lock.yaml'` because `scripts/ci-setup-pnpm.test.mjs` reads any step-shaped line starting with `pnpm` as pnpm used before setup (the plan reviewer ran it: `'pnpm-lock.yaml'` fails the guard, `'*pnpm-lock.yaml'` passes). GitHub's `*` matches zero or more characters other than `/`, so it still matches the root lockfile; confirm on the pull request by checking that the run starts. Keep a one-line comment at that entry saying why.
+
+There is no `summary` job and no stop step, deliberately: `ci.yml`'s `summary` covers only its own planned jobs, and the runner is discarded at the end of the job. `permissions: contents: read, packages: read`. Concurrency as in `kubernetes-proof.yml` (group `aws-emulator-<ref or run id>`, cancel in progress on pull requests). One job, `emulator-tests`, `runs-on: ubuntu-latest`, `timeout-minutes: 10`. Steps, in order:
 
 1. `actions/checkout@v5`, `ref: ${{ github.event.pull_request.head.sha || github.sha }}`, `persist-credentials: false`.
 2. Presence check (`id: presence`): when `packages/remote-access/test/emulator/route53-dns.test.ts` exists, write `present=true` to `$GITHUB_OUTPUT`. Otherwise write `present=false` and echo `Skipping: this head predates the AWS Emulator tests.` Every later step carries `if: steps.presence.outputs.present == 'true'`.
 3. Node and pnpm exactly as the `packages` job in `ci.yml`: `actions/setup-node@v5` (`node-version: '26'`, `package-manager-cache: false`), `node scripts/ci-setup-pnpm.mjs` with the same `env`, the second `setup-node` with `registry-url: https://npm.pkg.github.com` and `scope: '@waitron-io'`, then `pnpm install --frozen-lockfile` with `NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`. No dependency cache (Cloud's shared cache budget; a ten-minute job does not need it).
-4. Install: download with `python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 -- curl -fsSL --connect-timeout 20 --max-time 110 -o "$RUNNER_TEMP/aws-emulator.deb" <pinned URL>`; then `echo "<pinned SHA-256>  $RUNNER_TEMP/aws-emulator.deb" | sha256sum -c -`; then install under `sudo python3 scripts/ci-download.py` with the same dpkg and apt `--lock` options as `ci.yml`'s Chromium step, running `apt-get install -y --no-install-recommends "$RUNNER_TEMP/aws-emulator.deb"`; then `aws-emulator -v`.
+4. Install: download with `python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 -- curl -fsSL --connect-timeout 20 --max-time 110 -o "$RUNNER_TEMP/aws-emulator.deb" <pinned URL>`; then `echo "<pinned SHA-256>  $RUNNER_TEMP/aws-emulator.deb" | sha256sum -c -`; then install with `sudo python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 --lock /var/lib/dpkg/lock-frontend --lock /var/lib/dpkg/lock -- dpkg -i "$RUNNER_TEMP/aws-emulator.deb"`; then `aws-emulator -v`. No apt step: the package's control file declares only `Depends: libc6 (>= 2.17)` (read from the pinned `.deb` on 2026-11-18), which every Ubuntu runner has.
 5. Start: `aws-emulator -p 9297 -t off --idle-timeout 900 > "$RUNNER_TEMP/aws-emulator.log" 2>&1 &`. Wait for `curl -fsS --cacert "$HOME/.aws/emulator/9297/ca.pem" https://127.0.0.1:9297/__admin/health` to print `ok`, for up to 60 seconds, else fail. Append the three environment-contract variables to `$GITHUB_ENV`.
 6. `pnpm test:aws-emulator`.
 7. `if: failure() && steps.presence.outputs.present == 'true'`: `tail -n 100 "$RUNNER_TEMP/aws-emulator.log"`. Never print the credentials file.
@@ -191,7 +194,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 
 - [ ] **Step 3: Write the documentation paragraph**
 
-  In `docs/ci-proof-selection.md`, after the Kubernetes paragraph: the AWS Emulator workflow runs the two emulator test files on pull requests and `main` pushes touching its listed paths, daily at 04:47 UTC, and on demand; it installs version 1.0.512 checked by its SHA-256 and runs with telemetry off; the required `summary` check does not certify it, so read its result before merging; a head without the emulator tests skips it. Apply the `CLAUDE.md` one-line edit. Run `node --test scripts/ci-docs.test.mjs` and expect `# fail 0`.
+  In `docs/ci-proof-selection.md`, after the Kubernetes paragraph: the AWS Emulator workflow runs the two emulator test files on pull requests and `main` pushes touching its listed paths, and on demand; it installs version 1.0.512 checked by its SHA-256 and runs with telemetry off; the required `summary` check does not certify it, so read its result before merging; a head without the emulator tests skips it. In `docs/ci-nightly.md`, after the sentence saying Kubernetes prerequisites are separate, one sentence: the AWS Emulator tests are separate in the same way and have only a manual trigger besides their paths. Apply the `CLAUDE.md` one-line edit. Run `node --test scripts/ci-docs.test.mjs` and expect `# fail 0`.
 
 - [ ] **Step 4: Check the backlog**
 
@@ -199,5 +202,9 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 
 - [ ] **Step 5: Commit, then the driver pushes and reads the run**
 
-  `git add .github/workflows/aws-emulator.yml docs/ci-proof-selection.md CLAUDE.md && git commit -s -m "Run the Route 53 and SQS adapters against AWS Emulator in CI"`
-  On the pull request, the `AWS Emulator tests` run must show `# Required cases: 5 passed` and `# fail 0` in its test step.
+  `git add .github/workflows/aws-emulator.yml docs/ci-proof-selection.md docs/ci-nightly.md CLAUDE.md && git commit -s -m "Run the Route 53 and SQS adapters against AWS Emulator in CI"`
+  On the pull request, the `AWS Emulator tests` run must start (which also confirms the `'*pnpm-lock.yaml'` entry is valid YAML GitHub accepts) and show `# Required cases: 4 passed` and `# fail 0` in its test step.
+
+### Driver step (not an implementer task): the trial's answer
+
+After the pull request's `AWS Emulator tests` run, the driver writes a section in the pull request description headed "What the emulator showed". For each of the four cases, it says whether the emulator agreed with what the fake-server suite assumes for that call, quoting the run, and lists any difference found while building. It ends with a keep-or-drop recommendation and its reason. That section is the answer to the owner's question; the pull request is not ready to land without it.
