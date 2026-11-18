@@ -66,13 +66,17 @@ test('email verification continues the Add request once', async () => {
     await page.goto(f.origin + '/account');
     await page.getByRole('button', {name: 'Add a passkey', exact: true}).click();
     await page.getByText('Verify it’s you to add a passkey.', {exact: true}).waitFor();
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'action-proof-heading');
+    await page.waitForFunction(() => document.activeElement?.id === 'action-proof-heading');
     await page.getByRole('button', {name: 'Email a code', exact: true}).click();
     const input = page.locator('input[name=actionProofCode]');
     await input.waitFor();
     await f.drainMail();
     const code = (await mailFor(email, 'Your Waitron Cloud verification code')).match(/^([0-9]{6})$/m)?.[1];
     assert.ok(code);
+    await input.fill(code === '000000' ? '111111' : '000000');
+    await input.press('Enter');
+    await page.locator('.action-proof [role=alert]').waitFor();
+    assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1', [id])).rows[0].count, '0');
     await input.fill(code);
     await input.press('Enter');
     await page.getByText('Your passkey was added.', {exact: true}).waitFor();

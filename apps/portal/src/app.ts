@@ -484,10 +484,9 @@ export class PortalApp {
     await this.#continuePasskeyAdd(add, proved);
   }
   async #continuePasskeyAdd(add: PasskeyAddRequest | undefined, proved: boolean) {
-    if (!add || add !== this.#passkeyAddRequest) return;
+    if (!proved || !add || add !== this.#passkeyAddRequest) return;
     this.#passkeyAddRequest = undefined;
-    if (proved) await this.#enrollPasskey(true);
-    else this.draw();
+    await this.#enrollPasskey(true);
   }
   async refreshPasskeys() {
     const route = this.#route;
