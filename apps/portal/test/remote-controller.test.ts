@@ -175,10 +175,10 @@ for(const code of ['proof_required','enrollment_required'])test(`remote ${code} 
 });
 
 test('remote views refuse invalid record-moved evidence while accepting older replies',()=>{
- const staff={...view.names.staff,current:dns.hostname,recordMoved:true,certificateNotAfter:'2026-12-01T12:00:00.000Z'};
+ const staff={...view.names.staff,current:dns.hostname,recordMoved:true};
  assert(validRemoteView(view));
  assert(validRemoteView({...view,names:{...view.names,staff}}));
- for(const patch of [{recordMoved:'yes'},{certificateNotAfter:'2026-02-30T00:00:00.000Z'},{current:staff.assigned}]){
+ for(const patch of [{recordMoved:'yes'},{current:staff.assigned}]){
   assert.equal(validRemoteView({...view,names:{...view.names,staff:{...staff,...patch}}}),false);
  }
 });

@@ -189,8 +189,9 @@ pointing to Cloud. It clears each incident on recovery and suppresses it when yo
 the route or revoke the installation. The portal presents the public and staff routes
 separately. If you opt in to service alerts, Cloud sends the opening and recovery emails
 in your saved language. When a DNS record has moved, the opening email gives you the
-address, its expected target and the last verified certificate expiry if Cloud knows it.
-Open [Set up remote access](local-remote-access.md) to check a corrected record.
+address and its expected target. If you fix the record before the notice goes out,
+Cloud skips that notice. Open **Set up remote access** to check a corrected record.
+See [Local remote access](local-remote-access.md).
 
 For local delivery, start Mailpit and run the existing mail worker with local transport:
 

@@ -29,9 +29,7 @@ export function remoteScreen(app:PortalApp,id:string,revoked=false){
   ${v?.names?html`<p>${c.remotePrivacy}</p>
    ${(['staff','public'] as const).map(kind=>{
     const name=v.names![kind],heading='remote-name-'+kind;
-    const expiry=name.certificateNotAfter?new Intl.DateTimeFormat(app.locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(name.certificateNotAfter)):null;
-    const notice=(expiry?c.remoteRecordMoved:c.remoteRecordMovedNoDate)
-     .replace('{hostname}',name.current).replace('{target}',name.assigned).replace('{date}',expiry??'');
+    const notice=c.remoteRecordMoved.replace('{hostname}',name.current).replace('{target}',name.assigned);
     return html`<h5 id=${heading} tabindex="-1">${kind==='staff'?c.remoteStaff:c.remotePublic}</h5>
      <dl><dt>${c.remoteCurrent}</dt><dd>${ready?html`<a href=${'https://'+name.current} target="_blank" rel="noopener noreferrer">${name.current}</a>`:name.current}</dd><dt>${c.remoteAssigned}</dt><dd>${name.assigned}</dd></dl>
      ${name.recordMoved&&!v.revoked?html`<p role="status">${notice}</p>

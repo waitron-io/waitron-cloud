@@ -52,12 +52,9 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if(kind==='service_alert'){
     if(!validServiceAlert(message))throw new Error('Invalid account email');
     const subjects=locale==='es'?{open:'Waitron Cloud: un local necesita atención',recovered:'Waitron Cloud: comprobación recuperada'}:{open:'Waitron Cloud: a venue needs attention',recovered:'Waitron Cloud: venue check recovered'};
-    const expiry=message.certificateNotAfter
-      ? new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(message.certificateNotAfter))
-      : null;
     const recordMoved=locale==='es'
-      ? `Tu registro DNS de ${message.hostname} ya no apunta a Waitron Cloud. Vuelve a dirigirlo a ${message.target}; si no, esta dirección dejará de funcionar cuando caduque su certificado${expiry ? ' el '+expiry : ''}.`
-      : `Your DNS record for ${message.hostname} no longer points at Waitron Cloud. Point it back to ${message.target}, or this address stops working when its certificate expires${expiry ? ' on '+expiry : ''}.`;
+      ? `Tu registro DNS de ${message.hostname} ya no apunta a Waitron Cloud. Vuelve a dirigirlo a ${message.target}; si no, esta dirección dejará de funcionar cuando caduque su certificado.`
+      : `Your DNS record for ${message.hostname} no longer points at Waitron Cloud. Point it back to ${message.target}, or this address stops working when its certificate expires.`;
     const issues=locale==='es'?{
       public_record_moved:recordMoved,
       staff_record_moved:recordMoved,

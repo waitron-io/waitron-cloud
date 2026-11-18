@@ -3,7 +3,7 @@ import type {EmailOutbox} from './email-outbox.ts';
 import type {IncidentKind,ServiceAlert} from './service-alert.ts';
 import {validatedMonitorConfig} from './monitor-config.ts';
 import {transaction} from './transaction.ts';
-type AlertEvidence = Pick<ServiceAlert,'checkedAt'|'hostname'|'target'|'certificateNotAfter'>;
+type AlertEvidence = Pick<ServiceAlert,'checkedAt'|'hostname'|'target'>;
 export interface MonitorConfig {probeStaleSeconds?:number;quietSeconds?:number;reminderSeconds?:number}
 export class MonitorWorker {
  readonly #pool:Pool;readonly #outbox:EmailOutbox;readonly #probeStaleSeconds:number;readonly #quietSeconds:number;readonly #reminderSeconds:number;
@@ -46,7 +46,7 @@ export class MonitorWorker {
    await this.#transition(client,installation.id,monitor.venue_id,'snapshot_stale',!!snapshots,!!snapshots&&old(verified??snapshotSince!,172800),now);
    await this.#transition(client,installation.id,monitor.venue_id,'verification_failed',!!snapshots,!!failureSince&&old(failureSince,300),now);
    const remote=active&&services.includes('remote_access')?(await client.query('SELECT venue_id FROM remote_placements WHERE installation_id=$1 AND venue_id=$2',[installation.id,monitor.venue_id])).rows[0]:undefined;
-   const names=remote?(await client.query(`SELECT h.kind,h.hostname,h.assigned_hostname,h.record_moved_at,o.status,o.checked_at,o.certificate_not_after
+   const names=remote?(await client.query(`SELECT h.kind,h.hostname,h.assigned_hostname,h.record_moved_at,o.status,o.checked_at
     FROM remote_hostnames h LEFT JOIN remote_probe_observations o ON o.venue_id=h.venue_id AND o.service=h.kind AND o.hostname=h.hostname
       AND o.installation_id=$1 AND o.configuration_revision=$3 WHERE h.venue_id=$2`,[installation.id,monitor.venue_id,installation.configuration_revision])).rows:[];
    for(const service of ['public','staff'] as const){
@@ -55,9 +55,8 @@ export class MonitorWorker {
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_route_failed`,!!remote&&fresh,!!remote&&fresh&&observation.status==='failed',now,checkedAt?{checkedAt}:{});
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_probe_stale`,!!remote,!!remote&&!fresh,now,checkedAt?{checkedAt}:{});
     const custom=!!observation&&observation.hostname!==observation.assigned_hostname;
-    const certificateNotAfter=observation?.certificate_not_after?.toISOString();
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_record_moved`,custom,custom&&!!observation.record_moved_at,now,custom?{
-     hostname:observation.hostname,target:observation.assigned_hostname,...(certificateNotAfter?{certificateNotAfter}:{}),
+     hostname:observation.hostname,target:observation.assigned_hostname,
     }:{});
    }
    await client.query(`UPDATE venue_monitors SET checked_at=$2,next_check_at=LEAST($2::timestamptz+interval '1 minute',

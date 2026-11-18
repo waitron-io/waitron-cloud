@@ -50,15 +50,12 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const permission=options.planMode==='test-venue-levels'?await readVenuePermissions(client,binding.venue_id,options.planMode):undefined;
   const paid=permission?permission.level==='connected'||permission.level==='hosted':await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
-  const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at,o.certificate_not_after
+  const names=(await client.query(`SELECT h.kind,h.assigned_hostname,h.hostname,h.record_moved_at
    FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id
-   LEFT JOIN remote_probe_observations o ON o.installation_id=p.installation_id AND o.venue_id=h.venue_id
-     AND o.service=h.kind AND o.hostname=h.hostname AND o.configuration_revision=$2
-   WHERE p.installation_id=$1`,[id,installation.configuration_revision])).rows;
+   WHERE p.installation_id=$1`,[id])).rows;
   const name=(kind:'staff'|'public')=>{
    const row=names.find(r=>r.kind===kind);
-   return row?{assigned:row.assigned_hostname,current:row.hostname,recordMoved:row.hostname!==row.assigned_hostname&&row.record_moved_at!==null,
-    certificateNotAfter:row.certificate_not_after?.toISOString()??null}:null;
+   return row?{assigned:row.assigned_hostname,current:row.hostname,recordMoved:row.hostname!==row.assigned_hostname&&row.record_moved_at!==null}:null;
   };
   const staff=name('staff'),publicName=name('public');
   const service=(await client.query("SELECT s.state,o.health,o.observed_at,o.received_at,o.revision FROM installation_services s LEFT JOIN installation_observations o USING(installation_id,service) WHERE s.installation_id=$1 AND s.service='remote_access'",[id])).rows[0];

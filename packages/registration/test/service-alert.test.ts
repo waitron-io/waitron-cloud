@@ -60,9 +60,9 @@ const movedAlert = {
   hostname: 'staff.cafe.example.test',
   target: 'staff-123.cloud.example.test',
 };
-test('record-moved alerts require two hostnames and accept an optional canonical expiry', () => {
+test('record-moved alerts require two hostnames and refuse probe expiry evidence', () => {
   assert.equal(validServiceAlert(movedAlert), true);
-  assert.equal(validServiceAlert({...movedAlert, certificateNotAfter}), true);
+  assert.equal(validServiceAlert({...movedAlert, certificateNotAfter}), false);
   assert.equal(validServiceAlert({...movedAlert, issue: 'public_record_moved'}), true);
   for (const patch of [
     {target: undefined}, {hostname: 'https://staff.cafe.example.test'}, {target: 'a..example.test'},
@@ -72,14 +72,12 @@ test('record-moved alerts require two hostnames and accept an optional canonical
 
 test('record-moved opening mail gives the owner the DNS target in their language', () => {
   const expected = [
-    ['en', undefined, 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff-123.cloud.example.test, or this address stops working when its certificate expires.'],
-    ['en', certificateNotAfter, 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff-123.cloud.example.test, or this address stops working when its certificate expires on Oct 1, 2026.'],
-    ['es', undefined, 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff-123.cloud.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado.'],
-    ['es', certificateNotAfter, 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff-123.cloud.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado el 1 oct 2026.'],
+    ['en', 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff-123.cloud.example.test, or this address stops working when its certificate expires.'],
+    ['es', 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff-123.cloud.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado.'],
   ] as const;
-  for (const [locale, expiry, text] of expected) {
+  for (const [locale, text] of expected) {
     const mail = accountMail(new URL('https://cloud.example.test'), 'service_alert', {
-      ...movedAlert, locale, certificateNotAfter: expiry,
+      ...movedAlert, locale,
     });
     assert(mail.text.split('\n').includes(text), mail.text);
   }

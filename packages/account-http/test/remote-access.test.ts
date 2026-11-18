@@ -243,7 +243,7 @@ async function movedStaffRecord() {
  return hostname;
 }
 
-test('only the affected custom name reports its moved record and matching expiry',async()=>{
+test('only the affected custom name reports its moved record and leaves probe dates out',async()=>{
  const hostname=await movedStaffRecord(),expiry='2026-12-01T12:00:00.000Z';
  await db.pool.query(`INSERT INTO remote_probe_observations
   (installation_id,venue_id,service,configuration_revision,hostname,status,checked_at,elapsed_ms,certificate_not_before,certificate_not_after,certificate_fingerprint256)
@@ -251,10 +251,8 @@ test('only the affected custom name reports its moved record and matching expiry
  const reply=await request('status');
  assert.equal(reply.status,200);
  const {names}=await reply.json();
- assert.deepEqual(names.staff,{assigned,current:hostname,recordMoved:true,certificateNotAfter:expiry});
+ assert.deepEqual(names.staff,{assigned,current:hostname,recordMoved:true});
  assert.equal(names.public.recordMoved,false);
- await db.pool.query("UPDATE remote_probe_observations SET configuration_revision=0");
- assert.equal((await (await request('status')).json()).names.staff.certificateNotAfter,null);
 });
 
 test('Check again clears a verified record notice and makes a failed job due',async()=>{
@@ -326,4 +324,22 @@ test('Check again preserves a claim committed while it waits to reset a pending 
   worker.release();await reply?.catch(()=>{});
  }
  assert.deepEqual((await db.pool.query('SELECT status,claim_id FROM remote_configuration_jobs')).rows,[{status:'running',claim_id:claim}]);
+});
+
+
+test('repeated Check again requests preserve retry timing once the notice clears',async()=>{
+ const hostname=await movedStaffRecord();
+ let lookups=0;
+ resolve=async name=>{lookups++;return name===hostname?[assigned]:[];};
+ assert.equal((await request('recheck',{kind:'staff'})).status,200);
+ await db.pool.query(`UPDATE remote_configuration_jobs SET attempts=7,last_error='challenge_not_answerable',
+  available_at=clock_timestamp()+interval '15 minutes' WHERE kind='certificate_staff'`);
+ const before=(await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows;
+ for(let press=0;press<2;press++){
+  const reply=await request('recheck',{kind:'staff'});
+  assert.equal(reply.status,200);
+  assert.equal((await reply.json()).names.staff.recordMoved,false);
+ }
+ assert.equal(lookups,1);
+ assert.deepEqual((await db.pool.query('SELECT * FROM remote_configuration_jobs')).rows,before);
 });

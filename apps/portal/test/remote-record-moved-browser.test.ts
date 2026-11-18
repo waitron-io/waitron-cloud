@@ -55,8 +55,8 @@ for(const locale of ['en','es'] as const)test(`the ${locale} record notice ident
   await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
   const panel=page.getByRole('region',{name:c.remoteSetupTitle,exact:true});
   const sentence=locale==='en'
-   ? 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff.venue.example.test, or this address stops working when its certificate expires on Dec 1, 2026.'
-   : 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff.venue.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado el 1 dic 2026.';
+   ? 'Your DNS record for staff.cafe.example.test no longer points at Waitron Cloud. Point it back to staff.venue.example.test, or this address stops working when its certificate expires.'
+   : 'Tu registro DNS de staff.cafe.example.test ya no apunta a Waitron Cloud. Vuelve a dirigirlo a staff.venue.example.test; si no, esta dirección dejará de funcionar cuando caduque su certificado.';
   const notice=panel.getByText(sentence,{exact:true});
   await notice.waitFor();
   const check=panel.getByRole('button',{name:locale==='en'?'Check again':'Comprobar de nuevo',exact:true});

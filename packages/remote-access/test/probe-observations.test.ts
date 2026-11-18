@@ -89,17 +89,3 @@ test('a probe usage write failure rolls back the observation and the same report
  assert.equal((await db.pool.query('SELECT count(*) FROM remote_probe_observations WHERE installation_id=$1',[target.installationId])).rows[0].count,'2');
  assert.equal((await db.pool.query("SELECT count(*) FROM usage_events WHERE source_kind='monitoring_probe' AND source_reference LIKE $1",[`${target.installationId}:%`])).rows[0].count,'2');
 });
-
-test('a failed probe preserves expiry only for the same hostname',async()=>{
- const target=await placed(),store=new RemoteProbeObservationStore(db.pool);
- assert.equal(await store.record(result(target,'2026-09-25T12:00:00.000Z','healthy')),true);
- const changed={...target,publicHostname:`new-${target.venueId}.evidence.example.test`};
- await db.pool.query("UPDATE remote_hostnames SET hostname=$2 WHERE venue_id=$1 AND kind='public'",[target.venueId,changed.publicHostname]);
- assert.equal(await store.record(result(changed,'2026-09-25T12:00:01.000Z','failed')),true);
- const {rows}=await db.pool.query(`SELECT service,certificate_not_before,certificate_not_after,certificate_fingerprint256
-  FROM remote_probe_observations WHERE installation_id=$1 ORDER BY service`,[target.installationId]);
- assert.deepEqual(rows,[
-  {service:'public',certificate_not_before:null,certificate_not_after:null,certificate_fingerprint256:null},
-  {service:'staff',certificate_not_before:new Date('2026-09-01T00:00:00Z'),certificate_not_after:new Date('2026-12-01T00:00:00Z'),certificate_fingerprint256:'AA:BB'},
- ]);
-});

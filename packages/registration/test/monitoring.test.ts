@@ -446,8 +446,10 @@ for (const locale of ['en', 'es'] as const) {
   assert.equal(sent.length, 1);
   assert.partialDeepStrictEqual(sent[0], {
    email: 'monitor@example.test', locale, issue: 'staff_record_moved', state: 'open',
-   hostname: 'staff.cafe.example.test', target: 'staff.monitor.example.test', certificateNotAfter: '2026-12-01T12:00:00.000Z',
+   hostname: 'staff.cafe.example.test', target: 'staff.monitor.example.test',
   });
+
+  assert.equal(Object.hasOwn(sent[0] as object,'certificateNotAfter'),false);
 
   await db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1');
   await due();
@@ -474,4 +476,19 @@ test('an assigned name does not open a record-moved incident', async () => {
  await monitor.runOnce();
  assert.equal((await kinds()).includes('public_record_moved'), false);
  assert.equal((await db.pool.query("SELECT 1 FROM venue_incidents WHERE kind='public_record_moved'")).rowCount, 0);
+});
+
+
+test('a queued opening is cancelled when the record is fixed before mail handoff',async()=>{
+ await remoteRoute();
+ await remoteObservation('staff','healthy');
+ await remoteObservation('public','healthy');
+ await db.pool.query("UPDATE remote_hostnames SET hostname='staff.cafe.example.test',record_moved_at=clock_timestamp() WHERE kind='staff'");
+ await monitor.schedule();await contact(0);await monitor.runOnce();
+ const queued=(await alerts()).find(row=>(db.outbox.open(row) as {issue:string}).issue==='staff_record_moved');
+ assert.equal(queued.status,'pending');
+ await db.pool.query("UPDATE remote_hostnames SET record_moved_at=NULL WHERE kind='staff'");
+ await deliver();
+ assert.equal(sent.some(message=>(message as {issue:string}).issue==='staff_record_moved'),false);
+ assert.equal((await db.pool.query('SELECT status FROM email_outbox WHERE id=$1',[queued.id])).rows[0].status,'cancelled');
 });

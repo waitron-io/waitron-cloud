@@ -236,7 +236,7 @@ export class RemoteAccessStore {
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
   const read=async(client:PoolClient)=>{
    await requireRemotePlan(client,id,this.#planMode);
-   const row=(await client.query(`SELECT h.venue_id,h.hostname,h.assigned_hostname,i.configuration_revision,i.revoked_at,i.public_key
+   const row=(await client.query(`SELECT h.venue_id,h.hostname,h.assigned_hostname,h.record_moved_at,i.configuration_revision,i.revoked_at,i.public_key
     FROM remote_placements p JOIN installations i ON i.id=p.installation_id
     JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind=$2
     WHERE i.id=$1 AND i.superseded_by IS NULL FOR UPDATE OF i`,[id,kind])).rows[0];
@@ -245,6 +245,7 @@ export class RemoteAccessStore {
    return row;
   };
   const admitted=await transaction(this.#pool,read);
+  if(admitted.record_moved_at===null)return;
   await verifyDelegation(admitted.hostname,admitted.assigned_hostname,name=>boundedResolveCname(name,resolve));
 
   await transaction(this.#pool,async client=>{
@@ -252,6 +253,8 @@ export class RemoteAccessStore {
    const current=await read(client);
    if(current.configuration_revision!==admitted.configuration_revision||current.venue_id!==admitted.venue_id
     ||current.public_key!==admitted.public_key||current.hostname!==admitted.hostname||current.assigned_hostname!==admitted.assigned_hostname)fail('revision_conflict');
+
+   if(current.record_moved_at===null)return;
 
    // A running worker can hold the job row while waiting for the installation.
    await client.query(`UPDATE remote_configuration_jobs SET status='pending',available_at=clock_timestamp(),attempts=0,
