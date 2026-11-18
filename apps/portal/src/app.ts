@@ -459,7 +459,7 @@ export class PortalApp {
   async addPasskey() {
     this.readFields();
     if(!await this.#requireActionProof())return;
-    await this.passkeys.enroll('');await this.actionProof.load();
+    await this.passkeys.enrollAfterList();await this.actionProof.load();
     if (this.session.state.kind === 'authenticated' && this.session.state.enrollmentRequired) await this.session.check({fresh: true});
   }
   async removePasskey(id: string) {

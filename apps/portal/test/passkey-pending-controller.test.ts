@@ -79,3 +79,26 @@ for (const action of ['load', 'refresh', 'signIn', 'enroll', 'remove'] as const)
     }
   });
 }
+
+test('an accepted enrolment waiting on the list cannot follow a switch to another account', async () => {
+  let finish!: (result: ApiResult<{passkeys: PasskeySummary[]}>) => void;
+  const reply = new Promise<ApiResult<{passkeys: PasskeySummary[]}>>(resolve => {finish = resolve;});
+  const calls: string[] = [];
+  const request = async <T>(path: string): Promise<ApiResult<T>> => {
+    calls.push(path);
+    if (calls.length === 1) return await reply as ApiResult<T>;
+    if (path === '/passkeys') return {ok: true, value: {passkeys: [added]} as T};
+    return {ok: false, status: 503, code: 'unavailable', retryAfterMs: 0};
+  };
+  const controller = new PasskeyController(() => {}, request);
+  controller.account('first');
+  const readingOldAccount = controller.load();
+  const enrolling = controller.enrollAfterList();
+  assert.deepEqual(calls, ['/passkeys']);
+  controller.account('second');
+  await controller.load();
+  finish({ok: true, value: {passkeys: [existing]}});
+  await Promise.all([readingOldAccount, enrolling]);
+  assert.deepEqual(calls, ['/passkeys', '/passkeys']);
+  assert.deepEqual(controller.passkeys, [added]);
+});
