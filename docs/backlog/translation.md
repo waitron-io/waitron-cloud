@@ -265,14 +265,16 @@ PostgreSQL self-termination during cleanup passes three times with the guard and
 with the guard deleted. Treat that as qualification of the fatal-then-retry mechanism,
 not proof that every intermittent disconnect failure is resolved. On recurrence, keep the
 complete assertion output, selected backend ids and termination results before changing
-the original check. The venue proof records the failed check, the zero-based iteration
+the disconnect or binding checks. The venue proof records the failed check, the zero-based iteration
 and up to four backend IDs with their termination results. It retains the worker's
 exit status and fixed messages when available. For an earlier check, the worker
 can still be running when its status is recorded. Other output is marked
 `output withheld` (`node --test scripts/translation-disconnect-diagnostics.test.mjs`).
 The ordinary failure row keeps priority within the proof's 16 failure slots.
 Update the diagnostic if the case's three iterations or the worker's four
-connections change.
+connections change. An oversized list is refused. The earlier failure keeps
+its ordinary failure row, and a fixed-output failure can still include the exit
+comparison without connection details.
 Run `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/translation-disconnect-binding.test.mjs`
 to force the fixed-output assertion to fail after a real backend termination and
 check that its diagnostic survives the proof. Active-job failure ordering at

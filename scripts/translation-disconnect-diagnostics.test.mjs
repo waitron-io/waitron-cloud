@@ -164,3 +164,19 @@ test('a failed worker exit check keeps connection facts when its output is priva
   {...diagnostic,actual:[1,null,'','private-output']},
  ])assert.equal(parseServiceProofFailure('SERVICE_PROOF_FAILURE '+JSON.stringify(invalid)),undefined);
 });
+
+test('the sender omits oversized backend facts even for named checks',()=>{
+ const oversized={iteration:0,backends:[...termination.backends,
+  {pid:701,killed:true},{pid:702,killed:true},{pid:703,killed:true}]};
+ const actual=[1,null,'',retry+failed];
+ for(const check of ['backends-terminated','worker-exit']){
+  const result=refusal(actual,title,{termination:oversized,check});
+  assert.equal(result.status,1,result.stderr);
+  assert.equal(result.stdout,'');
+  const rows=result.stderr.trim().split('\n')
+   .filter(line=>line.startsWith('SERVICE_PROOF_FAILURE '))
+   .map(line=>JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length)));
+  const expected=check==='worker-exit'?[{kind:'translation-disconnect',actual,expected:[1,null,'',failed]}]:[];
+  assert.deepEqual(rows.filter(row=>row.kind==='translation-disconnect'),expected,result.stderr);
+ }
+});
