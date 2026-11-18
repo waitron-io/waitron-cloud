@@ -1,44 +1,54 @@
 # D621 run 9, PR 3 — Storage that survives one machine loss
 
-The bounded Stockholm setup gains the PostgreSQL operator, three database copies and an S3
-test store on per-machine disk. The local Kind check proves encrypted reads, new writes and
-multipart completion during each single-machine outage. The legacy journey still uses A's
-network mount for configuration and image staging. PR 5 moves Cloud services onto the new
-data layer. PR 7 and run 9 check the full journey through machine loss. [P1 storage requirements](2026-10-22-cloud-country-cell.md#task-6-keep-genuine-s3-reads-and-writes-available-3555-calls)
+PR 3a prepares per-machine disks and installs the replicated database in the bounded
+Stockholm setup. PR 3b adds the test S3 store and an opt-in Kind check for encrypted
+reads, writes, multipart completion and repair through a machine outage.
+[P1 database and storage requirements](2026-10-22-cloud-country-cell.md#task-5-replicate-the-country-database-and-order-migrations-4065-calls)
 
-1. In `scripts/kubernetes-data.mjs`, reuse PR 2's digest-checked CloudNativePG 1.29.2 installer
-   and PostgreSQL 18.4 cluster settings from `scripts/kubernetes-database.mjs`. Keep two operator
-   replicas and three synchronously replicated database instances on distinct hosts. In the
-   bounded launcher, install only the data setup after the three nodes are ready. Fetch the
-   operator manifest into private scratch, verify its digest and use the existing image pins.
-   Keep the legacy fixture and its migration path working.
-2. In `deploy/kubernetes/bounded-amazon/bootstrap.sh` and `scripts/amazon-run.mjs`, prepare local
-   directories outside `/var/local/d620-config`. Render retained local volumes tied to their
-   hostnames, with delayed binding so the scheduler respects placement. Give PostgreSQL one
-   volume per host and prebind each MinIO peer's claim to its assigned local volume. Use separate
-   services and a `d621-data` namespace. Use the same resource renderer in Kind and Stockholm.
-3. Build private MinIO `RELEASE.2025-09-07T16-13-09Z` in `deploy/kubernetes/minio/Dockerfile`
-   with checksum-verified source and Go 1.24.2 inputs. Include its image in the launcher's verified
-   transfer. Use six fixed peer names, two per host, and one six-volume erasure set with EC:3.
-   Separate peer discovery from the readiness-filtered S3 Service. Use private-CA TLS with
-   hostname verification, versioned buckets and a proof user scoped to its fixture bucket.
-4. Add `--storage-loss` to `scripts/kubernetes-check.mjs` and the live check to
-   `scripts/kubernetes-storage.mjs`. Reuse the owned Kind stop and rejoin from
-   `scripts/kubernetes-node-loss.mjs`. Run one client outside the three nodes with the
-   existing S3 SDK and customer-key encryption headers. For each stopped node verify prior
-   bytes, list, new writes, wrong-key refusal and AES256 metadata. Start multipart before the
-   stop, complete while it is down and verify the full bytes. Check the same volume IDs and
-   wait for the store's repair status before the next leg. For the two-node control use verified Docker IDs and a
-   direct TLS endpoint on the survivor, independent of Kubernetes API quorum. Require the
-   store's write-quorum rejection, then restart both nodes and verify the rejected key is absent.
+## PR 3a — Install PostgreSQL on Stockholm's local disks
 
-Start with failing cases in `scripts/kubernetes-data.test.mjs` for digest and volume placement,
-and in `scripts/amazon-run.test.mjs` and `deploy/kubernetes/bounded-amazon/bootstrap.test.mjs`
-for installation order, local paths and failure cleanup. Keep PR 2's database checks. Add
-`scripts/kubernetes-storage.test.mjs` for the real fault assertions, register the new tests in
-`package.json` and run the opt-in proof in the approved Linux guest. Update `docs/backlog.md`
-and `docs/aws-infrastructure.md` with measured results. Temporary credentials, production-mode
-services, cold restart and paid work stay with their assigned slices.
+In `scripts/kubernetes-database.mjs`, share the digest-checked CloudNativePG 1.29.2
+installer and PostgreSQL 18.4 cluster settings with `scripts/kubernetes-data.mjs`.
+Keep Kind's storage class and probe roles for PR 2. After all three Stockholm nodes
+are ready, run data setup on A with the bound kubeconfig. Fetch and verify the upstream
+manifest in private scratch there. Pull the existing image digests from GHCR.
+In `deploy/kubernetes/bounded-amazon/bootstrap.sh`, prepare owned directories on each
+node's disk. Render a retained local volume per exact hostname with delayed binding
+and database-user permissions. Use `d621-data`, the operator-generated database-owner
+Secret and remote superuser access disabled. Wait for two operator replicas and three
+synchronous database copies on separate hosts. The legacy journey and migration stay
+on its own store and A's network mount for now.
 
-Estimate **420–600 implementation lines and 200–300 test lines**, including Stockholm PostgreSQL
-setup. The upstream operator manifest stays out of the diff.
+Start with failing placement and readiness checks in `scripts/kubernetes-data.test.mjs`
+and failure and order checks in `scripts/amazon-run.test.mjs` and `deploy/kubernetes/bounded-amazon/bootstrap.test.mjs`.
+Keep PR 2's database checks. Estimate 130–210 implementation and 75–120 test lines.
+
+## PR 3b — Rehearse S3 loss and repair
+
+Propose pinning [MinIO's October security release](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
+for the private test store. Build its verified commit with pinned Go 1.24.8 in
+`deploy/kubernetes/images/store/Dockerfile`. Reuse the launcher's verified image transfer
+and the local-volume renderer. Prebind two claims per host to six fixed peers in a
+parallel-start StatefulSet, one EC:3 erasure set. Set directory permissions for the
+store user. Separate peer discovery from the ready-only S3 Service. Wait for all six
+peers and use a bootstrap Job to create a versioned fixture bucket with disposable credentials.
+
+Add `--storage-loss` to `scripts/kubernetes-check.mjs` and the check in
+`scripts/kubernetes-storage.mjs`. Use PR 2's owned Kind stop and rejoin. Run one host
+client using the backups package's S3 SDK, a private NodePort reachable via the
+survivors and matching TLS names. Within each 90-second leg, check old bytes, list,
+new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
+the stop. During it, reject a completion with a missing part, then upload that part,
+complete and compare bytes. Check the original volumes after rejoin. Within 180 seconds
+of rejoin start the next leg and reread every earlier outage write with a different
+node down, so the read needs repaired shards. Repeat the first stop for the last writes.
+For the write-quorum control, isolate only the store traffic on a second node while
+one node is stopped. Keep the Kubernetes API available and require HTTP 503
+`SlowDownWrite` with retries off. Restore and confirm the failed write has no version.
+
+Start with the placement checks and name the live fault cases in
+`scripts/kubernetes-storage.test.mjs`. Add focused files to `package.json`, run the
+opt-in proof in an approved Linux guest, and record peak memory, disk and timings.
+Estimate 290–420 implementation and 130–200 test lines. Update the backlog and AWS
+guide after each slice. PRs 4, 5, 7 and 8 still own temporary credentials, Cloud cutover,
+the 15-minute full-service fault legs and cold restart. Paid work stays behind its gates.
