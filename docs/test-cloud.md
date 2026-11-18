@@ -282,8 +282,9 @@ keeps the private backend CA and LAN certificate for internal services. In
 account origin requires a fresh deployment and a new pairing, because existing
 pairings retain their origin.
 
-The override publishes only port 443. PostgreSQL, Mailpit, storage and the gateway
-have no host ports. Only bootstrap mounts your certificate directory, read-only;
+The Amazon override publishes account and venue HTTPS on TCP 443, an independent
+HTTP challenge listener on TCP 80, and the remote tunnel on UDP 51820. PostgreSQL,
+Mailpit, storage and gateway TCP have no host ports. Only bootstrap mounts your certificate directory, read-only;
 the proxy reads its imported bundle from a separate proxy-only volume. Account,
 storage and workers cannot mount that volume. HAProxy keeps its security rules
 in the read-only image and reads the configured name and certificate path from
@@ -295,7 +296,7 @@ the unavailable workers keep their existing restrictions.
 On an authorised machine, use Certbot to obtain and renew the public certificate.
 Its HTTP-01 challenge proves the name by serving a temporary response on port 80.
 After successful renewal, run bootstrap with these same Compose files and settings,
-then restart the proxy so it reads the new bundle:
+then gracefully reload the proxy so existing connections can finish:
 
 ```sh
 docker compose --env-file deploy/test-cloud/test.env \
@@ -303,8 +304,50 @@ docker compose --env-file deploy/test-cloud/test.env \
   -f deploy/test-cloud/compose.amazon.yaml run --rm bootstrap
 docker compose --env-file deploy/test-cloud/test.env \
   -f compose.yaml -f deploy/test-cloud/compose.yaml \
-  -f deploy/test-cloud/compose.amazon.yaml restart proxy
+  -f deploy/test-cloud/compose.amazon.yaml kill --signal SIGUSR2 proxy
 ```
+
+For the authorised single test host, first create `/opt/waitron-cloud/acme-webroot`
+and start `http-challenges` with the same Compose files, using `up --no-deps -d
+http-challenges`. It has no account, proxy, database or worker dependency, so
+account renewal still works while those services are stopped. Convert an existing
+Certbot 4 certificate before starting the shared listener:
+
+```sh
+sudo certbot reconfigure --cert-name test-cloud.waitron.io \
+  --webroot --webroot-path /opt/waitron-cloud/acme-webroot
+sudo certbot renew --cert-name test-cloud.waitron.io --dry-run \
+  --run-deploy-hooks --no-random-sleep-on-renew
+```
+
+Keep the existing Certbot account and copy/bootstrap hook; change its last action
+to the graceful reload above. The handler serves only exact challenge GETs, with
+separate read-only mounts for Certbot's webroot and venue challenge files. Only
+the manifest worker can write the latter; it retains a separate private ACME
+account key in the configuration volume and registers no email contact.
+
+The venue zone is the account name, such as `test-cloud.waitron.io`; its wildcard
+must already resolve to this host. No DNS credential is used. The Amazon worker
+adopts that zone and tunnel endpoint only if no placement or stored venue name
+exists. It preserves the gateway identity and refuses an occupied conflicting
+cell. LAN keeps its private issuer. Public venue issuance defaults to Let's
+Encrypt staging. After qualifying issuance and renewal there, set
+`TEST_CLOUD_ACME_DIRECTORY=https://acme-v02.api.letsencrypt.org/directory` in the
+host's private `deploy/test-cloud/test.env`, then recreate the manifest worker
+with the same Compose files. Staging certificates are not browser trusted.
+
+Preserve the host's environment file when refreshing source. In particular,
+configure `CLOUD_FACTOR_POLICY` using the [local authentication example](authenticator-app.md)
+before starting the account service; keys alone do not enable sign-in. Keep that
+policy, account keys, remote keys and ACME identity with your private database
+backup. Do not overwrite them with the repository's default environment file.
+The deployment driver refuses an image change on an existing journal: keep its
+coordinated backup/upgrade requirement rather than using `up` to bypass it.
+
+Landing these files does not qualify a public deployment. Rehearse account
+renewal, staff/public issuance and renewal, and the existing remote off/on command
+before the owner's pairing and mobile-data check. Provider access and opening
+UDP 51820 on the existing security group need the recorded test-host authority.
 
 Read captured mail privately over SSH, without publishing Mailpit. From the
 same deployment directory and with the same settings, list messages through the
@@ -354,7 +397,9 @@ the machine size.
 `load` still takes the image stream on standard input. The target selects only
 the checked-in override and explicit settings; ambient Compose files, profiles,
 build tokens and bind overrides remain excluded. Its initial-account admission
-requires 2,048 MiB available RAM and 8 GiB free disk, and an unused port 443.
+requires 2,048 MiB available RAM and 8 GiB free disk, and unused TCP ports 80/443
+and UDP port 51820. Amazon permits a total container memory budget of 2,112 MiB
+for the independent 64 MiB challenge service; LAN retains its 2,048 MiB ceiling.
 Monitoring aborts after three consecutive readings below 512 MiB or 4 GiB.
 Owned out-of-memory events and protected Waitron regressions retain their original
 refusal. The LAN command and its stricter original thresholds are unchanged.

@@ -15,7 +15,7 @@ function canonicalHttpsOrigin(origin){
 }
 function targetLimits(target){
  if(target==='lan')return{availableMiB:4096,freeGiB:20,floorMiB:2048,floorGiB:15,ports};
- if(target==='amazon')return{availableMiB:2048,freeGiB:8,floorMiB:512,floorGiB:4,ports:new Set([443])};
+ if(target==='amazon')return{availableMiB:2048,freeGiB:8,floorMiB:512,floorGiB:4,ports:new Set([80,443,51820])};
  throw new Error('test_cloud.target');
 }
 export function validatePreflight(value,{image,ownedIds=[],target='lan'}={}){
@@ -34,13 +34,18 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
  targetLimits(target);const amazon=target==='amazon',services=value?.services;
  if(value?.name!==project||!services?.account||!services?.proxy||!services?.postgres||!services?.mailpit)throw new Error('test_cloud.rendered');
  for(const [name,service] of Object.entries(services)){
-  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
+  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
   for(const port of service.ports??[]){
-   if(name==='proxy'){if(port.host_ip!==(amazon?'0.0.0.0':'192.168.10.10')||String(port.published)!==(amazon?'443':'3000')||port.target!==3000)throw new Error('test_cloud.rendered');}
+   if(name==='proxy'){if(port.host_ip!==(amazon?'0.0.0.0':'192.168.10.10')||String(port.published)!==(amazon?'443':'3000')||port.target!==(amazon?443:3000)||port.protocol&&port.protocol!=='tcp')throw new Error('test_cloud.rendered');}
+   else if(amazon&&name==='http-challenges'){if(port.host_ip!=='0.0.0.0'||String(port.published)!=='80'||port.target!==8080||port.protocol!=='tcp')throw new Error('test_cloud.rendered');}
+   else if(amazon&&name==='gateway'){if(port.host_ip!=='0.0.0.0'||String(port.published)!=='51820'||port.target!==51820||port.protocol!=='udp')throw new Error('test_cloud.rendered');}
    else if(port.host_ip!=='127.0.0.1'||(amazon?['account','postgres','mailpit','storage','gateway'].includes(name):name==='account'))throw new Error('test_cloud.rendered');
   }
  }
  if(amazon){
+  const challenge=services['http-challenges'],manifest=services['gateway-manifest'];
+  if(challenge?.restart!=='unless-stopped'||challenge?.ports?.length!==1||services.gateway?.ports?.length!==1||Number(challenge.mem_limit)!==64*1024*1024||challenge.depends_on||challenge.volumes?.length!==2||!challenge.volumes.every(v=>v.read_only===true)||!challenge.volumes.some(v=>v.type==='bind'&&v.target==='/run/account-webroot')||!challenge.volumes.some(v=>v.source==='test-cloud-http-challenges'&&v.target==='/run/remote-challenges')||!manifest?.volumes?.some(v=>v.source==='test-cloud-http-challenges'&&v.target==='/run/remote-challenges'&&!v.read_only))throw new Error('test_cloud.rendered');
+  for(const[name,service]of Object.entries(services))if(!['gateway-manifest','http-challenges'].includes(name)&&service.volumes?.some(v=>v.source==='test-cloud-http-challenges'))throw new Error('test_cloud.rendered');
   const bundle=services.bootstrap?.volumes?.find(v=>v.target==='/run/proxy-certificate');
   if(bundle?.source!=='test-cloud-public-certificate'||!services.proxy.volumes?.some(v=>v.source===bundle.source&&v.target==='/run/proxy-certificate'&&v.read_only===true))throw new Error('test_cloud.rendered');
   for(const[name,service]of Object.entries(services)){
@@ -49,7 +54,7 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
   }
   for(const name of ['bootstrap','account','email-worker'])if(services[name]?.environment?.TEST_CLOUD_ORIGIN!==origin)throw new Error('test_cloud.rendered');
  }
- if(Object.values(services).reduce((sum,service)=>sum+Number(service.mem_limit),0)>2048*1024*1024)throw new Error('test_cloud.rendered');
+ if(Object.values(services).reduce((sum,service)=>sum+Number(service.mem_limit),0)>(amazon?2112:2048)*1024*1024)throw new Error('test_cloud.rendered');
  if(services.proxy.ports?.length!==1||services.account.ports?.length)throw new Error('test_cloud.rendered');
  for(const [name,expected] of [['postgres',[['55432',5432]]],['mailpit',[['1125',1025],['8125',8025]]]]){
   const actual=(services[name].ports??[]).map(p=>[String(p.published),p.target]);if(JSON.stringify(actual)!==JSON.stringify(amazon?[]:expected))throw new Error('test_cloud.rendered');

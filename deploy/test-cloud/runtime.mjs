@@ -16,12 +16,13 @@ export function testRuntimeEnvironment(role,config,environment={}){
  const enabled=mode!=='existing';
  const result=runtimeEnvironment(role==='action-demo'?'migrate':role==='storage'||role==='manifest'&&enabled?'reconcile':role,config,role==='account'?{CLOUD_FACTOR_POLICY:environment.CLOUD_FACTOR_POLICY,...(demo?{CLOUD_OPERATOR_ACCOUNT_ID:environment.CLOUD_OPERATOR_ACCOUNT_ID}:{})}:{},canonicalHttpsOrigin(environment.TEST_CLOUD_ORIGIN??'https://waitron.local:3000'));result.CLOUD_TEST_SERVICE_PLANS=flag;
  if(environment.TEST_CLOUD_ORIGIN!==undefined)result.TEST_CLOUD_ORIGIN=environment.TEST_CLOUD_ORIGIN;
+ if(role==='manifest')for(const name of ['TEST_CLOUD_PUBLIC_REMOTE','TEST_CLOUD_ACME_DIRECTORY','TEST_CLOUD_CHALLENGE_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
  if(venueFlag!==undefined)result.CLOUD_VENUE_SERVICE_LEVELS=venueFlag;
  if(allowances&&['account','translation'].includes(role)){result.CLOUD_TEST_ALLOWANCES='1';result.CLOUD_ALLOWANCE_CALENDAR=allowances.calendar;}
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';
  if(['account','action-demo'].includes(role)&&demo){result.CLOUD_ACTION_DEMO='1';result.CLOUD_ACTION_DEMO_DIR=environment.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo';}
  if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
- if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';result.GATEWAY_CERTIFICATE_REFRESH='1';}
+ if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';result.GATEWAY_CERTIFICATE_REFRESH='1';if(environment.TEST_CLOUD_PUBLIC_REMOTE==='1')result.GATEWAY_PROXY_SOURCE='10.79.0.2';}
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  return result;

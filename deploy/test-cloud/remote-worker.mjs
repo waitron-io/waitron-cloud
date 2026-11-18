@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runWorkerLoop,parsePlanMode} from '../../packages/registration/src/index.ts';
 import {runManifestWorker} from '../local-stack/manifest-worker.mjs';
-import {openTestRemoteRuntime} from './remote-runtime.mjs';
+import {openTestRemoteRuntime,loadPublicRemoteSettings} from './remote-runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 const stop=new AbortController(),shutdown=()=>stop.abort(),ready=join(tmpdir(),'test-cloud-remote-ready');let pool;
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
@@ -15,7 +15,8 @@ try{
  else{
   if(!process.env.DATABASE_URL)throw Error();
   pool=new Pool({connectionString:process.env.DATABASE_URL,max:3,connectionTimeoutMillis:5000,statement_timeout:10000});pool.on('error',()=>{console.error('Test remote database unavailable');stop.abort();process.exitCode=1;});
-  const {worker}=await openTestRemoteRuntime({pool,directory,mode});
+  const publicRemote=await loadPublicRemoteSettings(directory,process.env);
+  const {worker}=await openTestRemoteRuntime({pool,directory,mode,publicRemote});
   // Placement needs the committed cell, not merely a running worker process.
   await writeFile(ready,'ready\n',{mode:0o600});
   await runWorkerLoop({signal:stop.signal,concurrency:1,scheduleIntervalMs:1000,pollIntervalMs:250,schedule:()=>worker.schedule(),runOnce:signal=>worker.runOnce(signal),onError:()=>console.error('Test remote reconciliation unavailable; retrying')});

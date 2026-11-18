@@ -1047,8 +1047,11 @@ implementation or production evidence.
   Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
   protected Waitron containers are never adopted.
 
-  Public test-venue HTTPS remains unbuilt; its [short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md)
-  has the watcher's 17 November clearance. Pairing and the owner's mobile-data check remain separate gates.
+  Public test-venue HTTPS still needs Amazon staging/production issuance and renewal
+  qualification, account renewal, pairing and the owner's mobile-data check. The
+  [short plan](superpowers/plans/2026-11-17-test-cloud-public-remote.md) has the
+  watcher's 17 November clearance; local HTTP issuance and proxy checks do not
+  qualify those deployment workflows.
   The [single-machine Amazon test plan](superpowers/plans/2026-11-16-test-cloud-aws.md)
   is cleared by the watcher for staged implementation. Configurable HTTPS reuses
   the test runtime and internal CA trust. The explicit Amazon driver target has

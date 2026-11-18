@@ -163,3 +163,16 @@ test('demoModeOffByDefault: only an explicit LAN demo passes the operator to the
  for(const role of ['email','monitor','storage'])assert.equal(testRuntimeEnvironment(role,config,enabled).CLOUD_OPERATOR_ACCOUNT_ID,undefined);
  assert.throws(()=>testRuntimeEnvironment('account',config,{...enabled,NODE_ENV:'production'}),/demo/);
 });
+
+test('public remote settings persist a separate private ACME account and pass only to the Amazon worker',async t=>{
+ const {loadPublicRemoteSettings}=await import('./remote-runtime.mjs');assert.equal(typeof loadPublicRemoteSettings,'function','public remote settings missing');
+ const {readFile,stat}=await import('node:fs/promises'),dir=await mkdtemp(join(tmpdir(),'cloud-public-settings-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ assert.equal(await loadPublicRemoteSettings(dir,{}),undefined);
+ const env={TEST_CLOUD_PUBLIC_REMOTE:'1',TEST_CLOUD_ORIGIN:'https://test-cloud.example.test',TEST_CLOUD_ACME_DIRECTORY:'https://ca.example.test/dir',TEST_CLOUD_CHALLENGE_DIR:join(dir,'challenges')};
+ const settings=await loadPublicRemoteSettings(dir,env),again=await loadPublicRemoteSettings(dir,env);
+ assert.equal(settings.zone,'test-cloud.example.test');assert.equal(settings.endpoint,'test-cloud.example.test:51820');assert.equal(settings.directoryUrl,env.TEST_CLOUD_ACME_DIRECTORY);assert.equal(settings.challengeDirectory,env.TEST_CLOUD_CHALLENGE_DIR);assert.deepEqual(again.accountKey,settings.accountKey);
+ assert.equal((await stat(join(dir,'acme/account-key.pem'))).mode&0o777,0o600);assert.notEqual(settings.accountKey,await readFile(join(dir,'gateway-signing-key.pem'),'utf8'));
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ for(const role of ['account','manifest','gateway','email']){const value=testRuntimeEnvironment(role,config,env);assert.equal(value.TEST_CLOUD_PUBLIC_REMOTE,role==='manifest'?'1':undefined);assert.equal(value.TEST_CLOUD_ACME_DIRECTORY,role==='manifest'?env.TEST_CLOUD_ACME_DIRECTORY:undefined);assert.equal(value.GATEWAY_PROXY_SOURCE,role==='gateway'?'10.79.0.2':undefined);}
+ for(const changed of [{TEST_CLOUD_PUBLIC_REMOTE:'yes'},{TEST_CLOUD_ORIGIN:'http://cloud.example.test'},{TEST_CLOUD_ACME_DIRECTORY:'http://ca.example.test/dir'},{TEST_CLOUD_CHALLENGE_DIR:'relative'}])await assert.rejects(loadPublicRemoteSettings(dir,{...env,...changed}));
+});

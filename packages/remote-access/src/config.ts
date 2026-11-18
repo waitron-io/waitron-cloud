@@ -1,7 +1,7 @@
 import {isAddress,isHostname,isPeerKey,isUuid,type GatewayRoute} from './manifest.ts';
 import {isIP} from 'node:net';
 export interface TrafficRenderOptions {socket:string;operationalSources:readonly string[]}
-interface HaproxyOptions {port:number;publicTlsPort:number;gatePort:number;certificateDirectory:string;traffic?:TrafficRenderOptions}
+interface HaproxyOptions {port:number;publicTlsPort:number;gatePort:number;certificateDirectory:string;traffic?:TrafficRenderOptions;proxySource?:string}
 export function validateTrafficRenderOptions(value:TrafficRenderOptions):void{
  if(!value||typeof value.socket!=='string'||value.socket.length>100||!/^\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.sock$/.test(value.socket)
   ||!Array.isArray(value.operationalSources)||value.operationalSources.length<1||value.operationalSources.length>64
@@ -16,6 +16,9 @@ function validate(routes:GatewayRoute[]){
 export function renderHaproxy(routes:GatewayRoute[],o:HaproxyOptions):string{
  validate(routes);if(![o.port,o.publicTlsPort,o.gatePort].every(p=>Number.isInteger(p)&&p>0&&p<=65535)||new Set([o.port,o.publicTlsPort,o.gatePort]).size!==3||!/^\/[A-Za-z0-9_/-]+$/.test(o.certificateDirectory))throw new Error('invalid_gateway_options');
  if(o.traffic)validateTrafficRenderOptions(o.traffic);
+ if(o.proxySource!==undefined&&isIP(o.proxySource)!==4)throw new Error('invalid_gateway_options');
+ // PROXY headers are decoded after connection rules; session rules see the caller.
+ const sourcePhase=o.proxySource?'session':'connection';
  const name=(r:GatewayRoute,kind:'user'|'ops',channel:'staff'|'public')=>`traffic_${kind}_${channel}_${r.installationId.replaceAll('-','')}`;
  const selectors=o.traffic?routes.map(r=>[
   `  use_backend ${name(r,'ops','staff')} if traffic_operational { req.ssl_sni -m str ${r.staffHostname} }`,
@@ -46,9 +49,9 @@ ${o.traffic?`  stats socket ${o.traffic.socket} mode 600 level operator\n`:''}de
 frontend ingress
   bind :${o.port}
   stick-table type ip size 10000 expire 1m store conn_cur,conn_rate(10s)
-  tcp-request connection track-sc0 src
-  tcp-request connection reject if { sc0_conn_cur gt 32 }
-  tcp-request connection reject if { sc0_conn_rate gt 60 }
+${o.proxySource?`  tcp-request connection expect-proxy layer4 if { src ${o.proxySource} }\n`:''}  tcp-request ${sourcePhase} track-sc0 src
+  tcp-request ${sourcePhase} reject if { sc0_conn_cur gt 32 }
+  tcp-request ${sourcePhase} reject if { sc0_conn_rate gt 60 }
   tcp-request inspect-delay 5s
 ${limits}  tcp-request content accept if { req.ssl_hello_type 1 }
 ${o.traffic?`  acl traffic_operational src ${o.traffic.operationalSources.join(' ')}\n`:''}${selectors}

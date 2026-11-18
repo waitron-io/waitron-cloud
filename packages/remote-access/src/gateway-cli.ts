@@ -53,7 +53,7 @@ async function apply(routes:GatewayRoute[]){
  if(trafficOptions)await mkdir(trafficOptions.socketDirectory,{recursive:true,mode:0o700});
  await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n\n${renderWireGuard(routes)}`);
  run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);
- await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs',traffic}));
+ await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs',traffic,...(process.env.GATEWAY_PROXY_SOURCE?{proxySource:process.env.GATEWAY_PROXY_SOURCE}:{})}));
  run('haproxy',['-c','-f',join(root,'haproxy.cfg')]);
  const previousPid=trafficRuntime&&currentTraffic?trafficRuntime.pid(currentTraffic):current?.pid;
  // The traffic supervisor must retain the predecessor's stats socket through its final sample.
