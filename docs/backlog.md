@@ -715,8 +715,8 @@ stored names and signed reply. DNS movement is checked locally by
 `scripts/remote-reconciler-receipt.mjs`; live DNS qualification remains open.
 Remaining work:
 
-- Reduce an owner’s custom name to one CNAME, with the gateway answering
-  Let’s Encrypt’s TLS-ALPN-01 check on port 443.
+- Reduce an owner’s custom name to one CNAME. Connect the certificate worker to
+  the gateway’s local TLS-ALPN-01 responder and qualify issuance end to end.
 - Issue, renew and install every certificate automatically.
 - Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 

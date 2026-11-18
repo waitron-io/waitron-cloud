@@ -167,6 +167,23 @@ marker and accepted configuration. Missing or corrupt established state needs op
 recovery; do not delete the marker to make an old export acceptable.
 Keep the signing key outside the gateway; mount only its public key.
 
+### Answer a certificate authority's TLS check
+
+To exercise a TLS-ALPN-01 certificate check, set `GATEWAY_CHALLENGES` to a private
+directory and mount it read-only in the gateway. Give write access only to the
+role that presents certificate checks. That role can prove control of routed staff
+and public names. Leave the setting unset to answer no checks.
+
+Supply one `<hostname>.json` per routed name, with `hostname`, an RFC 8737
+`certificate` and its matching PEM `key`, and `expiresAt` in epoch milliseconds.
+The gateway reads at most 128 files, each at most 16 KiB, once a second. It drops
+missing or invalid checks and clears the list if the directory read fails. A
+withdrawn route or an expired check stops answering immediately.
+
+HAProxy sends connections offering `acme-tls/1` on port 443 to the gateway's
+loopback listener on port 8445. `status.json` lists ready names in `challenges.answerable`.
+The local image test uses a synthetic certificate. Worker orders and delivery are still open.
+
 ## Reconcile routes and certificates
 
 Use the durable reconciler after migrations have run and placements have been assigned.
