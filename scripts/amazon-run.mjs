@@ -223,10 +223,13 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         }
         await ssh(0, ['sudo', 'docker', 'load', '-i', '/tmp/d618-images.tar']);
         await ssh(0, ['sudo', 'docker', 'network', 'create', '--subnet', '10.79.0.0/24', name]);
-        await bootstrap(0, 'control', [name]);
+        const certificateKey = await bootstrap(0, 'control', [name]);
         const joinCommand = await ssh(0, ['sudo', 'kubeadm', 'token', 'create', '--ttl', '20m', '--print-join-command']);
-        for (const index of [1, 2]) await bootstrap(index, 'join', [], joinCommand + '\n');
+        for (const index of [1, 2]) await bootstrap(index, 'join', [name], joinCommand + '\n' + certificateKey + '\n');
         await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s']);
+        // Recreate pods so their hosts files use the API on their own machines.
+        await kube(['-n', 'kube-system', 'rollout', 'restart', 'daemonset/kube-proxy']);
+        await kube(['-n', 'kube-system', 'rollout', 'status', 'daemonset/kube-proxy', '--timeout=180s']);
         for (let index = 0; index < 3; index++) {
           const found = await ssh(index, ['sh', '-c', 'test -x /opt/cni/bin/flannel && echo present || echo missing']);
           assert.equal(found, 'present', 'amazon.flannel_plugin: machine ' + index + ' has no flannel network plugin in /opt/cni/bin, where containerd looks');

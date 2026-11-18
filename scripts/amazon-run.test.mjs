@@ -186,10 +186,11 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [];
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
+  const certificateKey = 'b'.repeat(64), joins = [];
   let time = Date.UTC(2026, 10, 10), target, savedTags = [], deleting = false;
   let markStage,releaseStage,markRemoval,releaseRemoval;
   const stageReady=new Promise(resolve=>{markStage=resolve;});
@@ -261,7 +262,12 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
         if (script.includes('crictl')) return JSON.stringify({status: {id: 'sha256:' + (scenario === 'wrong imported image' ? 'b'.repeat(64) : hashes), pinned: false, repoTags: [], repoDigests: [], size: '364', username: ''}, info: {}});
         if (script.includes('kubernetes-check.mjs')) {phases.push(target.phase); assert.ok(script.includes('sha256:' + hashes)); assert.equal(target.instances[2], output.C); return JSON.stringify({checked: target.phase});}
         if (script.includes('jsonpath=')) return 'manifest-old';
-        if (script.includes('token')) return 'kubeadm join 10.77.0.1:6443 --token synthetic --discovery-token-ca-cert-hash sha256:' + hashes;
+        if (script.includes("bootstrap.sh' 'control'")) return certificateKey;
+        if (script.includes("bootstrap.sh' 'join'")) {
+          joins.push({host: args.at(-2), input});
+          if (scenario === 'failed control-plane join') throw Error('synthetic join refusal');
+        }
+        if (script.includes("'token' 'create'")) return 'kubeadm join d618-api:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:' + hashes;
       }
       return '';
     }});
@@ -323,6 +329,10 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
     assert.equal(calls.find(row => row[1] === 'wait' && row[2] === 'stack-delete-complete')?.at(-1), name);
     assert.equal(calls.some(row => row[0] === 'docker' && row[1] === 'buildx' && ['create', 'rm'].includes(row[2])), false);
     if (['wrong instance', 'wrong imported image', 'failed bundle upload', 'failed private copy', 'missing flannel'].includes(scenario)) assert.deepEqual(phases, []);
+    if (scenario === 'failed control-plane join') {
+      assert.deepEqual(joins.map(row => row.host), ['admin@203.0.113.2']);
+      assert.deepEqual(phases, [], 'no fixture starts after a failed member join');
+    }
     if (['failed bundle upload','failed private copy'].includes(scenario)) assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes("'ctr'")),false,'no import after a failed distribution');
     return;
   }
@@ -344,6 +354,16 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   assert.ok(lastStorage>=0&&lastStorage<upload,'every worker has its private mount before distribution');
   const removal=calls.findIndex(row=>row[0]==='ssh'&&row.at(-1)==="'sudo' 'rm' '/var/local/d620-config/d618-images.tar'");
   assert.ok(removal>calls.findLastIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'cp'"))&&removal<calls.findIndex(row=>row[0]==='ssh'&&row.at(-1).includes("'ctr'")));
+  assert.deepEqual(joins.map(row => row.host), ['admin@203.0.113.2', 'admin@203.0.113.3']);
+  for (const {input} of joins) {
+    assert.equal(input, 'kubeadm join d618-api:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:' + hashes + '\n' + certificateKey + '\n');
+  }
+  assert.ok(transports.every(({args}) => !args.some(arg => arg.includes(certificateKey) || arg.includes('abcdef.0123456789abcdef'))));
+  const lastJoin = calls.findLastIndex(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'join'"));
+  const refresh = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'restart' 'daemonset/kube-proxy'"));
+  const ready = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'status' 'daemonset/kube-proxy'"));
+  const fixture = calls.findIndex(row => row[0] === 'scp' && row.at(-2).endsWith('target.json'));
+  assert.ok(lastJoin >= 0 && lastJoin < refresh && refresh < ready && ready < fixture, 'refresh the proxy after both joins and wait before fixtures');
   if (scenario === 'observer') {
     assert.ok(calls.findIndex(row=>row[0]==='flux-prepare')>=0&&calls.findIndex(row=>row[0]==='flux-prepare')<calls.findIndex(row=>row[1]==='create-stack'),'prepare offline controllers before machines');
     assert.equal(savedTags.filter(tag=>/:(source|kustomize)-controller$/.test(tag)).length,2);

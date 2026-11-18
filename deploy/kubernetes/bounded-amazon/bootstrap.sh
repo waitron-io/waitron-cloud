@@ -4,6 +4,48 @@ phase=${1:-}
 case "$phase" in prepare|mesh|control|join|storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
+
+api_name=d618-api
+hosts_file=${D618_HOSTS_FILE:-/etc/hosts}
+
+mesh_address() {
+  local address
+  read -r _ _ _ address _ < <(ip -4 -o address show dev wg0 scope global)
+  printf '%s\n' "${address%/*}"
+}
+
+set_api_address() {
+  local other_hosts
+  other_hosts=$(awk -v name="$api_name" '$2 != name' "$hosts_file")
+  {
+    if [ -n "$other_hosts" ]; then printf '%s\n' "$other_hosts"; fi
+    printf '%s %s\n' "$1" "$api_name"
+  } > "$hosts_file"
+}
+
+kubeadm_private() {
+  local output
+  if ! output=$(kubeadm "$@" 2>&1); then
+    printf '%s\n' "${output//"$certificate_key"/[redacted certificate key]}" |
+      sed -E 's/[a-z0-9]{6}\.[a-z0-9]{16}/[redacted token]/g' >&2
+    return 1
+  fi
+}
+
+configure_local_api() {
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+  kubectl config rename-context kubernetes-admin@kubernetes "$1"
+  for ((attempt = 0; attempt < 24; attempt++)); do
+    if kubectl --request-timeout=5s get --raw=/readyz/etcd >/dev/null &&
+       kubectl --request-timeout=5s get --raw=/readyz >/dev/null; then
+      kubectl taint node "$(hostname)" node-role.kubernetes.io/control-plane:NoSchedule-
+      return
+    fi
+    sleep 5
+  done
+  echo 'The local Kubernetes API or etcd did not become ready' >&2
+  return 1
+}
 case "$phase" in
 prepare)
   name=$2; address=$3
@@ -78,16 +120,34 @@ storage)
   test "$(cat mount-check)" = shared; mv mount-check mount-renamed; rm mount-renamed
   ;;
 control)
-  kubeadm init --kubernetes-version=v1.34.3 --apiserver-advertise-address=10.77.0.1 --pod-network-cidr=10.244.0.0/16
-  export KUBECONFIG=/etc/kubernetes/admin.conf
-  kubectl config rename-context kubernetes-admin@kubernetes "$2"
-  kubectl taint node "$(hostname)" node-role.kubernetes.io/control-plane:NoSchedule-
-  curl -fsSL https://raw.githubusercontent.com/flannel-io/flannel/v0.27.3/Documentation/kube-flannel.yml | sed '/- --kube-subnet-mgr/a\        - --iface=wg0' | kubectl apply -f -
+  address=$(mesh_address)
+  [ "$address" = 10.77.0.1 ]
+  set_api_address "$address"
+  certificate_key=$(kubeadm certs certificate-key)
+  [[ "$certificate_key" =~ ^[a-f0-9]{64}$ ]]
+  kubeadm_private init --kubernetes-version=v1.34.3 --apiserver-advertise-address="$address" \
+    --control-plane-endpoint="$api_name:6443" --pod-network-cidr=10.244.0.0/16 \
+    --upload-certs --certificate-key="$certificate_key"
+  configure_local_api "$2" >&2
+  curl -fsSL https://raw.githubusercontent.com/flannel-io/flannel/v0.27.3/Documentation/kube-flannel.yml | sed '/- --kube-subnet-mgr/a\        - --iface=wg0' | kubectl apply -f - >&2
+  printf '%s\n' "$certificate_key"
   ;;
 join)
-  # The short-lived kubeadm join command arrives privately from this run's control plane.
+  # Credentials arrive on stdin so they stay out of the SSH command and its logs.
   read -r -a command
-  [ "${command[0]}" = kubeadm ]; [ "${command[1]}" = join ]; [ "${command[2]}" = 10.77.0.1:6443 ]
-  "${command[@]}"
+  read -r certificate_key
+  [ "${#command[@]}" = 7 ]
+  [ "${command[0]}" = kubeadm ]; [ "${command[1]}" = join ]; [ "${command[2]}" = "$api_name:6443" ]
+  [ "${command[3]}" = --token ]; [[ "${command[4]}" =~ ^[a-z0-9]{6}\.[a-z0-9]{16}$ ]]
+  [ "${command[5]}" = --discovery-token-ca-cert-hash ]; [[ "${command[6]}" =~ ^sha256:[a-f0-9]{64}$ ]]
+  [[ "$certificate_key" =~ ^[a-f0-9]{64}$ ]]
+  address=$(mesh_address)
+  [[ "$address" =~ ^10\.77\.0\.[23]$ ]]
+  set_api_address 10.77.0.1
+  kubeadm_private "${command[@]:1}" --control-plane --certificate-key="$certificate_key" \
+    --apiserver-advertise-address="$address"
+  # Every member keeps the certificate name but uses its own API after joining.
+  set_api_address "$address"
+  configure_local_api "$2" >&2
   ;;
 esac
