@@ -16,10 +16,15 @@ records keep the same expected fields. Hosted readback still requires an active
 workflow (`scripts/ci-decision.mjs:79`); if GitHub reports the deleted workflow as
 inactive, readback refuses those older records.
 
+AWS Emulator runs separately on matching pull requests and pushes to `main`.
+Read its job and test log for the exact merge SHA. The workflow runs the four
+required cases again and publishes their count in the log. It has no planner,
+decision artifact or reuse.
+
 ## Read the decision before counting tests
 
 For every triggered workflow, save the exact merge SHA, tree, run ID and attempt,
-then read all final jobs and their logs. The run retains one main artifact
+then read all final jobs and their logs. A run with a planner retains one main artifact
 named `ci-decision-v1-<workflow-key>-<run-id>-<attempt>`. It contains only
 `plan.json`. The step summary links any inherited PR and source attempt.
 The possible decisions are:

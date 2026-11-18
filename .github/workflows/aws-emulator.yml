@@ -6,7 +6,10 @@ on:
       - 'packages/remote-access/src/manifest.ts'
       - 'packages/remote-access/test/emulator/**'
       - 'packages/remote-access/package.json'
+      - 'packages/registration/src/country-policy.ts'
+      - 'packages/registration/src/migrate.ts'
       - 'packages/registration/src/ses-feedback-*.ts'
+      - 'packages/registration/src/transaction.ts'
       - 'packages/registration/test/emulator/**'
       - 'packages/registration/test/fixtures/mail-attempt.ts'
       - 'packages/registration/test/fixtures/ses-feedback.ts'
@@ -26,7 +29,10 @@ on:
       - 'packages/remote-access/src/manifest.ts'
       - 'packages/remote-access/test/emulator/**'
       - 'packages/remote-access/package.json'
+      - 'packages/registration/src/country-policy.ts'
+      - 'packages/registration/src/migrate.ts'
       - 'packages/registration/src/ses-feedback-*.ts'
+      - 'packages/registration/src/transaction.ts'
       - 'packages/registration/test/emulator/**'
       - 'packages/registration/test/fixtures/mail-attempt.ts'
       - 'packages/registration/test/fixtures/ses-feedback.ts'
@@ -64,8 +70,8 @@ jobs:
             echo 'present=false' >> "$GITHUB_OUTPUT"
             echo 'Skipping: this head predates the AWS Emulator tests.'
           fi
-      - uses: actions/setup-node@v5
-        if: steps.presence.outputs.present == 'true'
+      - if: steps.presence.outputs.present == 'true'
+        uses: actions/setup-node@v5
         with:
           node-version: '26'
           package-manager-cache: false
@@ -76,8 +82,8 @@ jobs:
           npm_config_fetch_timeout: '15000'
           npm_config_fetch_retries: '1'
           npm_config_fetch_retry_mintimeout: '1000'
-      - uses: actions/setup-node@v5
-        if: steps.presence.outputs.present == 'true'
+      - if: steps.presence.outputs.present == 'true'
+        uses: actions/setup-node@v5
         with:
           node-version: '26'
           package-manager-cache: false

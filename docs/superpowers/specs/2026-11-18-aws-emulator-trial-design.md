@@ -35,8 +35,9 @@ and keeps checking as the adapters change.
 
 ## Approaches
 
-1. **New emulator test files in each package, run by a dedicated CI job when either package
-   changes and nightly (chosen).** Small, keeps catching drift, no change to the existing suites.
+1. **New emulator test files in each package, run by a dedicated CI job (chosen).** The
+   reviewed trial runs on relevant path changes and on demand. The original design included
+   a daily run. The trial pins the emulator and leaves that run out.
 2. Point the existing tests at the emulator. Rejected: they rely on what only a fake can do —
    hanging on purpose, counting requests, returning malformed replies.
 3. A one-off script. Rejected: cheaper, but catches nothing after the day it runs.
@@ -68,9 +69,9 @@ and keeps checking as the adapters change.
 - **CI job.** Installs a pinned Debian package
   (`https://downloads.aws.com/aws-emulator/packages/aws-emulator/LTS/aws-emulator_<version>-1_amd64.deb`,
   about 200 MB), checks its SHA-256 before installing, starts the emulator on loopback with
-  telemetry off and an idle timeout, waits on `/__admin/health`, runs the two emulator files, and
-  stops it. It follows the repository's existing CI conventions (timeouts, retries, selection,
-  `summary`).
+  telemetry off and an idle timeout, waits on `/__admin/health` and runs the two emulator files.
+  The hosted runner is discarded at the end of the job. Read the result in the separate
+  `AWS Emulator tests` workflow before merging. Standard CI's `summary` covers its own jobs.
 - **Locally.** Without the emulator the files skip with a message naming the reason.
 
 ## Left to the builder

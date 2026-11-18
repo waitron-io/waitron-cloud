@@ -152,14 +152,17 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 **Interfaces:**
 - Consumes: root script `test:aws-emulator` (Task 1); the environment contract above.
 
-**Workflow shape.** Name `AWS Emulator tests`. Triggers: `pull_request` and `push` to `main`, each with this `paths` list, plus `workflow_dispatch`. No schedule: the emulator version is pinned, so a run on unchanged inputs repeats the last answer, and the path list names every input (a deliberate departure from the spec's "nightly", stated in the pull request).
+**Workflow shape.** Name `AWS Emulator tests`. Run on `pull_request` and `push` to `main` for these paths, and on demand through `workflow_dispatch`. The reviewed trial uses a pinned emulator and omits the daily run in the original design. Record that decision in the pull request. Use the manual trigger to check changes to the runner or toolchain between runs.
 
 ```
 - 'packages/remote-access/src/route53-dns.ts'
 - 'packages/remote-access/src/manifest.ts'
 - 'packages/remote-access/test/emulator/**'
 - 'packages/remote-access/package.json'
+- 'packages/registration/src/country-policy.ts'
+- 'packages/registration/src/migrate.ts'
 - 'packages/registration/src/ses-feedback-*.ts'
+- 'packages/registration/src/transaction.ts'
 - 'packages/registration/test/emulator/**'
 - 'packages/registration/test/fixtures/mail-attempt.ts'
 - 'packages/registration/test/fixtures/ses-feedback.ts'
@@ -169,6 +172,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 - 'scripts/ci-required-cases.json'
 - 'scripts/ci-required-cases.mjs'
 - 'scripts/ci-setup-pnpm.mjs'
+- 'scripts/ci-pnpm-diagnostics.cjs'
 - 'scripts/ci-download.py'
 - '.github/workflows/aws-emulator.yml'
 ```
