@@ -1220,6 +1220,20 @@ after the three control planes are ready. The legacy journey still uses its own
 database and the network share on A. Switching the Cloud services to the
 replicated database and checking machine loss in Stockholm are later steps.
 
+Run `node scripts/kubernetes-check.mjs --storage-loss` in the Linux guest to
+rehearse object storage loss independently of the Cloud services. The check builds
+the pinned MinIO test image with Docker Buildx and serves it over private HTTPS.
+It starts six peers, with two local volumes per machine. It reads and writes
+encrypted bytes while the first machine is down and checks that multipart
+completion refuses a missing part. Its JSON output reports the outage time.
+The Cloud services slice must prove disk repair and consecutive outages before
+run 9.
+
+The bounded Stockholm launcher transfers the same test store image and waits
+for all six peers after joining the three machines. It runs the store in
+`d621-store` with disposable credentials. The legacy fixture keeps its existing
+store. Scoped credentials and Cloud service cutover follow in later slices.
+
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file
 watchers from all three nodes and the database workloads. Set the limit to 512

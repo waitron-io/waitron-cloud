@@ -4,6 +4,7 @@ import {chmodSync, copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync,
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
+import {stockholmStoreResources} from '../../../scripts/kubernetes-storage.mjs';
 
 const key = 'b'.repeat(64);
 const token = 'abcdef.0123456789abcdef';
@@ -132,5 +133,18 @@ test('the database bootstrap prepares a private directory on this machine', t =>
   assert.deepEqual(calls.map(({name, args}) => [name, ...args]), [
     ['id', '-u'],
     ['install', '-d', '-m', '0700', '-o', '26', '-g', '26', '/var/local/d621-postgres'],
+  ]);
+});
+
+test('the store bootstrap prepares two private directories with the store process ownership', t => {
+  const {result, calls} = bootstrap(t, 'object-storage');
+  assert.equal(result.status, 0, result.stderr);
+  const resources = stockholmStoreResources(['stockholm-a', 'stockholm-b', 'stockholm-c'], 'local:store');
+  const {runAsUser, runAsGroup} = resources.find(row => row.kind === 'StatefulSet').spec.template.spec.securityContext;
+  const users = readFileSync(new URL('../images/store/Dockerfile', import.meta.url), 'utf8').match(/^USER (\d+):(\d+)$/m);
+  assert.deepEqual(users?.slice(1), [String(runAsUser), String(runAsGroup)]);
+  assert.deepEqual(calls.map(({name, args}) => [name, ...args]), [
+    ['id', '-u'],
+    ['install', '-d', '-m', '0700', '-o', users[1], '-g', users[2], '/var/local/d621-store/0', '/var/local/d621-store/1'],
   ]);
 });

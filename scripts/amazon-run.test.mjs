@@ -186,7 +186,7 @@ test('launcher refuses a standard vCPU quota below twelve before building or cre
     }), value < 12 ? new RegExp(`D618 needs a Running On-Demand Standard instances quota of at least 12 vCPUs; current quota is ${value}`) : /builder reached/);
   }
 });
-for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
+for (const [scenario, expectedError] of [['complete', null], ['observer', null], ['observer failed after stop', /synthetic observer stop failure/], ['observer expiry', /amazon.observer_expiry/], ['observer copy baseline', /amazon.observer_baseline_late/], ['observer late baseline', /amazon.observer_baseline_late/], ['failed creation', /creation failed/], ['wrong instance', /amazon.instance_binding/], ['wrong imported image', /amazon.import_digest/], ['late deletion', /amazon.deletion_late/], ['incomplete archive', /amazon.archive_blob/], ['failed bundle upload', /upload failed/], ['failed private copy', /private copy failed/], ['missing flannel', /amazon.flannel_plugin: machine 2 /], ['failed control-plane join', /synthetic join refusal/], ['database not ready', /synthetic database readiness failure/], ['store not ready', /synthetic store readiness failure/]]) test('Amazon distribution and journeys: ' + scenario, async t => {
   const diagnostics = [];
   if (scenario === 'observer failed after stop') t.mock.method(process.stderr, 'write', value => {diagnostics.push(String(value)); calls.push(['stderr', String(value)]); return true;});
   const calls = [], phases = [], metadata = [], transports = [], hashes = 'a'.repeat(64);
@@ -270,6 +270,9 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
         if (scenario === 'database not ready' && script.includes('scripts/kubernetes-data.mjs')) {
           throw Error('synthetic database readiness failure');
         }
+        if (scenario === 'store not ready' && script.includes('scripts/kubernetes-storage.mjs')) {
+          throw Error('synthetic store readiness failure');
+        }
         if (script.includes("'token' 'create'")) return 'kubeadm join d618-api:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:' + hashes;
       }
       return '';
@@ -340,6 +343,10 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       assert.deepEqual(phases, [], 'no fixture starts if PostgreSQL setup fails');
       assert.equal(calls.some(row => row[1] === 'stop-instances'), false);
     }
+    if (scenario === 'store not ready') {
+      assert.deepEqual(phases, [], 'no fixture starts if the store fails readiness');
+      assert.equal(calls.some(row => row[1] === 'stop-instances'), false);
+    }
     if (['failed bundle upload','failed private copy'].includes(scenario)) assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes("'ctr'")),false,'no import after a failed distribution');
     return;
   }
@@ -391,6 +398,23 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   for (const suffix of ['-control-plane', '-worker', '-worker2']) {
     assert.ok(calls[data].at(-1).includes("'" + clusterName + suffix + "'"));
   }
+  const storeTag = clusterName + ':store';
+  const storeBuild = calls.findIndex(row => row[0] === 'docker' && row[1] === 'buildx' &&
+    row.includes('deploy/kubernetes/images/store/Dockerfile') && row.includes(storeTag));
+  assert.ok(storeBuild >= 0 && storeBuild < calls.indexOf(save), 'build the local store before archiving');
+  assert.ok(savedTags.includes(storeTag), 'the verified bundle carries the store');
+  const storeDisks = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'object-storage'"));
+  const store = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs'));
+  assert.deepEqual(storeDisks.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+  const storeImports = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("'inspecti'") && row.at(-1).includes(storeTag));
+  assert.deepEqual(storeImports.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+  assert.ok(nodeReady < store && store < fixture);
+  assert.ok([...storeDisks, ...storeImports].every(row => calls.indexOf(row) < store));
+  assert.equal(calls[store].at(-2), 'admin@203.0.113.1');
+  assert.ok(calls[store].at(-1).includes("'" + storeTag + "'"));
+  assert.match(calls[store].at(-1), /'--kubeconfig=\/etc\/kubernetes\/admin\.conf'/);
+  assert.ok(calls[store].at(-1).includes("'--context=" + clusterName + "'"));
+  assert.ok(calls[store].at(-1).endsWith("'10.77.0.1' '10.77.0.2' '10.77.0.3'"));
   if (scenario === 'observer') {
     assert.ok(calls.findIndex(row=>row[0]==='flux-prepare')>=0&&calls.findIndex(row=>row[0]==='flux-prepare')<calls.findIndex(row=>row[1]==='create-stack'),'prepare offline controllers before machines');
     assert.equal(savedTags.filter(tag=>/:(source|kustomize)-controller$/.test(tag)).length,2);
