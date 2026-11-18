@@ -39,10 +39,10 @@ async function retry(check, signal, canRetry = () => true) {
   signal.throwIfAborted();
 }
 
-function retryApi(check, signal, stage) {
+export function retryApi(check, signal, stage, retryOther = () => false) {
   return retry(check, signal, error => {
-    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF/i.test(error.message)) return false;
-    process.stderr.write(`Waiting for the Kind API during ${stage}\n${error.message.slice(-2048)}\n`);
+    if (!/Unable to connect to the server:|The connection to the server .* was refused|connection reset by peer|unexpected EOF|^error: EOF$/im.test(error.message) && !retryOther(error)) return false;
+    process.stderr.write(`Retrying Kind connection during ${stage}\n${error.message.slice(-2048)}\n`);
     return true;
   });
 }
@@ -64,7 +64,7 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
@@ -163,8 +163,9 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
     await kube(['taint', 'node', ...names, 'node-role.kubernetes.io/control-plane:NoSchedule-']);
     await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {timeout: 185_000});
     const nodeUids = await readNodes(), members = await readEtcd(nodes);
-    const legs = [];
-    for (const [index, node] of nodes.entries()) {
+    async function stopNode(name, {whileStopped, afterRestart} = {}) {
+      const node = nodes.find(candidate => candidate.name === name);
+      assert.ok(node, 'node_loss.unknown_node');
       const stopped = await verifyContainer(node.id);
       assert.equal(stopped.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_before_stop');
       // Keep the selected node down for the whole leg independently of Docker restart policy.
@@ -179,19 +180,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       await expectStopped();
       process.stderr.write(`Kind node stopped ${node.name}\n`);
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
-      const name = 'node-loss-' + (index + 1);
-      // Success on one API connection does not settle the balancer for the next connection.
-      const duringFault = (args, input) => retryApi(() => kube(args, {...failover, input}), failover.signal, args.slice(0, 3).join(' '));
-      const apply = manifest => duringFault(['apply', '-f', '-'], JSON.stringify({apiVersion: 'v1', metadata: {name}, ...manifest}));
-      await apply({kind: 'ConfigMap', data: {stopped: node.name}});
-      const config = JSON.parse(await duringFault(['get', 'configmap', name, '-o', 'json']));
-      assert.equal(config.data.stopped, node.name, 'node_loss.configmap_read');
-      const matchFields = [{key: 'metadata.name', operator: 'NotIn', values: [node.name]}];
-      await apply({kind: 'Pod', spec: {restartPolicy: 'Never', containers: [{name: 'pause', image: pauseImage, imagePullPolicy: 'Never'}],
-        affinity: {nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {nodeSelectorTerms: [{matchFields}]}}}}});
-      await duringFault(['wait', '--for=condition=Ready', `pod/${name}`, '--timeout=90s']);
-      const scheduledOn = JSON.parse(await duringFault(['get', 'pod', name, '-o', 'json'])).spec.nodeName;
-      assert.ok(names.includes(scheduledOn) && scheduledOn !== node.name, 'node_loss.pod_survivor');
+      const result = await whileStopped(failover);
       await expectStopped();
       const failoverMs = Math.round(performance.now() - started);
       const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
@@ -200,6 +189,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       await docker(['network', 'disconnect', networkId, node.id], rejoin);
       await docker(['network', 'connect', networkId, '--ip', node.ip, node.id], rejoin);
       await docker(['start', node.id], rejoin);
+      if (afterRestart) await afterRestart(rejoin);
       const restarted = await verifyContainer(node.id, rejoin);
       assert.equal(restarted.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_after_restart');
       // Ready can still hold its pre-outage value while the kubelet is absent.
@@ -208,7 +198,30 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       const restartedNodes = await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity');
       assert.deepEqual(restartedNodes, nodeUids, 'node_loss.node_identity');
       assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
-      legs.push({stopped: node.name, scheduledOn, failoverMs});
+      return {stopped: node.name, failoverMs, ...result};
+    }
+    if (database) {
+      const result = await database({nodes: nodes.map(node => node.name), cluster, directory, run, kube, stopNode, signal: stop.signal});
+      return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, database: result};
+    }
+    const legs = [];
+    for (const [index, node] of nodes.entries()) {
+      legs.push(await stopNode(node.name, {whileStopped: async failover => {
+        const name = 'node-loss-' + (index + 1);
+        // Success on one API connection does not settle the balancer for the next connection.
+        const duringFault = (args, input) => retryApi(() => kube(args, {...failover, input}), failover.signal, args.slice(0, 3).join(' '));
+        const apply = manifest => duringFault(['apply', '-f', '-'], JSON.stringify({apiVersion: 'v1', metadata: {name}, ...manifest}));
+        await apply({kind: 'ConfigMap', data: {stopped: node.name}});
+        const config = JSON.parse(await duringFault(['get', 'configmap', name, '-o', 'json']));
+        assert.equal(config.data.stopped, node.name, 'node_loss.configmap_read');
+        const matchFields = [{key: 'metadata.name', operator: 'NotIn', values: [node.name]}];
+        await apply({kind: 'Pod', spec: {restartPolicy: 'Never', containers: [{name: 'pause', image: pauseImage, imagePullPolicy: 'Never'}],
+          affinity: {nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {nodeSelectorTerms: [{matchFields}]}}}}});
+        await duringFault(['wait', '--for=condition=Ready', `pod/${name}`, '--timeout=90s']);
+        const scheduledOn = JSON.parse(await duringFault(['get', 'pod', name, '-o', 'json'])).spec.nodeName;
+        assert.ok(names.includes(scheduledOn) && scheduledOn !== node.name, 'node_loss.pod_survivor');
+        return {scheduledOn};
+      }}));
     }
     return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, legs};
   } catch (error) {

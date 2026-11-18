@@ -67,8 +67,9 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
         return '';
       }
       if (verb === 'get' && kind === 'configmap' && readTimeout) {
+        const message = readTimeout === 'eof' ? 'kubectl failed\nerror: EOF\n' : 'Unable to connect to the server: context deadline exceeded';
         readTimeout = false;
-        throw Error('Unable to connect to the server: context deadline exceeded');
+        throw Error(message);
       }
       if (verb === 'get' && (kind === 'configmap' || kind === 'pod')) return JSON.stringify(pod);
       if (verb === 'taint' || verb === 'wait' || kind === 'events') return '';
@@ -194,4 +195,44 @@ test('lease recovery retries a connection timeout and waits out a stale heartbea
   const reads = f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('lease') && args.includes(first));
   assert.equal(reads.length, 4, 'two reads while stopped and two after restart');
   assert.equal(result.legs.length, 3);
+});
+
+test('the database check can stop only an owned node and leaves cleanup to the Kind fixture', async () => {
+  const f = fixture();
+  await assert.rejects(runCheck({execute: f.execute, async database({nodes, stopNode}) {
+    assert.equal(nodes.length, 3);
+    assert.equal(f.mutations('kill').length, 0);
+    await stopNode('unrelated-node', {whileStopped: () => assert.fail('foreign fault started')});
+  }}), /node_loss\.unknown_node/);
+  assert.deepEqual(f.mutations('kill'), []);
+  assert.equal(f.remaining(), 0);
+  assert.ok(f.removed());
+});
+
+test('a database fault runs its checks around the stop and restart of the selected node', async () => {
+  const f = fixture();
+  const result = await runCheck({execute: f.execute, async database({nodes, stopNode}) {
+    const [node] = nodes;
+    await stopNode(node, {
+      whileStopped: async () => {
+        assert.deepEqual(f.mutations('kill'), ['1'.repeat(64)]);
+        assert.deepEqual(f.mutations('start'), []);
+      },
+      afterRestart: async () => {
+        assert.deepEqual(f.mutations('start'), ['1'.repeat(64)]);
+      }
+    });
+    return {rejoined: node};
+  }});
+  assert.equal(result.database.rejoined, result.nodes[0].name);
+  assert.equal(f.remaining(), 0);
+  assert.ok(f.removed());
+});
+
+test('the fault check retries a bare Kubernetes API EOF while the node stays down', async () => {
+  const f = fixture({readTimeout: 'eof'});
+  const result = await runCheck({execute: f.execute});
+  assert.equal(result.legs.length, 3);
+  assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
+  assert.deepEqual(f.mutations('start'), f.mutations('kill'));
 });

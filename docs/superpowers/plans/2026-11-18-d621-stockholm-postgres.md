@@ -36,7 +36,8 @@ failover quorum. Use the existing Cloud image with a release-digest migration Jo
 \`schema-consumer.mjs\` for the probe. Give the Job the database-owner Secret and keep remote
 superuser access disabled. Use a separate Secret and a CloudNativePG-managed \`pg_read_all_data\`
 role for the probe. Verify TLS hostnames. Start the probe before the Job finishes and have it
-retry. Show that the consumer can read only after migration success. The existing wrapper tests
+retry. Place the database test client on a node that survives both faults. Show that the
+consumer can read only after migration success. The existing wrapper tests
 own the digest refusal.
 
 Pause both WAL receivers and show the commit waits. Raise only \`wal_sender_timeout\` to 30s
@@ -48,3 +49,9 @@ until the former primary is confirmed a replica. Pause its replay and use \`host
 with \`hostaddr\` set to its pod IP, \`sslmode=verify-full\`, and the writer role. Require a direct
 INSERT to fail with SQLSTATE \`25006\`. Verify the same claim, lag, catch-up, and a successful
 write through a separate standby loss. The real run owns Job ordering and fault results.
+
+Reuse the owned stop and rejoin in `scripts/kubernetes-node-loss.mjs`. Add focused checks
+in `scripts/kubernetes-node-loss.test.mjs` and `scripts/kubernetes-database.test.mjs`, and run them
+through `package.json` in CI. Run the real check in the approved rented Linux guest with at
+least 10 GiB RAM and 30 GiB free disk. Update the backlog and AWS guide with the verified
+scope. Estimate 440–600 implementation lines and 90–150 test lines.

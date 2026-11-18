@@ -1195,8 +1195,25 @@ checks that all three original etcd members, which store the cluster state, are
 healthy. The check uses the pinned Kind image and needs no venue images.
 A Linux guest with 15.6 GiB of RAM completed the three outage checks in 17.7,
 17.2 and 12.9 seconds. The lowest sampled available memory was 13.4 GiB, and
-the guest recorded no out-of-memory kills. PostgreSQL failover and the loss
-of a Stockholm machine require their own checks.
+the guest recorded no out-of-memory kills.
+
+To check PostgreSQL in the same three-node Kind setup, build the
+[local Cloud image](test-cloud.md#build-and-transfer-an-image) and pass its
+local image ID as `TEST_CLOUD_INTEGRATION_IMAGE`. Run
+`node scripts/kubernetes-check.mjs --database-loss`. This starts three PostgreSQL
+copies with separate local volumes. The command checks migration startup, a
+synchronously acknowledged write through primary loss, refusal of a direct
+write to the returning replica, and a new write during a standby outage.
+Use the same Linux guest requirements as the control-plane check. The command
+uses `curl` to fetch the pinned operator manifest from GitHub. Kind pulls the
+pinned operator and PostgreSQL images from ghcr.io. Stockholm operator setup,
+per-node storage and real machine loss are separate work.
+
+If kube-proxy reports `too many open files` in a disposable Linux guest, check
+`sysctl fs.inotify.max_user_instances`. The fault check needs room for file
+watchers from all three nodes and the database workloads. Set the limit to 512
+in the disposable guest when its current value is lower. See
+[Kind's file-watcher guidance](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
 
 The opt-in three-node local reproducer is not a qualified check; no further full
 local run is planned. It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
