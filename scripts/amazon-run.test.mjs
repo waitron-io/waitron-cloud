@@ -361,6 +361,8 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   assert.ok(transports.every(({args}) => !args.some(arg => arg.includes(certificateKey) || arg.includes('abcdef.0123456789abcdef'))));
   const created = calls.find(row => row[1] === 'create-stack');
   const clusterName = created[created.indexOf('--stack-name') + 1];
+  const control = calls.find(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'control'"));
+  assert.ok(control?.at(-1).endsWith("'control' '" + clusterName + "'"), 'the first member uses the run name too');
   const joinCalls = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'join'"));
   assert.ok(joinCalls.every(row => row.at(-1).endsWith("'join' '" + clusterName + "'")), 'each member renames its admin context to the run name');
   const lastJoin = calls.indexOf(joinCalls.at(-1));

@@ -10,7 +10,7 @@ const token = 'abcdef.0123456789abcdef';
 const joinInput = endpoint =>
   `kubeadm join ${endpoint} --token ${token} --discovery-token-ca-cert-hash sha256:${'a'.repeat(64)}\n${key}\n`;
 
-function bootstrap(t, phase, address, input, failJoin = false) {
+function bootstrap(t, phase, address, input, failJoin = false, keyOutput = key) {
   const root = process.getuid() === 0;
   const dir = mkdtempSync(join(root ? '/tmp' : tmpdir(), 'd618-bootstrap-'));
   t.after(() => rmSync(dir, {recursive: true, force: true}));
@@ -31,7 +31,7 @@ function bootstrap(t, phase, address, input, failJoin = false) {
     if (name === 'ip') console.log('7: wg0 inet ' + process.env.ADDRESS + '/24 scope global wg0');
     if (name === 'hostname') console.log('synthetic-node');
     if (name === 'kubectl') console.log('synthetic ' + args[0]);
-    if (name === 'kubeadm' && args[0] === 'certs') console.log(${JSON.stringify(key)});
+    if (name === 'kubeadm' && args[0] === 'certs') console.log(process.env.KEY_OUTPUT);
     if (name === 'kubeadm' && args[0] !== 'certs') console.log(${JSON.stringify(token)});
     if (name === 'kubeadm' && args[0] === 'join' && process.env.FAIL_JOIN === 'true') {
       console.error('synthetic join failure ' + args.join(' '));
@@ -45,7 +45,7 @@ function bootstrap(t, phase, address, input, failJoin = false) {
     for (const path of [hosts, log]) chmodSync(path, 0o666);
   }
   const result = spawnSync('/bin/bash', [script, phase, 'synthetic-context'], {
-    env: {PATH: dir, D618_HOSTS_FILE: hosts, CALLS: log, ADDRESS: address, FAIL_JOIN: String(failJoin)},
+    env: {PATH: dir, D618_HOSTS_FILE: hosts, CALLS: log, ADDRESS: address, FAIL_JOIN: String(failJoin), KEY_OUTPUT: keyOutput},
     ...(root ? {uid: 65534, gid: 65534} : {}), input, encoding: 'utf8', timeout: 15000,
   });
   assert.ifError(result.error);
@@ -62,6 +62,14 @@ test('A resolves the private API before kubeadm init and returns only the certif
     assert.ok(init.args.includes(arg), arg);
   assert.equal(result.stdout.trim(), key);
   assert.doesNotMatch(result.stderr, new RegExp(token + '|' + key));
+});
+
+test('A refuses malformed certificate-key output before initialising kubeadm', t => {
+  const {result, calls} = bootstrap(t, 'control', '10.77.0.1', undefined, false, 'short-key');
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stderr.trim(), 'Invalid kubeadm certificate key');
+  assert.equal(result.stdout, '');
+  assert.ok(!calls.some(({name, args}) => name === 'kubeadm' && args[0] === 'init'));
 });
 
 test('B and C join through A before using their own mesh address for API and etcd checks', async t => {
@@ -97,12 +105,12 @@ test('join refuses malformed credentials or the first member address before invo
     ['bad token', valid.replace(token, 'not-a-token'), '10.77.0.2'],
     ['bad CA hash', valid.replace('a'.repeat(64), 'missing-hash'), '10.77.0.2'],
     ['bad certificate key', valid.replace(key, 'short-key'), '10.77.0.2'],
-    ['wrong member address', valid, '10.77.0.1'],
+    ['wrong member address', valid, '10.77.0.1', 'Invalid joining WireGuard address'],
   ];
-  for (const [name, input, address] of cases) await t.test(name, t => {
+  for (const [name, input, address, message = 'Invalid kubeadm join inputs'] of cases) await t.test(name, t => {
     const {result, calls, hosts} = bootstrap(t, 'join', address, input);
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /Invalid kubeadm join inputs|Invalid joining WireGuard address/);
+    assert.equal(result.stderr.trim(), message);
     assert.ok(!calls.some(({name}) => name === 'kubeadm'));
     assert.equal(hosts, '127.0.0.1 localhost\n');
   });
