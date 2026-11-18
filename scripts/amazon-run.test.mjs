@@ -384,6 +384,8 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   assert.ok(nodeReady > lastJoin && nodeReady < data && ready < data && data < fixture);
   assert.ok(disks.every(row => calls.indexOf(row) < data), 'all local directories exist before PostgreSQL starts');
   assert.equal(calls[data].at(-2), 'admin@203.0.113.1');
+  // Allow the operator and database waits to finish and print their own diagnosis.
+  assert.ok(transports.find(row => row.args.at(-1) === calls[data].at(-1)).timeout >= 720_000);
   assert.match(calls[data].at(-1), /'--kubeconfig=\/etc\/kubernetes\/admin\.conf'/);
   assert.ok(calls[data].at(-1).includes("'--context=" + clusterName + "'"));
   for (const suffix of ['-control-plane', '-worker', '-worker2']) {

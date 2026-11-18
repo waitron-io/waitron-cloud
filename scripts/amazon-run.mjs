@@ -236,7 +236,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         }
         for (let index = 0; index < 3; index++) await bootstrap(index, 'database-storage');
         await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-data.mjs',
-          '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes]);
+          '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes], undefined, 720_000);
       },
       journey: async phase => {
         target.phase = phase;

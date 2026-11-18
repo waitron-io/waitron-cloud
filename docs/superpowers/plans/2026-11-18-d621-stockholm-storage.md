@@ -16,7 +16,7 @@ In `deploy/kubernetes/bounded-amazon/bootstrap.sh`, prepare owned directories on
 node's disk. Render a retained local volume per exact hostname with delayed binding
 and database-user permissions. Use the `d621-data` namespace, the operator-generated database-owner
 Secret and remote superuser access disabled. Wait for two operator replicas and three
-synchronous database copies on separate hosts. The legacy journey and migration stay
+ready database copies on separate hosts. The legacy journey and migration stay
 on its own store and A's network mount for now. PR 5 connects its migration
 and Cloud services to the database in `d621-data`.
 

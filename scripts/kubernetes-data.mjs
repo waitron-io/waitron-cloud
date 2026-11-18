@@ -10,7 +10,7 @@ const namespace = 'd621-data';
 const storageClass = 'd621-local-postgres';
 const storagePath = '/var/local/d621-postgres';
 
-export async function installStockholmDatabase({nodes, directory, run, kube}) {
+export async function installStockholmDatabase({nodes, directory, run, kube, installOperator = installDatabaseOperator}) {
   assert.equal(nodes.length, 3, 'stockholm.database_node_count');
   assert.equal(new Set(nodes).size, 3, 'stockholm.database_duplicate_nodes');
   const cluster = databaseCluster({storageClass, proofRoles: false});
@@ -30,8 +30,8 @@ export async function installStockholmDatabase({nodes, directory, run, kube}) {
     cluster,
   ];
 
-  await installDatabaseOperator({directory, run, kube});
   try {
+    await installOperator({directory, run, kube});
     await kube(['apply', '-f', '-'], {timeout: 30_000, input: JSON.stringify({apiVersion: 'v1', kind: 'List', items})});
     await kube(['-n', namespace, 'wait', '--for=jsonpath={.status.readyInstances}=3',
       'cluster/' + cluster.metadata.name, '--timeout=240s'], {timeout: 245_000});
@@ -39,8 +39,10 @@ export async function installStockholmDatabase({nodes, directory, run, kube}) {
       '-l', 'cnpg.io/cluster=' + cluster.metadata.name + ',cnpg.io/podRole=instance', '-o', 'json']));
     assert.deepEqual(pods.map(pod => pod.spec.nodeName).sort(), [...nodes].sort(), 'stockholm.database_placement');
   } catch (error) {
-    await kube(['-n', namespace, 'get', 'events', '--sort-by=.lastTimestamp'])
-      .then(output => process.stderr.write(output + '\n'), () => {});
+    await Promise.all(['cnpg-system', namespace].map(async name => {
+      const output = await kube(['-n', name, 'get', 'events', '--sort-by=.lastTimestamp']).catch(() => '');
+      if (output) process.stderr.write(name + ' events:\n' + output + '\n');
+    }));
     throw error;
   }
 }

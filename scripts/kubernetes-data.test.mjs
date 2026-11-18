@@ -1,8 +1,50 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import test from 'node:test';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
+
+test('Stockholm volumes use the private bootstrap path and bind on the selected machine', async () => {
+  const nodes = ['stockholm-a', 'stockholm-b', 'stockholm-c'];
+  let resources;
+  await installStockholmDatabase({nodes, directory: tmpdir(), installOperator() {},
+    run() {assert.fail('Unexpected operator download in the volume check');},
+    async kube(args, options) {
+      if (args[0] === 'apply') resources = JSON.parse(options.input).items;
+      return JSON.stringify({items: nodes.map(nodeName => ({spec: {nodeName}}))});
+    },
+  });
+  const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
+  const [, path] = bootstrap.match(/^  install -d -m 0700 -o 26 -g 26 (\S+)$/m);
+  const storage = resources.find(row => row.kind === 'StorageClass');
+  assert.equal(storage.volumeBindingMode, 'WaitForFirstConsumer');
+  assert.equal(storage.provisioner, 'kubernetes.io/no-provisioner');
+  const volumes = resources.filter(row => row.kind === 'PersistentVolume');
+  assert.deepEqual(volumes.map(row => row.metadata.name), nodes);
+  for (const {metadata, spec} of volumes) {
+    assert.equal(spec.local.path, path);
+    assert.equal(spec.storageClassName, storage.metadata.name);
+    assert.equal(spec.persistentVolumeReclaimPolicy, 'Retain');
+    assert.deepEqual(spec.nodeAffinity.required.nodeSelectorTerms, [{matchExpressions: [
+      {key: 'kubernetes.io/hostname', operator: 'In', values: [metadata.name]},
+    ]}]);
+  }
+});
+
+test('operator startup failure reads operator events before returning the error', async () => {
+  const failure = Error('operator startup failed');
+  const eventNamespaces = [];
+  await assert.rejects(installStockholmDatabase({nodes: ['a', 'b', 'c'], directory: tmpdir(),
+    run() {throw failure;},
+    async kube(args) {
+      assert.equal(args[3], 'events');
+      eventNamespaces.push(args[1]);
+      return '';
+    },
+  }), error => error === failure);
+  assert.ok(eventNamespaces.includes('cnpg-system'));
+});
 
 test('Stockholm database setup starts one ready PostgreSQL copy on each machine-local volume', {
   skip: process.env.TEST_KUBERNETES_STOCKHOLM_DATABASE !== '1', timeout: 900_000,
