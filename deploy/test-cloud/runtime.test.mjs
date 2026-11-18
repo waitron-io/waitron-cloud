@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
 import test from 'node:test';
 import {bootstrap} from '../local-stack/bootstrap.mjs';
 import {runtimeEnvironment} from '../local-stack/runtime.mjs';
@@ -203,12 +204,13 @@ test('public remote settings refuse half-configured or shared challenge director
   {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:tls+'/.'},
   {TEST_CLOUD_TLS_CHALLENGE_DIR:env.TEST_CLOUD_CHALLENGE_DIR,TEST_CLOUD_GATEWAY_STATUS_DIR:status},
   {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:join(tls,'status')},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:join(status,'tls'),TEST_CLOUD_GATEWAY_STATUS_DIR:status},
   {TEST_CLOUD_TLS_CHALLENGE_DIR:join(env.TEST_CLOUD_CHALLENGE_DIR,'tls'),TEST_CLOUD_GATEWAY_STATUS_DIR:status}
  ])await assert.rejects(loadPublicRemoteSettings(dir,{...env,...paths}),/test_cloud.remote_settings/);
 });
 
 test('the Amazon worker refuses custom names without a TLS challenge',async()=>{
- const {crypto}=await import('../../packages/remote-access/node_modules/acme-client/src/index.js');
+ const {crypto}=createRequire(new URL('../../packages/remote-access/package.json',import.meta.url))('acme-client');
  const {issueTestRemoteCertificate}=await import('./remote-runtime.mjs');
  const hostname='menu.cafe.example.test',[,csr]=await crypto.createCsr({commonName:hostname,altNames:[hostname]});
  const signal=new AbortController().signal;

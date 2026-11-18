@@ -183,7 +183,10 @@ test('Amazon admission reserves the TLS challenge and gateway status volumes for
    ['wrong mount path',services=>{services[reader].volumes.find(v=>v.source===source).target='/other';}],
    ['wrong mount type',services=>{services[reader].volumes.find(v=>v.source===source).type='image';}],
    ['extra mount',services=>{services[reader].volumes.push({type:'volume',source,target:'/other',read_only:true});}],
-   ['another service can read',services=>{services.account={...services.account,volumes:[{type:'volume',source,target,read_only:true}]};}]
+   ['another service can read',services=>{services.account={...services.account,volumes:[{type:'volume',source,target,read_only:true}]};}],
+   ['another service uses the reserved path',services=>{
+    services.account={...services.account,volumes:[{type:'volume',source:source+'-alias',target,read_only:true}]};
+   }]
   ]){
    const value=amazonDeployment();change(value.services);
    assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/,source+' '+description);

@@ -343,10 +343,11 @@ port 443. The worker writes the temporary challenge and the gateway reads it.
 The gateway writes readiness to a separate volume that the worker can read.
 Assigned names still use the independent port-80 listener.
 
-The local certificate test reaches the gateway's challenge responder. Use the
-real-domain trial to check the complete path through both proxies. Use a domain
-you control and the trusted issuer setting above. Open the custom address on a
-phone using mobile data and check the certificate name and page load.
+The local certificate test connects to the gateway's challenge responder through
+a test-only forwarder. The real-domain trial checks the public proxy and the
+gateway proxy on the Amazon host. Use a domain you control and the trusted issuer
+setting above. Open your custom address on a phone using mobile data and check
+the certificate name and page load.
 
 Preserve the host's environment file when refreshing source. In particular,
 configure `CLOUD_FACTOR_POLICY` using the [local authentication example](authenticator-app.md)
