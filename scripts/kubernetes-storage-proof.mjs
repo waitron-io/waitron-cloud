@@ -39,7 +39,7 @@ function storeMetrics(ip, {ca, credentials}, signal) {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
   const {accessKeyId, secretAccessKey} = credentials;
   const payload = encode({alg: 'HS512', typ: 'JWT'}) + '.' +
-    encode({accessKey: accessKeyId, sub: accessKeyId, exp: Math.floor(Date.now() / 1000) + 300});
+    encode({iss: 'prometheus', sub: accessKeyId, exp: Math.floor(Date.now() / 1000) + 300});
   const token = payload + '.' + createHmac('sha512', secretAccessKey).update(payload).digest('base64url');
   const endpoint = 'https://' + ip + ':' + storeNodePort + '/minio/v2/metrics/node';
   return new Promise((resolve, reject) => {
