@@ -26,6 +26,16 @@ export async function database(template?: string) {
     async close() {await pool.end(); await secondPool.end(); if (!cloned) await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); await cloned?.close();}};
 }
 
+export async function signupVerification(db:Awaited<ReturnType<typeof database>>,email:string) {
+  const {rows} = await db.pool.query(`SELECT mail.* FROM signup_requests request
+    JOIN email_outbox mail ON mail.token_hash = request.token_hash
+    WHERE request.email = $1 AND mail.kind = 'verification'`, [email]);
+  assert.equal(rows.length, 1, 'expected one verification email for the fixture address');
+  const mail = db.outbox.open(rows[0]);
+  assert.ok('token' in mail);
+  return mail;
+}
+
 const emailLimit={limit:1000,windowSeconds:300};
 export const emailLoginPolicy={loginLifetimeMs:300000,pendingLifetimeMs:300000,challengeAttempts:10,enrolmentAttempts:10,
   loginAccount:emailLimit,completeIp:emailLimit,completeAccount:emailLimit,completeChallenge:emailLimit,manageIp:emailLimit,manageAccount:emailLimit};

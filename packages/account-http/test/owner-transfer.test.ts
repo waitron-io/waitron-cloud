@@ -6,14 +6,14 @@ import type {HttpBindings} from '@hono/node-server';
 import {login} from '@waitron-cloud/identity';
 import {SignupStore,transaction} from '@waitron-cloud/registration';
 import {prepareConnectionProof} from '../../registration/test/fixtures/action-proof.ts';
-import {database,emailLoginPolicy} from './fixtures.ts';
+import {database,emailLoginPolicy,signupVerification} from './fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',password='A long enough transfer password';
 before(async()=>{db=await database();});beforeEach(async()=>{await db.pool.query('DELETE FROM account_rate_limits');});after(async()=>db?.close());
 async function account(){
  const email=randomUUID()+'@example.test',signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
- const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
+ const mail=await signupVerification(db,email);
  const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),session=await transaction(db.pool,c=>login(c,{email,password}));
  await prepareConnectionProof(db.pool,owner.accountId,session.token);return {...owner,...session,email};
 }
