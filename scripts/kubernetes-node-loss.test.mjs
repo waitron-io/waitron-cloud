@@ -201,7 +201,7 @@ test('the database check can stop only an owned node and leaves cleanup to the K
   await assert.rejects(runCheck({execute: f.execute, async database({nodes, stopNode}) {
     assert.equal(nodes.length, 3);
     assert.equal(f.mutations('kill').length, 0);
-    await stopNode('unrelated-node', () => assert.fail('foreign fault started'));
+    await stopNode('unrelated-node', {whileStopped: () => assert.fail('foreign fault started')});
   }}), /node_loss\.unknown_node/);
   assert.deepEqual(f.mutations('kill'), []);
   assert.equal(f.remaining(), 0);

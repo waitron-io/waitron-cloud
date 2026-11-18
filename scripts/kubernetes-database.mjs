@@ -48,7 +48,7 @@ function databaseCluster() {
       switchoverDelay: 15, stopDelay: 20, storage: {size: '1Gi', storageClass: 'standard'},
       affinity: {enablePodAntiAffinity: true, topologyKey: 'kubernetes.io/hostname', podAntiAffinityType: 'required'},
       postgresql: {parameters: {synchronous_commit: 'on'}, synchronous: {method: 'any', number: 1, dataDurability: 'required', failoverQuorum: true}},
-      managed: {roles: [managedRole(reader, ['pg_read_all_data']), managedRole(writer, ['pg_read_all_data', 'pg_write_all_data'])]}
+      managed: {roles: [managedRole(reader, ['pg_read_all_data']), managedRole(writer, [])]}
     }};
 }
 
@@ -65,10 +65,18 @@ function cloudContainer(image, name, secret, command) {
 
 const requireTls = `export DATABASE_URL="$PGURI?sslmode=verify-full&sslrootcert=${caPath}"\n`;
 const probe = requireTls + `
-until node deploy/local-stack/schema-consumer.mjs -e 'console.log("migration ledger verified")'; do
-  touch /tmp/schema-waiting
-  sleep 1
-done
+until (cd packages/registration && node -e '
+  const pool = new (require("pg").Pool)({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000});
+  pool.query("SELECT to_regclass($1) IS NULL AS missing", ["public.schema_migrations"])
+    .then(({rows}) => { process.exitCode = rows[0].missing ? 0 : 1; })
+    .catch(() => { process.exitCode = 1; })
+    .finally(() => pool.end());
+'); do sleep 1; done
+if node deploy/local-stack/schema-consumer.mjs -e 'console.log("migration ledger verified")'; then
+  exit 1
+fi
+touch /tmp/schema-waiting
+until node deploy/local-stack/schema-consumer.mjs -e 'console.log("migration ledger verified")'; do sleep 1; done
 touch /tmp/schema-ready
 exec sleep infinity
 `;
@@ -93,6 +101,15 @@ function migrationJob(image) {
 
 function within(signal, ms) {
   return {signal: AbortSignal.any([signal, AbortSignal.timeout(ms)]), timeout: ms + 2_000};
+}
+
+async function cleanUp(failure, action) {
+  try {
+    await action();
+  } catch (error) {
+    if (!failure) throw error;
+    throw new AggregateError([failure, error], `${failure.message}\nCleanup failed: ${error.message}`);
+  }
 }
 
 async function until(label, {signal}, check) {
@@ -156,6 +173,7 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
 
   async function withPausedReceivers(replicas, action) {
     const paused = new Map();
+    let failure;
     const resume = async (pod, options) => {
       if (!paused.has(pod)) return;
       await exec(pod, 'postgres', ['kill', '-CONT', paused.get(pod)], options);
@@ -169,8 +187,11 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
         paused.set(name, pid);
       }
       return await action(resume);
+    } catch (error) {
+      failure = error;
+      throw error;
     } finally {
-      await Promise.all([...paused.keys()].map(pod => resume(pod)));
+      await cleanUp(failure, () => Promise.all([...paused.keys()].map(pod => resume(pod))));
     }
   }
 
@@ -187,8 +208,7 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     return {outcome, receipt: () => receipt};
   }
 
-  const started = within(signal, 360_000);
-  let tagged = false;
+  let tagged = false, failure;
   try {
     const imageId = await run('docker', ['image', 'inspect', '--format={{.Id}}', image]);
     assert.equal(imageId, image, 'database_loss.local_image_binding');
@@ -196,6 +216,7 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     tagged = true;
     await run('kind', ['load', 'docker-image', imageTag, '--name', cluster], {timeout: 180_000});
     await installDatabaseOperator({directory, run, kube});
+    const started = within(signal, 360_000);
     for (const name of [reader, writer]) await apply('v1', 'Secret', name, databaseSecret(name));
     const {apiVersion, kind, metadata, spec} = databaseCluster();
     await apply(apiVersion, kind, metadata.name, {spec});
@@ -215,7 +236,8 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     await kube(['wait', '--for=condition=Complete', 'job/' + job, '--timeout=120s'], {timeout: 125_000});
     await kube(['wait', '--for=condition=Ready', 'pod/' + client, '--timeout=90s'], {timeout: 95_000});
     assert.equal(await sql('SELECT pg_is_in_recovery()', started), 'f', 'database_loss.writer_service_primary');
-    await local(oldPrimary, 'CREATE TABLE failover_probe (marker text PRIMARY KEY)', started);
+    await local(oldPrimary, 'CREATE TABLE failover_probe (marker text PRIMARY KEY); ' +
+      'GRANT SELECT, INSERT, UPDATE ON failover_probe TO ' + writer, started);
     process.stderr.write('Migration completed and the surviving client read the release ledger\n');
 
     const baseSenderTimeout = await local(oldPrimary, 'SHOW wal_sender_timeout', started);
@@ -259,6 +281,7 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
           });
           assert.equal(await sql(readRow('primary-loss'), options), 'primary-loss', 'database_loss.acknowledged_row_preserved');
           await verifyWrite('promoted-write', options);
+          process.stderr.write('Promoted PostgreSQL copy retained the acknowledged row and accepted a new write\n');
           return {acknowledgedRow: 'primary-loss', promoted};
         },
         async afterRestart(options) {
@@ -267,19 +290,23 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
             assert.ok(endpoint.items.every(slice => slice.endpoints.every(item => item.targetRef?.name !== oldPrimary)),
               'database_loss.old_primary_in_write_service');
             const pod = await read(['pod', oldPrimary], options);
-            return pod.status?.podIP && (await local(oldPrimary, 'SELECT pg_is_in_recovery()', options)) === 't' && pod;
+            if (!pod.status?.podIP) return;
+            const recovery = await local(oldPrimary, 'SELECT pg_is_in_recovery()', options);
+            assert.equal(recovery, 't', 'database_loss.old_primary_still_writable');
+            return pod;
           });
           const target = ['PGHOSTADDR=' + returning.status.podIP];
           await local(oldPrimary, 'SELECT pg_wal_replay_pause()', options);
           try {
-            await assert.rejects(sql(writeRow('refused'), options, target), /\b25006\b/, 'database_loss.old_primary_write_refusal');
             await verifyWrite('after-restart', options);
             await until('old_primary_replay_lag', options, async () =>
               (await local(oldPrimary, 'SELECT pg_last_wal_receive_lsn() > pg_last_wal_replay_lsn()', options)) === 't');
+            await assert.rejects(sql(writeRow('refused'), options, target), /\b25006\b/, 'database_loss.old_primary_write_refusal');
           } finally {
             await local(oldPrimary, 'SELECT pg_wal_replay_resume()', options);
           }
           await until('old_primary_caught_up', options, async () => (await local(oldPrimary, readRow('after-restart'), options)) === 'after-restart');
+          process.stderr.write('Former primary refused the write while behind and then replayed the new row\n');
         }
       });
     });
@@ -303,13 +330,17 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     return {clientNode, schema: {refusedBeforeMigration: true, readAfterMigration: true}, syncOffControl: true,
       primary: {...primaryFault, oldPrimaryWriteSqlstate: '25006'}, standby: standbyFault};
   } catch (error) {
+    failure = error;
     for (const args of [['get', 'pods', '-A', '-o', 'wide'], ['get', 'clusters,failoverquorums', '-o', 'wide'],
+      ['logs', '-l', 'cnpg.io/cluster=' + database + ',cnpg.io/podRole=instance', '-c', 'postgres', '--prefix', '--tail=15'],
+      ['logs', '-n', 'cnpg-system', '-l', 'app.kubernetes.io/name=cloudnative-pg', '--prefix', '--tail=12'],
+      ['logs', '-n', 'kube-system', '-l', 'k8s-app=kube-proxy', '--prefix', '--tail=12'],
       ['logs', 'job/cloud-migrate-' + image.slice(7, 55), '--tail=30'], ['logs', client, '-c', 'schema', '--tail=12']]) {
       const output = await kube(args, {signal: null}).catch(String);
       process.stderr.write(output.slice(-8192) + '\n');
     }
     throw error;
   } finally {
-    if (tagged) await run('docker', ['image', 'rm', imageTag], {signal: null});
+    if (tagged) await cleanUp(failure, () => run('docker', ['image', 'rm', imageTag], {signal: null}));
   }
 }

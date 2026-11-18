@@ -4,8 +4,9 @@
 // --node-loss checks three control planes without venue images.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
-// Both need three owned nodes, 10 GiB RAM and 30 GiB disk, using the approved shared Docker wrapper.
-// Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
+// The loss checks need three owned nodes, 10 GiB RAM and 30 GiB disk. Use the approved shared Docker wrapper.
+// Requires kind 0.31.0, kubectl 1.34.3 and Docker. Venue image builds also need Buildx.
+// The database check needs access to GitHub and ghcr.io for pinned dependencies.
 import assert from 'node:assert/strict';
 import {execFile, spawn} from 'node:child_process';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';

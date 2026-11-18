@@ -7,7 +7,7 @@ import test from 'node:test';
 
 test('database loss requires a local Cloud image ID before it starts Kind', () => {
   const {status, stderr} = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', '--database-loss'], {
-    encoding: 'utf8', env: {...process.env, TEST_CLOUD_INTEGRATION_IMAGE: 'cloud:latest'}
+    encoding: 'utf8', env: {...process.env, PATH: '', TEST_CLOUD_INTEGRATION_IMAGE: 'cloud:latest'}
   });
   assert.equal(status, 1);
   assert.match(stderr, /database_loss\.cloud_image_id/);
