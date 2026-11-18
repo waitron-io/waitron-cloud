@@ -16,7 +16,7 @@ export const reviewedDirectoryReaders = Object.freeze({
   "packages/backups/test/object-transfer.test.ts": {"mode":"100644","type":"blob","id":"1d5db2e2675413299be1573f9ef43e20f85c4c5d","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/storage.test.ts": {"mode":"100644","type":"blob","id":"7a199d26834dc36b847268d4d4d4535d310fde30","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/backups/test/waitron-verifier.test.ts": {"mode":"100644","type":"blob","id":"98f96f41e5210ef80bdb5d8b73ef78c8676bcb24","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
-  "packages/remote-access/src/gateway-cli.ts": {"mode":"100644","type":"blob","id":"909fa7b3ab269e1afcaa62450f3648c56868eed9","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/remote-access/src/gateway-cli.ts": {"mode":"100644","type":"blob","id":"d8c4623bdd55094d1d960e728815a4660320df91","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/gateway-traffic-runtime.ts": {"mode":"100644","type":"blob","id":"698be5aad916c32ab5b1d6d7fbb6c734fb52ad07","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/traffic-collector.ts": {"mode":"100644","type":"blob","id":"9842ef9c0a02c6cc7bced63c37146ea93055e1af","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/remote-access/src/traffic-spool.ts": {"mode":"100644","type":"blob","id":"8c4dd9f6f5123a92d2316e7fea0f6cc2ca341c38","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
