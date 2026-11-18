@@ -17,6 +17,10 @@ const caPath = '/run/db-ca/ca.crt';
 const caVolume = {name: 'db-ca', secret: {secretName: database + '-ca', items: [{key: 'ca.crt', path: 'ca.crt'}]}};
 const caMount = {name: caVolume.name, mountPath: '/run/db-ca', readOnly: true};
 
+const separateByHost = matchLabels => ({podAntiAffinity: {requiredDuringSchedulingIgnoredDuringExecution: [
+  {labelSelector: {matchLabels}, topologyKey: 'kubernetes.io/hostname'}
+]}});
+
 export async function installDatabaseOperator({directory, run, kube}) {
   const path = join(directory, 'operator.yaml');
   await run('curl', ['--fail', '--silent', '--show-error', '--location', '--max-time', '90', '--output', path, operatorManifest],
@@ -24,9 +28,7 @@ export async function installDatabaseOperator({directory, run, kube}) {
   assert.equal(createHash('sha256').update(await readFile(path)).digest('hex'), operatorDigest, 'database_loss.operator_digest');
   const patch = {apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'cnpg-controller-manager', namespace: 'cnpg-system'},
     spec: {replicas: 2, template: {spec: {
-      affinity: {podAntiAffinity: {requiredDuringSchedulingIgnoredDuringExecution: [
-        {labelSelector: {matchLabels: {'app.kubernetes.io/name': 'cloudnative-pg'}}, topologyKey: 'kubernetes.io/hostname'}
-      ]}},
+      affinity: separateByHost({'app.kubernetes.io/name': 'cloudnative-pg'}),
       containers: [{name: 'manager', image: operatorImage, env: [{name: 'OPERATOR_IMAGE_NAME', value: operatorImage}]}]
     }}}};
   const configuration = {apiVersion: 'kustomize.config.k8s.io/v1beta1', kind: 'Kustomization', resources: ['operator.yaml'],
@@ -162,7 +164,8 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
   const readRow = name => `SELECT marker FROM failover_probe WHERE marker = '${name}'`;
   async function verifyWrite(name, options) {
     // The marker is idempotent if the API connection drops after the database commits.
-    const row = await retryApi(() => sql(writeRow(name), options), options.signal, name);
+    const row = await retryApi(() => sql(writeRow(name), options), options.signal, name,
+      error => /psql: error: could not translate host name .*Temporary failure in name resolution/.test(error.message));
     assert.equal(row, name, 'database_loss.written_row');
   }
 
@@ -231,6 +234,10 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     await run('docker', ['tag', image, imageTag]);
     tagged = true;
     await run('kind', ['load', 'docker-image', imageTag, '--name', cluster], {timeout: 180_000});
+    // A lone Kind node must not host every DNS pod needed by the write Service.
+    await kube(['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p',
+      JSON.stringify({spec: {template: {spec: {affinity: separateByHost({'k8s-app': 'kube-dns'})}}}})]);
+    await kube(['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s'], {timeout: 125_000});
     await installDatabaseOperator({directory, run, kube});
     const started = within(signal, 360_000);
     for (const name of [reader, writer]) await apply('v1', 'Secret', name, databaseSecret(name));
