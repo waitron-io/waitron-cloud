@@ -69,7 +69,14 @@ test('both serving peers must report four online drives during the outage and si
       'minio_cluster_health_erasure_set_online_drives{pool="0",server="' + server + '",set="0"} ' + count;
   };
   const samples = [reading(2, 5), reading(3, 6), reading(2, 6)];
-  await waitForStoreDrives(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
+  let timedOut = false;
+  await waitForStoreDrives(async () => {
+    if (!timedOut) {
+      timedOut = true;
+      throw Object.assign(Error('storage_loss.peer_metrics_timeout'), {code: 'ETIMEDOUT'});
+    }
+    return samples.shift();
+  }, ['store-2', 'store-3'], AbortSignal.timeout(5000));
   assert.deepEqual(samples, []);
 
   const afterStop = [reading(2, 5, 4), reading(3, 4, 4), reading(2, 4, 4)];

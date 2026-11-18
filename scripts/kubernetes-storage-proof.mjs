@@ -56,7 +56,7 @@ function storeMetrics(ip, {ca, credentials}, signal) {
       response.once('end', () => resolve(body));
       response.once('error', reject);
     });
-    request.setTimeout(5000, () => request.destroy(Error('storage_loss.peer_metrics_timeout')));
+    request.setTimeout(5000, () => request.destroy(Object.assign(Error('storage_loss.peer_metrics_timeout'), {code: 'ETIMEDOUT'})));
     request.once('error', reject);
   });
 }
@@ -67,10 +67,16 @@ export async function waitForStoreDrives(read, expected, signal, drives = 6) {
   try {
     while ([...counts.values()].some(count => count !== drives)) {
       signal.throwIfAborted();
-      const text = await read(signal);
-      const metric = /^minio_cluster_health_erasure_set_online_drives\{pool="0",server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000",set="0"\} (\d+)$/m.exec(text);
-      assert.ok(metric && counts.has(metric[1]), 'storage_loss.unexpected_peer_metric');
-      counts.set(metric[1], Number(metric[2]));
+      const text = await read(signal).catch(error => {
+        if (error.code !== 'ETIMEDOUT' || signal.aborted) throw error;
+        process.stderr.write('Store drive metrics request timed out (' + summary() + ')\n');
+        return null;
+      });
+      if (text !== null) {
+        const metric = /^minio_cluster_health_erasure_set_online_drives\{pool="0",server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000",set="0"\} (\d+)$/m.exec(text);
+        assert.ok(metric && counts.has(metric[1]), 'storage_loss.unexpected_peer_metric');
+        counts.set(metric[1], Number(metric[2]));
+      }
       if ([...counts.values()].some(count => count !== drives)) await delay(1000, undefined, {signal});
     }
   } catch (error) {
