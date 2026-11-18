@@ -27,14 +27,26 @@ export class AccountActionProofController{
     if(generation!==this.#generation)return;this.pending=false;
     if(result.ok)this.challengeToken=result.value.challengeToken;else this.#failure(result);this.#changed();
   }
-  async verify(method:'email'|'app'|'recovery'){
-    if(!this.#account||this.pending||this.waiting||!this.code)return;
-    const normalised=this.code.replace(/\s/g,'');
-    if(!(method==='recovery'?/^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{8}){3})$/:/^\d{6}$/).test(normalised)){this.error='factorCodeInvalid';this.#changed();return;}
-    const generation=this.#generation,code=normalised;this.code='';this.pending=true;this.error=undefined;this.#changed();
-    const result=await this.#request<void>(method==='email'?'/action-proof/email/verify':'/action-proof/factor',method==='email'?{challengeToken:this.challengeToken,code}:{kind:method==='app'?'totp':'recovery',code});
-    if(generation!==this.#generation)return;this.pending=false;
-    if(result.ok||result.status===0||result.status>=500){this.challengeToken=undefined;await this.load();if(generation!==this.#generation)return;if(!this.status?.freshUntil)this.error='actionProofUnavailable';}
-    else this.#failure(result);this.#changed();
+  async verify(method: 'email' | 'app' | 'recovery'): Promise<boolean> {
+    if (!this.#account || this.pending || this.waiting || !this.code) return false;
+    const code = this.code.replace(/\s/g, '');
+    if (!(method === 'recovery' ? /^(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{8}){3})$/ : /^\d{6}$/).test(code)) {
+      this.error = 'factorCodeInvalid'; this.#changed(); return false;
+    }
+    const generation = this.#generation;
+    this.code = ''; this.pending = true; this.error = undefined; this.#changed();
+    const result = await this.#request<void>(method === 'email' ? '/action-proof/email/verify' : '/action-proof/factor',
+      method === 'email' ? {challengeToken: this.challengeToken, code} : {kind: method === 'app' ? 'totp' : 'recovery', code});
+    if (generation !== this.#generation) return false;
+    this.pending = false;
+    if (!result.ok && result.status !== 0 && result.status < 500) {
+      this.#failure(result); this.#changed(); return false;
+    }
+    this.challengeToken = undefined;
+    await this.load();
+    if (generation !== this.#generation) return false;
+    if (!this.status?.freshUntil) this.error = 'actionProofUnavailable';
+    this.#changed();
+    return !!this.status?.freshUntil;
   }
 }

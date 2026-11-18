@@ -120,6 +120,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(api.writes.length, before);
       api.fail(undefined); await approve.click(); await page.getByText(c.pairApproved, {exact: true}).waitFor();
       assert.deepEqual(api.writes.at(-1), {path: '/pairing/approve', body: {requestId, code: '12345678', organisationId: businesses[1]!.organisationId, legalBusinessId: businesses[1]!.legalBusinessId}});
+      assert.deepEqual(await page.locator('dt, dd').allTextContents(), locale === 'en'
+        ? ['Venue identifier', 'New venue', 'Installation', 'Test installation', 'Organisation', 'Bar Luna', 'Legal business', 'Luna SL']
+        : ['Identificador del local', 'Nuevo local', 'Instalación', 'Instalación de prueba', 'Organización', 'Bar Luna', 'Negocio legal', 'Luna SL']);
+      const accountLink = page.getByRole('link', {name: locale === 'en' ? 'Back to your account' : 'Volver a tu cuenta'});
+      assert.equal(await accountLink.getAttribute('href'), '/account');
+      if (process.env.PAIRING_CHOICE_RECEIPT_DIR) await page.screenshot({
+        path: `${process.env.PAIRING_CHOICE_RECEIPT_DIR}/${locale}-${theme}-${width}-approved.png`, fullPage: true,
+      });
       await page.close();
     } finally { await browser.close(); }
   });
@@ -132,6 +140,8 @@ for (const locale of ['en', 'es'] as const) test(`${locale}: a single business s
     const c = translations[locale], api = await start(page, true);
     await page.locator('wt-input[name=pairingCode] input').fill('12345678');
     await page.getByRole('button', {name: c.pairInspect, exact: true}).click();
+    await page.getByRole('button', {name: c.pairApprove, exact: true}).waitFor();
+    assert.equal(await page.locator('dt').filter({hasText: c.pairBusiness}).locator('+ dd').textContent(), 'Sol SL');
     await page.getByRole('button', {name: c.pairApprove, exact: true}).click();
     await page.getByText(c.pairApproved, {exact: true}).waitFor();
     assert.equal(await page.locator('select[name=legalBusinessId]').count(), 0);

@@ -18,7 +18,9 @@ button:disabled { cursor: default; opacity: .6; }
 :focus-visible { outline: 2px solid var(--wt-color-primary); outline-offset: 3px; }
 @media (max-width: 480px) { #portal { margin: .75rem auto; padding: .75rem; } h1 { font-size: 1.5rem; } }
 
-.venue-id { overflow-wrap: anywhere; margin-inline-start: 0; }
+.venue-id { overflow-wrap: anywhere; }
+.pairing-details dt { font-weight: 600; }
+.pairing-details dd { margin: 0 0 .5rem; overflow-wrap: anywhere; }
 .business-choice { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--wt-space-2); }
 .business-choice select { max-width: 100%; min-height: 2.75rem; }
 

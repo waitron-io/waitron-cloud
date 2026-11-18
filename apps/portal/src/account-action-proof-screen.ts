@@ -3,9 +3,9 @@ import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {PortalApp} from './app.ts';
 export function accountActionProofScreen(app:PortalApp,headingLevel:2|3=3){
  const p=app.actionProof,c=app.copy,disabled=p.pending||!!p.waiting||app.passkeys.pending;
- const verify=(method:'email'|'app'|'recovery',label:string,id?:string)=>html`<wt-button id=${id??nothing} .disabled=${disabled||!p.code} @click=${()=>{void p.verify(method);}}>${label}</wt-button>`;
+ const verify=(method:'email'|'app'|'recovery',label:string,id?:string)=>html`<wt-button id=${id??nothing} .disabled=${disabled||!p.code} @click=${()=>{void app.proveWithCode(method);}}>${label}</wt-button>`;
  return html`<section class="action-proof" aria-labelledby="action-proof-heading">${headingLevel===2?html`<h2 id="action-proof-heading" tabindex="-1">${c.actionProofTitle}</h2>`:html`<h3 id="action-proof-heading" tabindex="-1">${c.actionProofTitle}</h3>`}
-  <p>${p.status?.freshUntil?c.actionProofReady:c.actionProofHelp}</p>${p.error?html`<p role="alert">${c[p.error]}</p>`:nothing}
+  <p>${p.status?.freshUntil ? c.actionProofReady : app.verifyingToAddPasskey ? c.actionProofAddPasskey : c.actionProofHelp}</p>${p.error?html`<p role="alert">${c[p.error]}</p>`:nothing}
   ${p.status?.freshUntil?nothing:html`
    ${p.status?.methods.includes('passkey')?html`<wt-button .disabled=${disabled} @click=${()=>{void app.proveWithPasskey();}}>${c.actionProofPasskey}</wt-button>`:nothing}
    ${p.status?.methods.includes('email')&&!p.challengeToken?html`<wt-button .disabled=${disabled} @click=${()=>{void p.email(app.locale);}}>${c.actionProofEmail}</wt-button>`:nothing}
