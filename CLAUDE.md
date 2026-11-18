@@ -140,8 +140,8 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
   ([ci-proof-selection.md](docs/ci-proof-selection.md)). AWS, AWS Emulator and Kubernetes
   workflows use their declared paths for pull requests and pushes. A green pull request says
   nothing about checks that did not run.
-- **The nightly run at 03:17 UTC runs everything** ([ci-nightly.md](docs/ci-nightly.md)). Start one with
-  `gh workflow run nightly.yml --ref main`.
+- **The nightly run at 03:17 UTC runs full standard CI, cost, venue, AWS infrastructure and mutation
+  checks** ([ci-nightly.md](docs/ci-nightly.md)). Start one with `gh workflow run nightly.yml --ref main`.
 - **Review changed code's actual readers and test owners.**
   Follow [ci-root-input-ownership.md](docs/ci-root-input-ownership.md) and
   [ci-documentation-audit.md](docs/ci-documentation-audit.md). The selectors keep known owners and
