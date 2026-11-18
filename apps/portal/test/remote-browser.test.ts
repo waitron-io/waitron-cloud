@@ -29,14 +29,13 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   const input=page.getByRole('textbox',{name:locale==='en'?'Hostname':'Nombre de dominio',exact:true});await input.fill('staff.cafe.example');
   await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();await section.locator('dd').filter({hasText:/^staff\.cafe\.example$/}).waitFor();
   assert.equal(await section.getByText('CNAME',{exact:true}).count(),1);
-  const confirmation=section.getByRole('group',{name:c.remoteConfirmTitle,exact:true});
   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   if(!replyDelayMs){
    for(const width of [390,1280])for(const colorScheme of ['light','dark'] as const){
     await page.setViewportSize({width,height:812});await page.emulateMedia({colorScheme});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await confirmation.screenshot({path:new URL(`../dist/remote-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname});
+    await page.screenshot({path:new URL(`../dist/remote-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
    }
    await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:locale==='en'?'light':'dark'});
   }

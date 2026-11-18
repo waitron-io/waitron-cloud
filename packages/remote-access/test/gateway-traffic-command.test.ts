@@ -195,11 +195,15 @@ test('a failed certificate-status write leaves the gateway serving its routes',a
  await waitFor(async()=>assert.equal(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')).ready,true));
  await mkdir(blocked);
  await waitFor(async()=>assert.match(f.output(),/EISDIR|gateway\.status_unavailable/));
- await waitFor(async()=>assert.equal((await f.status()).ready,true));
  assert.match(f.output(),/gateway\.status_unavailable/);
  assert.equal(gateway.exitCode,null);
+ const status=join(f.statusDirectory,'status.json');
+ await rm(status);
+ await f.publish({...f.manifest,sequence:2});
+ await waitFor(async()=>assert.deepEqual(await f.status().then(value=>[value.sequence,value.ready]),[2,true]));
+ await assert.rejects(readFile(status),{code:'ENOENT'});
  await rmdir(blocked);
- await waitFor(async()=>assert.equal(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')).ready,true));
+ await waitFor(async()=>assert.equal(JSON.parse(await readFile(status,'utf8')).ready,true));
 });
 
 test('a certificate-status path cannot alias the gateway state directory',async t=>{

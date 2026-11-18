@@ -81,7 +81,8 @@ Run
 the manifest sequence advances, failed-apply rollback, stable names and certificates, custom
 name renewal, unchanged owner records, source revocation and other-venue isolation.
 To rehearse the same move using assigned staff and public addresses, repeat the
-proof with `REMOTE_ASSIGNED_NAMES=1` and a separate `REMOTE_RECEIPT` path.
+proof with `REMOTE_ASSIGNED_NAMES=1` and a separate `REMOTE_RECEIPT` path. Run
+the same verifier on that receipt to check the move with assigned names.
 
 The test root is trusted explicitly by its test clients. It never installs a system
 certificate authority, disables certificate verification or changes host DNS. The
@@ -330,8 +331,8 @@ configuration:
 ```
 
 Set `GATEWAY_CHALLENGES` to the gateway's read-only mount of the check directory.
-Give write access only to the certificate worker. Set `GATEWAY_STATUS_DIR` to a
-separate directory the gateway can write. Give the worker read-only access to that
+Give write access only to the certificate worker. Before starting the gateway, create
+a separate writable directory for `GATEWAY_STATUS_DIR`. Give the worker read-only access to that
 directory. The gateway writes `status.json` with mode 0640. If the gateway and worker
 use different accounts, set the directory's group to one the worker belongs to and
 set the directory's set-group-ID bit so its files inherit that group. Keep the gateway

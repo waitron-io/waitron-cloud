@@ -295,6 +295,7 @@ try{
  const monitoring={version:1,phases,isolation:{routeFailureLimitedToVenueA,controlContactStayedFresh},mail:{openings:await mailCount(openingSubject),recoveries:await mailCount(recoverySubject),deduplicationChecks,duplicates:duplicateMail}};
 
  const moving=venues[0],unchanged=venues[1],movingId=moving.placement.installationId;
+ const assignedNames=[moving.placement.staffHostname,moving.placement.publicHostname];
  const staff='staff.synthetic-cafe.example.test',publicName='menu.synthetic-cafe.example.test';
  const names=process.env.REMOTE_ASSIGNED_NAMES==='1'?[]:[
   {kind:'staff',hostname:staff,assigned:moving.placement.staffHostname},
@@ -319,6 +320,7 @@ try{
     this.setServers([${JSON.stringify(acme.dnsServer)}]);
     return resolveCname.call(this,hostname);
    };
+   // The assigned certificates are minted before this phase. Any new order must use the gateway.
    export default {
     point:(host,target)=>pointPebbleName(${JSON.stringify(acme.dnsUrl)},host,target),
     async present(){throw Error('custom proof requires the port-443 challenge');},
@@ -334,15 +336,18 @@ try{
   customCsr=(await ipc(moving.server,{csrHostname:staff})).csr;
   firstStaff=await staffCertificate(moving.placement,customCsr);
   await ipc(moving.server,{certificate:firstStaff,hostname:staff});
-  // The public gateway verifies the venue's upstream TLS against its staff name.
-  await waitFor(async()=>(await remote(staff)).status===200,20000);
-  await waitFor(async()=>(await remote(publicName,'/_cloud/challenge')).status===200);
+  // A new management name changes the fixture's startup configuration.
+  const port=moving.server.port;
+  await stop(moving.server);moving.server=await launch(moving.root);
+  assert.equal(moving.server.port,port);
+  await waitFor(async()=>{await delay(1000);return (await remote(staff)).status===200;},20000);
+  await waitFor(async()=>{await delay(1000);return (await remote(publicName,'/_cloud/challenge')).status===200;});
   const localPublic=await solve(publicName);
   customPublic=(await remote(publicName,'/public/availability',{headers:{cookie:localPublic}})).status===200;
   assert.equal(customPublic,true);
   checks.push('the certificate command issues both custom names through the source gateway on port 443');
-  for(const {assigned} of names)assert.deepEqual(await acme.resolveCname(assigned),['gateway.example.test']);
  }
+ for(const assigned of assignedNames)assert.deepEqual(await acme.resolveCname(assigned),['gateway.example.test']);
  const staffBefore=(await remote(moving.placement.staffHostname)).certificate,publicBefore=(await remote(moving.placement.publicHostname)).certificate;
  await publishTarget(await placementStore.manifest(targetCellId));startTargetGateway();await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).ready);
  const expectedRevision=Number((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[moving.placement.installationId])).rows[0].configuration_revision);
@@ -363,6 +368,8 @@ try{
  assert.equal(JSON.parse(await operator('move-ready',{operationId,expectedRevision,sequence:stagedTarget.sequence})).state,'ready');
  const completed=JSON.parse(await operator('move-commit',{operationId,expectedRevision})),completedReplay=JSON.parse(await operator('move-commit',{operationId,expectedRevision}));assert.deepEqual(completedReplay,completed);
  const committedTarget=await placementStore.manifest(targetCellId),committedSource=await placementStore.manifest(cellId);await publishTarget(committedTarget);await publish(committedSource);
+ await runCertificates();
+ for(const assigned of assignedNames)assert.deepEqual(await acme.resolveCname(assigned),['target-gateway.example.test']);
  await waitFor(async()=>{try{await remote(moving.placement.staffHostname);return false;}catch{return (await remote(unchanged.placement.staffHostname)).status===200&&(await remoteTarget(moving.placement.staffHostname)).status===200;}},15000);
  const targetRejectsOther=await remoteTarget(unchanged.placement.staffHostname).then(()=>false,()=>true);assert.equal(targetRejectsOther,true);
  const hostnamesPreserved=completed.target.staffHostname===moving.placement.staffHostname&&completed.target.publicHostname===moving.placement.publicHostname;assert.equal(hostnamesPreserved,true);
@@ -371,11 +378,9 @@ try{
  const oldRouteRevoked=await remote(moving.placement.staffHostname).then(()=>false,()=>true);assert.equal(oldRouteRevoked,true);
  let customNames;
  if(names.length){
-  await runCertificates();
   const targetAcmeIp=acme.connectGateway(name+'-gateway-target');
   const ownerRecords=[];
   for(const {hostname,assigned} of names){
-   assert.deepEqual(await acme.resolveCname(assigned),['target-gateway.example.test']);
    ownerRecords.push(JSON.stringify(await acme.resolveCname(hostname))===JSON.stringify([assigned]));
    await acme.addA(assigned,targetAcmeIp);
   }
@@ -384,13 +389,14 @@ try{
   const renewedStaff=await staffCertificate(completed.target,customCsr);
   const renewed=new X509Certificate(renewedStaff).serialNumber!==new X509Certificate(firstStaff).serialNumber;
   await ipc(moving.server,{certificate:renewedStaff,hostname:staff});
-  const staffServed=await waitFor(async()=>(await remoteTarget(staff)).certificate===new X509Certificate(renewedStaff).fingerprint256,20000);
+  const fingerprint=new X509Certificate(renewedStaff).fingerprint256;
+  const staffServed=await waitFor(async()=>{await delay(1000);return (await remoteTarget(staff)).certificate===fingerprint;},20000);
   const publicServed=(await remoteTarget(publicName,'/public/availability',{headers:{cookie:targetCookie}})).status===200;
   customNames={staff:staffServed,public:customPublic&&publicServed,renewed,cnameUntouched:ownerRecords.every(Boolean)};
   assert.deepEqual(customNames,{staff:true,public:true,renewed:true,cnameUntouched:true});
   checks.push('the certificate command renews through the destination gateway on 443 with the older certificate record still present');
  }
- const movement={version:1,...(customNames?{customNames}:{}),failedApply:{cancelled:failedCancelled.state==='cancelled',sourceStayedHealthy,destinationRemoved},hostnamesPreserved,certificatesPreserved,otherVenueIsolated,oldRouteRevoked,completedReplayMatched:JSON.stringify(completedReplay)===JSON.stringify(completed),reconnectionMs,sequences:{initialSource:initialSource.sequence,failedTarget:failedTarget.sequence,cancelledTarget:cancelledTarget.sequence,stagedTarget:stagedTarget.sequence,committedSource:committedSource.sequence,committedTarget:committedTarget.sequence}};
+ const movement={version:1,mode:customNames?'custom':'assigned',...(customNames?{customNames}:{}),failedApply:{cancelled:failedCancelled.state==='cancelled',sourceStayedHealthy,destinationRemoved},hostnamesPreserved,certificatesPreserved,otherVenueIsolated,oldRouteRevoked,completedReplayMatched:JSON.stringify(completedReplay)===JSON.stringify(completed),reconnectionMs,sequences:{initialSource:initialSource.sequence,failedTarget:failedTarget.sequence,cancelledTarget:cancelledTarget.sequence,stagedTarget:stagedTarget.sequence,committedSource:committedSource.sequence,committedTarget:committedTarget.sequence}};
  checks.push('one venue moves through a tested staged route while the other venue remains isolated; failed apply cancels without replacing the source');
 
  const held=tlsConnect({host:'127.0.0.1',port:targetGatewayPort,servername:moving.placement.staffHostname,ca:acme.certificateRoot});held.on('error',()=>{});await new Promise((resolve,reject)=>{held.once('secureConnect',resolve);held.once('error',reject);});held.write('GET /public/availability HTTP/1.1\r\nHost: '+moving.placement.staffHostname+'\r\n');
