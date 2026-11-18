@@ -30,6 +30,7 @@ function bootstrap(t, phase, address, input, failJoin = false) {
     if (name === 'id') console.log('0');
     if (name === 'ip') console.log('7: wg0 inet ' + process.env.ADDRESS + '/24 scope global wg0');
     if (name === 'hostname') console.log('synthetic-node');
+    if (name === 'kubectl') console.log('synthetic ' + args[0]);
     if (name === 'kubeadm' && args[0] === 'certs') console.log(${JSON.stringify(key)});
     if (name === 'kubeadm' && args[0] !== 'certs') console.log(${JSON.stringify(token)});
     if (name === 'kubeadm' && args[0] === 'join' && process.env.FAIL_JOIN === 'true') {
@@ -87,6 +88,24 @@ test('join refuses the old numeric endpoint before invoking kubeadm', t => {
   assert.notEqual(result.status, 0);
   assert.ok(!calls.some(({name}) => name === 'kubeadm'));
   assert.equal(hosts, '127.0.0.1 localhost\n');
+});
+
+test('join refuses malformed credentials or the first member address before invoking kubeadm', async t => {
+  const valid = joinInput('d618-api:6443');
+  const cases = [
+    ['unexpected argument', valid.replace(' --token', ' --discovery-token-unsafe-skip-ca-verification --token'), '10.77.0.2'],
+    ['bad token', valid.replace(token, 'not-a-token'), '10.77.0.2'],
+    ['bad CA hash', valid.replace('a'.repeat(64), 'missing-hash'), '10.77.0.2'],
+    ['bad certificate key', valid.replace(key, 'short-key'), '10.77.0.2'],
+    ['wrong member address', valid, '10.77.0.1'],
+  ];
+  for (const [name, input, address] of cases) await t.test(name, t => {
+    const {result, calls, hosts} = bootstrap(t, 'join', address, input);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid kubeadm join inputs|Invalid joining WireGuard address/);
+    assert.ok(!calls.some(({name}) => name === 'kubeadm'));
+    assert.equal(hosts, '127.0.0.1 localhost\n');
+  });
 });
 
 test('failed join keeps the diagnosis and hides the token and certificate key', t => {

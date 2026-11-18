@@ -1157,8 +1157,9 @@ database-host loss and production-mode checks. No production service is deployed
 The launcher sets up the Kubernetes API and etcd, the cluster's database, on all three machines.
 Each machine uses the API on its own private address after it joins. The legacy fixture still
 mounts its configuration over the network from A, so keep A running for either journey above.
-Run the setup command checks with
+Stopping C now also stops one API server and one etcd member. Run the setup checks with
 `node --test deploy/kubernetes/bounded-amazon/bootstrap.test.mjs scripts/amazon-run.test.mjs`.
+They substitute commands for real kubeadm.
 The [D621 machine-loss slice and run 9](superpowers/plans/2026-11-18-d621-stockholm-control-plane.md)
 will test what happens when you lose A, B or C.
 

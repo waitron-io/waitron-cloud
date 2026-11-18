@@ -15,8 +15,8 @@ mount. PR 7 and run 9 will test real machine loss. This starts the three-member 
    name in the admin kubeconfig and API certificates. Rename each admin context, check the local
    API by name, and make each machine schedulable. Refresh kube-proxy after changing the hosts
    entries. Keep the legacy fixture's mount, A/B/C names, `target.address`, and `start` and `observe`
-   journeys. PR 7 owns the restart checks for swap, loaded network modules and Docker's forwarding
-   policy. [Kubeadm 1.34 procedure](https://v1-34.docs.kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/).
+   journeys. PR 7 owns the restart checks for the private name in the hosts file, swap, loaded
+   network modules and Docker's forwarding policy. [Kubeadm 1.34 procedure](https://v1-34.docs.kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/).
 3. Start with failing checks in `deploy/kubernetes/bounded-amazon/bootstrap.test.mjs` for A's
    initialisation, the join endpoint guard, and B and C's mesh-local joins. Use only stub commands
    on PATH and a temporary hosts-file path, including when the test runs as root. In

@@ -359,7 +359,11 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
     assert.equal(input, 'kubeadm join d618-api:6443 --token abcdef.0123456789abcdef --discovery-token-ca-cert-hash sha256:' + hashes + '\n' + certificateKey + '\n');
   }
   assert.ok(transports.every(({args}) => !args.some(arg => arg.includes(certificateKey) || arg.includes('abcdef.0123456789abcdef'))));
-  const lastJoin = calls.findLastIndex(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'join'"));
+  const created = calls.find(row => row[1] === 'create-stack');
+  const clusterName = created[created.indexOf('--stack-name') + 1];
+  const joinCalls = calls.filter(row => row[0] === 'ssh' && row.at(-1).includes("bootstrap.sh' 'join'"));
+  assert.ok(joinCalls.every(row => row.at(-1).endsWith("'join' '" + clusterName + "'")), 'each member renames its admin context to the run name');
+  const lastJoin = calls.indexOf(joinCalls.at(-1));
   const refresh = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'restart' 'daemonset/kube-proxy'"));
   const ready = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'status' 'daemonset/kube-proxy'"));
   const fixture = calls.findIndex(row => row[0] === 'scp' && row.at(-2).endsWith('target.json'));

@@ -124,7 +124,10 @@ control)
   [ "$address" = 10.77.0.1 ]
   set_api_address "$address"
   certificate_key=$(kubeadm certs certificate-key)
-  [[ "$certificate_key" =~ ^[a-f0-9]{64}$ ]]
+  if ! [[ "$certificate_key" =~ ^[a-f0-9]{64}$ ]]; then
+    echo 'Invalid kubeadm certificate key' >&2
+    exit 1
+  fi
   kubeadm_private init --kubernetes-version=v1.34.3 --apiserver-advertise-address="$address" \
     --control-plane-endpoint="$api_name:6443" --pod-network-cidr=10.244.0.0/16 \
     --upload-certs --certificate-key="$certificate_key"
@@ -134,15 +137,20 @@ control)
   ;;
 join)
   # Credentials arrive on stdin so they stay out of the SSH command and its logs.
-  read -r -a command
-  read -r certificate_key
-  [ "${#command[@]}" = 7 ]
-  [ "${command[0]}" = kubeadm ]; [ "${command[1]}" = join ]; [ "${command[2]}" = "$api_name:6443" ]
-  [ "${command[3]}" = --token ]; [[ "${command[4]}" =~ ^[a-z0-9]{6}\.[a-z0-9]{16}$ ]]
-  [ "${command[5]}" = --discovery-token-ca-cert-hash ]; [[ "${command[6]}" =~ ^sha256:[a-f0-9]{64}$ ]]
-  [[ "$certificate_key" =~ ^[a-f0-9]{64}$ ]]
+  if ! read -r -a command || ! read -r certificate_key ||
+     [ "${command[0]:-}" != kubeadm ] || [ "${#command[@]}" != 7 ] ||
+     ! [[ "${command[1]}" = join && "${command[2]}" = "$api_name:6443" &&
+          "${command[3]}" = --token && "${command[4]}" =~ ^[a-z0-9]{6}\.[a-z0-9]{16}$ &&
+          "${command[5]}" = --discovery-token-ca-cert-hash && "${command[6]}" =~ ^sha256:[a-f0-9]{64}$ &&
+          "$certificate_key" =~ ^[a-f0-9]{64}$ ]]; then
+    echo 'Invalid kubeadm join inputs' >&2
+    exit 1
+  fi
   address=$(mesh_address)
-  [[ "$address" =~ ^10\.77\.0\.[23]$ ]]
+  if ! [[ "$address" =~ ^10\.77\.0\.[23]$ ]]; then
+    echo 'Invalid joining WireGuard address' >&2
+    exit 1
+  fi
   set_api_address 10.77.0.1
   kubeadm_private "${command[@]:1}" --control-plane --certificate-key="$certificate_key" \
     --apiserver-advertise-address="$address"
