@@ -50,7 +50,7 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
    ['test-cloud-tls-challenges','/run/remote-tls-challenges','gateway-manifest','gateway'],
    ['test-cloud-gateway-status','/run/remote-gateway-status','gateway','gateway-manifest']
   ])for(const [name,service] of Object.entries(services)){
-   const mounts=(service.volumes??[]).filter(v=>v.source===source||v.target===target);
+   const mounts=(service.volumes??[]).filter(v=>v.source===source);
    if(name===writer||name===reader){
     const [mount]=mounts;
     if(mounts.length!==1||mount.type!=='volume'||mount.source!==source||mount.target!==target||(mount.read_only===true)!==(name===reader))throw new Error('test_cloud.rendered');

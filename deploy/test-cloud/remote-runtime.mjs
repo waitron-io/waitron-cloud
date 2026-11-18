@@ -2,7 +2,7 @@ import {createPrivateKey,createPublicKey,generateKeyPairSync,randomUUID} from 'n
 import {execFile} from 'node:child_process';
 import {constants} from 'node:fs';
 import {access,mkdir,open,readFile,rename,rm,stat,writeFile} from 'node:fs/promises';
-import {join,isAbsolute,resolve} from 'node:path';
+import {join,isAbsolute,resolve,sep} from 'node:path';
 import {promisify} from 'node:util';
 import {createRequire} from 'node:module';
 import {transaction} from '../../packages/registration/src/transaction.ts';
@@ -25,9 +25,12 @@ export async function loadPublicRemoteSettings(directory,environment){
  const url=new URL(directoryUrl);
  if(!isHostname(zone)||zone.length>180||url.protocol!=='https:'||url.username||url.password||url.hash||!isAbsolute(challengeDirectory??''))throw Error('test_cloud.remote_settings');
  const tlsChallengeDirectory=environment.TEST_CLOUD_TLS_CHALLENGE_DIR,statusDirectory=environment.TEST_CLOUD_GATEWAY_STATUS_DIR;
- if((tlsChallengeDirectory!==undefined||statusDirectory!==undefined)&&
-    (!isAbsolute(tlsChallengeDirectory??'')||!isAbsolute(statusDirectory??'')||
-     new Set([challengeDirectory,tlsChallengeDirectory,statusDirectory].map(path=>resolve(path))).size!==3))throw Error('test_cloud.remote_settings');
+ if(tlsChallengeDirectory!==undefined||statusDirectory!==undefined){
+  const paths=[challengeDirectory,tlsChallengeDirectory,statusDirectory];
+  if(paths.some(path=>!isAbsolute(path??'')))throw Error('test_cloud.remote_settings');
+  const folders=paths.map(path=>resolve(path)).map(path=>path.endsWith(sep)?path:path+sep);
+  if(folders.some((folder,index)=>folders.some((other,i)=>i!==index&&other.startsWith(folder))))throw Error('test_cloud.remote_settings');
+ }
  const state=join(directory,'acme');await mkdir(state,{recursive:true,mode:0o700});const lease=await claimLease(join(state,'account.lock'));if(!lease)throw Error('test_cloud.remote_busy');
  try{
   const file=join(state,'account-key.pem');let accountKey;

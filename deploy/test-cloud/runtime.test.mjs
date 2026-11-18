@@ -201,6 +201,20 @@ test('public remote settings refuse half-configured or shared challenge director
   {TEST_CLOUD_TLS_CHALLENGE_DIR:tls},
   {TEST_CLOUD_TLS_CHALLENGE_DIR:'relative',TEST_CLOUD_GATEWAY_STATUS_DIR:status},
   {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:tls+'/.'},
-  {TEST_CLOUD_TLS_CHALLENGE_DIR:env.TEST_CLOUD_CHALLENGE_DIR,TEST_CLOUD_GATEWAY_STATUS_DIR:status}
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:env.TEST_CLOUD_CHALLENGE_DIR,TEST_CLOUD_GATEWAY_STATUS_DIR:status},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:join(tls,'status')},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:join(env.TEST_CLOUD_CHALLENGE_DIR,'tls'),TEST_CLOUD_GATEWAY_STATUS_DIR:status}
  ])await assert.rejects(loadPublicRemoteSettings(dir,{...env,...paths}),/test_cloud.remote_settings/);
+});
+
+test('the Amazon worker refuses custom names without a TLS challenge',async()=>{
+ const {crypto}=await import('../../packages/remote-access/node_modules/acme-client/src/index.js');
+ const {issueTestRemoteCertificate}=await import('./remote-runtime.mjs');
+ const hostname='menu.cafe.example.test',[,csr]=await crypto.createCsr({commonName:hostname,altNames:[hostname]});
+ const signal=new AbortController().signal;
+ // The refusal must happen before the issuer needs an ACME directory or account key.
+ for(const validation of [undefined,{type:'dns-01'}]){
+  await assert.rejects(issueTestRemoteCertificate(undefined,{hostname,csr:csr.toString(),signal,validation},
+   {zone:'test-cloud.example.test'}),{message:'test_cloud.remote_target'});
+ }
 });

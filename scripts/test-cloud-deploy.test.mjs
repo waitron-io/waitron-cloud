@@ -181,6 +181,8 @@ test('Amazon admission reserves the TLS challenge and gateway status volumes for
    ['writer is read-only',services=>{services[writer].volumes.find(v=>v.source===source).read_only=true;}],
    ['reader can write',services=>{delete services[reader].volumes.find(v=>v.source===source).read_only;}],
    ['wrong mount path',services=>{services[reader].volumes.find(v=>v.source===source).target='/other';}],
+   ['wrong mount type',services=>{services[reader].volumes.find(v=>v.source===source).type='image';}],
+   ['extra mount',services=>{services[reader].volumes.push({type:'volume',source,target:'/other',read_only:true});}],
    ['another service can read',services=>{services.account={...services.account,volumes:[{type:'volume',source,target,read_only:true}]};}]
   ]){
    const value=amazonDeployment();change(value.services);
