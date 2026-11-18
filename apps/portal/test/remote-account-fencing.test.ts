@@ -13,6 +13,7 @@ const view=(installationId=first):RemoteView=>({
 });
 const dns:RemoteDns={installationId:first,kind:'staff',hostname:'staff.cafe.example',records:[
  {type:'CNAME',name:'staff.cafe.example',value:'staff.venue.example'},
+ {type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.venue.example'},
 ]};
 const saved:RemoteView={...view(),revision:2,names:{...view().names!,staff:{assigned:'staff.venue.example',current:dns.hostname}}};
 
@@ -91,6 +92,7 @@ for(const boundary of boundaries)for(const change of ['account','account-return'
     c.choose('public');c.edit('current.cafe.example');
     replies.push({ok:true,value:{installationId,kind:'public',hostname:'current.cafe.example',records:[
      {type:'CNAME',name:'current.cafe.example',value:'venue.example'},
+     {type:'CNAME',name:'_acme-challenge.current.cafe.example',value:'_acme-challenge.venue.example'},
     ]}});
     await c.preview();assert.equal(c.confirmation?.hostname,'current.cafe.example');
     assert.equal(c.view?.installationId,installationId);assert.equal(c.pending,false);

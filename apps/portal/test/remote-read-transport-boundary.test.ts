@@ -15,7 +15,8 @@ const view: RemoteView = {installationId: id, revision: 7, revoked: false,
   publicForward: {category: 'upstream_timeout', observedAt: stamp,
     expiresAt: '2026-10-28T12:05:00.000Z'}};
 const dns: RemoteDns = {installationId: id, kind: 'staff', hostname, records: [
-  {type: 'CNAME', name: hostname, value: assigned}]};
+  {type: 'CNAME', name: hostname, value: assigned},
+  {type: 'CNAME', name: '_acme-challenge.' + hostname, value: '_acme-challenge.' + assigned}]};
 type Reply = 'network' | {body?: unknown; status?: number; raw?: string; brokenBody?: boolean; retry?: string;
   fetchWait?: Promise<void>; bodyWait?: Promise<void>};
 

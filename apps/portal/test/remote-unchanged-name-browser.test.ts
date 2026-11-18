@@ -38,7 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(path==='/remote-access/status')return route.fulfill({json:saved});
     if(path==='/remote-access/dns'||path==='/remote-access/apply'){
      const body=request.postDataJSON();calls.push({path,body});const kind=body.kind as 'staff'|'public',hostname=body.hostname as string;
-     if(path.endsWith('/dns'))return route.fulfill({json:{installationId:id,kind,hostname,records:[{type:'CNAME',name:hostname,value:saved.names![kind].assigned}]}});
+     if(path.endsWith('/dns'))return route.fulfill({json:{installationId:id,kind,hostname,records:[{type:'CNAME',name:hostname,value:saved.names![kind].assigned},{type:'CNAME',name:'_acme-challenge.'+hostname,value:'_acme-challenge.'+saved.names![kind].assigned}]}});
      saved={...saved,revision:saved.revision+1,names:{...saved.names!,[kind]:{...saved.names![kind],current:hostname}}};return route.fulfill({json:saved});
     }
     return route.fulfill({status:503,json:{error:'unavailable'}});

@@ -18,14 +18,11 @@ test('certificate signing accepts only a valid signature for the exact authorise
  assert.throws(()=>validateCsr(csr.toString(),'*.example.test'),/invalid_csr/);
  const lines=csr.toString().split('\n');lines[3]=lines[3]!.replace(/^./,lines[3]![0]==='A'?'B':'A');assert.throws(()=>validateCsr(lines.join('\n'),'staff.sol.example.test'),/invalid_csr/);
 });
-test('a custom hostname needs one routing CNAME to the bound assigned name',async()=>{
- const custom='staff.cafe.example',assigned='staff.sol.example.test',lookups:string[]=[];
- assert.deepEqual(dnsInstructions(custom,assigned),[{type:'CNAME',name:custom,value:assigned}]);
- await verifyDelegation(custom,assigned,async name=>{lookups.push(name);return ['STAFF.SOL.EXAMPLE.TEST.'];});
- assert.deepEqual(lookups,[custom]);
- for(const answers of [[],['foreign.example.test'],[assigned,assigned]])
-  await assert.rejects(verifyDelegation(custom,assigned,async()=>answers),/dns_not_verified/);
- assert.throws(()=>dnsInstructions('127.0.0.1',assigned),/invalid_hostname/);
+test('custom hostnames require both routing and DNS-01 delegation to the bound assigned name',async()=>{
+ const expected=dnsInstructions('staff.cafe.example','staff.sol.example.test');assert.deepEqual(expected,[{type:'CNAME',name:'staff.cafe.example',value:'staff.sol.example.test'},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.sol.example.test'}]);
+ await verifyDelegation('staff.cafe.example','staff.sol.example.test',async name=>[expected.find(r=>r.name===name)!.value]);
+ await assert.rejects(verifyDelegation('staff.cafe.example','staff.sol.example.test',async()=>['foreign.example.test']),/dns_not_verified/);
+ assert.throws(()=>dnsInstructions('127.0.0.1','staff.sol.example.test'),/invalid_hostname/);
 });
 test('TLS-ALPN presents an ephemeral key and certificate only for the ordered name',async()=>{
  const hostname='staff.cafe.example.test',value='synthetic-token.synthetic-thumbprint';

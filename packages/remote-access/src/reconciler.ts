@@ -6,7 +6,7 @@ import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope}
 import {RemoteAccessStore,type CertificateAuthorization,type TrafficCoverageJournal} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 import {crypto as acmeCrypto} from 'acme-client';
-import {validateCsr,verifyDelegation,type CertificateValidation} from './certificates.ts';
+import {matchesCname,validateCsr,type CertificateValidation} from './certificates.ts';
 import type {ChallengeFile} from './challenge-files.ts';
 import {boundedResolveCname,type ResolveCname} from './dns-lookup.ts';
 import {awaitAnswerable,type GatewayChallengeStatus} from './gateway-status.ts';
@@ -235,7 +235,7 @@ export class RemoteConfigurationReconciler {
    }));
   };
   let validation:CheckValidation={type:'dns-01',dnsName:target.dnsName};
-  if(hostname!==assigned){
+  if(hostname!==assigned&&status){
    let answers:string[];
    try{answers=await boundedResolveCname(hostname,this.#resolveCname);}
    catch(error){
@@ -243,9 +243,7 @@ export class RemoteConfigurationReconciler {
     if(code!=='ENODATA'&&code!=='ENOTFOUND')throw new Error('dns_not_verified');
     answers=[];
    }
-   let moved=false;
-   try{await verifyDelegation(hostname,assigned,async()=>answers);}
-   catch{moved=true;}
+   const moved=!matchesCname(answers,assigned);
    checkDeadline();
    await this.#complete(job,async client=>{
     await client.query(`UPDATE remote_hostnames h SET record_moved_at=CASE WHEN $4 THEN COALESCE(h.record_moved_at,clock_timestamp()) ELSE NULL END
@@ -255,7 +253,7 @@ export class RemoteConfigurationReconciler {
    if(moved)throw new Error('dns_not_verified');
 
    const checkCells=cells??await transaction(this.#pool,client=>routeCells(client,job.targetId));
-   if(!status||!artifacts?.hasChallengeFolder||!artifacts.writeChallenge||!artifacts.deleteChallenge||!checkCells.length)
+   if(!artifacts?.hasChallengeFolder||!artifacts.writeChallenge||!artifacts.deleteChallenge||!checkCells.length)
     throw new Error('challenge_not_answerable');
    const folders=await Promise.all(checkCells.map(cellId=>artifacts.hasChallengeFolder!(cellId)));
    if(folders.some(available=>!available))throw new Error('challenge_not_answerable');

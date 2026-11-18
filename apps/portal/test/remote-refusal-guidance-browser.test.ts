@@ -26,7 +26,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(endpoint==='installations'){installationReads++;return route.fulfill({json:{installations:[{...installation,revokedAt:revoked?'2026-01-01T00:00:00Z':null}]}});}
     if(endpoint===denied){writes.push(endpoint);return route.fulfill({status:403,json:{error:code}});}
     if(endpoint==='remote-access/status')return route.fulfill({json:{...view,revoked:statusRevoked||revoked}});
-    if(endpoint==='remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:view.names.staff.assigned}]}});
+    if(endpoint==='remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:view.names.staff.assigned},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.'+view.names.staff.assigned}]}});
     if(endpoint==='remote-access/apply'||endpoint==='installations/revoke')writes.push(endpoint);
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });

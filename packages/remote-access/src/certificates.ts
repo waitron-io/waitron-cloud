@@ -12,15 +12,17 @@ export function validateCsr(pem:string,hostname:string):void {
   const sans=extensions?.find(e=>e.name==='subjectAltName')?.altNames;if(!sans||sans.length!==1||sans[0]!.type!==2||sans[0]!.value!==hostname)throw Error();
  }catch{throw new Error('invalid_csr');}
 }
-export function dnsInstructions(custom:string,assigned:string):[{type:'CNAME';name:string;value:string}]{
+export function dnsInstructions(custom:string,assigned:string){
+ // The DNS-01 label adds 16 characters to both names in the certificate CNAME.
  if(!isHostname(custom)||custom.length>237||!isHostname(assigned)||assigned.length>237||custom===assigned)throw new Error('invalid_hostname');
- return [{type:'CNAME',name:custom,value:assigned}];
+ return [{type:'CNAME',name:custom,value:assigned},{type:'CNAME',name:`_acme-challenge.${custom}`,value:`_acme-challenge.${assigned}`}];
+}
+export function matchesCname(answers:string[],target:string){
+ return answers.length===1&&answers[0]!.replace(/\.$/,'').toLowerCase()===target;
 }
 export async function verifyDelegation(custom:string,assigned:string,resolve:typeof resolveCname=resolveCname){
- try{
-  const [record]=dnsInstructions(custom,assigned),values=await resolve(record.name);
-  if(values.length!==1||values[0]!.replace(/\.$/,'').toLowerCase()!==record.value)throw Error();
- }catch{throw new Error('dns_not_verified');}
+ try{for(const record of dnsInstructions(custom,assigned)){const values=await resolve(record.name);if(!matchesCname(values,record.value))throw Error();}}
+ catch{throw new Error('dns_not_verified');}
 }
 export interface DnsChallengeProvider {present:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;remove:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;point:(name:string,target:string,signal?:AbortSignal)=>Promise<void>}
 export type CertificateValidation =

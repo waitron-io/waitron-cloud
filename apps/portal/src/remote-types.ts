@@ -28,8 +28,8 @@ export function validRemoteView(v:unknown):v is RemoteView{
  return (names===null||(object(names)&&['staff','public'].every(k=>object(names[k])&&remoteHostname(names[k].assigned)&&remoteHostname(names[k].current))))&&['unconfigured','provisioning','ready','failed'].includes(String(v.service.state))&&['unknown','healthy','degraded','failed'].includes(String(v.service.health))&&(v.service.validUntil===null||(typeof v.service.validUntil==='string'&&Number.isFinite(Date.parse(v.service.validUntil))))&&(v.service.observedAt===null||(typeof v.service.observedAt==='string'&&Number.isFinite(Date.parse(v.service.observedAt))));
 }
 export function validRemoteDns(v:unknown):v is RemoteDns{
- if(!object(v)||!id(v.installationId)||!['staff','public'].includes(String(v.kind))||!remoteHostname(v.hostname)||!Array.isArray(v.records)||v.records.length!==1)return false;
- const [record]=v.records;return object(record)&&record.type==='CNAME'&&record.name===v.hostname&&remoteHostname(record.value);
+ if(!object(v)||!id(v.installationId)||!['staff','public'].includes(String(v.kind))||!remoteHostname(v.hostname)||!Array.isArray(v.records)||v.records.length!==2)return false;
+ const [a,b]=v.records;return object(a)&&object(b)&&a.type==='CNAME'&&b.type==='CNAME'&&a.name===v.hostname&&b.name==='_acme-challenge.'+v.hostname&&remoteHostname(a.value)&&b.value==='_acme-challenge.'+a.value;
 }
 
 export function remoteReady(v:RemoteView|undefined,now=Date.now()):boolean {return !!v&&!v.revoked&&v.service.state==='ready'&&v.service.health==='healthy'&&!!v.service.validUntil&&Date.parse(v.service.validUntil)>now;}

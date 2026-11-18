@@ -38,7 +38,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (endpoint === '/remote-access/dns') {
           dns.push(route.request().postDataJSON());
           return route.fulfill({json: {installationId: id, kind: 'staff', hostname: 'cafe.example', records: [
-            {type: 'CNAME', name: 'cafe.example', value: 'staff.venue.example'}]}});
+            {type: 'CNAME', name: 'cafe.example', value: 'staff.venue.example'},
+            {type: 'CNAME', name: '_acme-challenge.cafe.example', value: '_acme-challenge.staff.venue.example'}]}});
         }
         if (endpoint === '/remote-access/apply') apply.push(route.request().postDataJSON());
         return route.fulfill({status: 503, json: {error: 'unavailable'}});

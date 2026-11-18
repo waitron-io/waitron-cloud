@@ -1029,9 +1029,10 @@ revision and CSR digest with its still-current local intent, then use the existi
 private-key matching and atomically replaces its certificate file. It does not
 establish trust in an arbitrary supplied issuer; obtain the chain through the
 trusted Cloud HTTPS origin. Cloud rechecks hostname, key and validity before
-publication. For a custom staff name, the configured Cloud gateway answers the
-issuer's TLS-ALPN-01 check on port 443. The appliance sends the same CSR and signed
-request as for an assigned name. Issuance does not mean the appliance
+publication. A configured certificate worker can use the gateway to answer the
+issuer's TLS-ALPN-01 check on port 443 for a custom staff name. The command-line
+worker uses the existing DNS check until that wiring is available. The appliance
+sends the same CSR and signed request for either check. Issuance does not mean the appliance
 has installed or reloaded the chain.
 
 The Cloud reconciler uses the database exchange for staff certificates.

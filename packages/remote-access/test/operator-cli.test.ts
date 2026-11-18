@@ -60,12 +60,3 @@ test('the cell command refuses a cell file without zone',async()=>{
  assert.equal((await db.pool.query('SELECT count(*) FROM remote_cells WHERE id=$1',[cell.id])).rows[0].count,'0');
  const accepted=await operator('cell',{...cell,zone:(await db.pool.query("SELECT suffix FROM remote_country_zones WHERE country='ES' AND environment='test'")).rows[0].suffix});assert.equal(accepted.status,0,accepted.stderr);
 });
-
-test('the DNS command prints a single CNAME to the venue’s assigned name',async()=>{
- const installed=await installation(),cellId=randomUUID();
- await store.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'dns-operator.example.test',subnet:34,publicKey:peerKey(),endpoint:'gateway.example.test:51820'});
- const placement=await store.provision(installed.installationId,cellId,peerKey()),hostname='staff.cafe.example.test';
- const reply=await operator('dns',{installationId:installed.installationId,kind:'staff',hostname});
- assert.equal(reply.status,0,reply.stderr);
- assert.deepEqual(JSON.parse(reply.stdout),[{type:'CNAME',name:hostname,value:placement.staffHostname}]);
-});

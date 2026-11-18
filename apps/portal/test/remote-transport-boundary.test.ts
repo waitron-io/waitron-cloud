@@ -19,6 +19,7 @@ const saved: RemoteView = {...initial, revision: 8,
   names: {...initial.names!, staff: {assigned, current: hostname}}};
 const dns: RemoteDns = {installationId: id, kind: 'staff', hostname, records: [
   {type: 'CNAME', name: hostname, value: assigned},
+  {type: 'CNAME', name: '_acme-challenge.' + hostname, value: '_acme-challenge.' + assigned},
 ]};
 type Reply = 'network' | {body?: unknown; status?: number; raw?: string; brokenBody?: boolean; retry?: string};
 

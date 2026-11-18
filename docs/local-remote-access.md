@@ -104,22 +104,22 @@ changing your own domain. If no gateway has been assigned, the screen says so in
 of offering an address that cannot work.
 
 To use a name such as `staff.your-cafe.es`, choose the address to change, enter the name
-and select **Review DNS settings**. Create the displayed CNAME record at your domain
-provider and keep it while you use the name. It points your address at the venue and
-lets the configured Cloud gateway answer the certificate authority's check. Use a
-subdomain because many DNS providers cannot put a CNAME at the domain root. You can
-enter up to 237 characters. Reload the portal if you still see the two-record form.
+and select **Review DNS settings**. Create both displayed CNAME records at your domain
+provider. The first directs traffic to your venue; the second delegates certificate
+validation. Keep both records while you use the name. Use a subdomain because many DNS
+providers cannot put a CNAME at the domain root. Your name can contain at most 237
+characters, leaving room for the certificate record's `_acme-challenge.` prefix.
 
-Select **Check DNS and use this name** when your record points to the displayed target.
-If the check fails, your current name stays in place. DNS can take time to propagate,
-so check the record with your provider and try again. **Use assigned name** lets you
-review a switch back without custom records.
+Select **Check DNS and use this name** when both records are present. A failed check
+leaves your current name unchanged. DNS can take time to propagate, so check the records
+and retry. **Use assigned name** lets you review a switch back without custom records.
 A concurrent configuration change requires refreshing and reviewing again. If the save
 reply is lost, the portal reads the current settings instead of resending the change.
 
 Changing a name returns the service to setup pending and can interrupt access until its
-certificate and venue settings are updated. Custom addresses require a certificate worker
-and gateway configured for the check described below. This screen does not
+certificate and venue settings are updated. The local reconciler below can publish the
+updated gateway route and issue a matching certificate after an operator changes the
+trusted mapping. This screen does not
 activate a live subscription or install a tunnel on a customer appliance. Once fresh
 service observations confirm the selected configuration, the addresses become links.
 That confirmation expires with the observation or connection lease, even on an open page.
@@ -186,8 +186,8 @@ It projects current PostgreSQL state into signed, expiring gateway manifests and
 public and staff certificates for renewal. Its leases survive a process restart, prevent
 two workers from completing the same claim and retry failures with a bounded backoff.
 Route and staff jobs with ordinary failures park after eight consecutive failures.
-Name and public certificate jobs keep retrying. A custom staff name also keeps retrying
-when its CNAME has moved or its gateway cannot yet answer the check.
+Name and public certificate jobs keep retrying. With gateway checks enabled, custom
+staff jobs also keep retrying through DNS failures and unavailable gateways.
 
 Create a trusted JSON file naming cells and the worker's private key directory:
 
@@ -319,14 +319,15 @@ answer the certificate authority on port 443. When you construct
 `FileReconcilerArtifacts`, supply the absolute `challenges` directory per route cell.
 Pass a `gatewayStatus` reader to `RemoteConfigurationReconciler` that reports the
 answerable names from every gateway in each cell. Give that reader access to status
-data only. The normal command-line configuration serves assigned names.
+data only. The command-line worker and account portal still use two DNS records
+for custom names until the local wiring and one-record switch are available.
 
-The worker checks that the custom CNAME still points to the assigned address before
-starting an order. If the record has moved, Cloud keeps the current certificate while
+Before a gateway check, the worker verifies that the custom CNAME still points to
+the assigned address. If the record has moved, Cloud keeps the current certificate while
 the worker retries. A failed DNS lookup leaves the last known record state in place.
 Point the record back and allow up to 15 minutes for the next attempt. For a staged
-move, the worker writes the check into both cells and waits
-until all mapped gateways report that name ready. The certificate claim lasts five
+move, the worker writes the check into both cells and waits until all mapped
+gateways report that name ready. The certificate claim lasts five
 minutes. The worker stops accepting an order result 15 seconds before the claim ends.
 
 The worker reserves the name in PostgreSQL before contacting the certificate authority.

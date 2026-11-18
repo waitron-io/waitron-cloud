@@ -18,7 +18,7 @@ test('a moved CNAME preserves the last public certificate and retries until DNS 
   if(lookupError)throw Object.assign(Error('synthetic resolver failure'),{code:lookupError});
   return [destination];
  };
- await f.store.setHostname(installationId,'public',hostname,1,resolveCname);
+ await f.store.setHostname(installationId,'public',hostname,1,async name=>[name===hostname?assigned:'_acme-challenge.'+assigned]);
  const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{cellId:placement.cellId,
   challenges:root,output:join(root,'manifest.json'),publicCertificates:root}]});
  const ca=forge.pki.privateKeyFromPem(generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'}).toString());

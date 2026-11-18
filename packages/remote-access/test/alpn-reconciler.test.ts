@@ -14,7 +14,9 @@ import {seedCurrentStaffRequest} from './fixtures/staff-certificate.ts';
 async function customStaff(t:TestContext){
  const f=await staffExchangeFixture();t.after(f.close);
  const venue=await f.venue(),hostname='staff.cafe.example.test',resolveCname=async()=>[venue.placement.staffHostname];
- await f.store.setHostname(venue.installationId,'staff',hostname,1,resolveCname);
+ await f.store.setHostname(venue.installationId,'staff',hostname,1,async name=>[
+  name===hostname?venue.placement.staffHostname:'_acme-challenge.'+venue.placement.staffHostname,
+ ]);
  await seedCurrentStaffRequest(f.db.pool,venue.installationId);
  async function run(worker:RemoteConfigurationReconciler){
   await worker.schedule();
@@ -69,7 +71,7 @@ test('a staged move needs both gateways to answer before the custom staff order 
 test('a custom staff name keeps retrying beyond its eighth unanswerable gateway attempt',async t=>{
  const f=await customStaff(t);
  let orders=0;
- const worker=new RemoteConfigurationReconciler(f.db.pool,{resolveCname:f.resolveCname,
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{resolveCname:f.resolveCname,gatewayStatus:{async read(){return [];}},
   async issueCertificate(){orders++;throw Error('missing gateway must refuse before order');},
  });
  for(let attempt=1;attempt<=9;attempt++)await f.run(worker);

@@ -19,7 +19,8 @@ function view(): RemoteView {
 }
 function dns(): RemoteDns {
   return {installationId: id, kind: 'staff', hostname, records: [
-    {type: 'CNAME', name: hostname, value: assigned}]};
+    {type: 'CNAME', name: hostname, value: assigned},
+    {type: 'CNAME', name: '_acme-challenge.' + hostname, value: '_acme-challenge.' + assigned}]};
 }
 function saved(): RemoteView {
   const value = view();
@@ -101,16 +102,18 @@ test('remote HTTP status for a different installation cannot become the selected
 
 const malformedDns: Array<{name: string; body: () => unknown}> = [
   {name: 'null', body: () => null},
-  {name: 'missing CNAME', body: () => ({...dns(), records: []})},
-  {name: 'TXT record', body: () => ({...dns(), records: [{...dns().records[0], type: 'TXT'}]})},
-  {name: 'wrong record name', body: () => ({...dns(), records: [{...dns().records[0], name: 'another.example'}]})},
-  {name: 'extra ACME record', body: () => ({...dns(), records: [...dns().records, {type: 'CNAME', name: '_acme-challenge.' + hostname, value: '_acme-challenge.' + assigned}]})},
+  {name: 'missing ACME record', body: () => ({...dns(), records: dns().records.slice(0, 1)})},
+  {name: 'TXT record', body: () => ({...dns(), records: [{...dns().records[0], type: 'TXT'}, dns().records[1]]})},
+  {name: 'wrong record name', body: () => ({...dns(), records: [{...dns().records[0], name: 'another.example'}, dns().records[1]]})},
+  {name: 'wrong ACME target', body: () => ({...dns(), records: [dns().records[0], {...dns().records[1], value: '_acme-challenge.another.example'}]})},
   {name: 'different installation', body: () => ({...dns(), installationId: other})},
   {name: 'different route kind', body: () => ({...dns(), kind: 'public'})},
   {name: 'different requested hostname', body: () => ({...dns(), hostname: 'other.cafe.example', records: [
-    {...dns().records[0], name: 'other.cafe.example'}]})},
+    {...dns().records[0], name: 'other.cafe.example'},
+    {...dns().records[1], name: '_acme-challenge.other.cafe.example'}]})},
   {name: 'different assigned target', body: () => ({...dns(), records: [
-    {...dns().records[0], value: 'staff.other.example'}]})},
+    {...dns().records[0], value: 'staff.other.example'},
+    {...dns().records[1], value: '_acme-challenge.staff.other.example'}]})},
 ];
 for (const row of malformedDns) test(`remote HTTP DNS rejects ${row.name} before confirmation or save`, async t => {
   const {c, replies, calls} = harness(t);
