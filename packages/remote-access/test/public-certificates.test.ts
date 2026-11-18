@@ -90,6 +90,11 @@ test('an unavailable source cannot block a destination that receives the current
  assert.equal(await s.read(s.target),copy.pem);assert.equal((await f.store.completeMove(move.operationId,1)).state,'completed');
 });
 
+test('an unavailable source does not postpone renewal of the destination certificate',async()=>{
+ const s=await fixture();await s.run();const old=await s.copy();assert.ok(old);s.advance();const move=await s.stage();await rm(join(root,s.venue.placement.cellId),{recursive:true,force:true});await s.run();
+ assert.equal(s.issues(),2);assert.notEqual(await s.read(s.target),old.pem);assert.equal((await f.store.completeMove(move.operationId,1)).state,'completed');
+});
+
 test('an unmapped old source cannot block the mapped destination copy',async()=>{
  const s=await fixture();await s.run();const move=await s.stage();
  const files=new FileReconcilerArtifacts({keyDirectory:join(root,'keys'),routes:s.routes.filter(r=>r.cellId===s.target)});

@@ -216,8 +216,7 @@ export class RemoteConfigurationReconciler {
      await client.query('UPDATE remote_configuration_jobs SET applied_digest=$3,last_success_at=clock_timestamp() WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId,certificateDigest(job.targetId,'public',authority,complete?cells:required)]);
     });
    },true);
-   if(!complete)throw new Error('public_copy_incomplete');
-   if(!renewal)await this.#complete(job,async()=>{});
+   if(!renewal){if(!complete)throw new Error('public_copy_incomplete');await this.#complete(job,async()=>{});}
   };
   if(copy&&usable){
    const authority=await this.#store.authorizeCertificate(job.targetId,'public',copy.csr);
