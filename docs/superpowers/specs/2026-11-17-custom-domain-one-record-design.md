@@ -2,7 +2,7 @@
 
 Status: the watcher released the corrected plan on 2026-11-17 at 18:21 after the owner landed #1273 and #1275.
 
-The design uses one DNS record per custom name and checks the name on port 443. Cloud serves HTTPS.
+The design uses one DNS record per custom name and checks the name on port 443. Keep port 80 closed.
 
 ## Why
 

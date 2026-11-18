@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
 import {connect} from 'node:tls';
+import {gatewayAlpnPort} from '../src/config.ts';
 import {signManifest,type ReportingGatewayManifest} from '../src/manifest.ts';
 import {serveTrafficLifetimes} from '../src/traffic-lifetime-transport.ts';
 import {verifyTrafficReport} from '../src/traffic-report.ts';
@@ -157,7 +158,7 @@ test('publishing a check updates status without starting HAProxy or a traffic li
  }
  await waitFor(async()=>assert.deepEqual((await f.status()).challenges?.answerable,[route]),3000);
  const presented=await new Promise<string>((resolve,reject)=>{
-  const socket=connect({host:'127.0.0.1',port:8445,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
+  const socket=connect({host:'127.0.0.1',port:gatewayAlpnPort,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
   socket.setTimeout(2000,()=>socket.destroy(new Error('gateway certificate check timed out')));
   socket.once('error',reject);
   socket.once('secureConnect',()=>{resolve(socket.getPeerCertificate().fingerprint256);socket.end();});
