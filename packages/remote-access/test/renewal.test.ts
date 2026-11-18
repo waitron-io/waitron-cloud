@@ -8,6 +8,9 @@ test('renewal checks hostname, CSR key and the last third or thirty days of cert
  const pem=forge.pki.certificateToPem(cert),request=forge.pki.certificationRequestToPem(csr);
  assert.equal(certificateNeedsRenewal(pem,request,'staff.example.test',Date.parse('2026-01-10')),false);
  assert.equal(certificateNeedsRenewal(pem,request,'staff.example.test',Date.parse('2026-03-10')),true);
+ assert.equal(certificateNeedsRenewal(pem,request,'staff.example.test',Date.parse('2026-03-10'),false),false);
+ assert.equal(certificateNeedsRenewal(pem,request,'staff.example.test',Date.parse('2026-04-01'),false),true);
+ assert.equal(certificateNeedsRenewal(pem,request,'other.example.test',Date.parse('2026-03-10'),false),true);
  assert.equal(certificateNeedsRenewal(pem,request,'other.example.test',Date.parse('2026-01-10')),true);
  assert.equal(certificateNeedsRenewal('broken',request,'staff.example.test'),true);
  const other=forge.pki.rsa.generateKeyPair(2048);csr.publicKey=other.publicKey;csr.sign(other.privateKey);

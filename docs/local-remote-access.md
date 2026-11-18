@@ -176,23 +176,17 @@ two workers from completing the same claim and retry failures with a bounded bac
 After eight consecutive failures, a target is parked until its desired state changes or
 the target is disabled and enabled again.
 
-Create a trusted JSON file with these explicit mappings:
+Create a trusted JSON file naming cells and the worker's private key directory:
 
 ```json
 {
+  "keyDirectory": "/absolute/operator-keys/public",
   "routes": [
     {
       "cellId": "00000000-0000-4000-8000-000000000001",
       "output": "/absolute/gateway/input/manifest.json",
-      "signingKeyFile": "/absolute/operator-keys/cell.pem"
-    }
-  ],
-  "certificates": [
-    {
-      "installationId": "00000000-0000-4000-8000-000000000002",
-      "kind": "staff",
-      "csrFile": "/absolute/exchange/staff.csr",
-      "output": "/absolute/exchange/staff.crt"
+      "signingKeyFile": "/absolute/operator-keys/cell.pem",
+      "publicCertificates": "/absolute/gateway/input/public-certs"
     }
   ],
   "acme": {
@@ -204,11 +198,13 @@ Create a trusted JSON file with these explicit mappings:
 }
 ```
 
-List every public and staff certificate target separately. The DNS module exports a
-default object with async `present(name, value)`, `remove(name, value)` and
-`point(name, target)` methods. All
-paths must be absolute. A missing route or certificate mapping fails only that target;
-the worker does not infer a path or reuse another cell's key.
+The worker discovers public names from placements, makes their RSA-2048 keys and
+signing requests, and writes `<venueId>.pem` to each cell holding the route.
+Private copies and requests stay in `keyDirectory` with mode 0600. You do not list
+venues or staff certificate files; old `certificates` and `staffExchange` settings
+are refused. The DNS module exports async `present(name, value)`,
+`remove(name, value)` and `point(name, target)` methods. Every path is absolute.
+An unmapped cell is refused before any public-certificate write.
 
 For a Route 53 zone, set `acme.dnsModule` to the absolute path of
 `packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
@@ -244,8 +240,8 @@ reconciler and staff exchange still decide who can receive a certificate, and th
 staff exchange still refuses production installations. Each box keeps its own key.
 The trial's wildcard address points at one gateway. Certificate authorization and
 renewal use each venue's stored assigned name, including after a cross-suffix move.
-Public DNS does not yet follow the destination cell automatically; its record
-worker and live routing qualification remain open. The single-suffix trial does
+The record worker follows committed cell moves; live provider and routing
+qualification remain open. The single-suffix trial does
 not exercise that move.
 
 Run one scheduling and work pass, inspect redacted status, or leave the worker running:
@@ -258,10 +254,9 @@ DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json
 
 Certificate publication rechecks the current hostname, ACME delegation name,
 configuration revision and claim lease after ACME completes. A stale result is refused.
-Files are replaced atomically, so a failed issuance or write keeps the prior usable chain
-or manifest. Cloud reads the staff CSR and returns only the chain; the private key remains
-in Waitron. For an authenticated CSR/chain exchange without shared files, use the database staff
-mode below. Automatic production appliance scheduling remains a Waitron dependency.
+Each file is replaced atomically. Failed issuance keeps the last good copy;
+a failed write does not partly overwrite that file. Cloud reads staff requests from the database exchange below and returns
+only the chain; the private key remains in Waitron. Automatic production appliance scheduling remains a Waitron dependency.
 
 On shutdown, the worker refuses to publish a result completed after the signal and returns
 that claim without consuming retry budget. The current ACME client does not expose request
@@ -278,7 +273,8 @@ WAITRON_CHECKOUT=/absolute/path/to/waitron pnpm proof:remote-reconciler
 The receipt uses PostgreSQL plus the local Pebble and DNS fixtures. It proves signed
 two-venue route publication, expired-lease restart and duplicate-worker recovery, bounded
 failure parking, initial public and
-staff issuance, renewal after CSR-key changes, Waitron's existing staff install command,
+staff issuance without per-venue operator files, public key regeneration, replacement staff
+requests through the database, Waitron's existing staff install command,
 retention after failed renewal, and hostname and expired-lease fences. It creates no live
 DNS record or certificate.
 
@@ -287,23 +283,25 @@ namespace. Mount `/input` read-only and `/state` writable. Input holds `manifest
 `issuer.pem`, `wireguard.key`, a 32-byte `bot.key`, and `public-certs/*.pem` containing
 public-site chains and keys. Set `GATEWAY_CELL_ID`, `GATEWAY_SUBNET`, and, for a test CA,
 `GATEWAY_UPSTREAM_CA`. The runner is the executable example for container arguments.
+Public certificate changes reload the gateway by default. Set
+`GATEWAY_CERTIFICATE_REFRESH=0` to disable that refresh.
+`GATEWAY_PUBLIC_CERTIFICATES` selects the certificate directory and defaults to
+`/input/public-certs`; missing folders have no certificate entries. Traffic-mode
+reloads retain the same signed manifest and name their predecessor process.
 Its `peer-cli.ts` is a local bridge to `host.docker.internal`, not an installer for a
 customer appliance. Neither component changes the host's network interfaces.
 
 ## Exchange staff certificates without shared files
 
 Use the [version 1 machine exchange](waitron-integration-contract.md#staff-certificate-exchange-version-1)
-when a test installation cannot share the reconciler filesystem. Set
+for every test installation's staff certificate. Set
 `CLOUD_STAFF_CERTIFICATES=1` on the account service (also forwarded by the local
 Compose account service); the default is disabled and returns 503. This opt-in
 requires the installation issuer and currently refuses production installations.
-Enable it together with the database staff worker. Add `"staffExchange": true`
-to the trusted reconciler JSON and remove every `kind: "staff"` entry from its
-`certificates` array. Public certificate files, route mappings, DNS adapter and ACME
-credentials keep their existing configuration. Staff requests arrive through the
-signed installation API and the worker reads and writes their bounded PostgreSQL
-rows. Run one consistent mode across all workers; do not mix database staff workers
-with filesystem staff workers against the same jobs.
+The reconciler always uses this exchange for staff certificates. Signed requests
+arrive through the installation API and the worker reads and writes their bounded
+PostgreSQL rows. Without a current request, no staff certificate job is queued.
+Public keys, cell mappings, DNS adapter and ACME credentials use the configuration above.
 
 A new predecessor-bound request changes the worker's desired state, so it becomes
 due even if the preceding request is parked or scheduled for tomorrow. An exact
@@ -341,14 +339,19 @@ the account/control API.
 1. Run `move-stage` with `operationId`, `installationId`, `targetCellId`,
    `targetPeerPublicKey`, `expectedRevision` and optional `port`. The result contains the
    unchanged hostnames plus the source and reserved destination routes.
-2. Export the destination cell. Apply that exact signed manifest, configure the venue
+2. Run the reconciler so the destination receives the venue's public certificate.
+   It copies a matching, still-valid certificate before attempting renewal, so a
+   renewal failure can leave the copy ready while renewal retries. Expired or
+   wrong-name copies do not qualify. Export the destination cell. Apply that exact signed manifest, configure the venue
    peer for the destination gateway, and test both public HTTPS and staff TLS through the
    destination route. A failed apply is not readiness: run `move-cancel`, then export the
    destination cell again so its staged route is removed.
 3. After a successful route test, run `move-ready` with the same `operationId` and
    `expectedRevision`, plus the sequence reported by the tested destination gateway. The
    command refuses a sequence that was not generated after this move was staged.
-4. Run `move-commit` with the same operation and revision. Then export and apply newer
+4. Run `move-commit` with the same operation and revision. It refuses
+   `move_destination_incomplete` until the enabled public-certificate job records a
+   copy for the current name, revision and route cells. Then export and apply newer
    manifests for both cells. The destination keeps the active route and the source removes
    it. Do not treat the move as complete while either gateway still reports the older
    sequence.
@@ -372,30 +375,19 @@ setting an objective.
 
 ## Issue and renew certificates
 
-Use Waitron's `apps/server/scripts/cloud-certificate.ts csr` command to create a CSR
-with its local key. The Cloud command authorizes that CSR against the active placement:
+Leave `remote:reconcile` running with the configuration above. It makes public
+keys and requests, renews within thirty days of expiry or the last third of a
+shorter certificate's life, and keeps the last good copy when issuance fails.
+Each renewal makes a fresh public key. A public-name change makes a matching
+request instead of retrying the old name's CSR. There is no operator `certificate`
+command.
 
-```sh
-node packages/remote-access/src/operator-cli.ts certificate /path/to/certificate.json
-```
-
-The current CSR contract uses an RSA key of at least 2048 bits, as generated by
-Waitron. Elliptic-curve CSRs are not accepted by this first adapter.
-
-The JSON contains `installationId`, `kind` (`staff` or `public`), `csrFile`, `output`,
-`directoryUrl` (an HTTPS ACME directory), `accountKeyFile`, `email` and `dnsModule`.
-The DNS module is a trusted local module exporting `default` with async
-`present(name, value)` and `remove(name, value)` functions. Use a narrowly scoped DNS
-provider credential when implementing the live provider adapter. The local runner
-supplies a Pebble adapter. Customer input never selects this module.
-
-Run this command daily under your job scheduler. It renews within thirty days of
-expiry, or the last third of a shorter certificate's life. `force: true` requests a
-renewal for the local test. The existing output survives issuance failure. Recheck
-placement after ACME finishes, then publish the chain atomically. Install the returned
-staff chain with Waitron's `cloud-certificate.ts install` command; Waitron validates
-its hostname and local key before replacing the file, then reloads future TLS
-connections within ten seconds. Initial HTTP-to-HTTPS setup still needs a restart.
+The box submits its staff CSR through the database exchange. Its RSA key remains
+local; the current CSR contract requires at least 2048 bits. The worker returns
+only the chain. Waitron's `cloud-certificate.ts install` command validates the
+hostname and local key before replacing the file and reloading future TLS
+connections. The local proofs use that interface; production appliance scheduling
+and deployment still need qualification.
 
 For a custom hostname, ask for the exact delegation instructions:
 

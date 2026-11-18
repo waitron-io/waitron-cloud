@@ -26,7 +26,7 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:strin
  await cp(new URL('./fixtures/gateway-system.ts',import.meta.url),join(root,'system.ts'));
  const quote=(s:string)=>"'"+s.replaceAll("'","'\\''")+"'";
  for(const name of ['ip','iptables','wg','haproxy'])await writeFile(join(bin,name),`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(root,'system.ts'))} ${name} "$@"\n`,{mode:0o700});
- const env={PATH:bin+':'+process.env.PATH,GATEWAY_FIXTURE_ROOT:root,GATEWAY_STATE_DIR:base,GATEWAY_MANIFEST:input,GATEWAY_CELL_ID:cellId,GATEWAY_TRUST_KEY:join(root,'issuer.pem'),GATEWAY_WIREGUARD_KEY:join(root,'wg.key'),GATEWAY_BOT_KEY:join(root,'bot.key'),
+ const env={PATH:bin+':'+process.env.PATH,GATEWAY_FIXTURE_ROOT:root,GATEWAY_STATE_DIR:base,GATEWAY_MANIFEST:input,GATEWAY_PUBLIC_CERTIFICATES:join(root,'public-certificates'),GATEWAY_CELL_ID:cellId,GATEWAY_TRUST_KEY:join(root,'issuer.pem'),GATEWAY_WIREGUARD_KEY:join(root,'wg.key'),GATEWAY_BOT_KEY:join(root,'bot.key'),
   GATEWAY_TRAFFIC_MODE:'test',GATEWAY_TRAFFIC_COUNTRY:'ES',GATEWAY_TRAFFIC_ENVIRONMENT:'test',GATEWAY_TRAFFIC_SOCKET_DIRECTORY:stats,GATEWAY_TRAFFIC_OPERATIONAL_SOURCES:'["127.0.0.2"]',GATEWAY_TRAFFIC_STATE_DIRECTORY:state,GATEWAY_TRAFFIC_REPORTER_KEY:join(root,'reporter.pem'),GATEWAY_TRAFFIC_REPORT_DIRECTORY:reports,GATEWAY_TRAFFIC_LIFETIME_SOCKET:join(country,'life.sock'),GATEWAY_TRAFFIC_READER_GID:String(process.getegid!()),GATEWAY_TRAFFIC_MAX_BYTES:'32768'};
  const children=async():Promise<Array<{pid:number;processId:string;prepared:boolean;args:string[];at:number}>>=>{try{return (await readFile(join(root,'children'),'utf8')).trim().split('\n').map(s=>JSON.parse(s));}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return [];throw e;}};
  let gateway:ChildProcess|undefined,output='',release:()=>void=()=>{},server:Awaited<ReturnType<typeof serveTrafficLifetimes>>|undefined;const lifetimes:unknown[]=[];
@@ -130,4 +130,15 @@ test('gateway expires the predecessor while authority processing waits on a queu
  await waitFor(async()=>assert.throws(()=>process.kill(c.pid,0),/ESRCH/),Math.max(1,f.manifest.expiresAt+1600-Date.now()));
  assert.ok(Date.now()<=f.manifest.expiresAt+1600);held.release();
  await waitFor(async()=>assert.equal((await f.children()).length,2,f.output()));
+});
+
+
+test('default certificate refresh starts one successor under the same signed manifest',async t=>{
+ const f=await fixture(t),certificates=join(f.root,'public-certificates');await mkdir(certificates);await writeFile(join(certificates,'venue.pem'),'first public certificate');
+ const held=await f.holdCountry(),gateway=f.launch(),first=await f.prepared();await held.accepted();held.release();
+ await writeFile(join(certificates,'venue.pem'),'replacement public certificate');
+ const second=await waitFor(async()=>{const children=await f.children();assert.equal(children.length,2,f.output());await readFile(join(f.root,children[1]!.processId+'.ready'));return children[1]!;});
+ const start=async(id:string)=>verifyTrafficLifecycle(JSON.parse(await readFile(join(f.state,id,'journal','prepared.json'),'utf8')).start,f.reporter.publicKey);
+ const a=await start(first.processId),b=await start(second.processId);assert.equal(b.manifestDigest,a.manifestDigest);assert.equal(b.predecessorId,first.processId);
+ gateway.kill('SIGTERM');await waitFor(async()=>assert.equal(gateway.exitCode,0),10000);assert.equal((await f.children()).length,2);
 });

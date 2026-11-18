@@ -1,3 +1,4 @@
+import {seedCurrentStaffRequest,seedStaffCertificate} from './fixtures/staff-certificate.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -21,7 +22,7 @@ async function fixture(){
   // The same organisation's unplaced venue has no setup in the remote policy batch.
   await f.pool.query("UPDATE installation_services SET state='unconfigured',configuration='{}' WHERE service='remote_access' AND installation_id IN (SELECT id FROM installations WHERE venue_id=$1)",[f.otherVenue]);
   await set(f,'connected');
-  for(const venueId of f.venues){const id=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venueId])).rows[0].id;ids.push(id);peers.push(peer());await ordinary.provision(id,source,peers.at(-1)!);}
+  for(const venueId of f.venues){const id=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venueId])).rows[0].id;ids.push(id);peers.push(peer());await ordinary.provision(id,source,peers.at(-1)!);await seedCurrentStaffRequest(f.pool,id);}
   const revision=async(id=ids[0]!)=>Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[id])).rows[0].configuration_revision);
   await ordinary.stageMove({operationId:randomUUID(),installationId:ids[0]!,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:await revision()});
   await f.pool.query("UPDATE organisations SET service_plan='paid' WHERE id=$1",[f.scope.organisationId]);
@@ -85,7 +86,7 @@ for(const roundTrip of [false,true])test(`venue remote DNS wait rejects permissi
 for(const reports of [false,true])for(const roundTrip of [false,true])test(`venue remote signing wait refuses old routes reports ${reports} round trip ${roundTrip}`,async()=>{
  const f=await fixture();try{
   const key=generateKeyPairSync('ed25519');let publications=0,signings=0;
-  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports:reports,async signingKeyForCell(){signings++;await set(f,'registered');if(roundTrip)await set(f,'connected');return key.privateKey;},artifacts:{async readCsr(){throw Error('unexpected certificate');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('unexpected certificate');},async publishManifest(){publications++;}}});
+  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports:reports,async signingKeyForCell(){signings++;await set(f,'registered');if(roundTrip)await set(f,'connected');return key.privateKey;},artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected certificate');},async publishManifest(){publications++;}}});
   await worker.schedule();await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");
   await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='route' AND target_id=$1",[f.source]);
   assert.equal(await worker.runOnce(),true);assert.equal(signings,1);assert.equal(publications,0);
@@ -97,7 +98,7 @@ for(const reports of [false,true])for(const roundTrip of [false,true])test(`venu
 for(const reports of [false,true])test(`venue remote signing wait refuses reprovisioned generation with reports ${reports}`,async()=>{
  const f=await fixture();try{
   const key=generateKeyPairSync('ed25519');let published=0,signings=0;
-  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports:reports,async signingKeyForCell(){signings++;await set(f,'registered');await set(f,'connected');await f.remote.provision(f.ids[0]!,f.source,f.peers[0]!);return key.privateKey;},artifacts:{async readCsr(){throw Error('unexpected certificate');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('unexpected certificate');},async publishManifest(){published++;}}});
+  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports:reports,async signingKeyForCell(){signings++;await set(f,'registered');await set(f,'connected');await f.remote.provision(f.ids[0]!,f.source,f.peers[0]!);return key.privateKey;},artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected certificate');},async publishManifest(){published++;}}});
   await worker.schedule();await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='route' AND target_id=$1",[f.source]);
   assert.equal(await worker.runOnce(),true);assert.equal(signings,1);assert.equal(published,0);
   assert.equal((await f.pool.query("SELECT applied_digest FROM remote_configuration_jobs WHERE kind='route' AND target_id=$1",[f.source])).rows[0].applied_digest,null);
@@ -109,10 +110,10 @@ for(const roundTrip of [false,true])test(`venue remote certificate wait refuses 
   const hostname=(await f.remote.manifest(f.source)).routes[0]!.staffHostname;
   const [key,request]=await acmeCrypto.createCsr({commonName:hostname,altNames:[hostname]}),csr=request.toString();
   const cert=forge.pki.createCertificate();cert.publicKey=forge.pki.certificationRequestFromPem(csr).publicKey!;cert.serialNumber='01';cert.setSubject([{name:'commonName',value:hostname}]);cert.setIssuer(cert.subject.attributes);cert.validity.notBefore=new Date(Date.now()-60000);cert.validity.notAfter=new Date(Date.now()+90*86400000);cert.setExtensions([{name:'subjectAltName',altNames:[{type:2,value:hostname}]}]);cert.sign(forge.pki.privateKeyFromPem(key.toString()));const chain=forge.pki.certificateToPem(cert);
-  let issued=0,published=0;
-  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,async issueCertificate(){issued++;await set(f,'registered');if(roundTrip){await set(f,'connected');await f.remote.provision(f.ids[0]!,f.source,f.peers[0]!);}return chain;},artifacts:{async readCsr(){return csr;},async readCertificate(){return undefined;},async publishCertificate(){published++;},async publishManifest(){throw Error('unexpected route');}}});
+  await seedStaffCertificate(f.pool,f.ids[0]!,csr);let issued=0;
+  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,async issueCertificate(){issued++;await set(f,'registered');if(roundTrip){await set(f,'connected');await f.remote.provision(f.ids[0]!,f.source,f.peers[0]!);}return chain;},artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected public certificate');},async publishManifest(){throw Error('unexpected route');}}});
   await worker.schedule();await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");await f.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_staff' AND target_id=$1",[f.ids[0]]);
-  assert.equal(await worker.runOnce(),true);assert.equal(issued,1);assert.equal(published,0);
+  assert.equal(await worker.runOnce(),true);assert.equal(issued,1);assert.equal((await f.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[f.ids[0]])).rows[0].certificate,null);
   assert.equal((await f.pool.query("SELECT applied_digest FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[f.ids[0]])).rows[0].applied_digest,null);
  }finally{await f.close();}
 });

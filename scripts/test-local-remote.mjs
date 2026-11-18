@@ -5,7 +5,7 @@ import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath,access} from 'node:f
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
-import {generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
 import {request,Agent} from 'node:https';
 import {connect as tlsConnect} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -14,6 +14,8 @@ import {SignupStore,PairingStore,InstallationStore,MonitorWorker} from '../packa
 import {login} from '../packages/identity/src/index.ts';
 import {transaction} from '../packages/registration/src/transaction.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
+import {RemoteConfigurationReconciler} from '../packages/remote-access/src/reconciler.ts';
+import {FileReconcilerArtifacts} from '../packages/remote-access/src/reconciler-files.ts';
 import {RemoteProbeStore} from '../packages/remote-access/src/probe-targets.ts';
 import {RemoteProbeObservationStore} from '../packages/remote-access/src/probe-observations.ts';
 import {probeTarget} from '../packages/remote-access/src/probe.ts';
@@ -123,6 +125,17 @@ try{
  await operator('cell',{id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'remote.example.test',zone:'remote.example.test',subnet:17,publicKey:gatewayKey.publicKey,endpoint:'gateway.example.test:51820'});
  await operator('cell',{id:targetCellId,country:'ES',provider:'aws',environment:'test',suffix:'target.remote.example.test',zone:'remote.example.test',subnet:18,publicKey:targetGatewayKey.publicKey,endpoint:'target-gateway.example.test:51820'});
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
+ const certificateFiles=new FileReconcilerArtifacts({keyDirectory:join(root,'public-keys'),routes:[{cellId,output:join(root,'worker-source.json'),publicCertificates:join(input,'public-certs')},{cellId:targetCellId,output:join(root,'worker-target.json'),publicCertificates:join(targetInput,'public-certs')}]});
+ const certificateWorker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:certificateFiles,pointName:(name,target)=>acme.point(name,target),signingKeyForCell:async id=>{assert.ok([cellId,targetCellId].includes(id));return issuer.privateKey;},issueCertificate:async target=>{
+  const csrFile=join(root,randomUUID()+'.csr'),output=join(root,randomUUID()+'.crt');await secret(csrFile,target.csr);return acme.issue({hostname:target.hostname,csrFile,accountKeyFile,output,dnsName:target.dnsName});
+ }});
+ async function runCertificates(){await certificateWorker.schedule();let runs=0;while(await certificateWorker.runOnce()){assert.ok(++runs<=20,'bounded certificate projection');}}
+ async function staffCertificate(placement,csr){
+  const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[placement.installationId])).rows[0].configuration_revision,requestId=randomUUID();
+  await f.db.pool.query(`INSERT INTO staff_certificate_exchange(installation_id,request_id,request_digest,revision,hostname,csr) VALUES($1,$2,$3,$4,$5,$6)
+   ON CONFLICT(installation_id) DO UPDATE SET request_id=EXCLUDED.request_id,request_digest=EXCLUDED.request_digest,revision=EXCLUDED.revision,hostname=EXCLUDED.hostname,csr=EXCLUDED.csr`,[placement.installationId,requestId,createHash('sha256').update(csr).digest('hex'),revision,placement.staffHostname,csr]);
+  await runCertificates();const row=(await f.db.pool.query('SELECT certificate,certificate_request_id FROM staff_certificate_exchange WHERE installation_id=$1',[placement.installationId])).rows[0];assert.equal(row.certificate_request_id,requestId);assert.ok(row.certificate);return row.certificate;
+ }
  const venues=[];
  for(let n=0;n<2;n++){
   const scratch=await mkdtemp(join(tmpdir(),'cloud-integration-backup-'));roots.push(scratch);
@@ -136,13 +149,9 @@ try{
   const location=await s3.bucket('remote-venue-'+n);await catalogue.provision(paired.registration.installationId,location);
   const key=wgKey(),placement=JSON.parse(await operator('provision',{installationId:paired.registration.installationId,cellId,peerPublicKey:key.publicKey}));
   const csr=(await ipc(server,{csrHostname:placement.staffHostname})).csr;
-  const csrFile=join(root,`venue-${n}.csr`);await secret(csrFile,csr);
-  const certificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'staff'},hostname:placement.staffHostname,csrFile,accountKeyFile,output:join(root,`venue-${n}.crt`)});
+  const certificate=await staffCertificate(placement,csr);
   await ipc(server,{certificate,hostname:placement.staffHostname});await stop(server);server=await launch(venueRoot);
-  const [publicKey,publicCsr]=await acmeCrypto.createCsr({commonName:placement.publicHostname,altNames:[placement.publicHostname]});
-  const publicCsrFile=join(root,`public-${n}.csr`);await secret(publicCsrFile,publicCsr);
-  const publicCertificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'public'},hostname:placement.publicHostname,csrFile:publicCsrFile,accountKeyFile,output:join(root,`public-${n}.crt`)});
-  const publicMaterial=Buffer.concat([publicKey,Buffer.from(publicCertificate)]);await secret(join(input,'public-certs',`venue-${n}.pem`),publicMaterial);await secret(join(targetInput,'public-certs',`venue-${n}.pem`),publicMaterial);
+  const publicMaterial=await readFile(join(input,'public-certs',placement.venueId+'.pem'),'utf8');assert.equal(new X509Certificate(publicMaterial).checkHost(placement.publicHostname),placement.publicHostname);
   venues.push({root:venueRoot,scratch,server,key,placement,certificate,location});await context.close();
  }
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
@@ -198,8 +207,7 @@ try{
  const firewall=docker('exec',name+'-gateway','iptables','-L','FORWARD','-v','-n');assert.match(firewall,/policy DROP [1-9]\d* packets/);
  checks.push('malicious peer route expansion cannot reach another venue; gateway DROP counter increased');
  // Renew at the venue, then verify a fresh connection sees the new certificate without a restart.
- const renewing=venues[1],csrFile=join(root,'renew.csr');await secret(csrFile,(await ipc(renewing.server,{csrHostname:renewing.placement.staffHostname})).csr);
- const renewed=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:renewing.placement.installationId,kind:'staff'},hostname:renewing.placement.staffHostname,csrFile,accountKeyFile,output:join(root,'renew.crt')});assert.notEqual(new X509Certificate(renewed).serialNumber,new X509Certificate(renewing.certificate).serialNumber);
+ const renewing=venues[1],renewed=await staffCertificate(renewing.placement,(await ipc(renewing.server,{csrHostname:renewing.placement.staffHostname})).csr);assert.notEqual(new X509Certificate(renewed).serialNumber,new X509Certificate(renewing.certificate).serialNumber);
  await ipc(renewing.server,{certificate:renewed,hostname:renewing.placement.staffHostname});
  const fingerprint=()=>new Promise((resolve,reject)=>{const socket=tlsConnect({host:'127.0.0.1',port:gatewayPort,servername:renewing.placement.staffHostname,ca:acme.certificateRoot},()=>{const value=socket.getPeerCertificate().fingerprint256;socket.end();resolve(value);});socket.on('error',reject);socket.setTimeout(3000,()=>socket.destroy(Error('TLS timeout')));});
  await waitFor(async()=>{await delay(1000);return await fingerprint()===new X509Certificate(renewed).fingerprint256;},20000);checks.push('real ACME renewal hot-reloaded by running Waitron');
@@ -259,6 +267,7 @@ try{
  const destinationRemoved=await remoteTarget(moving.placement.staffHostname).then(()=>false,()=>true);assert.equal(destinationRemoved,true);
 
  const operationId=randomUUID(),staged=JSON.parse(await operator('move-stage',{operationId,installationId:moving.placement.installationId,targetCellId,targetPeerPublicKey:moving.key.publicKey,expectedRevision}));
+ await runCertificates();
  const stagedTarget=await placementStore.manifest(targetCellId);await publishTarget(stagedTarget);await waitFor(async()=>JSON.parse(await readFile(join(targetState,'status.json'),'utf8')).routes===1);
  docker('rm','-f',moving.peer);owned.delete(moving.peer);
  const targetPeerInput=join(root,'peer-target-0');await mkdir(targetPeerInput);await secret(join(targetPeerInput,'peer.json'),JSON.stringify({address:staged.target.address,privateKey:moving.key.privateKey,gatewayPublicKey:targetGatewayKey.publicKey,gatewayEndpoint:targetGatewayIp+':51820',upstreamHost:'host.docker.internal',upstreamPort:moving.server.port}));await secret(join(targetPeerInput,'ca.pem'),acme.certificateRoot);moving.peerInput=targetPeerInput;

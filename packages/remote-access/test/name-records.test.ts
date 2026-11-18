@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
@@ -42,7 +43,7 @@ test('staged and ready moves keep the source DNS target; committing switches bot
  await runName(worker,current.installationId);assert.deepEqual(calls.map(c=>c[1]),['gw.cell-a.example.test','gw.cell-a.example.test']);calls.length=0;
  const manifest=await store.manifest(current.cells[1]!);await store.markMoveReady(operationId,1,manifest.sequence);
  await runName(worker,current.installationId);assert.deepEqual(calls.map(c=>c[1]),['gw.cell-a.example.test','gw.cell-a.example.test']);calls.length=0;
- await store.completeMove(operationId,1);await runName(worker,current.installationId);
+ await recordPublicCopy(db.pool,operationId);await store.completeMove(operationId,1);await runName(worker,current.installationId);
  assert.deepEqual(calls,[[`staff-v-${current.venueId}.venues.example.test`,'gw.cell-b.example.test'],[`v-${current.venueId}.venues.example.test`,'gw.cell-b.example.test']]);
 });
 test('a cancelled move leaves both stable names on the source cell',async()=>{

@@ -918,6 +918,12 @@ do not replace them with a Cloud-only implementation of the engine.
 
 ## Staff certificate exchange, version 1
 
+Cloud's reconciler uses the database exchange as its only staff certificate path.
+Its configuration names cells and a private public-key directory, never staff
+files or a per-venue certificate list. Public keys are worker-owned; the box's
+staff private key stays on the box.
+
+
 You can send a staff CSR to Cloud without sharing the appliance's TLS private key.
 The account server exposes this local integration only when
 `CLOUD_STAFF_CERTIFICATES=1`; it also requires an installation issuer and refuses

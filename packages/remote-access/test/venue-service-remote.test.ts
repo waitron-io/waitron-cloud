@@ -1,3 +1,4 @@
+import {seedCurrentStaffRequest} from './fixtures/staff-certificate.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -20,7 +21,7 @@ async function fixture(){
   const ids:string[]=[],peers:string[]=[];
   for(const venueId of f.venues){
    const id=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venueId])).rows[0].id;ids.push(id);peers.push(peer());
-   await set(f,'connected',venueId);await ordinary.provision(id,source,peers.at(-1)!);
+   await set(f,'connected',venueId);await ordinary.provision(id,source,peers.at(-1)!);await seedCurrentStaffRequest(f.pool,id);
   }
   const revision=async(id=ids[0]!)=>Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[id])).rows[0].configuration_revision);
   const move=await ordinary.stageMove({operationId:randomUUID(),installationId:ids[0]!,targetCellId:target,targetPeerPublicKey:peer(),expectedRevision:await revision()});
@@ -96,7 +97,7 @@ for(const action of ['provision','stage','dns','hostname','certificate'] as cons
 for(const forwardReports of [false,true])test(`venue remote reconciler publishes the exact active and staged set with reports ${forwardReports}`,async()=>{
  const f=await fixture();try{
   await disableSibling(f);const key=generateKeyPairSync('ed25519'),published=new Map<string,string>();
-  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports,signingKeyForCell:async()=>key.privateKey,artifacts:{async readCsr(){throw Error('unexpected certificate');},async readCertificate(){return undefined;},async publishCertificate(){throw Error('unexpected certificate');},async publishManifest(id,envelope){published.set(id,envelope);}}});
+  const worker=new RemoteConfigurationReconciler(f.pool,{planMode:mode,forwardReports,signingKeyForCell:async()=>key.privateKey,artifacts:{async readPublicCertificate(){throw Error('unexpected public certificate');},async publishPublicCertificate(){throw Error('unexpected certificate');},async publishManifest(id,envelope){published.set(id,envelope);}}});
   for(const id of [f.source,f.target,f.empty]){
    await due(f,worker,id);assert.equal(await worker.runOnce(),true);assert(published.has(id));
    const manifest=verifyManifest(JSON.parse(published.get(id)!),key.publicKey,id);

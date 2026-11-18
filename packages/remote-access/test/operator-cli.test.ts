@@ -1,3 +1,4 @@
+import {recordPublicCopy} from './fixtures/public-copy.ts';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
@@ -40,7 +41,7 @@ test('trusted commands fail closed and replay the durable completed move after a
  assert.equal(staged.status,0,staged.stderr);assert.equal(JSON.parse(staged.stdout).state,'staged');
  const stale=await operator('move-ready',{operationId,expectedRevision:1,sequence:999});assert.equal(stale.status,1);assert.equal(stale.stdout,'');assert.equal(stale.stderr,'remote.command_failed\n');
  const sequence=(await store.manifest(target.id)).sequence,ready=await operator('move-ready',{operationId,expectedRevision:1,sequence});assert.equal(ready.status,0,ready.stderr);assert.equal(JSON.parse(ready.stdout).state,'ready');
- const completed=await operator('move-commit',{operationId,expectedRevision:1});assert.equal(completed.status,0,completed.stderr);assert.equal(JSON.parse(completed.stdout).state,'completed');
+ await recordPublicCopy(db.pool,operationId);const completed=await operator('move-commit',{operationId,expectedRevision:1});assert.equal(completed.status,0,completed.stderr);assert.equal(JSON.parse(completed.stdout).state,'completed');
  const replay=await operator('move-commit',{operationId,expectedRevision:1});assert.equal(replay.status,0,replay.stderr);assert.deepEqual(JSON.parse(replay.stdout),JSON.parse(completed.stdout));
  const cancelCompleted=await operator('move-cancel',{operationId,expectedRevision:1});assert.equal(cancelCompleted.status,1);assert.equal(cancelCompleted.stderr,'remote.command_failed\n');
 });

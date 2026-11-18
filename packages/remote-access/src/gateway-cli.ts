@@ -14,7 +14,8 @@ import {createPublicGate} from './public-gate.ts';
 import {isUuid,isPeerKey,type GatewayRoute} from './manifest.ts';
 const root=process.env.GATEWAY_STATE_DIR??'/state',input=process.env.GATEWAY_MANIFEST??'/input/manifest.json',cell=process.env.GATEWAY_CELL_ID??'';
 const trafficOptions=gatewayTrafficOptions(process.env);
-const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'0';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');
+const publicCertificates=process.env.GATEWAY_PUBLIC_CERTIFICATES??'/input/public-certs';
+const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'1';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');
 if(!isUuid(cell))throw new Error('GATEWAY_CELL_ID required');
 gatewayTrafficRuntimeConfiguration(process.env,trafficOptions,cell);
 const trust=createPublicKey(await readFile(process.env.GATEWAY_TRUST_KEY??'/input/issuer.pem'));
@@ -43,7 +44,8 @@ async function stop(){
 let stopping=false;for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{stopping=true;void trafficRuntime?.withdraw().catch(trafficError);});
 async function apply(routes:GatewayRoute[]){
  if(stopping)throw new Error('gateway_start_failed');
- const certificates=certificateRefresh==='1'?await Promise.all((await readdir('/input/public-certs')).filter(name=>name.endsWith('.pem')).sort().map(async name=>[name,createHash('sha256').update(await readFile(join('/input/public-certs',name))).digest('hex')])):[];
+ let names:string[]=[];if(certificateRefresh==='1')try{names=await readdir(publicCertificates);}catch(error){if(!(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT'))throw error;}
+ const certificates=await Promise.all(names.filter(name=>name.endsWith('.pem')).sort().map(async name=>[name,createHash('sha256').update(await readFile(join(publicCertificates,name))).digest('hex')]));
  const envelope=trafficOptions?JSON.parse(await readFile(join(root,'accepted.json'),'utf8')):undefined;
  const fingerprint=gatewayTrafficFingerprint(routes,certificates,envelope);if(fingerprint===lastRoutes&&alive())return;
  if(trafficRuntime&&routes.length===0){await stop();return;}
@@ -53,7 +55,7 @@ async function apply(routes:GatewayRoute[]){
  if(trafficOptions)await mkdir(trafficOptions.socketDirectory,{recursive:true,mode:0o700});
  await atomic('wireguard.conf',`[Interface]\nPrivateKey = ${wgKey}\nListenPort = 51820\n\n${renderWireGuard(routes)}`);
  run('wg',['syncconf','wg-cloud',join(root,'wireguard.conf')]);
- await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs',traffic,...(process.env.GATEWAY_PROXY_SOURCE?{proxySource:process.env.GATEWAY_PROXY_SOURCE}:{})}));
+ await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:publicCertificates,traffic,...(process.env.GATEWAY_PROXY_SOURCE?{proxySource:process.env.GATEWAY_PROXY_SOURCE}:{})}));
  run('haproxy',['-c','-f',join(root,'haproxy.cfg')]);
  const previousPid=trafficRuntime&&currentTraffic?trafficRuntime.pid(currentTraffic):current?.pid;
  // The traffic supervisor must retain the predecessor's stats socket through its final sample.

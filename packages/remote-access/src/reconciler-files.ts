@@ -1,12 +1,11 @@
 import {randomUUID} from 'node:crypto';
-import {isAbsolute,dirname} from 'node:path';
-import {open,readFile,rename,rm} from 'node:fs/promises';
+import {isAbsolute,dirname,join} from 'node:path';
+import {mkdir,open,readFile,rename,rm} from 'node:fs/promises';
 import {isUuid} from './manifest.ts';
 import type {ReconcilerArtifacts} from './reconciler.ts';
 
-interface CertificateFile {installationId:string;kind:'staff'|'public';csrFile:string;output:string}
-interface RouteFile {cellId:string;output:string}
-interface FileReconcilerConfig {certificates:CertificateFile[];routes:RouteFile[]}
+interface RouteFile {cellId:string;output:string;publicCertificates:string}
+interface FileReconcilerConfig {routes:RouteFile[];keyDirectory:string}
 
 function path(value:string){if(typeof value!=='string'||!isAbsolute(value))throw new Error('invalid_reconciler_files');return value;}
 async function atomic(destination:string,value:string){
@@ -17,15 +16,24 @@ async function atomic(destination:string,value:string){
 async function optional(file:string){try{return await readFile(file,'utf8');}catch(error){if(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT')return;throw error;}}
 
 export class FileReconcilerArtifacts implements ReconcilerArtifacts {
- readonly #certificates=new Map<string,{csrFile:string;output:string}>();readonly #routes=new Map<string,string>();
+ readonly #keyDirectory:string;readonly #publicCertificates=new Map<string,string>();
+ readonly #routes=new Map<string,string>();
  constructor(config:FileReconcilerConfig){
-  if(!config||!Array.isArray(config.certificates)||!Array.isArray(config.routes))throw new Error('invalid_reconciler_files');
-  for(const target of config.certificates){if(!isUuid(target.installationId)||!['staff','public'].includes(target.kind))throw new Error('invalid_reconciler_files');const key=`${target.installationId}:${target.kind}`;if(this.#certificates.has(key))throw new Error('invalid_reconciler_files');this.#certificates.set(key,{csrFile:path(target.csrFile),output:path(target.output)});}
-  for(const target of config.routes){if(!isUuid(target.cellId)||this.#routes.has(target.cellId))throw new Error('invalid_reconciler_files');this.#routes.set(target.cellId,path(target.output));}
+  if(!config||!Array.isArray(config.routes)||'certificates'in config||'staffExchange'in config)throw new Error('invalid_reconciler_files');
+  this.#keyDirectory=path(config.keyDirectory);
+  for(const target of config.routes){if(!isUuid(target.cellId)||this.#routes.has(target.cellId))throw new Error('invalid_reconciler_files');this.#routes.set(target.cellId,path(target.output));this.#publicCertificates.set(target.cellId,path(target.publicCertificates));}
  }
- #certificate(installationId:string,kind:'staff'|'public'){const target=this.#certificates.get(`${installationId}:${kind}`);if(!target)throw new Error('certificate_mapping_missing');return target;}
- async readCsr(installationId:string,kind:'staff'|'public'){return readFile(this.#certificate(installationId,kind).csrFile,'utf8');}
- async readCertificate(installationId:string,kind:'staff'|'public'){return optional(this.#certificate(installationId,kind).output);}
- async publishCertificate(installationId:string,kind:'staff'|'public',certificate:string){await atomic(this.#certificate(installationId,kind).output,certificate);}
+ async readPublicCertificate(installationId:string){
+  if(!isUuid(installationId)||!this.#keyDirectory)throw new Error('invalid_reconciler_files');
+  const pem=await optional(join(this.#keyDirectory,installationId+'.public.pem')),csr=await optional(join(this.#keyDirectory,installationId+'.public.csr'));
+  return pem!==undefined&&csr!==undefined?{pem,csr}:undefined;
+ }
+ async publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string}){
+  if(!isUuid(installationId)||!isUuid(venueId)||!this.#keyDirectory)throw new Error('invalid_reconciler_files');
+  const outputs=cellIds.map(id=>{const directory=this.#publicCertificates.get(id);if(!directory)throw new Error('route_mapping_missing');return join(directory,venueId+'.pem');});
+  for(const output of outputs)await atomic(output,copy.pem);
+  await mkdir(this.#keyDirectory,{recursive:true,mode:0o700});
+  await atomic(join(this.#keyDirectory,installationId+'.public.pem'),copy.pem);await atomic(join(this.#keyDirectory,installationId+'.public.csr'),copy.csr);
+ }
  async publishManifest(cellId:string,envelope:string){const output=this.#routes.get(cellId);if(!output)throw new Error('route_mapping_missing');await atomic(output,envelope);}
 }

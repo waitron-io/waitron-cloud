@@ -22,7 +22,7 @@ async function fixture(){
  await store.createCell({id:cellId,country:'ES',provider:'aws',environment:'test',suffix:`cell-${cellId}.example.test`,subnet:++subnet,publicKey:peerKey(),endpoint:`gateway-${cellId}.example.test:51820`});
  await writeFile(signingKeyFile,signing.privateKey.export({format:'pem',type:'pkcs8'}),{mode:0o600});await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});
  await writeFile(dnsModule,"export default {present:async()=>{},remove:async()=>{},point:async()=>{}};\n",{mode:0o600});
- const configFile=join(root,`${cellId}.config.json`);await writeFile(configFile,JSON.stringify({routes:[{cellId,output,signingKeyFile}],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'local@example.test',accountKeyFile,dnsModule}}),{mode:0o600});
+ const configFile=join(root,`${cellId}.config.json`);await writeFile(configFile,JSON.stringify({routes:[{cellId,output,signingKeyFile,publicCertificates:root}],keyDirectory:join(root,'keys'),acme:{directoryUrl:'https://acme.example.test/directory',email:'local@example.test',accountKeyFile,dnsModule}}),{mode:0o600});
  return {cellId,signing,output,configFile};
 }
 function run(...args:string[]){return spawnSync(process.execPath,['src/reconciler-cli.ts',...args],{cwd:new URL('..',import.meta.url),encoding:'utf8',env:cliEnvironment({DATABASE_URL:databaseUrl})});}
@@ -59,11 +59,11 @@ test('continuous mode exits cleanly on SIGTERM',async()=>{
  assert.equal(ready,true,output);child.kill('SIGTERM');const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,output);
 });
 
-test('database staff mode is explicit and cannot coexist with a staff file mapping',async()=>{
+test('legacy staff settings and file mappings are refused',async()=>{
  const value=await fixture(),config=JSON.parse(await readFile(value.configFile,'utf8'));
  for(const staffExchange of ['yes',1,null]){await writeFile(value.configFile,JSON.stringify({...config,staffExchange}));assert.equal(run(value.configFile,'--status').status,1);}
- await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true}));assert.equal(run(value.configFile,'--status').status,0);
- await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true,certificates:[{installationId:randomUUID(),kind:'staff',csrFile:join(root,'staff.csr'),output:join(root,'staff.crt')}]}));assert.equal(run(value.configFile,'--status').status,1);
+ await writeFile(value.configFile,JSON.stringify({...config,staffExchange:true}));assert.equal(run(value.configFile,'--status').status,1);
+ await writeFile(value.configFile,JSON.stringify({...config,certificates:[{installationId:randomUUID(),kind:'staff',csrFile:join(root,'staff.csr'),output:join(root,'staff.crt')}]}));assert.equal(run(value.configFile,'--status').status,1);
 });
 
 test('reconciler refuses a malformed test plan flag before scheduling or publishing',async()=>{
@@ -73,4 +73,13 @@ test('reconciler refuses a malformed test plan flag before scheduling or publish
   assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
  }
  assert.equal((await db.pool.query('SELECT count(*)::integer AS n FROM remote_configuration_jobs WHERE target_id=$1',[value.cellId])).rows[0].n,0);
+});
+
+test('a worker configuration names only cells and its private key directory',async()=>{
+ const value=await fixture(),config=JSON.parse(await readFile(value.configFile,'utf8'));delete config.certificates;
+ const current={...config,keyDirectory:join(root,'keys'),routes:config.routes.map((r:Record<string,unknown>)=>({...r,publicCertificates:join(root,'public')}))};
+ await writeFile(value.configFile,JSON.stringify(current));assert.equal(run(value.configFile,'--status').status,0);
+ for(const legacy of [{certificates:[]},{staffExchange:true},{staffExchange:false}]){
+  await writeFile(value.configFile,JSON.stringify({...current,...legacy}));const reply=run(value.configFile,'--status');assert.equal(reply.status,1);assert.equal(reply.stdout,'');
+ }
 });

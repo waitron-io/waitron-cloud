@@ -35,7 +35,7 @@ try{
  const accountKeyFile=join(root,'acme.key');await writeFile(accountKeyFile,await acmeCrypto.createPrivateKey(),{mode:0o600});
  let issues=0;
  const issueCertificate=async target=>{issues++;const csrFile=join(root,randomUUID()+'.csr'),output=join(root,randomUUID()+'.crt');await writeFile(csrFile,target.csr);return acme.issue({hostname:target.hostname,csrFile,output,accountKeyFile,dnsName:target.dnsName});};
- const worker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate});
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{issueCertificate});
  const venues=[];
  for(let n=0;n<2;n++){
   const a=await f.venue(),state=join(root,'venue-'+n),csrFile=join(root,`venue-${n}.csr`),certificateFile=join(root,`venue-${n}.crt`);
@@ -64,7 +64,7 @@ try{
  checks.push('cross-tenant status, wrong-host chain and separately same-host wrong-key chain installation refused while prior chain stayed installed');
  const next=randomUUID(),replacement={...a.a.body,previousRequestId:a.id};assert.equal((await exchange(a.a,'staff-certificate-submit',replacement,next)).status,200);
  await worker.schedule();await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff'");
- await new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>{throw Error('local DNS failure');}}).runOnce();
+ await new RemoteConfigurationReconciler(f.db.pool,{issueCertificate:async()=>{throw Error('local DNS failure');}}).runOnce();
  const pending=await exchange(a.a,'staff-certificate-status',{version:1,requestId:next});assert.equal(pending.body.state,'pending');assert.equal('certificate'in pending.body,false);assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
  await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE target_id=$1 AND kind='certificate_staff'",[a.a.installationId]);await worker.runOnce();
  const renewed=await exchange(a.a,'staff-certificate-status',{version:1,requestId:next});assert.equal(renewed.body.state,'ready');assert.notEqual(renewed.body.certificate,a.initial);await writeFile(a.certificateFile,renewed.body.certificate);command(a.state,'install',a.a.body.hostname,a.certificateFile);
@@ -72,7 +72,7 @@ try{
  checks.push('renewal failure retained installed chain, retry installed new chain, delayed original submission refused, second venue unchanged');
  const third=randomUUID();assert.equal((await exchange(a.a,'staff-certificate-submit',{...a.a.body,previousRequestId:next},third)).status,200);
  let entered,release;const started=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
- const staleWorker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async target=>{const chain=await issueCertificate(target);entered();await gate;return chain;}});await staleWorker.schedule();
+ const staleWorker=new RemoteConfigurationReconciler(f.db.pool,{issueCertificate:async target=>{const chain=await issueCertificate(target);entered();await gate;return chain;}});await staleWorker.schedule();
  await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff'");
  const running=staleWorker.runOnce();try{await Promise.race([started,new Promise((_,reject)=>setTimeout(()=>reject(Error('local issuance timeout')),65000).unref())]);await f.db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[a.a.installationId]);}finally{release();await running;}
  assert.equal((await exchange(a.a,'staff-certificate-status',{version:1,requestId:third})).status,409);
