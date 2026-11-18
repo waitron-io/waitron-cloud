@@ -22,7 +22,9 @@ The result is `{ allowed: false, reason: 'unqualified_flow' }`. The default reco
 Spain's intended home `eu-south-2` and extra backup `eu-west-3`, but its flow list
 is empty. Neither location qualifies a supplier. All records in the
 [purpose and supplier register](cloud-data-processing-register.md) remain
-unqualified.
+unqualified. Spain’s flow list contains no payment flows; the
+[billing-provider inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
+records what is still missing.
 
 ## Keep qualification separate from matching
 

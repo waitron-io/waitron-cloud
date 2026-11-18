@@ -1,7 +1,7 @@
 # Billing provider records before live data
 
 **Author:** Codex. **Authority:** the owner's D604 queue ask, matching [billing slice F](2026-10-29-cloud-billing.md#the-slices-in-order): “plus the supplier register rows and country flows both providers need before live data.”
-This new plan still requires Claude read and watcher clearance before build.
+Claude read this plan on 18 November (111 seconds); the reduced inventory was cleared by the watcher at 03:16, to build once PR4’s PR opened. This is watcher clearance, not owner approval of this new plan.
 
 **Smallest usable outcome:** you can identify SumUp card and Stripe SEPA debit
 surfaces, their data paths and missing country evidence in the existing documents.
