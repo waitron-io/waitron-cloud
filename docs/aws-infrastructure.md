@@ -1206,8 +1206,19 @@ synchronously acknowledged write through primary loss, refusal of a direct
 write to the returning replica, and a new write during a standby outage.
 Use the same Linux guest requirements as the control-plane check. The command
 uses `curl` to fetch the pinned operator manifest from GitHub. Kind pulls the
-pinned operator and PostgreSQL images from ghcr.io. Stockholm operator setup,
-per-node storage and real machine loss are separate work.
+pinned operator and PostgreSQL images from ghcr.io.
+
+To exercise the Stockholm database setup on Kind, run
+`TEST_KUBERNETES_STOCKHOLM_DATABASE=1 node --test scripts/kubernetes-data.test.mjs`
+on the same Linux guest. This check uses the Stockholm bootstrap and operator
+installer. PostgreSQL writes its data on the node where each copy runs. The
+test checks that all three copies are ready and that each node has its own
+bound volume and PostgreSQL data files. This check needs no Cloud image.
+
+The bounded Stockholm launcher starts PostgreSQL in the `d621-data` namespace
+after the three control planes are ready. The legacy journey still uses its own
+database and the network share on A. Switching the Cloud services to the
+replicated database and checking machine loss in Stockholm are later steps.
 
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|control|join|storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|control|join|storage|database-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -100,6 +100,10 @@ mesh)
   umask 077
   cat > /etc/wireguard/wg0.conf
   systemctl enable --now wg-quick@wg0
+  ;;
+database-storage)
+  # The pinned PostgreSQL image runs as UID and GID 26; the local volume starts private.
+  install -d -m 0700 -o 26 -g 26 /var/local/d621-postgres
   ;;
 storage)
   mkdir -p /var/local/d620-config /etc/exports.d
