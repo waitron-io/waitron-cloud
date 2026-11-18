@@ -93,7 +93,7 @@ test('join refuses the old numeric endpoint before invoking kubeadm', t => {
 test('join refuses malformed credentials or the first member address before invoking kubeadm', async t => {
   const valid = joinInput('d618-api:6443');
   const cases = [
-    ['unexpected argument', valid.replace(' --token', ' --discovery-token-unsafe-skip-ca-verification --token'), '10.77.0.2'],
+    ['unexpected argument', valid.replace('\n', ' --unexpected-flag\n'), '10.77.0.2'],
     ['bad token', valid.replace(token, 'not-a-token'), '10.77.0.2'],
     ['bad CA hash', valid.replace('a'.repeat(64), 'missing-hash'), '10.77.0.2'],
     ['bad certificate key', valid.replace(key, 'short-key'), '10.77.0.2'],
