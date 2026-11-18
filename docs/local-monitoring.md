@@ -52,7 +52,7 @@ Public website and staff access have separate check results and dates.
 - If a recent check failed, check the venue's internet connection. Open **Set up
   remote access** for that venue and check **Selected hostname** and the setup
   status. The [remote setup guide](local-remote-access.md#set-up-your-venue-in-the-account-portal)
-  explains how to review a custom name's two DNS records. Do not change a working
+  explains how to review a custom name's DNS record. Do not change a working
   name merely because an external check failed; changing it can interrupt access.
 - If monitoring is unknown, use **Refresh status** below the venue list to look
   for new observations. A missing recent check does not establish an outage, and

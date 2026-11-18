@@ -49,7 +49,7 @@ changes, readiness and local-network guidance. After an uncertain save reply, th
 reads the current settings once even during Retry-After; new saves and manual refreshes
 keep waiting, so you can see whether the name was saved without repeating the change.
 Custom names are limited to 237 characters in the portal, DNS instructions and save
-validation, leaving room for the certificate record's `_acme-challenge.` prefix.
+validation.
 You can enter a custom name with one final dot; the portal removes it before DNS
 review and confirmation. Two final dots, URLs, paths, IPv4 addresses and names over
 237 characters still fail the existing validation. Focused controller tests cover

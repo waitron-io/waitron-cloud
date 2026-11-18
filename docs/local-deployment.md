@@ -325,8 +325,12 @@ LOCAL_STACK_RECONCILER_DIR=/absolute/path/to/reconciler-inputs \
   --profile remote-reconciliation up -d remote-reconciler
 ```
 
-These profiles fail when their external inputs are missing. The default lifecycle proof does
-not claim that a live Waitron checkout, DNS provider or certificate authority is configured.
+The local stack publishes an empty gateway manifest for its lifecycle checks. For a
+routed gateway and custom-name certificate issuance, use the separate
+[local remote access rehearsal](local-remote-access.md#run-the-proof). These profiles
+fail when their external inputs are missing. The default lifecycle proof checks
+the deployment with local fixtures and makes no claim about a live DNS provider
+or certificate authority.
 
 ## Rehearse the complete lifecycle
 

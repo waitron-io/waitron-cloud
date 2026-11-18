@@ -83,3 +83,18 @@ test('a worker configuration names only cells and its private key directory',asy
   await writeFile(value.configFile,JSON.stringify({...current,...legacy}));const reply=run(value.configFile,'--status');assert.equal(reply.status,1);assert.equal(reply.stdout,'');
  }
 });
+
+test('a gateway mapping requires both absolute certificate-check and status paths',async()=>{
+ const value=await fixture(),config=JSON.parse(await readFile(value.configFile,'utf8')),route=config.routes[0];
+ const challenges=join(root,'checks'),statusDirectory=join(root,'status');
+ for(const [mapping,expected] of [
+  [{challenges},1],[{statusDirectory},1],[{challenges,statusDirectory:'relative'},1],
+  [{challenges:'relative',statusDirectory},1],[{challenges,statusDirectory},0],
+ ] as const){
+  await writeFile(value.configFile,JSON.stringify({...config,routes:[{...route,...mapping}]}));
+  const reply=run(value.configFile,'--status');
+  assert.equal(reply.status,expected,reply.stderr);
+ }
+ await writeFile(value.configFile,JSON.stringify({...config,routes:[{...route,challenges,statusDirectory},{...route,cellId:randomUUID()}]}));
+ assert.equal(run(value.configFile,'--status').status,1,'staged rollouts cannot mix certificate renewal modes');
+});

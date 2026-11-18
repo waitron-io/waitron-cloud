@@ -11,13 +11,12 @@ const installationId='12345678-1234-4234-8234-123456789abc';
 const venueId='22345678-1234-4234-8234-123456789abc';
 const assigned=`staff-v-${venueId}.example.test`;
 
-test('DNS instructions leave room for the certificate challenge label on both record names',()=>{
+test('DNS instructions keep the 237-character limit on both names',()=>{
  const longest=hostname(237);
  assert.equal(longest.length,237);
  const records=dnsInstructions(longest,assigned);
- assert.deepEqual(records,[{type:'CNAME',name:longest,value:assigned},{type:'CNAME',name:'_acme-challenge.'+longest,value:'_acme-challenge.'+assigned}]);
- assert.equal(records[1]!.name.length,253);
- assert.equal(dnsInstructions('staff.cafe.example',longest)[1]!.value.length,253);
+ assert.deepEqual(records,[{type:'CNAME',name:longest,value:assigned}]);
+ assert.equal(dnsInstructions('staff.cafe.example',longest)[0]!.value,longest);
  for(const length of [238,253]){
   const tooLong=hostname(length);
   assert.equal(tooLong.length,length);
@@ -45,7 +44,7 @@ function store(kind:'staff'|'public'){
 }
 
 for(const kind of ['staff','public'] as const){
- test(`saving a ${kind} name refuses an oversized certificate record before DNS resolution`,async()=>{
+ test(`saving a ${kind} name refuses an oversized hostname before DNS resolution`,async()=>{
   for(const length of [238,253]){
    await assert.rejects(store(kind).setHostname(installationId,kind,hostname(length),1,async()=>{
     assert.fail('an oversized hostname must not reach DNS');

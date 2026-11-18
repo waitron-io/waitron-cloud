@@ -712,12 +712,12 @@ Stored country-zone names and certificate-check names now survive a cell move;
 `packages/remote-access/test/installation-configuration-names.test.ts` cover the
 stored names and signed reply. DNS movement is checked locally by
 `packages/remote-access/test/name-records.test.ts` and the real CNAME reads in
-`scripts/remote-reconciler-receipt.mjs`; live DNS qualification remains open.
+`scripts/remote-reconciler-receipt.mjs`. The [local two-cell proof](local-remote-access.md#run-the-proof)
+covers the one-record portal and certificate worker's gateway path, including issuance
+and renewal with Pebble and an unchanged owner CNAME across a move. Live DNS and
+the Amazon test Cloud's own-domain adapter still need qualification.
 Remaining work:
 
-- Wire a runnable worker to the private gateway check and status paths. Switch the
-  account portal and API to one CNAME in the same pull request. Prove issuance and
-  renewal through Pebble, then move the venue without changing the owner’s record.
 - Qualify automatic staff certificate installation on the appliance.
 - Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 

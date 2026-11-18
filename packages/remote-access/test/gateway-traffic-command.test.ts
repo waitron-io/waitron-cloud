@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn,type ChildProcess} from 'node:child_process';
 import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
-import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,writeFile} from 'node:fs/promises';
+import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,rmdir,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
@@ -31,7 +31,7 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:strin
  for(const name of ['ip','iptables','wg','haproxy'])await writeFile(join(bin,name),`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(join(root,'system.ts'))} ${name} "$@"\n`,{mode:0o700});
  const env={PATH:bin+':'+process.env.PATH,GATEWAY_FIXTURE_ROOT:root,GATEWAY_STATE_DIR:base,GATEWAY_MANIFEST:input,GATEWAY_PUBLIC_CERTIFICATES:join(root,'public-certificates'),GATEWAY_CELL_ID:cellId,GATEWAY_TRUST_KEY:join(root,'issuer.pem'),GATEWAY_WIREGUARD_KEY:join(root,'wg.key'),GATEWAY_BOT_KEY:join(root,'bot.key'),
   GATEWAY_TRAFFIC_MODE:'test',GATEWAY_TRAFFIC_COUNTRY:'ES',GATEWAY_TRAFFIC_ENVIRONMENT:'test',GATEWAY_TRAFFIC_SOCKET_DIRECTORY:stats,GATEWAY_TRAFFIC_OPERATIONAL_SOURCES:'["127.0.0.2"]',GATEWAY_TRAFFIC_STATE_DIRECTORY:state,GATEWAY_TRAFFIC_REPORTER_KEY:join(root,'reporter.pem'),GATEWAY_TRAFFIC_REPORT_DIRECTORY:reports,GATEWAY_TRAFFIC_LIFETIME_SOCKET:join(country,'life.sock'),GATEWAY_TRAFFIC_READER_GID:String(process.getegid!()),GATEWAY_TRAFFIC_MAX_BYTES:'32768'};
- const checkDirectory=join(root,'checks');await mkdir(checkDirectory,{mode:0o700});
+ const checkDirectory=join(root,'checks'),statusDirectory=join(root,'status');await mkdir(checkDirectory,{mode:0o700});
  const status=async()=>JSON.parse(await readFile(join(base,'status.json'),'utf8'));
  const children=async():Promise<Array<{pid:number;processId:string;prepared:boolean;args:string[];at:number}>>=>{try{return (await readFile(join(root,'children'),'utf8')).trim().split('\n').map(s=>JSON.parse(s));}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return [];throw e;}};
  let gateway:ChildProcess|undefined,output='',release:()=>void=()=>{},server:Awaited<ReturnType<typeof serveTrafficLifetimes>>|undefined;const lifetimes:unknown[]=[];
@@ -39,14 +39,14 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:strin
   release();if(gateway?.exitCode===null&&gateway.signalCode===null){if(!gateway.killed)gateway.kill('SIGTERM');try{await waitFor(async()=>assert.ok(gateway!.exitCode!==null||gateway!.signalCode!==null),10000);}catch{gateway.kill('SIGKILL');await waitFor(async()=>assert.ok(gateway!.signalCode));}}
   try{await server?.close();}finally{for(const c of await children()){t.diagnostic(`owned child PID ${c.pid}`);try{process.kill(c.pid,'SIGKILL');}catch(e){assert.equal((e as NodeJS.ErrnoException).code,'ESRCH');}await waitFor(async()=>assert.throws(()=>process.kill(c.pid,0),/ESRCH/));}await rm(root,{recursive:true,force:true});}
  });
- const launch=()=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env:{...env,...(checks?{GATEWAY_CHALLENGES:checkDirectory}:{})},stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
+ const launch=(overrides:Record<string,string>={})=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env:{...env,...(checks?{GATEWAY_CHALLENGES:checkDirectory,GATEWAY_STATUS_DIR:statusDirectory}:{}),...overrides},stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
  const holdCountry=async()=>{
   const gate=new Promise<void>(r=>{release=r;});
   server=await serveTrafficLifetimes({socket:env.GATEWAY_TRAFFIC_LIFETIME_SOCKET,mappings:[{country:'ES',environment:'test',cellId,directory:reports,writerUid:process.geteuid!(),readerGid:process.getegid!()}],store:{async recordLifecycle(_m,e){lifetimes.push(e);await gate;}}});
   return {accepted:()=>waitFor(async()=>assert.ok(lifetimes.length,'country command must receive a signed start')),release:()=>release()};
  };
  const prepared=()=>waitFor(async()=>{const cs=await children();assert.ok(cs.length>0,output);assert.equal(cs[0]!.prepared,true,'command must use durable owned traffic preparation');await readFile(join(root,cs[0]!.processId+'.ready'));return cs[0]!;});
- return {root,state,reports,checkDirectory,status,manifest,reporter,publish,children,launch,holdCountry,prepared,lifetimes,output:()=>output};
+ return {root,state,reports,checkDirectory,statusDirectory,status,manifest,reporter,publish,children,launch,holdCountry,prepared,lifetimes,output:()=>output};
 }
 
 // Omitting command consumption leaves no signed lifetime, sample or durable preparation.
@@ -157,6 +157,10 @@ test('publishing a check updates status without starting HAProxy or a traffic li
   await writeFile(join(f.checkDirectory,entry.hostname+'.json'),JSON.stringify(entry));
  }
  await waitFor(async()=>assert.deepEqual((await f.status()).challenges?.answerable,[route]),3000);
+ await waitFor(async()=>assert.deepEqual(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')),
+  {ready:true,challenges:{answerable:[route]}}),3000);
+ assert.deepEqual(await readdir(f.statusDirectory),['status.json']);
+ assert.equal((await stat(join(f.statusDirectory,'status.json'))).mode&0o777,0o640);
  const presented=await new Promise<string>((resolve,reject)=>{
   const socket=connect({host:'127.0.0.1',port:gatewayAlpnPort,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
   socket.setTimeout(2000,()=>socket.destroy(new Error('gateway certificate check timed out')));
@@ -183,4 +187,27 @@ test('the gateway answers no checks with no explicit private directory', async t
   const status=await f.status();assert.equal(status.ready,true);
   assert.deepEqual(status.challenges?.answerable,[]);
  },3000);
+});
+
+test('a failed certificate-status write leaves the gateway serving its routes',async t=>{
+ const f=await fixture(t,60_000,true),held=await f.holdCountry(),blocked=join(f.statusDirectory,'status.json.tmp');
+ const gateway=f.launch();await f.prepared();await held.accepted();held.release();
+ await waitFor(async()=>assert.equal(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')).ready,true));
+ await mkdir(blocked);
+ await waitFor(async()=>assert.match(f.output(),/EISDIR|gateway\.status_unavailable/));
+ assert.match(f.output(),/gateway\.status_unavailable/);
+ assert.equal(gateway.exitCode,null);
+ const status=join(f.statusDirectory,'status.json');
+ await rm(status);
+ await f.publish({...f.manifest,sequence:2});
+ await waitFor(async()=>assert.deepEqual(await f.status().then(value=>[value.sequence,value.ready]),[2,true]));
+ await assert.rejects(readFile(status),{code:'ENOENT'});
+ await rmdir(blocked);
+ await waitFor(async()=>assert.equal(JSON.parse(await readFile(status,'utf8')).ready,true));
+});
+
+test('a certificate-status path cannot alias the gateway state directory',async t=>{
+ const f=await fixture(t,60_000,true),gateway=f.launch({GATEWAY_STATUS_DIR:join(f.root,'gateway')+'/.'});
+ await waitFor(async()=>assert.equal(gateway.exitCode,1),3000);
+ assert.match(f.output(),/Invalid gateway status directory/);
 });

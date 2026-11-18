@@ -5,11 +5,11 @@ import {validRemoteView,validRemoteDns} from '../src/remote-types.ts';
 import type {ApiResult} from '../src/api.ts';
 const id='12345678-1234-4234-8234-123456789abc',other='22345678-1234-4234-8234-123456789abc';
 const view={installationId:id,revision:1,revoked:false,names:{staff:{assigned:'staff.venue.example',current:'staff.venue.example'},public:{assigned:'venue.example',current:'venue.example'}},service:{state:'provisioning',health:'unknown',observedAt:null,validUntil:null}};
-const dns={installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:'staff.venue.example'},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.venue.example'}]};
+const dns={installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:'staff.venue.example'}]};
 test('remote views validate display fields and DNS records before rendering',()=>{
  assert(validRemoteView(view));assert(validRemoteView({...view,names:null}));assert(validRemoteDns(dns));
  for(const patch of [{revision:-1},{names:{...view.names,staff:{assigned:'javascript:alert(1)',current:'bad'}}},{service:{state:'ready',health:'ok',observedAt:null}}])assert.equal(validRemoteView({...view,...patch}),false);
- for(const patch of [{records:[]},{hostname:'bad'},{records:[{...dns.records[0],type:'TXT'},dns.records[1]]}])assert.equal(validRemoteDns({...dns,...patch}),false);
+ for(const patch of [{records:[]},{hostname:'bad'},{records:[{...dns.records[0],type:'TXT'}]}])assert.equal(validRemoteDns({...dns,...patch}),false);
 });
 test('account and venue changes discard delayed setup replies',async()=>{
  let finish!:(v:ApiResult<unknown>)=>void;const c=new RemoteController(()=>{},<T>()=>new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;}));c.account('owner');const opening=c.open(id);c.account('other');finish({ok:true,value:view});await opening;assert.equal(c.view,undefined);
@@ -66,7 +66,7 @@ for(const kind of ['staff','public'] as const)for(const custom of [false,true])t
  const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
   calls.push(path);
   if(path.endsWith('/status'))return {ok:true,value:saved as T};
-  if(path.endsWith('/dns'))return {ok:true,value:{installationId:id,kind,hostname:current,records:[{type:'CNAME',name:current,value:view.names[kind].assigned},{type:'CNAME',name:'_acme-challenge.'+current,value:'_acme-challenge.'+view.names[kind].assigned}]} as T};
+  if(path.endsWith('/dns'))return {ok:true,value:{installationId:id,kind,hostname:current,records:[{type:'CNAME',name:current,value:view.names[kind].assigned}]} as T};
   return {ok:true,value:saved as T};
  });
  c.account('owner');await c.open(id);c.choose(kind);
