@@ -1,5 +1,13 @@
 import {MAX_OBJECT_BYTES} from './object-transfer.ts';
 import { createHash } from "node:crypto";
+export const DISK_VERIFIER_CLEANUP_MS = 30_000;
+export const DISK_VERIFIER_ATTEMPT_MS = 300_000;
+export function verifierWatchdogMs(cutoff: string | undefined): number {
+  if (cutoff === undefined) return 30_000;
+  const remaining = Number(cutoff) - Date.now();
+  return Number.isSafeInteger(remaining) && remaining <= DISK_VERIFIER_ATTEMPT_MS - DISK_VERIFIER_CLEANUP_MS
+    ? Math.max(0, remaining) : 0;
+}
 // Structural wire types only; Waitron owns the module verification semantics.
 export type BackupModuleStatus =
   "passed" | "invalid" | "needs_authority" | "unsupported";

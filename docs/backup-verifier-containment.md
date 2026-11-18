@@ -33,6 +33,39 @@ both count against scratch. The ceilings are independent: a tight memory setting
 fail before the scratch quota is full. The 512 MiB catalogue limit is an upload ceiling, not a promise
 that a snapshot of that size fits this verifier configuration.
 
+## Use a private disk for the venue-level trial
+
+Keep the encrypted input and unpacked database on a dedicated scratch filesystem so
+they fit beside the verifier's 1 GiB memory limit. On your isolated Linux Docker host,
+allocate a 16 GiB filesystem for the named scratch volume. The filesystem bounds total
+writes, including the input, the unpacked archive and the restored database.
+
+```sh
+scratch=$(mktemp -d)
+mkdir "$scratch/mount"
+fallocate -l 16G "$scratch/disk"
+mkfs.ext4 -q -m 0 "$scratch/disk"
+sudo mount -o loop,nodev,nosuid,noexec "$scratch/disk" "$scratch/mount"
+sudo install -d -m 0700 -o 1000 -g 1000 "$scratch/mount/work"
+docker volume create --driver local --label cloud.backup-verifier.scratch=waitron-cloud-test-backup \
+  --opt type=none --opt o=bind --opt "device=$scratch/mount/work" streamed-verifier-scratch
+```
+
+Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
+Run the venue-level test worker on that same Linux host with its pinned image ID in
+`CLOUD_VERIFIER_IMAGE`, its own controller state directory in `CLOUD_VERIFIER_STATE_DIR`,
+the volume name in `CLOUD_VERIFIER_SCRATCH_VOLUME` and the worker's separate 5 GiB
+[staging directory](local-backups.md#use-disk-stages-for-the-local-publication-trial) in
+`CLOUD_BACKUP_STAGE_ROOT`. The trusted worker accesses the mounted directory on
+the host. The child sees it as its only writable mount at `/scratch`.
+
+The worker has six minutes to keep its claim on a job. Verification has five
+minutes, with the final 30 seconds reserved for cleanup and recording the result.
+The controller confirms the exact child is gone, then clears the volume without
+following links before it releases the slot. A restart uses the same volume and
+controller state to reclaim an expired job. If the controller cannot confirm the
+child's removal or the volume's emptiness, it withholds the result.
+
 ## Failure and restart
 
 Memory exhaustion or a full scratch volume refuses verification with

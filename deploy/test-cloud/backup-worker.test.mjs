@@ -39,6 +39,9 @@ test('test worker opens the pinned bound verifier and preserves its scope across
  for(const expectedRevision of ['', 'main', 'a'.repeat(39), 'A'.repeat(40)])await assert.rejects(openTestBackupVerifier({directory:join(directory,'invalid'),image,expectedRevision}),/test_cloud.verifier_configuration/);
  for(const extra of [{owner:''},{memoryMiB:0},{scratchMiB:0}])await assert.rejects(openTestBackupVerifier({directory:join(directory,randomUUID()),image,...extra}),/verifier_configuration/);
  const settings={directory,image,owner:'runtime-'+randomUUID(),memoryMiB:192,scratchMiB:16};
+ await assert.rejects(openTestBackupVerifier({
+  ...settings, directory:join(directory,'missing-scratch'), memoryMiB:1024, expectedRevision:revision,scratchVolume:'missing-'+randomUUID(),
+ }), /test_cloud.verifier_configuration/);
  const opened=await openTestBackupVerifier(settings);assert.equal(typeof opened.verify,'function','runtime still opens the callback verifier');
  const identity=JSON.parse(await readFile(join(directory,'verifier-controller','identity.json'),'utf8'));assert.equal(opened.controllerScope,identity.scope);assert.equal(identity.owner,settings.owner);
  const request={...vector,verifierImage:'local.waitron-verifier@'+image,attempt:{...vector.attempt,controllerScope:opened.controllerScope,childToken:randomUUID(),deadline:new Date(Date.now()+25000).toISOString()}};
@@ -52,4 +55,14 @@ test('test worker opens the pinned bound verifier and preserves its scope across
 test('enabled worker requires writable controller state outside its configuration',async()=>{
  const {runTestBackupWorker}=await import('./backup-worker.mjs');
  for(const state of [undefined,'relative-state','/run/local-stack','/run/local-stack/verifier-state','/run/local-stack/../local-stack'])await assert.rejects(runTestBackupWorker({CLOUD_TEST_SERVICE_PLANS:'1',DATABASE_URL:'postgres://invalid',LOCAL_STACK_CONFIG_DIR:'/run/local-stack',CLOUD_VERIFIER_STATE_DIR:state},[]),/test_cloud.backup_configuration/);
+});
+
+test('the disk-backed verifier is available only to the venue-level test worker with a disk stage', async () => {
+ const {runTestBackupWorker}=await import('./backup-worker.mjs');
+ const common={DATABASE_URL:'postgres://invalid',CLOUD_VERIFIER_STATE_DIR:'/run/backup-verifier',
+  CLOUD_VERIFIER_SCRATCH_VOLUME:'private-scratch'};
+ await assert.rejects(runTestBackupWorker({...common,CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'},[]),
+  /test_cloud.backup_configuration/);
+ await assert.rejects(runTestBackupWorker({...common,CLOUD_VENUE_SERVICE_LEVELS:'test'},[]),
+  /test_cloud.backup_configuration/);
 });

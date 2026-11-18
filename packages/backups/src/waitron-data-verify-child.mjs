@@ -6,11 +6,15 @@ import {pipeline} from 'node:stream/promises';
 import {pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {readVerificationInput} from './verification-transport.ts';
-import {readBackupVerificationResult} from './verification-protocol.ts';
-const watchdog=setTimeout(()=>process.exit(74),30000);
+import {DISK_VERIFIER_CLEANUP_MS,readBackupVerificationResult,verifierWatchdogMs} from './verification-protocol.ts';
+import {MAX_OBJECT_BYTES} from './object-transfer.ts';
+const cutoff=process.env.CLOUD_VERIFIER_WORK_CUTOFF,remaining=verifierWatchdogMs(cutoff);
+if(remaining===0)process.exit(74);
+const watchdog=setTimeout(()=>process.exit(74),remaining);
 try{
  const [dist,scratchRoot]=process.argv.slice(2);
  const {request,key,archive}=await readVerificationInput(process.stdin);
+ if(cutoff!==undefined&&Date.parse(request.attempt.deadline)-DISK_VERIFIER_CLEANUP_MS!==Number(cutoff))throw Error('backup.verifier_configuration');
  const bundle=await import(pathToFileURL(join(dist,'backup-verification.js')).href);
  const target=bundle.currentBackupVerificationTarget();
  if(!isDeepStrictEqual(target,request.target))throw Error('backup.verifier_configuration');
@@ -28,7 +32,8 @@ try{
  }
  if(!await journals(migrationsRoot))throw Error('backup.verifier_configuration');
  const artifactPath=join(scratchRoot,'input.backup.enc');let bytes=0;
- const meter=new Transform({transform(chunk,_encoding,done){bytes+=chunk.length;done(bytes>256*1024*1024?Error('backup.verifier_resource'):null,chunk);}});
+ const maximum=cutoff===undefined?256*1024*1024:MAX_OBJECT_BYTES;
+ const meter=new Transform({transform(chunk,_encoding,done){bytes+=chunk.length;done(bytes>maximum?Error('backup.verifier_resource'):null,chunk);}});
  await pipeline(Readable.from(archive),meter,createWriteStream(artifactPath,{flags:'wx',mode:0o600}));
  const result=await bundle.verifyBackupArtifact(request,{artifactPath,recoveryKey:key,scratchRoot,modules:bundle.BACKUP_VERIFICATION_MODULES,migrationsRoot,runtime:target.runtime,signal:new AbortController().signal,now:()=>new Date()});
  process.stdout.write(JSON.stringify(readBackupVerificationResult(JSON.stringify(result),request)));

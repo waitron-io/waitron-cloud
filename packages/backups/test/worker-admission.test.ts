@@ -3,6 +3,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {before,after,beforeEach,test} from 'node:test';
 import {Readable} from 'node:stream';
+import {setTimeout as delay} from 'node:timers/promises';
 import {transaction} from '@waitron-cloud/registration';
 import {database} from '../../account-http/test/fixtures.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
@@ -55,6 +56,44 @@ async function fixture(){
 
 
 function worker(f:Awaited<ReturnType<typeof fixture>>,verify:DataRestoreVerifier,other=false){return new BackupWorker(other?db.secondPool:db.pool,f.catalogue(),verify,'pipeline-fixture');}
+
+test('the disk-backed worker gives verification five minutes inside a six-minute lease', async () => {
+ const f = await fixture();
+ const observations: {attemptSeconds:number;leaseSeconds:number}[] = [];
+ const worker = new BackupWorker(db.pool, f.catalogue(), async (_source, _key, request) => {
+  const state = await f.state();
+  observations.push({
+   attemptSeconds: (Date.parse(request.attempt.deadline) - Date.now()) / 1000,
+   leaseSeconds: (state.job.lease_until.getTime() - Date.now()) / 1000,
+  });
+  return output(request);
+ }, f.claim.controllerScope, {diskBackedVerification: true});
+ assert.equal(await worker.runOnce(), true);
+ const [observed] = observations;
+ assert(observed);
+ assert(observed.attemptSeconds > 295 && observed.attemptSeconds <= 300, JSON.stringify(observed));
+ assert(observed.leaseSeconds > 355 && observed.leaseSeconds <= 360, JSON.stringify(observed));
+ assert.equal((await f.state()).point.verification, 'verified');
+});
+
+test('disk-backed verification stops staging in time to record the expired work', async () => {
+ const f = await fixture();
+ await db.pool.query("UPDATE backup_jobs SET status='running', claim_id=$1, attempts=1, lease_until=clock_timestamp()+interval '31 seconds' WHERE id=$2",
+  [f.claim.claimId, f.claim.id]);
+ const catalogue = f.catalogue(() => ({
+  async stage(_key, _expected, options) {
+   await delay(2500, undefined, {signal: options?.signal});
+   assert.fail('staging continued into the cleanup reserve');
+  },
+  async putStaged() { assert.fail('verification does not publish'); },
+  async remove() { assert.fail('verification does not delete'); },
+ }));
+ assert.equal(await catalogue.verifyClaim({...f.claim, diskBackedVerification:true},
+  async () => assert.fail('the verifier must wait for complete staging')), 'unavailable');
+ const {attempts, point} = await f.state();
+ assert.equal(attempts[0].reason, 'deadline');
+ assert.equal(point.verification, 'pending');
+});
 for(const [status,reason,want] of [
  ['passed','none','verified'],['invalid','module_integrity','failed'],['needs_authority','module_data_check_requires_authority','pending'],
  ['unsupported','module_missing','pending'],['unavailable','decryption_unavailable','pending']

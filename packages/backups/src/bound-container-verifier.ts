@@ -4,7 +4,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID} from 'node:crypto';
-import {backupVerificationRequestDigest,readBackupVerificationRequest,readBackupVerificationResult,type BackupVerificationRequest,type BackupVerificationResult} from './verification-protocol.ts';
+import {backupVerificationRequestDigest,DISK_VERIFIER_CLEANUP_MS,readBackupVerificationRequest,readBackupVerificationResult,type BackupVerificationRequest,type BackupVerificationResult} from './verification-protocol.ts';
 import {readVerificationKey,verificationInput,type VerificationKey} from './verification-transport.ts';
 import type {ReplayableObject} from './object-transfer.ts';
 export interface VerifiedChildOutput {
@@ -12,7 +12,7 @@ export interface VerifiedChildOutput {
  receipt:{childId:string;imageId:string;requestDigest:string;controllerScope:string;childToken:string;terminated:true;cleanupConfirmed:true};
 }
 export type DataRestoreVerifier=(source:ReplayableObject,key:VerificationKey,request:BackupVerificationRequest,signal:AbortSignal)=>Promise<VerifiedChildOutput>;
-interface BoundController {scope:string;reclaim():Promise<void>;create(args:string[],request:BackupVerificationRequest):Promise<string>;remove(id:string,request:BackupVerificationRequest):Promise<void>;}
+interface BoundController {scope:string;scratchVolume?:string;reclaim():Promise<void>;create(args:string[],request:BackupVerificationRequest):Promise<string>;remove(id:string,request:BackupVerificationRequest):Promise<void>;}
 interface BoundContainerOptions {image:string;owner:string;controller:BoundController;memoryMiB?:number;scratchMiB?:number;}
 const execute=promisify(execFile),idPattern=/^[a-f0-9]{64}$/;
 async function docker(args:string[],missing?:string){
@@ -22,6 +22,9 @@ async function docker(args:string[],missing?:string){
 export async function createBoundContainerWaitronVerifier(options:BoundContainerOptions):Promise<DataRestoreVerifier>{
  const {image,owner,controller}=options,memory=options.memoryMiB??1024,scratch=options.scratchMiB??256;
  if(!/^sha256:[a-f0-9]{64}$/.test(image??'')||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(owner??'')||!controller||typeof controller.scope!=='string'||!controller.scope||!Number.isInteger(memory)||memory<128||memory>1024||!Number.isInteger(scratch)||scratch<1||scratch>256)throw Error('backup.verifier_configuration');
+ const scratchVolume=controller.scratchVolume;
+ if(scratchVolume!==undefined&&(!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,63}$/.test(scratchVolume)||memory!==1024))throw Error('backup.verifier_configuration');
+ const tmpfs=`rw,noexec,nosuid,nodev,size=${scratch}m,uid=1000,gid=1000,mode=0700`;
  let imageInfo;
  try{[imageInfo]=JSON.parse(await docker(['image','inspect',image]));if(imageInfo.Id!==image||Object.keys(imageInfo.Config.Volumes??{}).length)throw Error();}
  catch{throw Error('backup.verifier_configuration');}
@@ -31,8 +34,10 @@ export async function createBoundContainerWaitronVerifier(options:BoundContainer
   try{request=readBackupVerificationRequest(JSON.stringify(supplied));key=readVerificationKey(JSON.stringify(suppliedKey),request);}catch{throw Error('backup.verifier_input');}
   if(request.verifierImage!=='local.waitron-verifier@'+image||request.attempt.controllerScope!==controller.scope)throw Error('backup.verifier_configuration');
   if(signal.aborted)throw Error('backup.verifier_cancelled');
-  const timeout=Math.min(30000,Date.parse(request.attempt.deadline)-Date.now());
-  if(timeout<1)throw Error('backup.verifier_timeout');
+  const deadline=Date.parse(request.attempt.deadline);
+  const cutoff=scratchVolume?deadline-DISK_VERIFIER_CLEANUP_MS:deadline;
+  if(cutoff<=Date.now())throw Error('backup.verifier_timeout');
+  const cutoffEnv='CLOUD_VERIFIER_WORK_CUTOFF='+cutoff;
   await controller.reclaim();
   const digest=backupVerificationRequestDigest(request),labels={'cloud.backup-verifier.owner':owner,'cloud.backup-verifier.scope':controller.scope,'cloud.backup-verifier.token':request.attempt.childToken,'cloud.backup-verifier.claim':request.attempt.claimId,'cloud.backup-verifier.request':digest,'cloud.backup-verifier.deadline':String(Date.parse(request.attempt.deadline))};
   let id:string|undefined,child:ChildProcess|undefined,closed:Promise<number|null>|undefined,input:Readable|undefined,upload:Promise<void>|undefined,failure:string|undefined,removal:Promise<void>|undefined;
@@ -43,7 +48,7 @@ export async function createBoundContainerWaitronVerifier(options:BoundContainer
     const detail=error as {message?:unknown;cause?:{stage?:unknown;operation?:unknown;code?:unknown;signal?:unknown;killed?:unknown;elapsedMs?:unknown}},cause:Record<string,unknown>={stage};
     if(typeof detail?.message==='string'&&['test_cloud.verifier_docker','test_cloud.verifier_ownership'].includes(detail.message)){
      cause.reason=detail.message;const diagnostic=detail.cause;
-     if(typeof diagnostic?.stage==='string'&&['journal','request-binding','discover','inspect-owned','remove-child','confirm-absent','remove-journal'].includes(diagnostic.stage))cause.controllerStage=diagnostic!.stage;
+     if(typeof diagnostic?.stage==='string'&&['journal','request-binding','discover','inspect-owned','remove-child','confirm-absent','clear-scratch','remove-journal'].includes(diagnostic.stage))cause.controllerStage=diagnostic!.stage;
      if(typeof diagnostic?.operation==='string'&&['ps','inspect','rm'].includes(diagnostic.operation)){
       cause.operation=diagnostic!.operation;
       cause.code=Number.isInteger(diagnostic!.code)?diagnostic!.code:typeof diagnostic!.code==='string'&&['ENOENT','ETIMEDOUT','ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(diagnostic!.code)?diagnostic!.code:null;
@@ -57,17 +62,26 @@ export async function createBoundContainerWaitronVerifier(options:BoundContainer
   })();
   const stop=(code:string)=>{failure??=code;input?.destroy();if(id)remove().catch(()=>{});child?.kill('SIGKILL');};
   const abort=()=>stop('backup.verifier_cancelled');signal.addEventListener('abort',abort,{once:true});
-  const timer=setTimeout(()=>stop('backup.verifier_timeout'),Math.max(1,Date.parse(request.attempt.deadline)-Date.now()));
+  const timer=setTimeout(()=>stop('backup.verifier_timeout'),Math.max(1,cutoff-Date.now()));
   async function inspect(){
    const raw=await docker(['inspect',id!]);
    let info;
    try{[info]=JSON.parse(raw);}catch{throw Error('backup.verifier_container');}
-   if(info.Id!==id||info.Image!==image||JSON.stringify(info.Config.Entrypoint)!=='["node"]'||JSON.stringify(info.Config.Cmd)!=='["/verifier/container-entry.mjs","--bound"]'||Object.entries(labels).some(([name,value])=>info.Config.Labels?.[name]!==value)||info.Config.User!=='1000:1000'||info.HostConfig.NetworkMode!=='none'||!info.HostConfig.ReadonlyRootfs||info.HostConfig.Privileged!==false||info.HostConfig.CapDrop?.length!==1||info.HostConfig.CapDrop[0]!=='ALL'||!info.HostConfig.SecurityOpt?.includes('no-new-privileges')||info.HostConfig.PidsLimit!==64||info.HostConfig.NanoCpus!==1000000000||info.HostConfig.Memory!==memory*1024*1024||info.HostConfig.MemorySwap!==memory*1024*1024||info.HostConfig.IpcMode!=='none'||info.Mounts?.length!==0||Object.keys(info.HostConfig.Tmpfs??{}).join(',')!=='/scratch'||info.HostConfig.Tmpfs['/scratch']!==`rw,noexec,nosuid,nodev,size=${scratch}m,uid=1000,gid=1000,mode=0700`||info.HostConfig.LogConfig?.Type!=='none')throw Error('backup.verifier_container');
+   const mounts=info.Mounts, mount=mounts?.[0], temp=info.HostConfig.Tmpfs??{};
+   const environment=info.Config.Env?.filter((value:string)=>value.startsWith('CLOUD_VERIFIER_WORK_CUTOFF='))??[];
+   const scratchMatches=scratchVolume
+    ? mounts?.length===1&&mount.Type==='volume'&&mount.Name===scratchVolume&&mount.Destination==='/scratch'&&mount.RW===true
+      &&Object.keys(temp).length===0&&environment.length===1&&environment[0]===cutoffEnv
+    : mounts?.length===0&&Object.keys(temp).join(',')==='/scratch'&&temp['/scratch']===tmpfs&&environment.length===0;
+   if(!scratchMatches||info.Id!==id||info.Image!==image||JSON.stringify(info.Config.Entrypoint)!=='["node"]'||JSON.stringify(info.Config.Cmd)!=='["/verifier/container-entry.mjs","--bound"]'||Object.entries(labels).some(([name,value])=>info.Config.Labels?.[name]!==value)||info.Config.User!=='1000:1000'||info.HostConfig.NetworkMode!=='none'||!info.HostConfig.ReadonlyRootfs||info.HostConfig.Privileged!==false||info.HostConfig.CapDrop?.length!==1||info.HostConfig.CapDrop[0]!=='ALL'||!info.HostConfig.SecurityOpt?.includes('no-new-privileges')||info.HostConfig.PidsLimit!==64||info.HostConfig.NanoCpus!==1000000000||info.HostConfig.Memory!==memory*1024*1024||info.HostConfig.MemorySwap!==memory*1024*1024||info.HostConfig.IpcMode!=='none'||info.HostConfig.LogConfig?.Type!=='none')throw Error('backup.verifier_container');
    return info;
   }
   try{
    if(signal.aborted){stop('backup.verifier_cancelled');throw Error(failure);}
-   const args=['--name','cloud-bound-verify-'+randomUUID(),'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','1000:1000','--pids-limit','64','--cpus','1','--memory',`${memory}m`,'--memory-swap',`${memory}m`,'--ipc','none','--tmpfs',`/scratch:rw,noexec,nosuid,nodev,size=${scratch}m,uid=1000,gid=1000,mode=0700`,'--ulimit','core=0','--log-driver','none','--env','TMPDIR=/scratch','--entrypoint','node','-i',image,'/verifier/container-entry.mjs','--bound'];
+   const scratchArgs=scratchVolume
+    ? ['--mount',`type=volume,src=${scratchVolume},dst=/scratch,volume-nocopy`,'--env',cutoffEnv]
+    : ['--tmpfs',`/scratch:${tmpfs}`];
+   const args=['--name','cloud-bound-verify-'+randomUUID(),'--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user','1000:1000','--pids-limit','64','--cpus','1','--memory',`${memory}m`,'--memory-swap',`${memory}m`,'--ipc','none',...scratchArgs,'--ulimit','core=0','--log-driver','none','--env','TMPDIR=/scratch','--entrypoint','node','-i',image,'/verifier/container-entry.mjs','--bound'];
    id=await controller.create(args,request);
    if(!idPattern.test(id))throw Error('backup.verifier_container');
    if(failure||signal.aborted){stop(failure??'backup.verifier_cancelled');throw Error(failure);}
@@ -98,6 +112,8 @@ export async function createBoundContainerWaitronVerifier(options:BoundContainer
    if(![0,1].includes(info.State.ExitCode))throw Error('backup.verifier_container');
    if(info.State.ExitCode!==0)throw Error('backup.verifier_failed');
    if(uploadFailed)throw Error('backup.verifier_input');
+   if(cutoff<=Date.now())throw Error('backup.verifier_timeout');
+   if(scratchVolume)clearTimeout(timer);
    let result:BackupVerificationResult;
    try{result=readBackupVerificationResult(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Buffer.concat(output)),request);}catch{throw Error('backup.verifier_output');}
    await remove();

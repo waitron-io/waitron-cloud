@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp,readFile,rm,writeFile,chmod} from 'node:fs/promises';
+import {symlinkSync,writeFileSync} from 'node:fs';
+import {mkdtemp,readFile,readdir,rm,statfs,writeFile,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -60,6 +61,59 @@ test('bound container returns exact child provenance only after confirmed cleanu
  assert.deepEqual(output.receipt,{childId:output.receipt.childId,imageId:image,requestDigest:backupVerificationRequestDigest(req),controllerScope:req.attempt.controllerScope,childToken:req.attempt.childToken,terminated:true,cleanupConfirmed:true});
  assert.match(output.receipt.childId,/^[a-f0-9]{64}$/);empty();
  assert.throws(()=>docker('inspect',output.receipt.childId));
+});
+
+const scratchVolume = process.env.TEST_CLOUD_VERIFIER_SCRATCH_VOLUME;
+test('disk-backed verification exposes only owned scratch and empties it before admitting output',
+ {skip:!scratchVolume}, async () => {
+ const [{"Options": {device: scratch}, Labels}] = JSON.parse(docker('volume','inspect',scratchVolume!));
+ const scratchOwner = Labels['cloud.backup-verifier.scratch'];
+ const controlDirectory = join(directory,randomUUID());
+ const original = await openVerifierController({directory:controlDirectory,owner:scratchOwner,image,scratchVolume});
+ const outside = join(directory,'outside-scratch');
+ await writeFile(outside,'preserved');
+ const inspections: {HostConfig:{NetworkMode:string;ReadonlyRootfs:boolean;Memory:number;MemorySwap:number};
+  Mounts:{Name:string;Destination:string;Type:string}[]}[] = [];
+ const controller = {...original, async create(args:string[],request:BackupVerificationRequest){
+  const id = await original.create(args,request);
+  const [info] = JSON.parse(docker('inspect',id));
+  cleanup.record({id,image,labels:info.Config.Labels});
+  inspections.push(info);
+  return id;
+ }};
+ const verify = await factory.createBoundContainerWaitronVerifier({image,owner:scratchOwner,controller});
+ const request:BackupVerificationRequest = {...structuredClone(vector),verifierImage:'local.waitron-verifier@'+image,
+  attempt:{...vector.attempt,controllerScope:controller.scope,childToken:randomUUID(),deadline:new Date(Date.now()+60000).toISOString()}};
+ const input=source();
+ const result=await verify({...input,open(){
+  writeFileSync(join(scratch,'residue'),'scratch data');
+  symlinkSync(outside,join(scratch,'outside-link'));
+  return input.open();
+ }},key,request,new AbortController().signal);
+ const [inspection] = inspections;
+ assert(inspection);
+ assert.equal(inspection.HostConfig.NetworkMode,'none');
+ assert.equal(inspection.HostConfig.ReadonlyRootfs,true);
+ assert.equal(inspection.HostConfig.Memory,1024**3);
+ assert.equal(inspection.HostConfig.MemorySwap,1024**3);
+ assert.deepEqual(inspection.Mounts.map(({Name,Destination,Type}) =>
+  [Name,Destination,Type]),[[scratchVolume,'/scratch','volume']]);
+ assert.equal(result.result.status,'passed');
+ assert.equal(result.receipt.cleanupConfirmed,true);
+ assert.throws(()=>docker('inspect',result.receipt.childId));
+ assert.deepEqual(await readdir(scratch),[]);
+ assert.equal(await readFile(outside,'utf8'),'preserved');
+
+ const filesystem=await statfs(scratch);
+ assert(filesystem.blocks*filesystem.bsize<=128*1024**2,'use a small throwaway filesystem for the full-disk control');
+ const full=source(5);
+ await assert.rejects(verify({...full,open(){
+  const fill=filesystem.bavail*filesystem.bsize-2*1024**2;
+  execFileSync('fallocate',['-l',String(fill),join(scratch,'fixture-fill')]);
+  return full.open();
+ }},key,{...request,attempt:{...request.attempt,childToken:randomUUID(),deadline:new Date(Date.now()+60000).toISOString()}},
+ new AbortController().signal),/^Error: backup.verifier_resource$/);
+ assert.deepEqual(await readdir(scratch),[]);
 });
 for(const mode of [1,2,7,8,9,10,11])test(`bound container refuses unbound, malformed or private output mode ${mode}`,async()=>{
  const {verify,req}=await setup();await assert.rejects(verify(source(mode),key,req,new AbortController().signal),/^Error: backup.verifier_(output|failed)$/);empty();
