@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 phase=${1:-}
-case "$phase" in prepare|mesh|control|join|storage|database-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
+case "$phase" in prepare|mesh|control|join|storage|database-storage|object-storage) ;; *) echo 'Unknown bootstrap phase' >&2; exit 1 ;; esac
 [ "$(id -u)" = 0 ]
 export DEBIAN_FRONTEND=noninteractive
 
@@ -104,6 +104,9 @@ mesh)
 database-storage)
   # The pinned PostgreSQL image runs as UID and GID 26; the local volume starts private.
   install -d -m 0700 -o 26 -g 26 /var/local/d621-postgres
+  ;;
+object-storage)
+  install -d -m 0700 -o 10001 -g 10001 /var/local/d621-store/0 /var/local/d621-store/1
   ;;
 storage)
   mkdir -p /var/local/d620-config /etc/exports.d

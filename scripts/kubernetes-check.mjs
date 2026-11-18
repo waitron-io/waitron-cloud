@@ -2,6 +2,7 @@
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --node-loss checks three control planes without venue images.
+// --storage-loss uses the pinned private store and needs a Linux Docker host.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
 // The loss checks need three owned nodes, 10 GiB RAM and 30 GiB disk. Use the approved shared Docker wrapper.
@@ -92,6 +93,10 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
+if (target === 'kind-storage-loss') {
+  const {runKubernetesStorage} = await import('./kubernetes-storage-proof.mjs');
+  return runKubernetesNodeLoss({storage: runKubernetesStorage});
+}
 if (target === 'kind-database-loss') {
   const image = process.env.TEST_CLOUD_INTEGRATION_IMAGE;
   assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, 'database_loss.cloud_image_id');
@@ -351,7 +356,7 @@ return result;
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
-    ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss']]);
+    ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss']]);
   const target = extra.length ? undefined : file !== undefined ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');

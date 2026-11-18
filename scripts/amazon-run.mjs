@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
+import {storeBuildArgs} from './kubernetes-storage.mjs';
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
@@ -112,7 +113,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
   assert.equal(await run('git', ['status', '--porcelain']), '', 'Use a clean, committed Cloud checkout');
   const name = 'd618-' + randomUUID();
   const directory = await mkdtemp(join(tmpdir(), 'd618-')), ownedImages = [];
-  const cloud = name + ':cloud', waitron = name + ':waitron';
+  const cloud = name + ':cloud', waitron = name + ':waitron', store = name + ':store';
   let hosts;
   const sshOptions = ['-i', config.sshKey, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + join(directory, 'known_hosts'),
     '-o', 'ControlMaster=auto', '-o', 'ControlPath=' + join(directory, '%C'), '-o', 'ControlPersist=yes', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4'];
@@ -124,6 +125,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     ownedImages.push(waitron);
     await run('env', ['BUILDX_BUILDER=default', 'WAITRON_CHECKOUT=' + config.waitronCheckout, 'CLOUD_VERIFIER_IMAGE=' + waitron,
       process.execPath, 'scripts/build-backup-verifier.mjs'], undefined, false, 900000);
+    ownedImages.push(store);
+    await run('docker', storeBuildArgs(store, ['--platform', 'linux/amd64']), undefined, false, 900000);
     let fluxBundle;
     if(config.observer) {
       await run('docker',['run','--rm','--entrypoint','sh',waitron,'-ec','git --version && test -x "$(git --exec-path)/git-http-backend"']);
@@ -140,14 +143,15 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
       await run('docker',['pull','--platform','linux/amd64',upstream]);
       ownedImages.push(tag);await run('docker',['tag',upstream,tag]);images.push(tag);
     }
-    for (const image of [cloud, waitron, ...images]) {
+    const bundleImages = [cloud, waitron, store, ...images];
+    for (const image of bundleImages) {
       const [row] = JSON.parse(await run('docker', ['image', 'inspect', image]));
       assert.ok(row.Architecture === 'amd64' && row.Os === 'linux', 'amazon.image_architecture');
     }
-    await run('docker', ['save', '--platform', 'linux/amd64', '-o', join(directory, 'images.tar'), cloud, waitron, ...images], undefined, false, 300000);
-    await checkAmazonArchive(join(directory, 'images.tar'), [cloud, waitron, ...images], run);
+    await run('docker', ['save', '--platform', 'linux/amd64', '-o', join(directory, 'images.tar'), ...bundleImages], undefined, false, 300000);
+    await checkAmazonArchive(join(directory, 'images.tar'), bundleImages, run);
     const archive = JSON.parse(await run('tar', ['-xOf', join(directory, 'images.tar'), 'manifest.json'])), ids = {};
-    for (const image of [cloud, waitron, ...images]) {
+    for (const image of bundleImages) {
       const canonical = 'docker.io/' + (image.includes('/') ? image : 'library/' + image);
       const config = archive.find(row => row.RepoTags?.some(tag => tag === image || tag === canonical))?.Config;
       const digest = config?.split('/').at(-1).replace(/\.json$/, '');
@@ -238,6 +242,10 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
         // Leave the remote installer time for both rollouts and their failure diagnostics.
         await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-data.mjs',
           '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, ...target.nodes], undefined, 750_000);
+        for (let index = 0; index < 3; index++) await bootstrap(index, 'object-storage');
+        await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-storage.mjs',
+          '--kubeconfig=/etc/kubernetes/admin.conf', '--context=' + name, store,
+          ...target.nodes, '10.77.0.1', '10.77.0.2', '10.77.0.3'], undefined, 360_000);
       },
       journey: async phase => {
         target.phase = phase;
