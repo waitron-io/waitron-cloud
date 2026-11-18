@@ -42,14 +42,16 @@ writes, including the input, the unpacked archive and the restored database.
 
 ```sh
 scratch=/absolute/path/to/worker-verifier-scratch
+size=16G
+volume=streamed-verifier-scratch
 mkdir -m 0700 "$scratch"
 mkdir "$scratch/mount"
-fallocate -l 16G "$scratch/disk"
+fallocate -l "$size" "$scratch/disk"
 mkfs.ext4 -q -m 0 "$scratch/disk"
 sudo mount -o loop,nodev,nosuid,noexec "$scratch/disk" "$scratch/mount"
 sudo install -d -m 0700 -o 1000 -g 1000 "$scratch/mount/work"
 docker volume create --driver local --label cloud.backup-verifier.scratch=waitron-cloud-test-backup \
-  --opt type=none --opt o=bind --opt "device=$scratch/mount/work" streamed-verifier-scratch
+  --opt type=none --opt o=bind --opt "device=$scratch/mount/work" "$volume"
 ```
 
 Build the paired Waitron image with `node scripts/build-backup-verifier.mjs --streamed`.
@@ -98,10 +100,11 @@ work. If you reboot the host, remount the same filesystem at the same path befor
 starting the worker. If the controller cannot confirm the child's removal or the
 volume's emptiness, it withholds the result.
 
-Use a separate 64 MiB filesystem, created with `fallocate -l 64M`, for the test
-that deliberately fills scratch. Name the test volume `streamed-verifier-test-scratch` and pass its name as
-`TEST_CLOUD_VERIFIER_SCRATCH_VOLUME` when you run the focused Linux test. This case
-runs locally on demand because it needs a disposable loop mount.
+The disk-full test needs a separate, disposable filesystem. Repeat the filesystem
+setup with `scratch=/absolute/path/to/throwaway-verifier-scratch`, `size=64M` and
+`volume=streamed-verifier-test-scratch`. Use the same format, mount, directory ownership
+and volume options. Run the test as uid 1000 so it exercises unreadable scratch folders
+with the worker's permissions. This case runs on demand on Linux.
 
 ```sh
 TEST_CLOUD_VERIFIER_SCRATCH_VOLUME=streamed-verifier-test-scratch \
