@@ -1,3 +1,4 @@
+import {recordPublicCopy} from '../../remote-access/test/fixtures/public-copy.ts';
 import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
@@ -224,7 +225,7 @@ test('remote status retains assigned names after a move to a different cell suff
  const before=await (await request('status')).json(),target=randomUUID();
  await store.createCell({id:target,country:'ES',provider:'aws',environment:'test',suffix:'destination.example.test',subnet:8,publicKey:randomBytes(32).toString('base64'),endpoint:'destination.example.test:51820'});
  const operationId=randomUUID();await store.stageMove({operationId,installationId:venue.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
- const manifest=await store.manifest(target);await store.markMoveReady(operationId,1,manifest.sequence);await store.completeMove(operationId,1);
+ const manifest=await store.manifest(target);await store.markMoveReady(operationId,1,manifest.sequence);await recordPublicCopy(db.pool,operationId);await store.completeMove(operationId,1);
  const response=await request('status');assert.equal(response.status,200);assert.deepEqual((await response.json()).names,before.names);
 });
 
