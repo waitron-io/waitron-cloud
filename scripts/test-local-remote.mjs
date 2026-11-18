@@ -309,7 +309,7 @@ try{
    const records=JSON.parse(await operator('dns',{installationId:movingId,kind,hostname}));
    assert.deepEqual(records,[{type:'CNAME',name:hostname,value:assigned}]);
    // Pebble's fixture DNS follows one alias in an address query. Supply the cell IP for that answer.
-   await acme.addA(assigned,sourceAcmeIp);
+   await acme.setA(assigned,sourceAcmeIp);
    await acme.point(hostname,assigned);
    const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[movingId])).rows[0].configuration_revision;
    moving.placement=await placementStore.setHostname(movingId,kind,hostname,revision,acme.resolveCname);
@@ -384,7 +384,7 @@ try{
   const ownerRecords=[];
   for(const {hostname,assigned} of names){
    ownerRecords.push(JSON.stringify(await acme.resolveCname(hostname))===JSON.stringify([assigned]));
-   await acme.addA(assigned,targetAcmeIp);
+   await acme.setA(assigned,targetAcmeIp);
   }
   // A venue can retain the second record from the old setup during its first port-443 renewal.
   await acme.point('_acme-challenge.'+staff,'_acme-challenge.'+names[0].assigned);

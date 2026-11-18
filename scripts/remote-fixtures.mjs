@@ -48,7 +48,11 @@ export async function startAcme({http,tlsAlpn=false}={}){
   return {root,name,dnsUrl,certificateRoot,dnsServer:`127.0.0.1:${lookupPort}`,
    resolveCname:hostname=>cnameResolver.resolveCname(hostname),
    point:(host,target)=>pointPebbleName(dnsUrl,host,target),
-   addA:(host,address)=>dnsRecord(dnsUrl,'/add-a',{host:host+'.',addresses:[address]}),
+   async setA(name,address){
+    const host=name+'.';
+    await dnsRecord(dnsUrl,'/clear-a',{host});
+    await dnsRecord(dnsUrl,'/add-a',{host,addresses:[address]});
+   },
    connectGateway(container){
     docker('network','connect',name,container);
     return docker('inspect','--format','{{(index .NetworkSettings.Networks "'+name+'").IPAddress}}',container);
