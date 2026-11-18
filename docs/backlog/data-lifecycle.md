@@ -48,7 +48,12 @@ Next, measure deployment uplink bandwidth, spool volume and shutdown latency
 during database copy and encryption. Rerun the paired fiscal fixture after Lane L's
 VERIFIER-CERT-OPEN. The pinned Waitron certificate opener needs a subprocess and the
 Cloud verifier denies subprocesses, so verification of the synthetic fiscal fixture
-reports `secret_unavailable`. Keep the test Cloud's 512 MiB limit until a genuine
+reports `secret_unavailable`. The paired non-fiscal test retained 269 MB and 368 MB
+archives, then refused both with `backup.verifier_resource`. The 16 GiB scratch
+filesystem peaked at 2.72 GB and 3.72 GB. Lane J's VERIFIER-MEMORY tracks this
+separately. Waitron's `compareBackupTables` sorts each column and its hexadecimal
+representation in both copies, a possible source of the resource use.
+Keep the test Cloud's 512 MiB limit until a genuine
 year-sized backup passes capture, retained verification, preview and staging. Use
 Lane M's trimmed 3.31 GB synthetic database, about 1 GB compressed. Ask Lane I for
 private transfer into one isolated 55-minute Linux test slot. That slot length is
