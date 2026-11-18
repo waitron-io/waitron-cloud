@@ -81,6 +81,8 @@ const enBase = {
   billingTaxName:'Legal business name',billingTaxAddress:'Billing address',billingTaxNumber:'Tax number',billingTaxNameHint:'Up to 200 characters.',billingTaxAddressHint:'One line, up to 600 characters.',billingTaxNumberHint:'Up to 32 characters.',
   billingTaxSave:'Save tax details',billingTaxSaved:'Tax details saved.',billingTaxInvalid:'Check the tax details. Use one line in each field and the stated limits.',billingTaxUncertain:'We could not confirm the save. Your draft is kept.',
   billingTitle:'Connected trial',billingVenue:'Venue',billingLevel:'Current plan',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
+  billingMonthlyPrice:'{net}/month + VAT ({total})',
+  billingFirstCharge:'In live service, we charge your saved payment method when your business’s first paid venue finishes its trial. Without one, the venue returns to Registered.',
   billingIntro:'Try Connected free for 30 days. No card is needed.',billingStart:'Start free trial',billingLastDay:'Last trial day',billingIneligible:'A free trial is unavailable for this venue.',billingEmpty:'No venues are available.',
   billingChanged:'The trial choice changed. Check the current plan below.',billingUncertain:'We could not confirm the change. Check the current plan before trying again.',billingRefresh:'Check current plan',
 
@@ -410,6 +412,8 @@ const esBase: typeof enBase = {
   billingTaxName:'Nombre legal del negocio',billingTaxAddress:'Dirección de facturación',billingTaxNumber:'Identificación fiscal',billingTaxNameHint:'Hasta 200 caracteres.',billingTaxAddressHint:'Una línea, hasta 600 caracteres.',billingTaxNumberHint:'Hasta 32 caracteres.',
   billingTaxSave:'Guardar datos fiscales',billingTaxSaved:'Datos fiscales guardados.',billingTaxInvalid:'Revisa los datos fiscales. Usa una línea por campo y respeta los límites indicados.',billingTaxUncertain:'No hemos podido confirmar el guardado. Se conserva tu borrador.',
   billingTitle:'Prueba de Connected',billingVenue:'Local',billingLevel:'Plan actual',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
+  billingMonthlyPrice:'{net}/mes + IVA ({total})',
+  billingFirstCharge:'En el servicio real, cobramos con tu método de pago guardado al terminar la prueba del primer local de pago de tu empresa. Sin él, el local vuelve a Registered.',
   billingIntro:'Prueba Connected gratis durante 30 días. No necesitas tarjeta.',billingStart:'Iniciar prueba gratis',billingLastDay:'Último día de prueba',billingIneligible:'La prueba gratis no está disponible para este local.',billingEmpty:'No hay locales disponibles.',
   billingChanged:'La opción de prueba ha cambiado. Revisa el plan actual.',billingUncertain:'No hemos podido confirmar el cambio. Revisa el plan actual antes de volver a intentarlo.',billingRefresh:'Consultar plan actual',
 

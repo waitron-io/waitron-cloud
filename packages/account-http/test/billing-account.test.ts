@@ -5,7 +5,7 @@ import {before,after,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {HttpBindings} from '@hono/node-server';
 import {createSession,type SessionCredentials} from '@waitron-cloud/identity';
-import {BillingStore,transaction,type PlanMode} from '@waitron-cloud/registration';
+import {BillingPriceStore,BillingStore,transaction,type PlanMode} from '@waitron-cloud/registration';
 import {database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -392,4 +392,39 @@ test('recovered scope: billing chooser and tax save keep the recovered business 
  assert.deepEqual(await (await request(target,f.session)).json(),{venues:[]});
  assert.equal((await request(target,f.session,'/api/account/billing/tax/save',{venueId:f.venueId,legalName:'Sol SL',address:'Synthetic 1',taxNumber:'B12345678'})).status,403);
  await setRecoveryScope(db.pool,f.accountId,f.organisationId);assert.equal(((await (await request(target,f.session)).json()) as {venues:unknown[]}).venues.length,1);
+});
+
+test('a saved card can start the free trial without an effective price',async()=>{
+ const f=await owner(),target=app([f.accountId]);
+ const store=new BillingStore(db.pool),scope={organisationId:f.organisationId,legalBusinessId:f.legalBusinessId};
+ const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+ await store.execute(scope,event(),{type:'ensure_business'});
+ const method={id:randomUUID(),kind:'card',provider:'sumup',providerAccountId:'synthetic',customerId:'synthetic',methodId:'synthetic',mandateId:null} as const;
+ await store.execute(scope,event(),{type:'set_method',method});
+ const response=await request(target,f.session,startPath,{venueId:f.venueId});
+ assert.equal(response.status,200);
+ const {venues:[venue]}=await response.json();
+ assert.equal(venue.trial.state,'active');
+ assert.equal(Object.hasOwn(venue,'connectedPrice'),false);
+});
+
+test('billing shows the effective Connected price only on in-scope test venues',async()=>{
+ const f=await owner(),target=app([f.accountId]),productionId=randomUUID();
+ await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[productionId,f.organisationId,f.legalBusinessId]);
+ const store=new BillingPriceStore(db.pool);
+ await store.publish({revision:1,effectiveFrom:'2000-01-01',currency:'EUR',prices:{connectedMonthlyCents:1000,hostedMonthlyCents:2000},vatRateBasisPoints:2100});
+ await store.publish({revision:2,effectiveFrom:'2099-01-01',currency:'EUR',prices:{connectedMonthlyCents:3000,hostedMonthlyCents:4000},vatRateBasisPoints:2100});
+ const expected={currency:'EUR',netCents:1000,grossCents:1210};
+
+ const read=await request(target,f.session);assert.equal(read.status,200);
+ const {venues}=await read.json();
+ assert.deepEqual(venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
+ const production=venues.find((venue:{venueId:string})=>venue.venueId===productionId);
+ assert.equal(Object.hasOwn(production,'connectedPrice'),false);
+
+ await setRecoveryScope(db.pool,f.accountId);
+ assert.deepEqual(await (await request(target,f.session)).json(),{venues:[]});
+ await setRecoveryScope(db.pool,f.accountId,f.organisationId);
+ const start=await request(target,f.session,startPath,{venueId:f.venueId});assert.equal(start.status,200);
+ assert.deepEqual((await start.json()).venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
 });

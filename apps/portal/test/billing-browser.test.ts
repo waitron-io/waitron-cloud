@@ -14,7 +14,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
   const c=translations[locale];let starts=0,reads=0;
-  let venues=[first,second].map(venueId=>({venueId,level:'registered',trial:null as unknown,canStartTrial:true}));
+  let venues=[first,second].map(venueId=>({venueId,level:'registered',trial:null as unknown,canStartTrial:true,
+   ...(venueId===second?{connectedPrice:{currency:'EUR',netCents:1000,grossCents:1210}}:{})}));
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
@@ -30,9 +31,18 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const section=page.getByRole('region',{name:c.billingTitle,exact:true});await section.waitFor();
+  const price=section.getByText(locale==='en'?'€10.00/month + VAT (€12.10)':'10,00 €/mes + IVA (12,10 €)',{exact:true});
+  const timing=section.getByText(locale==='en'
+   ?'In live service, we charge your saved payment method when your business’s first paid venue finishes its trial. Without one, the venue returns to Registered.'
+   :'En el servicio real, cobramos con tu método de pago guardado al terminar la prueba del primer local de pago de tu empresa. Sin él, el local vuelve a Registered.',{exact:true});
+  assert.equal(await price.count(),0);
   await section.getByRole('combobox',{name:c.billingVenue,exact:true}).selectOption(second);
+  await price.waitFor();
+  await timing.waitFor();
   const start=section.getByRole('button',{name:c.billingStart,exact:true});await start.focus();await page.keyboard.press('Enter');
   await section.locator('time').waitFor();assert.equal(starts,1);assert.equal(reads,1);
+  await price.waitFor();
+  await timing.waitFor();
   assert.equal(await section.locator('time').getAttribute('datetime'),'2026-12-06');
   assert.equal(await section.locator('time').textContent(),locale==='en'?'6 December 2026':'6 de diciembre de 2026');
   assert.equal(await section.getByRole('button',{name:c.billingStart,exact:true}).count(),0);

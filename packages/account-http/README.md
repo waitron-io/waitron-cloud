@@ -755,12 +755,22 @@ day; that day is the day before the stored exclusive `endsOn` date. You need no
 card. A venue that has already trialled or paid for Connected cannot start another
 trial, and production venues cannot start one here.
 
+To see the price on a throwaway Cloud, publish a price effective today or earlier
+through `BillingPriceStore.publish()`. For example, use 1,000 Connected monthly
+cents and 2,100 VAT basis points (21%). The panel shows **€10.00/month + VAT
+(€12.10)** and explains when live billing would start. The free trial remains
+available before you save a test card and when there is no effective price. For
+a browser rehearsal, use the [sandbox account-panel setup](../../docs/billing-provider-test.md#local-account-panel-78-november-2026)
+and close its browser, account server and throwaway database when finished.
+
 The browser sends same-origin, CSRF-protected POST requests to
 `/api/account/billing/read` with `{}` and `/api/account/billing/start-trial` with
 `{"venueId":"11111111-1111-4111-8111-111111111111"}`. Each returns
 `{"venues":[{"venueId":"11111111-1111-4111-8111-111111111111","level":"registered","trial":null,"canStartTrial":true,"taxProfile":{"legalName":null,"address":null,"taxNumber":null}}]}`
-when reading an eligible synthetic venue before starting. Reads do not create
-billing state. A refused start rolls its writes back; a conflict returns the
+when reading an eligible synthetic venue before starting. If a price is effective
+on the database's UTC day, the test venue also carries
+`"connectedPrice":{"currency":"EUR","netCents":1000,"grossCents":1210}`.
+Reads do not create billing state. A refused start rolls its writes back; a conflict returns the
 current venue view. If a write reply is lost, the portal reads the current plan
 before offering another choice, because the write may have committed.
 
