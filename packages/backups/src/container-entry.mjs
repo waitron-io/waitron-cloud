@@ -5,11 +5,14 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {createWaitronVerifier} from './waitron-verifier.ts';
 import {readVerifierMemoryEvents,verifierResourceDiagnostic} from './verify-process.ts';
+import {verifierWatchdogMs} from './verification-protocol.ts';
 if(process.argv[2]==='--bound'){
- const child=spawn(process.execPath,['--max-old-space-size=512','--permission','--allow-fs-read=/waitron/apps/server/dist/','--allow-fs-read=/verifier/','--allow-fs-read=/scratch/','--allow-fs-write=/scratch/','/verifier/waitron-data-verify-child.mjs','/waitron/apps/server/dist','/scratch'],{env:{TMPDIR:'/scratch'},stdio:['pipe','pipe','pipe']});
+ const cutoff=process.env.CLOUD_VERIFIER_WORK_CUTOFF,remaining=verifierWatchdogMs(cutoff);
+ if(remaining===0)process.exit(74);
+ const child=spawn(process.execPath,['--max-old-space-size=512','--permission','--allow-fs-read=/waitron/apps/server/dist/','--allow-fs-read=/verifier/','--allow-fs-read=/scratch/','--allow-fs-write=/scratch/','/verifier/waitron-data-verify-child.mjs','/waitron/apps/server/dist','/scratch'],{env:{TMPDIR:'/scratch',...(cutoff===undefined?{}:{CLOUD_VERIFIER_WORK_CUTOFF:cutoff})},stdio:['pipe','pipe','pipe']});
  let expired=false;
  // The watchdog has its own event loop so synchronous verifier code cannot block it.
- const watchdog=setTimeout(()=>{expired=true;child.kill('SIGKILL');},30000);
+ const watchdog=setTimeout(()=>{expired=true;child.kill('SIGKILL');},remaining);
  child.on('error',()=>{});
  child.stdout.pipe(process.stdout);child.stderr.pipe(process.stderr);
  const upload=pipeline(process.stdin,child.stdin).catch(()=>{});

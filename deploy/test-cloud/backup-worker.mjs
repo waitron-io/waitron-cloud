@@ -14,9 +14,11 @@ export async function runTestBackupWorker(env=process.env,args=process.argv.slic
  const planMode=parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS,env.CLOUD_VENUE_SERVICE_LEVELS);
  if(!['test-free-paid','test-venue-levels'].includes(planMode))throw Error('test_cloud.plan_mode');
  const mode=args[0];if(args.length>1||mode&&!['--once','--status','--retry-failed'].includes(mode)||!env.DATABASE_URL)throw Error('test_cloud.backup_configuration');
+ const scratchVolume=env.CLOUD_VERIFIER_SCRATCH_VOLUME;
  if(!['--status','--retry-failed'].includes(mode)){
   const state=env.CLOUD_VERIFIER_STATE_DIR,config=resolve(env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack');
   if(!state||!isAbsolute(state)||!relative(config,resolve(state)).startsWith('../'))throw Error('test_cloud.backup_configuration');
+  if(scratchVolume!==undefined&&(planMode!=='test-venue-levels'||!isAbsolute(env.CLOUD_BACKUP_STAGE_ROOT??'')))throw Error('test_cloud.backup_configuration');
  }
  const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
  const pool=new Pool({connectionString:env.DATABASE_URL,max:3,connectionTimeoutMillis:5000,statement_timeout:10000});
@@ -27,9 +29,9 @@ export async function runTestBackupWorker(env=process.env,args=process.argv.slic
   if(mode==='--retry-failed')return console.log(JSON.stringify({retried:await retryFailedBackupJobs(pool)}));
   const master=env.CLOUD_BACKUP_MASTER_KEY??'';if(!/^[a-fA-F0-9]{64}$/.test(master))throw Error('test_cloud.backup_configuration');
   ownership=await claimTestBackupWorker(pool,shutdown);
-  const {verify,controllerScope}=await openTestBackupVerifier({directory:env.CLOUD_VERIFIER_STATE_DIR,image:env.CLOUD_VERIFIER_IMAGE,expectedRevision});
+  const {verify,controllerScope}=await openTestBackupVerifier({directory:env.CLOUD_VERIFIER_STATE_DIR,image:env.CLOUD_VERIFIER_IMAGE,expectedRevision,scratchVolume});
   const ca=await readFile(env.CLOUD_BACKUP_CA_FILE,'utf8');storage=workerObjects(env,ca);
-  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope);
+  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope,{diskBackedVerification:scratchVolume!==undefined});
   if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await worker.status()));}
   else await runWorkerLoop({signal:stop.signal,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,schedule:()=>worker.schedule(),runOnce:async signal=>{try{return await worker.runOnce(signal);}finally{storage.close();}}});
  }finally{storage?.close();try{await ownership?.release();}finally{await pool.end();}process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}

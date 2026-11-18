@@ -2,8 +2,8 @@ import {execFile} from 'node:child_process';
 import {constants} from 'node:fs';
 import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
-import {mkdir,open,rm,lstat} from 'node:fs/promises';
-import {join} from 'node:path';
+import {chmod,mkdir,open,rm,rmdir,lstat,realpath,readdir,statfs,unlink} from 'node:fs/promises';
+import {isAbsolute,join} from 'node:path';
 import {atomicPrivateFile} from './storage-authority.mjs';
 import {readBackupVerificationRequest,backupVerificationRequestDigest,parseBackupVerificationJson} from '../../packages/backups/src/verification-protocol.ts';
 const execute=promisify(execFile),idPattern=/^[a-f0-9]{64}$/,imagePattern=/^sha256:[a-f0-9]{64}$/;
@@ -22,16 +22,51 @@ async function privateState(path){
   return new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes.subarray(0,bytesRead));
  }finally{await file.close();}
 }
-export async function openVerifierController({directory,owner,image}){
+async function scratchDirectory(volume,owner){
+ try{
+  if(typeof volume!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,63}$/.test(volume))throw Error();
+  const [info]=JSON.parse(await docker(['volume','inspect',volume]));
+  const path=info.Options?.device;
+  if(info.Name!==volume||info.Driver!=='local'||info.Scope!=='local'||
+     info.Labels?.['cloud.backup-verifier.scratch']!==owner||info.Options?.type!=='none'||info.Options?.o!=='bind'||
+     typeof path!=='string'||!isAbsolute(path)||await realpath(path)!==path)throw Error();
+  const entry=await lstat(path),fs=await statfs(path);
+  if(!entry.isDirectory()||entry.uid!==1000||entry.gid!==1000||
+     fs.type!==0xef53||fs.blocks*fs.bsize>16*1024**3)throw Error();
+  return path;
+ }catch{throw Error('test_cloud.verifier_configuration');}
+}
+async function clearScratchDirectory(path){
+ await chmod(path,0o700);
+ for(const name of await readdir(path)){
+  const entry=join(path,name);
+  if((await lstat(entry)).isDirectory()){
+   await clearScratchDirectory(entry);
+   await rmdir(entry);
+  }else await unlink(entry);
+ }
+}
+export async function openVerifierController({directory,owner,image,scratchVolume}){
  if(!imagePattern.test(image??'')||!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/.test(owner??''))throw Error('test_cloud.verifier_configuration');
+ const scratch=scratchVolume===undefined?undefined:await scratchDirectory(scratchVolume,owner);
  await mkdir(directory,{recursive:true,mode:0o700});const info=await lstat(directory);
  if(!info.isDirectory()||info.isSymbolicLink()||(info.mode&0o077)!==0)throw Error('test_cloud.verifier_configuration');
  const identity=join(directory,'identity.json'),child=join(directory,'child.json');
- try{const file=await open(identity,'wx',0o600);try{await file.writeFile(JSON.stringify({version:1,owner,image,scope:randomUUID()}));await file.sync();}finally{await file.close();}}
+ try{const file=await open(identity,'wx',0o600);try{await file.writeFile(JSON.stringify({version:1,owner,image,scope:randomUUID(),scratchVolume,scratch}));await file.sync();}finally{await file.close();}}
  catch(error){if(error.code!=='EEXIST')throw error;}
  let saved;try{saved=parseBackupVerificationJson(await privateState(identity),131072);}catch{throw Error('test_cloud.verifier_ownership');}
- if(!saved||saved.version!==1||saved.owner!==owner||saved.image!==image||!/^[-a-f0-9]{36}$/.test(saved.scope??''))throw Error('test_cloud.verifier_ownership');
+ if(!saved||saved.version!==1||saved.owner!==owner||saved.image!==image||saved.scratchVolume!==scratchVolume||saved.scratch!==scratch||!/^[-a-f0-9]{36}$/.test(saved.scope??''))throw Error('test_cloud.verifier_ownership');
  const labels={ 'cloud.backup-verifier.owner':owner,'cloud.backup-verifier.scope':saved.scope };
+ async function checkScratch(clear=false){
+  if(scratch===undefined)return;
+  try{
+   if(await scratchDirectory(scratchVolume,owner)!==scratch)throw Error();
+   // Once the exact child is gone it cannot swap paths while we repair directory modes.
+   if(clear)await clearScratchDirectory(scratch);
+   if(((await lstat(scratch)).mode&0o777)!==0o700)throw Error();
+   if((await readdir(scratch)).length!==0)throw Error();
+  }catch{throw Error('test_cloud.verifier_ownership');}
+ }
  function binding(supplied){
   try{
    const request=readBackupVerificationRequest(JSON.stringify(supplied));
@@ -75,6 +110,7 @@ export async function openVerifierController({directory,owner,image}){
    stage='inspect-owned';
    if(await inspect(id,state)){stage='remove-child';await docker(['rm','-f',id],{missing:id});}
    stage='confirm-absent';if(state.version===2&&await inspect(id,state))throw Error('test_cloud.verifier_ownership');
+   stage='clear-scratch';await checkScratch(true);
    stage='remove-journal';await rm(child);
   }catch(error){
    // Only fixed controller errors carry command diagnostics; daemon text stays private.
@@ -85,19 +121,24 @@ export async function openVerifierController({directory,owner,image}){
  async function reclaim(){
   const state=await journal();if(!state){
    const found=await docker(['ps','-aq','--no-trunc',...Object.entries(labels).flatMap(([key,value])=>['--filter',`label=${key}=${value}`])]);
-   if(found)throw Error('test_cloud.verifier_ownership');return;
+   if(found)throw Error('test_cloud.verifier_ownership');
+   await checkScratch();return;
   }
   if(state.deadline>=Date.now())throw Error('test_cloud.verifier_busy');
   const id=await discover(state);if(id)await remove(id,state.request);else if(state.version===2)throw Error('test_cloud.verifier_ownership');else await rm(child);
  }
  await reclaim();
- return {scope:saved.scope,reclaim,remove,async create(args,supplied){
+ return {scope:saved.scope,scratchVolume,reclaim,remove,async create(args,supplied){
   let state;
   if(supplied!==undefined){
    const request=binding(supplied),deadline=Date.parse(request.attempt.deadline);
-   if(deadline<=Date.now()||deadline>Date.now()+30000||!Array.isArray(args)||args.some(arg=>typeof arg!=='string'||arg.includes('cloud.backup-verifier.')))throw Error('test_cloud.verifier_ownership');
+   if(deadline<=Date.now()||deadline>Date.now()+(scratch===undefined?30000:300000)||!Array.isArray(args)||args.some(arg=>typeof arg!=='string'||arg.includes('cloud.backup-verifier.')))throw Error('test_cloud.verifier_ownership');
    state={version:2,request,requestDigest:backupVerificationRequestDigest(request),token:request.attempt.childToken,deadline,id:null};
-  }else state={token:randomUUID(),deadline:Date.now()+60000,id:null};
+  }else{
+   if(scratch!==undefined)throw Error('test_cloud.verifier_ownership');
+   state={token:randomUUID(),deadline:Date.now()+60000,id:null};
+  }
+  await checkScratch();
   let file;try{file=await open(child,'wx',0o600);}catch(error){if(error.code==='EEXIST')throw Error('test_cloud.verifier_busy');throw error;}
   try{await file.writeFile(JSON.stringify(state));await file.sync();}finally{await file.close();}
   // Intent is written before Docker runs; an interrupted create is found only by its private token.

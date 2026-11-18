@@ -200,7 +200,7 @@ for (const path of ['packages/registration/test/fixtures/venue-service.ts',
 }
 
 for (const path of ['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.mjs',
-  'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json']) {
+  'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json', 'deploy/backup-verifier/streamed-target.json']) {
   test(`venue keeps its imported deployment fixture ${path}`, () => fixture(({put, commit, plan, pr}) => {
     put(path); assert.equal(plan('venue', pr(commit())).required, true);
   }));

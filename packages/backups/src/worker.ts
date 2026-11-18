@@ -8,7 +8,12 @@ import {lockVerificationPolicy} from './verification-admission.ts';
 interface Job {id:string;kind:'verify'|'retention'|'incoming';venue_id:string;target_id:string;claim_id:string;attempts:number;}
 export class BackupWorker {
  readonly #pool:Pool;readonly #catalogue:BackupCatalogue;readonly #restore:DataRestoreVerifier;readonly #scope:string;
- constructor(pool:Pool,catalogue:BackupCatalogue,restore:DataRestoreVerifier,controllerScope:string){if(typeof controllerScope!=='string'||!controllerScope||controllerScope.length>128)throw Error('backup.verifier_configuration');this.#pool=pool;this.#catalogue=catalogue;this.#restore=restore;this.#scope=controllerScope;}
+ readonly #diskBackedVerification:boolean;
+ constructor(pool:Pool,catalogue:BackupCatalogue,restore:DataRestoreVerifier,controllerScope:string,{diskBackedVerification=false}={}){
+  if(typeof controllerScope!=='string'||!controllerScope||controllerScope.length>128)throw Error('backup.verifier_configuration');
+  this.#pool=pool;this.#catalogue=catalogue;this.#restore=restore;this.#scope=controllerScope;
+  this.#diskBackedVerification=diskBackedVerification;
+ }
  async schedule(){
   let count=0;
   const points=await this.#pool.query(`INSERT INTO backup_jobs(kind,venue_id,target_id)
@@ -33,14 +38,15 @@ export class BackupWorker {
     ORDER BY j.available_at,j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED`,[!!policy?.target])).rows[0] as Job|undefined;
    if(!row)return undefined;
    if(row.attempts>=8){await client.query("UPDATE backup_jobs SET status='failed',claim_id=NULL,lease_until=NULL,last_error='attempts_exhausted' WHERE id=$1",[row.id]);return null;}
-   return (await client.query("UPDATE backup_jobs SET status='running',claim_id=$2,lease_until=clock_timestamp()+interval '120 seconds',attempts=attempts+1,runs=runs+1 WHERE id=$1 RETURNING *",[row.id,randomUUID()])).rows[0] as Job;
+   const leaseSeconds=row.kind==='verify'&&this.#diskBackedVerification?360:120;
+   return (await client.query("UPDATE backup_jobs SET status='running',claim_id=$2,lease_until=clock_timestamp()+$3*interval '1 second',attempts=attempts+1,runs=runs+1 WHERE id=$1 RETURNING *",[row.id,randomUUID(),leaseSeconds])).rows[0] as Job;
   });
   if(job===undefined)return false;if(job===null)return true;
   if(job.kind==='verify'){
    const available=await this.#pool.query("SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2 AND kind='snapshot' AND NOT deleting AND deleted_at IS NULL",[job.target_id,job.venue_id]);
    if(!available.rowCount){try{await this.#finish(job,true);}catch(error){if(!(error instanceof Error&&error.message==='backup.claim_expired'))throw error;}return true;}
    // Admission owns the entire verification transition; stale work has no worker fallback.
-   await this.#catalogue.verifyClaim({id:job.id,venueId:job.venue_id,pointId:job.target_id,claimId:job.claim_id,number:job.attempts,controllerScope:this.#scope},this.#restore,signal);
+   await this.#catalogue.verifyClaim({id:job.id,venueId:job.venue_id,pointId:job.target_id,claimId:job.claim_id,number:job.attempts,controllerScope:this.#scope,diskBackedVerification:this.#diskBackedVerification},this.#restore,signal);
    return true;
   }
   try{

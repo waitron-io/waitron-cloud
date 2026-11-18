@@ -12,7 +12,7 @@ import type { PublicationDeadline } from "./publication-deadline.ts";
 import { isBackupCancellation } from "./cancellation.ts";
 import {prepareVerification,admitVerification,recordVerificationUnavailable,lockVerificationPolicy,type VerificationClaim} from './verification-admission.ts';
 import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier.ts';
-import type {BackupVerificationReason} from './verification-protocol.ts';
+import {DISK_VERIFIER_CLEANUP_MS,type BackupVerificationReason} from './verification-protocol.ts';
 export type MutationFence = (client:PoolClient)=>Promise<void>;
 interface StreamingObjectStore {
   stage(
@@ -502,6 +502,7 @@ export class BackupCatalogue {
     });
     if(!prepared)return 'stale' as const;
     const {attempt}=prepared;
+    const stagingCutoff=claim.diskBackedVerification?Date.parse(attempt.request.attempt.deadline)-DISK_VERIFIER_CLEANUP_MS:undefined;
     let source:ReplayableObject|undefined,output:VerifiedChildOutput|undefined,reason:BackupVerificationReason|undefined;
     try {
       signal.throwIfAborted();
@@ -510,7 +511,19 @@ export class BackupCatalogue {
       catch {reason='secret_unavailable';throw Error('backup.key_unavailable');}
       signal.throwIfAborted();
       const objects=this.#objects(prepared.location);
-      source='stage' in objects?await objects.stage(attempt.point.objectKey,undefined,{signal}):bufferObject(await objects.read(attempt.point.objectKey));
+      const options:StageOptions={signal};
+      if(stagingCutoff!==undefined){
+        const remaining=stagingCutoff-Date.now();
+        if(remaining<=0)throw Error('backup.verifier_timeout');
+        if(!('stage' in objects))throw Error('backup.verifier_configuration');
+        options.signal=AbortSignal.any([signal,AbortSignal.timeout(remaining)]);
+        options.timeoutMs=remaining;
+      }
+      try{source=await staged(objects,attempt.point.objectKey,options);}
+      catch(error){
+        if(options.signal?.aborted&&!signal.aborted)throw Error('backup.verifier_timeout');
+        throw error;
+      }
       signal.throwIfAborted();
       const stagedReceipt={...source.receipt};
       output=await verify(source,{version:attempt.point.keyVersion,reference:attempt.request.backupKey.reference,secret:keys.recoveryKey},attempt.request,signal);

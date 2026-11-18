@@ -32,7 +32,8 @@ function consumes(kind, path) {
     // Product source is already exercised by package CI. This matrix is selected by
     // edits to its proof programs and their test cases, rather than every product edit.
     if (['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.mjs',
-      'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json'].includes(path)) return true;
+      'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json',
+      'deploy/backup-verifier/streamed-target.json'].includes(path)) return true;
     if (path.startsWith('deploy/test-cloud/') || packageProofCases.has(path) ||
       /^packages\/[^/]+\/test\/venue-service-/.test(path)) return true;
   }

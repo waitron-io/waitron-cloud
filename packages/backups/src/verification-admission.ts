@@ -11,7 +11,7 @@ export interface VerificationAttempt {
  readonly policyRevision:number;
  readonly point:BackupPoint;
 }
-export interface VerificationClaim {id:string;venueId:string;pointId:string;claimId:string;number:number;controllerScope:string;}
+export interface VerificationClaim {id:string;venueId:string;pointId:string;claimId:string;number:number;controllerScope:string;diskBackedVerification?:boolean;}
 type Verdict='verified'|'failed'|'unavailable'|'stale';
 function metadata(p:BackupPoint){
  return {objectKey:p.objectKey,retention:p.retention,venueId:p.venueId,installationId:p.installationId,keyVersion:p.keyVersion,digest:p.digest,size:p.size,capturedAt:p.capturedAt,sourceNodeId:p.sourceNodeId,modules:p.modules};
@@ -48,7 +48,8 @@ export async function prepareVerification(client:PoolClient,claim:VerificationCl
  if(!policy?.target)return;
  const locked=await lockedPoint(client,claim);if(!locked)return;
  // Re-read PostgreSQL time after every blocking lock, including capture/key locks.
- const live=(await client.query("SELECT lease_until>clock_timestamp() AS live,LEAST(lease_until,clock_timestamp()+interval '30 seconds') AS deadline FROM backup_jobs WHERE id=$1",[claim.id])).rows[0];
+ const attemptSeconds=claim.diskBackedVerification?300:30;
+ const live=(await client.query("SELECT lease_until>clock_timestamp() AS live,LEAST(lease_until,clock_timestamp()+$2*interval '1 second') AS deadline FROM backup_jobs WHERE id=$1",[claim.id,attemptSeconds])).rows[0];
  if(!live.live)return;
  const p=locked.point;
  const request=readBackupVerificationRequest(JSON.stringify({protocol:'backup-data-restore/v1',captureId:p.id,pointId:p.id,venueId:p.venueId,sourceInstallationId:p.installationId,sourceNodeId:p.sourceNodeId,capturedAt:p.capturedAt,
