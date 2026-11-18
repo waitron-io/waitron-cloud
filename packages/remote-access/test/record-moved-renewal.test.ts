@@ -46,6 +46,12 @@ test('a moved CNAME preserves the last public certificate and retries until DNS 
  assert.equal(orders,1);
  now+=61*86400000;lookupError='ETIMEOUT';
  await run();assert.equal(orders,1);assert.equal(await record(),null);
+ for(const code of ['ENODATA','ENOTFOUND']){
+  lookupError=code;
+  await run();assert.ok((await record()) instanceof Date,code);
+  assert.equal(orders,1);
+  await f.db.pool.query("UPDATE remote_hostnames SET record_moved_at=NULL WHERE venue_id=$1 AND kind='public'",[venueId]);
+ }
  lookupError=undefined;destination='other.example.test';
  await run();const moved=await record();assert.ok(moved instanceof Date);
  for(let attempt=2;attempt<=9;attempt++)await run();

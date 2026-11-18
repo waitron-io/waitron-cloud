@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
-import {mkdtemp,mkdir,readdir,rm} from 'node:fs/promises';
+import {chmod,mkdtemp,mkdir,readdir,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
@@ -84,19 +84,23 @@ test('a custom staff name keeps retrying beyond its eighth unanswerable gateway 
  assert.equal(orders,0);
 });
 
-test('an unmounted check folder refuses before the custom staff issuer is called',async t=>{
- const f=await customStaff(t),root=await mkdtemp(join(tmpdir(),'worker-alpn-unmounted-'));
- t.after(()=>rm(root,{recursive:true,force:true}));
- const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{
-  cellId:f.venue.placement.cellId,output:join(root,'manifest.json'),publicCertificates:root,challenges:join(root,'unmounted'),
- }]});
- let orders=0;
- const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts,resolveCname:f.resolveCname,
-  gatewayStatus:{async read(){return [new Set()];}},
-  async issueCertificate(){orders++;throw Error('unmounted folder must refuse before order');},
- });
- await f.run(worker);
- assert.equal(orders,0);
- const job=(await f.db.pool.query("SELECT status,last_error FROM remote_configuration_jobs WHERE target_id=$1 AND kind='certificate_staff'",[f.venue.installationId])).rows[0];
- assert.deepEqual(job,{status:'pending',last_error:'challenge_not_answerable'});
+test('an unavailable check folder refuses before the custom staff issuer is called',async t=>{
+ const f=await customStaff(t),root=await mkdtemp(join(tmpdir(),'worker-alpn-unavailable-'));
+ const notDirectory=join(root,'file'),readOnly=join(root,'read-only');
+ await writeFile(notDirectory,'synthetic fixture');await mkdir(readOnly,{mode:0o500});
+ t.after(async()=>{await chmod(readOnly,0o700);await rm(root,{recursive:true,force:true});});
+ for(const challenges of [join(root,'unmounted'),notDirectory,readOnly]){
+  const artifacts=new FileReconcilerArtifacts({keyDirectory:root,routes:[{
+   cellId:f.venue.placement.cellId,output:join(root,'manifest.json'),publicCertificates:root,challenges,
+  }]});
+  let orders=0;
+  const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts,resolveCname:f.resolveCname,
+   gatewayStatus:{async read(){return [new Set()];}},
+   async issueCertificate(){orders++;throw Error('unavailable folder must refuse before order');},
+  });
+  await f.run(worker);
+  assert.equal(orders,0,challenges);
+  const job=(await f.db.pool.query("SELECT status,last_error FROM remote_configuration_jobs WHERE target_id=$1 AND kind='certificate_staff'",[f.venue.installationId])).rows[0];
+  assert.deepEqual(job,{status:'pending',last_error:'challenge_not_answerable'});
+ }
 });
