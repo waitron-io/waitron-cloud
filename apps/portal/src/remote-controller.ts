@@ -57,11 +57,13 @@ export class RemoteController {
   const result=await this.#request<RemoteView>('/remote-access/recheck',{installationId:id,kind});
   if(generation!==this.#generation)return false;
   this.pending=false;
-  if(result.ok){
-   const refreshed=await this.#load(true);
-   return generation===this.#generation&&refreshed?.names?.[kind].recordMoved===false&&!this.error;
+  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){
+   this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';
+   this.#changed();
+   return result.value.names?.[kind].recordMoved===false;
   }
-  this.#failure(result);this.#changed();
+  if(!result.ok)this.#failure(result);else this.error='unavailable';
+  this.#changed();
   return false;
  }
  async preview(){

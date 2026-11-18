@@ -183,7 +183,7 @@ test('remote views refuse invalid record-moved evidence while accepting older re
  }
 });
 
-test('Check again posts the affected name kind and reloads status',async()=>{
+test('Check again posts the affected name kind and uses the returned status',async()=>{
  const calls:{path:string;body?:Record<string,unknown>}[]=[];
  let moved=true;
  const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
@@ -196,7 +196,6 @@ test('Check again posts the affected name kind and reloads status',async()=>{
  assert.deepEqual(calls,[
   {path:'/remote-access/status',body:{installationId:id}},
   {path:'/remote-access/recheck',body:{installationId:id,kind:'staff'}},
-  {path:'/remote-access/status',body:{installationId:id}},
  ]);
  assert.equal(c.view?.names?.staff.recordMoved,false);
 });

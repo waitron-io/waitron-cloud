@@ -59,11 +59,12 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   };
   const staff=name('staff'),publicName=name('public');
   const service=(await client.query("SELECT s.state,o.health,o.observed_at,o.received_at,o.revision FROM installation_services s LEFT JOIN installation_observations o USING(installation_id,service) WHERE s.installation_id=$1 AND s.service='remote_access'",[id])).rows[0];
-  const publicForward=action==='status'?await new ForwardObservationStore(pool,options.planMode).readCurrent(client,id):undefined;
+  const includeForward=action==='status'||action==='recheck';
+  const publicForward=includeForward?await new ForwardObservationStore(pool,options.planMode).readCurrent(client,id):undefined;
   await authorize(client);
   const deadline=Math.min(service?.observed_at?.getTime()+300000,service?.received_at?.getTime()+300000,installation.lease_expires_at?.getTime());
   const current=paid&&!installation.revoked_at&&service?.revision===installation.configuration_revision&&deadline>Date.now();
-  return {...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(action==='status'?{publicForward}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
+  return {...(options.guestOrigin?{guestMenu:{venueId:binding.venue_id,...await guestMenuStatus(client,binding.venue_id,options.guestOrigin)}}:{}),...(includeForward?{publicForward}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:staff&&publicName?{staff,public:publicName}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
  });
  try{
   if(action==='status')return c.json(await status());

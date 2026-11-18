@@ -260,7 +260,9 @@ test('Check again clears a verified record notice and makes a failed job due',as
  resolve=async name=>name===hostname?[assigned]:[];
  const reply=await request('recheck',{kind:'staff'});
  assert.equal(reply.status,200);
- assert.equal((await reply.json()).names.staff.recordMoved,false);
+ const view=await reply.json();
+ assert.equal(view.names.staff.recordMoved,false);
+ assert.equal(view.publicForward,null);
  const {rows}=await db.pool.query(`SELECT status,attempts,last_error,available_at<=clock_timestamp() AS due
   FROM remote_configuration_jobs WHERE kind='certificate_staff'`);
  assert.deepEqual(rows,[{status:'pending',attempts:0,last_error:null,due:true}]);
