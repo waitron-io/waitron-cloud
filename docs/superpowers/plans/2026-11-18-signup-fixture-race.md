@@ -1,0 +1,9 @@
+# Keep verification mail tied to its test signup
+
+The owner-transfer tests can create two sender accounts at once and each sender can complete its own signup. The previous reproduction forced both signup requests to finish before either fixture read its verification email. With both using the newest row, one signup failed with `verification_unavailable` at `packages/registration/src/signup.ts:84` (CI run 44401032178, job 135144301304).
+
+1. In `packages/registration/test/owner-transfer.test.ts`, split the existing account fixture into queuing a request and returning a function that completes it. Keep the ordinary fixture path immediate. In “verified first-time signup attaches every live offer without creating business access or a session”, queue both senders before either completion runs. Keep its handover assertions. Run this case on PostgreSQL with the old lookup and observe `verification_unavailable`.
+2. In `packages/account-http/test/fixtures.ts`, add one shared verification lookup. Use the existing `signup_requests.email` and join its token hash to the verification outbox row, then open the row with the fixture's existing outbox. Use it from both account creation helpers in `packages/registration/test/owner-transfer.test.ts` and `packages/account-http/test/owner-transfer.test.ts`. The email addresses are unique to each account fixture. Keep the other mail lookups and runtime code out of this patch.
+3. Run both named owner-transfer files through `node scripts/test-postgres.mjs exec node --test --test-timeout=30000 packages/registration/test/owner-transfer.test.ts packages/account-http/test/owner-transfer.test.ts` on the campaign test box. Confirm the forced case and the existing HTTP checks pass. Reverting the recipient match in a disposable checkout should make the forced case fail again.
+
+Expected size is zero production lines, about 12 test lines and 10 lines of shared test support. The backlog has no entry for this fixture race.
