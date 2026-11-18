@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {createHash, randomBytes} from 'node:crypto';
+import {createHash, createHmac, randomBytes} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {Agent} from 'node:https';
+import {Agent, get} from 'node:https';
 import {createRequire} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
 import {BackupObjects} from '../packages/backups/src/storage.ts';
@@ -33,6 +33,51 @@ async function readObject({objects}, name, key, signal) {
   } finally {
     await object.dispose();
   }
+}
+
+function storeMetrics(ip, {ca, credentials}, signal) {
+  const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const {accessKeyId, secretAccessKey} = credentials;
+  const payload = encode({alg: 'HS512', typ: 'JWT'}) + '.' +
+    encode({accessKey: accessKeyId, sub: accessKeyId, exp: Math.floor(Date.now() / 1000) + 300});
+  const token = payload + '.' + createHmac('sha512', secretAccessKey).update(payload).digest('base64url');
+  const endpoint = 'https://' + ip + ':' + storeNodePort + '/minio/v2/metrics/node';
+  return new Promise((resolve, reject) => {
+    // A fresh connection can reach either of the two peers on this machine.
+    const request = get(endpoint, {ca, agent: false, signal, headers: {Authorization: 'Bearer ' + token}}, response => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(Error('storage_loss.peer_metrics HTTP ' + response.statusCode));
+        return;
+      }
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => {body += chunk;});
+      response.once('end', () => resolve(body));
+      response.once('error', reject);
+    });
+    request.setTimeout(5000, () => request.destroy(Error('storage_loss.peer_metrics_timeout')));
+    request.once('error', reject);
+  });
+}
+
+export async function waitForRepairPeers(read, expected, signal) {
+  const counts = new Map(expected.map(peer => [peer, 'unseen']));
+  const summary = () => [...counts].map(([peer, count]) => peer + '=' + count).join(', ');
+  try {
+    while ([...counts.values()].some(count => count !== 6)) {
+      signal.throwIfAborted();
+      const text = await read(signal);
+      const metric = /^minio_cluster_nodes_online_total\{server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000"\} (\d+)$/m.exec(text);
+      assert.ok(metric && counts.has(metric[1]), 'storage_loss.unexpected_peer_metric');
+      counts.set(metric[1], Number(metric[2]));
+      if ([...counts.values()].some(count => count !== 6)) await delay(1000, undefined, {signal});
+    }
+  } catch (error) {
+    if (!signal.aborted) throw error;
+    throw Error('storage_loss.peers not reconnected (' + summary() + ')', {cause: error});
+  }
+  return summary();
 }
 
 async function uploadEncryptedPart(send, args, encrypted, signal) {
@@ -112,7 +157,8 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
     for (const [index, node] of [...nodes, nodes[0]].entries()) {
       const name = 'outage-' + index, multipart = 'multipart-' + index, bytes = randomBytes(512);
       const upload = await startMultipart(first, multipart, encrypted, AbortSignal.any([signal, AbortSignal.timeout(60_000)]));
-      const survivors = names.filter(machine => machine !== node.name).map(machine => clients.get(machine));
+      const survivorNodes = nodes.filter(machine => machine.name !== node.name);
+      const survivors = survivorNodes.map(machine => clients.get(machine.name));
       const [client] = survivors;
       const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
         for (const survivor of survivors) {
@@ -136,6 +182,11 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
       try {
         await waitForStore({nodes: names, kube, signal: repair});
+        const survivor = survivorNodes[0];
+        const ordinal = names.indexOf(survivor.name) * 2;
+        const peerCounts = await waitForRepairPeers(requestSignal => storeMetrics(survivor.ip, account, requestSignal),
+          ['store-' + ordinal, 'store-' + (ordinal + 1)], repair);
+        process.stderr.write('Store peers reconnected on ' + survivor.name + ' (' + peerCounts + ')\n');
         // A survivor has the acknowledged bytes while the returned volumes are still missing them.
         assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
         assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);

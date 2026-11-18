@@ -61,6 +61,24 @@ test('multipart upload refuses a part response without the requested encryption'
     /storage_loss.multipart_encryption/);
 });
 
+test('repair waits for both survivor peers to reconnect before reading', async () => {
+  const {waitForRepairPeers} = await import('./kubernetes-storage-proof.mjs');
+  assert.equal(typeof waitForRepairPeers, 'function', 'repair must wait for the store view');
+  const reading = (peer, count) =>
+    'minio_cluster_nodes_online_total{server="store-' + peer + '.store-peers.d621-store.svc.cluster.local:9000"} ' + count;
+  const samples = [reading(2, 5), reading(3, 6), reading(2, 6)];
+  await waitForRepairPeers(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
+  assert.deepEqual(samples, []);
+
+  const stop = new AbortController();
+  async function short() {
+    stop.abort();
+    return reading(2, 5);
+  }
+  await assert.rejects(waitForRepairPeers(short, ['store-2', 'store-3'], stop.signal),
+    /store-2=5, store-3=unseen/);
+});
+
 test('repair checks both disks for actual multipart data files', async t => {
   const {waitForPieces} = await import('./kubernetes-storage-proof.mjs');
   const temp = await mkdtemp(join(tmpdir(), 'store-shards-test-'));
