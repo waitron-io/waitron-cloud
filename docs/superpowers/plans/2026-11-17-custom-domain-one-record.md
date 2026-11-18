@@ -273,6 +273,9 @@ Independent; may land before PR 1.
 
 The tasks are ordered so every commit is green: new artifact methods are added before the old ones go, and the proofs move to the new configuration before the operator command is removed.
 
+**Pre-build corrections, 18 November:** Claude read this slice against current main. The watcher cleared the following corrections at 03:02 and requested this single revision with no further plan read. Gateway public files use the venue ID, while private copies remain per installation; pass `venueId` to the publisher. Test a public-name change and a staged move during failed renewal. Keep the test Cloud's existing `remote/<id>/{key,request,certificate}.pem` layout and its HTTP-01 adapter; run `deploy/test-cloud/remote-runtime.test.mjs` as well as `runtime.test.mjs`. All actual old-artifact and staff-mode consumers migrate with their behavioral checks preserved, including the reconciler, certificate, forward-observation, venue-boundary, traffic-publication and staff-receipt tests. The two-venue proof runs the certificate worker after staging a move; its worker route outputs use scratch files. Cell lists include only staged/ready moves at the installation's current revision. The move gate reads an enabled job without a row lock, preserving the existing installation/job lock order. Add `GATEWAY_PUBLIC_CERTIFICATES`, default `/input/public-certs`; missing folders are empty and host-run fixtures use private temporary folders. Keep Task 4.7's actual traffic-mode measurement before choosing its default. No new migration, table, provider action or live upgrade is part of this slice.
+
+
 ### Task 4.1: The worker makes its own public key and CSR
 
 **Files:**
@@ -284,8 +287,8 @@ The tasks are ordered so every commit is green: new artifact methods are added b
 **Interfaces:**
 - Produces:
   - `ReconcilerArtifacts.readPublicCertificate(installationId:string):Promise<{pem:string;csr:string}|undefined>` — `pem` is key followed by chain.
-  - `ReconcilerArtifacts.publishPublicCertificate(installationId:string,cellIds:string[],copy:{pem:string;csr:string}):Promise<void>`.
-  - File artifacts keep `<keyDirectory>/<installationId>.public.pem` and `<keyDirectory>/<installationId>.public.csr` (mode 0600), and write `<publicCertificates>/<installationId>.pem` for each named cell, each atomically. A cell with no mapping fails with `route_mapping_missing` before any write.
+  - `ReconcilerArtifacts.publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string}):Promise<void>`.
+  - File artifacts keep `<keyDirectory>/<installationId>.public.pem` and `<keyDirectory>/<installationId>.public.csr` (mode 0600), and write `<publicCertificates>/<venueId>.pem` for each named cell, each atomically. A cell with no mapping fails with `route_mapping_missing` before any write.
 
 - [ ] **Step 1: Write the failing tests**:
   - `public-certificates.test.ts` (a fake `issueCertificate` signs the CSR with a local test CA, as `deploy/test-cloud/remote-runtime.mjs` does): `a newly placed venue gets a public certificate with no configuration entry and no operator command`. One pass publishes `<cell>/<installationId>.pem`; its chain covers the stored public name, and its key matches the stored CSR.
@@ -307,7 +310,7 @@ The tasks are ordered so every commit is green: new artifact methods are added b
 - Produces:
   - `routeCells(client:PoolClient,installationId:string):Promise<string[]>` — sorted ids of the cell holding the active placement and of any `staged`/`ready` move target.
   - `certificateDigest(installationId,kind,authority,cells:string[]):string`, and the `certificate_public` digest includes `cells`.
-- The flow on every pass: read the private copy; call `authorizeCertificate(id,'public',copy.csr)`; if the chain covers the hostname and is outside the renewal window, publish the copy to `routeCells` through `publishAuthorizedCertificate` with that CSR and complete; otherwise issue (Task 4.1).
+- The flow on every pass: read the current public name and private copy. A copy with the wrong name needs a fresh CSR before authorization. Publish a matching, still-valid copy to `routeCells` through `publishAuthorizedCertificate` and record its copied-state digest before attempting renewal. Outside the renewal window, complete. Inside it, renew with a fresh key; failure keeps the copied-state digest and uses the existing retry backoff. Expired or wrong-name copies never qualify. Preserve the last good private copy until a valid replacement exists; add no saved candidate-key protocol.
 
 - [ ] **Step 1: Write the failing tests**:
   - `a certificate inside its renewal window is renewed and reaches every cell holding the venue's route` — move the clock to 29 days before expiry and stage a move: both cells hold the new chain with a new key.
