@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createRequire} from 'node:module';
 import test from 'node:test';
 import {bootstrap} from '../local-stack/bootstrap.mjs';
 import {runtimeEnvironment} from '../local-stack/runtime.mjs';
@@ -175,4 +176,47 @@ test('public remote settings persist a separate private ACME account and pass on
  const {testRuntimeEnvironment}=await import('./runtime.mjs');
  for(const role of ['account','manifest','gateway','email']){const value=testRuntimeEnvironment(role,config,env);assert.equal(value.TEST_CLOUD_PUBLIC_REMOTE,role==='manifest'?'1':undefined);assert.equal(value.TEST_CLOUD_ACME_DIRECTORY,role==='manifest'?env.TEST_CLOUD_ACME_DIRECTORY:undefined);assert.equal(value.GATEWAY_PROXY_SOURCE,role==='gateway'?'10.79.0.2':undefined);}
  for(const changed of [{TEST_CLOUD_PUBLIC_REMOTE:'yes'},{TEST_CLOUD_ORIGIN:'http://cloud.example.test'},{TEST_CLOUD_ACME_DIRECTORY:'http://ca.example.test/dir'},{TEST_CLOUD_CHALLENGE_DIR:'relative'}])await assert.rejects(loadPublicRemoteSettings(dir,{...env,...changed}));
+});
+
+test('Amazon challenge paths reach only worker and gateway',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-challenge-env-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir);
+ const worker={TEST_CLOUD_TLS_CHALLENGE_DIR:'/run/remote-tls-challenges',TEST_CLOUD_GATEWAY_STATUS_DIR:'/run/remote-gateway-status'};
+ const gateway={GATEWAY_CHALLENGES:worker.TEST_CLOUD_TLS_CHALLENGE_DIR,GATEWAY_STATUS_DIR:worker.TEST_CLOUD_GATEWAY_STATUS_DIR};
+ const supplied={...worker,...gateway};
+ for(const flag of ['0','1'])for(const role of ['manifest','gateway','account','email','reconcile']){
+  const value=testRuntimeEnvironment(role,config,{TEST_CLOUD_PUBLIC_REMOTE:flag,...supplied});
+  const expected=flag==='1'?(role==='manifest'?worker:role==='gateway'?gateway:{}):{};
+  assert.deepEqual(Object.fromEntries(Object.keys(supplied).filter(name=>name in value).map(name=>[name,value[name]])),expected,role);
+ }
+});
+
+test('public remote settings refuse half-configured or shared challenge directories',async t=>{
+ const {loadPublicRemoteSettings}=await import('./remote-runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-challenge-settings-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const env={TEST_CLOUD_PUBLIC_REMOTE:'1',TEST_CLOUD_ORIGIN:'https://test-cloud.example.test',
+  TEST_CLOUD_ACME_DIRECTORY:'https://ca.example.test/dir',TEST_CLOUD_CHALLENGE_DIR:join(dir,'http')};
+ const tls=join(dir,'tls'),status=join(dir,'status');
+ for(const paths of [
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:tls},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:'relative',TEST_CLOUD_GATEWAY_STATUS_DIR:status},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:tls+'/.'},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:env.TEST_CLOUD_CHALLENGE_DIR,TEST_CLOUD_GATEWAY_STATUS_DIR:status},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:tls,TEST_CLOUD_GATEWAY_STATUS_DIR:join(tls,'status')},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:join(status,'tls'),TEST_CLOUD_GATEWAY_STATUS_DIR:status},
+  {TEST_CLOUD_TLS_CHALLENGE_DIR:join(env.TEST_CLOUD_CHALLENGE_DIR,'tls'),TEST_CLOUD_GATEWAY_STATUS_DIR:status}
+ ])await assert.rejects(loadPublicRemoteSettings(dir,{...env,...paths}),/test_cloud.remote_settings/);
+});
+
+test('the Amazon worker refuses custom names without a TLS challenge',async()=>{
+ const {crypto}=createRequire(new URL('../../packages/remote-access/package.json',import.meta.url))('acme-client');
+ const {issueTestRemoteCertificate}=await import('./remote-runtime.mjs');
+ const hostname='menu.cafe.example.test',[,csr]=await crypto.createCsr({commonName:hostname,altNames:[hostname]});
+ const signal=new AbortController().signal;
+ // The refusal must happen before the issuer needs an ACME directory or account key.
+ for(const validation of [undefined,{type:'dns-01'}]){
+  await assert.rejects(issueTestRemoteCertificate(undefined,{hostname,csr:csr.toString(),signal,validation},
+   {zone:'test-cloud.example.test'}),{message:'test_cloud.remote_target'});
+ }
 });

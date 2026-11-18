@@ -342,7 +342,8 @@ for every route in this worker before enabling custom names.
 The command-line configuration reads one status file per cell. A deployment with
 multiple gateways in a cell needs a status reader that reports each gateway. Configure
 the check and status paths before offering one-record setup. The Amazon test Cloud
-has a separate certificate adapter and needs its own custom-domain qualification.
+uses the same gateway check and has a separate real-domain trial for its public
+HTTPS path. See [the Amazon test setup](test-cloud.md#configure-a-separate-https-test-name).
 
 Before a gateway check, the worker verifies that the custom CNAME still points to
 the assigned address. If the record has moved, Cloud keeps the current certificate while

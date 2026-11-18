@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {database} from '../../packages/account-http/test/fixtures.ts';
 import {OrganisationPlanStore} from '../../packages/registration/src/organisation-plans.ts';
+import {venueServiceFixture,set} from '../../packages/registration/test/fixtures/venue-service.ts';
 import {RemoteAccessStore} from '../../packages/remote-access/src/placement.ts';
 import {verifyManifest} from '../../packages/remote-access/src/manifest.ts';
 import {bootstrapTestCloud} from './bootstrap.mjs';
@@ -149,4 +150,93 @@ test('public HTTP issuance and renewal use the independent listener and remove e
  await assert.rejects(acme.issue({...options,accountKeyFile:abortAccount,http:{...options.http,abortOnChallenge:true}}),/"aborted":true/);
  assert.deepEqual(await readdir(join(challenges,hostname)),[]);assert.equal(await readFile(output,'utf8'),previous);
  assert.equal(new X509Certificate(await acme.issue(options)).checkHost(hostname),hostname);
+});
+
+test('Amazon worker issues a custom certificate through the gateway responder',{timeout:120000},async t=>{
+ const {startAcme,docker,waitFor}=await import('../../scripts/remote-fixtures.mjs');
+ const {getCACertificates,setDefaultCACertificates}=await import('node:tls');
+ const {mkdir,readdir,copyFile}=await import('node:fs/promises');
+ const {openTestRemoteRuntime,loadPublicRemoteSettings}=await import('./remote-runtime.mjs');
+ const db=await venueServiceFixture();t.after(()=>db.close());
+ const mode='test-venue-levels',venue=db.venues[0];
+ await set(db,'connected',venue);
+ const {id:installation}=(await db.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venue])).rows[0];
+ const directory=await mkdtemp(join(tmpdir(),'cloud-custom-acme-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ await bootstrapTestCloud(directory);
+ const challenges=join(directory,'challenges'),status=join(directory,'status'),source=join(directory,'responder'),http=join(directory,'http');
+ for(const folder of [challenges,status,source,http])await mkdir(folder);
+ for(const file of ['alpn-responder.ts','challenge-files.ts','manifest.ts']){
+  await copyFile(new URL('../../packages/remote-access/src/'+file,import.meta.url),join(source,file));
+ }
+ await writeFile(join(source,'package.json'),'{"type":"module"}');
+ const acme=await startAcme({tlsAlpn:true});
+ let container;
+ t.after(async()=>{try{if(container)docker('rm','-f',container);}finally{await acme.close();}});
+ const defaultCAs=getCACertificates('default');
+ setDefaultCACertificates([...defaultCAs,await readFile(join(acme.root,'acme-root.pem'),'utf8')]);
+ t.after(()=>setDefaultCACertificates(defaultCAs));
+ const zone='test-cloud.example.test',hostname='menu.cafe.example.test';
+ const publicRemote=await loadPublicRemoteSettings(directory,{
+  TEST_CLOUD_PUBLIC_REMOTE:'1',TEST_CLOUD_ORIGIN:'https://'+zone,TEST_CLOUD_ACME_DIRECTORY:acme.directoryUrl,
+  TEST_CLOUD_CHALLENGE_DIR:http,TEST_CLOUD_TLS_CHALLENGE_DIR:challenges,TEST_CLOUD_GATEWAY_STATUS_DIR:status
+ });
+ const {worker,cellId}=await openTestRemoteRuntime({pool:db.pool,directory,mode,publicRemote,resolveCname:acme.resolveCname});
+ const store=new RemoteAccessStore(db.pool,mode);
+ const peer=generateKeyPairSync('x25519').publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
+ const placement=await store.provision(installation,cellId,peer);
+ await acme.point(hostname,placement.publicHostname);
+ const {configuration_revision:revision}=(await db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installation])).rows[0];
+ await store.setHostname(installation,'public',hostname,revision,acme.resolveCname);
+
+ await worker.schedule();
+ // Publish the signed route before running the certificate job under test.
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'route'");
+ assert.equal(await worker.runOnce(),true);
+
+ // The responder listens on loopback. Forward port 443 to it inside this fixture's network.
+ const script=`
+  import {createPublicKey} from 'node:crypto';
+  import {readFile,rename,writeFile} from 'node:fs/promises';
+  import {connect,createServer} from 'node:net';
+  import {setTimeout as delay} from 'node:timers/promises';
+  import {AlpnResponder} from '/app/alpn-responder.ts';
+  import {verifyManifest} from '/app/manifest.ts';
+  const trust=createPublicKey(await readFile('/state/gateway-issuer.pem'));
+  let names=new Set();
+  const responder=new AlpnResponder({folder:'/checks',routeNames:()=>names});
+  const port=await responder.listen(0);
+  createServer(socket=>{
+   const backend=connect(port,'127.0.0.1');
+   socket.on('error',()=>backend.destroy());backend.on('error',()=>socket.destroy());
+   socket.pipe(backend).pipe(socket);
+  }).listen(443,'0.0.0.0');
+  for(;;){
+   const manifest=verifyManifest(JSON.parse(await readFile('/state/gateway-manifest.json')),trust,process.argv[1]);
+   names=new Set(manifest.routes.flatMap(route=>[route.staffHostname,route.publicHostname]));
+   await responder.refresh();
+   await writeFile('/status/pending',JSON.stringify({ready:true,challenges:{answerable:responder.answerable()}}));
+   await rename('/status/pending','/status/status.json');
+   await delay(100);
+  }`;
+ container=docker('run','-d','--read-only','--memory','64m','--network',acme.name,
+  '-v',source+':/app:ro','-v',directory+':/state:ro','-v',challenges+':/checks:ro','-v',status+':/status',
+  'node:26-alpine3.23','node','--input-type=module','-e',script,cellId);
+ const address=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',container);
+ await acme.setA(placement.publicHostname,address);
+ await waitFor(()=>readFile(join(status,'status.json'),'utf8'),5000);
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[installation]);
+ assert.equal(await worker.runOnce(),true);
+ const job=(await db.pool.query("SELECT applied_digest=desired_digest AS applied,last_error FROM remote_configuration_jobs WHERE kind='certificate_public' AND target_id=$1",[installation])).rows[0];
+ if(!job.applied){
+  t.diagnostic(await readFile(join(status,'status.json'),'utf8'));
+  t.diagnostic(docker('logs',container));
+  t.diagnostic(docker('logs','--tail','15',acme.name+'-ca'));
+ }
+ assert.deepEqual(job,{applied:true,last_error:null});
+ const pem=await readFile(join(directory,'public-certs',venue+'.pem'),'utf8');
+ const [leaf,intermediate]=pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g).map(bytes=>new X509Certificate(bytes));
+ assert.equal(leaf.checkHost(hostname),hostname);
+ assert.ok(leaf.verify(intermediate.publicKey));
+ assert.ok(intermediate.verify(new X509Certificate(acme.certificateRoot).publicKey));
+ assert.deepEqual(await readdir(challenges),[]);
 });

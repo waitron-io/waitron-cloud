@@ -157,10 +157,42 @@ function amazonDeployment(){
   bootstrap:{...base,volumes:[{type:'bind',source:'/private/certificates',target:'/run/public-certificate',read_only:true},{type:'volume',source:'test-cloud-public-certificate',target:'/run/proxy-certificate'}]},
   proxy:{...base,ports:[{host_ip:'0.0.0.0',published:'443',target:443,protocol:'tcp'}],volumes:[{type:'volume',source:'test-cloud-public-certificate',target:'/run/proxy-certificate',read_only:true}]},
   'http-challenges':{...base,restart:'unless-stopped',ports:[{host_ip:'0.0.0.0',published:'80',target:8080,protocol:'tcp'}],volumes:[{type:'bind',source:'/opt/waitron-cloud/acme-webroot',target:'/run/account-webroot',read_only:true},{type:'volume',source:'test-cloud-http-challenges',target:'/run/remote-challenges',read_only:true}]},
-  gateway:{...base,ports:[{host_ip:'0.0.0.0',published:'51820',target:51820,protocol:'udp'}]},'gateway-manifest':{...base,volumes:[{type:'volume',source:'test-cloud-http-challenges',target:'/run/remote-challenges'}]},
+  gateway:{...base,ports:[{host_ip:'0.0.0.0',published:'51820',target:51820,protocol:'udp'}],volumes:[
+   {type:'volume',source:'test-cloud-tls-challenges',target:'/run/remote-tls-challenges',read_only:true},
+   {type:'volume',source:'test-cloud-gateway-status',target:'/run/remote-gateway-status'}
+  ]},
+  'gateway-manifest':{...base,volumes:[
+   {type:'volume',source:'test-cloud-http-challenges',target:'/run/remote-challenges'},
+   {type:'volume',source:'test-cloud-tls-challenges',target:'/run/remote-tls-challenges'},
+   {type:'volume',source:'test-cloud-gateway-status',target:'/run/remote-gateway-status',read_only:true}
+  ]},
   account:base,'email-worker':base,postgres:{mem_limit:67108864},mailpit:{mem_limit:67108864}
  }};
 }
+
+test('Amazon admission reserves the TLS challenge and gateway status volumes for their two roles',async()=>{
+ const {validateDeployment}=await api(),options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates'};
+ for(const [source,target,writer,reader] of [
+  ['test-cloud-tls-challenges','/run/remote-tls-challenges','gateway-manifest','gateway'],
+  ['test-cloud-gateway-status','/run/remote-gateway-status','gateway','gateway-manifest']
+ ]){
+  for(const [description,change] of [
+   ['missing writer',services=>{services[writer].volumes=services[writer].volumes.filter(v=>v.source!==source);}],
+   ['writer is read-only',services=>{services[writer].volumes.find(v=>v.source===source).read_only=true;}],
+   ['reader can write',services=>{delete services[reader].volumes.find(v=>v.source===source).read_only;}],
+   ['wrong mount path',services=>{services[reader].volumes.find(v=>v.source===source).target='/other';}],
+   ['wrong mount type',services=>{services[reader].volumes.find(v=>v.source===source).type='image';}],
+   ['extra mount',services=>{services[reader].volumes.push({type:'volume',source,target:'/other',read_only:true});}],
+   ['another service can read',services=>{services.account={...services.account,volumes:[{type:'volume',source,target,read_only:true}]};}],
+   ['another service uses the reserved path',services=>{
+    services.account={...services.account,volumes:[{type:'volume',source:source+'-alias',target,read_only:true}]};
+   }]
+  ]){
+   const value=amazonDeployment();change(value.services);
+   assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/,source+' '+description);
+  }
+ }
+});
 
 test('Amazon rendered admission keeps private services and the certificate source private',async()=>{
  const {validateDeployment}=await api(),options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates'};

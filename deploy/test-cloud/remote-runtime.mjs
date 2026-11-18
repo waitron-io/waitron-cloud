@@ -1,13 +1,16 @@
 import {createPrivateKey,createPublicKey,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
-import {mkdir,open,readFile,rename,rm,stat,writeFile} from 'node:fs/promises';
-import {join,isAbsolute} from 'node:path';
+import {constants} from 'node:fs';
+import {access,mkdir,open,readFile,rename,rm,stat,writeFile} from 'node:fs/promises';
+import {join,isAbsolute,resolve,sep} from 'node:path';
 import {promisify} from 'node:util';
 import {createRequire} from 'node:module';
 import {transaction} from '../../packages/registration/src/transaction.ts';
 import {RemoteConfigurationReconciler} from '../../packages/remote-access/src/reconciler.ts';
 import {isUuid,isHostname,verifyManifest} from '../../packages/remote-access/src/manifest.ts';
-import {validateCsr} from '../../packages/remote-access/src/certificates.ts';
+import {challengeHandlers,validateCsr} from '../../packages/remote-access/src/certificates.ts';
+import {deleteChallenge,writeChallenge} from '../../packages/remote-access/src/challenge-files.ts';
+import {answerableNames} from '../../packages/remote-access/src/gateway-status.ts';
 import {loadRuntime,canonicalHttpsOrigin} from '../local-stack/runtime.mjs';
 import {claimLease} from '../local-stack/lease.mjs';
 import {isTestRemoteHostname,presentHttpChallenge,removeHttpChallenge} from './http-challenges.mjs';
@@ -21,24 +24,38 @@ export async function loadPublicRemoteSettings(directory,environment){
  const zone=new URL(canonicalHttpsOrigin(environment.TEST_CLOUD_ORIGIN)).hostname,directoryUrl=environment.TEST_CLOUD_ACME_DIRECTORY,challengeDirectory=environment.TEST_CLOUD_CHALLENGE_DIR;
  const url=new URL(directoryUrl);
  if(!isHostname(zone)||zone.length>180||url.protocol!=='https:'||url.username||url.password||url.hash||!isAbsolute(challengeDirectory??''))throw Error('test_cloud.remote_settings');
+ const tlsChallengeDirectory=environment.TEST_CLOUD_TLS_CHALLENGE_DIR,statusDirectory=environment.TEST_CLOUD_GATEWAY_STATUS_DIR;
+ if(tlsChallengeDirectory!==undefined||statusDirectory!==undefined){
+  const paths=[challengeDirectory,tlsChallengeDirectory,statusDirectory];
+  if(paths.some(path=>!isAbsolute(path??'')))throw Error('test_cloud.remote_settings');
+  const folders=paths.map(path=>resolve(path)).map(path=>path.endsWith(sep)?path:path+sep);
+  if(folders.some((folder,index)=>folders.some((other,i)=>i!==index&&other.startsWith(folder))))throw Error('test_cloud.remote_settings');
+ }
  const state=join(directory,'acme');await mkdir(state,{recursive:true,mode:0o700});const lease=await claimLease(join(state,'account.lock'));if(!lease)throw Error('test_cloud.remote_busy');
  try{
   const file=join(state,'account-key.pem');let accountKey;
   try{accountKey=await privateFile(file);}catch(error){if(error.code!=='ENOENT')throw error;accountKey=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({format:'pem',type:'pkcs8'});await lease.assertOwned();await atomic(file,accountKey);}
-  createPrivateKey(accountKey);return{zone,endpoint:zone+':51820',directoryUrl,accountKey,challengeDirectory};
+  createPrivateKey(accountKey);return{zone,endpoint:zone+':51820',directoryUrl,accountKey,challengeDirectory,tlsChallengeDirectory,statusDirectory};
  }finally{await lease.release();}
 }
 function publicTarget(directory,id){if(!isUuid(id))throw Error('test_cloud.remote_target');return join(directory,'remote',id);}
 export async function issueTestRemoteCertificate(directory,target,publicRemote){
  target.signal.throwIfAborted();validateCsr(target.csr,target.hostname);
  if(publicRemote){
-  if(!isTestRemoteHostname(target.hostname,publicRemote.zone))throw Error('test_cloud.remote_target');
-  const client=new Client({directoryUrl:publicRemote.directoryUrl,accountKey:publicRemote.accountKey,backoffAttempts:5,backoffMin:500,backoffMax:3000}),active=new Set();
+  const tls=target.validation?.type==='tls-alpn-01';
+  if(!tls&&!isTestRemoteHostname(target.hostname,publicRemote.zone))throw Error('test_cloud.remote_target');
+  const client=new Client({directoryUrl:publicRemote.directoryUrl,accountKey:publicRemote.accountKey,backoffAttempts:5,backoffMin:500,backoffMax:3000});
+  // An explicit empty contact list makes repeated registration a valid account update.
+  await client.createAccount({termsOfServiceAgreed:true,contact:[]});target.signal.throwIfAborted();
+  if(tls){
+   const chain=await client.auto({csr:target.csr,termsOfServiceAgreed:true,challengePriority:['tls-alpn-01'],
+    skipChallengeVerification:true,...challengeHandlers(target)});
+   target.signal.throwIfAborted();return chain;
+  }
+  const active=new Set();
   const cleanup=()=>Promise.all([...active].map(token=>removeHttpChallenge(publicRemote.challengeDirectory,target.hostname,token))),abort=()=>{void cleanup().catch(()=>{});};
   target.signal.addEventListener('abort',abort,{once:true});
   try{
-   // An explicit empty contact list makes repeated registration a valid account update.
-   await client.createAccount({termsOfServiceAgreed:true,contact:[]});target.signal.throwIfAborted();
    const chain=await client.auto({csr:target.csr,termsOfServiceAgreed:true,challengePriority:['http-01'],skipChallengeVerification:true,
     challengeCreateFn:async(authz,challenge,value)=>{target.signal.throwIfAborted();if(authz.identifier.value!==target.hostname||challenge.type!=='http-01')throw Error('test_cloud.remote_challenge');active.add(challenge.token);await presentHttpChallenge(publicRemote.challengeDirectory,target.hostname,challenge.token,value);if(target.signal.aborted){await cleanup();target.signal.throwIfAborted();}},
     challengeRemoveFn:async(authz,challenge)=>{if(authz.identifier.value!==target.hostname||challenge.type!=='http-01')throw Error('test_cloud.remote_challenge');await removeHttpChallenge(publicRemote.challengeDirectory,target.hostname,challenge.token);active.delete(challenge.token);}
@@ -54,7 +71,7 @@ export async function issueTestRemoteCertificate(directory,target,publicRemote){
   target.signal.throwIfAborted();return await readFile(join(scratch,'certificate.pem'),'utf8')+await privateFile(join(directory,'lan/ca.pem'));
  }finally{await rm(scratch,{recursive:true,force:true});}
 }
-export async function openTestRemoteRuntime({pool,directory,mode,publicRemote}){
+export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,resolveCname}){
  if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  const zone=publicRemote?.zone??suffix,endpoint=publicRemote?.endpoint??'waitron.local:51820';
  if(publicRemote){
@@ -100,7 +117,25 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote}){
   },
   async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');await atomic(join(directory,'gateway-manifest.json'),text);}
  };
- // LAN uses caller-provided resolution; Amazon uses the operator's existing wildcard.
- const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,artifacts,pointName:async()=>{},signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target,publicRemote)});
+ const {tlsChallengeDirectory,statusDirectory}=publicRemote??{};
+ let gatewayStatus;
+ if(tlsChallengeDirectory&&statusDirectory){
+  artifacts.hasChallengeFolder=async id=>{
+   if(id!==cellId)return false;
+   try{await access(tlsChallengeDirectory+'/',constants.W_OK|constants.X_OK);return true;}catch{return false;}
+  };
+  artifacts.writeChallenge=async(id,file)=>{
+   if(id!==cellId)throw Error('test_cloud.remote_target');
+   await writeChallenge(tlsChallengeDirectory,file);
+  };
+  artifacts.deleteChallenge=async(id,hostname)=>{
+   if(id===cellId)await deleteChallenge(tlsChallengeDirectory,hostname);
+  };
+  gatewayStatus={async read(id){
+   return id===cellId?[answerableNames(await readFile(join(statusDirectory,'status.json'),'utf8'))]:[];
+  }};
+ }
+ // The operator wildcard supplies assigned names. The reconciler verifies the owner's CNAME.
+ const worker=new RemoteConfigurationReconciler(pool,{planMode:mode,artifacts,gatewayStatus,resolveCname,pointName:async()=>{},signingKeyForCell:async id=>{if(id!==cellId)throw Error('test_cloud.remote_target');return key;},issueCertificate:target=>issueTestRemoteCertificate(directory,target,publicRemote)});
  return {worker,cellId};
 }

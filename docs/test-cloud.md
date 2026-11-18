@@ -336,6 +336,19 @@ Encrypt staging. After qualifying issuance and renewal there, set
 host's private `deploy/test-cloud/test.env`, then recreate the manifest worker
 with the same Compose files. Staging certificates are not browser trusted.
 
+After pairing a test venue, use the CNAME shown in its remote access settings to
+point your custom hostname at the venue's assigned name. The worker checks that
+record and asks the gateway to answer the certificate authority's TLS check on
+port 443. The worker writes the temporary challenge and the gateway reads it.
+The gateway writes readiness to a separate volume that the worker can read.
+Assigned names still use the independent port-80 listener.
+
+The local certificate test connects to the gateway's challenge responder through
+a test-only forwarder. The real-domain trial checks the public proxy and the
+gateway proxy on the Amazon host. Use a domain you control and the trusted issuer
+setting above. Open your custom address on a phone using mobile data and check
+the certificate name and page load.
+
 Preserve the host's environment file when refreshing source. In particular,
 configure `CLOUD_FACTOR_POLICY` using the [local authentication example](authenticator-app.md)
 before starting the account service; keys alone do not enable sign-in. Keep that

@@ -46,6 +46,16 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
   const challenge=services['http-challenges'],manifest=services['gateway-manifest'];
   if(challenge?.restart!=='unless-stopped'||challenge?.ports?.length!==1||services.gateway?.ports?.length!==1||Number(challenge.mem_limit)!==64*1024*1024||challenge.depends_on||challenge.volumes?.length!==2||!challenge.volumes.every(v=>v.read_only===true)||!challenge.volumes.some(v=>v.type==='bind'&&v.target==='/run/account-webroot')||!challenge.volumes.some(v=>v.source==='test-cloud-http-challenges'&&v.target==='/run/remote-challenges')||!manifest?.volumes?.some(v=>v.source==='test-cloud-http-challenges'&&v.target==='/run/remote-challenges'&&!v.read_only))throw new Error('test_cloud.rendered');
   for(const[name,service]of Object.entries(services))if(!['gateway-manifest','http-challenges'].includes(name)&&service.volumes?.some(v=>v.source==='test-cloud-http-challenges'))throw new Error('test_cloud.rendered');
+  for(const [source,target,writer,reader] of [
+   ['test-cloud-tls-challenges','/run/remote-tls-challenges','gateway-manifest','gateway'],
+   ['test-cloud-gateway-status','/run/remote-gateway-status','gateway','gateway-manifest']
+  ])for(const [name,service] of Object.entries(services)){
+   const mounts=(service.volumes??[]).filter(v=>v.source===source||v.target===target);
+   if(name===writer||name===reader){
+    const [mount]=mounts;
+    if(mounts.length!==1||mount.type!=='volume'||mount.source!==source||mount.target!==target||(mount.read_only===true)!==(name===reader))throw new Error('test_cloud.rendered');
+   }else if(mounts.length)throw new Error('test_cloud.rendered');
+  }
   const bundle=services.bootstrap?.volumes?.find(v=>v.target==='/run/proxy-certificate');
   if(bundle?.source!=='test-cloud-public-certificate'||!services.proxy.volumes?.some(v=>v.source===bundle.source&&v.target==='/run/proxy-certificate'&&v.read_only===true))throw new Error('test_cloud.rendered');
   for(const[name,service]of Object.entries(services)){

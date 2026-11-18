@@ -22,7 +22,14 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(['account','storage','backup'].includes(role))result.NODE_EXTRA_CA_CERTS='/run/local-stack/lan/ca.pem';
  if(['account','action-demo'].includes(role)&&demo){result.CLOUD_ACTION_DEMO='1';result.CLOUD_ACTION_DEMO_DIR=environment.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo';}
  if(role==='account'){delete result.CLOUD_LOCAL_REQUEST_METRICS;result.CLOUD_TRANSLATION='0';result.CLOUD_HTTP_TRUSTED_PROXY_IPS=environment.CLOUD_HTTP_TRUSTED_PROXY_IPS??'10.79.0.2';if(enabled)result.CLOUD_STAFF_CERTIFICATES='1';}
- if(role==='gateway'){result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';if(environment.TEST_CLOUD_PUBLIC_REMOTE==='1')result.GATEWAY_PROXY_SOURCE='10.79.0.2';}
+ if(role==='gateway')result.GATEWAY_UPSTREAM_CA='/run/local-stack/lan/ca.pem';
+ if(environment.TEST_CLOUD_PUBLIC_REMOTE==='1'){
+  if(role==='manifest')for(const name of ['TEST_CLOUD_TLS_CHALLENGE_DIR','TEST_CLOUD_GATEWAY_STATUS_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
+  if(role==='gateway'){
+   result.GATEWAY_PROXY_SOURCE='10.79.0.2';
+   for(const name of ['GATEWAY_CHALLENGES','GATEWAY_STATUS_DIR'])if(environment[name]!==undefined)result[name]=environment[name];
+  }
+ }
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  if(role==='account'&&mode==='test-venue-levels'&&environment.CLOUD_BACKUP_STAGE_ROOT!==undefined)result.CLOUD_BACKUP_STAGE_ROOT=environment.CLOUD_BACKUP_STAGE_ROOT;
