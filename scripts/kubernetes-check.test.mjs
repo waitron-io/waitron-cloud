@@ -626,3 +626,18 @@ let mirrorClosed=false;const result=await runKubernetesCheck(${JSON.stringify(ta
   assert.deepEqual(stdout.trim().split('\n').map((line, index) => index ? JSON.parse(line) : line),
     ['P1_READY', {observed: {done: true}, worker: '2026-11-12T10:00:00Z'}]);
 });
+
+test('--node-loss checks the local Kind version without needing venue images', async t => {
+  const {directory, env, log} = await commandFixture(t, 'node-loss-version');
+  await writeFile(join(directory, 'kind'), `#!${process.execPath}
+require('node:fs').writeFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)));
+console.error('synthetic Kind version failure');
+process.exit(37);
+`, {mode: 0o700});
+  delete env.TEST_CLOUD_INTEGRATION_IMAGE;
+  delete env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE;
+  const result = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', '--node-loss'], {env, encoding: 'utf8', timeout: 10000});
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /kind version failed \(37.*\)\s+synthetic Kind version failure/);
+  assert.deepEqual(JSON.parse(await readFile(log, 'utf8')), ['version']);
+});

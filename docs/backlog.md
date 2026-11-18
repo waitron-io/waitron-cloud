@@ -1755,8 +1755,10 @@ implementation or production evidence.
   The [three-member control-plane setup](superpowers/plans/2026-11-18-d621-stockholm-control-plane.md)
   runs through synthetic commands in
   `node --test deploy/kubernetes/bounded-amazon/bootstrap.test.mjs scripts/amazon-run.test.mjs`.
-  The legacy fixture still mounts storage from A. The D621 machine-loss slice and run 9 will
-  test real machine loss.
+  The local `node scripts/kubernetes-check.mjs --node-loss` check exercises a
+  three-member Kind cluster with new API writes and pods during each control-plane
+  outage. The legacy fixture still mounts storage from A. PostgreSQL failover,
+  real machine loss and cold restart remain open.
   Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups

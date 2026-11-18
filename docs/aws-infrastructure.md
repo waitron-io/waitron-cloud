@@ -1184,6 +1184,16 @@ verification before the existing withdrawal checks and cleanup. Stop and replace
 durations are separate launcher measurements. Keep the private JSON result and
 bounded diagnostics; failure still requests deletion and confirms it.
 
+To check whether a local Kubernetes cluster can schedule after losing one control
+plane, run `node scripts/kubernetes-check.mjs --node-loss` in a Linux guest with
+Kind 0.31.0, kubectl 1.34.3, Docker, at least 10 GiB of RAM and 30 GiB of free
+disk. The command uses three control planes and a loopback API address. It stops
+each node in turn, writes and reads a ConfigMap, and checks that a fresh pod runs
+on a surviving node. It then starts the stopped node at its original address and
+checks that all three original etcd members, which store the cluster state, are
+healthy. The check uses the pinned Kind image and needs no venue images.
+PostgreSQL failover and the loss of a Stockholm machine require their own checks.
+
 The opt-in three-node local reproducer is not a qualified check; no further full
 local run is planned. It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
 Use the same pinned Cloud and Waitron image variables as the other local checks,

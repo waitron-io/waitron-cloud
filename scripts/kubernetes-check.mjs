@@ -1,6 +1,7 @@
 // Local targets: prebuild the existing Cloud and pinned Waitron images, then run
 // TEST_CLOUD_INTEGRATION_IMAGE=sha256:… TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:… node scripts/kubernetes-check.mjs
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
+// --node-loss checks three control planes without venue images.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
 // Both need three owned nodes, 10 GiB RAM and 30 GiB disk, using the approved shared Docker wrapper.
 // Requires kind 0.31.0, kubectl 1.34.3 and Docker with Buildx (the venue build uses RUN --network=none). This deletes only its newly created kind cluster.
@@ -15,6 +16,7 @@ import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {observeP1, readP1Signals} from './p1-observer.mjs';
 import {installFlux} from './kubernetes-git.mjs';
+import {kindNodeImage, runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
@@ -87,6 +89,7 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 }
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
+if (target === 'kind-node-loss') return runKubernetesNodeLoss();
 const amazon = typeof target === 'object' ? target : undefined;
 if (amazon) assertAmazonBinding(amazon);
 else assert.ok(['kind', 'kind-worker-loss', 'kind-worker-observer'].includes(target), 'kubernetes.target');
@@ -171,7 +174,7 @@ try {
   }
   const configuration = {kind: 'Cluster', apiVersion: 'kind.x-k8s.io/v1alpha4', nodes: ['control-plane', 'worker', 'worker'].map(role => ({role,
     extraMounts: [{hostPath: shared, containerPath: '/var/local/d620-config'}]}))};
-  await run('kind', ['create', 'cluster', '--name', cluster, '--image', 'kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48', '--wait', '120s',
+  await run('kind', ['create', 'cluster', '--name', cluster, '--image', kindNodeImage, '--wait', '120s',
     ...(threeNodes ? ['--config', '-'] : [])], threeNodes ? JSON.stringify(configuration) : undefined);
   if (threeNodes) {
     await kube(['taint', 'node', cluster + '-control-plane', 'node-role.kubernetes.io/control-plane:NoSchedule-']);
@@ -338,7 +341,11 @@ return result;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const target = process.argv.length === 4 && process.argv[2] === '--amazon' ? JSON.parse(await readFile(process.argv[3], 'utf8')) : process.argv.length === 2 ? 'kind' : process.argv.length === 3 && process.argv[2] === '--worker-loss' ? 'kind-worker-loss' : process.argv.length === 3 && process.argv[2] === '--observer-worker-loss' ? 'kind-worker-observer' : undefined;
+  const [mode, file, ...extra] = process.argv.slice(2);
+  const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
+    ['--node-loss', 'kind-node-loss']]);
+  const target = extra.length ? undefined : file !== undefined ?
+    mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');
   try {process.stdout.write(JSON.stringify(await runKubernetesCheck(target)) + '\n');}
   catch (error) {
