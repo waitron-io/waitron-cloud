@@ -43,3 +43,11 @@ test('venue runtime leaves both historical modes unchanged when its flag is dorm
   assert.equal(parsePlanMode(absent.CLOUD_TEST_SERVICE_PLANS,absent.CLOUD_VENUE_SERVICE_LEVELS),flag==='0'?'existing':'test-free-paid');
  }
 });
+
+test('test account receives its mounted backup disk only in venue-level mode',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'cloud-stage-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir),settings={CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'};
+ assert.equal(testRuntimeEnvironment('account',config,{...settings,CLOUD_VENUE_SERVICE_LEVELS:'test'}).CLOUD_BACKUP_STAGE_ROOT,settings.CLOUD_BACKUP_STAGE_ROOT);
+ assert.equal(testRuntimeEnvironment('account',config,{...settings,CLOUD_TEST_SERVICE_PLANS:'1'}).CLOUD_BACKUP_STAGE_ROOT,undefined);
+ assert.equal(testRuntimeEnvironment('backup',config,{...settings,CLOUD_VENUE_SERVICE_LEVELS:'test'}).CLOUD_BACKUP_STAGE_ROOT,undefined);
+});

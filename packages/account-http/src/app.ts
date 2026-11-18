@@ -154,6 +154,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     return withEnrollmentPolicy({required: config.requireEnrollment === true, allowEnrollment: read || write || c.req.path.startsWith('/api/account/action-proof/')}, next);
   });
   app.all('*', async c => {
+    const startedAt=Date.now();
     protect(c);
     const url = new URL(c.req.url);
     if (url.host !== origin.host || (c.req.header('host') && c.req.header('host') !== origin.host)) throw new AccountHttpError(403, 'forbidden');
@@ -195,7 +196,7 @@ export function createAccountApp(options: {operatorAccountId?:string;guestOrigin
     if(c.req.path==='/api/installations/address-lookup')return addressLookupResponse(c,{machine:addressLookup,ip,consume});
     if(translationPaths.includes(c.req.path))return translationResponse(c,{machine:translation,ip,consume});
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
-    if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume});
+    if(['/api/installations/backup-reserve','/api/installations/backup-publish'].includes(c.req.path))return captureResponse(c,{captures,ip,consume,startedAt});
     if(['/api/installations/backup-stream-configure','/api/installations/backup-stream-observe'].includes(c.req.path))return managedStreamResponse(c,{streams,ip,consume});
     if(c.req.path.startsWith('/api/account/remote-access/'))return remoteAccessResponse(c,{pool,origin:config.portalOrigin,consume,resolve:options.remoteResolve,planMode:options.planMode,guestOrigin:options.guestOrigin});
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});

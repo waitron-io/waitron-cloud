@@ -7,7 +7,8 @@ import {
   type ObjectReceipt,
   type StorageLocation,
 } from "./storage.ts";
-import { bufferObject, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
+import { bufferObject, MAX_LEGACY_BACKUP_BYTES, MAX_OBJECT_BYTES, type ReplayableObject, type StageOptions } from "./object-transfer.ts";
+import type { PublicationDeadline } from "./publication-deadline.ts";
 import { isBackupCancellation } from "./cancellation.ts";
 import {prepareVerification,admitVerification,recordVerificationUnavailable,lockVerificationPolicy,type VerificationClaim} from './verification-admission.ts';
 import type {DataRestoreVerifier,VerifiedChildOutput} from './container-verifier.ts';
@@ -19,27 +20,27 @@ interface StreamingObjectStore {
     streamKey?: string,
     options?: StageOptions,
   ): Promise<ReplayableObject>;
-  putStaged(key: string, source: ReplayableObject): Promise<ObjectReceipt>;
+  putStaged(key: string, source: ReplayableObject, streamKey?:string, options?: StageOptions): Promise<ObjectReceipt>;
 }
 interface BufferedObjectStore {
   read(key: string): Promise<Buffer>;
   put(key: string, bytes: Uint8Array): Promise<ObjectReceipt>;
 }
 export type ObjectStore = (StreamingObjectStore | BufferedObjectStore) & {
-  remove(key: string): Promise<void>;
+  remove(key: string, options?: StageOptions): Promise<void>;
 };
 export type ObjectFactory = (location: StorageLocation) => ObjectStore;
-async function staged(objects:ObjectStore,key:string,signal?:AbortSignal){
-  signal?.throwIfAborted();
-  const source='stage' in objects?await objects.stage(key,undefined,{signal}):bufferObject(await objects.read(key));
-  if(signal?.aborted){
+async function staged(objects:ObjectStore,key:string,options?:StageOptions){
+  options?.signal?.throwIfAborted();
+  const source='stage' in objects?await objects.stage(key,undefined,options):bufferObject(await objects.read(key));
+  if(options?.signal?.aborted){
     await source.dispose();
-    signal.throwIfAborted();
+    options.signal.throwIfAborted();
   }
   return source;
 }
-async function putStaged(objects:ObjectStore,key:string,source:ReplayableObject){
-  if('putStaged' in objects)return objects.putStaged(key,source);
+async function putStaged(objects:ObjectStore,key:string,source:ReplayableObject,options?:StageOptions){
+  if('putStaged' in objects)return objects.putStaged(key,source,undefined,options);
   const chunks:Buffer[]=[];
   for await(const chunk of source.open())chunks.push(Buffer.from(chunk));
   return objects.put(key,Buffer.concat(chunks,source.receipt.size));
@@ -78,26 +79,37 @@ async function snapshotsAllowed(client:PoolClient,venueId:string,mode:PlanMode):
   if(mode==='test-venue-levels')return (await readVenuePermissions(client,venueId,mode)).level!=='registered';
   return await readVenuePlan(client,venueId,mode)==='paid';
 }
-async function publicationTransaction<T>(client:PoolClient,action:(client:PoolClient)=>Promise<T>):Promise<T>{
-  await client.query('BEGIN');
-  try{
-    const result=await action(client);await client.query('COMMIT');return result;
-  }catch(error){
-    try{await client.query('ROLLBACK');}catch{}
-    throw error;
-  }
-}
-async function publicationSession<T>(pool:Pool,id:string,action:(client:PoolClient)=>Promise<T>):Promise<T>{
-  const client=await pool.connect(),lock='snapshot-publication:'+id;
+type PublicationTransaction = <T>(action:(client:PoolClient)=>Promise<T>)=>Promise<T>;
+async function publicationSession<T>(pool:Pool,id:string,deadline:PublicationDeadline|undefined,action:(transact:PublicationTransaction)=>Promise<T>):Promise<T>{
+  const client=deadline?await deadline.run(()=>pool.connect(),late=>late.release()):await pool.connect();
+  const lock='snapshot-publication:'+id;
   let discard=false;
   const onError=()=>{discard=true;};client.on('error',onError);
+  const run=<Result>(operation:()=>Promise<Result>)=>deadline?deadline.run(operation):operation();
+  const transact:PublicationTransaction=work=>run(async()=>{
+    await client.query('BEGIN');
+    try{
+      // PostgreSQL must stop waiting for locks even if the client has already disconnected.
+      if(deadline)await client.query("SELECT set_config('transaction_timeout',$1,true)",[`${deadline.remaining()}ms`]);
+      const result=await work(client);
+      deadline?.remaining();
+      await client.query('COMMIT');
+      return result;
+    }catch(error){
+      try{await client.query('ROLLBACK');}catch{}
+      throw error;
+    }
+  });
   try{
-    // One capture's canonical object stays exclusive while authority transactions release their locks.
-    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
-    return await action(client);
+    // One capture's session lock stays held when its authority transactions release their locks.
+    const acquire=()=>client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
+    if(deadline)await transact(acquire);
+    else await acquire();
+    return await action(transact);
   }catch(error){discard=true;throw error;}
   finally{
-    try{if(!discard)await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);}
+    // Discard a timed-out session so its advisory lock cannot follow the pooled connection.
+    try{if(!discard)await run(()=>client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]));}
     catch(error){discard=true;throw error;}
     finally{client.release(discard);client.removeListener('error',onError);}
   }
@@ -212,7 +224,7 @@ export async function pointKeys(
   if (!row) backupFail("key_unavailable");
   return vault.open(venue, version, row.sealed);
 }
-function validateMetadata(m: PointMetadata) {
+function validateMetadata(m: PointMetadata, maximum: number) {
   if (
     !m ||
     Object.keys(m).sort().join(",") !==
@@ -221,7 +233,7 @@ function validateMetadata(m: PointMetadata) {
     !/^[0-9a-f]{64}$/.test(m.digest) ||
     !Number.isSafeInteger(m.size) ||
     m.size < 1 ||
-    m.size > 512 * 1024 * 1024 ||
+    m.size > maximum ||
     !["daily", "monthly"].includes(m.retention) ||
     !Number.isFinite(Date.parse(m.capturedAt)) ||
     new Date(m.capturedAt).toISOString() !== m.capturedAt ||
@@ -378,10 +390,12 @@ export class BackupCatalogue {
     id: string,
     m: PointMetadata,
     fence?: MutationFence,
+    deadline?: PublicationDeadline,
   ): Promise<BackupPoint> {
     if (!uuid(id)) backupFail("unavailable");
-    validateMetadata(m);
-    if(this.#planMode==='test-venue-levels')return this.#publishVenue(installationId,id,m,fence);
+    const venueMode=this.#planMode==='test-venue-levels';
+    validateMetadata(m,venueMode?MAX_OBJECT_BYTES:MAX_LEGACY_BACKUP_BYTES);
+    if(venueMode)return this.#publishVenue(installationId,id,m,fence,deadline);
     const published = await transaction(this.#pool, async (client) => {
       const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id),
@@ -400,7 +414,7 @@ export class BackupCatalogue {
       }
       if(capture.expired)backupFail("capture_expired");
       const objects = this.#objects(location(l)),
-        source = await staged(objects,"incoming/" + id);
+        source = await staged(objects,"incoming/" + id,{maxBytes:MAX_LEGACY_BACKUP_BYTES});
       try {
         if (source.receipt.digest !== m.digest || source.receipt.size !== m.size)
           backupFail("object_mismatch");
@@ -434,9 +448,10 @@ export class BackupCatalogue {
     await this.#objects(published.location).remove("incoming/" + id);
     return published.point;
   }
-  async #publishVenue(installationId:string,id:string,m:PointMetadata,fence?:MutationFence):Promise<BackupPoint>{
-    return publicationSession(this.#pool,id,async client=>{
-      const first=await publicationTransaction(client,async client=>{
+  async #publishVenue(installationId:string,id:string,m:PointMetadata,fence?:MutationFence,deadline?:PublicationDeadline):Promise<BackupPoint>{
+    const storageOptions=()=>deadline?{signal:deadline.signal,timeoutMs:deadline.remaining()}:undefined;
+    return publicationSession(this.#pool,id,deadline,async transact=>{
+      const first=await transact(async client=>{
         const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
         const capture=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
         if(!capture)backupFail('unavailable');
@@ -448,14 +463,15 @@ export class BackupCatalogue {
         return {prior,venueId:install.venue_id as string,publicKey:install.public_key as string,generation:permission.revision,keyVersion:capture.key_version as number,location:location(l)};
       });
       const objects=this.#objects(first.location);
-      if(first.prior){await objects.remove('incoming/'+id);return first.prior;}
+      if(first.prior){await objects.remove('incoming/'+id,storageOptions());return first.prior;}
+      if(m.size>MAX_LEGACY_BACKUP_BYTES&&!('stage' in objects))backupFail('invalid_metadata');
       // Object I/O holds no authority locks; only the captured generation may admit its result.
-      const source=await staged(objects,'incoming/'+id),objectKey='snapshots/'+id;
+      const source=await staged(objects,'incoming/'+id,storageOptions()),objectKey='snapshots/'+id;
       try{
         if(source.receipt.digest!==m.digest||source.receipt.size!==m.size)backupFail('object_mismatch');
-        await putStaged(objects,objectKey,source);
+        await putStaged(objects,objectKey,source,storageOptions());
       }finally{await source.dispose();}
-      const published=await publicationTransaction(client,async client=>{
+      const published=await transact(async client=>{
         const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
         await fence?.(client);
         const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
@@ -473,7 +489,7 @@ export class BackupCatalogue {
           [id,first.venueId,installationId,first.keyVersion,objectKey,m.digest,m.size,m.capturedAt,m.retention,m.sourceNodeId,m.modules]);
         return (await point(client,id))!;
       });
-      await objects.remove('incoming/'+id);
+      await objects.remove('incoming/'+id,storageOptions());
       return published;
     });
   }

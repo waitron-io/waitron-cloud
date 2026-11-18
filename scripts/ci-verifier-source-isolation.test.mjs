@@ -20,7 +20,7 @@ async function fixture(t) {
   }
   for (const path of ["scripts/build-backup-verifier.mjs", "deploy/backup-verifier/Dockerfile",
     ...["container-entry.mjs", "waitron-verifier.ts", "waitron-verify-child.mjs", "verify-process.ts",
-      "verification-protocol.ts", "verification-transport.ts", "waitron-data-verify-child.mjs"]
+      "verification-protocol.ts", "verification-transport.ts", "waitron-data-verify-child.mjs", "object-transfer.ts"]
       .map(name => "packages/backups/src/" + name)]) {
     await copyFile(new URL(path, repository), join(cloud, path));
   }
@@ -94,4 +94,12 @@ test("verifier release stamp uses the committed generator despite its staged rep
   const context = await f.build();
   assert.deepEqual(JSON.parse(await readFile(join(context, "build/hour-release.json"), "utf8")),
     { sourceCommit: f.revision, origin: "committed" });
+});
+
+test("the packaged verifier can import its runtime dependencies", { timeout: 20000 }, async t => {
+  const f = await fixture(t);
+  const context = await f.build();
+  await execute(process.execPath, ["--input-type=module", "-e", 'await import("./waitron-verifier.ts")'], {
+    cwd: join(context, "..", "verifier"), timeout: 10000,
+  });
 });

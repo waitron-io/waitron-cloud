@@ -30,6 +30,12 @@ restore records, retention and owner-bound snapshot recovery. The catalogue expo
 snapshot capture times and signed continuous recovery times through the customer
 catalogue and guided recovery screens.
 
+Test venue-level publication has a separate work deadline. Cloud stops at the
+earlier of 45 seconds after the request starts and 55 seconds after the box
+signed it. The signature itself still uses the existing 60-second check.
+A publish with no time left returns HTTP 503 and a retry hint. See the
+[authenticated backup capture adapter](authenticated-captures.md#wire-contract).
+
 The proof excludes actual source Cloud credentials/staff TLS keys and drops captured
 backup destination settings on the disposable replacement. It invokes Waitron's
 validation, SQLite restore/migration and module hooks without starting workers.

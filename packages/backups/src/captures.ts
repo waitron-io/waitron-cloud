@@ -4,6 +4,7 @@ import {BackupCatalogue,backupFail,type ObjectFactory,type PointMetadata} from '
 import type {BackupKeyVault} from './keys.ts';
 import type {StorageLocation,StorageScope,StorageCredentials} from './storage.ts';
 import type {ManagedStreamAuthority} from './managed-streams.ts';
+import {PUBLICATION_WORK_MS,PublicationDeadline,signedPublicationDeadline} from './publication-deadline.ts';
 export interface CaptureOptions {
  vault:BackupKeyVault;
  objects:ObjectFactory;
@@ -15,10 +16,18 @@ export type CaptureAction='backup-reserve'|'backup-publish';
 export class BackupCaptures {
  readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #options:CaptureOptions;readonly #catalogue:BackupCatalogue;
  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,options:CaptureOptions,trusted=createLeaseTrust(issuer)){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#options=options;this.#catalogue=new BackupCatalogue(pool,options.vault,options.objects,options.planMode);}
- async authenticate(action:CaptureAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
- async execute(action:CaptureAction,envelope:unknown){
-  if(this.#options.planMode==='test-free-paid'||this.#options.planMode==='test-venue-levels')await this.authenticate(action,envelope);
-  const routing=readMachineClaims(envelope);
+ async authenticate(action:CaptureAction,envelope:unknown,startedAt=Date.now()){
+  const authenticate=()=>new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);
+  if(action!=='backup-publish'||this.#options.planMode!=='test-venue-levels')return authenticate();
+  const claims=await new PublicationDeadline(startedAt+PUBLICATION_WORK_MS).run(authenticate);
+  signedPublicationDeadline(startedAt,claims.issuedAt);
+  return claims;
+ }
+ async execute(action:CaptureAction,envelope:unknown,startedAt=Date.now()){
+  const routing=this.#options.planMode==='test-free-paid'||this.#options.planMode==='test-venue-levels'
+   ?await this.authenticate(action,envelope,startedAt):readMachineClaims(envelope);
+  const deadline=action==='backup-publish'&&this.#options.planMode==='test-venue-levels'
+   ?signedPublicationDeadline(startedAt,routing.issuedAt):undefined;
   let permission:VenuePermission|undefined;
   const fence=async(client:PoolClient)=>{
    // Catalogue callers hold the installation lock before the location lock; rechecking never reverses it.
@@ -51,7 +60,7 @@ export class BackupCaptures {
    return {id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location:current.location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,...grant};
   }
   let metadata:PointMetadata;try{metadata=JSON.parse(routing.body);}catch{return backupFail('invalid_metadata');}
-  const p=await this.#catalogue.publish(routing.installationId,routing.operationId,metadata,fence);
+  const p=await this.#catalogue.publish(routing.installationId,routing.operationId,metadata,fence,deadline);
   return {id:p.id,installationId:p.installationId,venueId:p.venueId,keyVersion:p.keyVersion,digest:p.digest,size:p.size,capturedAt:p.capturedAt,retention:p.retention,sourceNodeId:p.sourceNodeId,modules:p.modules,verification:p.verification};
  }
 }

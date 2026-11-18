@@ -22,7 +22,7 @@ async function fixture(t, { generatorFails = false } = {}) {
   await copyFile(new URL("scripts/build-backup-verifier.mjs", repository), join(cloud, "scripts/build-backup-verifier.mjs"));
   await copyFile(new URL("deploy/backup-verifier/Dockerfile", repository), join(cloud, "deploy/backup-verifier/Dockerfile"));
   for (const name of ["container-entry.mjs", "waitron-verifier.ts", "waitron-verify-child.mjs", "verify-process.ts",
-    "verification-protocol.ts", "verification-transport.ts", "waitron-data-verify-child.mjs"]) {
+    "verification-protocol.ts", "verification-transport.ts", "waitron-data-verify-child.mjs", "object-transfer.ts"]) {
     await copyFile(new URL("packages/backups/src/" + name, repository), join(cloud, "packages/backups/src", name));
   }
   await writeFile(join(source, "package.json"), '{"type":"module"}');

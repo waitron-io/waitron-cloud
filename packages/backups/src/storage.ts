@@ -13,6 +13,7 @@ import {
   AssumeRoleWithWebIdentityCommand,
 } from "@aws-sdk/client-sts";
 import {
+  MAX_LEGACY_BACKUP_BYTES,
   MAX_OBJECT_BYTES,
   bufferObject,
   stageReadable,
@@ -162,14 +163,17 @@ export class StorageAuthority {
 }
 export class BackupObjects {
   readonly #client: S3Client;
+  readonly #temporaryRoot: string | undefined;
   readonly location: StorageLocation;
   constructor(
     location: StorageLocation,
     credentials: StorageCredentials,
     ca?: string,
+    temporaryRoot?: string,
   ) {
     validateLocation(location);
     this.location = location;
+    this.#temporaryRoot = temporaryRoot;
     const options: S3ClientConfig = {
       endpoint: location.endpoint,
       region: location.region,
@@ -207,9 +211,9 @@ export class BackupObjects {
         );
         if (!result.Body) throw new Error("backup.object_invalid");
         return await stageReadable(
-          Readable.from(result.Body as AsyncIterable<Uint8Array>),
+          result.Body instanceof Readable ? result.Body : Readable.from(result.Body as AsyncIterable<Uint8Array>),
           result.ContentLength as number,
-          { ...options, signal: operationSignal },
+          { temporaryRoot: this.#temporaryRoot, ...options, signal: operationSignal },
         );
       } catch (error) {
         if (operationSignal.aborted) throw new Error("backup.cancelled");
@@ -220,7 +224,7 @@ export class BackupObjects {
     throw new Error("backup.object_invalid");
   }
   async read(key: string, streamKey?: string): Promise<Buffer> {
-    const staged = await this.stage(key, streamKey);
+    const staged = await this.stage(key, streamKey, {maxBytes:MAX_LEGACY_BACKUP_BYTES});
     const chunks: Buffer[] = [];
     try {
       for await (const chunk of staged.open()) chunks.push(Buffer.from(chunk));
@@ -234,7 +238,8 @@ export class BackupObjects {
     bytes: Uint8Array,
     streamKey?: string,
   ): Promise<ObjectReceipt> {
-    return this.putStaged(key, bufferObject(bytes), streamKey);
+    if (bytes.length > MAX_LEGACY_BACKUP_BYTES) throw Error("backup.object_invalid");
+    return this.putStaged(key, bufferObject(bytes), streamKey, {maxBytes:MAX_LEGACY_BACKUP_BYTES});
   }
   async putStaged(
     key: string,
@@ -246,7 +251,7 @@ export class BackupObjects {
     if (
       !Number.isSafeInteger(expected.size) ||
       expected.size < 1 ||
-      expected.size > MAX_OBJECT_BYTES ||
+      expected.size > (options.maxBytes ?? MAX_OBJECT_BYTES) ||
       !/^[0-9a-f]{64}$/.test(expected.digest)
     )
       throw new Error("backup.object_invalid");
@@ -304,8 +309,8 @@ export class BackupObjects {
     }
     throw new Error("backup.object_invalid");
   }
-  async remove(key: string): Promise<void> {
-    const operationSignal = AbortSignal.timeout(10000);
+  async remove(key: string, options: StageOptions = {}): Promise<void> {
+    const operationSignal = abortSignal({timeoutMs:10000,...options});
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         await this.#client.send(

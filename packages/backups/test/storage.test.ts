@@ -1,9 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, randomBytes, verify } from "node:crypto";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable } from "node:stream";
 import { S3Client } from "@aws-sdk/client-s3";
 import { bufferObject } from "../src/object-transfer.ts";
+import { workerObjects } from "../src/worker-config.ts";
 import {
   BackupObjects,
   StorageAuthority,
@@ -142,6 +146,51 @@ test("storage locations and scopes refuse insecure and ambiguous destinations", 
       scope: "snapshots/a",
     }),
   );
+});
+
+test("storage startup refuses an explicitly empty stage root", () => {
+  assert.throws(() => workerObjects({
+    CLOUD_BACKUP_ENDPOINT: location.endpoint,
+    CLOUD_BACKUP_REGION: location.region,
+    CLOUD_BACKUP_ACCESS_KEY: credentials.accessKeyId,
+    CLOUD_BACKUP_SECRET_KEY: credentials.secretAccessKey,
+    CLOUD_BACKUP_STAGE_ROOT: "",
+  }), { message: "backup.storage_configuration" });
+});
+
+test("the configured worker disk holds both the download and its conditional retry comparison", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "cloud-storage-stage-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const worker = workerObjects({
+    CLOUD_BACKUP_ENDPOINT: location.endpoint,
+    CLOUD_BACKUP_REGION: location.region,
+    CLOUD_BACKUP_ACCESS_KEY: credentials.accessKeyId,
+    CLOUD_BACKUP_SECRET_KEY: credentials.secretAccessKey,
+    CLOUD_BACKUP_STAGE_ROOT: root,
+  });
+  t.after(() => worker.close());
+  const objects = worker.objects(location), bytes = Buffer.from("encrypted test archive");
+  await fakeS3(async (command) => {
+    if (command.constructor.name === "PutObjectCommand") {
+      await (command.input.Body as Readable).toArray();
+      throw Object.assign(new Error("existing copy"), { $metadata: { httpStatusCode: 412 } });
+    }
+    const body = Readable.from((async function* () {
+      if (command.input.Key === "snapshots/a") assert.equal((await readdir(root)).length, 2);
+      yield bytes;
+    })());
+    return { ContentLength: bytes.length, Body: body };
+  }, async () => {
+    const source = await objects.stage("incoming/a");
+    try {
+      assert.equal((await readdir(root)).length, 1);
+      assert.deepEqual(await objects.putStaged("snapshots/a", source), source.receipt);
+      assert.equal((await readdir(root)).length, 1);
+    } finally {
+      await source.dispose();
+    }
+  });
+  assert.deepEqual(await readdir(root), []);
 });
 
 test("staged uploads pass the exact length and reopen byte zero for a transient retry", async () => {

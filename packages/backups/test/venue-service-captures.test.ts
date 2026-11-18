@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {createLeaseIssuer,encodeMachine,transaction,type SignedEnvelope} from '@waitron-cloud/registration';
 import {venueServiceFixture,set,trial,event} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCaptures,type CaptureAction} from '../src/captures.ts';
@@ -101,4 +102,45 @@ test('venue capture provider failure preserves one retryable reservation',async(
   const before=await state(f);f.blockGrant(async()=>{});const result=await f.captures.execute('backup-reserve',f.proof('backup-reserve',id));
   assert.equal(result.id,id);assert.deepEqual(await state(f),before);assert.equal(f.grants.length,2);
  }finally{await f.close();}
+});
+
+test('a signed publish cannot start a copy after its proof has only five seconds left',async()=>{
+ const f=await fixture();try{
+  await provision(f);const id=randomUUID();
+  await f.captures.execute('backup-reserve',f.proof('backup-reserve',id));
+  const bytes=Buffer.from('staged encrypted backup'),metadata={...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}};
+  f.objects.set('incoming/'+id,bytes);
+  await assert.rejects(f.captures.execute('backup-publish',f.proof('backup-publish',id,metadata,{issuedAt:Date.now()-56000})),{message:'backup.cancelled'});
+  assert.deepEqual([...f.objects.keys()],['incoming/'+id]);
+  assert.deepEqual((await state(f)).backup_points,[]);
+  const point=await f.captures.execute('backup-publish',f.proof('backup-publish',id,metadata));
+  assert.equal(point.id,id);
+  assert.deepEqual(f.objects.get('snapshots/'+id),bytes);
+ }finally{await f.close();}
+});
+
+test('signed publication runs out of time while another connection holds the capture lock',async()=>{
+ const f=await fixture(), locker=await f.peer.connect();
+ let pending:Promise<unknown>|undefined;
+ try{
+  await provision(f);const id=randomUUID(), lock='snapshot-publication:'+id;
+  await f.captures.execute('backup-reserve',f.proof('backup-reserve',id));
+  const bytes=Buffer.from('staged encrypted backup'),metadata={...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}};
+  f.objects.set('incoming/'+id,bytes);
+  await locker.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
+  pending=f.captures.execute('backup-publish',f.proof('backup-publish',id,metadata,{issuedAt:Date.now()-53500}));
+  const refused=assert.rejects(Promise.race([pending,delay(3000,undefined,{ref:false}).then(()=>{throw Error('capture lock still waiting');})]),{message:'backup.cancelled'});
+  void refused.catch(()=>{});
+  const isWaiting=async()=>!!(await f.admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[f.schema])).rowCount;
+  let waiting=await isWaiting();
+  for(let n=0;n<40&&!waiting;n++){await delay(25);waiting=await isWaiting();}
+  assert.equal(waiting,true,'publication must reach the held lock before its budget expires');
+  await refused;
+  for(let n=0;n<40&&waiting;n++){waiting=await isWaiting();if(waiting)await delay(25);}
+  assert.equal(waiting,false,'the expired server-side lock wait must end while the holder still owns the lock');
+  assert.deepEqual((await state(f)).backup_points,[]);
+  assert.deepEqual([...f.objects.keys()],['incoming/'+id]);
+  await locker.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);
+  assert.equal((await f.captures.execute('backup-publish',f.proof('backup-publish',id,metadata))).id,id);
+ }finally{locker.release(true);await pending?.catch(()=>{});await f.close();}
 });

@@ -158,3 +158,9 @@ test('only account receives an explicitly supplied translation switch',async()=>
  for(const role of ['migrate','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation'])
   assert.equal(runtimeEnvironment(role,config,{CLOUD_TRANSLATION:'1'}).CLOUD_TRANSLATION,undefined,role);
 });
+
+test('local backup worker receives its mounted disk root',async()=>{
+ const {config}=await configured(),settings={CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'};
+ assert.equal(runtimeEnvironment('backup',config,settings).CLOUD_BACKUP_STAGE_ROOT,settings.CLOUD_BACKUP_STAGE_ROOT);
+ assert.equal(runtimeEnvironment('account',config,settings).CLOUD_BACKUP_STAGE_ROOT,undefined);
+});

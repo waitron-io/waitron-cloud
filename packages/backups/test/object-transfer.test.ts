@@ -118,6 +118,13 @@ test("invalid advertised lengths close the unread provider body", async () => {
   assert.deepEqual(await readdir(root), []);
 });
 
+test("staging closes the unread provider stream if its disk root cannot create a stage", async () => {
+  const body = Readable.from([Buffer.from("unread")]);
+  await assert.rejects(stageReadable(body, 6, { temporaryRoot: join(root, "missing") }), { code: "ENOENT" });
+  assert.equal(body.destroyed, true);
+  assert.deepEqual(await readdir(root), []);
+});
+
 test("caller cancellation stops staging and removes its partial file", async () => {
   const controller = new AbortController();
   const operation = stageReadable(repeated(0x62, 1024 * 1024, 5), 1024 * 1024, {

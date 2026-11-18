@@ -1870,7 +1870,8 @@ implementation or production evidence.
   `node --test scripts/test-cloud-paid-stream.test.mjs` passes with the pinned ec91 and
   explicitly selected 3ff92a10 Waitron images; the latter also passes
   `scripts/test-cloud-paid-continuous-recovery.test.mjs`. Production custody, release
-  qualification, provider isolation, capacity and lifecycle policies remain open. See
+  qualification, provider isolation, capacity and lifecycle policies remain open.
+  Whole-year backups still need the large verifier and a genuine recovery. See
   [the complete requirements and deliberate limits](backlog/data-lifecycle.md), including
   unresolved verifier failures.
 
