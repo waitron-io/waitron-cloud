@@ -15,6 +15,7 @@ assert.equal(movement.certificatesPreserved,true);
 assert.equal(movement.otherVenueIsolated,true);
 assert.equal(movement.oldRouteRevoked,true);
 assert.equal(movement.completedReplayMatched,true);
+assert.deepEqual(movement.customNames,{staff:true,public:true,renewed:true,cnameUntouched:true});
 assert.ok(Number.isInteger(movement.reconnectionMs)&&movement.reconnectionMs>=0,'invalid movement reconnectionMs');
 const sequences=movement.sequences;
 for(const name of ['initialSource','failedTarget','cancelledTarget','stagedTarget','committedSource','committedTarget'])assert.ok(Number.isSafeInteger(sequences?.[name])&&sequences[name]>0,`invalid ${name} sequence`);

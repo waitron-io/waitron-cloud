@@ -65,9 +65,10 @@ test('owner sees only public setup metadata with passive session, exact origin a
 });
 test('custom DNS instructions and revision-bound apply preserve other name and audit actor',async()=>{
  const input={kind:'staff',hostname:'staff.cafe.example'};
- const instructions=await request('dns',input);assert.equal(instructions.status,200);const dns=await instructions.json();assert.equal(dns.records.length,2);assert.equal(dns.records[0].value,assigned);
+ const instructions=await request('dns',input);assert.equal(instructions.status,200);
+ assert.deepEqual(await instructions.json(),{installationId:venue.installationId,...input,records:[{type:'CNAME',name:input.hostname,value:assigned}]});
  resolve=async()=>['wrong.example'];assert.equal((await request('apply',{...input,expectedRevision:'1'})).status,400);
- resolve=async name=>[name.startsWith('_acme-challenge.')?'_acme-challenge.'+assigned:assigned];
+ resolve=async name=>name===input.hostname?[assigned]:[];
  const applied=await request('apply',{...input,expectedRevision:'1'});assert.equal(applied.status,200);const view=await applied.json();assert.equal(view.names.staff.current,input.hostname);assert.equal(view.names.public.current,view.names.public.assigned);assert.equal(view.revision,2);assert.equal(view.service.state,'provisioning');
  assert.equal((await request('apply',{...input,expectedRevision:'1'})).status,409);
  const audit=(await db.pool.query('SELECT * FROM remote_hostname_changes')).rows;assert.equal(audit.length,1);assert.equal(audit[0].account_id,owner.accountId);assert.equal(audit[0].hostname,input.hostname);

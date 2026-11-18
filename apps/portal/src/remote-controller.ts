@@ -3,7 +3,7 @@ import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy} from './locale.ts';
 import {remoteHostname,validRemoteView,validRemoteDns,validGuestMenuView,type GuestMenuView,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
 export class RemoteController {
- installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:RemoteDns['records']}|undefined;
+ installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:[]|RemoteDns['records']}|undefined;
  error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}

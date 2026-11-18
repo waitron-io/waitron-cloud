@@ -71,11 +71,14 @@ drives the durable monitor, account portal and Mailpit through an isolated venue
 failure, stale evidence, invalid certificate trust, a full gateway outage and each recovery.
 Run `node scripts/verify-remote-monitoring-receipt.mjs /tmp/cloud-remote-receipt.json` to
 check the versioned phase list, timings, tenant-isolation flags and alert deduplication.
-It finally stages one venue on the second cell, cancels an unreachable destination, then
-tests and commits a fresh destination route. Run
+Pebble issues both custom names through the gateway on port 443. The proof renews
+the staff certificate with an older certificate CNAME still present. It then stages one
+venue on the second cell, cancels an unreachable destination, and tests and commits a fresh
+destination route. Cloud's assigned CNAMEs follow the active cell while the custom CNAMEs
+keep pointing at the assigned names. Run
 `node scripts/verify-cell-movement-receipt.mjs /tmp/cloud-remote-receipt.json` to check
-the manifest sequence advances, failed-apply rollback, stable names/certificates, source
-revocation and other-venue isolation.
+the manifest sequence advances, failed-apply rollback, stable names and certificates, custom
+name renewal, unchanged owner records, source revocation and other-venue isolation.
 
 The test root is trusted explicitly by its test clients. It never installs a system
 certificate authority, disables certificate verification or changes host DNS. The
@@ -104,14 +107,14 @@ changing your own domain. If no gateway has been assigned, the screen says so in
 of offering an address that cannot work.
 
 To use a name such as `staff.your-cafe.es`, choose the address to change, enter the name
-and select **Review DNS settings**. Create both displayed CNAME records at your domain
-provider. The first directs traffic to your venue; the second delegates certificate
-validation. Keep both records while you use the name. Use a subdomain because many DNS
-providers cannot put a CNAME at the domain root. Your name can contain at most 237
-characters, leaving room for the certificate record's `_acme-challenge.` prefix.
+and select **Review DNS settings**. Create the displayed CNAME record at your domain
+provider. It points your name at the venue's assigned address so the gateway can serve
+traffic and answer the certificate authority's check on port 443. Keep this record while
+you use the name. Use a subdomain of at most 237 characters, because many DNS providers
+cannot put a CNAME at the domain root.
 
-Select **Check DNS and use this name** when both records are present. A failed check
-leaves your current name unchanged. DNS can take time to propagate, so check the records
+Select **Check DNS and use this name** when the record is present. A failed check
+leaves your current name unchanged. DNS can take time to propagate, so check the record
 and retry. **Use assigned name** lets you review a switch back without custom records.
 A concurrent configuration change requires refreshing and reviewing again. If the save
 reply is lost, the portal reads the current settings instead of resending the change.
@@ -257,9 +260,8 @@ reconciler and staff exchange still decide who can receive a certificate, and th
 staff exchange still refuses production installations. Each box keeps its own key.
 The trial's wildcard address points at one gateway. Certificate authorization and
 renewal use each venue's stored assigned name, including after a cross-suffix move.
-The record worker follows committed cell moves; live provider and routing
-qualification remain open. The single-suffix trial does
-not exercise that move.
+The local two-cell proof exercises the name switch on commit across distinct cell suffixes.
+Live provider and routing qualification remain open.
 
 Run one scheduling and work pass, inspect redacted status, or leave the worker running:
 
@@ -313,14 +315,27 @@ customer appliance. Neither component changes the host's network interfaces.
 
 ## Configure a custom-name certificate check
 
-Assigned names use a DNS challenge through the worker's DNS module. For a custom
-address, configure the worker with the gateway's private check folder so it can
-answer the certificate authority on port 443. When you construct
-`FileReconcilerArtifacts`, supply the absolute `challenges` directory per route cell.
-Pass a `gatewayStatus` reader to `RemoteConfigurationReconciler` that reports the
-answerable names from every gateway in each cell. Give that reader access to status
-data only. The command-line worker and account portal still use two DNS records
-for custom names until the local wiring and one-record switch are available.
+Assigned names use a DNS challenge through the worker's DNS module. To serve custom
+addresses with the command-line worker, add two absolute paths to each route in its
+configuration:
+
+```json
+{
+  "challenges": "/absolute/private/cell-checks",
+  "statusDirectory": "/absolute/private/cell-status"
+}
+```
+
+Set `GATEWAY_CHALLENGES` to the gateway's read-only mount of the check directory.
+Give write access only to the certificate worker. Set `GATEWAY_STATUS_DIR` to a
+separate directory the gateway can write. Give the worker read-only access to that
+directory, with permission to read its private `status.json`. Keep the gateway state
+and WireGuard key directories out of the worker's mounts.
+
+The command-line configuration reads one status file per cell. A deployment with
+multiple gateways in a cell needs a status reader that reports each gateway. Configure
+the check and status paths before offering one-record setup. The Amazon test Cloud
+has a separate certificate adapter and needs its own custom-domain qualification.
 
 Before a gateway check, the worker verifies that the custom CNAME still points to
 the assigned address. If the record has moved, Cloud keeps the current certificate while
@@ -443,13 +458,13 @@ For a custom hostname, ask for the exact delegation instructions:
 node packages/remote-access/src/operator-cli.ts dns /path/to/custom-name.json
 ```
 
-The file contains `installationId`, `kind` and `hostname`. Create both returned
-CNAME records, then add the current `expectedRevision` and run the `hostname` command.
-Both CNAMEs must resolve to the assigned venue targets. Custom names cannot claim
+The file contains `installationId`, `kind` and `hostname`. Create the returned
+CNAME, then add the current `expectedRevision` and run the `hostname` command.
+Your CNAME must resolve to the venue's assigned name. Custom names cannot claim
 any country-zone or cell suffix, including names reserved for venues not yet provisioned. The command refuses an already
 claimed name or stale revision, changes the active hostname and returns the placement
-to provisioning. Reissue its certificate and update Waitron's management origin before
-exporting routes with the changed name. This initial operator flow selects one active
+to provisioning. Leave the configured worker running so it can publish the route and
+order the matching certificate. Update Waitron's management origin to the new name. This initial operator flow selects one active
 staff and one active public name; it does not serve both custom and assigned aliases.
 
 ## Keep LAN access independent

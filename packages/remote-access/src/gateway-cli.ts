@@ -1,6 +1,6 @@
 import {createHash,createPublicKey,randomUUID} from 'node:crypto';
 import {readFile,readdir,rename,mkdir,open} from 'node:fs/promises';
-import {join} from 'node:path';
+import {isAbsolute,join} from 'node:path';
 import {createServer} from 'node:http';
 import {spawn,execFileSync,type ChildProcess} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -14,6 +14,8 @@ import {AlpnResponder} from './alpn-responder.ts';
 import {createPublicGate} from './public-gate.ts';
 import {isUuid,isPeerKey,type GatewayRoute} from './manifest.ts';
 const root=process.env.GATEWAY_STATE_DIR??'/state',input=process.env.GATEWAY_MANIFEST??'/input/manifest.json',cell=process.env.GATEWAY_CELL_ID??'';
+const statusDirectory=process.env.GATEWAY_STATUS_DIR;
+if(statusDirectory!==undefined&&(!isAbsolute(statusDirectory)||statusDirectory===root))throw new Error('Invalid gateway status directory');
 const trafficOptions=gatewayTrafficOptions(process.env);
 const publicCertificates=process.env.GATEWAY_PUBLIC_CERTIFICATES??'/input/public-certs';
 const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'1';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');
@@ -28,7 +30,8 @@ const wgKey=(await readFile(wireGuardKeyFile,'utf8')).trim();if(!isPeerKey(wgKey
 const subnet=Number(process.env.GATEWAY_SUBNET??0);if(!Number.isInteger(subnet)||subnet<0||subnet>255)throw new Error('Invalid subnet');
 const run=(command:string,args:string[])=>execFileSync(command,args,{stdio:['ignore','pipe','pipe'],timeout:5000});
 await mkdir(root,{recursive:true,mode:0o700});
-async function atomic(name:string,value:string){const path=join(root,name),temporary=path+'.tmp';const file=await open(temporary,'w',0o600);try{await file.writeFile(value);await file.sync();}finally{await file.close();}await rename(temporary,path);const dir=await open(root,'r');try{await dir.sync();}finally{await dir.close();}}
+if(statusDirectory)await mkdir(statusDirectory,{recursive:true,mode:0o700});
+async function atomic(name:string,value:string,directory=root){const path=join(directory,name),temporary=path+'.tmp';const file=await open(temporary,'w',0o600);try{await file.writeFile(value);await file.sync();}finally{await file.close();}await rename(temporary,path);const dir=await open(directory,'r');try{await dir.sync();}finally{await dir.close();}}
 // This process runs in an isolated Linux network namespace. It never edits host interfaces.
 try{run('ip',['link','show','wg-cloud']);}catch{run('ip',['link','add','wg-cloud','type','wireguard']);}
 run('ip',['address','replace',`10.77.${subnet}.1/24`,'dev','wg-cloud']);run('ip',['link','set','wg-cloud','up']);
@@ -103,8 +106,9 @@ while(!stopping){
  }
  await challenges?.refresh().catch(()=>console.error('gateway.challenges_unavailable'));
  await forwardReports.flush(Date.now());
- const ready=authority.hasAuthority&&alive();
- await atomic('status.json',JSON.stringify({sequence:authority.sequence,ready,routes:ready?authority.routes.length:0,challenges:{answerable:challenges?.answerable()??[]},...gate.stats()}));
+ const ready=authority.hasAuthority&&alive(),challengeStatus={ready,challenges:{answerable:challenges?.answerable()??[]}};
+ await atomic('status.json',JSON.stringify({sequence:authority.sequence,routes:ready?authority.routes.length:0,...challengeStatus,...gate.stats()}));
+ if(statusDirectory)await atomic('status.json',JSON.stringify(challengeStatus),statusDirectory);
  await delay(1000);
 }}finally{
  clearInterval(trafficTimer);

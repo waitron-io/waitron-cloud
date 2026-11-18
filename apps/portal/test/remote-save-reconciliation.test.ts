@@ -6,7 +6,7 @@ import type {ApiResult} from '../src/api.ts';
 const id='12345678-1234-4234-8234-123456789abc';
 const assigned='staff.venue.example',hostname='staff.cafe.example';
 const original={installationId:id,revision:1,revoked:false,names:{staff:{assigned,current:assigned},public:{assigned:'venue.example',current:'venue.example'}},service:{state:'provisioning',health:'unknown',observedAt:null,validUntil:null}};
-const dns={installationId:id,kind:'staff',hostname,records:[{type:'CNAME',name:hostname,value:assigned},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.venue.example'}]};
+const dns={installationId:id,kind:'staff',hostname,records:[{type:'CNAME',name:hostname,value:assigned}]};
 
 for(const committed of [true,false])test(`a 503 save with Retry-After re-reads once when the name ${committed?'was':'was not'} saved`,async t=>{
  let now=1_800_000_000_000;t.mock.method(Date,'now',()=>now);t.mock.method(performance,'now',()=>now-1_800_000_000_000);

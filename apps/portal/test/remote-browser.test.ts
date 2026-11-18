@@ -12,7 +12,7 @@ import {prepareConnectionProof} from '../../../packages/registration/test/fixtur
 for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',replyDelayMs:0},{locale:'en',replyDelayMs:4500}] as const)test(`${locale} owner changes remote DNS at phone width and reconciles a lost reply${replyDelayMs?' after delayed fault injection':''}`,async t=>{
  let page:Page|undefined;const started=Date.now();const events:unknown[]=[];
  const record=(event:unknown)=>{if(events.length<60)events.push({afterMs:Date.now()-started,event});};
- let assigned='';const f=await startPortalFixture(undefined,async name=>[name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned]);try{
+ let assigned='';const f=await startPortalFixture(undefined,async name=>name==='staff.cafe.example'?[assigned]:[]);try{
   const email='remote@example.test',password='A long enough owner password',signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);const mail=f.db.outbox.open((await f.db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert('token' in mail);
   const owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),r=new RegistrationStore(f.db.pool),b={operationId:randomUUID(),installationKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId};await r.start(b);await r.approveCloud(b,owner.accountId);await r.approveLocal(b,randomUUID());const v=await r.complete(b);
   const store=new RemoteAccessStore(f.db.pool),cell={id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'local.example.test',subnet:7,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.example.test:51820'};await store.createCell(cell);assigned=(await store.provision(v.installationId,cell.id,randomBytes(32).toString('base64'))).staffHostname;
@@ -27,8 +27,18 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   await page.getByRole('button',{name:locale==='en'?'Set up remote access':'Configurar acceso remoto',exact:true}).click();
   const section=page.getByRole('region',{name:locale==='en'?'Remote access setup':'Configuración de acceso remoto',exact:true});await section.waitFor();
   const input=page.getByRole('textbox',{name:locale==='en'?'Hostname':'Nombre de dominio',exact:true});await input.fill('staff.cafe.example');
-  await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();await section.getByText('_acme-challenge.staff.cafe.example',{exact:true}).waitFor();
-  await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:new URL(`../dist/remote-${locale}.png`,import.meta.url).pathname,fullPage:true});
+  await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();await section.getByText('staff.cafe.example',{exact:true}).waitFor();
+  assert.equal(await section.getByText('CNAME',{exact:true}).count(),1);
+  await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  if(!replyDelayMs){
+   for(const width of [390,1280])for(const colorScheme of ['light','dark'] as const){
+    await page.setViewportSize({width,height:812});await page.emulateMedia({colorScheme});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:new URL(`../dist/remote-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+   }
+   await page.setViewportSize({width:375,height:812});await page.emulateMedia({colorScheme:locale==='en'?'light':'dark'});
+  }
   const confirm=page.getByRole('button',{name:locale==='en'?'Check DNS and use this name':'Comprobar DNS y usar este nombre',exact:true});await confirm.click();await section.getByText(locale==='en'?'Name saved. Access remains pending until the certificate and venue settings are ready.':'Nombre guardado. El acceso sigue pendiente hasta que el certificado y la configuración del local estén listos.',{exact:true}).waitFor();
   assert.equal((await f.db.pool.query("SELECT hostname FROM remote_hostnames WHERE venue_id=$1 AND kind='staff'",[v.venueId])).rows[0].hostname,'staff.cafe.example');
   await input.fill(assigned);await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();

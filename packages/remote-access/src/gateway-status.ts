@@ -1,7 +1,14 @@
 import {setTimeout as delay} from 'node:timers/promises';
+import {isHostname} from './manifest.ts';
 
 export interface GatewayChallengeStatus {
  read(cellId:string):Promise<ReadonlySet<string>[]>;
+}
+
+export function answerableNames(value:string):ReadonlySet<string>{
+ const status=JSON.parse(value);
+ const names=status?.challenges?.answerable;
+ return new Set(status?.ready===true&&Array.isArray(names)&&names.length<=128&&names.every(isHostname)?names:[]);
 }
 
 export async function awaitAnswerable(status:GatewayChallengeStatus,cellIds:string[],hostname:string,

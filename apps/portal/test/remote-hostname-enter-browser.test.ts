@@ -17,8 +17,7 @@ const view = {installationId: id, revision: 1, revoked: false,
   names: {staff: {assigned: 'staff.venue.example', current: 'staff.venue.example'}, public: {assigned: 'venue.example', current: 'venue.example'}},
   service: {state: 'provisioning', health: 'unknown', observedAt: null, validUntil: null}};
 const dns = {installationId: id, kind: 'staff', hostname: 'staff.cafe.example', records: [
-  {type: 'CNAME', name: 'staff.cafe.example', value: 'staff.venue.example'},
-  {type: 'CNAME', name: '_acme-challenge.staff.cafe.example', value: '_acme-challenge.staff.venue.example'}]};
+  {type: 'CNAME', name: 'staff.cafe.example', value: 'staff.venue.example'}]};
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   const handlerCases = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary'] as const;
@@ -77,7 +76,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.deepEqual(applyRequests, []);
       releaseDns();
       await confirmation.waitFor();
-      await confirmation.getByText('_acme-challenge.staff.cafe.example', {exact: true}).waitFor();
+      await confirmation.getByText('staff.cafe.example', {exact: true}).waitFor();
+      assert.equal(await confirmation.getByText('CNAME', {exact: true}).count(), 1);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.REMOTE_ENTER_RECEIPT_DIR) {
         await mkdir(process.env.REMOTE_ENTER_RECEIPT_DIR, {recursive: true});

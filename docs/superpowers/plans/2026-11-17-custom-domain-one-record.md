@@ -4,7 +4,7 @@
 
 **Goal:** An owner's own staff or public name needs one CNAME; Cloud gets its certificate with Let's Encrypt's TLS-ALPN-01 check on port 443; every venue keeps the same assigned names when it moves cell; every certificate is issued and renewed with nobody acting; an owner whose record has moved is told in their language.
 
-**Architecture:** Eight Cloud pull requests, landed in order. Names are stored once at placement under a configured country zone (PR 1) and Cloud keeps one CNAME per stable name pointing at the venue's current cell (PR 2). Owner certificate-expiry alerts go (PR 3). The renewal worker makes and publishes public keys and certificates itself, staff certificates use only the database exchange, and a move cannot commit before the destination holds the certificate (PR 4). Plain check files (one per name, delivered like public certificates) and a loopback TLS responder in the gateway answer `acme-tls/1` connections (PR 5); the worker gains support for them (PR 6). The record-moved notice and email follow (PR 7). PR 8 wires a runnable worker, switches the portal and API to one record, and runs the local Pebble proof.
+**Architecture:** Eight Cloud pull requests. PR 8 lands before PR 7. Names are stored once at placement under a configured country zone (PR 1) and Cloud keeps one CNAME per stable name pointing at the venue's current cell (PR 2). Owner certificate-expiry alerts go (PR 3). The renewal worker makes and publishes public keys and certificates itself, staff certificates use only the database exchange, and a move cannot commit before the destination holds the certificate (PR 4). Plain check files (one per name, delivered like public certificates) and a loopback TLS responder in the gateway answer `acme-tls/1` connections (PR 5); the worker gains support for them (PR 6). PR 8 wires a runnable worker, switches the portal and API to one record, and runs the local Pebble proof. The record-moved notice and email follow (PR 7), as the watcher cleared on 18 November at 12:43 CET.
 
 **Tech Stack:** Node 26 TypeScript (type stripping), Node 24 in the gateway image, `node:test`, PostgreSQL through `scripts/test-postgres.mjs`, `acme-client` 5.4.0, HAProxy 3.2.26 (Alpine 3.23 `apk add haproxy`, measured), Docker, Pebble and pebble-challtestsrv (digests pinned in `scripts/remote-fixtures.mjs`), Lit portal.
 
@@ -80,8 +80,8 @@
 | 4 | Public certificates are Cloud's alone; staff only through the database exchange; move gate | 1 | 8 | ~330 | ~500 | proofs ~250, docs ~80 | Yes: certificates and keys; cell moves |
 | 5 | Plain check files and the gateway's check responder | 4 (shares `gateway-cli.ts`) | 4 | ~200 | ~380 | docs ~40 | Yes: keys; gateway routing decides who reaches a venue |
 | 6 | Worker support for TLS-ALPN-01 with the existing DNS path retained | 1, 4, 5 | 7 | ~300 (migration ~8) | ~575 | docs ~90 | Yes: certificates; name checks; migration |
-| 7 | Telling the owner their record moved | 3, 6 | 4 | ~330 | ~500 | docs ~30 | Yes: owner-only reads; migration |
 | 8 | Runnable worker, one-record portal and API, and the two-cell Pebble proof | 2, 6 | 3 | ~130 | ~280 | proof ~280, docs ~70 | Yes: worker configuration and portal/API contract |
+| 7 | Telling the owner their record moved | 3, 8 | 4 | ~330 | ~500 | docs ~30 | Yes: owner-only reads; migration |
 
 The estimates are judged from each PR's tasks and the files they touch, not measured. They count added and changed lines, and leave out lockfiles and test fixtures copied verbatim.
 
@@ -550,6 +550,8 @@ Describe the injected gateway status reader, the private check folders, readines
 ---
 
 ## PR 7 — Telling the owner their record moved
+
+Build this after PR 8. The watcher cleared the revised notice plan on 18 November at 12:53 CET.
 
 ### Task 7.1: Incident kinds and the email text
 
