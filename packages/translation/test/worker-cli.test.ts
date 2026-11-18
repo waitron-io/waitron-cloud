@@ -210,8 +210,11 @@ test('disconnected database clients exit with one fixed line and no raw error',a
    disconnectCheck='worker-exit';
    const out=await run.exited;
    assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
-   const remaining=await db.pool.query('SELECT pid FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
-   assert.equal(remaining.rowCount,0,'The stopped worker still owns PostgreSQL connections');
+   disconnectCheck='worker-connections';
+   // PostgreSQL can finish closing its connections after the worker exits.
+   await until(async()=>(
+    await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1',[run.applicationName])
+   ).rowCount===0);
   }catch(error){
    const {stdout,stderr}=run.output();
    // The proof filters worker output before it reports the connection facts.

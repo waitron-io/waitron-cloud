@@ -306,7 +306,10 @@ The diagnostic did not record timing for each stop.
 
 The idle disconnect fixture now waits for two idle connections, terminates one
 in a single PostgreSQL statement and requires that stop to succeed. It still
-checks the exact worker exit and now checks that no worker connections remain.
+checks the exact worker exit. It then waits up to ten seconds for PostgreSQL
+to report that no worker connections remain. PostgreSQL can finish its socket
+cleanup after the worker exits. A timeout identifies the connection check as
+`worker-connections` in the report.
 The binding test requires exactly one selected connection. Run the binding
 command above and `node scripts/test-postgres.mjs exec node --test --test-name-pattern="^disconnected database clients exit with one fixed line and no raw error$" packages/translation/test/worker-cli.test.ts`
 to exercise the original case and the retained diagnostic.

@@ -24,7 +24,7 @@ const countFields=['tests','passed','failed','cancelled','skipped','todo'];
 const disconnectTitle='disconnected database clients exit with one fixed line and no raw error';
 const workerFailure='Translation worker failed; check database, migrations and provider configuration\n';
 const workerLines=[workerFailure,'Translation worker pass failed; retrying\n','Translation worker cleanup failed; retrying\n'];
-const disconnectChecks=['idle-backend','stop-query','backends-selected','backends-terminated','worker-exit'];
+const disconnectChecks=['idle-backend','stop-query','backends-selected','backends-terminated','worker-exit','worker-connections'];
 const outputWithheld='output withheld';
 const expectedDisconnectExit=[1,null,'',workerFailure];
 function validDisconnectStatus(value){

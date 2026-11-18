@@ -180,3 +180,15 @@ test('the sender omits oversized backend facts even for named checks',()=>{
   assert.deepEqual(rows.filter(row=>row.kind==='translation-disconnect'),expected,result.stderr);
  }
 });
+
+test('the proof names a connection cleanup failure after a correct exit',()=>{
+ const actual=[1,null,'',failed];
+ const stopped={iteration:0,backends:[{pid:321,killed:true}]};
+ const result=refusal(actual,title,{termination:stopped,check:'worker-connections',code:'ERR_TEST_FAILURE'});
+ assert.equal(result.status,1,result.stderr);
+ assert.equal(result.stdout,'');
+ const rows=result.stderr.trim().split('\n').map(parseServiceProofFailure).filter(Boolean);
+ assert.deepEqual(rows.find(row=>row.kind==='translation-disconnect'),{
+  kind:'translation-disconnect',check:'worker-connections',actual,expected:actual,termination:stopped,
+ },result.stderr);
+});
