@@ -25,6 +25,7 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.ok(container.args.join(' ').includes('--certs-dir /certs'));
   assert.ok(container.volumeMounts.some(row => row.name === 'certs' && row.mountPath === '/certs' && row.readOnly));
   assert.ok(container.env.some(row => row.name === 'MINIO_STORAGE_CLASS_STANDARD' && row.value === 'EC:3'));
+  assert.equal(container.env.find(row => row.name === 'MINIO_DNS_CACHE_TTL')?.value, '1s');
   const services = items.filter(row => row.kind === 'Service');
   const peer = services.find(row => row.metadata.name === store.spec.serviceName);
   assert.equal(peer.spec.clusterIP, 'None');
