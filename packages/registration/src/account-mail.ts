@@ -52,7 +52,15 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
   if(kind==='service_alert'){
     if(!validServiceAlert(message))throw new Error('Invalid account email');
     const subjects=locale==='es'?{open:'Waitron Cloud: un local necesita atención',recovered:'Waitron Cloud: comprobación recuperada'}:{open:'Waitron Cloud: a venue needs attention',recovered:'Waitron Cloud: venue check recovered'};
+    const expiry=message.certificateNotAfter
+      ? new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeZone:'UTC'}).format(new Date(message.certificateNotAfter))
+      : null;
+    const recordMoved=locale==='es'
+      ? `Tu registro DNS de ${message.hostname} ya no apunta a Waitron Cloud. Vuelve a dirigirlo a ${message.target}; si no, esta dirección dejará de funcionar cuando caduque su certificado${expiry ? ' el '+expiry : ''}.`
+      : `Your DNS record for ${message.hostname} no longer points at Waitron Cloud. Point it back to ${message.target}, or this address stops working when its certificate expires${expiry ? ' on '+expiry : ''}.`;
     const issues=locale==='es'?{
+      public_record_moved:recordMoved,
+      staff_record_moved:recordMoved,
       disconnected:'Cloud no recibe contacto de este local desde hace al menos 15 minutos. Comprueba su conexión a internet y el servidor Waitron.',
       snapshot_stale:'No hay una instantánea verificada de las últimas 48 horas. Comprueba las copias de seguridad del servidor.',
       verification_failed:'La comprobación de restauración de la última instantánea ha fallado. Conserva las copias anteriores verificadas; Cloud vuelve a intentarlo automáticamente.',
@@ -61,6 +69,8 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
       public_probe_stale:'La supervisión del sitio público es desconocida porque no hay una comprobación externa reciente. Usa Actualizar estado debajo de la lista de locales para buscar nuevas comprobaciones. La falta de una comprobación reciente no confirma una caída.',
       staff_probe_stale:'La supervisión del acceso del personal es desconocida porque no hay una comprobación externa reciente. Usa Actualizar estado debajo de la lista de locales para buscar nuevas comprobaciones. La falta de una comprobación reciente no confirma una caída.',
     }:{
+      public_record_moved:recordMoved,
+      staff_record_moved:recordMoved,
       disconnected:'Cloud has not heard from this venue for at least 15 minutes. Check its internet connection and Waitron server.',
       snapshot_stale:'There is no verified snapshot from the last 48 hours. Check the server’s backups.',
       verification_failed:'The latest snapshot failed its restore check. Keep older verified copies; Cloud retries automatically.',
@@ -69,7 +79,7 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
       public_probe_stale:'Public website monitoring is unknown because no recent external check is available. Use Refresh status below the venue list to look for new checks. A missing recent check does not confirm an outage.',
       staff_probe_stale:'Staff access monitoring is unknown because no recent external check is available. Use Refresh status below the venue list to look for new checks. A missing recent check does not confirm an outage.',
     };
-    const labels=locale==='es'?{disconnected:'Contacto con Cloud',snapshot_stale:'Antigüedad de las instantáneas',verification_failed:'Verificación de instantáneas',public_route_failed:'Sitio público',staff_route_failed:'Acceso del personal',public_probe_stale:'Sitio público',staff_probe_stale:'Acceso del personal'}:{disconnected:'Contact with Cloud',snapshot_stale:'Snapshot freshness',verification_failed:'Snapshot verification',public_route_failed:'Public website',staff_route_failed:'Staff access',public_probe_stale:'Public website',staff_probe_stale:'Staff access'};
+    const labels=locale==='es'?{disconnected:'Contacto con Cloud',snapshot_stale:'Antigüedad de las instantáneas',verification_failed:'Verificación de instantáneas',public_route_failed:'Sitio público',staff_route_failed:'Acceso del personal',public_probe_stale:'Sitio público',staff_probe_stale:'Acceso del personal',public_record_moved:'Sitio público',staff_record_moved:'Acceso del personal'}:{disconnected:'Contact with Cloud',snapshot_stale:'Snapshot freshness',verification_failed:'Snapshot verification',public_route_failed:'Public website',staff_route_failed:'Staff access',public_probe_stale:'Public website',staff_probe_stale:'Staff access',public_record_moved:'Public website',staff_record_moved:'Staff access'};
     const subject=message.notification==='reminder'?(locale==='es'?'Waitron Cloud: un local sigue necesitando atención':'Waitron Cloud: a venue still needs attention'):subjects[message.state];
     const detail=message.notification==='reminder'?(locale==='es'?'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.':'This issue is still open. Check your account for current service status.'):message.state==='open'?issues[message.issue]:locale==='es'?'La condición que provocó esta alerta ya no está presente. Consulta el estado actual de los servicios en tu cuenta.':'The condition that caused this alert is no longer present. Check your account for current service status.';
     const when=(value:string,label:string)=>`${label}: ${new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(value))}.`;

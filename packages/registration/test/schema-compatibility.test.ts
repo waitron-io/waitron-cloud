@@ -63,7 +63,7 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
   assert.equal(hasReleaseMigrationCount('45'),false);assert.equal(hasReleaseMigrationCount('46'),false);
   await Promise.all([migrations.migrate(p),migrations.migrate(p)]);await migrations.migrate(p);
   const rows=(await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(rows.length,74);assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
+  assert.equal(rows.length,75);assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
   for(const v of venues)delete v.local_venue_id;
   assert.deepEqual((await p.query('SELECT * FROM venues')).rows,venues);
   assert.equal((await p.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');
