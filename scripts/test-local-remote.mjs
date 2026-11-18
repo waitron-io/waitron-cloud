@@ -396,9 +396,13 @@ try{
   await ipc(moving.server,{certificate:renewedStaff,hostname:staff});
   const fingerprint=new X509Certificate(renewedStaff).fingerprint256;
   const staffServed=await waitFor(async()=>{await delay(1000);return (await remoteTarget(staff)).certificate===fingerprint;},20000);
-  const publicServed=(await remoteTarget(publicName,'/public/availability',{headers:{cookie:targetCookie}})).status===200;
+  // The browser check binds its cookie to the address Docker presents to the gateway.
+  const cookie=await solve(publicName,remoteTarget);
+  const publicReply=await remoteTarget(publicName,'/public/availability',{headers:{cookie}});
+  const publicServed=publicReply.status===200;
   customNames={staff:staffServed,public:customPublic&&publicServed,renewed,cnameUntouched:ownerRecords.every(Boolean)};
-  assert.deepEqual(customNames,{staff:true,public:true,renewed:true,cnameUntouched:true});
+  assert.deepEqual(customNames,{staff:true,public:true,renewed:true,cnameUntouched:true},
+   'Destination public response: '+publicReply.status);
   checks.push('the certificate command renews through the destination gateway on 443 with the older certificate record still present');
  }
  const movement={version:1,mode:customNames?'custom':'assigned',...(customNames?{customNames}:{}),failedApply:{cancelled:failedCancelled.state==='cancelled',sourceStayedHealthy,destinationRemoved},hostnamesPreserved,certificatesPreserved,otherVenueIsolated,oldRouteRevoked,completedReplayMatched:JSON.stringify(completedReplay)===JSON.stringify(completed),reconnectionMs,sequences:{initialSource:initialSource.sequence,failedTarget:failedTarget.sequence,cancelledTarget:cancelledTarget.sequence,stagedTarget:stagedTarget.sequence,committedSource:committedSource.sequence,committedTarget:committedTarget.sequence}};
