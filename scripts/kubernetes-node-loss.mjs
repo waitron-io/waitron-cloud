@@ -28,10 +28,11 @@ function executeCommand(binary, args, {env, input, signal, timeout}) {
   });
 }
 
-async function retry(check, signal) {
+async function retry(check, signal, canRetry = () => true) {
   while (!signal.aborted) {
     try {return await check();}
     catch (error) {
+      if (!canRetry(error)) throw error;
       await delay(1000, undefined, {signal}).catch(() => {throw error;});
     }
   }
@@ -171,15 +172,21 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       process.stderr.write(`Kind node stopped ${node.name}\n`);
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
       const name = 'node-loss-' + (index + 1);
-      const apply = manifest => kube(['apply', '-f', '-'], {...failover, input: JSON.stringify({apiVersion: 'v1', metadata: {name}, ...manifest})});
+      // Success on one API connection does not settle the balancer for the next connection.
+      const duringFault = (args, input) => retry(() => kube(args, {...failover, input}), failover.signal, error => {
+        if (!/Unable to connect to the server:|connection reset by peer|unexpected EOF/i.test(error.message)) return false;
+        process.stderr.write(`Waiting for the Kind API during ${args.slice(0, 3).join(' ')}\n${error.message.slice(-2048)}\n`);
+        return true;
+      });
+      const apply = manifest => duringFault(['apply', '-f', '-'], JSON.stringify({apiVersion: 'v1', metadata: {name}, ...manifest}));
       await apply({kind: 'ConfigMap', data: {stopped: node.name}});
-      const config = JSON.parse(await kube(['get', 'configmap', name, '-o', 'json'], failover));
+      const config = JSON.parse(await duringFault(['get', 'configmap', name, '-o', 'json']));
       assert.equal(config.data.stopped, node.name, 'node_loss.configmap_read');
       const matchFields = [{key: 'metadata.name', operator: 'NotIn', values: [node.name]}];
       await apply({kind: 'Pod', spec: {restartPolicy: 'Never', containers: [{name: 'pause', image: pauseImage, imagePullPolicy: 'Never'}],
         affinity: {nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {nodeSelectorTerms: [{matchFields}]}}}}});
-      await kube(['wait', '--for=condition=Ready', `pod/${name}`, '--timeout=90s'], failover);
-      const scheduledOn = JSON.parse(await kube(['get', 'pod', name, '-o', 'json'], failover)).spec.nodeName;
+      await duringFault(['wait', '--for=condition=Ready', `pod/${name}`, '--timeout=90s']);
+      const scheduledOn = JSON.parse(await duringFault(['get', 'pod', name, '-o', 'json'])).spec.nodeName;
       assert.ok(names.includes(scheduledOn) && scheduledOn !== node.name, 'node_loss.pod_survivor');
       await expectStopped();
       const failoverMs = Math.round(performance.now() - started);

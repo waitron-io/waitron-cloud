@@ -9,7 +9,7 @@ async function runCheck(options) {
   return module.runKubernetesNodeLoss(options);
 }
 
-function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined} = {}) {
+function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined, readTimeout = false} = {}) {
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
   let label, removed = false, pod;
   const starts = new Set();
@@ -65,6 +65,10 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
           pod = manifest;
         }
         return '';
+      }
+      if (verb === 'get' && kind === 'configmap' && readTimeout) {
+        readTimeout = false;
+        throw Error('Unable to connect to the server: context deadline exceeded');
       }
       if (verb === 'get' && (kind === 'configmap' || kind === 'pod')) return JSON.stringify(pod);
       if (verb === 'taint' || verb === 'wait' || kind === 'events') return '';
@@ -171,3 +175,12 @@ for (const [rejoin, message] of [['node', /node_identity/], ['member', /etcd_ide
     assert.ok(f.removed());
   });
 }
+
+
+test('the fault check retries a transient API connection timeout while the node stays down', async () => {
+  const f = fixture({readTimeout: true}), result = await runCheck({execute: f.execute});
+  assert.equal(result.legs.length, 3);
+  assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
+  assert.equal(f.mutations('kill').length, 3);
+  assert.ok(f.removed());
+});
