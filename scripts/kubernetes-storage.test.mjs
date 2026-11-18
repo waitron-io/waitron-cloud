@@ -20,6 +20,10 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.deepEqual(container.readinessProbe.httpGet, {scheme: 'HTTPS', path: '/minio/health/cluster', port: 'https'});
   assert.equal(pod.securityContext.runAsUser, 10001);
   assert.equal(pod.automountServiceAccountToken, false);
+  assert.equal(pod.topologySpreadConstraints[0].whenUnsatisfiable, 'DoNotSchedule');
+  assert.equal(pod.topologySpreadConstraints[0].topologyKey, 'kubernetes.io/hostname');
+  assert.ok(container.args.join(' ').includes('--certs-dir /certs'));
+  assert.ok(container.volumeMounts.some(row => row.name === 'certs' && row.mountPath === '/certs' && row.readOnly));
   assert.ok(container.env.some(row => row.name === 'MINIO_STORAGE_CLASS_STANDARD' && row.value === 'EC:3'));
   const services = items.filter(row => row.kind === 'Service');
   const peer = services.find(row => row.metadata.name === store.spec.serviceName);
@@ -46,6 +50,15 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.deepEqual(placements, ['stockholm-a', 'stockholm-a', 'stockholm-b', 'stockholm-b', 'stockholm-c', 'stockholm-c']);
   assert.deepEqual(paths, ['/var/local/d621-store/0', '/var/local/d621-store/1',
     '/var/local/d621-store/0', '/var/local/d621-store/1', '/var/local/d621-store/0', '/var/local/d621-store/1']);
+});
+
+test('multipart upload refuses a part response without the requested encryption', async () => {
+  const {startMultipart} = await import('./kubernetes-storage-proof.mjs');
+  const encrypted = {SSECustomerAlgorithm: 'AES256', SSECustomerKeyMD5: 'test-key-digest'};
+  const send = async Command => Command.name === 'CreateMultipartUploadCommand' ?
+    {UploadId: 'synthetic-upload'} : {ETag: 'synthetic-part'};
+  await assert.rejects(startMultipart({send}, 'example', encrypted, AbortSignal.timeout(2000)),
+    /storage_loss.multipart_encryption/);
 });
 
 test('repair checks both disks for actual multipart data files', async t => {

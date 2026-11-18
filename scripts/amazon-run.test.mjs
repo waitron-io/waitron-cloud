@@ -414,6 +414,7 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   assert.ok(calls[store].at(-1).includes("'" + storeTag + "'"));
   assert.match(calls[store].at(-1), /'--kubeconfig=\/etc\/kubernetes\/admin\.conf'/);
   assert.ok(calls[store].at(-1).includes("'--context=" + clusterName + "'"));
+  assert.ok(calls[store].at(-1).endsWith("'10.77.0.1' '10.77.0.2' '10.77.0.3'"));
   if (scenario === 'observer') {
     assert.ok(calls.findIndex(row=>row[0]==='flux-prepare')>=0&&calls.findIndex(row=>row[0]==='flux-prepare')<calls.findIndex(row=>row[1]==='create-stack'),'prepare offline controllers before machines');
     assert.equal(savedTags.filter(tag=>/:(source|kustomize)-controller$/.test(tag)).length,2);

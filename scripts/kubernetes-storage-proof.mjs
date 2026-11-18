@@ -35,12 +35,19 @@ async function readObject({objects}, name, key, signal) {
   }
 }
 
-async function startMultipart({send}, Key, encrypted, signal) {
+async function uploadEncryptedPart(send, args, encrypted, signal) {
+  const part = await send(UploadPartCommand, {...args, ...encrypted}, signal);
+  assert.ok(part.ETag, 'storage_loss.multipart_part_etag');
+  assert.ok(part.SSECustomerAlgorithm === encrypted.SSECustomerAlgorithm &&
+    part.SSECustomerKeyMD5 === encrypted.SSECustomerKeyMD5, 'storage_loss.multipart_encryption');
+  return part.ETag;
+}
+
+export async function startMultipart({send}, Key, encrypted, signal) {
   const first = randomBytes(5 * 1024 * 1024), last = randomBytes(512);
   const {UploadId} = await send(CreateMultipartUploadCommand, {Key, ...encrypted}, signal);
   assert.ok(UploadId, 'storage_loss.multipart_id');
-  const {ETag} = await send(UploadPartCommand, {Key, UploadId, PartNumber: 1, Body: first, ...encrypted}, signal);
-  assert.ok(ETag, 'storage_loss.multipart_first_part');
+  const ETag = await uploadEncryptedPart(send, {Key, UploadId, PartNumber: 1, Body: first}, encrypted, signal);
   return {Key, UploadId, ETag, last, bytes: Buffer.concat([first, last])};
 }
 
@@ -49,9 +56,8 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   const complete = second => send(CompleteMultipartUploadCommand,
     {Key, UploadId, MultipartUpload: {Parts: [first, {PartNumber: 2, ETag: second}]}, ...encrypted}, signal);
   await assert.rejects(complete(ETag), {name: 'InvalidPart'});
-  const second = await send(UploadPartCommand, {Key, UploadId, PartNumber: 2, Body: last, ...encrypted}, signal);
-  assert.ok(second.ETag, 'storage_loss.multipart_second_part');
-  const done = await complete(second.ETag);
+  const second = await uploadEncryptedPart(send, {Key, UploadId, PartNumber: 2, Body: last}, encrypted, signal);
+  const done = await complete(second);
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
@@ -120,17 +126,26 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
         await assert.rejects(readObject(client, name, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
         await finishMultipart(client, upload, encrypted, stopped);
         assert.deepEqual(await readObject(client, multipart, key, stopped), upload.bytes, multipart);
+        await assert.rejects(readObject(client, multipart, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
         const listed = await client.send(ListObjectsV2Command, {}, stopped);
         assert.deepEqual(listed.Contents.map(row => row.Key).sort(), [...old.keys(), name, multipart].sort());
       }});
       old.set(name, bytes);
       old.set(multipart, upload.bytes);
       const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
-      await waitForStore({nodes: names, kube, signal: repair});
-      // A successful read with all drives back queues MinIO's repair for that object.
-      assert.deepEqual(await readObject(first, name, key, repair), bytes, name);
-      assert.deepEqual(await readObject(first, multipart, key, repair), upload.bytes, multipart);
-      await waitForPieces(run, node, [name, multipart], repair, multipart);
+      process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
+      try {
+        await waitForStore({nodes: names, kube, signal: repair});
+        // A survivor has the acknowledged bytes while the returned volumes are still missing them.
+        assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
+        assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);
+        await waitForPieces(run, node, [name, multipart], repair, multipart);
+        const returned = clients.get(node.name);
+        assert.deepEqual(await readObject(returned, name, key, repair), bytes, name);
+        assert.deepEqual(await readObject(returned, multipart, key, repair), upload.bytes, multipart);
+      } catch (error) {
+        throw Error('storage_loss.repair on ' + node.name + ': ' + error.message, {cause: error});
+      }
       const repairMs = Math.round(performance.now() - repairStart);
       process.stderr.write('Confirmed returned shards on ' + node.name + ' in ' + repairMs + ' ms\n');
       legs.push({...leg, repairMs});
