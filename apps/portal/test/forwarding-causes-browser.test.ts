@@ -49,7 +49,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await page.evaluate(id=>(window as any).app.remote.open(id),id);
    const panel=page.getByRole('region',{name:heading,exact:true});await panel.waitFor();await panel.getByText(text[language]!,{exact:true}).waitFor();
    assert.equal(await panel.locator('time').count(),category==='unknown'?0:2);
-   if(!['success','unknown'].includes(category))await panel.getByText(locale==='en'?'Check the venue application and its connection. Gateway configuration still requires operator tools.':'Comprueba la aplicación del local y su conexión. La configuración de la pasarela sigue requiriendo herramientas de operador.',{exact:true}).waitFor();
+   if(!['success','unknown'].includes(category))await panel.getByText(locale==='en'?'Check the venue application and its connection.':'Comprueba la aplicación del local y su conexión.',{exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    if(process.env.FORWARDING_RECEIPT_DIR){await mkdir(process.env.FORWARDING_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.FORWARDING_RECEIPT_DIR}/${locale}-${theme}-${width}-${category}.png`,fullPage:true});}
   }

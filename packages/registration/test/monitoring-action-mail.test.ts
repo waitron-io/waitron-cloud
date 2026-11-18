@@ -10,7 +10,7 @@ const checkedAt = '2026-10-24T12:00:00.000Z';
 for (const locale of ['en', 'es'] as const) for (const kind of ['public', 'staff'] as const) {
   for (const condition of ['route_failed', 'probe_stale'] as const) {
     const issue = `${kind}_${condition}` as ServiceAlert['issue'];
-    test(`${locale} ${issue}: email points to available checks and names operator limits`, () => {
+    test(`${locale} ${issue}: email points to available checks`, () => {
       const alert: ServiceAlert = {...base, locale, issue, checkedAt};
       const mail = accountMail(new URL('https://cloud.example.test'), 'service_alert', alert);
       assert.ok(mail.text.includes('https://cloud.example.test/account'));
@@ -21,15 +21,15 @@ for (const locale of ['en', 'es'] as const) for (const kind of ['public', 'staff
         assert.match(mail.text, locale === 'en' ? /does not confirm an outage/ : /no confirma una caída/);
         assert.doesNotMatch(mail.text, locale === 'en' ? /failed its latest/ : /falló en la última/);
       } else {
-        assert.ok(mail.text.includes(locale === 'en' ? 'Set up remote access' : 'Configurar acceso remoto'));
+        assert.ok(mail.text.includes(locale === 'en' ? 'Open Remote access' : 'Abre Acceso remoto'));
         assert.match(mail.text, locale === 'en' ? /selected hostname and status/ : /nombre seleccionado y el estado/);
-        assert.match(mail.text, locale === 'en' ? /require operator tools/ : /requieren herramientas de operador/);
+        assert.doesNotMatch(mail.text, /Gateway changes still require operator tools|Los cambios de pasarela aún requieren herramientas de operador/);
         assert.match(mail.text, locale === 'en' ? /venue internet connection/ : /conexión a internet del local/);
         assert.doesNotMatch(mail.text, locale === 'en' ? /certificate expires soon/ : /certificado .*caduca pronto/);
       }
       for (const patch of [{state: 'recovered' as const}, {notification: 'reminder' as const}]) {
         const update = accountMail(new URL('https://cloud.example.test'), 'service_alert', {...alert, ...patch});
-        assert.doesNotMatch(update.text, /Set up remote access|Configurar acceso remoto|require operator tools|requieren herramientas de operador/);
+        assert.doesNotMatch(update.text, /Open Remote access|Abre Acceso remoto|Set up remote access|Configurar acceso remoto|require operator tools|requieren herramientas de operador/);
         assert.ok(update.text.includes('https://cloud.example.test/account'));
         assert.match(update.text, locale === 'en' ? /current service status/ : /estado actual de los servicios/);
       }

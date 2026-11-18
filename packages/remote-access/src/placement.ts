@@ -76,7 +76,7 @@ export class RemoteAccessStore {
  async provision(installationId:string,cellId:string,peerPublicKey:string,port=443):Promise<Placement>{
   return transaction(this.#pool,client=>this.provisionInTransaction(client,installationId,cellId,peerPublicKey,port));
  }
- async provisionInTransaction(client:PoolClient,installationId:string,cellId:string,peerPublicKey:string,port=443):Promise<Placement>{
+ async provisionInTransaction(client:PoolClient,installationId:string,cellId:string,peerPublicKey:string,port=443,restore:'restore-cleared'|'restore-any'='restore-any'):Promise<Placement>{
   if(!isUuid(installationId)||!isUuid(cellId)||!isPeerKey(peerPublicKey)||!Number.isInteger(port)||port<1||port>65535)fail('invalid_placement');
   try{
    await requireRemotePlan(client,installationId,this.#planMode,false);
@@ -90,7 +90,10 @@ export class RemoteAccessStore {
    const prior=await placement(client,installationId);
    if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');
     if(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels'){
-     const restored=await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access' AND state='unconfigured' RETURNING 1",[installationId,{version:1,...prior}]);
+     // An operator stop retains the peer key. Billing withdrawal clears it.
+     const restored=await client.query(`UPDATE installation_services SET state='provisioning',configuration=$2
+      WHERE installation_id=$1 AND service='remote_access' AND state='unconfigured'
+       AND ($3 OR configuration->>'peerPublicKey' IS DISTINCT FROM $4) RETURNING 1`,[installationId,{version:1,...prior},restore==='restore-any',peerPublicKey]);
      if(restored.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
     }return prior;}
    await lockPeerKey(client,peerPublicKey);

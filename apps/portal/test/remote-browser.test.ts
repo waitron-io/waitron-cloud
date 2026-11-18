@@ -24,8 +24,8 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.getByText(c.accountIntro,{exact:true}).waitFor();
   const sessionCookie=(await context.cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');assert.ok(sessionCookie);await prepareConnectionProof(f.db.pool,owner.accountId,sessionCookie.value);
-  await page.getByRole('button',{name:locale==='en'?'Set up remote access':'Configurar acceso remoto',exact:true}).click();
-  const section=page.getByRole('region',{name:locale==='en'?'Remote access setup':'Configuración de acceso remoto',exact:true});await section.waitFor();
+  await page.getByRole('button',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true}).click();
+  const section=page.getByRole('region',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true});await section.waitFor();
   const input=page.getByRole('textbox',{name:locale==='en'?'Hostname':'Nombre de dominio',exact:true});await input.fill('staff.cafe.example');
   await page.getByRole('button',{name:locale==='en'?'Review DNS settings':'Revisar DNS',exact:true}).click();await section.locator('dd').filter({hasText:/^staff\.cafe\.example$/}).waitFor();
   assert.equal(await section.getByText('CNAME',{exact:true}).count(),1);

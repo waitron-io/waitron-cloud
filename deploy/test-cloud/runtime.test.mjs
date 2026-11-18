@@ -61,6 +61,27 @@ test('test remote runtime selects real reconciliation only in enabled mode and s
  assert.equal(api.testRuntimeEnvironment('gateway',config,{}).GATEWAY_UPSTREAM_CA,'/run/local-stack/lan/ca.pem');
 });
 
+test('only the venue-level account worker receives the automatic gateway and trial accounts',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const {billingAccountOptionsFromEnv}=await import('../../packages/account-http/src/config.ts');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-automatic-gateway-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const accountId='f3a33048-3e2b-498a-b8b5-66e1d143cb5b';
+ const input={CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_BILLING_ACCOUNT_TEST_IDS:accountId,TEST_CLOUD_TUNNEL_CELL_ID:'ignored'};
+ const account=testRuntimeEnvironment('account',config,input);
+ assert.equal(account.TEST_CLOUD_TUNNEL_CELL_ID,config.gateway.cellId);
+ assert.deepEqual(billingAccountOptionsFromEnv(account,'test-venue-levels'),{accountIds:[accountId]});
+ for(const role of ['manifest','email','gateway']){
+  const environment=testRuntimeEnvironment(role,config,input);
+  assert.equal(environment.TEST_CLOUD_TUNNEL_CELL_ID,undefined,role);
+  assert.equal(environment.CLOUD_BILLING_ACCOUNT_TEST_IDS,undefined,role);
+ }
+ for(const mode of [{}, {CLOUD_TEST_SERVICE_PLANS:'1'}]){
+  const environment=testRuntimeEnvironment('account',config,{...mode,CLOUD_BILLING_ACCOUNT_TEST_IDS:accountId});
+  assert.equal(environment.TEST_CLOUD_TUNNEL_CELL_ID,undefined);
+  assert.equal(environment.CLOUD_BILLING_ACCOUNT_TEST_IDS,undefined);
+ }
+});
+
 // A paid capture uses the advertised LAN endpoint; the verifier worker must read the same location.
 test('test backup worker uses canonical storage and normal LAN trust in enabled mode',async t=>{
  const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-backup-command-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);

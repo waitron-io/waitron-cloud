@@ -84,7 +84,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           } else {
             assert.ok(text.includes(c.remoteSetup));
             assert.match(text, locale === 'en' ? /selected hostname and status/ : /nombre seleccionado y el estado/);
-            assert.match(text, locale === 'en' ? /require operator tools/ : /requieren herramientas de operador/);
+            assert.doesNotMatch(text, /Gateway changes still require operator tools|Los cambios de pasarela aún requieren herramientas de operador/);
 
           }
         }
@@ -94,13 +94,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await monitoring.screenshot({path: `${process.env.MONITORING_ACTION_RECEIPT_DIR}/${locale}-${theme}-${width}-${scenario}.png`});
         }
       });
-      await t.test('the named setup and refresh controls expose current evidence without changing setup', async () => {
+      await t.test('the named remote access and refresh controls expose current evidence without changing setup', async () => {
         await venue.getByRole('button', {name: c.remoteSetup, exact: true}).click();
         const remote = venue.locator('.remote-setup');
         await remote.getByText(c.remotePending, {exact: true}).waitFor();
         assert.equal(await remote.getByText('staff.cafe.example', {exact: true}).isVisible(), true);
         assert.equal(await remote.getByText('cafe.example', {exact: true}).isVisible(), true);
-        assert.equal(await remote.getByText(c.remoteLocalTrial, {exact: true}).isVisible(), true);
+        assert.equal(await remote.getByText(c.remoteBoxSwitch, {exact: true}).isVisible(), true);
         assert.deepEqual(reads, [{installationId: id}]);
         const response = page.waitForResponse('**/api/account/remote-access/status');
         await remote.getByRole('button', {name: c.refreshStatus, exact: true}).click();

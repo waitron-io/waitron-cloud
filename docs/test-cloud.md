@@ -293,6 +293,18 @@ links still go to the captured inbox, with your configured HTTPS origin. No real
 mail is sent by this setting. Venue service levels use test mode; translation and
 the unavailable workers keep their existing restrictions.
 
+Put the permitted test owner account IDs in `CLOUD_BILLING_ACCOUNT_TEST_IDS`
+in the host's private `deploy/test-cloud/test.env`. Use a comma-separated list.
+An allowed Registered owner can choose **Start free trial** in the account
+portal. When a Connected test box submits its signed tunnel key, Cloud assigns
+its addresses in the configured cell. After pairing, check **Remote access**
+for the assigned Staff address. Use the switch on the box to stop access.
+If the cell is still starting, the box can retry with the same key. Once the
+test cell has allocated 64 addresses, a new request returns HTTP 503 and the
+portal shows no assigned address. The box gets the same reply while the cell
+starts. To check capacity, read the configured cell's `remote_cells.next_address`
+value. A value of 66 means it is full.
+
 On an authorised machine, use Certbot to obtain and renew the public certificate.
 Its HTTP-01 challenge proves the name by serving a temporary response on port 80.
 After successful renewal, run bootstrap with these same Compose files and settings,

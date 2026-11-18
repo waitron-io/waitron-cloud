@@ -374,13 +374,16 @@ a fresh operation UUID and a live control lease. Its signed body is exactly
 `JSON.stringify({peerPublicKey})`, with a canonical 32-byte WireGuard base64 key
 and no other fields. The installation signing key and tunnel key stay separate.
 
-The route is disabled by default. You enable it through the account app/server
-option `tunnelProvision:{installationId,cellId}` and the existing lease issuer;
-the configured cell and destination port 443 are selected by Cloud. Only that
-installation in a test venue can call it. The chosen plan mode still applies;
-`existing` mode admits this configured test box without a paid-plan check. The
-trial operator supplies these options separately after this change lands.
-There is no CLI switch or production activation in this change.
+The test Cloud's venue-level account worker enables automatic provisioning with
+its configured cell and the existing lease issuer. The signed installation
+must belong to a test venue that has remote access through Connected or Hosted.
+Cloud chooses the cell and destination port 443. The cell accepts requests once
+the manifest worker creates it.
+
+Other account workers leave the route closed by default. The app/server option
+`tunnelProvision:{installationId,cellId}` still enables the single-box trial.
+That option admits only the named test installation. In `existing` mode it
+accepts that installation without a paid-plan check.
 
 HTTP 200 returns the existing version-1 `InstallationView` directly, including
 its three services and no new lease. Read `services` for `remote_access`:
@@ -394,21 +397,20 @@ treat that as not provisioned and do not install a tunnel from that reply.
 See `packages/account-http/test/tunnel-provision.test.ts` for the exact
 PostgreSQL reply, plan-change case and real HTTP listener check.
 
-The local test Cloud's remote switch can return `state:"unconfigured"` while
-retaining the prior placement in `configuration`. Disconnect based on state even
-when those details remain. Ordinary box refresh keeps the matching peer key and
-does not request another placement. Explicit trusted provisioning, including the
-optional signed tunnel-provision trial endpoint, can restore setup; test account
-startup keeps that endpoint closed. This switch does not revoke the installation.
+The Cloud operator's remote switch can return `state:"unconfigured"` while
+retaining the prior placement in `configuration`. Disconnect based on state.
+An automatic retry preserves that stop when the saved peer key matches.
+An explicit operator enable restores setup. A billing lapse clears setup, so
+an automatic retry after Connected returns can restore it with the same key.
+If Cloud returns `403 permission_denied` while the venue is Registered, retry
+on the box's normal refresh. A later Connected trial can make that key eligible.
 
 If you lose the reply, retry with a fresh proof and your persisted peer key.
-The same key, cell and port keep the allocation and revision, except when the
-existing paid-mode setup restoration advances it. Repeating an identical valid
-envelope also keeps that allocation; operation UUID freshness is a client rule.
-A changed key is a terminal
-409 `placement_conflict`; this action does not rotate keys. This unreplaced
-one-box trial accepts that provisioning during a prepared replacement can make
-replacement completion conflict. It adds no replacement guard or protocol.
+The same key, cell and port keep the allocation. Restoring setup advances the
+revision. Repeating an identical valid envelope also keeps that allocation.
+Generate a fresh operation UUID for each retry. A changed key returns
+409 `placement_conflict`. Provisioning during a prepared replacement can still
+make replacement completion conflict.
 The joint appliance G5 contract and its admission stay closed.
 
 The method, browser-Origin refusal, 16,384-byte/5-second JSON read and shared

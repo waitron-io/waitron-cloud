@@ -436,7 +436,7 @@ node scripts/test-postgres.mjs exec node --test apps/portal/test/guest-menu-brow
 ```
 
 The runtime test starts the account command with a separate HTTPS listener and a
-temporary local certificate. The browser test opens Remote access setup, stops
+temporary local certificate. The browser test opens Remote access, stops
 sharing, reloads the account, then allows sharing again. The copy stays absent
 until another publish; allowing sharing does not restore deleted pages.
 

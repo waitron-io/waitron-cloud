@@ -61,8 +61,8 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
       disconnected:'Cloud no recibe contacto de este local desde hace al menos 15 minutos. Comprueba su conexión a internet y el servidor Waitron.',
       snapshot_stale:'No hay una instantánea verificada de las últimas 48 horas. Comprueba las copias de seguridad del servidor.',
       verification_failed:'La comprobación de restauración de la última instantánea ha fallado. Conserva las copias anteriores verificadas; Cloud vuelve a intentarlo automáticamente.',
-      public_route_failed:'El sitio público falló en la última comprobación externa. Comprueba la conexión a internet del local. Abre Configurar acceso remoto y comprueba el nombre seleccionado y el estado. Los cambios de pasarela aún requieren herramientas de operador.',
-      staff_route_failed:'El acceso del personal falló en la última comprobación externa. Comprueba la conexión a internet del local. Abre Configurar acceso remoto y comprueba el nombre seleccionado y el estado. Los cambios de pasarela aún requieren herramientas de operador.',
+      public_route_failed:'El sitio público falló en la última comprobación externa. Comprueba la conexión a internet del local. Abre Acceso remoto y comprueba el nombre seleccionado y el estado.',
+      staff_route_failed:'El acceso del personal falló en la última comprobación externa. Comprueba la conexión a internet del local. Abre Acceso remoto y comprueba el nombre seleccionado y el estado.',
       public_probe_stale:'La supervisión del sitio público es desconocida porque no hay una comprobación externa reciente. Usa Actualizar estado debajo de la lista de locales para buscar nuevas comprobaciones. La falta de una comprobación reciente no confirma una caída.',
       staff_probe_stale:'La supervisión del acceso del personal es desconocida porque no hay una comprobación externa reciente. Usa Actualizar estado debajo de la lista de locales para buscar nuevas comprobaciones. La falta de una comprobación reciente no confirma una caída.',
     }:{
@@ -71,8 +71,8 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
       disconnected:'Cloud has not heard from this venue for at least 15 minutes. Check its internet connection and Waitron server.',
       snapshot_stale:'There is no verified snapshot from the last 48 hours. Check the server’s backups.',
       verification_failed:'The latest snapshot failed its restore check. Keep older verified copies; Cloud retries automatically.',
-      public_route_failed:'The public website failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway changes still require operator tools.',
-      staff_route_failed:'Staff access failed its latest external check. Check the venue internet connection. Open Set up remote access and check the selected hostname and status. Gateway changes still require operator tools.',
+      public_route_failed:'The public website failed its latest external check. Check the venue internet connection. Open Remote access and check the selected hostname and status.',
+      staff_route_failed:'Staff access failed its latest external check. Check the venue internet connection. Open Remote access and check the selected hostname and status.',
       public_probe_stale:'Public website monitoring is unknown because no recent external check is available. Use Refresh status below the venue list to look for new checks. A missing recent check does not confirm an outage.',
       staff_probe_stale:'Staff access monitoring is unknown because no recent external check is available. Use Refresh status below the venue list to look for new checks. A missing recent check does not confirm an outage.',
     };

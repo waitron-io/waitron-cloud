@@ -32,7 +32,10 @@ export function testRuntimeEnvironment(role,config,environment={}){
  }
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
- if(role==='account'&&mode==='test-venue-levels'&&environment.CLOUD_BACKUP_STAGE_ROOT!==undefined)result.CLOUD_BACKUP_STAGE_ROOT=environment.CLOUD_BACKUP_STAGE_ROOT;
+ if(role==='account'&&mode==='test-venue-levels'){
+  result.TEST_CLOUD_TUNNEL_CELL_ID=config.gateway.cellId;
+  for(const name of ['CLOUD_BACKUP_STAGE_ROOT','CLOUD_BILLING_ACCOUNT_TEST_IDS'])if(environment[name]!==undefined)result[name]=environment[name];
+ }
  return result;
 }
 export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',demoCommand='--fail'){
