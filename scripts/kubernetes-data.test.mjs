@@ -53,8 +53,11 @@ test('Stockholm database setup starts one ready PostgreSQL copy on each machine-
   const {database: copies} = await runKubernetesNodeLoss({
     database: async ({nodes, directory, run, kube}) => {
       const execNode = (node, args, options) => run('docker', ['exec', '-i', node, ...args], options);
+      const permissions = node => execNode(node, ['stat', '-c', '%u:%g %a', '/var/local/d621-postgres']);
       for (const node of nodes) {
         await execNode(node, ['bash', '-s', '--', 'database-storage'], {input: bootstrap});
+        // The directory may inherit the set-group-ID bit from /var/local.
+        assert.match(await permissions(node), /^26:26 2?700$/);
       }
       await installStockholmDatabase({nodes, directory, run, kube});
 
@@ -75,7 +78,8 @@ test('Stockholm database setup starts one ready PostgreSQL copy on each machine-
         assert.deepEqual(spec.nodeAffinity.required.nodeSelectorTerms, [{matchExpressions: [
           {key: 'kubernetes.io/hostname', operator: 'In', values: [node]},
         ]}]);
-        assert.equal(await execNode(node, ['stat', '-c', '%u:%g %a', '/var/local/d621-postgres']), '26:26 700');
+        // Kubernetes applies the pod's PostgreSQL group when mounting the volume.
+        assert.equal(await permissions(node), '26:26 2770');
         assert.equal(await execNode(node, ['cat', '/var/local/d621-postgres/pgdata/PG_VERSION']), '18');
         return {pod: pod.metadata.name, node, claim: claimName, volume: claim.spec.volumeName};
       }));
