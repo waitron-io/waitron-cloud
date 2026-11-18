@@ -6,7 +6,7 @@
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
 // The loss checks need three owned nodes, 10 GiB RAM and 30 GiB disk. Use the approved shared Docker wrapper.
 // Requires kind 0.31.0, kubectl 1.34.3 and Docker. Venue image builds also need Buildx.
-// The database check needs access to GitHub and ghcr.io for pinned dependencies.
+// The database check needs curl and access to GitHub and ghcr.io for pinned dependencies.
 import assert from 'node:assert/strict';
 import {execFile, spawn} from 'node:child_process';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';

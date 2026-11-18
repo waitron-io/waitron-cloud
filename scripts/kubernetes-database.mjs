@@ -65,16 +65,27 @@ function cloudContainer(image, name, secret, command) {
 
 const requireTls = `export DATABASE_URL="$PGURI?sslmode=verify-full&sslrootcert=${caPath}"\n`;
 const probe = requireTls + `
-until (cd packages/registration && node -e '
-  const pool = new (require("pg").Pool)({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000});
-  pool.query("SELECT to_regclass($1) IS NULL AS missing", ["public.schema_migrations"])
-    .then(({rows}) => { process.exitCode = rows[0].missing ? 0 : 1; })
-    .catch(() => { process.exitCode = 1; })
-    .finally(() => pool.end());
-'); do sleep 1; done
-if node deploy/local-stack/schema-consumer.mjs -e 'console.log("migration ledger verified")'; then
-  exit 1
-fi
+until node --input-type=module -e '
+  import {createRequire} from "node:module";
+  import {checkConsumerSchema} from "./deploy/local-stack/runtime.mjs";
+
+  const {Pool} = createRequire(new URL("./packages/registration/package.json", import.meta.url))("pg");
+  const pool = new Pool({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000, statement_timeout: 10000});
+  try {
+    await checkConsumerSchema(pool, process.cwd());
+    console.error("The schema gate accepted an unmigrated database");
+    process.exitCode = 2;
+  } catch (error) {
+    const code = typeof error.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? error.code : "unknown";
+    console.error("Pre-migration schema read: " + code);
+    process.exitCode = code === "42P01" ? 0 : 1;
+  } finally {
+    await pool.end();
+  }
+'; do
+  if [ "$?" -eq 2 ]; then exit 2; fi
+  sleep 1
+done
 touch /tmp/schema-waiting
 until node deploy/local-stack/schema-consumer.mjs -e 'console.log("migration ledger verified")'; do sleep 1; done
 touch /tmp/schema-ready
@@ -227,6 +238,8 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     const standbyNode = replicas[1].spec.nodeName;
     await apply('v1', 'Pod', client, {spec: clientPod(imageTag, clientNode)});
     await until('consumer_refusal_before_migration', started, async () => {
+      const pod = await read(['pod', client], started);
+      assert.notEqual(pod.status.phase, 'Failed', 'database_loss.schema_probe_failed');
       await exec(client, 'schema', ['test', '-f', '/tmp/schema-waiting'], started);
       await exec(client, 'schema', ['test', '!', '-f', '/tmp/schema-ready'], started);
       return true;
@@ -301,6 +314,7 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
             await verifyWrite('after-restart', options);
             await until('old_primary_replay_lag', options, async () =>
               (await local(oldPrimary, 'SELECT pg_last_wal_receive_lsn() > pg_last_wal_replay_lsn()', options)) === 't');
+            assert.equal(await local(oldPrimary, readRow('after-restart'), options), '', 'database_loss.replay_barrier');
             await assert.rejects(sql(writeRow('refused'), options, target), /\b25006\b/, 'database_loss.old_primary_write_refusal');
           } finally {
             await local(oldPrimary, 'SELECT pg_wal_replay_resume()', options);
