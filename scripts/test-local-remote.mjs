@@ -32,7 +32,7 @@ assert.ok(process.env.WAITRON_CHECKOUT,'Set WAITRON_CHECKOUT');
 const require=createRequire(join(waitron,'apps/server/package.json'));
 const acmeRequire=createRequire(new URL('../packages/remote-access/package.json',import.meta.url));
 const {crypto:acmeCrypto}=acmeRequire('acme-client');
-const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID();
+const root=await mkdtemp(join(tmpdir(),'cloud-remote-')),name='cloud-remote-'+randomUUID(),gatewayImage=process.env.REMOTE_GATEWAY_IMAGE??'waitron-cloud-local-remote:dev';
 const owned=new Set(),children=[],roots=[],checks=[],backupObjectClients=[],backupClients=new Map();
 let limitsReceipt;
 let f,acme,s3,catalogue,network=false,gatewayPort,gatewayIp,targetGatewayPort,targetGatewayIp;
@@ -69,17 +69,17 @@ async function publishTarget(manifest){await secret(join(targetInput,'manifest.n
 function startGateway(){
  const args=['run','-d','--name',name+'-gateway','--network',name,'--cap-add','NET_ADMIN','--sysctl','net.ipv4.ip_forward=1','-p',`127.0.0.1:${gatewayPort??''}:443`,'-v',input+':/input:ro','-v',state+':/state','-e','GATEWAY_CELL_ID='+cellId,'-e','GATEWAY_SUBNET=17','-e','GATEWAY_UPSTREAM_CA=/input/venue-ca.pem'];
  if(gatewayIp)args.push('--ip',gatewayIp);
- docker(...args,'waitron-cloud-local-remote:dev');owned.add(name+'-gateway');
+ docker(...args,gatewayImage);owned.add(name+'-gateway');
  gatewayPort=Number(docker('port',name+'-gateway','443/tcp').split(':').at(-1));gatewayIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',name+'-gateway');
 }
 function startTargetGateway(){
  const args=['run','-d','--name',name+'-gateway-target','--network',name,'--cap-add','NET_ADMIN','--sysctl','net.ipv4.ip_forward=1','-p',`127.0.0.1:${targetGatewayPort??''}:443`,'-v',targetInput+':/input:ro','-v',targetState+':/state','-e','GATEWAY_CELL_ID='+targetCellId,'-e','GATEWAY_SUBNET=18','-e','GATEWAY_UPSTREAM_CA=/input/venue-ca.pem'];
  if(targetGatewayIp)args.push('--ip',targetGatewayIp);
- docker(...args,'waitron-cloud-local-remote:dev');owned.add(name+'-gateway-target');
+ docker(...args,gatewayImage);owned.add(name+'-gateway-target');
  targetGatewayPort=Number(docker('port',name+'-gateway-target','443/tcp').split(':').at(-1));targetGatewayIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',name+'-gateway-target');
 }
 function startPeer(venue,index){
- const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN','-v',venue.peerInput+':/input:ro','waitron-cloud-local-remote:dev','node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
+ const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN','-v',venue.peerInput+':/input:ro',gatewayImage,'node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
 }
 function remoteAt(port,host,path='/public/availability',options={}){
  return new Promise((resolve,reject)=>{
@@ -292,7 +292,7 @@ try{
  // A short signed lease exercises the same expiry path as the normal ten-minute window.
  const expiring=await placementStore.manifest(cellId);expiring.expiresAt=Date.now()+3000;await publish(expiring);await delay(4500);await assert.rejects(remote(venues[1].placement.staffHostname));
  docker('rm','-f',name+'-gateway');owned.delete(name+'-gateway');startGateway();await delay(1500);await assert.rejects(remote(venues[1].placement.staffHostname));checks.push('expired signed cache closes routing and stays expired after restart');
- const dnsName=name+'-lan-dns';docker('run','-d','--name',dnsName,'--network',name,'--cap-add','NET_ADMIN','waitron-cloud-local-remote:dev','dnsmasq','--no-daemon','--no-resolv','--address=/'+venues[1].placement.staffHostname+'/'+venues[1].placement.address);owned.add(dnsName);
+ const dnsName=name+'-lan-dns';docker('run','-d','--name',dnsName,'--network',name,'--cap-add','NET_ADMIN',gatewayImage,'dnsmasq','--no-daemon','--no-resolv','--address=/'+venues[1].placement.staffHostname+'/'+venues[1].placement.address);owned.add(dnsName);
  const dnsIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',dnsName);
  await delay(500);
  const lan=docker('exec',venues[1].peer,'node','-e',`const r=new(require('dns').Resolver);r.setServers(['${dnsIp}']);const req=require('https').get({hostname:'${venues[1].placement.staffHostname}',port:443,path:'/public/availability',ca:require('fs').readFileSync('/input/ca.pem'),lookup:(name,options,done)=>r.resolve4(name,(error,ips)=>done(error,options.all?ips?.map(address=>({address,family:4})):ips?.[0],4))},res=>{if(res.statusCode!==200)process.exit(1);res.resume();res.on('end',()=>console.log('LAN HTTPS trusted'));});req.on('error',error=>{console.error(error.message);process.exit(1)});req.setTimeout(3000,()=>req.destroy(Error('timeout')));`);
