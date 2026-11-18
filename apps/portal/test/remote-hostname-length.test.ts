@@ -25,13 +25,13 @@ for(const kind of ['staff','public'] as const){
  });
  test(`the portal can review a 237-character ${kind} name with its full certificate record`,async()=>{
   const name=hostname(237),assigned=view.names![kind].assigned;
-  const records=[{type:'CNAME' as const,name,value:assigned},{type:'CNAME' as const,name:'_acme-challenge.'+name,value:'_acme-challenge.'+assigned}];
+  const records=[{type:'CNAME' as const,name,value:assigned}];
   const controller=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>({ok:true,value:(path.endsWith('/status')?view:{installationId,kind,hostname:name,records}) as T}));
   controller.account('owner');await controller.open(installationId);controller.choose(kind);
   controller.edit(name);await controller.preview();
   assert.equal(controller.error,undefined);
   assert.deepEqual(controller.confirmation,{kind,hostname:name,revision:1,records});
-  assert.equal(controller.confirmation!.records[1]!.name.length,253);
+  assert.equal(controller.confirmation!.records[0]!.name.length,237);
  });
 }
 

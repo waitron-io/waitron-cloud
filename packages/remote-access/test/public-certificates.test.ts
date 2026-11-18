@@ -21,9 +21,15 @@ function chain(csr:string,hostname:string,now:number){
 }
 async function fixture(){
  const venue=await f.venue(),target=randomUUID();await f.store.createCell({id:target,country:'ES',provider:'aws',environment:'test',suffix:'destination.example.test',subnet:53,publicKey:randomBytes(32).toString('base64'),endpoint:'gateway.destination.example.test:51820'});
- const routes=await Promise.all([venue.placement.cellId,target].map(async cellId=>{const publicCertificates=join(root,cellId);await mkdir(publicCertificates);return {cellId,output:join(root,cellId+'.json'),publicCertificates};}));
+ const routes=await Promise.all([venue.placement.cellId,target].map(async cellId=>{
+  const publicCertificates=join(root,cellId),challenges=join(root,cellId+'-checks');
+  await Promise.all([mkdir(publicCertificates),mkdir(challenges)]);
+  return {cellId,output:join(root,cellId+'.json'),publicCertificates,challenges};
+ }));
  const files=new FileReconcilerArtifacts({keyDirectory:join(root,'keys'),routes});let now=Date.now(),issues=0,fail=false;
- const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:files,now:()=>now,issueCertificate:async value=>{issues++;if(fail)throw Error('synthetic issuer unavailable');return chain(value.csr,value.hostname,now);}});
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:files,now:()=>now,
+  resolveCname:async()=>[venue.placement.publicHostname],gatewayStatus:{async read(){return [];}},
+  issueCertificate:async value=>{issues++;if(fail)throw Error('synthetic issuer unavailable');return chain(value.csr,value.hostname,now);}});
  async function run(selected=worker){await selected.schedule();await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day'");await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1",[venue.installationId]);assert.equal(await selected.runOnce(),true);}
  async function stage(){const move=await f.store.stageMove({operationId:randomUUID(),installationId:venue.installationId,targetCellId:target,targetPeerPublicKey:venue.placement.peerPublicKey,expectedRevision:1});await f.store.markMoveReady(move.operationId,1,(await f.store.manifest(target)).sequence);return move;}
  return {venue,target,routes,files,worker,run,stage,issues:()=>issues,fail:()=>{fail=true;},recover:()=>{fail=false;},advance:()=>{now+=61*86400000;},copy:()=>files.readPublicCertificate(venue.installationId),read:(cell:string)=>readFile(join(root,cell,venue.venueId+'.pem'),'utf8')};

@@ -6,13 +6,19 @@ import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope}
 import {RemoteAccessStore,type CertificateAuthorization,type TrafficCoverageJournal} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 import {crypto as acmeCrypto} from 'acme-client';
-import {validateCsr} from './certificates.ts';
+import {validateCsr,verifyDelegation,type CertificateValidation} from './certificates.ts';
+import type {ChallengeFile} from './challenge-files.ts';
+import {boundedResolveCname,type ResolveCname} from './dns-lookup.ts';
+import {awaitAnswerable,type GatewayChallengeStatus} from './gateway-status.ts';
 import {certificateDigest,routeCells} from './certificate-digest.ts';
 import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
 
 export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public'|'name';
+type ReleaseReason='reconcile_failed'|'order_in_flight'|'dns_not_verified'|'challenge_not_answerable';
+const retryAfterExpiry=`(kind IN ('name','certificate_public') OR
+ (kind='certificate_staff' AND COALESCE(last_error,'') IN ('dns_not_verified','challenge_not_answerable')))`;
 export interface RemoteConfigurationJob {
- kind:RemoteConfigurationKind;targetId:string;desiredDigest:string;claimId:string;attempts:number;
+ kind:RemoteConfigurationKind;targetId:string;desiredDigest:string;claimId:string;attempts:number;leaseUntil:number;
 }
 interface ExecuteContext {signal:AbortSignal;isCurrent:()=>Promise<boolean>}
 export interface PublicCertificateCopy {pem:string;csr:string}
@@ -20,8 +26,14 @@ export interface ReconcilerArtifacts {
  readPublicCertificate:(installationId:string)=>Promise<PublicCertificateCopy|undefined>;
  publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy)=>Promise<{copied:string[];complete:boolean}>;
  publishManifest:(cellId:string,envelope:string)=>Promise<void>;
+ hasChallengeFolder?:(cellId:string)=>boolean;
+ writeChallenge?:(cellId:string,file:ChallengeFile)=>Promise<void>;
+ deleteChallenge?:(cellId:string,hostname:string)=>Promise<void>;
 }
-export interface CertificateIssueTarget extends CertificateAuthorization {installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal}
+type CheckValidation={type:'dns-01';dnsName:string}|Extract<CertificateValidation,{type:'tls-alpn-01'}>;
+export interface CertificateIssueTarget extends CertificateAuthorization {
+ installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal;validation:CheckValidation;
+}
 interface ReconcilerOptions {
  planMode?:PlanMode;
  forwardReports?:boolean;
@@ -32,6 +44,8 @@ interface ReconcilerOptions {
  signingKeyForCell?:(cellId:string)=>Promise<KeyObject>;
  pointName?:(name:string,target:string,signal:AbortSignal)=>Promise<void>;
  now?:()=>number;
+ gatewayStatus?:GatewayChallengeStatus;
+ resolveCname?:ResolveCname;
 }
 interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:string;names?:{staff:string;public:string;target:string}}
 
@@ -39,7 +53,7 @@ const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value))
 const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(route=>({installationId:route.installationId,venueId:route.venueId,staffHostname:route.staffHostname,publicHostname:route.publicHostname,address:route.address,port:route.port,peerPublicKey:route.peerPublicKey})));
 const publicationDigest=(routes:GatewayRoute[],reporter?:{gatewayId:string;generation:number},venueLevels=false)=>reporter||venueLevels
  ?digest({routes:[...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(r=>({binding:routeDigest([r]),revision:(r as ReportingGatewayRoute).revision})),...(reporter?{reporter}:{})}):routeDigest(routes);
-const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
+const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts),leaseUntil:(row.lease_until as Date).getTime()});
 
 const staffDigest=(authorityDigest:string,request:StaffCertificateRequest)=>digest({authorityDigest,requestId:request.request_id,requestDigest:request.request_digest});
 
@@ -113,9 +127,11 @@ async function desiredTargets(client:PoolClient,mode:PlanMode,forwardReports:boo
 export class RemoteConfigurationReconciler {
  readonly #forwardReports:boolean;readonly #planMode:PlanMode;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
  readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #pointName:ReconcilerOptions['pointName'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
+ readonly #gatewayStatus:GatewayChallengeStatus|undefined;readonly #resolveCname:ResolveCname|undefined;
  constructor(pool:Pool,options:ReconcilerOptions={}){
   if(options.trafficCoverage&&(!options.forwardReports||options.execute))throw new Error('invalid_traffic_options');
   this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode,options.trafficCoverage);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#pointName=options.pointName;this.#now=options.now??Date.now;
+  this.#gatewayStatus=options.gatewayStatus;this.#resolveCname=options.resolveCname;
  }
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
@@ -152,14 +168,16 @@ export class RemoteConfigurationReconciler {
  }
  async runOnce(signal=new AbortController().signal):Promise<boolean>{
   const claimed=await transaction(this.#pool,async client=>{
-   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND kind NOT IN ('name','certificate_public') AND status='running' AND attempts>=8
+   const exhausted=(await client.query(`SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled AND NOT ${retryAfterExpiry} AND status='running' AND attempts>=8
     AND lease_until<=clock_timestamp() ORDER BY lease_until,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
    if(exhausted){await client.query(`UPDATE remote_configuration_jobs SET status='failed',claim_id=NULL,lease_until=NULL,failures=failures+1,
     last_error='reconcile_failed',updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2`,[exhausted.kind,exhausted.target_id]);return {parked:true as const};}
-   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND (attempts<8 OR kind IN ('name','certificate_public')) AND
+   const row=(await client.query(`SELECT * FROM remote_configuration_jobs WHERE enabled AND (attempts<8 OR ${retryAfterExpiry}) AND
     ((status='pending' AND available_at<=clock_timestamp()) OR (status='running' AND lease_until<=clock_timestamp()))
     ORDER BY available_at,kind,target_id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];if(!row)return;
-   return {parked:false as const,job:rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+interval '120 seconds',
+   return {parked:false as const,job:rowJob((await client.query(`UPDATE remote_configuration_jobs SET status='running',claim_id=$3,lease_until=clock_timestamp()+CASE kind
+    WHEN 'certificate_staff' THEN interval '300 seconds' WHEN 'certificate_public' THEN interval '300 seconds'
+    WHEN 'name' THEN interval '180 seconds' ELSE interval '120 seconds' END,
     attempts=LEAST(attempts+1,8),runs=runs+1,updated_at=clock_timestamp() WHERE kind=$1 AND target_id=$2 RETURNING *`,[row.kind,row.target_id,randomUUID()])).rows[0])};
   });
   if(!claimed)return false;
@@ -172,7 +190,10 @@ export class RemoteConfigurationReconciler {
    else if(job.kind==='certificate_staff'||job.kind==='certificate_public')await this.#certificate(job,signal);
    else if(job.kind==='name')await this.#name(job,signal);
    else await this.#route(job);
-  }catch{await this.#release(job,signal.aborted);}
+  }catch(error){
+   const reason=error instanceof Error?error.message:undefined;
+   await this.#release(job,signal.aborted,reason==='order_in_flight'||reason==='dns_not_verified'||reason==='challenge_not_answerable'?reason:'reconcile_failed');
+  }
   return true;
  }
  async #name(job:RemoteConfigurationJob,signal:AbortSignal){
@@ -195,6 +216,69 @@ export class RemoteConfigurationReconciler {
   });
  }
  async #certificate(job:RemoteConfigurationJob,signal:AbortSignal){return job.kind==='certificate_public'?this.#publicCertificate(job,signal):this.#staffCertificate(job,signal);}
+ async #order(job:RemoteConfigurationJob,target:Omit<CertificateIssueTarget,'signal'|'validation'>,signal:AbortSignal,cells?:string[]){
+  if(!this.#issueCertificate)throw new Error('reconciler_not_configured');
+  const deadline=job.leaseUntil-15_000,budget=Math.floor(deadline-Date.now()),started=this.#now();
+  if(budget<=0)throw new Error('order_deadline');
+  const orderSignal=AbortSignal.any([signal,AbortSignal.timeout(budget)]);
+  const checkDeadline=()=>{
+   orderSignal.throwIfAborted();
+   if(this.#now()-started>=budget)throw new Error('order_deadline');
+  };
+  const {hostname,assigned}=target,artifacts=this.#artifacts,status=this.#gatewayStatus,written=new Set<string>();
+  const withdraw=async()=>{
+   // An order that outlives its exclusion row cannot clean up a newer order's files.
+   if(Date.now()>=job.leaseUntil+300_000)return;
+   await Promise.allSettled([...written].map(async cellId=>{
+    await artifacts!.deleteChallenge!(cellId,hostname);
+    written.delete(cellId);
+   }));
+  };
+  let validation:CheckValidation={type:'dns-01',dnsName:target.dnsName};
+  if(hostname!==assigned){
+   let moved=false;
+   try{await verifyDelegation(hostname,assigned,name=>boundedResolveCname(name,this.#resolveCname));}
+   catch{moved=true;}
+   checkDeadline();
+   await this.#complete(job,async client=>{
+    await client.query(`UPDATE remote_hostnames h SET record_moved_at=CASE WHEN $4 THEN COALESCE(h.record_moved_at,clock_timestamp()) ELSE NULL END
+     FROM installations i WHERE i.id=$1 AND i.configuration_revision=$5 AND i.revoked_at IS NULL
+     AND h.venue_id=i.venue_id AND h.kind=$2 AND h.hostname=$3`,[target.installationId,target.kind,hostname,moved,target.revision]);
+   },true);
+   if(moved)throw new Error('dns_not_verified');
+
+   const checkCells=cells??await transaction(this.#pool,client=>routeCells(client,job.targetId));
+   if(!status||!artifacts?.hasChallengeFolder||!artifacts.writeChallenge||!artifacts.deleteChallenge
+    ||!checkCells.length||checkCells.some(cellId=>!artifacts.hasChallengeFolder!(cellId)))throw new Error('challenge_not_answerable');
+   const write=artifacts.writeChallenge.bind(artifacts);
+   validation={type:'tls-alpn-01',present:async entry=>{
+    for(const cellId of checkCells){
+     checkDeadline();
+     written.add(cellId);
+     await write(cellId,{...entry,expiresAt:job.leaseUntil});
+    }
+    checkDeadline();
+    await awaitAnswerable(status,checkCells,hostname,{signal:orderSignal,giveUpAt:Math.min(Date.now()+45_000,deadline-30_000)});
+    checkDeadline();
+   },withdraw};
+  }
+  checkDeadline();
+  const order=await this.#pool.query(`INSERT INTO remote_certificate_orders(hostname,claim_id,expires_at)
+   VALUES($1,$2,$3::timestamptz+interval '300 seconds')
+   ON CONFLICT(hostname) DO UPDATE SET claim_id=EXCLUDED.claim_id,expires_at=EXCLUDED.expires_at
+   WHERE remote_certificate_orders.expires_at<=clock_timestamp()`,[hostname,job.claimId,new Date(job.leaseUntil)]);
+  if(order.rowCount!==1)throw new Error('order_in_flight');
+  try{
+   if(!await this.#current(job))throw new Error('stale_claim');
+   checkDeadline();
+   const certificate=await this.#issueCertificate({...target,validation,signal:orderSignal});
+   checkDeadline();
+   return {certificate,checkDeadline};
+  }finally{
+   try{await withdraw();}
+   finally{await this.#pool.query('DELETE FROM remote_certificate_orders WHERE hostname=$1 AND claim_id=$2',[hostname,job.claimId]);}
+  }
+ }
  async #publicCertificate(job:RemoteConfigurationJob,signal:AbortSignal){
   if(!this.#artifacts||!this.#issueCertificate)throw new Error('reconciler_not_configured');
   const target=(await this.#pool.query("SELECT p.venue_id,h.hostname FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind='public' WHERE p.installation_id=$1",[job.targetId])).rows[0];
@@ -202,12 +286,13 @@ export class RemoteConfigurationReconciler {
   const cells=await transaction(this.#pool,client=>routeCells(client,job.targetId)),copy=await this.#artifacts.readPublicCertificate(job.targetId);
   let usable=false;
   if(copy)try{validateCsr(copy.csr,target.hostname);usable=!certificateNeedsRenewal(copy.pem,copy.csr,target.hostname,this.#now(),false)&&new X509Certificate(copy.pem).checkPrivateKey(createPrivateKey(copy.pem));}catch{}
-  const publish=async(value:PublicCertificateCopy,authority:CertificateAuthorization,renewal=false)=>{
+  const publish=async(value:PublicCertificateCopy,authority:CertificateAuthorization,renewal=false,checkDeadline?:()=>void)=>{
    let complete=false;
    await this.#complete(job,async client=>{
     await this.#store.publishAuthorizedCertificate(client,job.targetId,'public',value.csr,authority,async()=>{
      if(!await this.#current(job,client))throw new Error('stale_claim');signal.throwIfAborted();
      if(certificateDigest(job.targetId,'public',authority,await routeCells(client,job.targetId))!==job.desiredDigest)throw new Error('placement_changed');
+     checkDeadline?.();
      if(certificateNeedsRenewal(value.pem,value.csr,authority.hostname,this.#now(),false))throw new Error('invalid_certificate');
      const result=await this.#artifacts!.publishPublicCertificate(job.targetId,target.venue_id,cells,value);complete=result.complete;
      // Only cells that received this copy can qualify a move; other deliveries keep retrying.
@@ -224,9 +309,9 @@ export class RemoteConfigurationReconciler {
   if(!usable)await this.#complete(job,async client=>{await client.query('UPDATE remote_configuration_jobs SET applied_digest=NULL WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId]);},true);
   const [key,csrBytes]=await acmeCrypto.createCsr({commonName:target.hostname,altNames:[target.hostname]}),csr=csrBytes.toString(),authority=await this.#store.authorizeCertificate(job.targetId,'public',csr);
   if(certificateDigest(job.targetId,'public',authority,cells)!==job.desiredDigest)throw new Error('stale_configuration');
-  signal.throwIfAborted();const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind:'public',csr,signal});signal.throwIfAborted();
+  const {certificate,checkDeadline}=await this.#order(job,{...authority,installationId:job.targetId,kind:'public',csr},signal,cells);
   if(certificateNeedsRenewal(certificate,csr,authority.hostname,this.#now()))throw new Error('invalid_certificate');
-  await publish({pem:key.toString()+certificate,csr},authority);
+  await publish({pem:key.toString()+certificate,csr},authority,false,checkDeadline);
  }
  async #staffCertificate(job:RemoteConfigurationJob,signal:AbortSignal){
   if(!this.#issueCertificate)throw new Error('reconciler_not_configured');
@@ -234,13 +319,13 @@ export class RemoteConfigurationReconciler {
   const authority=await this.#store.authorizeCertificate(job.targetId,'staff',request.csr);
   if(request.revision!==authority.revision||request.hostname!==authority.hostname||staffDigest(certificateDigest(job.targetId,'staff',authority),request)!==job.desiredDigest)throw new Error('stale_configuration');
   if(request.certificate_request_id===request.request_id&&request.certificate&&!certificateNeedsRenewal(request.certificate,request.csr,authority.hostname,this.#now())){await this.#complete(job,async()=>{});return;}
-  const certificate=await this.#issueCertificate({...authority,installationId:job.targetId,kind:'staff',csr:request.csr,signal});
-  signal.throwIfAborted();
+  const {certificate,checkDeadline}=await this.#order(job,{...authority,installationId:job.targetId,kind:'staff',csr:request.csr},signal);
+  checkDeadline();
   await this.#complete(job,async client=>{
    await this.#store.publishAuthorizedCertificate(client,job.targetId,'staff',request.csr,authority,async()=>{
     // Taking the installation lock can outlive the claim or shutdown signal.
     if(!await this.#current(job,client))throw new Error('stale_claim');
-    signal.throwIfAborted();await publishStaffCertificate(client,request,certificate);
+    checkDeadline();await publishStaffCertificate(client,request,certificate);
    });
   });
  }
@@ -257,13 +342,14 @@ export class RemoteConfigurationReconciler {
     WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4`,[job.kind,job.targetId,job.desiredDigest,job.claimId,interval]);
   });
  }
- async #release(job:RemoteConfigurationJob,cancelled:boolean){
-  const attempts=job.attempts,status=job.kind!=='name'&&job.kind!=='certificate_public'&&!cancelled&&attempts>=8?'failed':'pending';
+ async #release(job:RemoteConfigurationJob,cancelled:boolean,reason:ReleaseReason='reconcile_failed'){
+  const retry=job.kind==='name'||job.kind==='certificate_public'||job.kind==='certificate_staff'&&(reason==='dns_not_verified'||reason==='challenge_not_answerable');
+  const attempts=job.attempts,status=!retry&&!cancelled&&attempts>=8?'failed':'pending';
   const seconds=cancelled?0:Math.min(900,30*2**Math.max(0,attempts-1));
   await this.#pool.query(`UPDATE remote_configuration_jobs SET status=$5,available_at=clock_timestamp()+$6*interval '1 second',claim_id=NULL,lease_until=NULL,
-   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) WHEN kind IN ('name','certificate_public') THEN LEAST(attempts,7) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
-   last_error=CASE WHEN $7 THEN last_error ELSE 'reconcile_failed' END,updated_at=clock_timestamp()
-   WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4 AND status='running'`,[job.kind,job.targetId,job.desiredDigest,job.claimId,status,seconds,cancelled]);
+   attempts=CASE WHEN $7 THEN GREATEST(0,attempts-1) WHEN $8 THEN LEAST(attempts,7) ELSE attempts END,failures=failures+CASE WHEN $7 THEN 0 ELSE 1 END,
+   last_error=CASE WHEN $7 THEN last_error ELSE $9 END,updated_at=clock_timestamp()
+   WHERE kind=$1 AND target_id=$2 AND desired_digest=$3 AND claim_id=$4 AND status='running'`,[job.kind,job.targetId,job.desiredDigest,job.claimId,status,seconds,cancelled,retry,reason]);
  }
 }
 

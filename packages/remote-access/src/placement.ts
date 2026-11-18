@@ -222,7 +222,7 @@ export class RemoteAccessStore {
    // Assigned names are reserved even when a venue elects to use a custom name.
    const reserved=(await client.query(`SELECT venue_id FROM remote_hostnames WHERE assigned_hostname=$1 AND venue_id<>$2`,[custom,row.venue_id])).rowCount;
    if(reserved)fail('hostname_conflict');
-   await client.query('UPDATE remote_hostnames SET hostname=$3 WHERE venue_id=$1 AND kind=$2',[row.venue_id,kind,custom]);
+   await client.query('UPDATE remote_hostnames SET hostname=$3,record_moved_at=NULL WHERE venue_id=$1 AND kind=$2',[row.venue_id,kind,custom]);
    const result=(await placement(client,id))!;
    await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access'",[id,{version:1,...result}]);
    await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);

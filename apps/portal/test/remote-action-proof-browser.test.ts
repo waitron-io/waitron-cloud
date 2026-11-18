@@ -21,7 +21,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path==='/action-proof/factor'){freshUntil='2099-01-01T00:00:00Z';return route.fulfill({status:204});}
    if(path==='/installations')return route.fulfill({json:{installations:[{installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))}]}});
    if(path==='/remote-access/status')return route.fulfill({json:view});
-   if(path==='/remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:'staff.venue.example'},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.venue.example'}]}});
+   if(path==='/remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:'staff.venue.example'}]}});
    if(path==='/remote-access/apply'){applies++;return route.fulfill({json:{...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:'staff.cafe.example'}}}});}
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });

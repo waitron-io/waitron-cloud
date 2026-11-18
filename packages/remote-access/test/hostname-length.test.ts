@@ -11,13 +11,12 @@ const installationId='12345678-1234-4234-8234-123456789abc';
 const venueId='22345678-1234-4234-8234-123456789abc';
 const assigned=`staff-v-${venueId}.example.test`;
 
-test('DNS instructions leave room for the certificate challenge label on both record names',()=>{
+test('DNS instructions preserve the 237-character hostname limit',()=>{
  const longest=hostname(237);
  assert.equal(longest.length,237);
  const records=dnsInstructions(longest,assigned);
- assert.deepEqual(records,[{type:'CNAME',name:longest,value:assigned},{type:'CNAME',name:'_acme-challenge.'+longest,value:'_acme-challenge.'+assigned}]);
- assert.equal(records[1]!.name.length,253);
- assert.equal(dnsInstructions('staff.cafe.example',longest)[1]!.value.length,253);
+ assert.deepEqual(records,[{type:'CNAME',name:longest,value:assigned}]);
+ assert.equal(dnsInstructions('staff.cafe.example',longest)[0]!.value.length,237);
  for(const length of [238,253]){
   const tooLong=hostname(length);
   assert.equal(tooLong.length,length);

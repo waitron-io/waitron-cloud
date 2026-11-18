@@ -1,6 +1,6 @@
 import {organisationScopeSql} from '@waitron-cloud/identity';
 import {guestMenuStatus} from '@waitron-cloud/remote-access/guest-menu';
-import {Resolver} from 'node:dns/promises';
+import {boundedResolveCname,type ResolveCname} from '@waitron-cloud/remote-access/dns-lookup';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
@@ -12,12 +12,7 @@ import {readSessionCookie} from './cookies.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
-export type RemoteResolver=(hostname:string)=>Promise<string[]>;
-async function boundedResolve(name:string,custom?:RemoteResolver):Promise<string[]>{
- const resolver=custom?undefined:new Resolver({timeout:1000,tries:1});let timer:ReturnType<typeof setTimeout>|undefined;
- try{return await Promise.race([(custom??(n=>resolver!.resolveCname(n)))(name),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('dns_not_verified')),3000);})]);}
- finally{clearTimeout(timer);resolver?.cancel();}
-}
+export type RemoteResolver=ResolveCname;
 export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:string;consume:(rules:RateRule[])=>Promise<void>;resolve?:RemoteResolver;planMode?:PlanMode;guestOrigin?:string}):Promise<Response>{
  const {pool,origin,consume}=options,action=c.req.path.slice('/api/account/remote-access/'.length);
  if(!['status','dns','apply'].includes(action))throw new AccountHttpError(404,'not_found');
@@ -70,7 +65,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
    const records=await store.hostnameInstructions(id,kind,body.hostname!);await transaction(pool,authorize);
    return c.json({installationId:id,kind,hostname:body.hostname!,records});
   }
-  await store.setHostname(id,kind,body.hostname!,Number(body.expectedRevision),name=>boundedResolve(name,options.resolve),authorize);
+  await store.setHostname(id,kind,body.hostname!,Number(body.expectedRevision),name=>boundedResolveCname(name,options.resolve),authorize);
   return c.json(await status());
  }catch(error){
   if(error instanceof AccountHttpError)throw error;
