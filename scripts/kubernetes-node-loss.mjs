@@ -158,7 +158,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
     for (const [index, node] of nodes.entries()) {
       const stopped = await verifyContainer(node.id);
       assert.equal(stopped.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_before_stop');
-      // Kind enables restart-on-failure, which would shorten the outage after SIGKILL.
+      // Keep the selected node down for the whole leg independently of Docker restart policy.
       await docker(['update', '--restart=no', node.id]);
       const started = performance.now();
       await docker(['kill', '--signal=SIGKILL', node.id]);
