@@ -196,7 +196,9 @@ try{
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
  await secret(join(input,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(input,'wireguard.key'),gatewayKey.privateKey);await secret(join(input,'bot.key'),randomBytes(32));await secret(join(input,'venue-ca.pem'),acme.certificateRoot);
  await secret(join(targetInput,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(targetInput,'wireguard.key'),targetGatewayKey.privateKey);await secret(join(targetInput,'bot.key'),randomBytes(32));await secret(join(targetInput,'venue-ca.pem'),acme.certificateRoot);
- await operator('export',{cellId,signingKeyFile,output:join(input,'manifest.json')});docker('network','create',name);network=true;startGateway();
+ await operator('export',{cellId,signingKeyFile,output:join(input,'manifest.json')});
+ // Keep the same gateway IP across replacement so existing WireGuard peers can reconnect.
+ docker('network','create','--subnet',`10.179.${randomBytes(1)[0]}.0/24`,name);network=true;startGateway();
  for(const [n,venue] of venues.entries()){
   const peerInput=join(root,`peer-${n}`);await mkdir(peerInput);await secret(join(peerInput,'peer.json'),JSON.stringify({address:venue.placement.address,privateKey:venue.key.privateKey,gatewayPublicKey:gatewayKey.publicKey,gatewayEndpoint:gatewayIp+':51820',upstreamHost:'host.docker.internal',upstreamPort:venue.server.port}));venue.peerInput=peerInput;
   await secret(join(peerInput,'ca.pem'),acme.certificateRoot);
