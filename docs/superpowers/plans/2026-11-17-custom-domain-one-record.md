@@ -512,7 +512,15 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
 **Files:**
 - Modify: `packages/remote-access/src/reconciler.ts` (`CertificateIssueTarget.validation`, `#certificate`, `#staffCertificate`; option `gatewayStatus:GatewayChallengeStatus`)
 - Modify: `packages/remote-access/src/reconciler-cli.ts`, `packages/remote-access/src/reconciler-files.ts` — routes gain `challenges:string` (the cell's check folder, absolute) and `gatewayStatusFiles:string[]` (absolute), both required; `ReconcilerArtifacts` gains `writeChallenge(cellId:string,file:ChallengeFile):Promise<void>` and `deleteChallenge(cellId:string,hostname:string):Promise<void>`, which call Task 5.1's helpers (`writeChallenge` sweeps expired files first)
+- Modify: `compose.yaml`, `deploy/local-stack/runtime.mjs`, `deploy/test-cloud/compose.yaml`, `deploy/test-cloud/runtime.mjs` — wire the local custom-name launches. Forward explicit `GATEWAY_CHALLENGES` and `GATEWAY_STATUS_DIR` settings only to the gateway child. With `GATEWAY_CHALLENGES` unset, checks are off.
+- Modify: `packages/remote-access/src/gateway-cli.ts` — atomically publish the same status as `status.json` under `GATEWAY_STATUS_DIR` when set, keeping `/state/status.json` for existing health readers.
+- Modify: `deploy/test-cloud/remote-worker.mjs`, `deploy/test-cloud/remote-runtime.mjs` — pass the LAN worker's check folder and status file into its reconciler, which builds its own artifacts and issuer outside the reconciler CLI.
 - Test: `packages/remote-access/test/alpn-reconciler.test.ts`
+- Test: `deploy/test-cloud/deployment.test.mjs` (extend the existing Compose contract coverage). Add one check, `custom-name launchers wire private checks and gateway status`, that renders both local layouts and passes each rendered environment through its gateway launcher. It fails for a missing setting or mount, reversed mount permissions, or access by another service.
+
+Mount a private check volume read-only in the gateway and writable only by the certificate worker (`remote-reconciler` in the root stack, `gateway-manifest` in the LAN test overlay where `remote-reconciler` is unavailable). Mount the status-only directory writable in the gateway and read-only in that worker. Mount the directory so the worker sees each atomic replacement of `status.json`; gateway state and WireGuard keys stay private to the gateway.
+
+Review the adapter's new artifact and status hooks with `deploy/test-cloud/remote-runtime.test.mjs`. The LAN CA signs CSRs directly, and Amazon uses its separate HTTP-01 adapter. Check that a TLS-ALPN-01 job cannot complete through either shortcut. In the same wiring check, render the additional `deploy/test-cloud/compose.amazon.yaml` overlay with synthetic inputs and verify that `GATEWAY_CHALLENGES` stays unset there. Task 8.2 proves real issuance with Pebble.
 
 **Interfaces:**
 - Consumes: `ChallengeFile` and its helpers (5.1), the order guard and deadline (6.3), `awaitAnswerable` (6.4), `routeCells` (4.2), `CertificateValidation` (6.1).
@@ -528,7 +536,7 @@ Extend the real HAProxy image test with a synthetic certificate and a counting s
   - `a timed-out wait sends nothing and retries` (job `pending`, backoff applied).
   - `the check files are deleted after success and after failure`.
   - `a venue with a staged move gets the check file in both cells, and the order row records both`.
-- [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/alpn-reconciler.test.ts`; FAIL. **Implement**; run it plus `test/reconciler.test.ts test/reconciler-cli.test.ts test/public-certificates.test.ts test/staff-reconciler.test.ts`; PASS.
+- [ ] **Step 2: Run** `node scripts/test-postgres.mjs exec pnpm --dir packages/remote-access exec node --test test/alpn-reconciler.test.ts` and `node --test --test-name-pattern='custom-name launchers wire private checks and gateway status' deploy/test-cloud/deployment.test.mjs`; FAIL. **Implement**; run them again plus `test/reconciler.test.ts test/reconciler-cli.test.ts test/public-certificates.test.ts test/staff-reconciler.test.ts` and `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/remote-runtime.test.mjs`; PASS.
 - [ ] **Step 3: Commit** `git commit -s -m "Order custom-name certificates with the gateway's check"`.
 
 ### Task 6.6: A moved record stops renewal before any order
@@ -679,6 +687,7 @@ Copy: `remoteRecordMoved` and `remoteRecordMovedNoDate` use Task 7.1's exact EN/
 
 **Files:**
 - Modify: `scripts/test-local-remote.mjs` — the worker gets `challenges` and `gatewayStatusFiles` for both cells; one venue's custom staff and public names are saved through `setHostname` with one CNAME; issuance goes through the real gateway; one of them is renewed
+- In that script, wire both `startGateway` (source) and `startTargetGateway` (destination) to set `GATEWAY_CHALLENGES` and mount their own private check folder read-only. Only the proof worker writes the folders. Read only each cell's `status.json` through the existing `gatewayFile` path, including its Linux fallback. Check both launches for the setting and read-only mount, and include the new mount in the existing box-key absence check.
 
 - [ ] **Step 1:** Add the phase. It asserts that both custom names answer with certificates from Pebble's root, that the renewed one has a new serial, and that the box's private key is absent from the gateway (the existing check).
 - [ ] **Step 2: Run** the proof (as in "Run the proof"); read every `PASS`. **Commit** `git commit -s -m "Prove one-record custom names through the real gateway"`.
