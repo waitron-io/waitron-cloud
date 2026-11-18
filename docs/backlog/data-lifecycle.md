@@ -44,17 +44,23 @@ explicit. See [the capacity guide](../local-backups.md#measure-local-transfer-ca
 The [clean-commit measurement](../receipts/backup-capacity-2026-09-30.json) ran all three
 sizes; the guide records the observed times and resource peaks. Provider policies
 and real Waitron archive assembly remain outside this fixture.
-Next: measure deployment uplink bandwidth, spool volume and real database/
-encryption shutdown latency and qualify the large bound verifier and genuine
-M6 recovery before raising the current 512 MiB bound. The plan uses Lane M's
-compact 3.31 GB one-year database. At the same growth rate a venue reaches the
-planned 4 GiB expanded limit after about 15–16 months. At that limit the new
-Cloud capture should report failure and preserve the last retained copy.
+Next, measure deployment uplink bandwidth, spool volume and shutdown latency
+during database copy and encryption. Rerun the paired fiscal fixture after Lane L's
+VERIFIER-CERT-OPEN. The pinned Waitron certificate opener needs a subprocess and the
+Cloud verifier denies subprocesses, so verification of the synthetic fiscal fixture
+reports `secret_unavailable`. Keep the test Cloud's 512 MiB limit until a genuine
+year-sized backup passes capture, retained verification, preview and staging. Use
+Lane M's trimmed 3.31 GB synthetic database, about 1 GB compressed. Ask Lane I for
+private transfer into one isolated 55-minute Linux test slot. That slot length is
+an estimate once the fixture can be loaded.
+At the measured growth rate a venue reaches the 4 GiB expanded limit after
+about 15–16 months. At that limit Cloud reports capture failure and keeps the
+last retained copy.
 Other open work includes
 production master-key custody/rewrapping and production-host verifier hardening. The
 process verifier denies network, subprocesses, native addons, host reads and outside
-writes. The container adapter adds a disposable container around the deployed
-verifier with total memory, swap disabled, aggregate scratch, no network or host mounts, and ownership cleanup.
+writes. The disposable container sets total memory, disables swap and network access,
+bounds scratch writes and checks that the worker removed its own child.
 Archive input now waits until Docker inspection acknowledges runtime startup.
 A local Docker 28.0.4 runtime with a controlled two-second start-return delay
 reproduced exit 73 with `OOMKilled=false`: restore input arrived before

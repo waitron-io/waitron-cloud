@@ -19,8 +19,8 @@ daemon. Missing configuration fails before claiming a backup job. Only the recov
 source node identity, module versions, capture time and encrypted snapshot travel through
 stdin. Database, provider, stream and master keys stay with the trusted worker.
 
-The container runs as uid 1000 with no capabilities, no network, no host mounts, no shared
-memory segment and a read-only root filesystem. It retains the existing Node permission,
+The container runs as uid 1000 with no capabilities, no network, no shared
+memory segment and a read-only root filesystem. It retains the Node permission,
 CPU, file, descriptor, heap and output limits. The loader needs worker threads, so Node's
 permission model alone is not the security boundary. Docker also denies external network
 and image writes when a test deliberately bypasses the Node permissions.
@@ -41,7 +41,7 @@ allocate a 16 GiB filesystem for the named scratch volume. The filesystem bounds
 writes, including the input, the unpacked archive and the restored database.
 
 ```sh
-scratch=$(mktemp -d)
+scratch=$(realpath "$(mktemp -d)")
 mkdir "$scratch/mount"
 fallocate -l 16G "$scratch/disk"
 mkfs.ext4 -q -m 0 "$scratch/disk"
