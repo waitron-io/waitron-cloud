@@ -60,7 +60,8 @@ detailed timing in the scratch run. A real PostgreSQL control must force
 the observed ordering and fail at the original check before a repair.
 Change the fixture or worker only where that evidence points. Bring any
 change to an existing assertion to the watcher with its failing control.
-Keep the exact exit check and current deadlines. Add no retries. Write a
+Keep the exact exit check and its deadline. The cleanup read uses the
+cleared wait. Never repeat the stop or the exit check. Write a
 deviation to the watcher if the demonstrated repair needs to loosen the
 termination check. If the cause stays open, take the retained evidence to
 the watcher.

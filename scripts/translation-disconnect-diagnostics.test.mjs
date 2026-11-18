@@ -18,10 +18,20 @@ function refusal(actual,name=title,options={}){
   copyFileSync(new URL('./ci-required-cases.mjs',import.meta.url),join(directory,'scripts/ci-required-cases.mjs'));
   writeFileSync(join(directory,'scripts/ci-required-cases.json'),'{}\n');
   const file=join(directory,'packages/translation/test',options.file??'worker-cli.test.ts');
+  const actualText=JSON.stringify(actual);
+  const expectedText=JSON.stringify(options.expected??[1,null,'',failed]);
+  let assertion=`assert.deepEqual(${actualText},${expectedText});`;
+  if(options.code)assertion=`throw Object.assign(new Error('private-error'),{
+   code:${JSON.stringify(options.code)},actual:${actualText},expected:[1,null,'',${JSON.stringify(failed)}]});`;
+  if(options.check==='backends-terminated')
+   assertion=`assert.ok(${JSON.stringify(options.termination?.backends)}.every(row=>row.killed));`;
+  if(options.check==='worker-connections')assertion="throw new Error('condition timed out');";
+  const workerActual=['backends-terminated','worker-connections'].includes(options.check)?actual:undefined;
+  const facts={termination:options.termination,disconnectCheck:options.check,workerActual};
   writeFileSync(file,`import {test} from 'node:test';import assert from 'node:assert/strict';
  ${options.prior?`for(let n=0;n<${options.prior};n++)test('earlier failure '+n,()=>assert.fail());`:''}
- test(${JSON.stringify(name)},()=>{try{${options.check==='backends-terminated'?`assert.ok(${JSON.stringify(options.termination?.backends)}.every(row=>row.killed));`:options.code?`throw Object.assign(new Error('private-error'),{code:${JSON.stringify(options.code)},actual:${JSON.stringify(actual)},expected:[1,null,'',${JSON.stringify(failed)}]});`:`assert.deepEqual(${JSON.stringify(actual)},${JSON.stringify(options.expected??[1,null,'',failed])});`}}
- catch(error){Object.assign(error,${JSON.stringify({termination:options.termination,disconnectCheck:options.check,workerActual:options.check==='backends-terminated'?actual:undefined})});throw error;}});`);
+ test(${JSON.stringify(name)},()=>{try{${assertion}}
+ catch(error){Object.assign(error,${JSON.stringify(facts)});throw error;}});`);
   const driver=join(directory,'driver.mjs');
   writeFileSync(driver,`import {run} from 'node:test';import {summariseServiceMatrix} from './scripts/test-cloud-free-services.mjs';
  try{await summariseServiceMatrix(run({files:[${JSON.stringify(file)}],execArgv:[]}),[{id:'translation',files:[${JSON.stringify(file)}]}]);}catch{process.exitCode=1;}`);
@@ -184,11 +194,11 @@ test('the sender omits oversized backend facts even for named checks',()=>{
 test('the proof names a connection cleanup failure after a correct exit',()=>{
  const actual=[1,null,'',failed];
  const stopped={iteration:0,backends:[{pid:321,killed:true}]};
- const result=refusal(actual,title,{termination:stopped,check:'worker-connections',code:'ERR_TEST_FAILURE'});
+ const result=refusal(actual,title,{termination:stopped,check:'worker-connections'});
  assert.equal(result.status,1,result.stderr);
  assert.equal(result.stdout,'');
  const rows=result.stderr.trim().split('\n').map(parseServiceProofFailure).filter(Boolean);
  assert.deepEqual(rows.find(row=>row.kind==='translation-disconnect'),{
-  kind:'translation-disconnect',check:'worker-connections',actual,expected:actual,termination:stopped,
+  kind:'translation-disconnect',check:'worker-connections',actual,expected:[1,null,'',failed],termination:stopped,
  },result.stderr);
 });
