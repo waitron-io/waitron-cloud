@@ -41,7 +41,7 @@ function storeMetrics(ip, {ca, credentials}, signal) {
   const payload = encode({alg: 'HS512', typ: 'JWT'}) + '.' +
     encode({iss: 'prometheus', sub: accessKeyId, exp: Math.floor(Date.now() / 1000) + 300});
   const token = payload + '.' + createHmac('sha512', secretAccessKey).update(payload).digest('base64url');
-  const endpoint = 'https://' + ip + ':' + storeNodePort + '/minio/v2/metrics/node';
+  const endpoint = 'https://' + ip + ':' + storeNodePort + '/minio/v2/metrics/cluster';
   return new Promise((resolve, reject) => {
     // A fresh connection can reach either of the two peers on this machine.
     const request = get(endpoint, {ca, agent: false, signal, headers: {Authorization: 'Bearer ' + token}}, response => {
@@ -61,21 +61,21 @@ function storeMetrics(ip, {ca, credentials}, signal) {
   });
 }
 
-export async function waitForStorePeers(read, expected, signal, connected = 6) {
+export async function waitForStoreDrives(read, expected, signal, drives = 6) {
   const counts = new Map(expected.map(peer => [peer, 'unseen']));
   const summary = () => [...counts].map(([peer, count]) => peer + '=' + count).join(', ');
   try {
-    while ([...counts.values()].some(count => count !== connected)) {
+    while ([...counts.values()].some(count => count !== drives)) {
       signal.throwIfAborted();
       const text = await read(signal);
-      const metric = /^minio_cluster_nodes_online_total\{server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000"\} (\d+)$/m.exec(text);
+      const metric = /^minio_cluster_health_erasure_set_online_drives\{pool="0",server="(store-[0-5])\.store-peers\.d621-store\.svc\.cluster\.local:9000",set="0"\} (\d+)$/m.exec(text);
       assert.ok(metric && counts.has(metric[1]), 'storage_loss.unexpected_peer_metric');
       counts.set(metric[1], Number(metric[2]));
-      if ([...counts.values()].some(count => count !== connected)) await delay(1000, undefined, {signal});
+      if ([...counts.values()].some(count => count !== drives)) await delay(1000, undefined, {signal});
     }
   } catch (error) {
     if (!signal.aborted) throw error;
-    throw Error('storage_loss.expected ' + connected + ' connected peers (' + summary() + ')', {cause: error});
+    throw Error('storage_loss.expected ' + drives + ' online drives (' + summary() + ')', {cause: error});
   }
   return summary();
 }
@@ -143,7 +143,13 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
     process.stderr.write('Waiting for all six store peers\n');
     const account = await installStockholmStore({nodes: names, addresses: nodes.map(node => node.ip), image, directory, run, kube, signal});
     nodes.forEach(node => clients.set(node.name, storageClient(node, account)));
+    const waitForDrives = (machine, drives, deadline) => {
+      const ordinal = names.indexOf(machine.name) * 2;
+      return waitForStoreDrives(requestSignal => storeMetrics(machine.ip, account, requestSignal),
+        ['store-' + ordinal, 'store-' + (ordinal + 1)], deadline, drives);
+    };
     const first = clients.get(names[0]), ready = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+    await waitForDrives(nodes[0], 6, ready);
     await first.send(CreateBucketCommand, {}, ready);
     await first.send(PutBucketVersioningCommand, {VersioningConfiguration: {Status: 'Enabled'}}, ready);
     assert.equal((await first.send(GetBucketVersioningCommand, {}, ready)).Status, 'Enabled');
@@ -156,17 +162,17 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
     const legs = [];
     for (const [index, node] of [...nodes, nodes[0]].entries()) {
       const name = 'outage-' + index, multipart = 'multipart-' + index, bytes = randomBytes(512);
-      const upload = await startMultipart(first, multipart, encrypted, AbortSignal.any([signal, AbortSignal.timeout(60_000)]));
+      const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+      await waitForDrives(nodes[0], 6, uploadLimit);
+      const upload = await startMultipart(first, multipart, encrypted, uploadLimit);
       const survivorNodes = nodes.filter(machine => machine.name !== node.name);
       const survivors = survivorNodes.map(machine => clients.get(machine.name));
       const [client] = survivors;
-      const survivor = survivorNodes[0], ordinal = names.indexOf(survivor.name) * 2;
-      const waitForPeers = (connected, deadline) => waitForStorePeers(requestSignal => storeMetrics(survivor.ip, account, requestSignal),
-        ['store-' + ordinal, 'store-' + (ordinal + 1)], deadline, connected);
+      const survivor = survivorNodes[0];
       const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
-        // MinIO must see the four surviving peers before it can assess a multipart write.
-        const peerCounts = await waitForPeers(4, stopped);
-        process.stderr.write('Store peers after stop on ' + survivor.name + ' (' + peerCounts + ')\n');
+        // MinIO must see the four surviving drives before it can assess a multipart write.
+        const peerCounts = await waitForDrives(survivor, 4, stopped);
+        process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + peerCounts + ')\n');
         for (const survivor of survivors) {
           assert.deepEqual(await readObject(survivor, 'baseline', key, stopped), old.get('baseline'));
         }
@@ -188,8 +194,8 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
       try {
         await waitForStore({nodes: names, kube, signal: repair});
-        const peerCounts = await waitForPeers(6, repair);
-        process.stderr.write('Store peers reconnected on ' + survivor.name + ' (' + peerCounts + ')\n');
+        const peerCounts = await waitForDrives(survivor, 6, repair);
+        process.stderr.write('Store drives online after rejoin on ' + survivor.name + ' (' + peerCounts + ')\n');
         // A survivor has the acknowledged bytes while the returned volumes are still missing them.
         assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
         assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);

@@ -61,17 +61,19 @@ test('multipart upload refuses a part response without the requested encryption'
     /storage_loss.multipart_encryption/);
 });
 
-test('both survivor peers must see four connections during the outage and six after rejoin', async () => {
-  const {waitForStorePeers} = await import('./kubernetes-storage-proof.mjs');
-  assert.equal(typeof waitForStorePeers, 'function', 'repair must wait for the store view');
-  const reading = (peer, count) =>
-    'minio_cluster_nodes_online_total{server="store-' + peer + '.store-peers.d621-store.svc.cluster.local:9000"} ' + count;
+test('both serving peers must report four online drives during the outage and six after rejoin', async () => {
+  const {waitForStoreDrives} = await import('./kubernetes-storage-proof.mjs');
+  const reading = (peer, count, processes = 6) => {
+    const server = 'store-' + peer + '.store-peers.d621-store.svc.cluster.local:9000';
+    return 'minio_cluster_nodes_online_total{server="' + server + '"} ' + processes + '\n' +
+      'minio_cluster_health_erasure_set_online_drives{pool="0",server="' + server + '",set="0"} ' + count;
+  };
   const samples = [reading(2, 5), reading(3, 6), reading(2, 6)];
-  await waitForStorePeers(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
+  await waitForStoreDrives(async () => samples.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000));
   assert.deepEqual(samples, []);
 
-  const afterStop = [reading(2, 5), reading(3, 4), reading(2, 4)];
-  assert.equal(await waitForStorePeers(async () => afterStop.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000), 4),
+  const afterStop = [reading(2, 5, 4), reading(3, 4, 4), reading(2, 4, 4)];
+  assert.equal(await waitForStoreDrives(async () => afterStop.shift(), ['store-2', 'store-3'], AbortSignal.timeout(5000), 4),
     'store-2=4, store-3=4');
   assert.deepEqual(afterStop, []);
 
@@ -80,7 +82,7 @@ test('both survivor peers must see four connections during the outage and six af
     stop.abort();
     return reading(2, 5);
   }
-  await assert.rejects(waitForStorePeers(short, ['store-2', 'store-3'], stop.signal),
+  await assert.rejects(waitForStoreDrives(short, ['store-2', 'store-3'], stop.signal),
     /store-2=5, store-3=unseen/);
 });
 
