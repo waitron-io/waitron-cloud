@@ -53,11 +53,18 @@ and keeps checking as the adapters change.
     `eu-north-1` (the account passes the 12-digit check in `ses-feedback-config.ts`); through
     `createSesFeedbackQueue` with a `requestHandler` that forwards to the emulator: send a message,
     receive it, see it hidden while in flight, delete it, and see it gone.
-- **Route 53 timing.** The emulator has no control to complete a change; one change measured on
-  2026-11-18 was `PENDING` straight after the write and `INSYNC` within one to two minutes. The
-  adapter's publish deadline is 75 seconds (`route53-dns.ts`). The first task measures the
-  emulator's delay. If it exceeds 75 seconds, that is a finding to report, not something to hide by
-  changing the deadline.
+- **Route 53 timing.** The emulator has no control to complete a change. On 1.0.512 (Docker on the
+  owner's Mac, 2026-11-18) a change was `PENDING` straight after the write and `INSYNC` 1.0 seconds
+  later, both through `createRoute53DnsProvider(...).present` and when polled directly. (An earlier
+  note here of "one to two minutes" measured only how long I took to look again.) The adapter's
+  75-second publish deadline (`route53-dns.ts`) is therefore not at risk; the tests keep the
+  package's 30-second case limit.
+- **SQS forwarding.** The adapter signs for `sqs.eu-north-1.amazonaws.com`, and Node takes the TLS
+  name from that `Host` header, so a plain forward to `127.0.0.1` fails the certificate name check.
+  The forwarding transport keeps the signed headers and checks the certificate against `127.0.0.1`
+  (`servername: ''` and `checkServerIdentity` with `'127.0.0.1'`), still verifying it against the
+  emulator's CA. Measured the same day: without that, `receive` refused with
+  `ses_feedback_receive_failed`; with it, the adapter received a sent message and deleted it.
 - **CI job.** Installs a pinned Debian package
   (`https://downloads.aws.com/aws-emulator/packages/aws-emulator/LTS/aws-emulator_<version>-1_amd64.deb`,
   about 200 MB), checks its SHA-256 before installing, starts the emulator on loopback with
@@ -68,6 +75,7 @@ and keeps checking as the adapters change.
 
 ## Left to the builder
 
-File names, how the job is selected by the CI planner, whether to cache the package, the exact
-pinned version, and how the test locates the emulator (its startup line gives the endpoint and CA
-file).
+File names, whether to cache the package, and how the test locates the emulator. The plan settles
+the version (1.0.512, SHA-256 `557f7c2fbf4c4bd99ac50434cdbb36c2f18a111c36d78cfd3cc4f88f765c0962`,
+whose `.sig` verified against Amazon's key `98BC F336 A3BE 53B7 34E9 67C5 2E5B F49B D940 F624` on
+2026-11-18) and the selection: a standalone workflow, not part of `ci.yml`'s planner.
