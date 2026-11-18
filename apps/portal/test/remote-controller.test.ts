@@ -173,3 +173,30 @@ for(const code of ['proof_required','enrollment_required'])test(`remote ${code} 
  await c.apply();assert.equal(c.error,code==='proof_required'?'actionProofUnavailable':'pairEnrollment');
  assert.deepEqual(c.confirmation,reviewed);assert(c.view?.names);assert.equal(calls.filter(p=>p.endsWith('/apply')).length,1);
 });
+
+test('remote views refuse invalid record-moved evidence while accepting older replies',()=>{
+ const staff={...view.names.staff,current:dns.hostname,recordMoved:true,certificateNotAfter:'2026-12-01T12:00:00.000Z'};
+ assert(validRemoteView(view));
+ assert(validRemoteView({...view,names:{...view.names,staff}}));
+ for(const patch of [{recordMoved:'yes'},{certificateNotAfter:'2026-02-30T00:00:00.000Z'},{current:staff.assigned}]){
+  assert.equal(validRemoteView({...view,names:{...view.names,staff:{...staff,...patch}}}),false);
+ }
+});
+
+test('Check again posts the affected name kind and reloads status',async()=>{
+ const calls:{path:string;body?:Record<string,unknown>}[]=[];
+ let moved=true;
+ const c=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
+  calls.push({path,body});
+  if(path.endsWith('/recheck'))moved=false;
+  return {ok:true,value:{...view,names:{...view.names,staff:{...view.names.staff,current:dns.hostname,recordMoved:moved}}} as T};
+ });
+ c.account('owner');await c.open(id);
+ await c.recheck('staff');
+ assert.deepEqual(calls,[
+  {path:'/remote-access/status',body:{installationId:id}},
+  {path:'/remote-access/recheck',body:{installationId:id,kind:'staff'}},
+  {path:'/remote-access/status',body:{installationId:id}},
+ ]);
+ assert.equal(c.view?.names?.staff.recordMoved,false);
+});

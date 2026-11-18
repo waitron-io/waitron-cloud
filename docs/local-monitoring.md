@@ -84,7 +84,7 @@ they need Docker and do not run as part of these focused commands.
 
 ## Run the monitor
 
-Apply every migration through `073_retire_certificate_expiry_incidents.sql`. Configure `DATABASE_URL` and the
+Apply every migration through `075_record_moved_incidents.sql`. Configure `DATABASE_URL` and the
 same `CLOUD_EMAIL_KEYS` and `CLOUD_EMAIL_ACTIVE_KEY_ID` used by the account email queue.
 The monitor encrypts notification payloads using those keys. It needs no backup master
 key, storage credentials or SMTP credentials.
@@ -184,11 +184,13 @@ the installation authority lock. A hostname change, replacement or revocation th
 rejects a late result from the old route. Evidence more than one minute ahead of database
 time is rejected so a bad clock cannot leave a stopped worker looking fresh.
 
-The monitor records deduplicated route, stale-probe and certificate-expiry incidents and
-their recoveries. It suppresses them when you remove the route or revoke the installation.
-The portal presents the public and staff routes separately. If you have opted in to service
-alerts, their incident and recovery transitions use the same bilingual email queue as contact
-and snapshot alerts.
+The monitor records failed routes, stale probes and custom DNS records that stop
+pointing to Cloud. It clears each incident on recovery and suppresses it when you remove
+the route or revoke the installation. The portal presents the public and staff routes
+separately. If you opt in to service alerts, Cloud sends the opening and recovery emails
+in your saved language. When a DNS record has moved, the opening email gives you the
+address, its expected target and the last verified certificate expiry if Cloud knows it.
+Open [Set up remote access](local-remote-access.md) to check a corrected record.
 
 For local delivery, start Mailpit and run the existing mail worker with local transport:
 
@@ -284,7 +286,7 @@ API tests cover venue isolation. Mailpit captures incident and recovery messages
 languages, and proves that opting out or revoking a route suppresses queued remote notices.
 
 External remote-access probes now persist revision-bound evidence and the monitor records
-route, stale-probe, certificate-expiry and recovery transitions without confusing a live
+route, stale-probe, record-moved and recovery transitions without confusing a live
 control connection for a working route. The portal presents redacted evidence, and opted-in
 owners receive bilingual incident and recovery emails after delivery-time authority checks.
 The two-venue proof runs this whole path against real local gateway and TLS fixtures. It stops

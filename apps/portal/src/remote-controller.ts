@@ -49,6 +49,21 @@ export class RemoteController {
   if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';}
   else if(!result.ok)this.#failure(result);else {this.#clearForward();this.error='unavailable';}this.#changed();return this.view;
  }
+ async recheck(kind:RemoteKind){
+  const id=this.installationId;
+  if(!this.#account||!id||this.view?.revoked||!this.view?.names?.[kind].recordMoved||this.pending||this.waiting)return false;
+  this.#clearForward();const generation=this.#generation;
+  this.pending=true;this.error=undefined;this.notice=undefined;this.#changed();
+  const result=await this.#request<RemoteView>('/remote-access/recheck',{installationId:id,kind});
+  if(generation!==this.#generation)return false;
+  this.pending=false;
+  if(result.ok){
+   const refreshed=await this.#load(true);
+   return generation===this.#generation&&refreshed?.names?.[kind].recordMoved===false&&!this.error;
+  }
+  this.#failure(result);this.#changed();
+  return false;
+ }
  async preview(){
   if(!this.#account||!this.view?.names||this.view.revoked||!this.installationId||this.pending||this.waiting||!this.hostnameChanged)return;
   const hostname=this.hostname.trim().toLowerCase().replace(/\.$/,''),kind=this.kind,revision=this.view.revision,id=this.installationId,generation=this.#generation;

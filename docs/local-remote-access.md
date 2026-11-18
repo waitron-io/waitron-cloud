@@ -347,8 +347,15 @@ has a separate certificate adapter and needs its own custom-domain qualification
 Before a gateway check, the worker verifies that the custom CNAME still points to
 the assigned address. If the record has moved, Cloud keeps the current certificate while
 the worker retries. A failed DNS lookup leaves the last known record state in place.
-Point the record back and allow up to 15 minutes for the next attempt. For a staged
-move, the worker writes the check into both cells and waits until all mapped
+Look for the warning next to the affected address in **Set up remote access**.
+Point the record back to the target shown, then choose **Check again**. Cloud
+clears the warning once it verifies the record and makes the certificate job due
+if it is waiting. If the certificate is already being checked, let that attempt finish.
+You can also wait up to 15 minutes for the worker to retry. Cloud looks for changes
+when it requests a certificate. For renewal, that starts 30 days before expiry,
+or in the last third of the certificate's lifetime if that is shorter.
+
+For a staged move, the worker writes the check into both cells and waits until all mapped
 gateways report that name ready. The certificate claim lasts five
 minutes. The worker stops accepting an order result 15 seconds before the claim ends.
 
