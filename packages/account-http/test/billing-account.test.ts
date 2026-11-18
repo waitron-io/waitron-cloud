@@ -13,13 +13,13 @@ import {startAccountServer} from '../src/server.ts';
 const origin='https://cloud.example.test',readPath='/api/account/billing/read',startPath='/api/account/billing/start-trial';
 let db:Awaited<ReturnType<typeof database>>,addresses=0;
 before(async()=>{db=await database();});after(async()=>db?.close());
-function app(accountIds?:readonly string[],planMode:PlanMode='test-venue-levels'){
- return createAccountApp({pool:db.pool,outbox:db.outbox,config:{portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]},
+function app(accountIds?:readonly string[],planMode:PlanMode='test-venue-levels',testDb=db){
+ return createAccountApp({pool:testDb.pool,outbox:testDb.outbox,config:{portalOrigin:origin,production:true,rateKey:testDb.rateKey,trustedProxyIps:[]},
   planMode,...(accountIds===undefined?{}:{billingAccount:{accountIds}})});
 }
-async function owner(){
+async function owner(testDb=db){
  const accountId=randomUUID(),organisationId=randomUUID(),legalBusinessId=randomUUID(),venueId=randomUUID();
- const session=await transaction(db.pool,async client=>{
+ const session=await transaction(testDb.pool,async client=>{
   await client.query('INSERT INTO cloud_accounts(id) VALUES($1)',[accountId]);
   await client.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[accountId,`billing-${accountId}@example.test`]);
   await client.query('INSERT INTO organisations(id) VALUES($1)',[organisationId]);
@@ -394,6 +394,28 @@ test('recovered scope: billing chooser and tax save keep the recovered business 
  await setRecoveryScope(db.pool,f.accountId,f.organisationId);assert.equal(((await (await request(target,f.session)).json()) as {venues:unknown[]}).venues.length,1);
 });
 
+test('billing shows the effective Connected price only on in-scope test venues',async t=>{
+ const pricedDb=await database();t.after(()=>pricedDb.close());
+ const f=await owner(pricedDb),target=app([f.accountId],undefined,pricedDb),productionId=randomUUID();
+ await pricedDb.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[productionId,f.organisationId,f.legalBusinessId]);
+ const store=new BillingPriceStore(pricedDb.pool);
+ await store.publish({revision:1,effectiveFrom:'2000-01-01',currency:'EUR',prices:{connectedMonthlyCents:1000,hostedMonthlyCents:2000},vatRateBasisPoints:2100});
+ await store.publish({revision:2,effectiveFrom:'2099-01-01',currency:'EUR',prices:{connectedMonthlyCents:3000,hostedMonthlyCents:4000},vatRateBasisPoints:2100});
+ const expected={currency:'EUR',netCents:1000,grossCents:1210};
+
+ const read=await request(target,f.session);assert.equal(read.status,200);
+ const {venues}=await read.json();
+ assert.deepEqual(venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
+ const production=venues.find((venue:{venueId:string})=>venue.venueId===productionId);
+ assert.equal(Object.hasOwn(production,'connectedPrice'),false);
+
+ await setRecoveryScope(pricedDb.pool,f.accountId);
+ assert.deepEqual(await (await request(target,f.session)).json(),{venues:[]});
+ await setRecoveryScope(pricedDb.pool,f.accountId,f.organisationId);
+ const start=await request(target,f.session,startPath,{venueId:f.venueId});assert.equal(start.status,200);
+ assert.deepEqual((await start.json()).venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
+});
+
 test('a saved card can start the free trial without an effective price',async()=>{
  const f=await owner(),target=app([f.accountId]);
  const store=new BillingStore(db.pool),scope={organisationId:f.organisationId,legalBusinessId:f.legalBusinessId};
@@ -406,25 +428,4 @@ test('a saved card can start the free trial without an effective price',async()=
  const {venues:[venue]}=await response.json();
  assert.equal(venue.trial.state,'active');
  assert.equal(Object.hasOwn(venue,'connectedPrice'),false);
-});
-
-test('billing shows the effective Connected price only on in-scope test venues',async()=>{
- const f=await owner(),target=app([f.accountId]),productionId=randomUUID();
- await db.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,environment) VALUES($1,$2,$3,'production')",[productionId,f.organisationId,f.legalBusinessId]);
- const store=new BillingPriceStore(db.pool);
- await store.publish({revision:1,effectiveFrom:'2000-01-01',currency:'EUR',prices:{connectedMonthlyCents:1000,hostedMonthlyCents:2000},vatRateBasisPoints:2100});
- await store.publish({revision:2,effectiveFrom:'2099-01-01',currency:'EUR',prices:{connectedMonthlyCents:3000,hostedMonthlyCents:4000},vatRateBasisPoints:2100});
- const expected={currency:'EUR',netCents:1000,grossCents:1210};
-
- const read=await request(target,f.session);assert.equal(read.status,200);
- const {venues}=await read.json();
- assert.deepEqual(venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
- const production=venues.find((venue:{venueId:string})=>venue.venueId===productionId);
- assert.equal(Object.hasOwn(production,'connectedPrice'),false);
-
- await setRecoveryScope(db.pool,f.accountId);
- assert.deepEqual(await (await request(target,f.session)).json(),{venues:[]});
- await setRecoveryScope(db.pool,f.accountId,f.organisationId);
- const start=await request(target,f.session,startPath,{venueId:f.venueId});assert.equal(start.status,200);
- assert.deepEqual((await start.json()).venues.find((venue:{venueId:string})=>venue.venueId===f.venueId)?.connectedPrice,expected);
 });

@@ -36,6 +36,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    ?'In live service, we charge your saved payment method when your business’s first paid venue finishes its trial. Without one, the venue returns to Registered.'
    :'En el servicio real, cobramos con tu método de pago guardado al terminar la prueba del primer local de pago de tu empresa. Sin él, el local vuelve a Registered.',{exact:true});
   assert.equal(await price.count(),0);
+  assert.equal(await timing.count(),0);
   await section.getByRole('combobox',{name:c.billingVenue,exact:true}).selectOption(second);
   await price.waitFor();
   await timing.waitFor();
