@@ -1193,8 +1193,8 @@ on a surviving node. Connection errors are retried within the 90-second outage
 check. The command starts the stopped node at its original address and
 checks that all three original etcd members, which store the cluster state, are
 healthy. The check uses the pinned Kind image and needs no venue images.
-A Linux guest with 15.6 GiB of RAM completed the three outage checks in 17.4,
-12.0 and 22.7 seconds. The lowest sampled available memory was 13.4 GiB, and
+A Linux guest with 15.6 GiB of RAM completed the three outage checks in 17.7,
+17.2 and 12.9 seconds. The lowest sampled available memory was 13.4 GiB, and
 the guest recorded no out-of-memory kills. PostgreSQL failover and the loss
 of a Stockholm machine require their own checks.
 
