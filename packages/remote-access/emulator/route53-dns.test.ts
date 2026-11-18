@@ -9,7 +9,7 @@ import {
   Route53Client,
   type GetChangeCommandOutput,
 } from '@aws-sdk/client-route-53';
-import {createRoute53DnsProvider} from '../../src/route53-dns.ts';
+import {createRoute53DnsProvider} from '../src/route53-dns.ts';
 
 const endpoint=process.env.AWS_EMULATOR_ENDPOINT;
 const credentialsFile=process.env.AWS_EMULATOR_CREDENTIALS_FILE;

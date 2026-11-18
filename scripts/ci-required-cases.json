@@ -162,7 +162,7 @@
     "^spent unconfirmed service admission stays incomplete and is never a confirmed trial run$",
     "^trial usage requires complete traffic evidence before zero use is known$"
   ],
-  "packages/registration/test/emulator/ses-feedback-queue.test.ts": [
+  "packages/registration/emulator/ses-feedback-queue.test.ts": [
     "^emulator: the adapter receives a sent message, sees nothing while it is in flight, and deletes it$"
   ],
   "packages/registration/test/venue-service-installations.test.ts": [
@@ -226,7 +226,7 @@
     "^trial dates grant only the stored half open interval$",
     "^venue levels have exact service floors$"
   ],
-  "packages/remote-access/test/emulator/route53-dns.test.ts": [
+  "packages/remote-access/emulator/route53-dns.test.ts": [
     "^emulator: a challenge TXT is published only after INSYNC, read back as one quoted value with TTL 60, and removed by its exact value$",
     "^emulator: a remove with a stale value is refused and the newer challenge survives$",
     "^emulator: a venue CNAME is pointed at its cell with TTL 60 only after INSYNC$"

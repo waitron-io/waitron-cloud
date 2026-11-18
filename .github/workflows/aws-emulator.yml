@@ -4,13 +4,13 @@ on:
     paths:
       - 'packages/remote-access/src/route53-dns.ts'
       - 'packages/remote-access/src/manifest.ts'
-      - 'packages/remote-access/test/emulator/**'
+      - 'packages/remote-access/emulator/**'
       - 'packages/remote-access/package.json'
       - 'packages/registration/src/country-policy.ts'
       - 'packages/registration/src/migrate.ts'
       - 'packages/registration/src/ses-feedback-*.ts'
       - 'packages/registration/src/transaction.ts'
-      - 'packages/registration/test/emulator/**'
+      - 'packages/registration/emulator/**'
       - 'packages/registration/test/fixtures/mail-attempt.ts'
       - 'packages/registration/test/fixtures/ses-feedback.ts'
       - 'packages/registration/package.json'
@@ -28,13 +28,13 @@ on:
     paths:
       - 'packages/remote-access/src/route53-dns.ts'
       - 'packages/remote-access/src/manifest.ts'
-      - 'packages/remote-access/test/emulator/**'
+      - 'packages/remote-access/emulator/**'
       - 'packages/remote-access/package.json'
       - 'packages/registration/src/country-policy.ts'
       - 'packages/registration/src/migrate.ts'
       - 'packages/registration/src/ses-feedback-*.ts'
       - 'packages/registration/src/transaction.ts'
-      - 'packages/registration/test/emulator/**'
+      - 'packages/registration/emulator/**'
       - 'packages/registration/test/fixtures/mail-attempt.ts'
       - 'packages/registration/test/fixtures/ses-feedback.ts'
       - 'packages/registration/package.json'
@@ -68,8 +68,8 @@ jobs:
       - name: Check for the emulator tests on the checked-out head
         id: presence
         run: |
-          route53=packages/remote-access/test/emulator/route53-dns.test.ts
-          sqs=packages/registration/test/emulator/ses-feedback-queue.test.ts
+          route53=packages/remote-access/emulator/route53-dns.test.ts
+          sqs=packages/registration/emulator/ses-feedback-queue.test.ts
           if [[ -f "$route53" && -f "$sqs" ]]; then
             echo 'present=true' >> "$GITHUB_OUTPUT"
           elif [[ -f "$route53" || -f "$sqs" ]] || grep -Fq '"test:aws-emulator"' package.json; then

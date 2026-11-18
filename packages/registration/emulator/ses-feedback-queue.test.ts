@@ -8,8 +8,8 @@ import {checkServerIdentity} from 'node:tls';
 import {
   CreateQueueCommand,GetQueueAttributesCommand,SendMessageCommand,SQSClient,
 } from '@aws-sdk/client-sqs';
-import {createSesFeedbackQueue} from '../../src/ses-feedback-queue.ts';
-import {config} from '../fixtures/mail-attempt.ts';
+import {createSesFeedbackQueue} from '../src/ses-feedback-queue.ts';
+import {config} from '../test/fixtures/mail-attempt.ts';
 
 const endpoint=process.env.AWS_EMULATOR_ENDPOINT;
 const credentialsFile=process.env.AWS_EMULATOR_CREDENTIALS_FILE;

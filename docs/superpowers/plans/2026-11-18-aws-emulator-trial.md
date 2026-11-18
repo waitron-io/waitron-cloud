@@ -4,7 +4,7 @@
 
 **Goal:** Run Cloud's real Route 53 and SQS adapters against Amazon's AWS Emulator in a CI workflow of their own, alongside the unchanged fake-server tests.
 
-**Architecture:** Two new test files, one per package, under `test/emulator/` so the packages' own `test/*.test.ts` globs never pick them up. One root script runs both with the repository's required-case reporter, so a skipped case fails the run. A standalone workflow installs a pinned, checksummed emulator package on the Ubuntu runner, starts it on loopback with telemetry off, and runs that script.
+**Architecture:** Two new test files, one per package, under `emulator/` beside each package's `test/` directory. This keeps them outside the packages' normal test commands and the saved test inventory. One root script runs both with the repository's required-case reporter, so a skipped case fails the run. A standalone workflow installs a pinned, checksummed emulator package on the Ubuntu runner, starts it on loopback with telemetry off, and runs that script.
 
 **Tech Stack:** Node 26 `node:test`, `@aws-sdk/client-route-53` and `@aws-sdk/client-sqs` 3.1163.0 (already dependencies), AWS Emulator 1.0.512 Debian package, GitHub Actions.
 
@@ -49,14 +49,14 @@ Each test file reads the two `AWS_EMULATOR_*` variables itself (about ten lines:
 ### Task 1: Route 53 adapter against the emulator
 
 **Files:**
-- Create: `packages/remote-access/test/emulator/route53-dns.test.ts`
+- Create: `packages/remote-access/emulator/route53-dns.test.ts`
 - Modify: `package.json` (root): add script `test:aws-emulator`
 - Modify: `scripts/ci-required-cases.json`: add this file's three case names
 
 **Interfaces:**
 - Consumes: `createRoute53DnsProvider(config:{zoneId:string;suffix:string}, client:Route53Client)` from `packages/remote-access/src/route53-dns.ts`.
 - Produces: root script `test:aws-emulator`, exactly:
-  `node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=./scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 packages/remote-access/test/emulator/*.test.ts packages/registration/test/emulator/*.test.ts`
+  `node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=./scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 packages/remote-access/emulator/*.test.ts packages/registration/emulator/*.test.ts`
   (Task 2 adds no script; its file is picked up by the second glob. `scripts/ci-required-cases-routes.test.mjs` accepts a required file only when a root script or package `test` script with this reporter names it through a `*.test.ts` pattern.)
 
 Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fresh suffix such as `<8 random hex>.emulator.test.waitron.io`, `CallerReference` = `randomUUID()`), takes the zone id as the last path segment of `HostedZone.Id` (it matches the adapter's `/^Z[A-Z0-9]+$/`), and builds the provider with a `Route53Client({region:'us-east-1', endpoint, credentials})`. Read records back with `ListResourceRecordSetsCommand`; real Route 53 returns record names with a trailing dot, so compare names after removing one trailing dot (values are compared exactly). Challenge name: `_acme-challenge.staff-v-11111111-1111-4111-8111-111111111111.<suffix>`; token `'A'.repeat(43)`, newer token `'B'.repeat(43)`.
@@ -80,10 +80,10 @@ Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fre
 
 - [ ] **Step 3: Without an emulator, see the file skip and the CI command refuse**
 
-  Run: `node --test packages/remote-access/test/emulator/route53-dns.test.ts`
+  Run: `node --test packages/remote-access/emulator/route53-dns.test.ts`
   Expected: `ℹ skipped 3`, `ℹ pass 0`, each skip carrying the reason text above.
   Run: `pnpm test:aws-emulator`
-  Expected: exit status not 0, with three `# Required case did not pass exactly once: <absolute path>/packages/remote-access/test/emulator/route53-dns.test.ts: …` lines.
+  Expected: exit status not 0, with three `# Required case did not pass exactly once: <absolute path>/packages/remote-access/emulator/route53-dns.test.ts: …` lines.
 
 - [ ] **Step 4: Against an emulator (optional local Docker run, otherwise CI in Task 3), see all three pass**
 
@@ -97,12 +97,12 @@ Each case creates its own hosted zone (`CreateHostedZoneCommand`, `Name` = a fre
 
 - [ ] **Step 6: Commit**
 
-  `git add packages/remote-access/test/emulator/route53-dns.test.ts package.json scripts/ci-required-cases.json && git commit -s -m "Test the Route 53 adapter against AWS Emulator"`
+  `git add packages/remote-access/emulator/route53-dns.test.ts package.json scripts/ci-required-cases.json && git commit -s -m "Test the Route 53 adapter against AWS Emulator"`
 
 ### Task 2: SQS adapter against the emulator
 
 **Files:**
-- Create: `packages/registration/test/emulator/ses-feedback-queue.test.ts`
+- Create: `packages/registration/emulator/ses-feedback-queue.test.ts`
 - Modify: `scripts/ci-required-cases.json`: add this file's one case name
 
 **Interfaces:**
@@ -124,7 +124,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 
 - [ ] **Step 3: Without an emulator, see the file skip and the CI command refuse**
 
-  Run: `node --test packages/registration/test/emulator/ses-feedback-queue.test.ts`
+  Run: `node --test packages/registration/emulator/ses-feedback-queue.test.ts`
   Expected: `ℹ skipped 1`, `ℹ pass 0`.
   Run: `pnpm test:aws-emulator`
   Expected: exit status not 0, with four `Required case did not pass exactly once` lines (three from Task 1, one from this file).
@@ -140,7 +140,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 
 - [ ] **Step 6: Commit**
 
-  `git add packages/registration/test/emulator/ses-feedback-queue.test.ts scripts/ci-required-cases.json && git commit -s -m "Test the SQS feedback adapter against AWS Emulator"`
+  `git add packages/registration/emulator/ses-feedback-queue.test.ts scripts/ci-required-cases.json && git commit -s -m "Test the SQS feedback adapter against AWS Emulator"`
 
 ### Task 3: The workflow and its documentation
 
@@ -157,13 +157,13 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 ```
 - 'packages/remote-access/src/route53-dns.ts'
 - 'packages/remote-access/src/manifest.ts'
-- 'packages/remote-access/test/emulator/**'
+- 'packages/remote-access/emulator/**'
 - 'packages/remote-access/package.json'
 - 'packages/registration/src/country-policy.ts'
 - 'packages/registration/src/migrate.ts'
 - 'packages/registration/src/ses-feedback-*.ts'
 - 'packages/registration/src/transaction.ts'
-- 'packages/registration/test/emulator/**'
+- 'packages/registration/emulator/**'
 - 'packages/registration/test/fixtures/mail-attempt.ts'
 - 'packages/registration/test/fixtures/ses-feedback.ts'
 - 'packages/registration/package.json'
@@ -183,7 +183,7 @@ The lockfile is written `'*pnpm-lock.yaml'` because `scripts/ci-setup-pnpm.test.
 There is no `summary` job and no stop step, deliberately: `ci.yml`'s `summary` covers only its own planned jobs, and the runner is discarded at the end of the job. `permissions: contents: read, packages: read`. Concurrency as in `kubernetes-proof.yml` (group `aws-emulator-<ref or run id>`, cancel in progress on pull requests). One job, `emulator-tests`, `runs-on: ubuntu-latest`, `timeout-minutes: 10`. Steps, in order:
 
 1. `actions/checkout@v5`, `ref: ${{ github.event.pull_request.head.sha || github.sha }}`, `persist-credentials: false`.
-2. Presence check (`id: presence`): when `packages/remote-access/test/emulator/route53-dns.test.ts` exists, write `present=true` to `$GITHUB_OUTPUT`. Otherwise write `present=false` and echo `Skipping: this head predates the AWS Emulator tests.` Every later step carries `if: steps.presence.outputs.present == 'true'`.
+2. Presence check (`id: presence`): when both emulator test files exist, write `present=true` to `$GITHUB_OUTPUT`. Fail when a trial head is missing either file. A head that predates the trial writes `present=false` and skips. Every later step carries `if: steps.presence.outputs.present == 'true'`.
 3. Node and pnpm exactly as the `packages` job in `ci.yml`: `actions/setup-node@v5` (`node-version: '26'`, `package-manager-cache: false`), `node scripts/ci-setup-pnpm.mjs` with the same `env`, the second `setup-node` with `registry-url: https://npm.pkg.github.com` and `scope: '@waitron-io'`, then `pnpm install --frozen-lockfile` with `NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`. No dependency cache (Cloud's shared cache budget; a ten-minute job does not need it).
 4. Install: download with `python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 -- curl -fsSL --connect-timeout 20 --max-time 110 -o "$RUNNER_TEMP/aws-emulator.deb" <pinned URL>`; then `echo "<pinned SHA-256>  $RUNNER_TEMP/aws-emulator.deb" | sha256sum -c -`; then install with `sudo python3 scripts/ci-download.py --timeout 120 --attempts 2 --grace 10 --lock-wait 30 --retry-delay 5 --lock /var/lib/dpkg/lock-frontend --lock /var/lib/dpkg/lock -- dpkg -i "$RUNNER_TEMP/aws-emulator.deb"`; then `aws-emulator -v`. No apt step: the package's control file declares only `Depends: libc6 (>= 2.17)` (read from the pinned `.deb` on 2026-11-18), which every Ubuntu runner has.
 5. Start: `aws-emulator -p 9297 -t off --idle-timeout 900 > "$RUNNER_TEMP/aws-emulator.log" 2>&1 &`. Wait for `curl -fsS --cacert "$HOME/.aws/emulator/9297/ca.pem" https://127.0.0.1:9297/__admin/health` to print `ok`, for up to 60 seconds, else fail. Append the three environment-contract variables to `$GITHUB_ENV`.
