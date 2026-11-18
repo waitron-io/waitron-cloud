@@ -58,6 +58,7 @@ export class RemoteController {
   if(generation!==this.#generation)return false;
   this.pending=false;
   if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){
+   this.confirmation=undefined;
    this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';
    this.#changed();
    return result.value.names?.[kind].recordMoved===false;

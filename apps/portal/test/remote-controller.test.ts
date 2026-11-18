@@ -199,3 +199,18 @@ test('Check again posts the affected name kind and uses the returned status',asy
  ]);
  assert.equal(c.view?.names?.staff.recordMoved,false);
 });
+
+test('successful Check again closes a preview for another hostname',async()=>{
+ const proposed='staff.next.example',current={...view.names.staff,current:dns.hostname,recordMoved:true};
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  if(path.endsWith('/dns'))return {ok:true,value:{...dns,hostname:proposed,records:[{...dns.records[0],name:proposed}]} as T};
+  const recordMoved=!path.endsWith('/recheck');
+  return {ok:true,value:{...view,names:{...view.names,staff:{...current,recordMoved}}} as T};
+ });
+ c.account('owner');await c.open(id);
+ c.edit(proposed);await c.preview();
+ assert.equal(c.confirmation?.hostname,proposed);
+ await c.recheck('staff');
+ assert.equal(c.hostname,dns.hostname);
+ assert.equal(c.confirmation,undefined);
+});
