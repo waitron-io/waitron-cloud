@@ -31,7 +31,7 @@ test('trusted CLI arguments, once and status are strict and redact configuration
  const missing=run();assert.equal(missing.status,1);assert.equal(missing.stdout,'');assert.equal(missing.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
  const value=await fixture(),once=run(value.configFile,'--once');assert.equal(once.status,0,once.stderr);assert.equal(JSON.parse(once.stdout).enabled,1);
  const envelope=JSON.parse(await readFile(value.output,'utf8'));assert.equal(verifyManifest(envelope,value.signing.publicKey,value.cellId).routes.length,0);
- const status=run(value.configFile,'--status');assert.equal(status.status,0,status.stderr);assert.deepEqual(JSON.parse(status.stdout),{enabled:1,due:0,running:0,failed:0,oldestDueAt:null});
+ const status=run(value.configFile,'--status');assert.equal(status.status,0,status.stderr);assert.deepEqual(JSON.parse(status.stdout),{enabled:1,due:0,running:0,failed:0,retrying:0,oldestDueAt:null});
  const extra=run(value.configFile,'--bad');assert.equal(extra.status,1);assert.equal(extra.stderr,'Remote configuration reconciler failed; check its trusted configuration and database migrations\n');
 });
 test('a DNS module without stable-name publication is refused before scheduling',async()=>{

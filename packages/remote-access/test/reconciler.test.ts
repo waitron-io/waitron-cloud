@@ -65,7 +65,7 @@ function memoryArtifacts(target:{installationId:string;placement:{staffHostname:
  async function readCertificate(id:string,kind:'staff'|'public'){return kind==='public'?certificates.get(`${id}:public`):(await db.pool.query('SELECT certificate FROM staff_certificate_exchange WHERE installation_id=$1',[id])).rows[0]?.certificate;}
  return {csrs,certificates,setCsr,setCertificate,readCertificate,async publications(){const value=await readCertificate(target.installationId,'staff');return [...publications,...(value&&value!==certificates.get(`${target.installationId}:staff`)?[`${target.installationId}:staff`]:[])];},adapter:{
   async readPublicCertificate(id:string){const csr=csrs.get(`${id}:public`),certificate=certificates.get(`${id}:public`);return csr&&certificate?{csr,pem:csrKeys.get(csr)!+certificate}:undefined;},
-  async publishPublicCertificate(id:string,_venueId:string,_cells:string[],copy:{pem:string;csr:string}){publications.push(`${id}:public`);csrs.set(`${id}:public`,copy.csr);csrKeys.set(copy.csr,createPrivateKey(copy.pem).export({type:'pkcs8',format:'pem'}).toString());certificates.set(`${id}:public`,copy.pem.slice(copy.pem.indexOf('-----BEGIN CERTIFICATE-----')));return true;},
+  async publishPublicCertificate(id:string,_venueId:string,_cells:string[],copy:{pem:string;csr:string}){publications.push(`${id}:public`);csrs.set(`${id}:public`,copy.csr);csrKeys.set(copy.csr,createPrivateKey(copy.pem).export({type:'pkcs8',format:'pem'}).toString());certificates.set(`${id}:public`,copy.pem.slice(copy.pem.indexOf('-----BEGIN CERTIFICATE-----')));return {copied:_cells,complete:true};},
   async publishManifest(){throw new Error('unexpected_route');},
  },target};
 }

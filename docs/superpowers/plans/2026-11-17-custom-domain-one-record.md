@@ -287,8 +287,8 @@ The tasks are ordered so every commit is green: new artifact methods are added b
 **Interfaces:**
 - Produces:
   - `ReconcilerArtifacts.readPublicCertificate(installationId:string):Promise<{pem:string;csr:string}|undefined>` — `pem` is key followed by chain.
-  - `ReconcilerArtifacts.publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string}):Promise<void>`.
-  - File artifacts keep `<keyDirectory>/<installationId>.public.pem` and `<keyDirectory>/<installationId>.public.csr` (mode 0600), and write `<publicCertificates>/<venueId>.pem` for each named cell, each atomically. A cell with no mapping fails with `route_mapping_missing` before any write.
+  - `ReconcilerArtifacts.publishPublicCertificate(installationId:string,venueId:string,cellIds:string[],copy:{pem:string;csr:string}):Promise<{copied:string[];complete:boolean}>`.
+  - File artifacts keep `<keyDirectory>/<installationId>.public.pem` and `<keyDirectory>/<installationId>.public.csr` (mode 0600), and write `<publicCertificates>/<venueId>.pem` for each named cell, each atomically. Keep issued material privately before independent cell writes. Return the copied cell IDs and whether all writes/cleanup completed; missing mappings retry without another order.
 
 - [ ] **Step 1: Write the failing tests**:
   - `public-certificates.test.ts` (a fake `issueCertificate` signs the CSR with a local test CA, as `deploy/test-cloud/remote-runtime.mjs` does): `a newly placed venue gets a public certificate with no configuration entry and no operator command`. One pass publishes `<cell>/<venueId>.pem`; its chain covers the stored public name, and its key matches the stored CSR.
@@ -752,3 +752,5 @@ Copy: `remoteRecordMoved` and `remoteRecordMovedNoDate` use Task 7.1's exact EN/
 - [ ] **Step 3: Commit** `git commit -s -m "Prove a two-cell move keeps the owner's record and the venue's names"`.
 
 PR4 run-it corrections cleared by the watcher on 2026-11-18 at 04:03: public jobs keep retrying with the existing 900-second backoff cap; move readiness uses the destination copy even when its old source is unavailable; the worker removes venue-named gateway copies from mapped cells without the route. Staff and route parking remain unchanged. No new table or delivery ledger.
+
+The watcher cleared final-read delivery corrections at 04:33 on 18 November: keep valid issued private material before gateway delivery, attempt every mapped current cell, record actual copied cell IDs in the existing digest, expose retrying CLI jobs, and test recovery of an expired eighth public claim. A move gate reads the latest worker delivery fact; the running worker clears that fact on observing expiry. The file checks now retain the new private copy and the old bytes at an undelivered gateway; manifest failed-write checks stay unchanged.

@@ -205,8 +205,10 @@ venues or staff certificate files; old `certificates` and `staffExchange` settin
 are refused. The DNS module exports async `present(name, value)`,
 `remove(name, value)` and `point(name, target)` methods. Every path is absolute.
 Create each configured `publicCertificates` folder before starting the worker;
-it must be writable by that worker. An unmapped cell is refused before any
-public-certificate write.
+it must be writable by that worker. The worker retains issued material in its
+private store before attempting each cell independently. Missing mappings or
+unwritable cells keep retrying without another order; only delivered copies
+qualify a destination.
 
 For a Route 53 zone, set `acme.dnsModule` to the absolute path of
 `packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
@@ -256,6 +258,7 @@ DATABASE_URL=postgres://... pnpm remote:reconcile /absolute/reconciler.json
 
 Certificate publication rechecks the current hostname, ACME delegation name,
 configuration revision and claim lease after ACME completes. A stale result is refused.
+The status command includes `retrying` for enabled jobs waiting after a failed pass.
 Each file is replaced atomically. Public-certificate failures retry indefinitely, with
 backoff capped at 900 seconds; staff and route jobs still park after eight failures.
 Failed issuance keeps the last good copy;
@@ -346,7 +349,8 @@ the account/control API.
 2. Run the reconciler so the destination receives the venue's public certificate.
    It copies a matching, still-valid certificate before attempting renewal, so a
    renewal failure can leave the copy ready while renewal retries. Expired or
-   wrong-name copies do not qualify. Export the destination cell. Apply that exact signed manifest, configure the venue
+   wrong-name copies are not published. The gate uses the last recorded worker
+   delivery; keep the worker running so it clears readiness when a copy expires. Export the destination cell. Apply that exact signed manifest, configure the venue
    peer for the destination gateway, and test both public HTTPS and staff TLS through the
    destination route. A failed apply is not readiness: run `move-cancel`, then export the
    destination cell again so its staged route is removed.

@@ -7,7 +7,7 @@ import {afterEach,beforeEach,test} from 'node:test';
 import forge from 'node-forge';
 import {staffExchangeFixture} from './staff-exchange-fixture.ts';
 import {FileReconcilerArtifacts} from '../src/reconciler-files.ts';
-import {RemoteConfigurationReconciler} from '../src/reconciler.ts';
+import {RemoteConfigurationReconciler,remoteConfigurationStatus} from '../src/reconciler.ts';
 
 const ca=forge.pki.privateKeyFromPem(generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs8',format:'pem'}).toString());
 let f:Awaited<ReturnType<typeof staffExchangeFixture>>,root:string;
@@ -111,4 +111,26 @@ for(const outcome of ['cancel','complete'] as const)test(`a ${outcome} move remo
 test('a copied certificate that expires while a move waits no longer qualifies after failed renewal',async()=>{
  const s=await fixture();await s.run();const move=await s.stage();await s.run();s.advance();s.advance();s.fail();await s.run();
  await assert.rejects(f.store.completeMove(move.operationId,1),/move_destination_incomplete/);
+});
+
+
+test('a failed first gateway write retains the issued private copy and retries without another order',async()=>{
+ const s=await fixture();await rm(join(root,s.venue.placement.cellId),{recursive:true,force:true});await s.run();await s.run();
+ assert.equal(s.issues(),1);assert.ok(await s.copy());
+ await mkdir(join(root,s.venue.placement.cellId));await s.run();assert.equal(s.issues(),1);assert.equal(await s.read(s.venue.placement.cellId),(await s.copy())!.pem);
+});
+
+test('an unavailable destination cannot postpone renewal of the live source',async()=>{
+ const s=await fixture();await s.run();const old=await s.copy();assert.ok(old);s.advance();const move=await s.stage();await rm(join(root,s.target),{recursive:true,force:true});await s.run();
+ assert.equal(s.issues(),2);assert.notEqual(await s.read(s.venue.placement.cellId),old.pem);await assert.rejects(f.store.completeMove(move.operationId,1),/move_destination_incomplete/);
+ await mkdir(join(root,s.target));await s.run();assert.equal(s.issues(),2);assert.equal((await f.store.completeMove(move.operationId,1)).state,'completed');
+});
+
+test('an expired eighth public claim is reclaimed and completed instead of parked or lost',async()=>{
+ const s=await fixture();await s.run();await f.db.pool.query("UPDATE remote_configuration_jobs SET status='running',attempts=8,claim_id=$2,lease_until=clock_timestamp()-interval '1 second' WHERE kind='certificate_public' AND target_id=$1",[s.venue.installationId,randomUUID()]);
+ assert.equal(await s.worker.runOnce(),true);const job=(await f.db.pool.query("SELECT status,attempts FROM remote_configuration_jobs WHERE kind='certificate_public' AND target_id=$1",[s.venue.installationId])).rows[0];assert.deepEqual(job,{status:'pending',attempts:0});assert.equal(s.issues(),1);
+});
+
+test('status exposes a public retry during its backoff',async()=>{
+ const s=await fixture();s.fail();await s.run();const status=await remoteConfigurationStatus(f.db.pool);assert.equal(status.failed,0);assert.equal(status.retrying,1);
 });

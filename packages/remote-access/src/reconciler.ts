@@ -18,7 +18,7 @@ interface ExecuteContext {signal:AbortSignal;isCurrent:()=>Promise<boolean>}
 export interface PublicCertificateCopy {pem:string;csr:string}
 export interface ReconcilerArtifacts {
  readPublicCertificate:(installationId:string)=>Promise<PublicCertificateCopy|undefined>;
- publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy,requiredCellIds?:string[])=>Promise<boolean>;
+ publishPublicCertificate:(installationId:string,venueId:string,cellIds:string[],copy:PublicCertificateCopy)=>Promise<{copied:string[];complete:boolean}>;
  publishManifest:(cellId:string,envelope:string)=>Promise<void>;
 }
 export interface CertificateIssueTarget extends CertificateAuthorization {installationId:string;kind:'staff'|'public';csr:string;signal:AbortSignal}
@@ -209,11 +209,9 @@ export class RemoteConfigurationReconciler {
      if(!await this.#current(job,client))throw new Error('stale_claim');signal.throwIfAborted();
      if(certificateDigest(job.targetId,'public',authority,await routeCells(client,job.targetId))!==job.desiredDigest)throw new Error('placement_changed');
      if(certificateNeedsRenewal(value.pem,value.csr,authority.hostname,this.#now(),false))throw new Error('invalid_certificate');
-     const destinations=(await client.query("SELECT target_cell_id FROM remote_cell_moves WHERE installation_id=$1 AND state IN ('staged','ready') AND expected_revision=$2",[job.targetId,authority.revision])).rows.map(row=>row.target_cell_id);
-     const required=destinations.length?destinations:cells;
-     complete=await this.#artifacts!.publishPublicCertificate(job.targetId,target.venue_id,cells,value,required);
-     // A copied destination can qualify a move while an unavailable source keeps retrying.
-     await client.query('UPDATE remote_configuration_jobs SET applied_digest=$3,last_success_at=clock_timestamp() WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId,certificateDigest(job.targetId,'public',authority,complete?cells:required)]);
+     const result=await this.#artifacts!.publishPublicCertificate(job.targetId,target.venue_id,cells,value);complete=result.complete;
+     // Only cells that received this copy can qualify a move; other deliveries keep retrying.
+     await client.query('UPDATE remote_configuration_jobs SET applied_digest=$3,last_success_at=clock_timestamp() WHERE kind=$1 AND target_id=$2',[job.kind,job.targetId,certificateDigest(job.targetId,'public',authority,result.copied)]);
     });
    },true);
    if(!renewal){if(!complete)throw new Error('public_copy_incomplete');await this.#complete(job,async()=>{});}
@@ -274,7 +272,8 @@ export async function remoteConfigurationStatus(pool:Pool){
   count(*) FILTER(WHERE enabled AND ((status='pending' AND available_at<=clock_timestamp()) OR(status='running' AND lease_until<=clock_timestamp())))::integer AS due,
   count(*) FILTER(WHERE enabled AND status='running' AND lease_until>clock_timestamp())::integer AS running,
   count(*) FILTER(WHERE enabled AND status='failed')::integer AS failed,
+  count(*) FILTER(WHERE enabled AND last_error IS NOT NULL AND status<>'failed')::integer AS retrying,
   min(CASE WHEN status='running' THEN lease_until ELSE available_at END) FILTER(WHERE enabled AND ((status='pending' AND available_at<=clock_timestamp()) OR(status='running' AND lease_until<=clock_timestamp()))) AS oldest_due_at
   FROM remote_configuration_jobs`)).rows[0];
- return {enabled:row.enabled,due:row.due,running:row.running,failed:row.failed,oldestDueAt:row.oldest_due_at?.toISOString()??null};
+ return {enabled:row.enabled,due:row.due,running:row.running,failed:row.failed,retrying:row.retrying,oldestDueAt:row.oldest_due_at?.toISOString()??null};
 }

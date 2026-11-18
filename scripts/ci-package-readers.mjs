@@ -1,7 +1,7 @@
 // Exact reader versions bound the reviewed runtime/data scans and inert directory values.
 // File references and package edges remain visible; changed bytes require another review.
 export const reviewedDirectoryReaders = Object.freeze({
-  "packages/remote-access/test/reconciler-files.test.ts": {"mode":"100644","type":"blob","id":"198122b44a5035ce9427ac892d6911eddfdc012d","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
+  "packages/remote-access/test/reconciler-files.test.ts": {"mode":"100644","type":"blob","id":"ad3e4636d9c1e84b7ba8e0066a8ee63593214e81","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "packages/operations/test/status-page-cli.test.ts": {"mode":"100644","type":"blob","id":"e209a9baaac2ceacedb695d8b78811aa1882903f","nonSourceDirectoryReads":true,"directoryReferences":[],"sourceReferences":[]},
   "deploy/test-cloud/backup-worker.mjs": {"mode":"100644","type":"blob","id":"72dce8dbc475700bcfc79c04fec51411f83a11b3","nonSourceDirectoryReads":false,"directoryReferences":["../"],"sourceReferences":[]},
   "deploy/test-cloud/storage-authority.mjs": {"mode":"100644","type":"blob","id":"a484d5a7fe1f1161eac6934d955c6d3c97af79d5","nonSourceDirectoryReads":false,"directoryReferences":[".",".."],"sourceReferences":[]},
