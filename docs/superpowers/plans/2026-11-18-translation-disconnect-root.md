@@ -43,6 +43,13 @@ Its exact inner assertion and any shared cause remain unknown.
 
 ## Second pull request: repair the reproduced cause
 
+The watcher cleared the fixture change at 14:19 on 18 November. Wait for
+two idle connections to exercise pool shutdown, then select and terminate one
+idle connection in the same PostgreSQL statement. Require one successful
+termination, keep the exact worker exit check and check that no worker
+connections remain. The binding test requires one selected connection. Keep
+the diagnostic capture and the existing deadlines.
+
 In the scratch Linux run, record which connections were idle and still present
 before the signal, when the worker began closing and which connections were
 gone by the next signal. Test whether the first termination starts shutdown

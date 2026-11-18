@@ -42,7 +42,7 @@ test('a real disconnect assertion retains the selected backends and termination 
  assert.deepEqual(diagnostic.actual,[1,null,'',retry+failed],result.stderr);
  assert.deepEqual(diagnostic.expected,[1,null,'',failed],result.stderr);
  assert.equal(diagnostic.termination?.iteration,iteration,result.stderr);
- assert.ok(diagnostic.termination.backends.length>0&&diagnostic.termination.backends.length<=4,result.stderr);
+ assert.equal(diagnostic.termination.backends.length,1,result.stderr);
  for(const backend of diagnostic.termination.backends){
   assert.deepEqual(Object.keys(backend).sort(),['killed','pid'],result.stderr);
   assert.ok(Number.isInteger(backend.pid)&&backend.pid>0&&backend.pid<=2147483647,result.stderr);
