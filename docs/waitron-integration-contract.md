@@ -2416,8 +2416,8 @@ signs someone in or authorises activation.
 
 ### Disposition of A1188's remaining Cloud requests
 
-The following reconciles A1188 section 9. The part 3 agreement below settles
-requests 4–7 and 9 for future build; none of these are implemented effects.
+The following reconciles A1188 section 9. The agreements below settle the part 3
+and part 4 requests for future implementation.
 
 | A1188 request | Cloud response |
 | --- | --- |
@@ -2426,7 +2426,7 @@ requests 4–7 and 9 for future build; none of these are implemented effects.
 | 4: locked restore | Agreed part 3 item 1 and its TOTP input amendment below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Fresh-node placement still waits for A1425 part 3 / Waitron part 0 and A947/A1018 qualification. |
 | 5: copy identity/certificate | Agreed part 3 item 2 below: launcher-delivered certificate/key PEM for the same emergency hostname, with Waitron terminating TLS and a copy-deadline lease cap. Staff certificate v1 stays unchanged; issuance, key cleanup and production qualification remain open. |
 | 6: still open; 7: box last heard | Agreed part 3 item 3 below: authenticated copy-operation status, current eligibility and the bound source installation's last accepted control contact, or explicit null. These facts cannot replace a fresh declaration read or its two-minute refusal. |
-| 8: declaration confirmation | Bind one durable operation to the actor, selected copy and exact declaration. Same inputs replay the stored result; changed inputs conflict. Later implementation must coordinate charging, owner mail, source-service withdrawal and the new backup generation without inventing a second operation after an uncertain reply. |
+| 8: declaration confirmation | The part 4 agreement below binds the exact declaration to the stored copy operation and requires verified withdrawal of the source's remote access and backup writes before a confirmed reply. |
 | 9: stop and repeated starts | Agreed part 3 items 2 and 4 below: only declaration confirmation cancels the fixed 30-minute stop. One active locked copy and three admitted launch attempts per venue per rolling hour; durable reservation precedes launch, and failed launches count. |
 | 10: returning box | A separate narrow authenticated read must remain possible after service withdrawal. A positive move result keeps the box restricted; it grants no activation, trusted membership key or general service access. Its format/revocation policy remains a joint prerequisite. |
 
@@ -2455,9 +2455,10 @@ launcher input and decision 5 are superseded by the TOTP amendment below.
    Reuse the control lease's origin/installation/venue/environment/public-key
    bindings and one-hour maximum, capped at the copy deadline. This shortening
    is future work, not today's fixed one-hour lease. Before confirmation, allow
-   only lease renewal (`control`) and `emergency-copy-status`; other machine-v1
-   actions return 403 `emergency_hosting_installation_ineligible`, retaining
-   existing invalid-proof and revoked refusals. Check the bindings, certificate,
+   only lease renewal (`control`), `emergency-copy-status` and the part 4
+   `emergency-copy-confirm` action below. Other machine-v1 actions return 403
+   `emergency_hosting_installation_ineligible`, retaining existing invalid-proof
+   and revoked refusals. Check the bindings, certificate,
    key, hostname, validity and current eligibility before exposure or re-exposure.
    Failure, revocation or expiry withdraws the route and stops the copy.
    `expiresAt = startedAt + 30 minutes` is fixed; sign-in and restart cannot extend
@@ -2473,7 +2474,7 @@ launcher input and decision 5 are superseded by the TOTP amendment below.
    precedence, authentication, post-lock revalidation, errors, shared rate budgets
    and size/time bounds in item 3 of the pinned proposal. `sourceLastHeardAt` is
    the bound source installation row's `last_contact_at`, updated by accepted,
-   distinct control calls (`packages/registration/src/installations.ts:113–134`).
+   distinct control calls ([installation authentication](../packages/registration/src/installations.ts)).
    Retain that timestamp while the row exists, including when revoked or
    superseded; return null when no timestamp is known. The inspected Waitron
    worker sleeps 60 seconds between passes (`apps/server/src/cloud-worker.ts:20–23`
@@ -2513,6 +2514,40 @@ While Cloud retains that backup generation and its existing held backup key, it 
 
 The published examples cover original versions 7/3, no previous key, absent/empty current version 1 and wrong-key/purpose/version refusal. Missing/malformed payload refusals are prospective startup cases; neither the new reader nor Cloud delivery is qualified by those examples.
 The copy binding and fixed start-plus-30-minute deadline remain unchanged. Cloud’s supplier remains unbuilt until the real selected-backup-to-launch consumer exists; this agreement unblocks lane J’s reader, not P6 hosting or activation.
+
+### Agreed part 4 confirmation, 18 November 2026
+
+Cloud and Waitron agreed at 03:10 CET to the [signed confirmation request, exact replies and five examples](https://github.com/clintongormley/waitron/blob/a54681bfea8b1d827d9cdbfdbf67b90756994595/docs/superpowers/plans/2026-11-17-a1188-part4-declaration-contract.md),
+against Cloud source revision `8c490cdc7521e62d0b6467aeda7f4962d0f433cf`.
+The watcher cleared recording the agreement at 04:33 CET. Only the stored copy's
+installation can call `emergency-copy-confirm`, using part 3's proof and budgets.
+Cloud keeps the first authenticated, well-formed, binding-consistent canonical body,
+including the original actor and declaration, even if a precondition refuses it.
+Waitron checks fresh sign-in and the actor's safety statements. A retry uses the
+same body and fresh transport proof.
+
+After current installation checks, inconsistent or changed inputs conflict first.
+An identical confirmed request returns the original 200, even after expiry.
+For an unconfirmed request, expiry wins at the exact deadline, then known eligibility
+closure, unavailable state or future source contact, and source contact at most
+120 seconds old. Resolve how to authenticate a confirmed replay after the capped lease expires.
+
+Before returning 200, Cloud must block new source grants and publication, apply
+and verify withdrawal of the source's routes including existing access, and verify that
+storage refuses writes with the old stream identity and previously issued snapshot
+grants. If a grant cannot be revoked, verify refusal after its bounded expiry.
+After withdrawal, recheck the deadline, eligibility and source contact under the
+venue lock before recording one confirmation, one charge start, one queued owner
+notice and one fresh backup generation reservation. If expiry wins, record no charge
+or generation reservation. What happens to withdrawal already in progress remains open.
+
+Hosted venues (D115/P6) must first supply real A1425 part 3 placement, the stored
+copy operation, a restricted copy identity, a lease capped at the copy deadline,
+and current [D568 eligibility](#emergency-hosting-display-and-code-proposed-d568).
+Provide copy authority alongside the still-current source without superseding it
+under [migration 016](../packages/registration/migrations/016_server_replacement.sql).
+P6 also needs a shared contract release that includes both signed copy actions.
+The two endpoints and paired withdrawal checks still await implementation.
 
 ### A1018: answers to Lane A's four questions
 
