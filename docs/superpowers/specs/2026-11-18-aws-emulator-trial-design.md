@@ -36,8 +36,7 @@ and keeps checking as the adapters change.
 ## Approaches
 
 1. **New emulator test files in each package, run by a dedicated CI job (chosen).** The
-   reviewed trial runs on relevant path changes and on demand. The original design included
-   a daily run. The trial pins the emulator and leaves that run out.
+   trial runs on relevant path changes, nightly, and on demand.
 2. Point the existing tests at the emulator. Rejected: they rely on what only a fake can do —
    hanging on purpose, counting requests, returning malformed replies.
 3. A one-off script. Rejected: cheaper, but catches nothing after the day it runs.

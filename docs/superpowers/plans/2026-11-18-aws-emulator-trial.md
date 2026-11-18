@@ -152,7 +152,7 @@ A direct `SQSClient({region: 'eu-north-1', endpoint, credentials})` creates the 
 **Interfaces:**
 - Consumes: root script `test:aws-emulator` (Task 1); the environment contract above.
 
-**Workflow shape.** Name `AWS Emulator tests`. Run on `pull_request` and `push` to `main` for these paths, and on demand through `workflow_dispatch`. The reviewed trial uses a pinned emulator and omits the daily run in the original design. Record that choice in the pull request. Runner and toolchain changes between runs have no scheduled emulator check.
+**Workflow shape.** Name `AWS Emulator tests`. Run on `pull_request` and `push` to `main` for these paths, nightly at 04:17 UTC, and on demand through `workflow_dispatch`.
 
 ```
 - 'packages/remote-access/src/route53-dns.ts'
@@ -199,7 +199,7 @@ There is no `summary` job and no stop step, deliberately: `ci.yml`'s `summary` c
 
 - [ ] **Step 3: Write the documentation paragraph**
 
-  In `docs/ci-proof-selection.md`, after the Kubernetes paragraph: the AWS Emulator workflow runs the two emulator test files on pull requests and `main` pushes touching its listed paths, and on demand; it installs version 1.0.512 checked by its SHA-256 and runs with telemetry off; the required `summary` check does not certify it, so read its result before merging; a head without the emulator tests skips it. In `docs/ci-nightly.md`, after the sentence saying Kubernetes prerequisites are separate, one sentence: the AWS Emulator tests are separate in the same way and have only a manual trigger besides their paths. Apply the `CLAUDE.md` one-line edit. Run `node --test scripts/ci-docs.test.mjs` and expect `# fail 0`.
+  In `docs/ci-proof-selection.md`, describe the standalone AWS Emulator workflow, its triggers, its pinned version and SHA-256 check, and why you must read its result before merging. A head that predates the emulator tests skips it. Record its separate nightly schedule in `docs/ci-nightly.md` and update the workflow selection note in `CLAUDE.md`. Run `node --test scripts/ci-docs.test.mjs` and expect `# fail 0`.
 
 - [ ] **Step 4: Check the backlog**
 

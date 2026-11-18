@@ -47,6 +47,8 @@ on:
       - 'scripts/ci-pnpm-diagnostics.cjs'
       - 'scripts/ci-download.py'
       - '.github/workflows/aws-emulator.yml'
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
 permissions:
   contents: read
