@@ -714,8 +714,10 @@ stored names and signed reply. DNS movement is checked locally by
 `packages/remote-access/test/name-records.test.ts` and the real CNAME reads in
 `scripts/remote-reconciler-receipt.mjs`. The [local two-cell proof](local-remote-access.md#run-the-proof)
 covers the one-record portal and certificate worker's gateway path, including issuance
-and renewal with Pebble and an unchanged owner CNAME across a move. Live DNS and
-the Amazon test Cloud's own-domain adapter still need qualification.
+and renewal with Pebble and an unchanged owner CNAME across a move. The
+[Amazon test Cloud](test-cloud.md#configure-a-separate-https-test-name) uses the same TLS check for
+custom names. Its real-domain trial still needs a paired test venue, one public
+CNAME and a page load on mobile data.
 Remaining work:
 
 - Qualify automatic staff certificate installation on the appliance.

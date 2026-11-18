@@ -53,6 +53,12 @@ test('Amazon override configures HTTPS without publishing database, mail or inte
  const challenge=value.services['http-challenges'];assert.ok(challenge,'independent challenge listener missing');assert.equal(challenge.restart,'unless-stopped');assert.deepEqual(challenge.ports.map(p=>[p.host_ip,p.published,p.target,p.protocol]),[['0.0.0.0','80',8080,'tcp']]);assert.equal(challenge.depends_on,undefined);assert.equal(Number(challenge.mem_limit),64*1024*1024);assert.ok(challenge.volumes.every(v=>v.read_only));assert.deepEqual(challenge.volumes.map(v=>v.target).sort(),['/run/account-webroot','/run/remote-challenges']);
  assert.equal(value.services['gateway-manifest'].environment.TEST_CLOUD_PUBLIC_REMOTE,'1');assert.equal(value.services.gateway.environment.TEST_CLOUD_PUBLIC_REMOTE,'1');
  assert.ok(value.services['gateway-manifest'].volumes.some(v=>v.source==='test-cloud-http-challenges'&&!v.read_only));
+ for(const [service,variable,path] of [
+  ['gateway-manifest','TEST_CLOUD_TLS_CHALLENGE_DIR','/run/remote-tls-challenges'],
+  ['gateway-manifest','TEST_CLOUD_GATEWAY_STATUS_DIR','/run/remote-gateway-status'],
+  ['gateway','GATEWAY_CHALLENGES','/run/remote-tls-challenges'],
+  ['gateway','GATEWAY_STATUS_DIR','/run/remote-gateway-status']
+ ])assert.equal(value.services[service].environment[variable],path);
  assert.ok(Object.values(value.services).reduce((sum,v)=>sum+Number(v.mem_limit),0)<=2112*1024*1024);
  for(const name of ['bootstrap','account','email-worker'])assert.equal(value.services[name].environment.TEST_CLOUD_ORIGIN,'https://cloud.example.test');
  assert.equal(value.services.bootstrap.environment.TEST_CLOUD_CERTIFICATE_SOURCE,'/run/public-certificate');

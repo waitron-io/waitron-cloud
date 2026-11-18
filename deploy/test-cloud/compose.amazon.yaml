@@ -41,12 +41,21 @@ services:
       TEST_CLOUD_PUBLIC_REMOTE: "1"
       TEST_CLOUD_ACME_DIRECTORY: ${TEST_CLOUD_ACME_DIRECTORY:-https://acme-staging-v02.api.letsencrypt.org/directory}
       TEST_CLOUD_CHALLENGE_DIR: /run/remote-challenges
+      TEST_CLOUD_TLS_CHALLENGE_DIR: /run/remote-tls-challenges
+      TEST_CLOUD_GATEWAY_STATUS_DIR: /run/remote-gateway-status
     volumes:
       - test-cloud-http-challenges:/run/remote-challenges
+      - test-cloud-tls-challenges:/run/remote-tls-challenges
+      - test-cloud-gateway-status:/run/remote-gateway-status:ro
   gateway:
     environment:
       <<: *amazon-environment
       TEST_CLOUD_PUBLIC_REMOTE: "1"
+      GATEWAY_CHALLENGES: /run/remote-tls-challenges
+      GATEWAY_STATUS_DIR: /run/remote-gateway-status
+    volumes:
+      - test-cloud-tls-challenges:/run/remote-tls-challenges:ro
+      - test-cloud-gateway-status:/run/remote-gateway-status
     ports: !override ["0.0.0.0:51820:51820/udp"]
   backup-worker:
     environment: *amazon-environment
@@ -105,4 +114,6 @@ services:
 
 volumes:
   test-cloud-http-challenges:
+  test-cloud-tls-challenges:
+  test-cloud-gateway-status:
   test-cloud-public-certificate:
