@@ -51,7 +51,9 @@ export class EmailOutbox {
     const expiresAt:Date=(await client.query("SELECT clock_timestamp()+interval '1 day' AS expiry")).rows[0].expiry;
     const rows=messages.map(message=>{
       if(normaliseEmail(message?.email)!==message?.email||(message.locale!==undefined&&!validLocale(message.locale))||!validServiceAlert(message))throw new Error('Invalid queued email');
-      const id=randomUUID(),nonce=randomBytes(12),content:ServiceAlert={email:message.email,locale:message.locale,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),...(message.notification?{notification:message.notification}:{})};
+      const id=randomUUID(),nonce=randomBytes(12),content:ServiceAlert={email:message.email,locale:message.locale,incidentId:message.incidentId,revision:message.revision,venueId:message.venueId,issue:message.issue,state:message.state,...(message.checkedAt?{checkedAt:message.checkedAt}:{}),
+       ...(message.hostname?{hostname:message.hostname,target:message.target}:{}),
+       ...(message.certificateNotAfter?{certificateNotAfter:message.certificateNotAfter}:{}),...(message.notification?{notification:message.notification}:{})};
       if(content.locale===undefined)delete content.locale;
       const cipher=createCipheriv('aes-256-gcm',this.#keys.get(this.#active)!,nonce);cipher.setAAD(aad(id,'service_alert',this.#active));
       const encrypted=Buffer.concat([cipher.update(JSON.stringify(content),'utf8'),cipher.final()]);
@@ -316,7 +318,7 @@ export class EmailWorker {
             AND q.current_verification='verified' AND point.captured_at>clock_timestamp()-interval '172800 seconds'))=(i.status='recovered'))
           AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
             AND (i.kind='disconnected' OR (i.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
-             OR (i.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale') AND s.service='remote_access'
+             OR (i.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_record_moved','staff_record_moved') AND s.service='remote_access'
               AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id
                AND h.kind=CASE WHEN i.kind LIKE 'public_%' THEN 'public' ELSE 'staff' END))))`,
         [row.id,message.incidentId,message.revision,message.venueId,message.issue,message.state,message.email,row.claim_id,message.notification??'transition'])).rows[0];

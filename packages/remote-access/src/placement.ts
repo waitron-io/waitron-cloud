@@ -2,6 +2,7 @@ import type {Pool,PoolClient} from 'pg';
 import {certificateDigest,routeCells} from './certificate-digest.ts';
 import {resolveCname} from 'node:dns/promises';
 import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
+import {boundedResolveCname,type ResolveCname} from './dns-lookup.ts';
 import {requireRemotePlan,eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute,type AcceptedGatewayManifest,type ReportingGatewayRoute} from './manifest.ts';
@@ -230,6 +231,33 @@ export class RemoteAccessStore {
    if(authorize){await authorize(client);await client.query('INSERT INTO remote_hostname_changes(installation_id,account_id,kind,hostname,configuration_revision) VALUES($1,$2,$3,$4,$5)',[id,actor,kind,custom,expectedRevision+1]);}
    return result;
   });}catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='23505')return fail('hostname_conflict');throw error;}
+ }
+ async recheckHostname(id:string,kind:'staff'|'public',resolve?:ResolveCname,authorize?:(client:PoolClient)=>Promise<string>):Promise<void>{
+  if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
+  const read=async(client:PoolClient)=>{
+   await requireRemotePlan(client,id,this.#planMode);
+   const row=(await client.query(`SELECT h.venue_id,h.hostname,h.assigned_hostname,i.configuration_revision,i.revoked_at,i.public_key
+    FROM remote_placements p JOIN installations i ON i.id=p.installation_id
+    JOIN remote_hostnames h ON h.venue_id=p.venue_id AND h.kind=$2
+    WHERE i.id=$1 AND i.superseded_by IS NULL FOR UPDATE OF i`,[id,kind])).rows[0];
+   if(!row)fail('installation_unavailable');
+   if(row.revoked_at)fail('revoked');
+   return row;
+  };
+  const admitted=await transaction(this.#pool,read);
+  await verifyDelegation(admitted.hostname,admitted.assigned_hostname,name=>boundedResolveCname(name,resolve));
+
+  await transaction(this.#pool,async client=>{
+   await authorize?.(client);
+   const current=await read(client);
+   if(current.configuration_revision!==admitted.configuration_revision||current.venue_id!==admitted.venue_id
+    ||current.public_key!==admitted.public_key||current.hostname!==admitted.hostname||current.assigned_hostname!==admitted.assigned_hostname)fail('revision_conflict');
+
+   // A running worker can hold the job row while waiting for the installation.
+   await client.query(`UPDATE remote_configuration_jobs SET status='pending',available_at=clock_timestamp(),attempts=0,
+    last_error=NULL,updated_at=clock_timestamp() WHERE kind=$2 AND target_id=$1 AND status<>'running'`,[id,`certificate_${kind}`]);
+   await client.query('UPDATE remote_hostnames SET record_moved_at=NULL WHERE venue_id=$1 AND kind=$2',[current.venue_id,kind]);
+  });
  }
  async authorizeCertificate(id:string,kind:'staff'|'public',csr:string){
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');

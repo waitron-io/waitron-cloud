@@ -3,6 +3,7 @@ import type {EmailOutbox} from './email-outbox.ts';
 import type {IncidentKind,ServiceAlert} from './service-alert.ts';
 import {validatedMonitorConfig} from './monitor-config.ts';
 import {transaction} from './transaction.ts';
+type AlertEvidence = Pick<ServiceAlert,'checkedAt'|'hostname'|'target'|'certificateNotAfter'>;
 export interface MonitorConfig {probeStaleSeconds?:number;quietSeconds?:number;reminderSeconds?:number}
 export class MonitorWorker {
  readonly #pool:Pool;readonly #outbox:EmailOutbox;readonly #probeStaleSeconds:number;readonly #quietSeconds:number;readonly #reminderSeconds:number;
@@ -45,13 +46,19 @@ export class MonitorWorker {
    await this.#transition(client,installation.id,monitor.venue_id,'snapshot_stale',!!snapshots,!!snapshots&&old(verified??snapshotSince!,172800),now);
    await this.#transition(client,installation.id,monitor.venue_id,'verification_failed',!!snapshots,!!failureSince&&old(failureSince,300),now);
    const remote=active&&services.includes('remote_access')?(await client.query('SELECT venue_id FROM remote_placements WHERE installation_id=$1 AND venue_id=$2',[installation.id,monitor.venue_id])).rows[0]:undefined;
-   const observations=remote?(await client.query(`SELECT o.* FROM remote_probe_observations o JOIN remote_hostnames h ON h.venue_id=o.venue_id AND h.kind=o.service AND h.hostname=o.hostname
-    WHERE o.installation_id=$1 AND o.venue_id=$2 AND o.configuration_revision=$3`,[installation.id,monitor.venue_id,installation.configuration_revision])).rows:[];
+   const names=remote?(await client.query(`SELECT h.kind,h.hostname,h.assigned_hostname,h.record_moved_at,o.status,o.checked_at,o.certificate_not_after
+    FROM remote_hostnames h LEFT JOIN remote_probe_observations o ON o.venue_id=h.venue_id AND o.service=h.kind AND o.hostname=h.hostname
+      AND o.installation_id=$1 AND o.configuration_revision=$3 WHERE h.venue_id=$2`,[installation.id,monitor.venue_id,installation.configuration_revision])).rows:[];
    for(const service of ['public','staff'] as const){
-    const observation=observations.find(row=>row.service===service),fresh=!!observation&&!old(observation.checked_at,this.#probeStaleSeconds)&&observation.checked_at.getTime()<=now.getTime()+60000;
+    const observation=names.find(row=>row.kind===service),fresh=!!observation?.checked_at&&!old(observation.checked_at,this.#probeStaleSeconds)&&observation.checked_at.getTime()<=now.getTime()+60000;
     const checkedAt=observation?.checked_at?.toISOString();
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_route_failed`,!!remote&&fresh,!!remote&&fresh&&observation.status==='failed',now,checkedAt?{checkedAt}:{});
     await this.#transition(client,installation.id,monitor.venue_id,`${service}_probe_stale`,!!remote,!!remote&&!fresh,now,checkedAt?{checkedAt}:{});
+    const custom=!!observation&&observation.hostname!==observation.assigned_hostname;
+    const certificateNotAfter=observation?.certificate_not_after?.toISOString();
+    await this.#transition(client,installation.id,monitor.venue_id,`${service}_record_moved`,custom,custom&&!!observation.record_moved_at,now,custom?{
+     hostname:observation.hostname,target:observation.assigned_hostname,...(certificateNotAfter?{certificateNotAfter}:{}),
+    }:{});
    }
    await client.query(`UPDATE venue_monitors SET checked_at=$2,next_check_at=LEAST($2::timestamptz+interval '1 minute',
     (SELECT min(e.opening_due_at) FROM venue_alert_episodes e JOIN venue_incidents i ON i.id=e.incident_id WHERE i.venue_id=$1 AND e.status='open' AND e.opening_processed_at IS NULL AND e.opening_due_at>$2),
@@ -63,7 +70,7 @@ export class MonitorWorker {
    throw error;
   }
  }
- async #transition(client:PoolClient,installationId:string,venueId:string,kind:IncidentKind,enabled:boolean,bad:boolean,now:Date,evidence:Pick<ServiceAlert,'checkedAt'>={}){
+ async #transition(client:PoolClient,installationId:string,venueId:string,kind:IncidentKind,enabled:boolean,bad:boolean,now:Date,evidence:AlertEvidence={}){
   const previous=(await client.query('SELECT * FROM venue_incidents WHERE venue_id=$1 AND kind=$2',[venueId,kind])).rows[0];
   const status=!enabled?'suppressed':bad?'open':'recovered';
   if(!previous&&status!=='open')return;
@@ -159,11 +166,11 @@ export class MonitorWorker {
     AND ($4::uuid IS NULL OR EXISTS(SELECT 1 FROM venue_alert_recipients r WHERE r.episode_id=$4 AND r.account_id=a.id))
     AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
      AND ($2='disconnected' OR ($2 IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
-      OR ($2 IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale') AND s.service='remote_access'
+      OR ($2 IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_record_moved','staff_record_moved') AND s.service='remote_access'
        AND EXISTS(SELECT 1 FROM remote_placements rp JOIN remote_hostnames h ON h.venue_id=rp.venue_id WHERE rp.installation_id=n.id AND rp.venue_id=v.id
         AND h.kind=CASE WHEN $2 LIKE 'public_%' THEN 'public' ELSE 'staff' END)))) ORDER BY a.id`,[venueId,kind,installationId,episodeId??null])).rows;
  }
- async #enqueue(client:PoolClient,row:{id:string;revision:number;venue_id:string;kind:IncidentKind},episodeId:string,recipients:{id:string;email:string;locale:'en'|'es'}[],state:'open'|'recovered',evidence:Pick<ServiceAlert,'checkedAt'>,notification?:'reminder'){
+ async #enqueue(client:PoolClient,row:{id:string;revision:number;venue_id:string;kind:IncidentKind},episodeId:string,recipients:{id:string;email:string;locale:'en'|'es'}[],state:'open'|'recovered',evidence:AlertEvidence,notification?:'reminder'){
   for(let offset=0;offset<recipients.length;offset+=100){
    const batch=recipients.slice(offset,offset+100);
    const messages:ServiceAlert[]=batch.map(recipient=>({email:recipient.email,locale:recipient.locale,incidentId:row.id,revision:row.revision,venueId:row.venue_id,issue:row.kind,state,...evidence,...(notification?{notification}:{})}));

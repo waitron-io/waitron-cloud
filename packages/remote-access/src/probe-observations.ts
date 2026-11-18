@@ -23,9 +23,9 @@ async function write(client:PoolClient,result:RemoteProbeResult,organisationId:s
   ON CONFLICT(installation_id,service) DO UPDATE SET
    venue_id=EXCLUDED.venue_id,configuration_revision=EXCLUDED.configuration_revision,hostname=EXCLUDED.hostname,
    status=EXCLUDED.status,checked_at=EXCLUDED.checked_at,elapsed_ms=EXCLUDED.elapsed_ms,failure=EXCLUDED.failure,
-   certificate_not_before=COALESCE(EXCLUDED.certificate_not_before,remote_probe_observations.certificate_not_before),
-   certificate_not_after=COALESCE(EXCLUDED.certificate_not_after,remote_probe_observations.certificate_not_after),
-   certificate_fingerprint256=COALESCE(EXCLUDED.certificate_fingerprint256,remote_probe_observations.certificate_fingerprint256),
+   certificate_not_before=COALESCE(EXCLUDED.certificate_not_before,CASE WHEN remote_probe_observations.hostname=EXCLUDED.hostname THEN remote_probe_observations.certificate_not_before END),
+   certificate_not_after=COALESCE(EXCLUDED.certificate_not_after,CASE WHEN remote_probe_observations.hostname=EXCLUDED.hostname THEN remote_probe_observations.certificate_not_after END),
+   certificate_fingerprint256=COALESCE(EXCLUDED.certificate_fingerprint256,CASE WHEN remote_probe_observations.hostname=EXCLUDED.hostname THEN remote_probe_observations.certificate_fingerprint256 END),
    last_success_at=COALESCE(EXCLUDED.last_success_at,remote_probe_observations.last_success_at),
    last_failure_at=COALESCE(EXCLUDED.last_failure_at,remote_probe_observations.last_failure_at),
    last_failure=COALESCE(EXCLUDED.last_failure,remote_probe_observations.last_failure)
