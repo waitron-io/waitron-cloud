@@ -2,7 +2,7 @@
 
 **Finish line:** One click on **Add a passkey** starts enrolment once the pending proof-status read arrives and confirms fresh proof, without another click or a second initial status request.
 
-**Request, verbatim:** Watcher, `~/waitron-campaign-k/questions.md:362`, 18 November 01:12:
+**Request, verbatim:** Private campaign instruction from the managing watcher, 18 November 01:12:
 
 > Owner-recovery browser wait, second time: you take the root-cause fix (lane G owns D608 but is busy on CLOUD-BACKUP-STREAM). Diagnose in a disposable scratch checkout while the expiry-alert review finishes; bring the proved cause and the smallest fix, then a normal reviewed PR. Tell lane G what you find. No retries as a fix.
 

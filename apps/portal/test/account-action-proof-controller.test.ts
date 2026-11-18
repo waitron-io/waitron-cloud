@@ -44,3 +44,18 @@ test('ensure waits for the initial status read without another request',async()=
  await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.equal(calls,1);
  release({ok:true,value:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00.000Z'}});await loading;assert.equal(await proof,true);assert.equal(calls,1);
 });
+
+
+for(const finishOld of [false,true])test(finishOld?'an old read finishing keeps the newer read joinable':'ensure for a new account does not join the old read',async()=>{
+ assert.ok(module);const releases:((value:ApiResult<unknown>)=>void)[]=[],fresh={ok:true as const,value:{methods:['passkey'],freshUntil:'2099-01-01T00:00:00.000Z'}};let calls=0,settled=false;
+ const c=new module.AccountActionProofController(()=>{},<T>()=>new Promise<ApiResult<T>>(resolve=>{calls++;releases.push(resolve as typeof releases[number]);}));c.account('old');const old=c.load();c.account('new');
+ const current=finishOld?c.load():undefined;if(finishOld){releases[0]!(fresh);await old;}
+ const proof=c.ensure().then(value=>{settled=true;return value;});await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,2);assert.equal(settled,false);
+ releases[1]!(fresh);await current;assert.equal(await proof,true);if(!finishOld){releases[0]!(fresh);await old;}
+});
+
+
+test('status loading keeps screen errors inside its returned promise',async()=>{
+ assert.ok(module);const c=new module.AccountActionProofController(()=>{throw Error('screen failed');});c.account('owner');let work:Promise<void>|undefined;
+ assert.doesNotThrow(()=>{work=c.load();});await assert.rejects(work!,/screen failed/);
+});
