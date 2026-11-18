@@ -2423,7 +2423,7 @@ and part 4 requests for future implementation.
 | --- | --- |
 | 1: facts; 2: code and issue date | Separate reads above. Billing display v1 remains closed. |
 | 3: addresses | Follow owner-approved A1188 section 13 items 5–6: separate emergency name, separate code-entry origin, never locally pointed at the box. No staff password enters the code-entry page; the copy itself still runs on Cloud's machines. |
-| 4: locked restore | Agreed part 3 item 1 and its TOTP input amendment below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Fresh-node placement still waits for A1425 part 3 / Waitron part 0 and A947/A1018 qualification. |
+| 4: locked restore | Agreed part 3 item 1 and its TOTP input amendment below: distinct fresh node and installation identities, immutable copy binding and Cloud's held backup key. Cloud's read-only placement reader fetches the files; the locked copy gets no bucket credential before confirmation. Cloud must wire in A1425 part 3 placement and qualify A947/A1018. |
 | 5: copy identity/certificate | Agreed part 3 item 2 below: launcher-delivered certificate/key PEM for the same emergency hostname, with Waitron terminating TLS and a copy-deadline lease cap. Staff certificate v1 stays unchanged; issuance, key cleanup and production qualification remain open. |
 | 6: still open; 7: box last heard | Agreed part 3 item 3 below: authenticated copy-operation status, current eligibility and the bound source installation's last accepted control contact, or explicit null. These facts cannot replace a fresh declaration read or its two-minute refusal. |
 | 8: declaration confirmation | The part 4 agreement below binds the exact declaration to the stored copy operation and requires verified withdrawal of the source's remote access and backup writes before a confirmed reply. |
@@ -2433,7 +2433,7 @@ and part 4 requests for future implementation.
 ### Agreed part 3 values, 15 November 2026
 
 Cloud accepts items 1–4 of Waitron's
-[four-value proposal at 7d34d21aea4ffd4740564467a052133ddf96445d](https://github.com/clintongormley/waitron/blob/7d34d21aea4ffd4740564467a052133ddf96445d/docs/superpowers/plans/2026-11-15-a1188-part3-locked-start.md)
+[four-value proposal](https://github.com/clintongormley/waitron/blob/030d9ed82093a07c4b555249f4552671d8d63ba3/docs/superpowers/plans/2026-11-15-a1188-part3-locked-start.md)
 for future implementation, with the clarifications below. The watcher cleared
 this docs-only answer at 16:39 CET on 15 November, after Claude's plan read.
 This is a technical agreement, not owner approval of a new design or a runnable
@@ -2447,8 +2447,8 @@ launcher input and decision 5 are superseded by the TOTP amendment below.
    keys agreed below, never the source vault ring or retired account-key input. Before
    declaration, start no workers and grant no fiscal authority or database writes.
    Cloud's read-only placement reader fetches and places files; the locked copy
-   holds no bucket credential before confirmation. Real placement still waits
-   for A1425 part 3 / Waitron part 0; the existing source-identity restore is unchanged.
+   holds no bucket credential before confirmation. Cloud still needs to call Waitron's
+   [A1425 part 3 placement helper](https://github.com/clintongormley/waitron/blob/7b64fa3b175c137308773c98c81b8986cb29322d/apps/server/src/emergency-copy-placement.ts).
 2. **Emergency TLS and lease:** accept launcher-delivered certificate/key PEM
    files, Waitron TLS termination and the same emergency hostname across operations.
    The code-entry origin stays separate; staff-certificate-v1 stays unchanged.
@@ -2541,9 +2541,8 @@ venue lock before recording one confirmation, one charge start, one queued owner
 notice and one fresh backup generation reservation. If expiry wins, record no charge
 or generation reservation. What happens to withdrawal already in progress remains open.
 
-Hosted venues (D115/P6) must first supply real A1425 part 3 placement, the stored
-copy operation, a restricted copy identity, a lease capped at the copy deadline,
-and current [D568 eligibility](#emergency-hosting-display-and-code-proposed-d568).
+Hosted venues (D115/P6) must first place a locked copy using the Waitron helper,
+store its operation, cap its lease at the copy deadline and supply current [D568 eligibility](#emergency-hosting-display-and-code-proposed-d568).
 Provide copy authority alongside the still-current source without superseding it
 under [migration 016](../packages/registration/migrations/016_server_replacement.sql).
 P6 also needs a shared contract release that includes both signed copy actions.
