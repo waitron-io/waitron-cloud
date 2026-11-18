@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
-import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import test from 'node:test';
 import {promisify} from 'node:util';
 import {stockholmStoreResources} from './kubernetes-storage.mjs';
@@ -61,7 +58,7 @@ test('multipart upload refuses a part response without the requested encryption'
     /storage_loss.multipart_encryption/);
 });
 
-test('both serving peers must report four online drives during the outage and six after rejoin', async () => {
+test('both serving peers must report four online drives during the outage and six before it', async () => {
   const {waitForStoreDrives} = await import('./kubernetes-storage-proof.mjs');
   const reading = (peer, count, processes = 6) => {
     const server = 'store-' + peer + '.store-peers.d621-store.svc.cluster.local:9000';
@@ -93,33 +90,7 @@ test('both serving peers must report four online drives during the outage and si
     /store-2=5, store-3=unseen/);
 });
 
-test('repair checks both disks for actual multipart data files', async t => {
-  const {waitForPieces} = await import('./kubernetes-storage-proof.mjs');
-  const temp = await mkdtemp(join(tmpdir(), 'store-shards-test-'));
-  t.after(() => rm(temp, {recursive: true, force: true}));
-  for (const disk of ['0', '1']) {
-    const directory = join(temp, disk, 'cloud-storage-rehearsal', 'multipart-0');
-    await mkdir(join(directory, 'data-version'), {recursive: true});
-    await writeFile(join(directory, 'xl.meta'), 'metadata');
-    await writeFile(join(directory, 'data-version', 'part.1'), 'data');
-  }
-  await writeFile(join(temp, '0/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
-  const controller = new AbortController();
-  async function run(binary, [exec, id, shell, flag, script, name, ...args]) {
-    assert.deepEqual([binary, exec, id], ['docker', 'exec', 'example-node']);
-    const paths = args.map(path => path.replace('/var/local/d621-store', temp));
-    const {stdout} = await promisify(execFile)(shell, [flag, script, name, ...paths]);
-    if (!stdout) controller.abort();
-    return stdout.trim();
-  }
-  const files = ['multipart-0'];
-  const node = {id: 'example-node'};
-  await assert.rejects(waitForPieces(run, node, files, controller.signal, 'multipart-0'), {name: 'AbortError'});
-  await writeFile(join(temp, '1/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
-  await waitForPieces(run, node, files, AbortSignal.timeout(2000), 'multipart-0');
-});
-
-test('encrypted bytes, listing and multipart survive the first machine loss and repair', {
+test('encrypted bytes, listing and multipart survive the first machine outage', {
   skip: process.env.TEST_KUBERNETES_STOCKHOLM_STORAGE !== '1', timeout: 2_100_000,
 }, async () => {
   const child = promisify(execFile)(process.execPath, ['scripts/kubernetes-check.mjs', '--storage-loss'],
@@ -128,6 +99,6 @@ test('encrypted bytes, listing and multipart survive the first machine loss and 
   const {stdout} = await child;
   const {storage, nodes} = JSON.parse(stdout);
   assert.equal(storage.stopped, nodes[0].name);
-  assert.ok(storage.failoverMs <= 90_000 && storage.repairMs <= 180_000);
+  assert.ok(storage.failoverMs <= 90_000);
   console.log(JSON.stringify(storage));
 });

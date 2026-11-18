@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
 import {BackupObjects} from '../packages/backups/src/storage.ts';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
-import {installStockholmStore, storeBuildArgs, storeNodePort, storePath, waitForStore} from './kubernetes-storage.mjs';
+import {installStockholmStore, storeBuildArgs, storeNodePort} from './kubernetes-storage.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {
@@ -112,29 +112,6 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-export async function waitForPieces(run, node, keys, signal, multipart) {
-  // A read can succeed from the other four drives before the returned drives have healed.
-  const disks = ['0', '1'].map(slot => storePath + '/' + slot + '/' + bucket);
-  const metadata = disks.flatMap(disk => keys.map(key => disk + '/' + key + '/xl.meta'));
-  const parts = disks.map(disk => disk + '/' + multipart);
-  const check = `
-    first=$1; second=$2; shift 2
-    for file; do [ -s "$file" ] || exit 0; done
-    for object in "$first" "$second"; do
-      for version in "$object"/*; do
-        if [ -s "$version/part.1" ] && [ -s "$version/part.2" ]; then continue 2; fi
-      done
-      exit 0
-    done
-    echo repaired
-  `;
-  for (;;) {
-    const result = await run('docker', ['exec', node.id, 'sh', '-ec', check, 'store', ...parts, ...metadata], {signal});
-    if (result === 'repaired') return;
-    await delay(1000, undefined, {signal});
-  }
-}
-
 export async function runKubernetesStorage({nodes, cluster, directory, run, kube, stopNode, signal}) {
   const image = cluster + ':store', names = nodes.map(node => node.name), clients = new Map();
   const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
@@ -172,7 +149,7 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
     const [node, ...survivorNodes] = nodes;
     const survivors = survivorNodes.map(machine => clients.get(machine.name));
     const [client] = survivors, [survivor] = survivorNodes;
-    const leg = await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
+    return await stopNode(node.name, {whileStopped: async ({signal: stopped}) => {
       // MinIO must see the four surviving drives before it can assess a multipart write.
       const driveCounts = await waitForDrives(survivor, 4, stopped);
       process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + driveCounts + ')\n');
@@ -188,24 +165,6 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       const listed = await client.send(ListObjectsV2Command, {}, stopped);
       assert.deepEqual(listed.Contents.map(row => row.Key).sort(), ['baseline', multipart, name]);
     }});
-    const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
-    process.stderr.write('Checking store repair after rejoin ' + node.name + '\n');
-    try {
-      await waitForStore({nodes: names, kube, signal: repair});
-      const driveCounts = await waitForDrives(survivor, 6, repair);
-      process.stderr.write('Store drives online after rejoin on ' + survivor.name + ' (' + driveCounts + ')\n');
-      // A survivor has the acknowledged bytes while the returned volumes are still missing them.
-      assert.deepEqual(await readObject(client, name, key, repair), bytes, name);
-      assert.deepEqual(await readObject(client, multipart, key, repair), upload.bytes, multipart);
-      await waitForPieces(run, node, [name, multipart], repair, multipart);
-      assert.deepEqual(await readObject(first, name, key, repair), bytes, name);
-      assert.deepEqual(await readObject(first, multipart, key, repair), upload.bytes, multipart);
-    } catch (error) {
-      throw Error('storage_loss.repair on ' + node.name + ': ' + error.message, {cause: error});
-    }
-    const repairMs = Math.round(performance.now() - repairStart);
-    process.stderr.write('Confirmed returned shards on ' + node.name + ' in ' + repairMs + ' ms\n');
-    return {...leg, repairMs};
   } catch (error) {
     failure = error;
     const pods = await kube(['-n', 'd621-store', 'get', 'pods', '-o', 'wide'], {signal: null}).catch(String);

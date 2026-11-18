@@ -1224,9 +1224,10 @@ Run `node scripts/kubernetes-check.mjs --storage-loss` in the Linux guest to
 rehearse object storage loss independently of the Cloud services. The check builds
 the pinned MinIO test image with Docker Buildx and serves it over private HTTPS.
 It starts six peers, with two local volumes per machine. It reads and writes
-encrypted bytes while the first machine is down, checks that multipart completion
-refuses a missing part, and checks that objects repair onto the returned disks
-after it returns. Its JSON output reports the outage and repair times.
+encrypted bytes while the first machine is down and checks that multipart
+completion refuses a missing part. Its JSON output reports the outage time.
+The Cloud services slice must prove disk repair and consecutive outages before
+run 9.
 
 The bounded Stockholm launcher transfers the same test store image and waits
 for all six peers after joining the three machines. It runs the store in

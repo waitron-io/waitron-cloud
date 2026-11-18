@@ -16,7 +16,7 @@ const apiName = 's3';
 const uid = 10001;
 const port = 9000;
 export const storeNodePort = 30900;
-export const storePath = '/var/local/d621-store';
+const storePath = '/var/local/d621-store';
 const labels = {app: storeName};
 const peers = Array.from({length: 6}, (_, index) => 'store-' + index);
 const dns = name => name + '.' + namespace + '.svc.cluster.local';
@@ -79,7 +79,7 @@ export function stockholmStoreResources(nodes, image) {
   ];
 }
 
-export async function waitForStore({nodes, kube, signal}) {
+async function waitForStore({nodes, kube, signal}) {
   do {
     const {items} = JSON.parse(await kube(['-n', namespace, 'get', 'pods', '-l', 'app=store', '-o', 'json'], {signal}));
     if (items.length === peers.length && items.every(row =>

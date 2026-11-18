@@ -2,7 +2,7 @@
 
 PR 3a prepares per-machine disks and installs the replicated database in the bounded
 Stockholm setup. PR 3b adds the test S3 store and an opt-in Kind check for encrypted
-reads, writes, multipart completion and repair through the first machine outage.
+reads, writes and multipart completion through the first machine outage.
 [P1 database and storage requirements](2026-10-22-cloud-country-cell.md#task-5-replicate-the-country-database-and-order-migrations-4065-calls)
 
 ## PR 3a — Install PostgreSQL on Stockholm's local disks
@@ -27,7 +27,7 @@ installer. Check that three copies are ready, one per node, each writing to its
 own volume. Keep PR 2's database checks.
 Estimate 130–210 implementation and 75–120 test lines.
 
-## PR 3b — Rehearse S3 loss and repair
+## PR 3b — Rehearse the first S3 outage
 
 Propose pinning [MinIO's October security release](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
 for the private test store and update both P1 plan pin lines in PR 3b. Verify source commit `9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a`
@@ -46,11 +46,10 @@ and raw S3 for listings and the multipart missing-part case. Use a private NodeP
 on the contacted host and matching TLS names. Within the 90-second outage, check old bytes, list,
 new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
 the stop. During it, reject completion that references a missing part, then upload
-that part, complete and compare bytes. Once all six peers return, read each outage write once to queue repair.
-Within 180 seconds, verify both objects on both volumes of the returned
-machine, then read the original bytes through that machine. PR 5 covers a
-pending multipart upload and repair across consecutive outages before run 9,
-as required in the country-cell plan's Cloud services task.
+that part, complete and compare bytes. PR 5 starts by diagnosing why MinIO
+sometimes misses repair after a machine returns. It must prove returned-disk
+repair and a pending multipart upload through consecutive outages before run 9.
+See the Cloud services task in the country-cell plan.
 
 Start with the placement checks and name the live fault cases in
 `scripts/kubernetes-storage.test.mjs`. Check the launcher store install order and
