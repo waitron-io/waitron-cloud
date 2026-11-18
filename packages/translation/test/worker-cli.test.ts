@@ -208,7 +208,7 @@ test('disconnected database clients exit with one fixed line and no raw error',a
   }catch(error){
    const {stdout,stderr}=run.output();
    // The proof filters worker output before it reports the connection facts.
-   Object.assign(error as object,{disconnectCheck,termination:{iteration:repeat,backends:backends.slice(0,4)},
+   Object.assign(error as object,{disconnectCheck,termination:{iteration:repeat,backends},
     workerActual:[run.child.exitCode,run.child.signalCode,stdout,stderr]});
    throw error;
   }finally{await run.dispose();}
