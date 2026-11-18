@@ -298,6 +298,22 @@ and the worker exited with status 1 and no connections remaining. The unchanged
 termination assertion failed and the binding report named it. The pause
 reproduces a possible ordering. The two historical CI orderings remain unknown.
 
+The diagnostic then caught a natural recurrence in the
+[PR #1300 venue job](https://github.com/waitron-io/waitron-cloud/actions/runs/44313296597/job/134832901823).
+PostgreSQL returned true for one selected connection and false for the other.
+The worker had written its fatal line when the termination check failed.
+The diagnostic did not record timing for each stop.
+
+The idle disconnect fixture now waits for two idle connections, terminates one
+in a single PostgreSQL statement and requires that stop to succeed. It still
+checks the exact worker exit. It then waits up to ten seconds for PostgreSQL
+to report that no worker connections remain. PostgreSQL can finish its socket
+cleanup after the worker exits. A timeout identifies the connection check as
+`worker-connections` in the report.
+The binding test requires exactly one selected connection. Run the binding
+command above and `node scripts/test-postgres.mjs exec node --test --test-name-pattern="^disconnected database clients exit with one fixed line and no raw error$" packages/translation/test/worker-cli.test.ts`
+to exercise the original case and the retained diagnostic.
+
 A later CI disconnect failure retains the reverse output: a pass-retry line before
 that fatal line. A local real PostgreSQL lease-query termination reproduces this
 ordering when the client error event arrives later. The query reports `57P01`,

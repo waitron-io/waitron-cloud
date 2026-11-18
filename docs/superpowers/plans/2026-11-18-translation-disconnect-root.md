@@ -43,6 +43,15 @@ Its exact inner assertion and any shared cause remain unknown.
 
 ## Second pull request: repair the reproduced cause
 
+The watcher cleared the fixture change at 14:19 on 18 November. Wait for
+two idle connections to exercise pool shutdown, then select and terminate one
+idle connection in the same PostgreSQL statement. Require one successful
+termination, keep the exact worker exit check and check that no worker
+connections remain. The binding test requires one selected connection.
+The watcher cleared one cleanup label and the existing ten-second read helper
+on 18 November at 14:44 to account for PostgreSQL finishing after worker exit.
+Keep the existing stop behavior and exit deadline.
+
 In the scratch Linux run, record which connections were idle and still present
 before the signal, when the worker began closing and which connections were
 gone by the next signal. Test whether the first termination starts shutdown
@@ -51,7 +60,8 @@ detailed timing in the scratch run. A real PostgreSQL control must force
 the observed ordering and fail at the original check before a repair.
 Change the fixture or worker only where that evidence points. Bring any
 change to an existing assertion to the watcher with its failing control.
-Keep the exact exit check and current deadlines. Add no retries. Write a
+Keep the exact exit check and its deadline. The cleanup read uses the
+cleared wait. Never repeat the stop or the exit check. Write a
 deviation to the watcher if the demonstrated repair needs to loosen the
 termination check. If the cause stays open, take the retained evidence to
 the watcher.

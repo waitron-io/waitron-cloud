@@ -194,17 +194,27 @@ test('disconnected database clients exit with one fixed line and no raw error',a
   let backends:{pid:number;killed:boolean}[]=[];
   try{
    await until(async()=>Number((await db.pool.query(`SELECT count(*) AS n FROM pg_stat_activity
-    WHERE application_name=$1 AND state='idle' AND xact_start IS NULL`,[run.applicationName])).rows[0].n)>0);
+    WHERE application_name=$1 AND state='idle' AND xact_start IS NULL`,[run.applicationName])).rows[0].n)>=2);
    disconnectCheck='stop-query';
-   const killed=await db.pool.query<{pid:number;killed:boolean}>('SELECT pid,pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE application_name=$1',[run.applicationName]);
+   // The worker must close its other connections after the first one fails.
+   const killed=await db.pool.query<{pid:number;killed:boolean}>(`
+    SELECT pid,pg_terminate_backend(pid) AS killed
+    FROM (SELECT pid FROM pg_stat_activity WHERE application_name=$1
+     AND state='idle' AND xact_start IS NULL ORDER BY pid LIMIT 1) AS target
+   `,[run.applicationName]);
    backends=killed.rows;
    disconnectCheck='backends-selected';
-   assert.ok(killed.rows.length>0);
+   assert.equal(killed.rows.length,1);
    disconnectCheck='backends-terminated';
-   assert.ok(killed.rows.every(row=>row.killed));
+   assert.equal(killed.rows[0]?.killed,true);
    disconnectCheck='worker-exit';
    const out=await run.exited;
    assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[1,null,'',failed]);
+   disconnectCheck='worker-connections';
+   // PostgreSQL can finish closing its connections after the worker exits.
+   await until(async()=>(
+    await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1',[run.applicationName])
+   ).rowCount===0);
   }catch(error){
    const {stdout,stderr}=run.output();
    // The proof filters worker output before it reports the connection facts.
