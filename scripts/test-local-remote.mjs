@@ -79,7 +79,7 @@ function startTargetGateway(){
  targetGatewayPort=Number(docker('port',name+'-gateway-target','443/tcp').split(':').at(-1));targetGatewayIp=docker('inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',name+'-gateway-target');
 }
 function startPeer(venue,index){
- const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN','-v',venue.peerInput+':/input:ro',gatewayImage,'node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
+ const peer=name+`-peer-${index}`;docker('run','-d','--name',peer,'--network',name,'--cap-add','NET_ADMIN',...(process.platform==='linux'?['--add-host','host.docker.internal:host-gateway']:[]),'-v',venue.peerInput+':/input:ro',gatewayImage,'node','/app/src/peer-cli.ts');owned.add(peer);venue.peer=peer;
 }
 function remoteAt(port,host,path='/public/availability',options={}){
  return new Promise((resolve,reject)=>{
