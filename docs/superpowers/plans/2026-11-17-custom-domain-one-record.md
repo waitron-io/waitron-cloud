@@ -551,7 +551,8 @@ Describe the injected gateway status reader, the private check folders, readines
 
 ## PR 7 — Telling the owner their record moved
 
-Build this after PR 8. The watcher cleared the revised notice plan on 18 November at 12:53 CET.
+Build this after PR 8. The watcher cleared that sequence at 12:43 CET on 18 November
+and the revised notice plan at 12:53 CET.
 
 ### Task 7.1: Incident kinds and the email text
 
@@ -655,7 +656,10 @@ Run the setup and browser tests before and after the switch. Look at English and
 **Proof wiring:**
 - Modify: `scripts/test-local-remote.mjs` — the worker gets the two private check folders in `FileReconcilerArtifacts`, an injected `gatewayStatus` and a `resolveCname` that uses Pebble's test DNS; one venue's custom staff and public names are saved through `setHostname` with one CNAME; issuance goes through the real gateway; one of them is renewed
 - In that script, wire both `startGateway` (source) and `startTargetGateway` (destination) to set `GATEWAY_CHALLENGES` and mount their own private check folder read-only. Only the proof worker writes the folders. Read only each cell's `status.json` through the existing `gatewayFile` path, including its Linux fallback. Check both launches for the setting and read-only mount, and include the new mount in the existing box-key absence check.
-- The custom-name proof issues in the reconciler's process so the issuer can call its check-file callbacks. Trust Pebble's test root in that process and verify it against the pinned image. Give the worker a `GatewayChallengeStatus` backed by the proof's `gatewayFile` reader so the Linux fallback is exercised.
+- The custom-name proof runs the certificate command with Pebble's test root and a test-only
+DNS adapter. The command reads the status-only file as the Linux test user. The watcher
+cleared this proof on 18 November at 13:39 CET, including a destination renewal and a
+separate run of the same move using assigned names.
 
 - [ ] **Step 1:** Add the phase. It asserts that both custom names answer with certificates from Pebble's root, that the renewed one has a new serial, and that the box's private key is absent from the gateway (the existing check).
 - [ ] **Step 2: Run** the proof (as in "Run the proof"); read every `PASS`. **Commit** `git commit -s -m "Prove one-record custom names through the real gateway"`.

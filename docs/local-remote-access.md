@@ -71,14 +71,17 @@ drives the durable monitor, account portal and Mailpit through an isolated venue
 failure, stale evidence, invalid certificate trust, a full gateway outage and each recovery.
 Run `node scripts/verify-remote-monitoring-receipt.mjs /tmp/cloud-remote-receipt.json` to
 check the versioned phase list, timings, tenant-isolation flags and alert deduplication.
-Pebble issues both custom names through the gateway on port 443. The proof renews
-the staff certificate with an older certificate CNAME still present. It then stages one
-venue on the second cell, cancels an unreachable destination, and tests and commits a fresh
-destination route. Cloud's assigned CNAMEs follow the active cell while the custom CNAMEs
-keep pointing at the assigned names. Run
+The certificate command issues both custom names through the source gateway on port 443.
+The proof stages the venue on the second cell, cancels an unreachable destination, then
+tests and commits a fresh destination route. Cloud's assigned CNAMEs follow the active cell
+while the custom CNAMEs keep pointing at the assigned names. The command renews the staff
+certificate through the destination gateway with the older certificate CNAME still present.
+Run
 `node scripts/verify-cell-movement-receipt.mjs /tmp/cloud-remote-receipt.json` to check
 the manifest sequence advances, failed-apply rollback, stable names and certificates, custom
 name renewal, unchanged owner records, source revocation and other-venue isolation.
+To rehearse the same move using assigned staff and public addresses, repeat the
+proof with `REMOTE_ASSIGNED_NAMES=1` and a separate `REMOTE_RECEIPT` path.
 
 The test root is trusted explicitly by its test clients. It never installs a system
 certificate authority, disables certificate verification or changes host DNS. The
@@ -110,8 +113,8 @@ To use a name such as `staff.your-cafe.es`, choose the address to change, enter 
 and select **Review DNS settings**. Create the displayed CNAME record at your domain
 provider. It points your name at the venue's assigned address so the gateway can serve
 traffic and answer the certificate authority's check on port 443. Keep this record while
-you use the name. Use a subdomain of at most 237 characters, because many DNS providers
-cannot put a CNAME at the domain root.
+you use the name. Use a subdomain because many DNS providers cannot put a CNAME at
+the domain root. The name can contain at most 237 characters.
 
 Select **Check DNS and use this name** when the record is present. A failed check
 leaves your current name unchanged. DNS can take time to propagate, so check the record
@@ -329,8 +332,11 @@ configuration:
 Set `GATEWAY_CHALLENGES` to the gateway's read-only mount of the check directory.
 Give write access only to the certificate worker. Set `GATEWAY_STATUS_DIR` to a
 separate directory the gateway can write. Give the worker read-only access to that
-directory, with permission to read its private `status.json`. Keep the gateway state
-and WireGuard key directories out of the worker's mounts.
+directory. The gateway writes `status.json` with mode 0640. If the gateway and worker
+use different accounts, set the directory's group to one the worker belongs to and
+set the directory's set-group-ID bit so its files inherit that group. Keep the gateway
+state and WireGuard key directories out of the worker's mounts. Configure both paths
+for every route in this worker before enabling custom names.
 
 The command-line configuration reads one status file per cell. A deployment with
 multiple gateways in a cell needs a status reader that reports each gateway. Configure

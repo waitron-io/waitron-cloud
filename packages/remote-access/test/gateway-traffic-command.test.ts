@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn,type ChildProcess} from 'node:child_process';
 import {generateKeyPairSync,randomBytes,randomUUID,X509Certificate} from 'node:crypto';
-import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,writeFile} from 'node:fs/promises';
+import {chmod,chown,cp,mkdir,mkdtemp,readFile,readdir,realpath,rm,rmdir,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
@@ -39,7 +39,7 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void;diagnostic:(s:strin
   release();if(gateway?.exitCode===null&&gateway.signalCode===null){if(!gateway.killed)gateway.kill('SIGTERM');try{await waitFor(async()=>assert.ok(gateway!.exitCode!==null||gateway!.signalCode!==null),10000);}catch{gateway.kill('SIGKILL');await waitFor(async()=>assert.ok(gateway!.signalCode));}}
   try{await server?.close();}finally{for(const c of await children()){t.diagnostic(`owned child PID ${c.pid}`);try{process.kill(c.pid,'SIGKILL');}catch(e){assert.equal((e as NodeJS.ErrnoException).code,'ESRCH');}await waitFor(async()=>assert.throws(()=>process.kill(c.pid,0),/ESRCH/));}await rm(root,{recursive:true,force:true});}
  });
- const launch=()=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env:{...env,...(checks?{GATEWAY_CHALLENGES:checkDirectory,GATEWAY_STATUS_DIR:statusDirectory}:{})},stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
+ const launch=(overrides:Record<string,string>={})=>{gateway=spawn(process.execPath,[join(root,'src','gateway-cli.ts')],{env:{...env,...(checks?{GATEWAY_CHALLENGES:checkDirectory,GATEWAY_STATUS_DIR:statusDirectory}:{}),...overrides},stdio:['ignore','pipe','pipe']});t.diagnostic(`owned gateway PID ${gateway.pid}`);gateway.stdout!.on('data',b=>{output+=b;});gateway.stderr!.on('data',b=>{output+=b;});return gateway;};
  const holdCountry=async()=>{
   const gate=new Promise<void>(r=>{release=r;});
   server=await serveTrafficLifetimes({socket:env.GATEWAY_TRAFFIC_LIFETIME_SOCKET,mappings:[{country:'ES',environment:'test',cellId,directory:reports,writerUid:process.geteuid!(),readerGid:process.getegid!()}],store:{async recordLifecycle(_m,e){lifetimes.push(e);await gate;}}});
@@ -160,6 +160,7 @@ test('publishing a check updates status without starting HAProxy or a traffic li
  await waitFor(async()=>assert.deepEqual(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')),
   {ready:true,challenges:{answerable:[route]}}),3000);
  assert.deepEqual(await readdir(f.statusDirectory),['status.json']);
+ assert.equal((await stat(join(f.statusDirectory,'status.json'))).mode&0o777,0o640);
  const presented=await new Promise<string>((resolve,reject)=>{
   const socket=connect({host:'127.0.0.1',port:gatewayAlpnPort,servername:route,ALPNProtocols:['acme-tls/1'],rejectUnauthorized:false});
   socket.setTimeout(2000,()=>socket.destroy(new Error('gateway certificate check timed out')));
@@ -186,4 +187,23 @@ test('the gateway answers no checks with no explicit private directory', async t
   const status=await f.status();assert.equal(status.ready,true);
   assert.deepEqual(status.challenges?.answerable,[]);
  },3000);
+});
+
+test('a failed certificate-status write leaves the gateway serving its routes',async t=>{
+ const f=await fixture(t,60_000,true),held=await f.holdCountry(),blocked=join(f.statusDirectory,'status.json.tmp');
+ const gateway=f.launch();await f.prepared();await held.accepted();held.release();
+ await waitFor(async()=>assert.equal(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')).ready,true));
+ await mkdir(blocked);
+ await waitFor(async()=>assert.match(f.output(),/EISDIR|gateway\.status_unavailable/));
+ await waitFor(async()=>assert.equal((await f.status()).ready,true));
+ assert.match(f.output(),/gateway\.status_unavailable/);
+ assert.equal(gateway.exitCode,null);
+ await rmdir(blocked);
+ await waitFor(async()=>assert.equal(JSON.parse(await readFile(join(f.statusDirectory,'status.json'),'utf8')).ready,true));
+});
+
+test('a certificate-status path cannot alias the gateway state directory',async t=>{
+ const f=await fixture(t,60_000,true),gateway=f.launch({GATEWAY_STATUS_DIR:join(f.root,'gateway')+'/.'});
+ await waitFor(async()=>assert.equal(gateway.exitCode,1),3000);
+ assert.match(f.output(),/Invalid gateway status directory/);
 });

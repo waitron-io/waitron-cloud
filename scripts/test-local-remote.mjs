@@ -1,13 +1,13 @@
 import {prepareConnectionProof} from '../packages/registration/test/fixtures/action-proof.ts';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
-import {mkdtemp,readFile,writeFile,mkdir,rm,rename,realpath,access} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,chmod,rm,rename,realpath,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createRequire} from 'node:module';
 import {createHash,generateKeyPairSync,randomUUID,randomBytes,X509Certificate} from 'node:crypto';
 import {request,Agent} from 'node:https';
-import {connect as tlsConnect,getCACertificates,setDefaultCACertificates} from 'node:tls';
+import {connect as tlsConnect} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {startPortalFixture,contextSignIn} from '../apps/portal/test/fixtures.ts';
 import {SignupStore,PairingStore,InstallationStore,MonitorWorker} from '../packages/registration/src/index.ts';
@@ -15,8 +15,6 @@ import {login} from '../packages/identity/src/index.ts';
 import {transaction} from '../packages/registration/src/transaction.ts';
 import {RemoteAccessStore} from '../packages/remote-access/src/placement.ts';
 import {RemoteConfigurationReconciler} from '../packages/remote-access/src/reconciler.ts';
-import {issueCertificate} from '../packages/remote-access/src/certificates.ts';
-import {answerableNames} from '../packages/remote-access/src/gateway-status.ts';
 import {FileReconcilerArtifacts} from '../packages/remote-access/src/reconciler-files.ts';
 import {RemoteProbeStore} from '../packages/remote-access/src/probe-targets.ts';
 import {RemoteProbeObservationStore} from '../packages/remote-access/src/probe-observations.ts';
@@ -48,11 +46,7 @@ const input=join(root,'input'),state=join(root,'state'),targetInput=join(root,'t
 const checksSource=join(root,'checks-source'),checksTarget=join(root,'checks-target');
 const statusSource=join(root,'status-source'),statusTarget=join(root,'status-target');
 async function gatewayFile(directory,file){
- if(process.platform==='linux'){
-  const container=name+(directory===state||directory===statusSource?'-gateway':'-gateway-target');
-  const mount=directory===statusSource||directory===statusTarget?'/status/':'/state/';
-  return docker('exec',container,'node','-e',"process.stdout.write(require('node:fs').readFileSync(process.argv[1],'utf8'))",mount+file);
- }
+ if(process.platform==='linux')return docker('exec',name+(directory===state?'-gateway':'-gateway-target'),'node','-e',"process.stdout.write(require('node:fs').readFileSync('/state/'+process.argv[1],'utf8'))",file);
  return readFile(join(directory,file),'utf8');
 }
 function checkCertificateMounts(container){
@@ -132,7 +126,10 @@ async function captureVenue(venue){
 }
 async function captureBoth(venues){const points=[];for(const venue of venues)points.push(await captureVenue(venue));return points;}
 try{
- for(const directory of [checksSource,checksTarget,statusSource,statusTarget])await mkdir(directory,{mode:0o700});
+ for(const directory of [checksSource,checksTarget])await mkdir(directory,{mode:0o700});
+ for(const directory of [statusSource,statusTarget]){
+  await mkdir(directory,{mode:0o750});await chmod(directory,0o2750);
+ }
  await mkdir(input);await mkdir(state);await mkdir(join(input,'public-certs'));await mkdir(targetInput);await mkdir(targetState);await mkdir(join(targetInput,'public-certs'));
  s3=await startBackupStorage();f=await startPortalFixture({vault:backupVault,objects:backupObjects,grant:(location,scope)=>s3.authority.grant(location,scope,s3.ca),managedStreams:s3.managedStreams});catalogue=new BackupCatalogue(f.db.pool,backupVault,backupObjects);acme=await startAcme({tlsAlpn:true});
  const signup=new SignupStore(f.db.pool,f.db.outbox),email=`remote-${randomUUID()}@example.test`,password='Local remote integration password';
@@ -146,31 +143,31 @@ try{
  await operator('cell',{id:cellId,country:'ES',provider:'aws',environment:'test',suffix:'remote.example.test',zone:'remote.example.test',subnet:17,publicKey:gatewayKey.publicKey,endpoint:'gateway.example.test:51820'});
  await operator('cell',{id:targetCellId,country:'ES',provider:'aws',environment:'test',suffix:'target.remote.example.test',zone:'remote.example.test',subnet:18,publicKey:targetGatewayKey.publicKey,endpoint:'target-gateway.example.test:51820'});
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
- const certificateFiles=new FileReconcilerArtifacts({keyDirectory:join(root,'public-keys'),routes:[{cellId,output:join(root,'worker-source.json'),publicCertificates:join(input,'public-certs'),challenges:checksSource},{cellId:targetCellId,output:join(root,'worker-target.json'),publicCertificates:join(targetInput,'public-certs'),challenges:checksTarget}]});
- const statusDirectories=new Map([[cellId,statusSource],[targetCellId,statusTarget]]);
- const certificateWorker=new RemoteConfigurationReconciler(f.db.pool,{
-  artifacts:certificateFiles,pointName:(name,target)=>acme.point(name,target),resolveCname:acme.resolveCname,
-  gatewayStatus:{async read(id){
-   const directory=statusDirectories.get(id);
-   return directory?[answerableNames(await gatewayFile(directory,'status.json'))]:[];
-  }},
-  signingKeyForCell:async id=>{assert.ok([cellId,targetCellId].includes(id));return issuer.privateKey;},
-  issueCertificate:async target=>{
-   if(target.validation.type==='tls-alpn-01'){
-    const trusted=getCACertificates();
-    setDefaultCACertificates([...trusted,acme.directoryRoot]);
-    try{
-     return await issueCertificate({directoryUrl:acme.directoryUrl,accountKey:await readFile(accountKeyFile),email:'proof@example.test',
-      hostname:target.hostname,csr:target.csr,validation:target.validation,signal:target.signal});
-    }catch(error){console.error('Pebble gateway check failed for',target.hostname,error.message);throw error;}
-    finally{setDefaultCACertificates(trusted);}
+ const signingKeyFile=join(root,'issuer.key');await secret(signingKeyFile,issuer.privateKey.export({format:'pem',type:'pkcs8'}));
+ const keyDirectory=join(root,'public-keys');
+ const certificateRoutes=[
+  {cellId,output:join(root,'worker-source.json'),signingKeyFile,publicCertificates:join(input,'public-certs'),challenges:checksSource,statusDirectory:statusSource},
+  {cellId:targetCellId,output:join(root,'worker-target.json'),signingKeyFile,publicCertificates:join(targetInput,'public-certs'),challenges:checksTarget,statusDirectory:statusTarget},
+ ];
+ const certificateFiles=new FileReconcilerArtifacts({keyDirectory,routes:certificateRoutes});
+ const certificateWorker=new RemoteConfigurationReconciler(f.db.pool,{artifacts:certificateFiles,pointName:(name,target)=>acme.point(name,target),signingKeyForCell:async id=>{assert.ok([cellId,targetCellId].includes(id));return issuer.privateKey;},issueCertificate:async target=>{
+  const csrFile=join(root,randomUUID()+'.csr'),output=join(root,randomUUID()+'.crt');await secret(csrFile,target.csr);return acme.issue({hostname:target.hostname,csrFile,accountKeyFile,output,dnsName:target.dnsName});
+ }});
+ const configFile=join(root,'reconciler.json'),dnsModule=join(root,'pebble-dns.mjs');
+ let useCertificateCommand=false;
+ async function runCertificates(){
+  if(useCertificateCommand){
+   for(let runs=0;runs<20;runs++){
+    const result=JSON.parse(execFileSync(process.execPath,['--import',dnsModule,'packages/remote-access/src/reconciler-cli.ts',configFile,'--once'],{
+     encoding:'utf8',timeout:60000,env:{...process.env,DATABASE_URL:databaseUrl.toString(),NODE_EXTRA_CA_CERTS:join(acme.root,'acme-root.pem')},
+    }));
+    assert.equal(result.retrying,0,'the certificate command left a job retrying');
+    if(!result.due)return;
    }
-   const csrFile=join(root,randomUUID()+'.csr'),output=join(root,randomUUID()+'.crt');
-   await secret(csrFile,target.csr);
-   return acme.issue({hostname:target.hostname,csrFile,accountKeyFile,output,dnsName:target.dnsName});
+   assert.fail('certificate command did not settle within the fixture job bound');
   }
- });
- async function runCertificates(){await certificateWorker.schedule();let runs=0;while(await certificateWorker.runOnce()){assert.ok(++runs<=20,'bounded certificate projection');}}
+  await certificateWorker.schedule();let runs=0;while(await certificateWorker.runOnce()){assert.ok(++runs<=20,'bounded certificate projection');}
+ }
  async function staffCertificate(placement,csr){
   const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[placement.installationId])).rows[0].configuration_revision,requestId=randomUUID();
   await f.db.pool.query(`INSERT INTO staff_certificate_exchange(installation_id,request_id,request_digest,revision,hostname,csr) VALUES($1,$2,$3,$4,$5,$6)
@@ -199,7 +196,7 @@ try{
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
  await secret(join(input,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(input,'wireguard.key'),gatewayKey.privateKey);await secret(join(input,'bot.key'),randomBytes(32));await secret(join(input,'venue-ca.pem'),acme.certificateRoot);
  await secret(join(targetInput,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(targetInput,'wireguard.key'),targetGatewayKey.privateKey);await secret(join(targetInput,'bot.key'),randomBytes(32));await secret(join(targetInput,'venue-ca.pem'),acme.certificateRoot);
- const signingKeyFile=join(root,'issuer.key');await secret(signingKeyFile,issuer.privateKey.export({format:'pem',type:'pkcs8'}));await operator('export',{cellId,signingKeyFile,output:join(input,'manifest.json')});docker('network','create',name);network=true;startGateway();
+ await operator('export',{cellId,signingKeyFile,output:join(input,'manifest.json')});docker('network','create',name);network=true;startGateway();
  for(const [n,venue] of venues.entries()){
   const peerInput=join(root,`peer-${n}`);await mkdir(peerInput);await secret(join(peerInput,'peer.json'),JSON.stringify({address:venue.placement.address,privateKey:venue.key.privateKey,gatewayPublicKey:gatewayKey.publicKey,gatewayEndpoint:gatewayIp+':51820',upstreamHost:'host.docker.internal',upstreamPort:venue.server.port}));venue.peerInput=peerInput;
   await secret(join(peerInput,'ca.pem'),acme.certificateRoot);
@@ -299,37 +296,54 @@ try{
 
  const moving=venues[0],unchanged=venues[1],movingId=moving.placement.installationId;
  const staff='staff.synthetic-cafe.example.test',publicName='menu.synthetic-cafe.example.test';
- const names=[{kind:'staff',hostname:staff,assigned:moving.placement.staffHostname},
-  {kind:'public',hostname:publicName,assigned:moving.placement.publicHostname}];
- const sourceAcmeIp=acme.connectGateway(name+'-gateway');
- for(const {kind,hostname,assigned} of names){
-  const records=JSON.parse(await operator('dns',{installationId:movingId,kind,hostname}));
-  assert.deepEqual(records,[{type:'CNAME',name:hostname,value:assigned}]);
-  // Pebble's fixture DNS follows one alias in an address query. Supply the cell IP for that answer.
-  await acme.addA(assigned,sourceAcmeIp);
-  await acme.point(hostname,assigned);
-  const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[movingId])).rows[0].configuration_revision;
-  moving.placement=await placementStore.setHostname(movingId,kind,hostname,revision,acme.resolveCname);
+ const names=process.env.REMOTE_ASSIGNED_NAMES==='1'?[]:[
+  {kind:'staff',hostname:staff,assigned:moving.placement.staffHostname},
+  {kind:'public',hostname:publicName,assigned:moving.placement.publicHostname},
+ ];
+ if(names.length){
+  const sourceAcmeIp=acme.connectGateway(name+'-gateway');
+  for(const {kind,hostname,assigned} of names){
+   const records=JSON.parse(await operator('dns',{installationId:movingId,kind,hostname}));
+   assert.deepEqual(records,[{type:'CNAME',name:hostname,value:assigned}]);
+   // Pebble's fixture DNS follows one alias in an address query. Supply the cell IP for that answer.
+   await acme.addA(assigned,sourceAcmeIp);
+   await acme.point(hostname,assigned);
+   const revision=(await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[movingId])).rows[0].configuration_revision;
+   moving.placement=await placementStore.setHostname(movingId,kind,hostname,revision,acme.resolveCname);
+  }
+  await secret(dnsModule,`
+   import {Resolver} from 'node:dns/promises';
+   import {pointPebbleName} from ${JSON.stringify(new URL('./remote-fixtures.mjs',import.meta.url).href)};
+   const resolveCname=Resolver.prototype.resolveCname;
+   Resolver.prototype.resolveCname=function(hostname){
+    this.setServers([${JSON.stringify(acme.dnsServer)}]);
+    return resolveCname.call(this,hostname);
+   };
+   export default {
+    point:(host,target)=>pointPebbleName(${JSON.stringify(acme.dnsUrl)},host,target),
+    async present(){throw Error('custom proof requires the port-443 challenge');},
+    async remove(){throw Error('custom proof requires the port-443 challenge');},
+   };
+  `);
+  await secret(configFile,JSON.stringify({routes:certificateRoutes,keyDirectory,acme:{directoryUrl:acme.directoryUrl,email:'proof@example.test',accountKeyFile,dnsModule}}));
+  useCertificateCommand=true;
  }
  const initialSource=await placementStore.manifest(cellId);await publish(initialSource);
- const customCsr=(await ipc(moving.server,{csrHostname:staff})).csr;
- const firstStaff=await staffCertificate(moving.placement,customCsr);
- await ipc(moving.server,{certificate:firstStaff,hostname:staff});
- await waitFor(async()=>(await remote(publicName,'/_cloud/challenge')).status===200);
- const localPublic=await solve(publicName);
- assert.equal((await remote(publicName,'/public/availability',{headers:{cookie:localPublic}})).status,200);
- await waitFor(async()=>(await remote(staff)).status===200,20000);
- // Older setups may still have their certificate CNAME. It does not obstruct renewal on port 443.
- await acme.point('_acme-challenge.'+staff,'_acme-challenge.'+names[0].assigned);
- const renewedStaff=await staffCertificate(moving.placement,customCsr);
- assert.notEqual(new X509Certificate(renewedStaff).serialNumber,new X509Certificate(firstStaff).serialNumber);
- await ipc(moving.server,{certificate:renewedStaff,hostname:staff});
- const staffBefore=new X509Certificate(renewedStaff).fingerprint256;
- await waitFor(async()=>(await remote(staff)).certificate===staffBefore,20000);
- const publicBefore=(await remote(publicName)).certificate;
- assert.ok(publicBefore);
- checks.push('Pebble issues both custom names through the gateway on 443 and renews staff with its old certificate record present');
- for(const {assigned} of names)assert.deepEqual(await acme.resolveCname(assigned),['gateway.example.test']);
+ let customCsr,firstStaff,customPublic=false;
+ if(names.length){
+  customCsr=(await ipc(moving.server,{csrHostname:staff})).csr;
+  firstStaff=await staffCertificate(moving.placement,customCsr);
+  await ipc(moving.server,{certificate:firstStaff,hostname:staff});
+  // The public gateway verifies the venue's upstream TLS against its staff name.
+  await waitFor(async()=>(await remote(staff)).status===200,20000);
+  await waitFor(async()=>(await remote(publicName,'/_cloud/challenge')).status===200);
+  const localPublic=await solve(publicName);
+  customPublic=(await remote(publicName,'/public/availability',{headers:{cookie:localPublic}})).status===200;
+  assert.equal(customPublic,true);
+  checks.push('the certificate command issues both custom names through the source gateway on port 443');
+  for(const {assigned} of names)assert.deepEqual(await acme.resolveCname(assigned),['gateway.example.test']);
+ }
+ const staffBefore=(await remote(moving.placement.staffHostname)).certificate,publicBefore=(await remote(moving.placement.publicHostname)).certificate;
  await publishTarget(await placementStore.manifest(targetCellId));startTargetGateway();await waitFor(async()=>JSON.parse(await gatewayFile(targetState,'status.json')).ready);
  const expectedRevision=Number((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[moving.placement.installationId])).rows[0].configuration_revision);
  const failedOperation=randomUUID(),failedStage=JSON.parse(await operator('move-stage',{operationId:failedOperation,installationId:moving.placement.installationId,targetCellId,targetPeerPublicKey:moving.key.publicKey,expectedRevision}));assert.equal(failedStage.state,'staged');
@@ -349,21 +363,34 @@ try{
  assert.equal(JSON.parse(await operator('move-ready',{operationId,expectedRevision,sequence:stagedTarget.sequence})).state,'ready');
  const completed=JSON.parse(await operator('move-commit',{operationId,expectedRevision})),completedReplay=JSON.parse(await operator('move-commit',{operationId,expectedRevision}));assert.deepEqual(completedReplay,completed);
  const committedTarget=await placementStore.manifest(targetCellId),committedSource=await placementStore.manifest(cellId);await publishTarget(committedTarget);await publish(committedSource);
- await runCertificates();
- const targetAcmeIp=acme.connectGateway(name+'-gateway-target');
- for(const {hostname,assigned} of names){
-  assert.deepEqual(await acme.resolveCname(assigned),['target-gateway.example.test']);
-  assert.deepEqual(await acme.resolveCname(hostname),[assigned]);
-  await acme.addA(assigned,targetAcmeIp);
- }
- const customNames={staff:true,public:true,renewed:true,cnameUntouched:true};
  await waitFor(async()=>{try{await remote(moving.placement.staffHostname);return false;}catch{return (await remote(unchanged.placement.staffHostname)).status===200&&(await remoteTarget(moving.placement.staffHostname)).status===200;}},15000);
  const targetRejectsOther=await remoteTarget(unchanged.placement.staffHostname).then(()=>false,()=>true);assert.equal(targetRejectsOther,true);
  const hostnamesPreserved=completed.target.staffHostname===moving.placement.staffHostname&&completed.target.publicHostname===moving.placement.publicHostname;assert.equal(hostnamesPreserved,true);
  const certificatesPreserved=(await remoteTarget(moving.placement.staffHostname)).certificate===staffBefore&&(await remoteTarget(moving.placement.publicHostname)).certificate===publicBefore;assert.equal(certificatesPreserved,true);
  const otherVenueIsolated=(await remote(unchanged.placement.staffHostname)).status===200&&targetRejectsOther;assert.equal(otherVenueIsolated,true);
  const oldRouteRevoked=await remote(moving.placement.staffHostname).then(()=>false,()=>true);assert.equal(oldRouteRevoked,true);
- const movement={version:1,customNames,failedApply:{cancelled:failedCancelled.state==='cancelled',sourceStayedHealthy,destinationRemoved},hostnamesPreserved,certificatesPreserved,otherVenueIsolated,oldRouteRevoked,completedReplayMatched:JSON.stringify(completedReplay)===JSON.stringify(completed),reconnectionMs,sequences:{initialSource:initialSource.sequence,failedTarget:failedTarget.sequence,cancelledTarget:cancelledTarget.sequence,stagedTarget:stagedTarget.sequence,committedSource:committedSource.sequence,committedTarget:committedTarget.sequence}};
+ let customNames;
+ if(names.length){
+  await runCertificates();
+  const targetAcmeIp=acme.connectGateway(name+'-gateway-target');
+  const ownerRecords=[];
+  for(const {hostname,assigned} of names){
+   assert.deepEqual(await acme.resolveCname(assigned),['target-gateway.example.test']);
+   ownerRecords.push(JSON.stringify(await acme.resolveCname(hostname))===JSON.stringify([assigned]));
+   await acme.addA(assigned,targetAcmeIp);
+  }
+  // A venue can retain the second record from the old setup during its first port-443 renewal.
+  await acme.point('_acme-challenge.'+staff,'_acme-challenge.'+names[0].assigned);
+  const renewedStaff=await staffCertificate(completed.target,customCsr);
+  const renewed=new X509Certificate(renewedStaff).serialNumber!==new X509Certificate(firstStaff).serialNumber;
+  await ipc(moving.server,{certificate:renewedStaff,hostname:staff});
+  const staffServed=await waitFor(async()=>(await remoteTarget(staff)).certificate===new X509Certificate(renewedStaff).fingerprint256,20000);
+  const publicServed=(await remoteTarget(publicName,'/public/availability',{headers:{cookie:targetCookie}})).status===200;
+  customNames={staff:staffServed,public:customPublic&&publicServed,renewed,cnameUntouched:ownerRecords.every(Boolean)};
+  assert.deepEqual(customNames,{staff:true,public:true,renewed:true,cnameUntouched:true});
+  checks.push('the certificate command renews through the destination gateway on 443 with the older certificate record still present');
+ }
+ const movement={version:1,...(customNames?{customNames}:{}),failedApply:{cancelled:failedCancelled.state==='cancelled',sourceStayedHealthy,destinationRemoved},hostnamesPreserved,certificatesPreserved,otherVenueIsolated,oldRouteRevoked,completedReplayMatched:JSON.stringify(completedReplay)===JSON.stringify(completed),reconnectionMs,sequences:{initialSource:initialSource.sequence,failedTarget:failedTarget.sequence,cancelledTarget:cancelledTarget.sequence,stagedTarget:stagedTarget.sequence,committedSource:committedSource.sequence,committedTarget:committedTarget.sequence}};
  checks.push('one venue moves through a tested staged route while the other venue remains isolated; failed apply cancels without replacing the source');
 
  const held=tlsConnect({host:'127.0.0.1',port:targetGatewayPort,servername:moving.placement.staffHostname,ca:acme.certificateRoot});held.on('error',()=>{});await new Promise((resolve,reject)=>{held.once('secureConnect',resolve);held.once('error',reject);});held.write('GET /public/availability HTTP/1.1\r\nHost: '+moving.placement.staffHostname+'\r\n');

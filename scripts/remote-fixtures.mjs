@@ -8,6 +8,11 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {request} from 'node:https';
 export const docker=(...args)=>execFileSync('docker',args,{encoding:'utf8',timeout:120000}).trim();
 export async function waitFor(check,timeout=30000){const until=Date.now()+timeout;let last;while(Date.now()<until){try{const result=await check();if(result)return result;}catch(error){last=error;}await delay(100);}throw new Error('Timed out waiting for local fixture',{cause:last});}
+async function dnsRecord(dnsUrl,path,value){
+ const response=await fetch(dnsUrl+path,{method:'POST',body:JSON.stringify(value),signal:AbortSignal.timeout(3000)});
+ await response.text();if(!response.ok)throw Error('dns_failed');
+}
+export const pointPebbleName=(dnsUrl,host,target)=>dnsRecord(dnsUrl,'/set-cname',{host:host+'.',target:target+'.'});
 export async function startAcme({http,tlsAlpn=false}={}){
  const name='cloud-acme-'+randomUUID(),root=await mkdtemp(join(tmpdir(),'cloud-acme-'));const owned=[];let cnameResolver;
  docker('network','create',name);
@@ -40,14 +45,10 @@ export async function startAcme({http,tlsAlpn=false}={}){
   const port=docker('port',name+'-ca','14000/tcp').split(':').at(-1),management=docker('port',name+'-ca','15000/tcp').split(':').at(-1);
   const get=path=>new Promise((resolve,reject)=>{const req=request({host:'localhost',family:4,port:path==='/dir'?port:management,path,ca,headers:{'User-Agent':'waitron-cloud-local-test'}},res=>{let body='';res.on('data',v=>body+=v);res.on('end',()=>res.statusCode===200?resolve(body):reject(Error('ACME status '+res.statusCode+': '+body.slice(0,1000))));});req.setTimeout(2000,()=>req.destroy(Error('ACME timeout')));req.on('error',reject);req.end();});
   await waitFor(()=>get('/dir'),5000);const certificateRoot=await get('/roots/0');
-  async function dnsRecord(path,value){
-   const response=await fetch(dnsUrl+path,{method:'POST',body:JSON.stringify(value),signal:AbortSignal.timeout(3000)});
-   await response.text();if(!response.ok)throw Error('dns_failed');
-  }
-  return {root,name,dnsUrl,certificateRoot,directoryRoot:ca,
+  return {root,name,dnsUrl,certificateRoot,dnsServer:`127.0.0.1:${lookupPort}`,
    resolveCname:hostname=>cnameResolver.resolveCname(hostname),
-   point:(host,target)=>dnsRecord('/set-cname',{host:host+'.',target:target+'.'}),
-   addA:(host,address)=>dnsRecord('/add-a',{host:host+'.',addresses:[address]}),
+   point:(host,target)=>pointPebbleName(dnsUrl,host,target),
+   addA:(host,address)=>dnsRecord(dnsUrl,'/add-a',{host:host+'.',addresses:[address]}),
    connectGateway(container){
     docker('network','connect',name,container);
     return docker('inspect','--format','{{(index .NetworkSettings.Networks "'+name+'").IPAddress}}',container);

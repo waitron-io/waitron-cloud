@@ -76,7 +76,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.deepEqual(applyRequests, []);
       releaseDns();
       await confirmation.waitFor();
-      await confirmation.getByText('staff.cafe.example', {exact: true}).waitFor();
+      await confirmation.locator('dd').filter({hasText:/^staff\.cafe\.example$/}).waitFor();
       assert.equal(await confirmation.getByText('CNAME', {exact: true}).count(), 1);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.REMOTE_ENTER_RECEIPT_DIR) {

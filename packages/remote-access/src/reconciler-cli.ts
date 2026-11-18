@@ -25,6 +25,8 @@ function validate(value:unknown):asserts value is Configuration {
   if((route.challenges!==undefined||route.statusDirectory!==undefined)&&(!absolute(route.challenges)||!absolute(route.statusDirectory)))throw new Error();
   routeIds.add(route.cellId);
  }
+ // A custom-name worker needs the check and status paths for every cell it can serve.
+ if(config.routes.some(route=>route.statusDirectory!==undefined)&&config.routes.some(route=>route.statusDirectory===undefined))throw new Error();
  if(typeof config.acme.directoryUrl!=='string'||typeof config.acme.email!=='string'||!absolute(config.acme.accountKeyFile)||!absolute(config.acme.dnsModule))throw new Error();
  const url=new URL(config.acme.directoryUrl);if(url.protocol!=='https:'||url.username||url.password||!config.acme.email.includes('@'))throw new Error();
 }

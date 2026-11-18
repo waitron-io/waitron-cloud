@@ -95,4 +95,6 @@ test('a gateway mapping requires both absolute certificate-check and status path
   const reply=run(value.configFile,'--status');
   assert.equal(reply.status,expected,reply.stderr);
  }
+ await writeFile(value.configFile,JSON.stringify({...config,routes:[{...route,challenges,statusDirectory},{...route,cellId:randomUUID()}]}));
+ assert.equal(run(value.configFile,'--status').status,1,'staged rollouts cannot mix certificate renewal modes');
 });

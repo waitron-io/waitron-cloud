@@ -44,7 +44,7 @@ function store(kind:'staff'|'public'){
 }
 
 for(const kind of ['staff','public'] as const){
- test(`saving a ${kind} name refuses an oversized certificate record before DNS resolution`,async()=>{
+ test(`saving a ${kind} name refuses an oversized hostname before DNS resolution`,async()=>{
   for(const length of [238,253]){
    await assert.rejects(store(kind).setHostname(installationId,kind,hostname(length),1,async()=>{
     assert.fail('an oversized hostname must not reach DNS');
