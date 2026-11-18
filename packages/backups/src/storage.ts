@@ -1,5 +1,4 @@
 import { Agent } from "node:https";
-import { isAbsolute } from "node:path";
 import { createHash, createPublicKey, sign, type KeyObject } from "node:crypto";
 import { Readable } from "node:stream";
 import {
@@ -173,8 +172,6 @@ export class BackupObjects {
     temporaryRoot?: string,
   ) {
     validateLocation(location);
-    if (temporaryRoot !== undefined && !isAbsolute(temporaryRoot))
-      throw new Error("backup.storage_configuration");
     this.location = location;
     this.#temporaryRoot = temporaryRoot;
     const options: S3ClientConfig = {

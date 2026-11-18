@@ -83,8 +83,8 @@ user. Append `-f deploy/test-cloud/compose.backup-stage.yaml` to the local Compo
 command so it mounts those existing directories. In test Cloud, the venue-level
 account worker uses the account mount. In the base local stack, the backup
 worker uses the worker mount. Use the venue-level fixture settings for the test
-account and its storage service. The account stage fits one near-2 GiB
-publication at a time. After the trial, stop the services using the mounts before
+account and its storage service. The 5 GiB account stage fits one near-2 GiB
+publication at a time in the raised-ceiling trial. After the trial, stop the services using the mounts before
 unmounting the two filesystems. Remove only the stage directory you created.
 
 Run the signed TLS publication and retry proof.

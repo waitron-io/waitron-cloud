@@ -148,19 +148,14 @@ test("storage locations and scopes refuse insecure and ambiguous destinations", 
   );
 });
 
-test("an explicitly empty worker stage root is refused instead of using the working directory", () => {
-  const worker = workerObjects({
+test("storage startup refuses an explicitly empty stage root", () => {
+  assert.throws(() => workerObjects({
     CLOUD_BACKUP_ENDPOINT: location.endpoint,
     CLOUD_BACKUP_REGION: location.region,
     CLOUD_BACKUP_ACCESS_KEY: credentials.accessKeyId,
     CLOUD_BACKUP_SECRET_KEY: credentials.secretAccessKey,
     CLOUD_BACKUP_STAGE_ROOT: "",
-  });
-  try {
-    assert.throws(() => worker.objects(location), { message: "backup.storage_configuration" });
-  } finally {
-    worker.close();
-  }
+  }), { message: "backup.storage_configuration" });
 });
 
 test("the configured worker disk holds both the download and its conditional retry comparison", async (t) => {

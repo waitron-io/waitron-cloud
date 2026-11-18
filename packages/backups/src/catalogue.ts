@@ -97,7 +97,6 @@ async function publicationSession<T>(pool:Pool,id:string,deadline:PublicationDea
       return result;
     }catch(error){
       try{await client.query('ROLLBACK');}catch{}
-      if(deadline&&(error as {code?:string}|undefined)?.code==='25P04')backupFail('cancelled');
       throw error;
     }
   });
