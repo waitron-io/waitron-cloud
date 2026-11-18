@@ -11,7 +11,7 @@ const venue='20000000-0000-4000-8000-000000000001', point='20000000-0000-4000-80
 const installation={installationId:venue,venueId:venue,organisationId:venue,legalBusinessId:venue,environment:'test',revision:0,revokedAt:null,lastContactAt:stamp,leaseExpiresAt:expiry,canRevoke:true,
  overview:{organisationName:'Sol SL',businessName:'Café Sol',countryCode:'ES',latestSnapshotAt:stamp,verifiedSnapshotAt:stamp},
  services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'ready',health:'healthy',failure:null,observedAt:stamp})),
- monitoring:{enabled:true,fresh:true,checkedAt:stamp,incidents:[{kind:'disconnected',openedAt:stamp,changedAt:stamp},{kind:'public_certificate_expiring',openedAt:stamp,changedAt:stamp}],remoteChecks:{public:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry},staff:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry}}},
+ monitoring:{enabled:true,fresh:true,checkedAt:stamp,incidents:[{kind:'disconnected',openedAt:stamp,changedAt:stamp}],remoteChecks:{public:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry},staff:{status:'healthy',checkedAt:stamp,certificateNotAfter:expiry}}},
 };
 const approved: RecoveryView={requestId:request,state:'approved',expiresAt:expiry,operationId:request,operation:{id:request,venueId:venue,pointId:null,source:{kind:'continuous',recoverableAt:stamp,sourceNodeId:venue},mode:'failure',status:'pending',expiresAt:expiry}};
 assert(validRecoveryView(approved));
@@ -44,9 +44,9 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    for(const time of times){assert([stamp,expiry].includes(time.value!));assert.match(time.text!,time.value===stamp?expected:expectedExpiry);}
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   };
-  await assertTimes(9);
+  await assertTimes(8);
   await page.getByRole('button',{name:c.viewSnapshots,exact:true}).click();await page.getByLabel(c.chooseSnapshot,{exact:true}).waitFor();
-  await assertTimes(11);assert((await page.locator('option:checked').allTextContents()).some(text=>text.startsWith(locale==='en'?'November 10, 2026':'10 de noviembre de 2026')));
+  await assertTimes(10);assert((await page.locator('option:checked').allTextContents()).some(text=>text.startsWith(locale==='en'?'November 10, 2026':'10 de noviembre de 2026')));
   if(process.env.DATES_RECEIPT_DIR){await mkdir(process.env.DATES_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.DATES_RECEIPT_DIR}/${locale}-${theme}-${width}-account.png`,fullPage:true});}
   await page.evaluate(({request,expiry})=>{
    const app=(window as any).app;app.path='/recover';app.recovery.open(request);app.recovery.code='12345678';

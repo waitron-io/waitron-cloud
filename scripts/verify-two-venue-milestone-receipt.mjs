@@ -14,7 +14,7 @@ const requiredRemoteChecks=[
  'monitor detects and recovers one-route and whole-gateway failures while preserving other-venue isolation, stable certificates and fresh control contact',
  'encrypted venue-scoped snapshots publish before and after real gateway replacement',
 ];
-const monitoringPhases=['baseline','route_outage','route_recovery','stale_worker','invalid_trust','gateway_outage','gateway_recovery','certificate_warning'];
+const monitoringPhases=['baseline','route_outage','route_recovery','stale_worker','invalid_trust','gateway_outage','gateway_recovery'];
 function exact(value,keys){return !!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');}
 function date(value){return typeof value==='string'&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString()===value;}
 function positive(value){return typeof value==='number'&&Number.isFinite(value)&&value>0;}

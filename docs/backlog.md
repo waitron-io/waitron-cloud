@@ -717,8 +717,7 @@ Remaining work:
 
 - Reduce an owner’s custom name to one CNAME, with the gateway answering
   Let’s Encrypt’s TLS-ALPN-01 check on port 443.
-- Issue, renew and install every certificate automatically, removing owner
-  certificate-expiry emails.
+- Issue, renew and install every certificate automatically.
 - Tell owners, in their own language, when their DNS record stops pointing at Cloud.
 
 Waitron’s part, taking its staff name from Cloud, is a separate plan in Waitron
@@ -2888,8 +2887,7 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
-  asks you to look for new observations without declaring an outage; certificate
-  warnings retain their separate dates and can accompany a passing route check.
+  asks you to look for new observations without declaring an outage.
   Native mail and stubbed-browser checks cover the guidance, read-only setup/status
   requests and later healthy evidence. The local monitoring guide explains the
   checks and their limits; refreshing neither starts a probe nor repairs a route.

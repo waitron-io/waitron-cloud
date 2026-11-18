@@ -7,7 +7,7 @@ const source=process.argv[2]?await readFile(process.argv[2],'utf8'):await new Pr
 const receipt=JSON.parse(source),monitoring=receipt.monitoring;
 assert.ok(monitoring&&typeof monitoring==='object','missing monitoring receipt');
 assert.equal(monitoring.version,1);
-const required=['baseline','route_outage','route_recovery','stale_worker','invalid_trust','gateway_outage','gateway_recovery','certificate_warning'];
+const required=['baseline','route_outage','route_recovery','stale_worker','invalid_trust','gateway_outage','gateway_recovery'];
 assert.deepEqual(monitoring.phases.map(phase=>phase.name),required);
 for(const phase of monitoring.phases){
  assert.ok(Number.isInteger(phase.elapsedMs)&&phase.elapsedMs>=0,`${phase.name}: invalid elapsedMs`);
@@ -20,7 +20,6 @@ assert.ok(phases.stale_worker.openIncidents>phases.baseline.openIncidents,'stale
 assert.equal(phases.invalid_trust.openIncidents,phases.baseline.openIncidents,'fresh evidence did not clear stale incidents');
 assert.ok(phases.gateway_outage.openIncidents>phases.baseline.openIncidents,'gateway outage opened no incident');
 assert.equal(phases.gateway_recovery.openIncidents,phases.baseline.openIncidents,'gateway recovery did not restore baseline');
-assert.ok(phases.certificate_warning.openIncidents>phases.baseline.openIncidents,'proof threshold opened no certificate warning');
 assert.deepEqual(monitoring.isolation,{routeFailureLimitedToVenueA:true,controlContactStayedFresh:true});
 assert.ok(Number.isInteger(monitoring.mail.openings)&&monitoring.mail.openings>0,'missing opening mail');
 assert.ok(Number.isInteger(monitoring.mail.recoveries)&&monitoring.mail.recoveries>0,'missing recovery mail');

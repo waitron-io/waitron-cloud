@@ -19,7 +19,7 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
    COALESCE((SELECT jsonb_agg(jsonb_build_object('kind',x.kind,'openedAt',x.opened_at,'changedAt',x.changed_at) ORDER BY x.kind) FROM venue_incidents x WHERE x.venue_id=v.id AND x.status='open'
     AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.state<>'unconfigured' AND s.service<>'content_translation'
      AND (x.kind='disconnected' OR (x.kind IN ('snapshot_stale','verification_failed') AND s.service='retained_snapshots')
-      OR (x.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale','public_certificate_expiring','staff_certificate_expiring') AND s.service='remote_access'
+      OR (x.kind IN ('public_route_failed','staff_route_failed','public_probe_stale','staff_probe_stale') AND s.service='remote_access'
        AND EXISTS(SELECT 1 FROM remote_placements p JOIN remote_hostnames h ON h.venue_id=p.venue_id WHERE p.installation_id=n.id AND p.venue_id=v.id
         AND h.kind=CASE WHEN x.kind LIKE 'public_%' THEN 'public' ELSE 'staff' END))))),'[]') AS incidents,
    CASE WHEN n.revoked_at IS NULL AND EXISTS(SELECT 1 FROM installation_services s WHERE s.installation_id=n.id AND s.service='remote_access' AND s.state<>'unconfigured')

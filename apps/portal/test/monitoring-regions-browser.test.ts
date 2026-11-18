@@ -44,7 +44,6 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         monitoring: {enabled, fresh: n === 1, checkedAt, incidents: [
           {kind: 'disconnected', openedAt, changedAt: checkedAt},
           {kind: 'public_route_failed', openedAt, changedAt: checkedAt},
-          {kind: 'public_certificate_expiring', openedAt, changedAt: checkedAt},
         ], remoteChecks: {
           public: {status: 'failed', checkedAt, certificateNotAfter: expiresAt},
           staff: {status: 'healthy', checkedAt, certificateNotAfter: null},
@@ -88,11 +87,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         for (let n = 0; n < 2; n++) {
           const venue = venues.nth(n);
           for (const name of [c.monitoring, c.monitorPublic, c.monitorStaff]) assert.equal(await venue.getByRole('heading', {name, exact: true}).count(), 1);
-          for (const text of [c.monitorDisconnected, c.monitorPublicCertificate, n === 0 ? c.monitorPublicFailed : c.monitorPublicUnknown,
+          for (const text of [c.monitorDisconnected, n === 0 ? c.monitorPublicFailed : c.monitorPublicUnknown,
             n === 0 ? c.monitorStaffHealthy : c.monitorStaffUnknown]) assert.equal(await venue.getByText(text, {exact: true}).isVisible(), true);
           assert.equal(await venue.getByText(c.monitorUnknown, {exact: true}).count(), n === 0 ? 0 : 1);
           const times = venue.locator('time');
-          assert.ok((await times.evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime')))).includes(expiresAt));
           assert.ok((await times.evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime')))).includes(openedAt));
           assert.equal(await times.filter({hasText: locale === 'en' ? 'October 24, 2026' : '24 de octubre de 2026'}).count() > 0, true);
         }

@@ -489,7 +489,7 @@ resolve publicly to this gateway. The continuous form repeats every minute. It r
 authorised targets from PostgreSQL, uses system TLS trust and accepts no caller URL or
 private-address override. See [local monitoring](local-monitoring.md#probe-remote-access-from-outside-the-gateway)
 for its bounds, durable evidence and JSON-line result contract. The monitor records route
-failure, stale-probe, certificate-expiry and recovery transitions. The portal shows the
+failure, stale-probe and recovery transitions. The portal shows the
 latest redacted public/staff evidence, and opted-in owners receive bilingual incident and
 recovery mail after current route authority is rechecked.
 
