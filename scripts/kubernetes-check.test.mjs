@@ -641,3 +641,23 @@ process.exit(37);
   assert.match(result.stderr, /kind version failed \(37.*\)\s+synthetic Kind version failure/);
   assert.deepEqual(JSON.parse(await readFile(log, 'utf8')), ['version']);
 });
+
+test('--node-loss removes its network through real child processes after Kind fails', async t => {
+  const {directory, env, log} = await commandFixture(t, 'node-loss-cleanup');
+  const id = 'a'.repeat(64);
+  for (const tool of ['docker', 'kind', 'kubectl']) await writeFile(join(directory, tool), `#!${process.execPath}
+const fs = require('node:fs'), name = require('node:path').basename(process.argv[1]);
+const args = process.argv.slice(2), cluster = process.env.KIND_EXPERIMENTAL_DOCKER_NETWORK;
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({name, args}) + '\\n');
+if (name === 'kind' && args[0] === 'version') console.log('kind v0.31.0');
+else if (name === 'kind') {console.error('synthetic Kind startup error'); process.exitCode = 37;}
+else if (name === 'kubectl') console.log(JSON.stringify({clientVersion: {gitVersion: 'v1.34.3'}}));
+else if (args[1] === 'create') console.log(${JSON.stringify(id)});
+else if (args[1] === 'inspect') console.log(JSON.stringify([{Id: ${JSON.stringify(id)}, Name: cluster, Labels: {'cloud.kind.node-loss': cluster}}]));
+`, {mode: 0o700});
+  const result = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', '--node-loss'], {env, encoding: 'utf8', timeout: 10000});
+  assert.equal(result.status, 1, result.stderr);
+  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.deepEqual(calls.find(call => call.name === 'docker' && call.args.includes('rm'))?.args, ['network', 'rm', id], result.stderr);
+  assert.match(result.stderr, /synthetic Kind startup error/);
+});

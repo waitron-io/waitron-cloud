@@ -18,7 +18,7 @@ const balancerRole = 'external-load-balancer';
 
 function executeCommand(binary, args, {env, input, signal, timeout}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(binary, args, {env, signal, timeout, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024}, (error, stdout, stderr) => {
+    const child = execFile(binary, args, {env, signal: signal ?? undefined, timeout, killSignal: 'SIGKILL', maxBuffer: 2 * 1024 * 1024}, (error, stdout, stderr) => {
       if (!error) return resolve(stdout.trim());
       const reason = error.code ?? error.signal ?? error.name;
       reject(Error(`${binary} ${args.join(' ')} failed (${reason}, limit ${timeout}ms)\n${stdout.slice(-8192)}\n${stderr.slice(-8192)}`, {cause: error}));
