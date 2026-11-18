@@ -305,6 +305,8 @@ try{
  ];
  if(names.length){
   const sourceAcmeIp=acme.connectGateway(name+'-gateway');
+  // Docker can reassign the published port when a gateway joins the CA network.
+  gatewayPort=Number(docker('port',name+'-gateway','443/tcp').split(':').at(-1));
   for(const {kind,hostname,assigned} of names){
    const records=JSON.parse(await operator('dns',{installationId:movingId,kind,hostname}));
    assert.deepEqual(records,[{type:'CNAME',name:hostname,value:assigned}]);
@@ -381,6 +383,7 @@ try{
  let customNames;
  if(names.length){
   const targetAcmeIp=acme.connectGateway(name+'-gateway-target');
+  targetGatewayPort=Number(docker('port',name+'-gateway-target','443/tcp').split(':').at(-1));
   const ownerRecords=[];
   for(const {hostname,assigned} of names){
    ownerRecords.push(JSON.stringify(await acme.resolveCname(hostname))===JSON.stringify([assigned]));
