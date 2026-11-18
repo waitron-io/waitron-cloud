@@ -50,22 +50,22 @@ try{
   const ready=await exchange(v.a,'staff-certificate-status',{version:1,requestId:v.id});assert.equal(ready.status,200);assert.equal(ready.body.state,'ready');
   const chain=ready.body.certificate;assert.equal(ready.body.csrDigest,createHash('sha256').update(v.a.body.csr).digest('hex'));
   await writeFile(v.certificateFile,chain);command(v.state,'install',v.a.body.hostname,v.certificateFile);
-  assert.equal(await readFile(join(v.state,'cloud-staff.crt'),'utf8'),chain);v.initial=chain;
-  const key=await readFile(join(v.state,'cloud-staff.key'),'utf8');assert.equal(JSON.stringify((await f.db.pool.query('SELECT * FROM staff_certificate_exchange')).rows).includes(key),false);
+  assert.equal(await readFile(join(v.state,'cloud/staff.crt'),'utf8'),chain);v.initial=chain;
+  const key=await readFile(join(v.state,'cloud/staff.key'),'utf8');assert.equal(JSON.stringify((await f.db.pool.query('SELECT * FROM staff_certificate_exchange')).rows).includes(key),false);
  }
  checks.push('two independently owned installations submitted CSRs over HTTP and installed local Pebble chains with unchanged Waitron CLI');
  const [a,b]=venues;
  assert.equal((await exchange(b.a,'staff-certificate-status',{version:1,requestId:a.id})).status,409);
- await writeFile(a.certificateFile,b.initial);assert.throws(()=>command(a.state,'install',a.a.body.hostname,a.certificateFile));assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
+ await writeFile(a.certificateFile,b.initial);assert.throws(()=>command(a.state,'install',a.a.body.hostname,a.certificateFile));assert.equal(await readFile(join(a.state,'cloud/staff.crt'),'utf8'),a.initial);
  const wrongKeyCsr=join(root,'wrong-key.csr'),wrongKeyOutput=join(root,'wrong-key.crt');command(b.state,'csr',a.a.body.hostname,wrongKeyCsr);issues++;
  const wrongKeyChain=await acme.issue({hostname:a.a.body.hostname,csrFile:wrongKeyCsr,output:wrongKeyOutput,accountKeyFile});
  assert.equal(new X509Certificate(wrongKeyChain).checkHost(a.a.body.hostname),a.a.body.hostname);
- assert.throws(()=>command(a.state,'install',a.a.body.hostname,wrongKeyOutput));assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
+ assert.throws(()=>command(a.state,'install',a.a.body.hostname,wrongKeyOutput));assert.equal(await readFile(join(a.state,'cloud/staff.crt'),'utf8'),a.initial);
  checks.push('cross-tenant status, wrong-host chain and separately same-host wrong-key chain installation refused while prior chain stayed installed');
  const next=randomUUID(),replacement={...a.a.body,previousRequestId:a.id};assert.equal((await exchange(a.a,'staff-certificate-submit',replacement,next)).status,200);
  await worker.schedule();await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_staff'");
  await new RemoteConfigurationReconciler(f.db.pool,{issueCertificate:async()=>{throw Error('local DNS failure');}}).runOnce();
- const pending=await exchange(a.a,'staff-certificate-status',{version:1,requestId:next});assert.equal(pending.body.state,'pending');assert.equal('certificate'in pending.body,false);assert.equal(await readFile(join(a.state,'cloud-staff.crt'),'utf8'),a.initial);
+ const pending=await exchange(a.a,'staff-certificate-status',{version:1,requestId:next});assert.equal(pending.body.state,'pending');assert.equal('certificate'in pending.body,false);assert.equal(await readFile(join(a.state,'cloud/staff.crt'),'utf8'),a.initial);
  await f.db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE target_id=$1 AND kind='certificate_staff'",[a.a.installationId]);await worker.runOnce();
  const renewed=await exchange(a.a,'staff-certificate-status',{version:1,requestId:next});assert.equal(renewed.body.state,'ready');assert.notEqual(renewed.body.certificate,a.initial);await writeFile(a.certificateFile,renewed.body.certificate);command(a.state,'install',a.a.body.hostname,a.certificateFile);
  assert.equal((await exchange(a.a,'staff-certificate-submit',a.a.body,a.id)).status,409);assert.equal((await exchange(b.a,'staff-certificate-status',{version:1,requestId:b.id})).body.certificate,b.initial);

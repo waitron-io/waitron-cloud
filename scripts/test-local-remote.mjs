@@ -164,7 +164,7 @@ try{
   startPeer(venue,n);
  }
  await waitFor(async()=>{for(const venue of venues)if((await remote(venue.placement.staffHostname)).status!==200)return false;return true;});
- for(const venue of venues){const privateKey=await readFile(join(venue.root,'cloud-staff.key'),'utf8');const mounted=docker('exec',name+'-gateway','sh','-c','cat /input/public-certs/*.pem /state/* /input/* 2>/dev/null || true');assert.equal(mounted.includes(privateKey),false);}
+ for(const venue of venues){const privateKey=await readFile(join(venue.root,'cloud/staff.key'),'utf8');const mounted=docker('exec',name+'-gateway','sh','-c','cat /input/public-certs/*.pem /state/* /input/* 2>/dev/null || true');assert.equal(mounted.includes(privateKey),false);}
  checks.push('real WireGuard traffic and staff TLS passthrough; venue TLS keys absent from gateway');
  const cookies=[];
  for(const venue of venues){
