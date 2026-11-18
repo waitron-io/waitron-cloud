@@ -322,7 +322,7 @@ export {PasswordLoginStore, FactorError, type FactorProof, type PasswordLoginPol
 export {AuthenticatorFactorStore, FactorManagementError, type FactorAuthority, type FactorManagementPolicy} from './authenticator-factor.ts';
 
 export * from './billing-types.ts';
-export {BillingPriceStore,validateBillingPrice} from './billing-config.ts';
+export {BillingPriceStore,readBillingPrice,validateBillingPrice} from './billing-config.ts';
 
 export {BillingStore} from './billing-store.ts';
 

@@ -1693,8 +1693,8 @@ implementation or production evidence.
   [launch platform work](#launch-platform-work-in-priority-order); designed in
   [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
   The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
-  covers the test-account chooser for the existing Connected trial, discovered only
-  for configured synthetic accounts. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
+  covers the Connected trial chooser for configured synthetic accounts. The chooser shows
+  the current Connected price before and after VAT and explains the first live charge. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
   covers test-only saved methods. The [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
   records SumUp card and Stripe SEPA test paths; both suppliers and their live country
   flows remain unqualified. Paid-plan tax collection and Spanish tax-number

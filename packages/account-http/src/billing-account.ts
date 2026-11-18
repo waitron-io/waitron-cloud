@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {BillingStore,BillingError,transaction,readBillingVenue,readVenueHistory,effectiveVenueLevel,mayStartTrial,type TrialView,type BillingLevel} from '@waitron-cloud/registration';
+import {BillingStore,BillingError,transaction,readBillingVenue,readBillingPrice,chargeTotals,readVenueHistory,effectiveVenueLevel,mayStartTrial,type TrialView,type BillingLevel} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
@@ -13,8 +13,9 @@ import type {RateRule} from './rate-limit.ts';
 export const billingAccountPaths=['/api/account/billing/read','/api/account/billing/start-trial','/api/account/billing/tax/save'];
 type VenueRow={id:string;organisation_id:string;legal_business_id:string;environment:string};
 type TaxProfile={legalName:string|null;address:string|null;taxNumber:string|null};
+type ConnectedPrice={currency:'EUR';netCents:number;grossCents:number};
 type MethodPanel={selected:'card'|'direct_debit'|null;setup:{kind:'card'|'direct_debit';state:'pending'|'failed'|'verified'}|null};
-export type BillingAccountView={venues:{venueId:string;level:BillingLevel;trial:TrialView|null;canStartTrial:boolean;paymentMethods?:MethodPanel;taxProfile?:TaxProfile}[]};
+export type BillingAccountView={venues:{venueId:string;level:BillingLevel;trial:TrialView|null;canStartTrial:boolean;connectedPrice?:ConnectedPrice;paymentMethods?:MethodPanel;taxProfile?:TaxProfile}[]};
 function denied():never{throw new AccountHttpError(403,'permission_denied');}
 async function verified(client:PoolClient,accountId:string):Promise<void>{
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)denied();
@@ -22,12 +23,24 @@ async function verified(client:PoolClient,accountId:string):Promise<void>{
 async function membership(client:PoolClient,accountId:string,organisationId:string):Promise<void>{
  if(!(await client.query(`SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[accountId,organisationId])).rowCount)denied();
 }
+async function readConnectedPrice(client:PoolClient,venueId:string,on:string):Promise<ConnectedPrice|undefined>{
+ try{
+  const price=await readBillingPrice(client,{on});
+  const {netCents,grossCents}=chargeTotals([{venueId,kind:'connected_month',quantity:1,cents:price.prices.connectedMonthlyCents}],price.vatRateBasisPoints);
+  return {currency:price.currency,netCents,grossCents};
+ }catch(error){
+  if(error instanceof BillingError&&error.code==='billing_price_unavailable')return undefined;
+  throw error;
+ }
+}
 async function readView(client:PoolClient,accountId:string,methodsEnabled=false):Promise<BillingAccountView>{
  await verified(client,accountId);
  const venues=(await client.query<VenueRow>(`SELECT v.id,v.organisation_id,v.legal_business_id,v.environment FROM venues v
   JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=$1 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} ORDER BY v.id`,[accountId])).rows;
  for(const organisationId of [...new Set(venues.map(row=>row.organisation_id))].sort())await membership(client,accountId,organisationId);
  const today=(await client.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;
+ const pricedVenue=venues.find(row=>row.environment==='test');
+ const connectedPrice=pricedVenue?await readConnectedPrice(client,pricedVenue.id,today):undefined;
  const result:BillingAccountView={venues:[]};
  for(const row of venues){
   const scope={organisationId:row.organisation_id,legalBusinessId:row.legal_business_id},context={client,scope};
@@ -49,7 +62,8 @@ async function readView(client:PoolClient,accountId:string,methodsEnabled=false)
   const taxProfile=row.environment==='test'?(await client.query<TaxProfile>(`SELECT name AS "legalName",billing_address AS address,tax_number AS "taxNumber"
    FROM legal_businesses b WHERE b.id=$1 AND b.organisation_id=$2 AND NOT EXISTS(
     SELECT 1 FROM venues v WHERE v.legal_business_id=b.id AND v.organisation_id=b.organisation_id AND v.environment<>'test')`,[row.legal_business_id,row.organisation_id])).rows[0]:undefined;
-  result.venues.push({...(paymentMethods?{paymentMethods}:{}),...(taxProfile?{taxProfile}:{}),venueId:row.id,level:effectiveVenueLevel(venue.level,history.trials,today),
+  result.venues.push({...(row.environment==='test'&&connectedPrice?{connectedPrice}:{}),
+   ...(paymentMethods?{paymentMethods}:{}),...(taxProfile?{taxProfile}:{}),venueId:row.id,level:effectiveVenueLevel(venue.level,history.trials,today),
    trial:history.trials.find(trial=>trial.level==='connected'&&trial.state==='active'&&trial.startedOn<=today&&today<trial.endsOn)??null,
    canStartTrial:row.environment==='test'&&mayStartTrial('connected',{trialled:history.trials.map(trial=>trial.level),paid:history.paid.map(period=>period.level)})});
  }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {accountRequest} from '../src/api.ts';
+import {validBillingView} from '../src/billing-types.ts';
 
 const venueId='11111111-1111-4111-8111-111111111111';
 test('billing reads and trial writes send browser proof and accept only complete venue views',async t=>{
@@ -49,5 +50,18 @@ test('tax profile reads and save replies accept exact nullable strings but rejec
  for(const path of ['/billing/read','/billing/tax/save'])assert.deepEqual(await accountRequest(path,{}),{ok:true,value:{venues:[{...venue,taxProfile:profile}]}});
  for(const malformed of [null,{}, {...profile,legalName:1},{...profile,address:[]},{...profile,extra:'not allowed'}]){
   taxProfile=malformed;assert.equal((await accountRequest('/billing/read',{})).ok,false);assert.equal((await accountRequest('/billing/tax/save',{})).ok,false);
+ }
+});
+
+test('a published Connected price requires both EUR totals in whole cents',()=>{
+ const venue={venueId,level:'registered',trial:null,canStartTrial:true};
+ const price={currency:'EUR',netCents:1000,grossCents:1210};
+ assert.equal(validBillingView({venues:[venue]}),true);
+ assert.equal(validBillingView({venues:[{...venue,connectedPrice:price}]}),true);
+ assert.equal(validBillingView({venues:[{...venue,connectedPrice:{currency:'EUR',netCents:0,grossCents:0}}]}),true);
+ for(const connectedPrice of [null,{currency:'EUR',grossCents:1210},{...price,currency:'USD'},
+  {...price,netCents:-1},{...price,grossCents:1210.5},{...price,grossCents:Number.MAX_SAFE_INTEGER+1},
+  {...price,grossCents:999},{...price,revision:1}]){
+  assert.equal(validBillingView({venues:[{...venue,connectedPrice}]}),false);
  }
 });

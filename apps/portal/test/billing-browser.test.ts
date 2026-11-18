@@ -14,7 +14,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
   const c=translations[locale];let starts=0,reads=0;
-  let venues=[first,second].map(venueId=>({venueId,level:'registered',trial:null as unknown,canStartTrial:true}));
+  const hosted='33333333-3333-4333-8333-333333333333',usedTrial='44444444-4444-4444-8444-444444444444';
+  const free='55555555-5555-4555-8555-555555555555';
+  const registered={level:'registered',trial:null as unknown,canStartTrial:true};
+  const connectedPrice={currency:'EUR',netCents:1000,grossCents:1210};
+  let venues=[
+   {venueId:first,...registered},
+   {venueId:second,...registered,connectedPrice},
+   {venueId:hosted,...registered,level:'hosted',canStartTrial:false,connectedPrice},
+   {venueId:usedTrial,...registered,canStartTrial:false,connectedPrice},
+   {venueId:free,...registered,connectedPrice:{...connectedPrice,netCents:0,grossCents:0}},
+  ];
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
@@ -30,9 +40,30 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const section=page.getByRole('region',{name:c.billingTitle,exact:true});await section.waitFor();
-  await section.getByRole('combobox',{name:c.billingVenue,exact:true}).selectOption(second);
+  const price=section.getByText(locale==='en'?'€10.00/month + VAT (€12.10)':'10,00 €/mes + IVA (12,10 €)',{exact:true});
+  const timing=section.getByText(locale==='en'
+   ?'In live service, we charge your saved payment method when your business’s first paid venue finishes its trial. Without one, the venue returns to Registered.'
+   :'En el servicio real, cobramos con tu método de pago guardado al terminar la prueba del primer local de pago de tu empresa. Sin él, el local vuelve a Registered.',{exact:true});
+  assert.equal(await price.count(),0);
+  assert.equal(await timing.count(),0);
+  const venueChoice=section.getByRole('combobox',{name:c.billingVenue,exact:true});
+  for(const venueId of [hosted,usedTrial]){
+   await venueChoice.selectOption(venueId);
+   await section.getByText(venueId,{exact:true}).waitFor();
+   await section.getByText(c.billingIneligible,{exact:true}).waitFor();
+   assert.equal(await price.count(),0);
+   assert.equal(await timing.count(),0);
+  }
+  await venueChoice.selectOption(free);
+  await section.getByText(locale==='en'?'€0.00/month + VAT (€0.00)':'0,00 €/mes + IVA (0,00 €)',{exact:true}).waitFor();
+  assert.equal(await timing.count(),0);
+  await venueChoice.selectOption(second);
+  await price.waitFor();
+  await timing.waitFor();
   const start=section.getByRole('button',{name:c.billingStart,exact:true});await start.focus();await page.keyboard.press('Enter');
   await section.locator('time').waitFor();assert.equal(starts,1);assert.equal(reads,1);
+  await price.waitFor();
+  await timing.waitFor();
   assert.equal(await section.locator('time').getAttribute('datetime'),'2026-12-06');
   assert.equal(await section.locator('time').textContent(),locale==='en'?'6 December 2026':'6 de diciembre de 2026');
   assert.equal(await section.getByRole('button',{name:c.billingStart,exact:true}).count(),0);
