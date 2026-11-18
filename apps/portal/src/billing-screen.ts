@@ -20,7 +20,7 @@ export function billingScreen(app:PortalApp){
  const levels={registered:c.billingRegistered,connected:c.billingConnected,hosted:c.billingHosted};
  const end=venue?.trial?new Date(venue.trial.endsOn+'T00:00:00Z'):undefined;
  if(end)end.setUTCDate(end.getUTCDate()-1);
- const price=venue?.connectedPrice;
+ const price=venue&&(venue.canStartTrial||venue.trial)?venue.connectedPrice:undefined;
  let monthlyPrice:string|undefined;
  if(price){
   const euros=new Intl.NumberFormat(app.locale==='en'?'en-GB':'es-ES',{style:'currency',currency:price.currency});

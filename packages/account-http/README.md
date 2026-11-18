@@ -757,8 +757,9 @@ trial, and production venues cannot start one here.
 
 To see the price on a throwaway Cloud, publish a price effective today or earlier
 through `BillingPriceStore.publish()`. For example, use 1,000 Connected monthly
-cents and 2,100 VAT basis points (21%). The panel shows **€10.00/month + VAT
-(€12.10)** and explains when live billing would start. The free trial remains
+cents and 2,100 VAT basis points (21%). When your venue can start a trial or is
+already on one, the panel shows **€10.00/month + VAT (€12.10)** and explains
+when live billing would start. The free trial remains
 available before you save a test card and when there is no effective price. For
 a browser rehearsal, use the [sandbox account-panel setup](../../docs/billing-provider-test.md#local-account-panel-78-november-2026)
 and close its browser, account server and throwaway database when finished.
