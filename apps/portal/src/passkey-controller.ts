@@ -50,6 +50,7 @@ export class PasskeyController {
   notice: keyof Copy | undefined;
   #account: string | undefined;
   #generation = 0;
+  #listRead?: Promise<void>;
   #changed: () => void;
   #request: Request;
   #browser: PasskeyBrowser;
@@ -72,7 +73,7 @@ export class PasskeyController {
 
   get waiting() { return Math.max(0, Math.ceil((this.#retryUntil - performance.now()) / 1000)); }
 
-  fence() { this.#generation++; this.#browser.cancel?.(); this.#autofill = false; this.pending = false; this.error = undefined; this.notice = undefined; }
+  fence() { this.#generation++; this.#listRead = undefined; this.#browser.cancel?.(); this.#autofill = false; this.pending = false; this.error = undefined; this.notice = undefined; }
 
   account(id: string | undefined) {
     if (id === this.#account) return;
@@ -123,9 +124,14 @@ export class PasskeyController {
     if (!this.#account || this.pending || this.waiting) return;
     const generation = this.#generation;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
-    await this.#list(generation);
-    if (generation !== this.#generation) return;
-    this.pending = false; this.#changed();
+    const read = this.#list(generation).then(() => {
+      if (generation !== this.#generation) return;
+      this.pending = false; this.#changed();
+    }).finally(() => {
+      if (this.#listRead === read) this.#listRead = undefined;
+    });
+    this.#listRead = read;
+    await read;
   }
 
   async refresh() {
@@ -176,6 +182,13 @@ export class PasskeyController {
     }
     if (result.status === 0 || result.status >= 500) { this.error = 'passkeySignInUncertain'; this.#changed(); return 'reconcile'; }
     this.#failure(result, false, 'signIn'); this.#changed(); return false;
+  }
+
+  async enrollAfterList() {
+    const generation = this.#generation;
+    // The list owns pending state until it finishes. Drop the click if the page or account changes while it waits.
+    if (this.#listRead) await this.#listRead;
+    if (generation === this.#generation) await this.enroll();
   }
 
   async enroll(_password?: string) {

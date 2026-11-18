@@ -2,18 +2,25 @@ import {actionTestTotp} from '../../../packages/registration/test/fixtures/actio
 import {emailLoginPolicy} from '../../../packages/account-http/test/fixtures.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {loadavg} from 'node:os';
 import {test} from 'node:test';
 import {PasswordRecoveryStore} from '@waitron-cloud/registration';
 import {connectedVenue} from '../../../packages/translation/test/fixtures.ts';
 import {setRecoveryScope} from '../../../packages/registration/test/fixtures/recovery-scope.ts';
 import {startPortalFixture,addVirtualAuthenticator} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
+import {failPortalWait,portalTrace} from './portal-trace.ts';
 async function resetLink(f:Awaited<ReturnType<typeof startPortalFixture>>,accountId:string){
  const email=(await f.db.pool.query('SELECT email FROM cloud_credentials WHERE account_id=$1',[accountId])).rows[0].email;
  await new PasswordRecoveryStore(f.db.pool,f.db.outbox).request(email);
  const mail=f.db.outbox.open((await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='password_reset' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);return mail.token;
 }
-test('reset link recovers through the real Cloud box decision, then enrolls a new passkey',async()=>{
+function hold(){
+ let release!:()=>void;
+ const until=new Promise<void>(resolve=>{release=resolve;});
+ return {until,release};
+}
+test('reset link recovers through the real Cloud box decision, then enrolls a new passkey',async t=>{
  const f=await startPortalFixture(undefined,undefined,{keys:{activeKeyId:'test',keys:{test:'07'.repeat(32)}},policy:emailLoginPolicy},undefined,false,undefined,undefined,undefined,'ES');
  const context=await f.browser.newContext();let virtual:Awaited<ReturnType<typeof addVirtualAuthenticator>>|undefined;
  try{
@@ -32,11 +39,34 @@ test('reset link recovers through the real Cloud box decision, then enrolls a ne
   const request=(await read.json()).requests[0];assert.equal(request.accountId,box.accountId);
   const approved=await context.request.post(f.origin+'/api/installations/owner-recovery-approve',{data:box.proof('owner-recovery-approve',{request,approvedBy:randomUUID()},request.requestId,box.lease)});assert.equal(approved.status(),200);
   await page.getByRole('button',{name:'Check approval',exact:true}).click();await page.locator('input[name=ownerRecoveryPassword]').waitFor();await look('approved');
-  let requested!:()=>void,resume!:()=>void,continued!:()=>void;const held=new Promise<void>(r=>{requested=r;}),release=new Promise<void>(r=>{resume=r;}),resumed=new Promise<void>(r=>{continued=r;});
-  const holdProof=async(route:import('playwright').Route)=>{requested();await release;await route.continue();continued();};await page.route('**/api/account/action-proof',holdProof);
-  await page.locator('input[name=ownerRecoveryPassword]').fill('A fresh box recovered password');await page.locator('input[name=ownerRecoveryPassword]').press('Enter');
-  await page.getByText(translations.en.enrollmentRequiredHelp,{exact:true}).waitFor();assert.equal(await page.locator('#installations-section').count(),0);
-  await held;await page.getByRole('button',{name:translations.en.passkeyAdd,exact:true}).click();resume();await resumed;await page.unroute('**/api/account/action-proof',holdProof);await page.getByText(translations.en.accountIntro,{exact:true}).waitFor();
+  const trace=portalTrace(page),proof=hold(),session=hold(),list=hold();
+  let sessionReads=0,clicked=false,stage='initial proof read';
+  const step=(name:string)=>{stage=name;trace.stage(name);};
+  await page.route('**/api/account/action-proof',async route=>{await proof.until;await route.continue();});
+  await page.route('**/api/account/session',async route=>{if(++sessionReads===2)await session.until;await route.continue();});
+  await page.route('**/api/account/session/activity',async route=>{await session.until;await route.continue();});
+  await page.route('**/api/account/passkeys',async route=>{if(clicked)await list.until;await route.continue();});
+  try{
+   const password=page.locator('input[name=ownerRecoveryPassword]');
+   await password.fill('A fresh box recovered password');
+   await Promise.all([page.waitForRequest('**/api/account/action-proof'),password.press('Enter')]);
+   await page.getByText(translations.en.enrollmentRequiredHelp,{exact:true}).waitFor();assert.equal(await page.locator('#installations-section').count(),0);
+   step('Add a passkey click after Account navigation');
+   await Promise.all([page.waitForRequest('**/api/account/action-proof'),page.getByRole('button',{name:translations.en.passkeyAdd,exact:true}).click()]);
+   clicked=true;
+   step('passkey list after click');
+   const started=page.waitForRequest('**/api/account/passkeys');
+   session.release();await started;
+   step('waiting for proof while passkey list is held');
+   proof.release();await page.getByText(translations.en.actionProofReady,{exact:true}).waitFor();
+   step('proof ready, waiting for Account');
+   list.release();await page.getByText(translations.en.accountIntro,{exact:true}).waitFor();
+   step('clearing test routes');
+   await page.unrouteAll({behavior:'wait'});
+  }catch(error){
+   t.diagnostic(JSON.stringify({loadAverage:loadavg()}));
+   await failPortalWait(page,trace,stage,error,details=>t.diagnostic(details));
+  }finally{proof.release();session.release();list.release();}
   assert.equal((await f.db.pool.query('SELECT recovery_organisation_id FROM cloud_accounts WHERE id=$1',[box.accountId])).rows[0].recovery_organisation_id,box.organisationId);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM cloud_passkeys WHERE account_id=$1',[box.accountId])).rows[0].count,'1');
 

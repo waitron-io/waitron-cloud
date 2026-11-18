@@ -87,7 +87,8 @@ test('panel traces retain static endpoint lifecycle and main-frame navigation wi
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage(),trace=portalTrace(page);
-  const paths=['/installations','/backups/list','/recovery/inspect','/recovery/approve','/recovery/replace','/recovery/close','/remote-access/status','/remote-access/dns','/remote-access/apply'];
+  const paths=['/installations','/backups/list','/recovery/inspect','/recovery/approve','/recovery/replace','/recovery/close','/remote-access/status','/remote-access/dns','/remote-access/apply',
+   '/action-proof','/passkeys','/passkeys/registration/options','/passkeys/registration/verify'];
   await page.route('https://portal.test/**',route=>route.fulfill({body:'{}',contentType:'application/json'}));
   await page.goto('https://portal.test/account?private-query#private-token');
   for(const path of paths){

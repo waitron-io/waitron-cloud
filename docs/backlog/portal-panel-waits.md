@@ -82,6 +82,17 @@ before the fix and pass after it with the original six-second deadline. Run
 portal's `test/owner-recovery-browser.test.ts` through the PostgreSQL wrapper.
 This fixes the reproduced race; the original CI response remains untraced.
 
+[PR #1293's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44250866011/job/134621079335)
+and [PR #1294's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44251418394/job/134622955872)
+hit the same wait after #1288. The logs contain neither the request order nor
+runner load. On Linux, the same browser test passed when the list returned first.
+With proof first, the late list returned HTTP 200 and the browser sent no enrolment
+request before the six-second deadline. The accepted click now waits for the
+current list to finish. The proof-first test passes within its original deadline,
+and the controller test checks that an account switch discards the old click.
+The browser test reports request timing, status, navigation and runner load on
+failure, using static paths and stage names.
+
 ## Changed-email sign-in wait
 
 [The same merge's second portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44204279476/job/134466278462)

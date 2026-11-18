@@ -3,7 +3,8 @@ import type {Page,Request} from 'playwright';
 // Record only static endpoint names and timing, never reset tokens, cookies or bodies.
 export function portalTrace(page:Page) {
  const started=performance.now(),events:object[]=[],requests=new WeakMap<Request,number>();
- const paths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/request','/api/account/password-reset/complete','/api/account/translation-consent','/api/account/signup/complete','/api/account/usage/read','/api/account/installations','/api/account/backups/list','/api/account/recovery/inspect','/api/account/recovery/approve','/api/account/recovery/replace','/api/account/recovery/close','/api/account/remote-access/status','/api/account/remote-access/dns','/api/account/remote-access/apply']);
+ const paths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/request','/api/account/password-reset/complete','/api/account/translation-consent','/api/account/signup/complete','/api/account/usage/read','/api/account/installations','/api/account/backups/list','/api/account/recovery/inspect','/api/account/recovery/approve','/api/account/recovery/replace','/api/account/recovery/close','/api/account/remote-access/status','/api/account/remote-access/dns','/api/account/remote-access/apply',
+  '/api/account/action-proof','/api/account/passkeys','/api/account/passkeys/registration/options','/api/account/passkeys/registration/verify']);
  const record=(event:object)=>{events.push({ms:Math.round(performance.now()-started),...event});if(events.length>100)events.shift();};
  const details=(request:Request)=>{const path=new URL(request.url()).pathname;return paths.has(path)?{method:request.method(),path}:undefined;};
  page.on('request',request=>{const data=details(request);if(data){requests.set(request,performance.now());record({event:'request',...data});}});
