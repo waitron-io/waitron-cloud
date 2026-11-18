@@ -24,10 +24,16 @@ const countFields=['tests','passed','failed','cancelled','skipped','todo'];
 const disconnectTitle='disconnected database clients exit with one fixed line and no raw error';
 const workerFailure='Translation worker failed; check database, migrations and provider configuration\n';
 const workerLines=[workerFailure,'Translation worker pass failed; retrying\n','Translation worker cleanup failed; retrying\n'];
-function validDisconnectTuple(value){
+const disconnectChecks=['idle-backend','stop-query','backends-selected','backends-terminated','worker-exit'];
+const outputWithheld='output withheld';
+const expectedDisconnectExit=[1,null,'',workerFailure];
+function validDisconnectStatus(value){
   return Array.isArray(value)&&value.length===4&&
     (value[0]===null||Number.isSafeInteger(value[0])&&value[0]>=0&&value[0]<=255)&&
-    [null,'SIGINT','SIGTERM','SIGKILL','SIGABRT','SIGSEGV'].includes(value[1])&&value[2]===''&&
+    [null,'SIGINT','SIGTERM','SIGKILL','SIGABRT','SIGSEGV'].includes(value[1]);
+}
+function validDisconnectTuple(value){
+  return validDisconnectStatus(value)&&value[2]===''&&
     typeof value[3]==='string'&&value[3].length<=400&&
     value[3].split(/(?<=\n)/).every(line=>line===''||workerLines.includes(line));
 }
@@ -47,8 +53,14 @@ function validDisconnectTermination(value){
 }
 function disconnectAssertion(error){
   for(let depth=0;depth<4&&error&&typeof error==='object';depth++,error=error.cause){
+    if(disconnectChecks.includes(error.disconnectCheck)&&validDisconnectTermination(error.termination)){
+      const observed=error.workerActual??error.actual;
+      const actual=validDisconnectTuple(observed)?observed
+        :validDisconnectStatus(observed)?[observed[0],observed[1],'',outputWithheld]:[null,null,'',outputWithheld];
+      return {kind:'translation-disconnect',check:error.disconnectCheck,actual,expected:expectedDisconnectExit,termination:error.termination};
+    }
     if(error.code!=='ERR_ASSERTION'||!validDisconnectTuple(error.actual))continue;
-    try{assert.deepEqual(error.expected,[1,null,'',workerFailure]);}
+    try{assert.deepEqual(error.expected,expectedDisconnectExit);}
     catch{continue;}
     return {kind:'translation-disconnect',actual:error.actual,expected:error.expected,
       ...(validDisconnectTermination(error.termination)?{termination:error.termination}:{})};
@@ -89,10 +101,16 @@ export function parseServiceProofFailure(line) {
   try {
     const value=JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length));
     if(value.kind==='translation-disconnect'){
-      keys(value,value.termination===undefined?['kind','actual','expected']:['kind','actual','expected','termination']);
-      if(value.termination!==undefined)assert.ok(validDisconnectTermination(value.termination));
-      assert.ok(validDisconnectTuple(value.actual));
-      assert.deepEqual(value.expected,[1,null,'',workerFailure]);return value;
+      const fields=['kind','actual','expected'];
+      if(value.termination!==undefined)fields.push('termination');
+      if(value.check!==undefined){
+        fields.push('check');
+        assert.ok(disconnectChecks.includes(value.check)&&validDisconnectTermination(value.termination));
+      }else if(value.termination!==undefined)assert.ok(validDisconnectTermination(value.termination));
+      keys(value,fields);
+      const withheld=value.check!==undefined&&validDisconnectStatus(value.actual)&&value.actual[2]===''&&value.actual[3]===outputWithheld;
+      assert.ok(withheld||validDisconnectTuple(value.actual));
+      assert.deepEqual(value.expected,expectedDisconnectExit);return value;
     }
     if(value.kind==='truncated'){
       keys(value,['kind','limit']);assert.equal(value.limit,16);return value;
@@ -204,7 +222,7 @@ export async function summariseServiceMatrix(events,selected){
       if(event.type==='test:fail'&&position){
         const error=data.details?.error;
         report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
-        // Only this assertion's finite worker messages can cross the privacy boundary.
+        // Only this case's named checks and finite worker messages can cross the privacy boundary.
         if(resolve(data.file)===resolve(root,'packages/translation/test/worker-cli.test.ts')&&data.name===disconnectTitle){
           const diagnostic=disconnectAssertion(data.details?.error);if(diagnostic)report(diagnostic);
         }

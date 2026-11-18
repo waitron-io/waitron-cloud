@@ -5,7 +5,7 @@ selected. Reproduce the cause before changing worker or fixture behaviour.
 The Lane G watcher queued TRANSLATION-DISCONNECT-ROOT on 18 November 2026 at
 13:32: “Its first step keeps the inner assertion and the backend's facts on a
 failing run.” Codex wrote this plan. Claude reviewed the first draft. The watcher
-clears the build.
+cleared the build at 14:20 on 18 November with the split below.
 
 ## What the two runs show
 
@@ -20,7 +20,7 @@ records 1,852 passes, one failure and 30 skips. The outer
 case's opening line, an assertion error code and a failed-suite refusal.
 Its exact inner assertion and any shared cause remain unknown.
 
-## Work and checks
+## First pull request: keep the evidence
 
 1. Extend the nested-runner case in
    `scripts/translation-disconnect-diagnostics.test.mjs` to force the earlier
@@ -29,24 +29,32 @@ Its exact inner assertion and any shared cause remain unknown.
 2. In `packages/translation/test/worker-cli.test.ts`, widen the existing error
    capture to cover the two termination assertions. Keep a fixed check name,
    the iteration, and up to four process IDs with their termination results.
-   Include the worker's current exit code, signal and fixed messages when they
-   pass the existing filter. In `scripts/test-cloud-free-services.mjs`, emit
-   the bounded facts even without an exit assertion tuple. Keep the ordinary
-   failure and refusal and leave the venue-proof receipt wrapper alone. In
+   Include the worker's current exit code, signal and fixed messages. When
+   output falls outside the filter, report "output withheld" in its place.
+   Accept the new record through the parser in
+   `scripts/test-cloud-free-services.mjs` and check both emission and parsing
+   in the diagnostics test. Leave the venue-proof receipt wrapper alone. In
    `deploy/test-cloud/translation-disconnect-binding.test.mjs`, retain the
    nested report on every failure check. Keep the existing binding assertions.
-3. In a scratch Linux run, record which connections were idle and still present
-   before the signal, when the worker began closing and which connections were
-   gone by the next signal. Test whether the first termination starts shutdown
-   before PostgreSQL can signal the other selected connections. Keep this
-   detailed timing in the scratch run. A real PostgreSQL control must force
-   the observed ordering and fail at the original check before a repair.
-   Change the fixture or worker only where that evidence points. Bring any
-   change to an existing assertion to the watcher with its failing control.
-   Keep the exact exit check and current deadlines. Add no retries. If the
-   cause stays open, take the retained evidence to the watcher.
-4. Keep the main job link and add the PR job to `docs/backlog/translation.md`.
-   Update the diagnostic pointer in `docs/backlog.md` with the observed result.
+3. Keep the main job link and add the PR job to `docs/backlog/translation.md`.
+   Update the diagnostic pointer in `docs/backlog.md`.
+4. Use the binding test's own driver to run an early scratch-only control with
+   a pause between stop calls. Include the resulting evidence in the first PR.
+
+## Second pull request: repair the reproduced cause
+
+In the scratch Linux run, record which connections were idle and still present
+before the signal, when the worker began closing and which connections were
+gone by the next signal. Test whether the first termination starts shutdown
+before PostgreSQL can signal the other selected connections. Keep this
+detailed timing in the scratch run. A real PostgreSQL control must force
+the observed ordering and fail at the original check before a repair.
+Change the fixture or worker only where that evidence points. Bring any
+change to an existing assertion to the watcher with its failing control.
+Keep the exact exit check and current deadlines. Add no retries. Write a
+deviation to the watcher if the demonstrated repair needs to loosen the
+termination check. If the cause stays open, take the retained evidence to
+the watcher.
 
 Run `node --test scripts/translation-disconnect-diagnostics.test.mjs`.
 Use `node scripts/test-postgres.mjs exec` for the binding file and the exact

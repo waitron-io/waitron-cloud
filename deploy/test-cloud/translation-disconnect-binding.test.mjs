@@ -34,18 +34,19 @@ test('a real disconnect assertion retains the selected backends and termination 
  const result=await exec(process.execPath,[driverFile],
   {cwd:fileURLToPath(new URL('../../',import.meta.url)),env,encoding:'utf8',timeout:25000,maxBuffer:1048576})
   .then(value=>({...value,code:0}),error=>error);
- assert.equal(result.code,1,result.stderr);assert.equal(result.stdout,'');
+ assert.equal(result.code,1,result.stderr);assert.equal(result.stdout,'',result.stderr);
  const rows=result.stderr.trim().split('\n').filter((line)=>line.startsWith('SERVICE_PROOF_FAILURE ')).map((line)=>JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length)));
  const diagnostic=rows.find((row)=>row.kind==='translation-disconnect');
  assert.ok(diagnostic,result.stderr);
- assert.deepEqual(diagnostic.actual,[1,null,'',retry+failed]);
- assert.deepEqual(diagnostic.expected,[1,null,'',failed]);
+ assert.equal(diagnostic.check,'worker-exit',result.stderr);
+ assert.deepEqual(diagnostic.actual,[1,null,'',retry+failed],result.stderr);
+ assert.deepEqual(diagnostic.expected,[1,null,'',failed],result.stderr);
  assert.equal(diagnostic.termination?.iteration,iteration,result.stderr);
- assert.ok(diagnostic.termination.backends.length>0&&diagnostic.termination.backends.length<=4);
+ assert.ok(diagnostic.termination.backends.length>0&&diagnostic.termination.backends.length<=4,result.stderr);
  for(const backend of diagnostic.termination.backends){
-  assert.deepEqual(Object.keys(backend).sort(),['killed','pid']);
-  assert.ok(Number.isInteger(backend.pid)&&backend.pid>0&&backend.pid<=2147483647);
-  assert.equal(backend.killed,true);
+  assert.deepEqual(Object.keys(backend).sort(),['killed','pid'],result.stderr);
+  assert.ok(Number.isInteger(backend.pid)&&backend.pid>0&&backend.pid<=2147483647,result.stderr);
+  assert.equal(backend.killed,true,result.stderr);
  }
  }
 });
