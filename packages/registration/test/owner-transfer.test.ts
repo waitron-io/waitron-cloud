@@ -6,7 +6,7 @@ import {migrate} from '../src/migrate.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
-import {database} from '../../account-http/test/fixtures.ts';
+import {database,signupVerification} from '../../account-http/test/fixtures.ts';
 import {createSession,login,resolveSession} from '@waitron-cloud/identity';
 import {actionTestTotp,openProofWindow,prepareConnectionProof} from './fixtures/action-proof.ts';
 import {transaction} from '../src/transaction.ts';
@@ -20,19 +20,22 @@ import {AccountSecurityStore} from '../src/account-security.ts';
 let db:Awaited<ReturnType<typeof database>>;
 before(async()=>{db=await database();});after(async()=>db?.close());
 const password='A sufficiently long handover password';
-async function account(){
+async function requestAccount(){
  const email=`${randomUUID()}@example.test`,signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
- const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
- return {...await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),email};
+ return async()=>{
+  const mail=await signupVerification(db,email);
+  return {...await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'}),email};
+ };
 }
+async function account(){return (await requestAccount())();}
 test('a business refuses a second owner without removing its first owner',async()=>{
  const first=await account(),second=await account();
  await assert.rejects(db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[second.accountId,first.organisationId]),{code:'23505'});
  assert.deepEqual((await db.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner',[first.organisationId])).rows,[{account_id:first.accountId}]);
 });
 
-async function signedAccount(enrolled=true){
- const a=await account(),session=await transaction(db.pool,c=>login(c,{email:a.email,password}));
+async function signedAccount(enrolled=true,completeAccount=account){
+ const a=await completeAccount(),session=await transaction(db.pool,c=>login(c,{email:a.email,password}));
  if(enrolled)await prepareConnectionProof(db.pool,a.accountId,session.token);else await openProofWindow(db.pool,session.token);
  return {...a,...session};
 }
@@ -228,7 +231,9 @@ test('a security change leaves an expired offer expired without queuing cancella
 });
 
 test('verified first-time signup attaches every live offer without creating business access or a session',async()=>{
- const senders=await Promise.all([signedAccount(),signedAccount()]),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
+ // Both verification rows must be committed before either sender looks up its email.
+ const completeAccounts=await Promise.all([requestAccount(),requestAccount()]);
+ const senders=await Promise.all(completeAccounts.map(complete=>signedAccount(true,complete))),email=`new-${randomUUID()}@example.test`,store=new OwnerTransferStore(db.pool,db.outbox);
  const offers=[];for(const sender of senders)offers.push(await store.create(sender.token,sender.csrfToken,sender.organisationId,email));
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(email);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert.ok('token' in mail);
