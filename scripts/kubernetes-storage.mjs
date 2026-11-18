@@ -66,7 +66,9 @@ export function stockholmStoreResources(nodes, image) {
               {name: 'MINIO_UPDATE', value: 'off'}],
             ports: [{name: 'https', containerPort: port}],
             securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ['ALL']}},
-            readinessProbe: {httpGet: {scheme: 'HTTPS', path: '/minio/health/ready', port: 'https'}, periodSeconds: 2},
+            // The basic readiness endpoint can return 200 before the object layer starts.
+            readinessProbe: {httpGet: {scheme: 'HTTPS', path: '/minio/health/cluster', port: 'https'},
+              timeoutSeconds: 5, periodSeconds: 2},
             volumeMounts: [{name: 'disk', mountPath: '/disk'}, {name: 'certs', mountPath: '/certs', readOnly: true}],
           }],
           volumes: [{name: 'certs', secret: {secretName: 'store-tls', items: [

@@ -17,6 +17,7 @@ test('store reserves six private volumes, two from each machine, for specific pe
   assert.equal(store.spec.podManagementPolicy, 'Parallel');
   assert.equal(container.image, 'local:store');
   assert.equal(container.imagePullPolicy, 'Never');
+  assert.deepEqual(container.readinessProbe.httpGet, {scheme: 'HTTPS', path: '/minio/health/cluster', port: 'https'});
   assert.equal(pod.securityContext.runAsUser, 10001);
   assert.equal(pod.automountServiceAccountToken, false);
   assert.ok(container.env.some(row => row.name === 'MINIO_STORAGE_CLASS_STANDARD' && row.value === 'EC:3'));
