@@ -103,6 +103,12 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
     assert.ok(Object.values(uids).every(Boolean) && new Set(Object.values(uids)).size === 3, 'node_loss.node_uids');
     return uids;
   };
+  const heartbeat = async (name, options) => {
+    const lease = JSON.parse(await kube(['get', 'lease', name, '--namespace=kube-node-lease', '-o', 'json'], options));
+    const renewed = Date.parse(lease.spec.renewTime);
+    assert.ok(Number.isFinite(renewed), 'node_loss.invalid_lease_time');
+    return renewed;
+  };
   const etcdRun = (node, args, options) => docker(['exec', node.id, 'sh', '-ec', etcd, 'etcd', ...args], options);
   async function readEtcd(nodes, options) {
     const members = parseMembers(await etcdRun(nodes[0], ['member', 'list'], options));
@@ -178,15 +184,18 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
       await expectStopped();
       const failoverMs = Math.round(performance.now() - started);
       const rejoin = {signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]), timeout: 185_000};
+      const leaseWhileStopped = await heartbeat(node.name, rejoin);
       await verifyNetwork(rejoin);
       await docker(['network', 'disconnect', networkId, node.id], rejoin);
       await docker(['network', 'connect', networkId, '--ip', node.ip, node.id], rejoin);
       await docker(['start', node.id], rejoin);
       const restarted = await verifyContainer(node.id, rejoin);
       assert.equal(restarted.NetworkSettings.Networks[cluster]?.IPAddress, node.ip, 'node_loss.address_after_restart');
+      // Ready can still hold its pre-outage value while the kubelet is absent.
+      await retry(async () => assert.ok(await heartbeat(node.name, rejoin) > leaseWhileStopped, 'node_loss.stale_heartbeat'), rejoin.signal);
       await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], rejoin);
       assert.deepEqual(await readNodes(rejoin), nodeUids, 'node_loss.node_identity');
-      await retry(async () => assert.deepEqual(await readEtcd(nodes, rejoin), members, 'node_loss.etcd_identity'), rejoin.signal);
+      assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
       legs.push({stopped: node.name, scheduledOn, failoverMs});
     }
     return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, legs};
@@ -205,6 +214,10 @@ export async function runKubernetesNodeLoss({execute = executeCommand} = {}) {
         if (creating) {
           const containers = await inspect((await list(cleanup)).split('\n').filter(Boolean), cleanup);
           for (const row of containers.filter(owns)) {
+            if (failure) {
+              const logs = await docker(['logs', '--tail=30', row.Id], cleanup).catch(String);
+              process.stderr.write(`Kind container ${row.Name}\n${logs.slice(-8192)}\n`);
+            }
             await docker(['rm', '--force', '--volumes', row.Id], cleanup);
           }
           assert.equal(await list(cleanup), '', 'node_loss.container_ownership_or_cleanup');

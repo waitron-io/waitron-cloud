@@ -9,9 +9,10 @@ async function runCheck(options) {
   return module.runKubernetesNodeLoss(options);
 }
 
-function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false} = {}) {
+function fixture({foreign = false, foreignNetwork = false, partial = false, failWhileStopped = false, restarts = false, rejoin = undefined} = {}) {
   const calls = [], containers = new Map(), networkId = 'a'.repeat(64);
   let label, removed = false, pod;
+  const starts = new Set();
   const names = ['control-plane', 'control-plane2', 'control-plane3'];
   const execute = async (binary, args, options) => {
     calls.push({binary, args, options});
@@ -42,7 +43,13 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
       assert.equal(args[2], '--request-timeout=10s');
       const [verb, kind] = args.slice(3);
       if (verb === 'config') return JSON.stringify({clusters: [{cluster: {server: 'https://127.0.0.1:59876'}}]});
-      if (verb === 'get' && kind === 'nodes') return JSON.stringify({items: names.map((suffix, i) => ({metadata: {name: label + '-' + suffix, uid: 'uid-' + i}}))});
+      if (verb === 'get' && kind === 'nodes') return JSON.stringify({items: names.map((suffix, i) => ({metadata: {name: label + '-' + suffix,
+        uid: rejoin === 'node' && starts.size && i === 0 ? 'replacement-uid' : 'uid-' + i}}))});
+      if (verb === 'get' && kind === 'lease') {
+        const name = args[5];
+        const id = Array.from(containers.keys()).find(key => containers.get(key).Name === '/' + name);
+        return JSON.stringify({spec: {renewTime: starts.has(id) ? '2026-11-18T09:00:01Z' : '2026-11-18T09:00:00Z'}});
+      }
       if (verb === 'get' && kind === '--raw=/readyz') return 'ok';
       if (verb === 'apply') {
         const manifest = JSON.parse(options.input);
@@ -81,19 +88,22 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
       const node = containers.get(rest.at(-1));
       assert.equal(node.State.Running, false);
       if (second === 'disconnect') delete node.NetworkSettings.Networks[label];
-      else if (second === 'connect') node.NetworkSettings.Networks[label] = {NetworkID: networkId, IPAddress: rest[2]};
+      else if (second === 'connect') {
+        if (rejoin === 'connect') throw Error('synthetic reattach failure');
+        node.NetworkSettings.Networks[label] = {NetworkID: networkId, IPAddress: rest[2]};
+      }
       else assert.fail(args.join(' '));
       return '';
     }
     if (verb === 'inspect') return JSON.stringify(args.slice(2).map(id => containers.get(id)));
     if (verb === 'exec') return args.at(-1) === 'health' ? '127.0.0.1:2379 is healthy' :
-      names.map((suffix, i) => `0123456789abcde${i}, started, ${label}-${suffix}, https://unused:2380, https://unused:2379, false`).join('\n');
+      names.map((suffix, i) => `0123456789abcde${rejoin === 'member' && starts.size && i === 0 ? 9 : i}, started, ${label}-${suffix}, https://unused:2380, https://unused:2379, false`).join('\n');
     if (verb === 'logs') return 'synthetic container log';
     const node = containers.get(args.at(-1));
     assert.ok(node, args.join(' '));
     if (verb === 'update') assert.equal(second, '--restart=no');
     else if (verb === 'kill') {assert.equal(second, '--signal=SIGKILL'); node.State.Running = restarts;}
-    else if (verb === 'start') node.State.Running = true;
+    else if (verb === 'start') {node.State.Running = true; starts.add(node.Id);}
     else if (verb === 'rm') containers.delete(node.Id);
     else assert.fail(args.join(' '));
     return '';
@@ -107,6 +117,10 @@ test('the Kind fault loop stops each exact container, schedules on a survivor an
   assert.equal(result.legs.length, 3);
   assert.deepEqual(f.mutations('kill'), ['1', '2', '3'].map(digit => digit.repeat(64)));
   assert.deepEqual(f.mutations('start'), f.mutations('kill'));
+  for (const {stopped} of result.legs) {
+    const reads = f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('lease') && args.includes(stopped));
+    assert.equal(reads.length, 2, 'rejoin must observe a fresh node heartbeat');
+  }
   assert.ok(result.legs.every(leg => leg.stopped !== leg.scheduledOn));
   assert.deepEqual(Object.values(result.members), ['0', '1', '2'].map(digit => '0123456789abcde' + digit));
   assert.ok(f.removed());
@@ -140,6 +154,19 @@ for (const [mode, message] of [['partial', /synthetic Kind creation failure/], [
   test(`owned containers and network are removed after ${mode === 'partial' ? 'a failed Kind create' : 'a failed API write during a fault'}`, async () => {
     const f = fixture({[mode]: true});
     await assert.rejects(runCheck({execute: f.execute}), message);
+    assert.equal(f.remaining(), 0);
+    assert.ok(f.removed());
+    const diagnostics = f.calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'logs');
+    const removal = f.calls.findIndex(({binary, args}) => binary === 'docker' && args[0] === 'rm');
+    assert.ok(diagnostics !== -1 && diagnostics < removal, 'read owned container logs before removing them');
+  });
+}
+
+for (const [rejoin, message] of [['node', /node_identity/], ['member', /etcd_identity/], ['connect', /synthetic reattach failure/]]) {
+  test(`a failed rejoin (${rejoin}) stops the run and still removes owned containers`, {timeout: 500}, async () => {
+    const f = fixture({rejoin});
+    await assert.rejects(runCheck({execute: f.execute}), message);
+    assert.equal(f.mutations('kill').length, 1);
     assert.equal(f.remaining(), 0);
     assert.ok(f.removed());
   });
