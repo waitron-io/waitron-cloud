@@ -8,15 +8,16 @@ import {test} from 'node:test';
 
 test('a renewal arriving after the local deadline cannot extend gateway authority', async () => {
   const {runGatewayElection} = await import('./gateway-supervisor.mjs');
+  const stop = new AbortController();
   let tick = 0, version = 1;
   let current = {metadata: {resourceVersion: '1'}};
   const deadlines = [];
   await runGatewayElection({
-    holder: 'first',
+    holder: 'first', signal: stop.signal,
     now: () => tick,
     wait: async ms => {tick += ms;},
     lease: {
-      get: async () => version === 3 ? {...current, spec: {holderIdentity: 'standby'}} : current,
+      get: async () => current,
       replace: async value => {
         assert.equal(value.metadata.resourceVersion, String(version));
         assert.match(value.spec.renewTime, /\.\d{6}Z$/);
@@ -25,7 +26,10 @@ test('a renewal arriving after the local deadline cannot extend gateway authorit
         return current;
       },
     },
-    grant: deadline => deadlines.push(deadline),
+    grant(deadline) {
+      deadlines.push(deadline);
+      if (deadlines.length > 1) stop.abort();
+    },
   });
   assert.deepEqual(deadlines, [5000]);
 });
@@ -163,4 +167,25 @@ test('an expired gateway stops the election even if it is still running', {timeo
   });
   assert.equal(election.signalCode, 'SIGKILL');
   assert.equal(gateway.signalCode, 'SIGKILL');
+});
+
+test('a rejected Lease request is reported and retries at the usual interval', async () => {
+  const {runGatewayElection} = await import('./gateway-supervisor.mjs');
+  const stop = new AbortController(), rejected = [], attempts = [];
+  let tick = 0;
+  await runGatewayElection({holder: 'first', signal: stop.signal, now: () => tick,
+    wait: async ms => {tick += ms;},
+    onRefusal: status => rejected.push(status),
+    lease: {
+      async get() {
+        attempts.push(tick);
+        if (attempts.length === 1) throw Object.assign(Error('lease refused'), {status: 403});
+        return {metadata: {resourceVersion: '1'}, spec: {}};
+      },
+      replace: async value => value,
+    },
+    grant: () => stop.abort(),
+  });
+  assert.deepEqual(rejected, [403]);
+  assert.deepEqual(attempts, [0, 2000]);
 });

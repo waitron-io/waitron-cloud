@@ -12,7 +12,8 @@ const electionPid = '/state/election.pid';
 const expiry = 15000, renewal = 5000, retry = 2000;
 
 export async function runGatewayElection({lease, holder, grant, signal, now = monotonicMs,
-  wait = ms => delay(ms, undefined, {signal})}) {
+  wait = ms => delay(ms, undefined, {signal}),
+  onRefusal = status => console.error('remote.gateway_lease_refused:' + status)}) {
   let deadline, observedVersion, observedAt;
   while (!signal?.aborted && (deadline === undefined || now() < deadline)) {
     try {
@@ -35,8 +36,9 @@ export async function runGatewayElection({lease, holder, grant, signal, now = mo
       }
     } catch (error) {
       if (signal?.aborted) return;
-      const temporaryHttp = error.status === 409 || error.status === 429 || error.status >= 500;
-      if (!temporaryHttp && !['AbortError', 'TimeoutError'].includes(error.name) &&
+      if (Number.isInteger(error.status)) {
+        if (error.status !== 409 && error.status !== 429 && error.status < 500) onRefusal(error.status);
+      } else if (!['AbortError', 'TimeoutError'].includes(error.name) &&
         !['ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN', 'ENOTFOUND', 'ETIMEDOUT'].includes(error.code)) throw error;
     }
     if (!signal?.aborted) await wait(retry);
@@ -133,8 +135,5 @@ async function run() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {await run();} catch (error) {
-    console.error('remote.gateway_supervisor_failed' + (Number.isInteger(error.status) ? ':' + error.status : ''));
-    process.exitCode = 1;
-  }
+  try {await run();} catch {console.error('remote.gateway_supervisor_failed'); process.exitCode = 1;}
 }
