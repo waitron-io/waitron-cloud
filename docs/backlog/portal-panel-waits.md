@@ -63,8 +63,8 @@ code boundary produced HTTP 403 and the same page-wait failure. No clock,
 assertion, deadline or production source changed. This demonstrates a timing
 weakness in the fixture; the original CI response was not retained, so it does
 not establish that run's cause. The Mac result does not qualify Linux. Keep the
-enrolment, session, membership and explicit acceptance checks while investigating
-the fixture's code timing; a later green CI run is not a repair.
+enrolment, session, membership and explicit acceptance checks when changing the
+fixture.
 
 On 19 November, [PR #1313’s portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44443554874/job/135290208342)
 reported the same wait for `.factor-codes` at `owner-transfer-browser.test.ts:119`.
@@ -80,6 +80,23 @@ used by this fixture. The failed run again has no activation response.
 hit the same eight-second wait at line 119 and passed 1,469 other tests. The
 test and its runner inputs match the preceding main revision. The case passed
 in PR #1319's standard CI. The failed job did not record an activation response.
+
+[PR #1321's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44530811170/job/135583527533)
+hit the same wait and passed the other 1,469 tests. Its activation response was
+unavailable too.
+
+On disposable Linux, holding activation for 2,958 ms across the next code
+boundary returned HTTP 403 and reproduced the eight-second wait on main.
+With the updated fixture, the same probe held activation for 2,760 ms across
+the boundary. It returned HTTP 200, and all eight language, theme and width
+combinations completed the handover.
+The fixture uses one database instant to generate and check three distinct
+codes for enrolment, sign-in and handover proof. It verifies that PostgreSQL
+recorded all three code steps. The session checks still read the live clock.
+Run `node scripts/test-postgres.mjs exec node --test --test-timeout=120000
+apps/portal/test/owner-transfer-browser.test.ts` after building the portal.
+
+If the CI wait returns, capture the activation response to identify its cause.
 
 ## Owner recovery enrolment wait
 
