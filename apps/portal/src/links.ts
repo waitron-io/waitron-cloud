@@ -1,5 +1,5 @@
 import type { Locale } from './locale.ts';
-export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
+export type CapturedLink = {token?: string; emailChangeToken?:string; requestId?: string; pairingCode?: string; recoveryId?: string; locale?: Locale; invalid: boolean};
 export function captureLink(url: URL, replace: (url: string) => void): CapturedLink {
   const params = [url.searchParams, new URLSearchParams(url.hash.slice(1))];
   const tokens = params.flatMap(p => p.getAll('token'));
@@ -22,6 +22,14 @@ export function captureLink(url: URL, replace: (url: string) => void): CapturedL
   if(changes.length){
     if(changes.length!==1||url.pathname!=='/account'||url.searchParams.has('change')||tokens.length||result.invalid||!/^[A-Za-z0-9_-]{43}$/.test(changes[0]!))result.invalid=true;
     else result.emailChangeToken=changes[0];
+  }
+  const codes = params.flatMap(p => p.getAll('code'));
+  if (codes.length) {
+    const code = codes[0]!;
+    if (codes.length !== 1 || url.searchParams.has('code') || !result.requestId || result.invalid || !/^[0-9]{8}$/.test(code)) {
+      return result.locale ? {invalid: true, locale: result.locale} : {invalid: true};
+    }
+    result.pairingCode = code;
   }
   return result;
 }

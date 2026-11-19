@@ -38,3 +38,36 @@ test(`${locale} ${theme} ${width}: pairing shows body refusal advice for inspect
   }
  }finally{await browser.close();}
 });
+
+test('a refused linked code waits for the owner to retry', async () => {
+  const browser = await chromium.launch({headless: true});
+  try {
+    const page = await browser.newPage({locale: 'en'});
+    page.setDefaultTimeout(4000);
+    const c = translations.en;
+    const inspections: unknown[] = [];
+    await page.route('https://portal.test/connect', route => route.fulfill({
+      contentType: 'text/html', body: '<!doctype html><div id="portal" class="portal"></div>',
+    }));
+    await page.route('**/api/account/**', route => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
+      if (path.endsWith('/pairing/businesses')) return route.fulfill({json: {businesses: [business]}});
+      if (path.endsWith('/pairing/inspect')) {
+        inspections.push(route.request().postDataJSON());
+        return inspections.length === 1 ? route.fulfill({status: 404, json: {error: 'pairing_unavailable'}}) : route.fulfill({json: view});
+      }
+      return route.fulfill({status: 503, json: {error: 'unavailable'}});
+    });
+    await page.goto(`https://portal.test/connect#request=${requestId}&code=00000000`);
+    await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+    await page.getByRole('alert').getByText(c.pairUnavailable, {exact: true}).waitFor();
+    await page.getByLabel(c.language, {exact: true}).selectOption('es');
+    await page.getByRole('alert').getByText(translations.es.pairUnavailable, {exact: true}).waitFor();
+    assert.deepEqual(inspections, [{requestId, code: '00000000'}]);
+    await page.locator('input[name=pairingCode]').fill('01234567');
+    await page.getByRole('button', {name: translations.es.pairInspect, exact: true}).click();
+    await page.getByRole('button', {name: translations.es.pairApprove, exact: true}).waitFor();
+    assert.deepEqual(inspections, [{requestId, code: '00000000'}, {requestId, code: '01234567'}]);
+  } finally { await browser.close(); }
+});

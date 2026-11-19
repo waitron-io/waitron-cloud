@@ -105,3 +105,69 @@ test(`${approve?'approval':'inspection'} still refuses malformed code ${JSON.str
   const before=calls.length;controller.code=code;await (approve?controller.approve():controller.inspect());
   assert.equal(controller.error,'pairCodeError');assert.equal(controller.codeError,true);assert.equal(calls.length,before);
 });
+
+function linkedPairing(businessesReady?: Promise<void>) {
+  const inspections: unknown[] = [];
+  const controller = new PairingController(() => {}, async <T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> => {
+    if (path === '/pairing/businesses') {
+      await businessesReady;
+      return {ok: true, value: {businesses: [business]} as T};
+    }
+    assert.equal(path, '/pairing/inspect');
+    inspections.push(body);
+    return {ok: true, value: view as T};
+  });
+  controller.open(requestId, '01234567');
+  return {controller, inspections};
+}
+
+test('a linked code checks once after the first account and business list arrive', async () => {
+  const {controller, inspections} = linkedPairing();
+  controller.account(undefined);
+  await controller.load();
+  assert.deepEqual(inspections, []);
+  assert.equal(controller.code, '');
+  controller.account('first', false);
+  await controller.load();
+  assert.deepEqual(inspections, []);
+  assert.equal(controller.loaded, false);
+  controller.account('first');
+  assert.equal(controller.code, '');
+  await Promise.all([controller.load(), controller.load()]);
+  await controller.load();
+  assert.deepEqual(inspections, [{requestId, code: '01234567'}]);
+  assert.deepEqual(controller.view, view);
+});
+
+for (const exit of ['sign out', 'switch accounts', 'replace the request', 'leave the journey'] as const) {
+  test(`a linked code does not carry over when you ${exit}`, async () => {
+    const {controller, inspections} = linkedPairing();
+    controller.account('first');
+    if (exit === 'sign out') controller.account(undefined);
+    if (exit === 'replace the request') controller.open(business.legalBusinessId);
+    if (exit === 'leave the journey') controller.discardLinkedCode();
+    controller.account(exit === 'switch accounts' ? 'second' : 'first');
+    await controller.load();
+    assert.deepEqual(inspections, []);
+    assert.equal(controller.code, '');
+    assert.equal(controller.loaded, true);
+  });
+}
+
+test('a session outage fences the pending business list and keeps the unchecked code for the same account', async () => {
+  let releaseBusinesses!: () => void;
+  const businessesReady = new Promise<void>(resolve => { releaseBusinesses = resolve; });
+  const {controller, inspections} = linkedPairing(businessesReady);
+  controller.account('first');
+  const loading = controller.load();
+  controller.suspend();
+  releaseBusinesses();
+  await loading;
+  assert.equal(controller.loaded, false);
+  assert.deepEqual(inspections, []);
+
+  controller.account('first');
+  await controller.load();
+  assert.deepEqual(inspections, [{requestId, code: '01234567'}]);
+  assert.deepEqual(controller.view, view);
+});

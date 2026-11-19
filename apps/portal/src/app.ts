@@ -30,7 +30,7 @@ type PasskeyAddRequest = {accountId: string};
 export class PortalApp {
   root: HTMLElement;
   path = location.pathname;
-  link: CapturedLink;
+  link: Omit<CapturedLink, 'pairingCode'>;
   locale: Locale;
   fields: Fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
   errors: Partial<Record<keyof Fields, keyof Copy>> = {};
@@ -74,6 +74,7 @@ export class PortalApp {
   #timer: ReturnType<typeof setTimeout> | undefined;
   constructor(root: HTMLElement) {
     this.root = root;
+    this.pairing = new PairingController(() => this.draw());
     this.link = this.#capture();
     let saved: string | null = null;
     try { saved = localStorage.getItem('cloud.locale'); } catch { /* Storage is optional. */ }
@@ -128,20 +129,22 @@ export class PortalApp {
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
       this.draw();
     });
-    this.pairing = new PairingController(() => this.draw());
-    this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (this.sessionPage) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (this.sessionPage) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.#passkeyAddRequest = undefined; this.ownerRecovery.open(); this.transfers.account(undefined); this.cloudActions.account(undefined); this.actionProof.account(undefined); this.billing.account(undefined); this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.pairing.discardLinkedCode(); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.passkeys.fence(); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
     this.installations.showRecovery(this.path==='/recover');
     this.draw(); void this.session.check();
   }
-  #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
+  #capture() {
+    const {pairingCode, ...link} = captureLink(new URL(location.href), url => history.replaceState(null, '', url));
+    if (link.requestId || link.invalid) this.pairing.open(link.requestId, pairingCode);
+    return link;
+  }
   #session() { return new PortalSession(state => this.#sessionChanged(state)); }
   #sessionChanged(state: SessionState) {
     if (state.kind !== 'authenticated' || this.#passkeyAddRequest?.accountId !== state.accountId) {
@@ -188,9 +191,11 @@ export class PortalApp {
     this.installations.account(ordinary ? state.accountId : undefined);
     if ((page === 'venues' || page === 'remoteAccess' || this.path === '/recover') && ordinary && !this.installations.loaded) void this.installations.load();
     if (page === 'venues' && ordinary && this.usage.organisationId && !this.usage.loaded && !this.usage.error) void this.usage.load();
-    this.pairing.account(ordinary ? state.accountId : undefined);
+    if (state.kind === 'unavailable') this.pairing.suspend();
+    else this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined, !restricted);
     if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
-    if (this.sessionPage && state.kind === 'anonymous') {
+    const malformedPairingLink = this.path === '/connect' && this.link.invalid;
+    if (this.sessionPage && state.kind === 'anonymous' && (state.expired || !malformedPairingLink)) {
       const signedOut = this.#signOutCheck === this.session;
       if(this.path==='/operator/actions')this.#operatorSignin=true;
       this.navigate('/login');
@@ -262,6 +267,7 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
+    if (path !== '/connect' && (path !== '/login' || this.session.state.kind !== 'anonymous')) this.pairing.discardLinkedCode();
     if(path!=='/login')this.#operatorSignin=false;
     this.transfers.account(undefined);this.cloudActions.account(undefined);
     this.billing.fence();
@@ -275,7 +281,6 @@ export class PortalApp {
     this.link = this.#capture();
     this.ownerRecovery.open(path==='/reset-password'&&!this.link.invalid?this.link.token:undefined);
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
-    if (this.link.requestId || this.link.invalid) this.pairing.open(this.link.requestId);
     this.locale = this.link.locale ?? this.locale;
     this.fields = {email: '', password: '', legalBusinessName: '', organisationName: ''};
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;

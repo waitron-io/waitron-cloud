@@ -40,3 +40,27 @@ test('recovery fragments stay separate from venue pairing and reject query or du
  assert.deepEqual(captureLink(new URL(`https://cloud.example/recover#request=${id}`),v=>{clean=v;}),{invalid:false,recoveryId:id});assert.equal(clean,'/recover');
  for(const path of [`/recover?request=${id}`,`/recover#request=${id}&request=${id}`,`/recover#request=${id}&token=${token}`]){const result=captureLink(new URL('https://cloud.example'+path),v=>{clean=v;});assert(result.invalid);assert.equal(result.recoveryId,undefined);assert(!clean.includes(id));}
 });
+
+test('captures and scrubs a linked pairing code, preserving its leading zero', () => {
+  const id = '12345678-1234-4234-8234-123456789abc';
+  const paths: string[] = [];
+  const link = captureLink(new URL(`https://cloud.example/connect#request=${id}&code=01234567&lang=es`), path => paths.push(path));
+  assert.deepEqual(link, {invalid: false, requestId: id, pairingCode: '01234567', locale: 'es'});
+  assert.deepEqual(paths, ['/connect']);
+});
+
+test('a malformed pairing code invalidates the entire link after scrubbing', () => {
+  const id = '12345678-1234-4234-8234-123456789abc';
+  const request = `request=${id}`;
+  for (const path of [
+    `/connect?code=01234567#${request}`, `/connect#${request}&code=01234567&code=01234567`,
+    `/connect#${request}&code=1234567`, `/connect#${request}&code=01234567%0A`,
+    '/connect#code=01234567', '/connect#request=bad&code=01234567',
+    `/connect#${request}&${request}&code=01234567`,
+    `/recover#${request}&code=01234567`, `/signup#token=${token}&code=01234567`,
+  ]) {
+    const clean: string[] = [];
+    assert.deepEqual(captureLink(new URL('https://cloud.example' + path), value => clean.push(value)), {invalid: true}, path);
+    assert.deepEqual(clean, [new URL('https://cloud.example' + path).pathname], path);
+  }
+});
