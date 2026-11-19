@@ -287,6 +287,13 @@ test('Amazon deployment admits Docker control and private writable state only fo
  }
 });
 
+test('Amazon admission accepts Compose JSON that omits false from long-form binds',async()=>{
+ const {validateDeployment}=await api(),value=amazonBackupDeployment();
+ const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',backupVerifierImage:amazonVerifier};
+ for(const mount of value.services['backup-worker'].volumes.filter(v=>v.type==='bind'))mount.bind={};
+ assert.equal(validateDeployment(value,options).ready,true);
+});
+
 test('the driver enables the Amazon backup override only for an explicit immutable image',async()=>{
  const {deploy}=await api(),calls=[],id='d'.repeat(64);let reads=0;
  const execute=async(_command,args,{environment}={})=>{

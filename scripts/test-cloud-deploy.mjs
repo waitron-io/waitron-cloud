@@ -34,12 +34,16 @@ const backupRoles=new Set(['bootstrap','account','proxy','backup-worker']);
 const dockerSocket='/var/run/docker.sock';
 const workerStage='/opt/waitron-cloud/amazon-backup-stages/worker/mount/work';
 const verifierStage='/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work';
+function isPrivateBackupBind(mount){
+ // Some Compose versions omit false from the rendered bind object.
+ return mount.type==='bind'&&mount.bind!=null&&(mount.bind.create_host_path===undefined||mount.bind.create_host_path===false);
+}
 function isBackupStage(mount){
- return mount.type==='bind'&&mount.read_only!==true&&mount.bind?.create_host_path===false&&
+ return isPrivateBackupBind(mount)&&mount.read_only!==true&&
   (mount.source===workerStage&&mount.target==='/run/backup-stage'||mount.source===verifierStage&&mount.target===verifierStage);
 }
 function isBackupSocket(mount){
- return mount.type==='bind'&&mount.source===dockerSocket&&mount.target===dockerSocket&&mount.read_only===true&&mount.bind?.create_host_path===false;
+ return isPrivateBackupBind(mount)&&mount.source===dockerSocket&&mount.target===dockerSocket&&mount.read_only===true;
 }
 function validateBackupWorker(services,image){
  const worker=services['backup-worker'],mounts=worker?.volumes??[];
