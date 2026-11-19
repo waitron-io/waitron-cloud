@@ -46,9 +46,9 @@ and raw S3 for listings and the multipart missing-part case. Use a private NodeP
 on the contacted host and matching TLS names. Within the 90-second outage, check old bytes, list,
 new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
 the stop. During it, reject completion that references a missing part, then upload
-that part, complete and compare bytes. The Cloud services task in the
-country-cell plan tracks returned-disk repair and multipart through consecutive
-outages.
+that part, complete and compare bytes. After rejoin, the [first-outage repair check](2026-11-18-d621-stockholm-store-repair.md)
+verifies both objects on both returned disks. The Cloud services task in the
+country-cell plan tracks repair and multipart through consecutive outages.
 
 Start with the placement checks and name the live fault cases in
 `scripts/kubernetes-storage.test.mjs`. Check the launcher store install order and
@@ -64,11 +64,11 @@ the 15-minute full-service fault legs and cold restart. Paid work stays behind i
 
 On 18 November, two runs of the unpublished repair candidates used
 `TEST_KUBERNETES_STOCKHOLM_STORAGE=1 node --test scripts/kubernetes-storage.test.mjs`
-in disposable three-machine Kind clusters and found two limits for run 9:
+in disposable three-machine Kind clusters and failed at different points:
 
-- The store did not always repair a returned machine. Both serving peers reported
-  six online drives once the machine returned, but the repair check still found a
-  missing object shard on a returned disk. The local
+- In the first repair attempt, both serving peers reported six online drives
+  once the machine returned. The repair check found a missing object shard on
+  a returned disk. The local
   `repair-reconnect-capture-01.log` records the drive counts at lines 95–98 and
   the failed disk check at line 647.
 - In a separate run, both serving peers reported four of six drives online
@@ -89,6 +89,8 @@ still listed the stopped DNS host as ready (`post-land-dns-host-loss-live.log`,
 lines 75–86 and 438–476). Two subsequent controls passed all four checks. One
 kept the stale entry. In the other, both surviving machines routed DNS only to
 the surviving replica. The cause of the earlier multipart refusals remains open.
+A shorter peer refresh also discards idle addresses sooner. If multipart fails
+again, check whether a reconnect needed a fresh lookup while DNS was unavailable.
 
 Two scoped grant renewals reached Cloud's ten-second deadline while a machine
 was down. In the second run, MinIO finished reloading the grant on its peers
@@ -111,9 +113,16 @@ holds `combined-live-01.log` (lines 77–104 and 155–209) and
 `receipts/storage-read-during-outage/`. The second renewal timeout is in
 `receipts/d621-run9-storage-access/` within the lane.
 
-The separate candidate that refreshes peer addresses and requests explicit
-repair restored both outage objects and both multipart parts on both returned
-disks in 18.746 seconds. The returned machine read the bytes and the rehearsal
-passed all seven checks (`post-land-returned-drive-live-02.log`, lines 86–109).
-That result applies to the unpublished repair candidate. Multipart through
-consecutive outages and real Stockholm machine loss remain open.
+The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
+refreshes peer addresses every second. After the first machine returns, it waits
+for six drives and checks that both serving peers can read the dedicated synthetic probe object
+on both returned disks before requesting one bucket repair. The physical shard
+and encrypted byte checks share the same 180-second deadline as the wait and
+repair. An earlier Linux Kind recheck used the parked
+candidate `a2a254dbdf` with the DNS placement changes, tree
+`1abca994e6edb191f06b91f7d5b91c1d096ef557`. Both outage objects reached
+both returned disks, including both multipart parts. Both byte checks passed through the returned machine. The repair leg
+took 18.746 seconds and the run passed all seven checks
+(`receipts/storage-read-during-outage/post-land-returned-drive-live-02.log` in
+Lane G, lines 86–109). Repair and multipart through consecutive outages and
+real Stockholm machine loss remain open.

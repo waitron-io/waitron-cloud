@@ -1228,8 +1228,15 @@ rehearse object storage loss independently of the Cloud services. The check buil
 the pinned MinIO test image with Docker Buildx and serves it over private HTTPS.
 It starts six peers, with two local volumes per machine. It reads and writes
 encrypted bytes while the first machine is down and checks that multipart
-completion refuses a missing part. Its JSON output reports the outage time.
-The Cloud services slice must prove disk repair and consecutive outages before
+completion refuses a missing part. After the machine returns, the rehearsal
+waits for six online drives. It uses a dry run on a dedicated synthetic object
+to check both serving peers can read both returned disks. It then requests one
+bucket repair, checks both returned disks for the restored shards and compares
+both objects through the returned machine. The drive wait, probes, repair and
+checks share a 180-second deadline that starts once the node is Ready and its
+identity and cluster membership checks pass. The JSON output reports outage and
+repair times. This check uses curl with Signature V4. Running the bucket
+repair as part of the Cloud services' consecutive-outage proof remains open for
 run 9.
 
 Run `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`

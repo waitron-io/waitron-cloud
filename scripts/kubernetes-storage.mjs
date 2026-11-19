@@ -16,11 +16,12 @@ const apiName = 's3';
 const uid = 10001;
 const port = 9000;
 export const storeNodePort = 30900;
-const storePath = '/var/local/d621-store';
+export const storePath = '/var/local/d621-store';
 const labels = {app: storeName};
 const peers = Array.from({length: 6}, (_, index) => 'store-' + index);
 const dns = name => name + '.' + namespace + '.svc.cluster.local';
 const peerDns = name => name + '.' + dns(peerService);
+export const storeDiskEndpoint = peer => 'https://' + peerDns(peer) + ':' + port + '/disk';
 
 export function storeBuildArgs(image, args = []) {
   return ['buildx', 'build', '--builder', 'default', ...args, '--load',
@@ -60,10 +61,10 @@ export function stockholmStoreResources(nodes, image, openId) {
             whenUnsatisfiable: 'DoNotSchedule', labelSelector: {matchLabels: labels}}],
           containers: [{name: storeName, image, imagePullPolicy: 'Never',
             args: ['server', '--address', ':' + port, '--certs-dir', '/certs',
-              ...peers.map(peer => 'https://' + peerDns(peer) + ':' + port + '/disk')],
+              ...peers.map(storeDiskEndpoint)],
             envFrom: [{secretRef: {name: 'store-credentials'}}],
             env: [{name: 'MINIO_STORAGE_CLASS_STANDARD', value: 'EC:3'}, {name: 'MINIO_BROWSER', value: 'off'},
-              {name: 'MINIO_UPDATE', value: 'off'}, ...(openId ? [
+              {name: 'MINIO_UPDATE', value: 'off'}, {name: 'MINIO_DNS_CACHE_TTL', value: '1s'}, ...(openId ? [
               {name: 'MINIO_IDENTITY_OPENID_CONFIG_URL', value: openId.configUrl},
               {name: 'MINIO_IDENTITY_OPENID_CLIENT_ID', value: openId.clientId},
               {name: 'MINIO_IDENTITY_OPENID_ROLE_POLICY', value: openId.rolePolicy},
@@ -130,7 +131,7 @@ export async function installStockholmStore({nodes, addresses, image, directory,
     if (events) process.stderr.write(namespace + ' events:\n' + events + '\n');
     throw error;
   }
-  return {ca, credentials};
+  return {ca, caPath: certPath, credentials};
 }
 
 async function main() {
