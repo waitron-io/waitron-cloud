@@ -165,6 +165,8 @@ test('the signup reader accepts the mailed language parameter and refuses anothe
 
 test('the private remote rehearsal cannot run with the paid plan or a foreign namespace', async () => {
   const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, services: true}), /integration\.stockholm_remote_scope/);
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, paidVerification: true}), /integration\.stockholm_remote_scope/);
   await assert.rejects(runTestCloudClients({stockholmRemote: true, paidRemote: true}), /integration\.stockholm_remote_scope/);
   await assert.rejects(runTestCloudClients({stockholmRemote: true, kubernetes: {namespace: 'default'}}),
     /integration\.stockholm_remote_binding/);

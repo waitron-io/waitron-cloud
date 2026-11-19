@@ -8,7 +8,7 @@ import {kubernetesObject} from './kubernetes-object.mjs';
 
 export const monotonicMs = () => Number(process.hrtime.bigint() / 1000000n);
 const leaseActive = '/state/lease-active';
-const supervisorPid = '/state/supervisor.pid';
+const electionPid = '/state/election.pid';
 const expiry = 15000, renewal = 5000, retry = 2000;
 
 export async function runGatewayElection({lease, holder, grant, signal, now = monotonicMs,
@@ -26,7 +26,8 @@ export async function runGatewayElection({lease, holder, grant, signal, now = mo
       // A standby measures an unchanged Lease on its own clock.
       if (!incumbent || incumbent === holder || seen - observedAt >= expiry) {
         const next = await lease.replace({...current, spec: {...current.spec,
-          holderIdentity: holder, leaseDurationSeconds: expiry / 1000, renewTime: new Date().toISOString()}}, signal);
+          holderIdentity: holder, leaseDurationSeconds: expiry / 1000,
+          renewTime: new Date().toISOString().replace('Z', '000Z')}}, signal);
         if (signal?.aborted || next.spec.holderIdentity !== holder ||
           now() >= Math.min(deadline ?? Infinity, seen + renewal)) return;
         deadline = seen + renewal;
@@ -34,17 +35,27 @@ export async function runGatewayElection({lease, holder, grant, signal, now = mo
       }
     } catch (error) {
       if (signal?.aborted) return;
-      if (error.status === undefined && error.name !== 'TimeoutError' &&
-        !['AbortError', 'ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN', 'ETIMEDOUT'].includes(error.code)) throw error;
+      const temporaryHttp = error.status === 409 || error.status === 429 || error.status >= 500;
+      if (!temporaryHttp && !['AbortError', 'TimeoutError'].includes(error.name) &&
+        !['ECONNREFUSED', 'ECONNRESET', 'EAI_AGAIN', 'ENOTFOUND', 'ETIMEDOUT'].includes(error.code)) throw error;
     }
     if (!signal?.aborted) await wait(retry);
   }
 }
 
-export async function watchGateway({channel = process, launch, unready = () => {}, withdraw, signal}) {
+export async function watchGateway({channel = process, launch, ready = () => {}, unready = () => {}, withdraw, signal}) {
   let deadline, timer, child, exited;
   try {
-    return await new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
+      function finish(error) {
+        clearTimeout(timer);
+        channel.off('message', update);
+        channel.off('disconnect', stop);
+        signal?.removeEventListener('abort', stop);
+        if (error) reject(error);
+        else resolve();
+      }
+      const stop = () => finish();
       const update = next => {
         if (!Number.isSafeInteger(next)) return;
         const now = monotonicMs();
@@ -57,30 +68,37 @@ export async function watchGateway({channel = process, launch, unready = () => {
         try {
           child = launch();
           exited = once(child, 'exit');
-          exited.then(() => stop('gateway-exited'), reject);
-        } catch (error) {reject(error);}
+          exited.then(stop, finish);
+          ready();
+        } catch (error) {finish(error);}
       };
-      function stop(reason) {
-        clearTimeout(timer);
-        channel.off('message', update);
-        channel.off('disconnect', stop);
-        signal?.removeEventListener('abort', stop);
-        resolve(reason);
-      }
       channel.on('message', update);
       channel.once('disconnect', stop);
       signal?.addEventListener('abort', stop, {once: true});
       if (signal?.aborted) stop();
     });
   } finally {
-    clearTimeout(timer);
-    unready();
-    try {
-      if (child?.pid) {
-        try {process.kill(-child.pid, 'SIGKILL');} catch (error) {if (error.code !== 'ESRCH') throw error;}
-        await exited;
-      }
-    } finally {withdraw();}
+    try {unready();}
+    finally {
+      try {
+        if (child?.pid) {
+          try {process.kill(-child.pid, 'SIGKILL');} catch (error) {if (error.code !== 'ESRCH') throw error;}
+          await exited;
+        }
+      } finally {withdraw();}
+    }
+  }
+}
+
+export async function superviseGatewayElection(election, {started = () => {}, ...watch}) {
+  const ended = once(election, 'exit');
+  try {
+    started();
+    await watchGateway({...watch, channel: election});
+  } finally {
+    // A stopped watchdog must never leave an election process renewing the lease.
+    election.kill('SIGKILL');
+    await ended;
   }
 }
 
@@ -97,33 +115,26 @@ async function run() {
   process.once('SIGINT', () => stop.abort());
   while (!stop.signal.aborted) {
     const election = fork(fileURLToPath(import.meta.url), ['election']);
-    const ended = once(election, 'exit');
-    writeFileSync(supervisorPid, String(election.pid), {mode: 0o600});
-    const kill = () => election.kill('SIGKILL');
-    stop.signal.addEventListener('abort', kill, {once: true});
     try {
-      const reason = await watchGateway({channel: election, signal: stop.signal,
-        launch() {
-          const gateway = spawn(process.execPath, ['packages/remote-access/src/gateway-cli.ts'],
-            {detached: true, stdio: 'inherit'});
-          writeFileSync(leaseActive, '', {mode: 0o600});
-          return gateway;
-        },
+      await superviseGatewayElection(election, {signal: stop.signal,
+        started: () => writeFileSync(electionPid, String(election.pid), {mode: 0o600}),
+        launch: () => spawn(process.execPath, ['packages/remote-access/src/gateway-cli.ts'], {detached: true, stdio: 'inherit'}),
+        ready: () => writeFileSync(leaseActive, '', {mode: 0o600}),
         unready: () => rmSync(leaseActive, {force: true}),
         withdraw() {
           const run = args => execFileSync('ip', args, {stdio: 'ignore', timeout: 1000});
           try {run(['link', 'delete', 'wg-cloud']);}
           catch (error) {try {run(['link', 'show', 'wg-cloud']);} catch (missing) {if (missing.status === 1) return; throw missing;} throw error;}
         }});
-      if (reason === 'gateway-exited') kill();
-      await ended;
     } finally {
-      stop.signal.removeEventListener('abort', kill);
-      rmSync(supervisorPid, {force: true});
+      rmSync(electionPid, {force: true});
     }
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {await run();} catch {console.error('remote.gateway_supervisor_failed'); process.exitCode = 1;}
+  try {await run();} catch (error) {
+    console.error('remote.gateway_supervisor_failed' + (Number.isInteger(error.status) ? ':' + error.status : ''));
+    process.exitCode = 1;
+  }
 }

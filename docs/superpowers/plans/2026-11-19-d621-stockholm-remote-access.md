@@ -35,13 +35,13 @@ Keep production mode and both test-plan flags at zero.
    Leave shared ingress and the public gate's per-source qualification to PR 7.
 4. **Prove the route and handover.** Start with failing cases in
    `deploy/kubernetes/{remote-worker,gateway-supervisor}.test.mjs` for stale publication,
-   late renewal and a stopped supervisor. Check dispatch and scope in
+   late renewal and a stopped election process. Check dispatch and scope in
    `scripts/{kubernetes-check,test-cloud-integration}.test.mjs`. Run these files and
    `scripts/kubernetes-remote.test.mjs` after implementation. Run the latter again
    with `TEST_KUBERNETES_REMOTE=1` in the disposable Linux guest. Require verified staff
    TLS and allowed public traffic, unknown-name, wrong-certificate and private-path
-   refusals. Pause the active supervisor. Require its old interface to disappear
-   and both routes to return through the standby with a new handshake and transfer
+   refusals. Pause the active candidate's election process. Require its old interface
+   to disappear and both routes to return through the standby with a new handshake and transfer
    bytes within 90 s. The box and peer stay as they are. A miss fails the run. Check
    same-route certificate replacement and a new withdrawal phase using
    `POST /api/account/installations/revoke`. Observe each candidate within 180 s

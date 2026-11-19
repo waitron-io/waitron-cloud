@@ -43,7 +43,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
   const encoded = files => Object.fromEntries(Object.entries(files).map(([key, value]) => [key, Buffer.from(value).toString('base64')]));
   await secret('remote-worker-identity', encoded({...bootstrap, 'ca.pem': tls.root, 'ca-key.pem': tls.caKey}));
   await secret('remote-gateway-identity', encoded({'issuer.pem': bootstrap['gateway-issuer.pem'],
-    'wireguard.key': bootstrap['gateway-wireguard.key'], 'ca.pem': tls.root, 'default.pem': tls.key + tls.cert,
+    'wireguard.key': bootstrap['gateway-wireguard.key'], 'ca.pem': tls.root, 'default.pem': await readFile(join(runtimeDirectory, 'public-certs/default.pem')),
     'bot.key': await readFile(join(runtimeDirectory, 'gateway-bot.key'))}));
   const resources = JSON.parse(await readFile(new URL('../deploy/kubernetes/remote.yaml', import.meta.url), 'utf8'));
   const deployment = resources.items.find(row => row.kind === 'Deployment').spec.template;
@@ -90,7 +90,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       async handover(checkRoutes, peer) {
         const old = await active(signal);
         const start = performance.now(), cut = Math.floor(Date.now() / 1000);
-        await exec(old, ['sh', '-ec', 'kill -STOP "$(cat /state/supervisor.pid)"'], signal);
+        await exec(old, ['sh', '-ec', 'kill -STOP "$(cat /state/election.pid)"'], signal);
         return untilRemote(async limit => {
           const next = await active(limit);
           assert.notEqual(next, old, 'remote.standby_required');
