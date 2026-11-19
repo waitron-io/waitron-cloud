@@ -50,9 +50,9 @@ verifier on 10:18.
    Measure archive, image, scratch and host RAM/disk during the verifier run.
    Stop on capacity or failed checks and record the exact sizes, status and
    reason. Privately transfer the matching verifier and read back its image ID.
-   The private trial read identifies the latest admitted passed attempt for the
-   capture, current policy and image, matching archive digest and bytes, complete
-   required module results and confirmed child cleanup.
+   The private trial read starts from the capture's latest attempt. Require
+   admission, a passing result, the current policy and image, matching digest and
+   bytes, all required module checks and confirmed child cleanup.
    `verification-admission.test.ts` checks that result alongside pending
    qualification and `recovery-qualification.test.ts` checks recovery refusal.
    Readiness stays false, so the normal 48-hour stale snapshot notice can still
