@@ -11,7 +11,7 @@ import {captureRuntime} from '../packages/backups/src/capture-config.ts';
 import {StorageAuthority} from '../packages/backups/src/storage.ts';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
 import {readObject, storageBucket, storageClient, withStockholmStore} from './kubernetes-storage-proof.mjs';
-import {storeNodePort} from './kubernetes-storage.mjs';
+import {storeNodePort, waitForStore} from './kubernetes-storage.mjs';
 import {retryApi} from './kubernetes-node-loss.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
@@ -206,8 +206,11 @@ async function checkGrants(context, account, custodyDirectory) {
         process.stderr.write('Fresh grant issued while the machine is stopped\n');
         return {expiredGrantRefused: true, issuerKeyStable: true, issuerSurvivor: survivor.name, renewed};
       }});
+      const ready = AbortSignal.any([signal, AbortSignal.timeout(240_000)]);
+      process.stderr.write('Machine rejoined; waiting for all six store peers\n');
+      await waitForStore({nodes: nodes.map(node => node.name), kube, signal: ready});
       const restored = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
-      process.stderr.write('Machine rejoined; reading the encrypted snapshot with the renewed grant\n');
+      process.stderr.write('Store peers ready; reading the encrypted snapshot with the renewed grant\n');
       assert.deepEqual(await get(client(survivor, renewed.credentials), snapshot, restored), bytes);
       return {...outage, renewedGrantReadAfterRejoin: true};
     } finally { reopened.close(); }

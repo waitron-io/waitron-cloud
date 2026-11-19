@@ -84,7 +84,7 @@ export function stockholmStoreResources(nodes, image, openId) {
   ];
 }
 
-async function waitForStore({nodes, kube, signal}) {
+export async function waitForStore({nodes, kube, signal}) {
   do {
     const {items} = JSON.parse(await kube(['-n', namespace, 'get', 'pods', '-l', 'app=store', '-o', 'json'], {signal}));
     if (items.length === peers.length && items.every(row =>
