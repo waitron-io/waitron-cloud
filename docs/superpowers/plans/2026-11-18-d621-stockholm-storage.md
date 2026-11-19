@@ -83,22 +83,33 @@ could read its local drive and timed out looking up three surviving remote
 drives. The [DNS placement repair](2026-11-19-stockholm-storage-dns-placement.md)
 moves the replicas onto separate machines before workloads start. The Linux
 rehearsal passed both survivors' encrypted reads, writes, listing and multipart
-within the existing 90-second outage window. Both reads also passed in three
-controls that stopped a DNS host. The first control passed multipart. In the
-next two, the store refused a multipart completion request with HTTP 503
-`SlowDownWrite` where the missing-part check expected `InvalidPart`. In the
-last control, the Kubernetes endpoint snapshot still listed the stopped DNS
-host as ready (`post-land-dns-host-loss-live.log`, lines 75–86 and 438–476).
-Diagnosing that refusal is a prerequisite for the timed dry run. Lane G keeps
-the 19 November logs cited here under `receipts/storage-read-during-outage/`.
+within the existing 90-second outage window. Two forced DNS-host-loss runs
+returned HTTP 503 `SlowDownWrite` during multipart. In the second, Kubernetes
+still listed the stopped DNS host as ready (`post-land-dns-host-loss-live.log`,
+lines 75–86 and 438–476). Two subsequent controls passed all four checks. One
+kept the stale entry. In the other, both surviving machines routed DNS only to
+the surviving replica. The cause of the earlier multipart refusals remains open.
 
-With DNS placement fixed, one scoped grant renewal hit Cloud's ten-second
-deadline while the machine was still down (`placement-storage-identity-live.log`,
-lines 506–531). A later Linux run with server timing refused the expired grant,
-renewed in 18 ms, and read the encrypted snapshot after all six peers returned
-(`post-land-renewal-live.log`, lines 101–107, 161–172 and 404–419). The cause of
-the timeout remains open. The identity rehearsal keeps the same expiry,
-deadline and single renewal request and captures store timing.
+Two scoped grant renewals reached Cloud's ten-second deadline while a machine
+was down. In the second run, MinIO finished reloading the grant on its peers
+just after the client gave up (`renewal-timing-live.log`, lines 110–122 and
+516–530). An earlier traced renewal passed in 18 ms. The later per-peer trace
+passed in 9.786 seconds and read the encrypted snapshot after all six peers
+returned. The two stopped peers returned errors within four microseconds. Two
+peers on surviving machines completed in 9.407 and 9.777 seconds. Kubernetes
+listed the stopped DNS host as ready throughout the request. The cause of the
+slow reload remains open.
+
+Keep MinIO grant timing enabled in the identity rehearsal. For the run 9 Linux
+rehearsal, Lane G keeps the per-peer and DNS sampling enabled using
+`combined.patch` and `combined-command.sh` in
+`receipts/d621-multipart-dns-control/`. The test keeps the original expiry,
+deadline, single request and post-rejoin read. Report a third timeout or
+multipart refusal to the watcher with its trace. The same receipt directory
+holds `combined-live-01.log` (lines 77–104 and 155–209) and
+`survivor-only-03.log` (lines 75–110). Earlier DNS rehearsal logs are in
+`receipts/storage-read-during-outage/`. The second renewal timeout is in
+`receipts/d621-run9-storage-access/` within the lane.
 
 The separate candidate that refreshes peer addresses and requests explicit
 repair restored both outage objects and both multipart parts on both returned
