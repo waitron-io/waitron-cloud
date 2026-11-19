@@ -51,6 +51,8 @@ function fixture({foreign = false, foreignNetwork = false, partial = false, fail
         return JSON.stringify({spec: {renewTime: fresh ? '2026-11-18T09:00:01Z' : '2026-11-18T09:00:00Z'}});
       }
       if (verb === 'get' && kind === '--raw=/readyz') return 'ok';
+      if (verb === 'patch' && kind === 'deployment' && args[5] === 'coredns') return 'deployment.apps/coredns patched';
+      if (verb === 'rollout' && kind === 'status' && args[5] === 'deployment/coredns') return 'deployment "coredns" successfully rolled out';
       if (verb === 'apply') {
         const manifest = JSON.parse(options.input);
         const stopped = Array.from(containers.values()).find(row => !row.State.Running);
@@ -130,6 +132,25 @@ test('the Kind fault loop stops each exact container, schedules on a survivor an
   assert.deepEqual(Object.values(result.members), ['0', '1', '2'].map(digit => '0123456789abcde' + digit));
   assert.ok(f.removed());
   assert.equal(f.remaining(), 0);
+});
+
+test('the three-machine rehearsal waits for DNS across machines before starting workloads', async () => {
+  const f = fixture();
+  await runCheck({execute: f.execute, storage: async () => {
+    const commands = f.calls.filter(({binary}) => binary === 'kubectl').map(({args}) => args.slice(3));
+    const nodesReady = commands.findIndex(args => args[0] === 'wait' && args.includes('nodes'));
+    const patch = commands.findIndex(args => args[0] === 'patch' && args[2] === 'coredns');
+    const rollout = commands.findIndex(args => args[0] === 'rollout' && args[2] === 'deployment/coredns');
+    assert.ok(nodesReady >= 0 && nodesReady < patch, 'place DNS after the three nodes are ready');
+    assert.deepEqual(commands[patch].slice(0, -1),
+      ['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p']);
+    const template = JSON.parse(commands[patch].at(-1)).spec.template.spec;
+    assert.deepEqual(template.affinity?.podAntiAffinity?.requiredDuringSchedulingIgnoredDuringExecution, [{
+      labelSelector: {matchLabels: {'k8s-app': 'kube-dns'}}, topologyKey: 'kubernetes.io/hostname',
+    }]);
+    assert.ok(patch < rollout, 'wait for the DNS rollout before handing off to storage');
+    assert.deepEqual(commands[rollout], ['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s']);
+  }});
 });
 
 test('a container with an unrelated Kind label is never stopped or removed', async () => {

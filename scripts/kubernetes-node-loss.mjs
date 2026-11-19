@@ -5,6 +5,7 @@ import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {spreadCoreDns} from './kubernetes-placement.mjs';
 
 export const kindNodeImage = 'kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48';
 const pauseImage = 'registry.k8s.io/pause:3.10';
@@ -162,6 +163,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     });
     await kube(['taint', 'node', ...names, 'node-role.kubernetes.io/control-plane:NoSchedule-']);
     await kube(['wait', '--for=condition=Ready', 'nodes', '--all', '--timeout=180s'], {timeout: 185_000});
+    await spreadCoreDns(kube);
     const nodeUids = await readNodes(), members = await readEtcd(nodes);
     async function stopNode(name, {whileStopped, afterRestart} = {}) {
       const node = nodes.find(candidate => candidate.name === name);

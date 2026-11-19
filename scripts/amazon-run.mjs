@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 import {fluxImages,prepareFluxBundle} from './kubernetes-git.mjs';
 import {storeBuildArgs} from './kubernetes-storage.mjs';
+import {spreadCoreDns} from './kubernetes-placement.mjs';
 
 export async function runAmazonExperiment(operations, {sleep = delay, waitExpiry} = {}) {
   try {
@@ -169,7 +170,8 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
     const ssh = (index, args, input, timeout = 600000) => run('ssh', [...sshOptions, 'admin@' + hosts[index], args.map(quote).join(' ')], input, false, timeout);
     const copy = (index, file, path, timeout = 300000) => run('scp', [...sshOptions, join(directory, file), 'admin@' + hosts[index] + ':' + path], undefined, false, timeout);
     const bootstrap = (index, phase, args = [], input) => ssh(index, ['sudo', 'bash', '/opt/d618/deploy/kubernetes/bounded-amazon/bootstrap.sh', phase, ...args], input);
-    const kube = args => ssh(0, ['sudo', 'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name, ...args]);
+    const kube = (args, {timeout} = {}) => ssh(0, ['sudo', 'kubectl', '--kubeconfig=/etc/kubernetes/admin.conf', '--context', name, ...args],
+      undefined, timeout);
     const waitDeleted = async () => {
       try {await aws('cloudformation', ['wait', 'stack-delete-complete', '--stack-name', name], true);}
       catch (error) {if (error.code === 'ETIMEDOUT') throw Error('amazon.deletion_late'); throw error;}
@@ -238,6 +240,7 @@ export async function startAmazon(config, {run, aws, sleep = delay, now = Date.n
           const found = await ssh(index, ['sh', '-c', 'test -x /opt/cni/bin/flannel && echo present || echo missing']);
           assert.equal(found, 'present', 'amazon.flannel_plugin: machine ' + index + ' has no flannel network plugin in /opt/cni/bin, where containerd looks');
         }
+        await spreadCoreDns(kube);
         for (let index = 0; index < 3; index++) await bootstrap(index, 'database-storage');
         // Leave the remote installer time for both rollouts and their failure diagnostics.
         await ssh(0, ['sudo', 'node', '/opt/d618/scripts/kubernetes-data.mjs',
