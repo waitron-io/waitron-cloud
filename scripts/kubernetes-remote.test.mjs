@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawn} from 'node:child_process';
 import {createSocket} from 'node:dgram';
-import {once} from 'node:events';
+import {EventEmitter, once} from 'node:events';
+import {createConnection, createServer} from 'node:net';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -139,21 +140,72 @@ test('the paired venue keeps its endpoint when the active gateway machine stops'
   console.log('D621 gateway-machine timings', loss);
 });
 
-test('the WireGuard relay forwards replies after the upstream endpoint returns', {timeout: 10000}, async t => {
-  const local = '127.0.0.1', destination = createSocket('udp4');
-  destination.bind(0, local);
-  await once(destination, 'listening');
-  const {port: upstreamPort} = destination.address();
-  destination.close();
-  await once(destination, 'close');
-  const relay = spawn(process.execPath, [
-    fileURLToPath(new URL('../deploy/kubernetes/remote-relay.mjs', import.meta.url)), local, String(upstreamPort), '0', local,
-  ], {stdio: ['ignore', 'pipe', 'inherit']});
+test('the same relay ports follow a changed address and then fail over to another node', {timeout: 15000}, async t => {
+  const local = '127.0.0.1';
+  const backend = async name => {
+    const tcp = createServer(socket => socket.once('data', () => socket.end(name)));
+    let udp;
+    async function bindUdp(port = 0) {
+      udp = createSocket('udp4');
+      udp.on('message', (_data, peer) => udp.send(name, peer.port, peer.address));
+      udp.bind(port, local);
+      await once(udp, 'listening');
+    }
+    async function closeUdp() {
+      const closed = once(udp, 'close');
+      udp.close();
+      udp = undefined;
+      await closed;
+    }
+    tcp.listen(0, local);
+    t.after(() => {tcp.close(); udp?.close();});
+    await Promise.all([once(tcp, 'listening'), bindUdp()]);
+    return {tcp, ports: {tcp: tcp.address().port, udp: udp.address().port}, bindUdp, closeUdp};
+  };
+  const [original, replacement, standby] = await Promise.all(['original', 'replacement', 'standby'].map(backend));
+  const preload = `
+    import dns from 'node:dns';
+    import {Socket} from 'node:dgram';
+    import net from 'node:net';
+    import {syncBuiltinESMExports} from 'node:module';
+    const backends = ${JSON.stringify({
+      '192.0.2.1': original.ports, '192.0.2.2': replacement.ports, '192.0.2.3': standby.ports,
+    })};
+    const local = ${JSON.stringify(local)};
+    let primary = '192.0.2.1';
+    process.on('message', address => {primary = address; process.send('updated');});
+    const lookup = dns.lookup;
+    dns.lookup = (name, options, done) => {
+      if (name === 'node-first') return done(null, primary, 4);
+      if (name === 'node-second') return done(null, '192.0.2.3', 4);
+      if (name === 'node-third') {
+        process.send('check');
+        return done(Object.assign(Error('unavailable'), {code: 'ENOTFOUND'}));
+      }
+      return lookup(name, options, done);
+    };
+    const connectTcp = net.createConnection;
+    net.createConnection = (options, connected) => {
+      const ports = backends[options.host];
+      if (ports) options = {...options, host: local, port: ports.tcp};
+      return connectTcp(options, connected);
+    };
+    const connectUdp = Socket.prototype.connect;
+    Socket.prototype.connect = function (port, address, connected) {
+      const ports = backends[address === 'node-first' ? primary : address];
+      return ports ? connectUdp.call(this, ports.udp, local, connected) : connectUdp.call(this, port, address, connected);
+    };
+    syncBuiltinESMExports();
+  `;
+  const relay = spawn(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(preload),
+    fileURLToPath(new URL('../deploy/kubernetes/remote-relay.mjs', import.meta.url)),
+    'node-first', '31820', '0', local, '0', 'node-second', 'node-third',
+  ], {stdio: ['ignore', 'pipe', 'inherit', 'ipc']});
   const lines = createInterface({input: relay.stdout}), exited = once(relay, 'exit');
-  const client = createSocket('udp4'), replacement = createSocket('udp4');
+  const client = createSocket('udp4'), events = new EventEmitter();
+  relay.on('message', event => events.emit(event));
   t.after(async () => {
     client.close();
-    replacement.close();
     lines.close();
     if (relay.exitCode === null && relay.signalCode === null) relay.kill();
     await exited;
@@ -161,17 +213,47 @@ test('the WireGuard relay forwards replies after the upstream endpoint returns',
   const [line] = await Promise.race([
     once(lines, 'line'), exited.then(() => assert.fail('relay exited before listening')),
   ]);
-  const relayPort = Number(line);
-  client.send('packet before replacement', relayPort, local);
-  const [gap] = await Promise.race([
-    once(lines, 'line'),
-    exited.then(() => assert.fail('relay exited during the endpoint gap')),
-  ]);
-  assert.equal(gap, 'remote.relay_endpoint_unavailable');
-  replacement.on('message', (bytes, peer) => replacement.send(bytes, peer.port, local));
-  replacement.bind(upstreamPort, local);
-  await once(replacement, 'listening');
-  client.send('packet after replacement', relayPort, local);
-  const [response] = await once(client, 'message');
-  assert.equal(response.toString(), 'packet after replacement');
+  const {tcp, udp} = JSON.parse(line);
+  assert.ok(tcp > 0 && udp > 0, 'the relay opens a TCP and a UDP listener');
+
+  async function verifyUdp(expected, signal) {
+    const reply = once(client, 'message', {signal});
+    client.send('WireGuard', udp, local);
+    const [datagram] = await reply;
+    assert.equal(datagram.toString(), expected);
+  }
+  const verifyReplies = expected => remoteRehearsal.untilRemote(async () => {
+    const signal = AbortSignal.timeout(200);
+    const socket = createConnection({host: local, port: tcp, signal}, () => socket.write('staff'));
+    try {
+      const [data] = await once(socket, 'data', {signal});
+      assert.equal(data.toString(), expected);
+      await verifyUdp(expected, signal);
+      return true;
+    } finally {socket.destroy();}
+  }, 6000, t.signal, 'relay_reply_' + expected);
+
+  await verifyReplies('original');
+  await original.closeUdp();
+  const gap = once(lines, 'line', {signal: t.signal});
+  client.send('WireGuard while the endpoint is down', udp, local);
+  assert.deepEqual(await gap, ['remote.relay_endpoint_unavailable']);
+  await original.bindUdp(original.ports.udp);
+  await verifyReplies('original');
+
+  const updated = once(events, 'updated', {signal: t.signal});
+  relay.send('192.0.2.2');
+  await updated;
+  await verifyReplies('replacement');
+
+  await new Promise(resolve => replacement.tcp.close(resolve));
+  const checked = () => once(events, 'check', {signal: t.signal});
+  await checked();
+  await checked();
+  await verifyUdp('replacement', AbortSignal.timeout(500));
+  await verifyReplies('standby');
+
+  await new Promise(resolve => standby.tcp.close(resolve));
+  for (let check = 0; check < 4; check++) await checked();
+  await verifyUdp('standby', AbortSignal.timeout(500));
 });

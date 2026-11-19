@@ -26,7 +26,12 @@ export async function untilRemote(probe, ms, signal, stage) {
 const remoteDeadlineMs = 90_000;
 const readGatewayPods = async (kube, limit) => JSON.parse(await kube(['get', 'pods', '-l', 'app=remote-gateway', '-o', 'json'], limit)).items;
 const execGateway = (kube, pod, cmd, limit) => kube(['exec', pod, '--', ...cmd], limit);
-const noGatewayInterface = ['sh', '-ec', '! ip link show wg-cloud >/dev/null 2>&1 && test ! -e /state/lease-active'];
+const noGatewayInterface = ['sh', '-ec', `
+  status=0
+  if ip link show wg-cloud >/dev/null 2>&1; then echo 'WireGuard interface still present' >&2; status=1; fi
+  if test -e /state/lease-active; then echo 'Lease readiness marker still present' >&2; status=1; fi
+  exit "$status"
+`];
 
 async function peerCounters(kube, pod, peer, limit) {
   const counters = async column => (await execGateway(kube, pod, ['wg', 'show', 'wg-cloud', column], limit))
@@ -133,8 +138,10 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     return rows.length === 3 && rows.every(row => row.status.phase === 'Running') && new Set(rows.map(row => row.spec.nodeName)).size === 3 &&
       rows.map(row => row.metadata.name);
   }, 180000, signal, 'gateway_candidates');
+  const [primary, ...standbys] = nodes.map(node => node.name);
   const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
-    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs', nodes[0].ip]);
+    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs',
+    primary, '31820', '51820', '0.0.0.0', '30443', ...standbys]);
   assert.match(relayId, /^[a-f0-9]{64}$/);
   const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
   try {
@@ -161,7 +168,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         return {durationMs: Math.ceil(performance.now() - start), interfaceWithdrawn: true, handshake: true};
       }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), signal, 'handover_90_seconds');
     }
-    return {gatewayIp, host: nodes[0].ip, port: 30443, ca: tls.root, close, handover,
+    return {gatewayIp, host: gatewayIp, port: 30443, ca: tls.root, close, handover,
       ...(stopGatewayNode ? {machineLoss: (checkRoutes, peer, prepareRoutes) => measureGatewayMachineLoss({kube: call,
         accountNode: nodes[0].name, stopNode, moveGateway: handover, checkRoutes, prepareRoutes, peer, signal})} : {}),
       async peers(limit) {return exec(await active(limit), ['wg', 'show', 'wg-cloud', 'peers'], limit);},
