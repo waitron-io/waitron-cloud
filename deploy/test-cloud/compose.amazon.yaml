@@ -10,6 +10,7 @@ services:
     environment:
       <<: *amazon-environment
       TEST_CLOUD_CERTIFICATE_SOURCE: /run/public-certificate
+      TEST_CLOUD_GUEST_MENU: ${TEST_CLOUD_GUEST_MENU:-0}
     volumes:
       - type: bind
         source: ${TEST_CLOUD_CERTIFICATE_SOURCE:?Set the certificate directory}
@@ -26,6 +27,8 @@ services:
   account:
     environment:
       <<: *amazon-environment
+      TEST_CLOUD_AMAZON: "1"
+      TEST_CLOUD_GUEST_MENU: ${TEST_CLOUD_GUEST_MENU:-0}
       CLOUD_BILLING_ACCOUNT_TEST_IDS: ${CLOUD_BILLING_ACCOUNT_TEST_IDS:-}
       CLOUD_BILLING_METHODS_MODE: ${CLOUD_BILLING_METHODS_MODE:-off}
       CLOUD_BILLING_STRIPE_TEST_ACCOUNT: ${CLOUD_BILLING_STRIPE_TEST_ACCOUNT:-}
@@ -78,11 +81,17 @@ services:
     environment:
       TEST_CLOUD_ORIGIN: ${TEST_CLOUD_ORIGIN}
       TEST_CLOUD_CERTIFICATE: /run/proxy-certificate/proxy.pem
+      TEST_CLOUD_GUEST_MENU: ${TEST_CLOUD_GUEST_MENU:-0}
     command:
       - /bin/sh
       - -ec
       - |
         export TEST_CLOUD_HOST="$${TEST_CLOUD_ORIGIN#https://}"
+        unset TEST_CLOUD_GUEST_HOST
+        if [ "$${TEST_CLOUD_GUEST_MENU}" = 1 ]; then
+          export TEST_CLOUD_GUEST_HOST="menus.$${TEST_CLOUD_HOST}"
+          export TEST_CLOUD_GUEST_CA=/run/proxy-certificate/guest-ca.pem
+        fi
         exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg -f /app/deploy/test-cloud/proxy.amazon.cfg
     volumes: !override
       - test-cloud-public-certificate:/run/proxy-certificate:ro

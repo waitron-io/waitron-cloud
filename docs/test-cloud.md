@@ -361,6 +361,47 @@ separate read-only mounts for Certbot's webroot and venue challenge files. Only
 the manifest worker can write the latter; it retains a separate private ACME
 account key in the configuration volume and registers no email contact.
 
+### Open the synthetic venue's guest menu
+
+Upgrade the test Cloud with the coordinated backup below and leave
+`TEST_CLOUD_GUEST_MENU` off. The new challenge listener can already answer for
+`menus.test-cloud.waitron.io`, so you can rehearse issuance before opening the
+reader. Save a private backup of the Certbot state and renewal hook. Run:
+
+```sh
+sudo certbot certonly --dry-run --cert-name test-cloud.waitron.io \
+  --webroot --webroot-path /opt/waitron-cloud/acme-webroot \
+  -d test-cloud.waitron.io -d menus.test-cloud.waitron.io
+```
+
+After both names validate, repeat without `--dry-run` to expand the existing
+certificate in place. Keep one renewal configuration and its existing copy
+and reload hook. With guest service enabled, bootstrap imports a renewed
+certificate only if it covers both names. A refused import preserves the
+certificate the proxy is using. Check HTTPS for the account and an existing
+venue gateway address before enabling the reader.
+
+Set `TEST_CLOUD_GUEST_MENU=1` in the host's private `test.env`. Run the
+one-off bootstrap command above and confirm it prints `{"status":"ready"}`.
+If it fails, unset the switch and leave the running containers in place.
+Check that the certificate directory holds the new certificate and its key
+before trying again. After bootstrap succeeds, run the Amazon deployment
+driver's `up` command with the installed image. It starts the account and
+proxy with the new setting and updates the recorded container IDs. If `up`
+fails, it stops the recorded project containers. Unset the switch and rerun
+`up` with the same image to restore the account and gateway.
+
+After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
+choose **Turn sharing on**. Open the published address on a phone using mobile
+data. In the Cloud portal, turn the guest menu off for the venue and confirm
+the same address returns 404. Turn it on and wait for the box to publish again.
+
+To close the test reader, unset `TEST_CLOUD_GUEST_MENU` and run the Amazon
+driver's `up` command again with the installed image. The shared certificate
+can keep both names while this image is
+in use. Before restoring an image that lacks the guest challenge handler,
+restore the saved account-only Certbot configuration and verify its renewal.
+
 The venue zone is the account name, such as `test-cloud.waitron.io`; its wildcard
 must already resolve to this host. No DNS credential is used. The Amazon worker
 adopts that zone and tunnel endpoint only if no placement or stored venue name

@@ -33,6 +33,11 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  if(role==='account'&&mode==='test-venue-levels'){
+  if(environment.TEST_CLOUD_AMAZON==='1'&&environment.TEST_CLOUD_GUEST_MENU==='1'&&environment.NODE_ENV!=='production'){
+   const origin=new URL(result.CLOUD_PORTAL_ORIGIN);
+   if(origin.port||!environment.TEST_CLOUD_ORIGIN)throw Error('test_cloud.guest_origin');
+   result.GUEST_ORIGIN='https://menus.'+origin.hostname;
+  }
   result.TEST_CLOUD_TUNNEL_CELL_ID=config.gateway.cellId;
   for(const name of ['CLOUD_BACKUP_STAGE_ROOT','CLOUD_BILLING_ACCOUNT_TEST_IDS','CLOUD_BILLING_METHODS_MODE'])if(environment[name]!==undefined)result[name]=environment[name];
   if(result.CLOUD_BILLING_METHODS_MODE==='test'){

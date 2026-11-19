@@ -11,8 +11,8 @@ export async function guestTlsFixture(){
   execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','2','-subj',`/CN=${host}`,'-addext',`subjectAltName=DNS:${host}`,'-keyout',keyFile,'-out',certFile],{stdio:'ignore'});
   const tls={key:await readFile(keyFile),cert:await readFile(certFile)},origin=`https://${host}`;
   return {...f,scratch,keyFile,certFile,origin,tls,options:{pool:f.db.pool,rateKey:f.db.rateKey,origin,tls,port:0},
-   send:(port:number,path:string,method='GET',headers:Record<string,string>={})=>new Promise<{status:number;body:string;headers:import('node:http').IncomingHttpHeaders}>((resolve,reject)=>{
-    const req=request({host:'127.0.0.1',port,servername:host,ca:tls.cert,path,method,headers:{host,...headers}},reply=>{let body='';reply.setEncoding('utf8');reply.on('data',part=>body+=part);reply.on('end',()=>resolve({status:reply.statusCode!,body,headers:reply.headers}));});
+   send:(port:number,path:string,method='GET',headers:Record<string,string>={},address='127.0.0.1')=>new Promise<{status:number;body:string;headers:import('node:http').IncomingHttpHeaders}>((resolve,reject)=>{
+    const req=request({host:address,port,servername:host,ca:tls.cert,path,method,headers:{host,...headers}},reply=>{let body='';reply.setEncoding('utf8');reply.on('data',part=>body+=part);reply.on('end',()=>resolve({status:reply.statusCode!,body,headers:reply.headers}));});
     req.on('error',reject);req.end();
    }),
    close:async()=>{await f.db.close();await rm(scratch,{recursive:true,force:true});}};

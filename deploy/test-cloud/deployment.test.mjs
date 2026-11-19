@@ -128,3 +128,20 @@ test('driver inventory preserves absent, healthy and unhealthy states for its re
  assert.equal(after.containers.find(row=>row.id===watched).health,'unhealthy');
  assert.throws(()=>resourceGuard({...before,availableMiB:5000,freeGiB:30},{...after,availableMiB:5000,freeGiB:30}),/test_cloud.waitron_health/);
 });
+
+test('the Amazon guest setting reaches only its private reader, certificate import and proxy',()=>{
+ const files=['-f','compose.yaml','-f','deploy/test-cloud/compose.yaml'];
+ const render=extra=>JSON.parse(execFileSync('docker',['compose','--env-file','deploy/test-cloud/test.env',...files,...extra,'config','--format','json'],{
+  cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_GUEST_MENU:'1',TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'}
+ })).services;
+ const lan=render([]),amazon=render(['-f','deploy/test-cloud/compose.amazon.yaml']);
+ for(const service of Object.values(lan))assert.equal(service.environment?.TEST_CLOUD_GUEST_MENU,undefined);
+ for(const [name,service] of Object.entries(amazon))
+  assert.equal(service.environment?.TEST_CLOUD_GUEST_MENU,['account','bootstrap','proxy'].includes(name)?'1':undefined,name);
+ assert.equal(amazon.account.environment.TEST_CLOUD_AMAZON,'1');
+ assert.equal(amazon.account.ports,undefined);
+ const bootstrap=amazon.bootstrap.volumes.find(v=>v.target==='/run/proxy-certificate');
+ for(const [name,service] of Object.entries(amazon))
+  if(name!=='bootstrap'&&name!=='proxy')assert.ok(!service.volumes?.some(v=>v.source===bootstrap.source),name);
+ assert.equal(amazon.proxy.volumes.find(v=>v.source===bootstrap.source).read_only,true);
+});

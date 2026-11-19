@@ -264,3 +264,14 @@ test('the Amazon worker refuses custom names without a TLS challenge',async()=>{
    {zone:'test-cloud.example.test'}),{message:'test_cloud.remote_target'});
  }
 });
+
+test('guest publication and its reader are configured only for the enabled Amazon test account',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-guest-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const config=await bootstrap(dir),input={TEST_CLOUD_ORIGIN:'https://cloud.example.test',CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_AMAZON:'1',TEST_CLOUD_GUEST_MENU:'1'};
+ const child=testRuntimeEnvironment('account',config,input);
+ assert.equal(child.GUEST_ORIGIN,'https://menus.cloud.example.test');
+ for(const change of [{TEST_CLOUD_AMAZON:undefined},{CLOUD_VENUE_SERVICE_LEVELS:undefined},{NODE_ENV:'production'},{TEST_CLOUD_GUEST_MENU:'0'}])
+  assert.equal(testRuntimeEnvironment('account',config,{...input,...change}).GUEST_ORIGIN,undefined);
+ assert.equal(testRuntimeEnvironment('email',config,input).GUEST_ORIGIN,undefined);
+});
