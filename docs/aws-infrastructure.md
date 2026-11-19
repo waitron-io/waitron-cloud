@@ -1258,7 +1258,9 @@ services against the replicated database and store while all three nodes are up.
 ### Rehearse signup, pairing and backup on a healthy Kind cell
 
 Use a disposable x86-64 Linux Docker host with the same Kind, kubectl and Buildx
-versions as the storage rehearsal. Set `TEST_CLOUD_INTEGRATION_IMAGE` to the
+versions as the storage rehearsal. Run as root in the disposable host so the
+check can mount its private 1 GiB ext4 scratch filesystem for the verifier.
+Set `TEST_CLOUD_INTEGRATION_IMAGE` to the
 local Cloud image ID and `TEST_CLOUD_INTEGRATION_WAITRON_IMAGE` to the local
 Waitron verifier image ID built with `node scripts/build-backup-verifier.mjs --amazon-test`.
 This uses the shared test verifier pin in `deploy/backup-verifier/amazon-test-target.json`.
@@ -1273,8 +1275,10 @@ The journey uses a synthetic account and box, checks pairing and the stored
 archive, then waits for the backup worker to admit a matching restore using the existing
 test verifier and a policy pinned to the image in the disposable database. It
 also checks that altered bytes cannot be published. The worker uses its
-own Docker daemon and removes the isolated restore container. The checkout
-removes the Kind cluster and native client resources it created.
+own Docker daemon and removes the isolated restore container. The restore
+child's 1 GiB memory limit stays in place. The check prints the archive size
+and scratch bound after it removes the Kind cluster, native client resources
+and scratch filesystem it created.
 
 Use the outside rehearsal for Stockholm and Flux startup, worker redundancy,
 durable mail and a storage address that survives machine loss. The outside

@@ -50,6 +50,9 @@ test('an owned Linux Kind cell signs in and admits a genuine restored backup', {
   assert.equal(services.backup.workerVerification.status, 'passed');
   assert.equal(services.backup.workerVerification.childAbsent, true);
   assert.equal(services.backup.workerVerification.workerStoppedNaturally, true);
+  assert.ok(Number.isSafeInteger(services.backup.bytes) && services.backup.bytes > 0);
+  assert.equal(services.verifierScratchBytes, 1024 ** 3);
+  console.log(`D621 verifier scratch: ${services.backup.bytes} archive bytes, ${services.verifierScratchBytes} bytes allocated`);
   assert.equal(services.alteredPublicationRefused, true);
   assert.equal(services.operationsReady, true);
   assert.deepEqual(services.cleanup.remaining, []);

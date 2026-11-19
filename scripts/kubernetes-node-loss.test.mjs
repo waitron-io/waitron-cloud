@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {writeFile, truncate} from 'node:fs/promises';
 import test from 'node:test';
 
 import {runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
@@ -269,12 +270,43 @@ test('the fault check retries a bare Kubernetes API EOF while the node stays dow
 });
 
 test('the healthy services rehearsal uses the three owned nodes without stopping them', async () => {
-  const {execute, calls} = fixture();
+  const {execute: executeKind, calls, remaining} = fixture();
+  let workPath;
+  const execute = async (binary, args, options) => {
+    if (binary === 'fallocate') {
+      assert.deepEqual(args.slice(0, 2), ['-l', '1G']);
+      await writeFile(args[2], '');
+      await truncate(args[2], 1024 ** 3);
+      return '';
+    }
+    if (binary === 'mkfs.ext4') return '';
+    if (binary === 'mount') {
+      assert.deepEqual(args.slice(0, 2), ['-o', 'loop,nodev,nosuid,noexec']);
+      return '';
+    }
+    if (binary === 'install') {
+      assert.deepEqual(args.slice(0, -1), ['-d', '-m', '0700', '-o', '1000', '-g', '1000']);
+      workPath = args.at(-1);
+      return '';
+    }
+    if (binary === 'sh') {
+      assert.equal(remaining(), 0, 'remove the cluster before unmounting scratch');
+      assert.equal(args.at(-1) + '/work', workPath);
+      return '';
+    }
+    if (binary === 'kind' && args[0] === 'create') {
+      assert.ok(workPath, 'prepare the filesystem before creating Kind');
+      assert.deepEqual(JSON.parse(options.input).nodes.map(node => node.extraMounts), [
+        [{hostPath: workPath, containerPath: '/var/local/d621-verifier-scratch'}], undefined, undefined,
+      ]);
+    }
+    return executeKind(binary, args, options);
+  };
   const result = await runCheck({execute, services: async ({nodes, cluster, kube}) => {
     assert.deepEqual(nodes.map(node => node.ip), ['172.30.250.2', '172.30.250.3', '172.30.250.4']);
     assert.equal((await kube(['get', '--raw=/readyz'])), 'ok');
     return {network: cluster};
   }});
-  assert.deepEqual(result.services, {network: result.cluster});
+  assert.deepEqual(result.services, {network: result.cluster, verifierScratchBytes: 1024 ** 3});
   assert.equal(calls.filter(({binary, args}) => binary === 'docker' && args[0] === 'kill').length, 0);
 });

@@ -37,7 +37,10 @@ verifier and data installers. This is the healthy-cell journey from
    `LOCAL_STACK_CONFIG_DIR=/run/backup-verifier` and `CLOUD_VERIFIER_OWNER=waitron-cloud-test-backup`.
    Load the image before starting the production backup CLI. Poll the selected point's
    admitted result and require a clean worker exit. The restore child receives no
-   network, Cloud mounts, keys or host socket.
+   network, Cloud mounts, keys or host socket. Reuse the existing disk verifier
+   with a private 1 GiB ext4 scratch filesystem scoped to the Kind verifier Pod
+   and removed after cluster cleanup. Keep its 1 GiB memory limit and verify the
+   archive digest. The Lane G watcher cleared the scratch change on 19 November at 13:15.
 
 Add the failing cases, then rerun after implementation with
 `node --test deploy/kubernetes/services.test.mjs scripts/{kubernetes-services,kubernetes-check,test-cloud-integration}.test.mjs`.

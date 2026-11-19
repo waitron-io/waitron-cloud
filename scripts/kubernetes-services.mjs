@@ -7,7 +7,8 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {bootstrap} from '../deploy/local-stack/bootstrap.mjs';
 import {runtimeEnvironment} from '../deploy/local-stack/runtime.mjs';
 import {storageRuntime} from '../deploy/kubernetes/storage-identity.mjs';
-import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesVerifier, storeCaPath} from '../deploy/kubernetes/services.mjs';
+import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesVerifier, storeCaPath,
+  verifierScratchPath, verifierScratchVolume} from '../deploy/kubernetes/services.mjs';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
 import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
@@ -169,9 +170,15 @@ export async function runKubernetesServices(context) {
       await exec('cloud-services', 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
       const ports = await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
       const manifest = JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
-      const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag, verificationTarget.runtime.revision);
+      const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag,
+        verificationTarget.runtime.revision, nodes[0].name);
       const verifier = createKubernetesVerifier({template, kube, pod, classicImages: true,
-        loadImage: id => loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal)});
+        async loadImage(id) {
+          await verifier.docker(['volume', 'create', '--driver', 'local',
+            '--label', 'cloud.backup-verifier.scratch=waitron-cloud-test-backup',
+            '--opt', 'type=none', '--opt', 'o=bind', '--opt', 'device=' + verifierScratchPath, verifierScratchVolume]);
+          await loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal);
+        }});
       process.stderr.write('Running authenticated signup, box pairing and native backup verification\n');
       const result = await runTestCloudClients({image, waitronImage, verificationTarget, services: true, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',

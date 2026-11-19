@@ -49,19 +49,27 @@ test('the backup worker waits for its exact release image before using its priva
   const revision = 'bd0f485bfc4dd951e69e417d98fbbde194879424';
   const pod = deployment.servicesVerifier({metadata: {name: 'verifier'}, spec: {
     hostAliases: [{ip: 'unused'}], volumes: [{name: 'config', hostPath: {path: '/host'}}, {name: 'socket', emptyDir: {}}],
-    containers: [{name: 'docker'}, {name: 'verifier', env: [{name: 'DOCKER_HOST', value: 'unix:///docker-socket/docker.sock'}],
+    containers: [{name: 'docker', volumeMounts: []}, {name: 'verifier', env: [{name: 'DOCKER_HOST', value: 'unix:///docker-socket/docker.sock'}],
       volumeMounts: [{name: 'config', mountPath: '/run/local-stack'}, {name: 'socket', mountPath: '/docker-socket'}]}],
-  }}, 'owned:cloud', revision);
+  }}, 'owned:cloud', revision, 'owned-control-plane');
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
   assert.equal(pod.metadata.namespace, 'd621-data');
+  assert.equal(pod.spec.nodeName, 'owned-control-plane');
   assert.equal(pod.spec.hostAliases, undefined);
-  assert.equal(pod.spec.volumes.some(row => row.hostPath), false);
+  assert.deepEqual(pod.spec.volumes.filter(row => row.hostPath), [{
+    name: 'verifier-scratch', hostPath: {path: '/var/local/d621-verifier-scratch', type: 'Directory'},
+  }]);
   assert.match(worker.command[2], /until \[ -f \/run\/backup-verifier\/image-loaded \]/);
   assert.match(worker.command[2], /schema-consumer\.mjs packages\/backups\/src\/worker-cli\.ts/);
   const env = Object.fromEntries(worker.env.map(row => [row.name, row.value]));
   assert.equal(env.LOCAL_STACK_CONFIG_DIR, '/run/backup-verifier');
   assert.equal(env.CLOUD_VERIFIER_OWNER, 'waitron-cloud-test-backup');
   assert.equal(env.CLOUD_VERIFIER_WAITRON_REVISION, revision);
+  assert.equal(env.CLOUD_VERIFIER_SCRATCH_VOLUME, 'd621-verifier-scratch');
+  for (const container of pod.spec.containers) {
+    assert.deepEqual(container.volumeMounts.find(row => row.name === 'verifier-scratch'),
+      {name: 'verifier-scratch', mountPath: '/var/local/d621-verifier-scratch'});
+  }
   assert.equal(env.DOCKER_HOST, 'unix:///docker-socket/docker.sock');
   assert.deepEqual(worker.envFrom, [{secretRef: {name: 'services-backup'}}]);
 });

@@ -22,10 +22,11 @@ try{
  }else{
   const master=process.env.CLOUD_BACKUP_MASTER_KEY??'';if(!/^[a-fA-F0-9]{64}$/.test(master))throw Error();
   ownership=await claimTestBackupWorker(pool,shutdown);
-  const {verify,controllerScope}=await openTestBackupVerifier({directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',image:process.env.CLOUD_VERIFIER_IMAGE,owner:process.env.CLOUD_VERIFIER_OWNER??'',expectedRevision:process.env.CLOUD_VERIFIER_WAITRON_REVISION,memoryMiB:process.env.CLOUD_VERIFIER_MEMORY_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_MEMORY_MIB),scratchMiB:process.env.CLOUD_VERIFIER_SCRATCH_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_SCRATCH_MIB)});
+  const scratchVolume=process.env.CLOUD_VERIFIER_SCRATCH_VOLUME;
+  const {verify,controllerScope}=await openTestBackupVerifier({directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',image:process.env.CLOUD_VERIFIER_IMAGE,owner:process.env.CLOUD_VERIFIER_OWNER??'',expectedRevision:process.env.CLOUD_VERIFIER_WAITRON_REVISION,memoryMiB:process.env.CLOUD_VERIFIER_MEMORY_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_MEMORY_MIB),scratchMiB:process.env.CLOUD_VERIFIER_SCRATCH_MIB===undefined?undefined:Number(process.env.CLOUD_VERIFIER_SCRATCH_MIB),scratchVolume});
   const ca=process.env.CLOUD_BACKUP_CA_FILE?await readFile(process.env.CLOUD_BACKUP_CA_FILE,'utf8'):undefined;
   storage=workerObjects(process.env,ca);
-  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope);
+  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope,{diskBackedVerification:scratchVolume!==undefined});
   if(mode==='--once'){
    await worker.schedule();try{await worker.runOnce(stop.signal);}finally{storage.close();}
    console.log(JSON.stringify(await worker.status()));

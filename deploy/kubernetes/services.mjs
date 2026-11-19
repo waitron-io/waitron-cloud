@@ -2,6 +2,8 @@ import {cloudContainer, caVolume, requireTls} from '../../scripts/kubernetes-dat
 
 export const servicesNamespace = 'd621-data';
 export const servicesOrigin = 'https://cloud.example.test:3000';
+export const verifierScratchPath = '/var/local/d621-verifier-scratch';
+export const verifierScratchVolume = 'd621-verifier-scratch';
 const publicStoreCa = {name: 'store-ca', configMap: {name: 'services-store-ca'}};
 const storeMount = {name: publicStoreCa.name, mountPath: '/run/store-ca', readOnly: true};
 export const storeCaPath = storeMount.mountPath + '/ca.crt';
@@ -55,20 +57,25 @@ export function servicesPod(image, nodeName) {
     }};
 }
 
-export function servicesVerifier(template, image, revision) {
+export function servicesVerifier(template, image, revision, nodeName) {
   const pod = structuredClone(template);
   pod.metadata.namespace = servicesNamespace;
+  pod.spec.nodeName = nodeName;
   pod.spec.automountServiceAccountToken = false;
   delete pod.spec.hostAliases;
-  pod.spec.volumes = [...pod.spec.volumes.filter(row => row.name !== 'config'), caVolume, publicStoreCa];
+  const scratch = {name: 'verifier-scratch', mountPath: verifierScratchPath};
+  pod.spec.volumes = [...pod.spec.volumes.filter(row => row.name !== 'config'), caVolume, publicStoreCa,
+    {name: scratch.name, hostPath: {path: verifierScratchPath, type: 'Directory'}}];
+  pod.spec.containers.find(row => row.name === 'docker').volumeMounts.push(scratch);
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
   const backup = service(image, 'verifier', 'packages/backups/src/worker-cli.ts', {
     storage: true, secret: 'services-backup', variables: {LOCAL_STACK_CONFIG_DIR: '/run/backup-verifier',
-      CLOUD_VERIFIER_OWNER: 'waitron-cloud-test-backup', CLOUD_VERIFIER_IMAGE: '', CLOUD_VERIFIER_WAITRON_REVISION: revision},
+      CLOUD_VERIFIER_OWNER: 'waitron-cloud-test-backup', CLOUD_VERIFIER_IMAGE: '', CLOUD_VERIFIER_WAITRON_REVISION: revision,
+      CLOUD_VERIFIER_SCRATCH_VOLUME: verifierScratchVolume},
     wait: 'until [ -f /run/backup-verifier/image-loaded ]; do sleep 1; done\n',
   });
   backup.env.push(...worker.env.filter(row => row.name === 'DOCKER_HOST'));
-  backup.volumeMounts.push(...worker.volumeMounts.filter(row => row.name !== 'config'));
+  backup.volumeMounts.push(...worker.volumeMounts.filter(row => row.name !== 'config'), scratch);
   Object.assign(worker, backup);
   return pod;
 }
