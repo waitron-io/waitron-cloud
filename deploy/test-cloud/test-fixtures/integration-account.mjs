@@ -50,7 +50,7 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'paid-remote-provision' || phase === 'paid-remote-inspect' || phase === 'paid-remote-downgrade') {
+    if (['paid-remote-provision', 'paid-remote-inspect', 'paid-remote-downgrade', 'stockholm-remote-renew'].includes(phase)) {
       const {paidRemoteAccount} = await import('./integration-paid-remote-account.mjs');
       console.log(JSON.stringify(await paidRemoteAccount({pool, config, ...JSON.parse(input)})));
     } else if (phase === 'inspect-storage-withdrawal') {

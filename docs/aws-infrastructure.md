@@ -1290,6 +1290,30 @@ watchers from all three nodes and the database workloads. Set the limit to 512
 in the disposable guest when its current value is lower. See
 [Kind's file-watcher guidance](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files).
 
+### Rehearse a gateway handover on a private Kind cell
+
+Use the same disposable Linux host and pinned images as the services rehearsal.
+Include HAProxy, iproute2, iptables and WireGuard tools in the Cloud image.
+
+```sh
+TEST_KUBERNETES_REMOTE=1 node --test scripts/kubernetes-remote.test.mjs
+```
+
+The check signs up and pairs one synthetic venue over HTTPS. It uses the existing
+remote configuration worker and the rehearsal CA to serve its staff and public
+routes through the elected gateway. Only that candidate serves traffic. The
+worker publishes routes and the public certificate together to one Secret.
+
+The fault pauses the active candidate's lease renewal. The watchdog must
+remove the old WireGuard interface. The same venue peer then has 90 seconds
+from the fault to complete a new handshake and serve verified staff and public
+HTTPS through a standby. The check also verifies certificate replacement and
+owner account revocation. Each of those stages allows 180 seconds for the
+projected files to reach all three candidates.
+
+Use the outside rehearsal to check a stopped Stockholm machine and changes
+to its private address, with the outside TCP and UDP listener and shared ingress.
+
 The opt-in three-node local reproducer is not a qualified check; no further full
 local run is planned. It uses `node scripts/kubernetes-check.mjs --observer-worker-loss`.
 Use the same pinned Cloud and Waitron image variables as the other local checks,

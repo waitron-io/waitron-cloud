@@ -162,3 +162,10 @@ test('the signup reader accepts the mailed language parameter and refuses anothe
   assert.equal(readSignupToken(text, 'https://cloud.example.test:3000'), token);
   assert.throws(() => readSignupToken(text, 'https://other.example.test:3000'), /integration\.signup_mail/);
 });
+
+test('the private remote rehearsal cannot run with the paid plan or a foreign namespace', async () => {
+  const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, paidRemote: true}), /integration\.stockholm_remote_scope/);
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, kubernetes: {namespace: 'default'}}),
+    /integration\.stockholm_remote_binding/);
+});

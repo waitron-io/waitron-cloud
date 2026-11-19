@@ -197,18 +197,20 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
 }
 
 export async function runTestCloudClients(options = {}) {
-  if (options.services) {
-    const k = options.kubernetes;
+  if (options.services || options.stockholmRemote) {
+    const k = options.kubernetes, remote = options.stockholmRemote;
+    assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream',
+      'paidContinuousRecovery', 'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
+      'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)),
+      remote ? 'integration.stockholm_remote_scope' : 'integration.services_scope');
     assert.ok(k && /^d621-[a-f0-9]{32}$/.test(k.cluster) && k.network === k.cluster &&
       k.namespace === servicesNamespace && k.account === 'kube-account' && !k.amazon && !k.remote &&
       /^172\.30\.250\.\d{1,3}$/.test(k.proxyIp) && Number.isInteger(k.port) && Number.isInteger(k.mailPort) &&
       typeof k.mailAuthorization === 'string' && typeof k.storeCa === 'string' && typeof k.exec === 'function' &&
-      ['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function'),
-      'integration.services_binding');
-    assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery', 'freeRemote',
-      'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration', 'schemaRollback', 'pairedExpiry', 'fixedProject']
-      .some(key => options[key]), 'integration.services_scope');
-    options = {...options, paidVerification: true};
+      (remote ? typeof k.stockholmRemote?.handover === 'function' && typeof k.stockholmRemote?.projected === 'function' && !k.verifier :
+        ['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function')),
+      remote ? 'integration.stockholm_remote_binding' : 'integration.services_binding');
+    options = {...options, services: true, paidVerification: !remote};
   } else if (options.kubernetes) {
     const k = options.kubernetes;
     if (k.amazon) assertAmazonBinding(k.amazon);
@@ -805,6 +807,17 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
         }
       }
       if (services) {
+        if (kubernetes.stockholmRemote) {
+          journeyStage = 'stockholm-remote';
+          const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
+          const remote = await proveIntegrationPaidRemote({docker, control, account, image, runId,
+            paid: {id, stateVolume, venueRoot, organisationId, venueId: persisted.venueId, installationId: persisted.installationId},
+            target: kubernetes.stockholmRemote, stockholm: {
+              origin, signal: runSignal(), revoke: () => api('/api/account/installations/revoke', {installationId: persisted.installationId}, browser),
+            }, own: id => {owned.push(id); record('container', id);}});
+          result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
+          return;
+        }
         result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
           signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
           backup: publishedSnapshot, alteredPublicationRefused: true};

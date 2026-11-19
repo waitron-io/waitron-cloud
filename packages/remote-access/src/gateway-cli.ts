@@ -12,7 +12,7 @@ import {gatewayTrafficRuntimeConfiguration,gatewayTrafficRuntimeOptions} from '.
 import {GatewayTrafficRuntime} from './gateway-traffic-runtime.ts';
 import {AlpnResponder} from './alpn-responder.ts';
 import {createPublicGate} from './public-gate.ts';
-import {isUuid,isPeerKey,type GatewayRoute} from './manifest.ts';
+import {isUuid,isPeerKey,verifyManifest,type GatewayRoute} from './manifest.ts';
 const root=process.env.GATEWAY_STATE_DIR??'/state',input=process.env.GATEWAY_MANIFEST??'/input/manifest.json',cell=process.env.GATEWAY_CELL_ID??'';
 const statusDirectory=process.env.GATEWAY_STATUS_DIR,checkFolder=process.env.GATEWAY_CHALLENGES;
 function containsPath(directory:string,path:string):boolean{
@@ -24,6 +24,7 @@ if(statusDirectory!==undefined&&(!isAbsolute(statusDirectory)||
  throw new Error('Invalid gateway status directory');
 const trafficOptions=gatewayTrafficOptions(process.env);
 const publicCertificates=process.env.GATEWAY_PUBLIC_CERTIFICATES??'/input/public-certs';
+const artifactBundle=process.env.GATEWAY_ARTIFACT_BUNDLE;
 const certificateRefresh=process.env.GATEWAY_CERTIFICATE_REFRESH??'1';if(!['0','1'].includes(certificateRefresh))throw new Error('Invalid gateway certificate refresh');
 if(!isUuid(cell))throw new Error('GATEWAY_CELL_ID required');
 gatewayTrafficRuntimeConfiguration(process.env,trafficOptions,cell);
@@ -104,10 +105,31 @@ try{
 await challenges?.listen(gatewayAlpnPort);
 let initialized=false;try{const marker=await readFile(join(root,'initialized'),'utf8');if(marker!=='1\n')throw new Error('gateway.cache_unavailable');initialized=true;}catch(error){if(!(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT'))throw error;}
 try{await authority.restore(JSON.parse(await readFile(join(root,'accepted.json'),'utf8')));}catch(error){if(initialized||!(error&&typeof error==='object'&&'code' in error&&error.code==='ENOENT'))throw new Error('gateway.cache_unavailable');}
-let lastInput='';
+let lastInput='',lastBundle='';
+if(artifactBundle)try{lastInput=await readFile(join(root,'accepted.json'),'utf8');}catch(error){
+ if(!(error&&typeof error==='object'&&'code' in error&&error.code==='ENOENT'))throw error;
+}
+async function refreshInput(){
+ if(!artifactBundle){const text=await readFile(input,'utf8');if(text!==lastInput){await authority.accept(JSON.parse(text));lastInput=text;}return;}
+ // An open of the projected bundle binds every part of the publication to one Secret generation.
+ const bundle=await readFile(artifactBundle,'utf8');if(bundle===lastBundle)return;
+ const {manifest,certificates}=JSON.parse(bundle) as {manifest?:string;certificates:Record<string,string>};
+ if(!manifest)return;
+ const signed=JSON.parse(manifest),candidate=verifyManifest(signed,trust,cell,Date.now(),Math.max(0,authority.sequence-1));
+ if(candidate.sequence===authority.sequence&&manifest!==lastInput){
+  // Only a previous failed apply of this exact signed envelope can reuse the sequence.
+  const accepted=await readFile(join(root,'accepted.json'),'utf8');
+  if(manifest!==accepted)throw new Error('invalid_manifest');
+ }
+ for(const {venueId} of candidate.routes){
+  if(Object.hasOwn(certificates,venueId))await atomic(venueId+'.pem',certificates[venueId]!,publicCertificates);
+ }
+ if(manifest!==lastInput){await authority.accept(signed);lastInput=manifest;}
+ lastBundle=bundle;
+}
 while(!stopping){
  await authority.tick();
- try{const text=await readFile(input,'utf8');if(text!==lastInput){await authority.accept(JSON.parse(text));lastInput=text;}}
+ try{await refreshInput();}
  catch(error){if(error instanceof Error&&error.message!=='invalid_manifest')console.error('gateway.refresh_unavailable');}
  if(authority.hasAuthority&&(!alive()||certificateRefresh==='1')){
   try{await apply(authority.routes);}catch{await stop();console.error('gateway.restart_unavailable');}
