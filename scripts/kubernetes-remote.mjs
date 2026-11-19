@@ -7,7 +7,7 @@ import {separateByHost} from './kubernetes-placement.mjs';
 
 export async function untilRemote(probe, ms, signal, stage) {
   const end = performance.now() + ms;
-  const limit = AbortSignal.any([AbortSignal.timeout(ms), ...[signal].filter(Boolean)]);
+  const limit = AbortSignal.any([AbortSignal.timeout(Math.ceil(ms)), ...[signal].filter(Boolean)]);
   let last;
   while (!limit.aborted) {
     try {

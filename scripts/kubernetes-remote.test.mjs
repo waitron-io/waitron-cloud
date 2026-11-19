@@ -6,6 +6,11 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
+import {untilRemote} from './kubernetes-remote.mjs';
+
+test('handover can use the fractional time left after pausing the election', async () => {
+  assert.equal(await untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
+});
 
 test('the paired venue keeps its endpoint through an elected gateway handover', {
   skip: process.env.TEST_KUBERNETES_REMOTE !== '1', timeout: 35 * 60 * 1000,
