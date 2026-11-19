@@ -119,6 +119,21 @@ again returned 403 with the existing cookie. The test ended at 90 seconds.
 A separate Chromium check showed that an actual browser automatically
 solves this challenge after the source IP changes.
 
+A later signed Kind run used the [Waitron companion from #3849](https://github.com/clintongormley/waitron/pull/3849)
+and its own traffic. Kubernetes withdrew the stopped endpoint at 46.019
+seconds. The replacement exchanged tunnel bytes for the paired key, staff
+HTTPS returned 200 at 51.942 seconds, and public HTTPS returned 403 at
+51.947 seconds with the old cookie. A fresh challenge restored verified
+public HTTPS at 52.185 seconds. Both response bodies and certificates
+passed before the 90-second deadline.
+
+The whole test failed after the stopped node rejoined. The former gateway
+pod was running and unready, but its standby check could not show that
+both the old interface and the readiness marker were absent. The three-minute
+standby check expired. The disposable guest was confirmed absent after
+cleanup. Run the [companion machine-stop check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
+to repeat both gates.
+
 The existing Cloud fixture already preserves the key and endpoint, so this comparison
 adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
 separately scoped appliance procedure: define the authenticated trigger, preserve

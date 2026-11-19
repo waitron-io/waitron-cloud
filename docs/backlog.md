@@ -1808,11 +1808,12 @@ implementation or production evidence.
   durable mail and a storage address that survives machine loss remain outside
   rehearsal checks. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   uses the same peer through a standby and checks certificate replacement and account revocation.
-  The [private Kind machine-stop diagnostic](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
-  measured endpoint withdrawal in 50.168 seconds with fixture traffic. The
-  combined HTTPS and handshake check missed 90 seconds. Recovery of an idle
-  box within 90 seconds, real Stockholm gateway loss, changed addresses,
-  shared ingress and cold restart remain open.
+  The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
+  used the Waitron companion's own traffic and restored staff and public HTTPS
+  in 51.942 and 52.185 seconds. The public route completed a fresh challenge.
+  The run failed its former-gateway standby check after the node rejoined.
+  Standby cleanup, real Stockholm gateway loss, changed addresses, shared
+  ingress and cold restart remain open.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
