@@ -1,43 +1,46 @@
-# D621 run 9, PR 7 first checkpoint — Keep the outside endpoint stable
+# D621 run 9, PR 7 first task — Measure loss of the gateway machine
 
-In private Linux Kind, you can reach the existing fenced gateway from one TCP and UDP
-endpoint outside the cluster, stop its serving node, and keep the listener address and
-ports when a backend address changes. This is the first proposed checkpoint for the
-[P1 gateway and fault checks](2026-10-22-cloud-country-cell.md#coverage-map-and-outside-p1-gates).
+You can rehearse a real stop of the active WireGuard gateway's machine in private
+Linux Kind. This task measures the time from the stop to working staff and public
+HTTPS and a new handshake on the same venue peer. It precedes the outside listener
+build in [P1](2026-10-22-cloud-country-cell.md#coverage-map-and-outside-p1-gates).
 
-1. **Prove the listener first.** Add loopback TCP and UDP cases in
-   `deploy/kubernetes/remote-relay.test.mjs`. A backend disappears, then the same
-   recorded backend is presented at a new address. Require new TCP connections and
-   UDP replies through the existing listener, with one upstream UDP destination at a
-   time and no replies from the superseded socket after the switch. Watch the cases
-   fail before extending `deploy/kubernetes/remote-relay.mjs`. Reuse the existing
-   private UDP socket and add TCP passthrough. Use bounded TCP reachability checks on
-   the same gateway Service and accept an address refresh only for recorded backends.
-2. **Use the real gateway.** In `scripts/kubernetes-remote.mjs` direct the HTTPS
-   probes and WireGuard peer to the same stable listener. Reuse `remote.yaml`'s
-   TCP/UDP NodePorts and the existing Lease, which lets only one gateway serve.
-   Bind only inside the owned rehearsal network. Pass the ownership-checked
-   `stopNode` from `scripts/kubernetes-node-loss.mjs` and run the fault on the
-   active candidate away from the pinned account pod. Require that its recorded
-   container stays stopped while a different candidate serves. Keep the same venue,
-   DNS, key and listener through the fault. Reuse the signed-route, HTTPS and
-   WireGuard handshake/transfer checks. Keep the existing election-pause,
-   certificate replacement and revocation checks. Confirm cleanup by owned ID.
-3. **Run the focused checks.** Start with the new failure in
-   `scripts/kubernetes-remote.test.mjs` for the missing multi-node listener path,
-   then run it, `scripts/kubernetes-node-loss.test.mjs` and the relay loopback tests.
-   Run the remote opt-in case with `TEST_KUBERNETES_REMOTE=1` in the disposable
-   Linux guest. Record the actual stop, both HTTPS responses and tunnel recovery
-   times, identifying any diagnostic venue traffic in the result. Register the
-   relay test beside the existing local-stack checks in `package.json` and update
-   the rehearsal guide and the D621 entry in `docs/backlog.md`.
+1. **Use the existing fault and route checks.** Pass the owned `stopNode` helper
+   from `scripts/kubernetes-node-loss.mjs` through `scripts/kubernetes-services.mjs`
+   to the remote fixture in `scripts/kubernetes-remote.mjs`. Reuse the fixed test
+   listener on the account node and the existing gateway Service. Before timing,
+   arrange for a gateway on one of the other two nodes to hold the Lease. Use the
+   existing election controls to move it off the account node if required. Keep
+   the account node running and verify the chosen gateway and running venue before
+   stopping the exact recorded node.
+2. **Observe the machine loss.** Run the fault in an opt-in path in
+   `scripts/kubernetes-check.mjs` and
+   `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`, through the
+   binding check in `scripts/test-cloud-integration.mjs`. Reuse the paired venue,
+   staff certificate and public challenge checks. Record stop confirmation, when
+   the Service stops routing to the dead gateway, the new Lease holder, both HTTPS
+   statuses and the new handshake and transfer bytes. Measure from the stop request
+   and include time the old gateway still appears ready. Record a miss at 90 seconds
+   as a failure. Keep any traffic supplied by the fixture explicit in the result.
+   After recovery verify the same stopped machine rejoins and the owned state is
+   removed. Run the existing election-pause, certificate replacement and revocation
+   checks through their current mode.
+3. **Check the right thing at each layer.** First fail the remote callback check in
+   `scripts/kubernetes-node-loss.test.mjs` when it cannot stop a recorded node.
+   Use `scripts/kubernetes-check.test.mjs` and `scripts/test-cloud-integration.test.mjs`
+   for dispatch and scope. Run those files and `scripts/kubernetes-remote.test.mjs`.
+   Its opt-in Linux check uses the real peer and requires the stop, a different
+   gateway, successful HTTPS and a new handshake within the deadline. Keep the
+   existing loopback relay refusal/recovery test. Record local evidence and its
+   limits in the rehearsal guide and the D621 entry in `docs/backlog.md`.
 
-Estimate 230–360 implementation lines and 180–270 test lines. The address-change
-check uses loopback so the Kind cluster keeps the addresses its API and database
-depend on. Later PR 7 work supplies exact-instance Stockholm refresh, replicated
-publication, validated private `.test` issuance, trusted ingress and the full outside
-receipt. The final timed rehearsal still requires all three machine losses,
-changed addresses and idle-box recovery within 90 seconds using actual Waitron
-box behavior. The [private measurements](../../gateway-reconnection-measurements.md)
-record 21.841 seconds with fixture traffic and about 142 seconds for the idle
-handshake. Waitron owns the box work. This plan covers private fixtures only.
+Estimate 1–1.5 working hours for this task within PR 7's 10–13, with 21–24 worked
+through PR 6 and 37–45 estimated in total against 44 accepted. Allow 110–170
+implementation lines and 70–120 test lines. Start with this task on the PR 7
+branch and use its result to choose the outside listener's failover behavior.
+Keep the actual three machine losses, Stockholm address refresh, replicated
+publication, validated private certificates, ingress and exact final receipt
+in the remaining work. The [previous private measurement](../../gateway-reconnection-measurements.md)
+passed in 21.841 seconds with fixture traffic. The idle box took about 142 seconds
+to handshake. The final unassisted 90-second gate still requires actual Waitron
+behavior, with the box change owned by Waitron.
