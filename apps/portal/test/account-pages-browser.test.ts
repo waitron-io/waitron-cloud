@@ -121,9 +121,16 @@ test('venue cards sort by signed name and disclose secondary status', async t =>
   assert.deepEqual(await titles.allTextContents(),['Alba Bakery','Venue · 33333333','Zest Café']);
   const venue=page.locator('article.installation').first();
   const detail=venue.getByText('No verified snapshot yet',{exact:true});
+  const translation=venue.getByText('Menu translation',{exact:true});
+  const alerts=page.getByRole('region',{name:'Service alerts',exact:true});
+  assert.equal(await alerts.evaluate(element=>Boolean(document.querySelector('article.installation')!
+    .compareDocumentPosition(element)&Node.DOCUMENT_POSITION_FOLLOWING)),true);
   assert.equal(await detail.isVisible(),false);
+  assert.equal(await translation.isVisible(),false);
   await venue.locator('summary').filter({hasText:'Details'}).click();
   await detail.waitFor();
+  await venue.getByText('Cloud Company SL',{exact:true}).waitFor();
+  await translation.waitFor();
 });
 
 test('direct Billing hides the link and returns to Account when Billing is unavailable', async t => {

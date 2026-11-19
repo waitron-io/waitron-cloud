@@ -83,11 +83,13 @@ test('Remote access offers an explicit trial for the eligible connected box', as
     const services=['continuous_backup','remote_access','retained_snapshots'].map(service=>({
       service,state:'unconfigured',health:'unknown',failure:null,observedAt:null
     }));
-    const installation=(venueId:string)=>({
+    const installation=(venueId:string,revokedAt:string|null=null)=>({
       installationId:venueId,venueId,organisationId:first,legalBusinessId:first,environment:'test',
-      revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,services
+      revision:0,revokedAt,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,services
     });
     const usedTrial='33333333-3333-4333-8333-333333333333';
+    const stopped='44444444-4444-4444-8444-444444444444';
+    const connected='55555555-5555-4555-8555-555555555555';
     let started:unknown;
     await page.route('https://portal.test/account/remote-access',route=>route.fulfill({
       contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'
@@ -97,11 +99,13 @@ test('Remote access offers an explicit trial for the eligible connected box', as
       if(endpoint==='/session'||endpoint==='/session/activity')return route.fulfill({
         json:{accountId:'owner',expiresAt:'2099-01-01T00:00:00Z',billingTrialAvailable:true}
       });
-      if(endpoint==='/installations')return route.fulfill({json:{installations:[installation(second),installation(usedTrial)]}});
+      if(endpoint==='/installations')return route.fulfill({json:{installations:[installation(second),installation(usedTrial),installation(stopped,'2026-11-19T00:00:00Z'),installation(connected)]}});
       const venues=[
         {venueId:first,level:'registered',trial:null,canStartTrial:true},
         {venueId:second,level:'registered',trial:null,canStartTrial:true},
-        {venueId:usedTrial,level:'registered',trial:null,canStartTrial:false}
+        {venueId:usedTrial,level:'registered',trial:null,canStartTrial:false},
+        {venueId:stopped,level:'registered',trial:null,canStartTrial:true},
+        {venueId:connected,level:'connected',trial:null,canStartTrial:true}
       ];
       if(endpoint==='/billing/read')return route.fulfill({json:{venues}});
       if(endpoint==='/billing/start-trial'){

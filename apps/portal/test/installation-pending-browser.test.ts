@@ -10,7 +10,7 @@ const point = '20000000-0000-4000-8000-000000000003', request = '20000000-0000-4
 const installations = [first, second].map(id => ({
   installationId: id, venueId: id, organisationId: id, legalBusinessId: id, environment: 'test', revision: 0,
   revokedAt: null, lastContactAt: null, leaseExpiresAt: null, canRevoke: true,
-  overview: {organisationName: id === first ? 'A first organisation' : 'Z second organisation', businessName: id === first ? 'First test venue' : 'Second test venue', countryCode: 'ES', latestSnapshotAt: null, verifiedSnapshotAt: null},
+  overview: {organisationName: id === first ? 'A first organisation' : 'Z second organisation', businessName: 'Test Business SL', venueName: id === first ? 'First test venue' : 'Second test venue', countryCode: 'ES', latestSnapshotAt: null, verifiedSnapshotAt: null},
   services: ['continuous_backup', 'remote_access', 'retained_snapshots'].map(service => ({service, state: 'unconfigured', health: 'unknown', failure: null, observedAt: null})),
 }));
 const bundle = await build({stdin: {contents: `
@@ -148,7 +148,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await article.getByRole('button', {name: c.remoteReview, exact: true}).click();
         await article.getByRole('button', {name: c.remoteConfirm, exact: true}).waitFor();
       }
-      if (!remote) assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
+      if (!remote) {
+        const details=article.locator('.venue-details');
+        if (await details.getAttribute('open')===null) await details.locator('summary').click();
+        assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
+      }
+      await article.getByRole('heading',{name:'Second test venue',exact:true}).waitFor();
       const start = calls.length;
       refreshed = result === 'removed' ? installations.slice(0, 1) : installations;
       try {

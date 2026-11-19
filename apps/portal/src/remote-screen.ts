@@ -21,7 +21,7 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
  }}>${c.billingStart}</a></p>`:nothing;
  if(r.installationId!==id)return html`${trial}<wt-button id=${triggerId} .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${revokedAt?c.guestMenuTitle:c.remoteSetup}</wt-button>`;
  const disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
- const menu=v?.guestMenu;
+ const menu=v?.guestMenu,menuStatusId='guest-menu-status-'+id;
  return html`${trial}<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role=${r.error==='remoteProofRequired'?'status':'alert'}>${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.error==='pairEnrollment'?html`<a href="/account" @click=${(event: MouseEvent) => app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:r.error==='actionProofUnavailable'||r.error==='remoteProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
@@ -30,10 +30,14 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.remoteRevoked:v.connectedRequired?c.remoteConnectedRequired:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
   ${menu?html`<section aria-label=${c.guestMenuTitle}><h5>${c.guestMenuTitle}</h5>
-   <p role="status">${menu.state==='current'?c.guestMenuCurrent:menu.state==='blocked'?c.guestMenuBlocked:c.guestMenuOff}</p>
+   <p role="status" tabindex="-1" id=${menuStatusId}>${menu.state==='current'?c.guestMenuCurrent:menu.state==='blocked'?c.guestMenuBlocked:c.guestMenuOff}</p>
    <p><a href=${menu.url} target="_blank" rel="noopener noreferrer">${c.guestMenuLink}</a></p>
    ${menu.publication?html`<p><time datetime=${menu.publication.receivedAt}>${new Date(menu.publication.receivedAt).toLocaleString(app.locale)}</time></p>`:nothing}
-   ${menu.state==='off'?nothing:html`<wt-button .disabled=${disabled} @click=${()=>{void r.setGuestMenuBlocked(menu.state==='current');}}>${menu.state==='blocked'?c.guestMenuEnable:c.guestMenuTakedown}</wt-button>`}
+   ${menu.state==='off'?nothing:html`<wt-button .disabled=${disabled} @click=${async()=>{
+     const block=menu.state==='current';
+     await r.setGuestMenuBlocked(block);
+     if(!block&&r.installationId===id&&r.view?.guestMenu?.state==='off')app.root.querySelector<HTMLElement>('#'+menuStatusId)?.focus();
+   }}>${menu.state==='blocked'?c.guestMenuEnable:c.guestMenuTakedown}</wt-button>`}
    ${menu.state==='blocked'?html`<p class="help">${c.guestMenuHelp}</p>`:nothing}
   </section>`:nothing}
   ${v?html`<section aria-label=${c.forwardTitle}><h5>${c.forwardTitle}</h5>
@@ -58,6 +62,12 @@ export function remoteScreen(app:PortalApp,installation:AccountInstallation){
      ${r.confirmation.records.length?html`<p>${c.remoteDnsHelp}</p>${r.confirmation.records.map(record=>html`<dl><dt>${c.remoteRecord}</dt><dd>CNAME</dd><dt>${c.remoteRecordName}</dt><dd>${record.name}</dd><dt>${c.remoteRecordValue}</dt><dd>${record.value}</dd></dl>`)}<p class="help">${c.remoteDnsApex}</p>`:html`<p>${c.remoteAssignedHelp}</p>`}
      <wt-button .disabled=${disabled||app.actionProof.pending} @click=${()=>{void app.applyRemote();}}>${c.remoteConfirm}</wt-button></div>`:nothing}`:nothing}`:nothing}
   ${v&&!v.revoked&&!v.connectedRequired?html`<p class="help">${c.remoteBoxSwitch}</p>`:nothing}
-  <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void r.load();}}>${c.refreshStatus}</wt-button><wt-button @click=${()=>{r.close();app.draw();app.root.querySelector<HTMLElement>('#'+triggerId)?.focus();}}>${c.remoteClose}</wt-button></div>
+  <div class="snapshot-actions"><wt-button .disabled=${disabled} @click=${()=>{void r.load();}}>${c.refreshStatus}</wt-button><wt-button @click=${async()=>{
+    r.close();
+    app.draw();
+    const trigger=app.root.querySelector<LitElement>('#'+triggerId);
+    await trigger?.updateComplete;
+    trigger?.shadowRoot?.querySelector('button')?.focus();
+  }}>${c.remoteClose}</wt-button></div>
  </section>`;
 }

@@ -58,7 +58,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.goto(`https://portal.test/${panel === 'recovery' ? 'recover#request=' + id : panel === 'remote' ? 'account/remote-access' : 'account/venues'}`);
       await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await page.waitForFunction(() => (window as any).app.installations.loaded);
-      if (panel === 'translationConsent') await page.waitForFunction(() => (window as any).app.translationConsent.loaded);
+      if (panel === 'translationConsent') {
+        await page.waitForFunction(() => (window as any).app.translationConsent.loaded);
+        await page.locator('.venue-details summary').click();
+      }
       const c = translations[locale]; armed = true;
       let retry = page.getByRole('button', {name: c.refreshStatus, exact: true});
       if (panel === 'diagnostics') retry = page.getByRole('button', {name: c.diagnosticDownload, exact: true});

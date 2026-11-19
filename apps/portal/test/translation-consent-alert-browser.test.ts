@@ -39,6 +39,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const app=(window as any).app;return app.installations.loaded&&app.translationConsent.error==='unavailable'&&!app.translationConsent.pending;});
   const c=translations[locale],list=page.getByRole('region',{name:c.installations,exact:true}),venues=list.locator('article.installation');
+  for (const index of [0,1]) await venues.nth(index).locator('.venue-details summary').click();
   const group=(index:number)=>venues.nth(index).getByRole('group',{name:c.translationConsent,exact:true});
   const readAlerts=list.getByRole('alert').filter({hasText:c.unavailable});
   await t.test('one failed account-wide read produces one message for two venues',async()=>{

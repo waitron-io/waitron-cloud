@@ -32,6 +32,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const app=(window as any).app;return app.installations.loaded&&!app.installations.pending&&app.translationConsent.error==='unavailable'&&!app.translationConsent.pending;});
+  await page.locator('.venue-details summary').click();
   const c=translations[locale],list=page.getByRole('region',{name:c.installations,exact:true}),group=list.getByRole('group',{name:c.translationConsent,exact:true});
   const refresh=group.locator('wt-button').first().getByRole('button');
   await t.test('translation retry has a distinct accessible name from list refresh',async()=>{
