@@ -44,8 +44,10 @@ Add the failing cases, then rerun after implementation with
 Check production settings, startup order and exact dependency bindings. On owned Linux run
 `TEST_KUBERNETES_SERVICES=1 node --test scripts/kubernetes-services.test.mjs`. Require SMTP
 refusals, signup, sign-in, real capture, matching admitted restore, altered archive bytes
-refused without a successful verification verdict, and cleanup. Keep the built image bound to
-`deploy/backup-verifier/target.json`. Register the unit cases in CI and update the D621
+refused without a successful verification verdict, and cleanup. Bind the native box and
+verifier image to the shared test pin `deploy/backup-verifier/amazon-test-target.json`
+as cleared by the watcher on 19 November at 11:25. Verify the image's full target against
+that pin before use. Register the unit cases in CI and update the D621
 backlog and rehearsal guide.
 
 Estimate 570–720 implementation and 220–320 test lines. PR 6 owns remote routes. The

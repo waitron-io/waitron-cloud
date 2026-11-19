@@ -25,6 +25,16 @@ test('explicit newer integration uses the native target from that exact revision
   assert.deepEqual(select({revision, pinnedTarget: pinned, nativeTarget: native}), native);
 });
 
+test('a rehearsal with an exact pin refuses a second valid target from that same revision', async () => {
+  const {selectIntegrationVerificationTarget: select} = await load();
+  const input = {revision, pinnedTarget: native, nativeTarget: native, requireNativeMatch: true};
+  assert.deepEqual(select(input), native);
+  const other = structuredClone(native);
+  other.modules[0].policyDigest = 'a'.repeat(64);
+  Object.assign(other, backupVerificationTargetDigests(other));
+  assert.throws(() => select({...input, nativeTarget: other}), /integration\.services_waitron_pin/);
+});
+
 for (const [name, change] of [
   ['missing native target', value => {delete value.nativeTarget;}],
   ['wrong revision', value => {value.nativeTarget = pinned;}],

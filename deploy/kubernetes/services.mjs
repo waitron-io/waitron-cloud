@@ -55,7 +55,7 @@ export function servicesPod(image, nodeName) {
     }};
 }
 
-export function servicesVerifier(template, image) {
+export function servicesVerifier(template, image, revision) {
   const pod = structuredClone(template);
   pod.metadata.namespace = servicesNamespace;
   pod.spec.automountServiceAccountToken = false;
@@ -64,7 +64,7 @@ export function servicesVerifier(template, image) {
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
   const backup = service(image, 'verifier', 'packages/backups/src/worker-cli.ts', {
     storage: true, secret: 'services-backup', variables: {LOCAL_STACK_CONFIG_DIR: '/run/backup-verifier',
-      CLOUD_VERIFIER_OWNER: 'waitron-cloud-test-backup', CLOUD_VERIFIER_IMAGE: ''},
+      CLOUD_VERIFIER_OWNER: 'waitron-cloud-test-backup', CLOUD_VERIFIER_IMAGE: '', CLOUD_VERIFIER_WAITRON_REVISION: revision},
     wait: 'until [ -f /run/backup-verifier/image-loaded ]; do sleep 1; done\n',
   });
   backup.env.push(...worker.env.filter(row => row.name === 'DOCKER_HOST'));

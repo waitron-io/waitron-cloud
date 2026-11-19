@@ -22,7 +22,7 @@ import {inspectIntegrationStream} from './integration-stream-evidence.mjs';
 import {inspectIntegrationRetainedSnapshot} from './integration-retained-snapshot-evidence.mjs';
 import {ManagedStreams} from '../../../packages/backups/src/managed-streams.ts';
 import {inspectIntegrationContinuousState} from './integration-continuous-recovery-evidence.mjs';
-import {selectIntegrationVerificationTarget} from './integration-verification-target.mjs';
+import {readRehearsalVerificationTarget, selectIntegrationVerificationTarget} from './integration-verification-target.mjs';
 const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
 const {S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
@@ -170,9 +170,10 @@ try {
         {requestId, venueId: rows[0].venue_id, organisationId, pointId, attemptId, targetDigest, sha256, bytes}, desiredStatus)));
     } else if (phase === 'configure-verification' || phase === 'inspect-verification') {
       assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
-      const pinnedTarget = JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
+      const pinnedTarget = services ? await readRehearsalVerificationTarget() :
+        JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
       const {revision = pinnedTarget.runtime.revision, nativeTarget} = JSON.parse(input);
-      const target = selectIntegrationVerificationTarget({revision, pinnedTarget, nativeTarget});
+      const target = selectIntegrationVerificationTarget({revision, pinnedTarget, nativeTarget, requireNativeMatch: services});
       if (phase === 'configure-verification') {
         // Only the disposable proof database qualifies this target; deployment remains disabled.
         await transaction(pool, client => setVerificationPolicy(client, target, 'local.waitron-verifier@' + image, true));

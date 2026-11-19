@@ -1260,7 +1260,8 @@ services against the replicated database and store while all three nodes are up.
 Use a disposable x86-64 Linux Docker host with the same Kind, kubectl and Buildx
 versions as the storage rehearsal. Set `TEST_CLOUD_INTEGRATION_IMAGE` to the
 local Cloud image ID and `TEST_CLOUD_INTEGRATION_WAITRON_IMAGE` to the local
-Waitron verifier image ID built from `deploy/backup-verifier/target.json`.
+Waitron verifier image ID built with `node scripts/build-backup-verifier.mjs --amazon-test`.
+This uses the shared test verifier pin in `deploy/backup-verifier/amazon-test-target.json`.
 
 ```sh
 TEST_KUBERNETES_SERVICES=1 node --test scripts/kubernetes-services.test.mjs

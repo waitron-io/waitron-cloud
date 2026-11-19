@@ -225,7 +225,8 @@ export async function runTestCloudClients(options = {}) {
       .every(name => typeof k.verifier?.[name] === 'function'), 'integration.kubernetes_binding');
   }
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
-  const revision = process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
+  const revision = options.services ? options.verificationTarget?.runtime?.revision ?? '' :
+    process.env.TEST_CLOUD_INTEGRATION_WAITRON_REVISION ?? defaultWaitronRevision;
   assert.match(revision, /^[a-f0-9]{40}$/, 'integration.waitron_revision_invalid');
   const stop = new AbortController(), shutdown = () => stop.abort(Error('integration.cancelled'));
   process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
@@ -248,7 +249,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, kubernetes}, fixedProject, waitronSource) {
   const origin = services ? servicesOrigin : composeOrigin;
   const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
@@ -363,10 +364,6 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
-      if (services) {
-        const pinned = JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json', import.meta.url), 'utf8'));
-        assert.equal(revision, pinned.runtime.revision, 'integration.services_waitron_pin');
-      }
       if ((paidVerification || paidRecovery) && revision !== historicalWaitronRevision) {
         const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
           '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -375,8 +372,9 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           "import {currentBackupVerificationTarget} from '/waitron/apps/server/dist/backup-verification.js';console.log(JSON.stringify(currentBackupVerificationTarget()));"], '', 'verification-target-create');
         owned.push(id); record('container', id);
         nativeTarget = selectIntegrationVerificationTarget({revision,
-          pinnedTarget: JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json', import.meta.url), 'utf8')),
-          nativeTarget: parseIntegrationJson(await docker(['start', '-a', id], '', 'verification-target-read'))});
+          pinnedTarget: services ? verificationTarget : JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json', import.meta.url), 'utf8')),
+          nativeTarget: parseIntegrationJson(await docker(['start', '-a', id], '', 'verification-target-read')),
+          requireNativeMatch: services});
         assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', id]), '0');
       }
       if (waitronSource) waitronBaseSource = await probeWaitronSource({docker, image: waitronImage, source: waitronSource, expectedHead: revision, runId,

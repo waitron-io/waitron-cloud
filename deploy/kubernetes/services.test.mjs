@@ -45,12 +45,13 @@ test('Mailpit accepts only authenticated TLS mail to synthetic addresses', () =>
   assert.deepEqual(mail.args.filter(arg => /relay|forward|auth-accept-any/.test(arg)), []);
 });
 
-test('the backup worker waits for its image before using its private daemon', () => {
+test('the backup worker waits for its exact release image before using its private daemon', () => {
+  const revision = 'bd0f485bfc4dd951e69e417d98fbbde194879424';
   const pod = deployment.servicesVerifier({metadata: {name: 'verifier'}, spec: {
     hostAliases: [{ip: 'unused'}], volumes: [{name: 'config', hostPath: {path: '/host'}}, {name: 'socket', emptyDir: {}}],
     containers: [{name: 'docker'}, {name: 'verifier', env: [{name: 'DOCKER_HOST', value: 'unix:///docker-socket/docker.sock'}],
       volumeMounts: [{name: 'config', mountPath: '/run/local-stack'}, {name: 'socket', mountPath: '/docker-socket'}]}],
-  }}, 'owned:cloud');
+  }}, 'owned:cloud', revision);
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
   assert.equal(pod.metadata.namespace, 'd621-data');
   assert.equal(pod.spec.hostAliases, undefined);
@@ -60,6 +61,7 @@ test('the backup worker waits for its image before using its private daemon', ()
   const env = Object.fromEntries(worker.env.map(row => [row.name, row.value]));
   assert.equal(env.LOCAL_STACK_CONFIG_DIR, '/run/backup-verifier');
   assert.equal(env.CLOUD_VERIFIER_OWNER, 'waitron-cloud-test-backup');
+  assert.equal(env.CLOUD_VERIFIER_WAITRON_REVISION, revision);
   assert.equal(env.DOCKER_HOST, 'unix:///docker-socket/docker.sock');
   assert.deepEqual(worker.envFrom, [{secretRef: {name: 'services-backup'}}]);
 });

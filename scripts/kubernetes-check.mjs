@@ -22,6 +22,7 @@ import {observeP1, readP1Signals} from './p1-observer.mjs';
 import {installFlux} from './kubernetes-git.mjs';
 import {kindNodeImage, runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
+import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
   const exporter = spawn('docker', ['save', image], {env, signal, stdio: ['ignore', 'pipe', 'pipe']});
@@ -114,8 +115,9 @@ if (target === 'kind-services') {
   assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, 'services.cloud_image_id');
   assert.match(waitronImage ?? '', /^sha256:[a-f0-9]{64}$/, 'services.waitron_image_id');
   assert.equal(process.platform, 'linux', 'services.requires_linux');
+  const verificationTarget = await readRehearsalVerificationTarget();
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
-  return runKubernetesNodeLoss({services: context => runKubernetesServices({...context, image, waitronImage})});
+  return runKubernetesNodeLoss({services: context => runKubernetesServices({...context, image, waitronImage, verificationTarget})});
 }
 if (target === 'kind-storage-identity') {
   const {runStorageIdentity} = await import('./kubernetes-storage-identity.mjs');

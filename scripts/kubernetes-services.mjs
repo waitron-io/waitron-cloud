@@ -123,7 +123,7 @@ async function configureServices(context, kube, store, custody) {
 }
 
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, env, kubeconfig, signal} = context;
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -169,11 +169,11 @@ export async function runKubernetesServices(context) {
       await exec('cloud-services', 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
       const ports = await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
       const manifest = JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
-      const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag);
+      const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag, verificationTarget.runtime.revision);
       const verifier = createKubernetesVerifier({template, kube, pod, classicImages: true,
         loadImage: id => loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal)});
       process.stderr.write('Running authenticated signup, box pairing and native backup verification\n');
-      const result = await runTestCloudClients({image, waitronImage, services: true, kubernetes: {
+      const result = await runTestCloudClients({image, waitronImage, verificationTarget, services: true, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, verifier,
         exec: async (role, args, input, limit) => {
