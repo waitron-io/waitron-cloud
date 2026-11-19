@@ -81,9 +81,12 @@ packet lengths and `wg show wg-cloud latest-handshakes` on both ends recorded
 the new exchange and subsequent tunnel bytes.
 
 The idle venue missed the 90-second handover deadline. An extra 60 seconds
-of observation captured the new handshake and left the joint staff and
-public HTTPS check unresolved. Keep the deadline when measuring recovery
-with outbound venue traffic.
+of observation captured the new handshake. In a second run the fixture sent
+a small packet from the venue through the same peer every five seconds. The
+standby was ready and the old interface was gone after 16.9 seconds. The
+same peer completed a new handshake at about 22 seconds, and verified staff
+HTTPS returned. The public request with its pre-fault cookie returned HTTP
+403 through the deadline. The periodic packets came from the rehearsal fixture.
 
 The existing Cloud fixture already preserves the key and endpoint, so this comparison
 adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
