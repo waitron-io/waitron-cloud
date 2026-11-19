@@ -76,6 +76,11 @@ hit the same eight-second wait on 19 November. The payment startup branch
 changes neither the portal package nor the account and registration packages
 used by this fixture. The failed run again has no activation response.
 
+[PR #1320's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44513881789/job/135525039664)
+hit the same eight-second wait at line 119 and passed 1,469 other tests. The
+test and its runner inputs match the preceding main revision. The case passed
+in PR #1319's standard CI. The failed job did not record an activation response.
+
 ## Owner recovery enrolment wait
 
 [PR #1284's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44200297572/job/134452537917)

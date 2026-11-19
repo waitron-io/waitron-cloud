@@ -142,6 +142,14 @@ explicit pool cleanup or production shutdown. Unlike the acknowledgement-loss ca
 this server receives no complete message; the checks make no general promise about
 duplicate delivery on a later retry.
 
+[PR #1320's registration shard 1](https://github.com/waitron-io/waitron-cloud/actions/runs/44513881789/job/135525039524)
+passed 326 tests. In the SIGINT case, PostgreSQL cancelled the fixture's
+`pg_stat_activity` query at line 79 with code `57014` during the SMTP hold.
+The previous CI suite and an isolated Linux run of the unchanged file at main
+`1ab56ecbf4f3` passed both signals. The failed job has no database wait detail.
+The cause remains open under D530. Keep the existing statement deadline and
+capture the database wait if this case recurs.
+
 ### Monitoring command shutdown with real database scheduling (D537)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
