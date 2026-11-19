@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {pathToFileURL} from 'node:url';
 
-const namespace = 'd621-store';
+import {storageNamespace as namespace} from '../deploy/kubernetes/secrets.mjs';
 const storeName = 'store';
 const peerService = 'store-peers';
 const storageClass = 'd621-local-store';
@@ -27,7 +27,7 @@ export function storeBuildArgs(image, args = []) {
     '-f', 'deploy/kubernetes/images/store/Dockerfile', '-t', image, 'deploy/kubernetes/images/store'];
 }
 
-export function stockholmStoreResources(nodes, image) {
+export function stockholmStoreResources(nodes, image, openId) {
   assert.equal(nodes.length, 3, 'stockholm.store_node_count');
   assert.equal(new Set(nodes).size, 3, 'stockholm.store_duplicate_nodes');
   const claim = {accessModes: ['ReadWriteOnce'], storageClassName: storageClass, resources: {requests: {storage: '10Gi'}}};
@@ -63,7 +63,11 @@ export function stockholmStoreResources(nodes, image) {
               ...peers.map(peer => 'https://' + peerDns(peer) + ':' + port + '/disk')],
             envFrom: [{secretRef: {name: 'store-credentials'}}],
             env: [{name: 'MINIO_STORAGE_CLASS_STANDARD', value: 'EC:3'}, {name: 'MINIO_BROWSER', value: 'off'},
-              {name: 'MINIO_UPDATE', value: 'off'}],
+              {name: 'MINIO_UPDATE', value: 'off'}, ...(openId ? [
+              {name: 'MINIO_IDENTITY_OPENID_CONFIG_URL', value: openId.configUrl},
+              {name: 'MINIO_IDENTITY_OPENID_CLIENT_ID', value: openId.clientId},
+              {name: 'MINIO_IDENTITY_OPENID_ROLE_POLICY', value: openId.rolePolicy},
+            ] : [])],
             ports: [{name: 'https', containerPort: port}],
             securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ['ALL']}},
             // The basic readiness endpoint can return 200 before the object layer starts.
@@ -73,6 +77,7 @@ export function stockholmStoreResources(nodes, image) {
           }],
           volumes: [{name: 'certs', secret: {secretName: 'store-tls', items: [
             {key: 'tls.crt', path: 'public.crt'}, {key: 'tls.key', path: 'private.key'}, {key: 'tls.crt', path: 'CAs/local.crt'},
+            ...(openId ? [{key: 'issuer.crt', path: 'CAs/issuer.crt'}] : []),
           ]}}],
         }}, volumeClaimTemplates: [{metadata: {name: 'disk'}, spec: claim}]},
     },
@@ -94,8 +99,8 @@ async function waitForStore({nodes, kube, signal}) {
   signal.throwIfAborted();
 }
 
-export async function installStockholmStore({nodes, addresses, image, directory, run, kube, signal}) {
-  const items = stockholmStoreResources(nodes, image);
+export async function installStockholmStore({nodes, addresses, image, directory, run, kube, signal, openId}) {
+  const items = stockholmStoreResources(nodes, image, openId);
   assert.ok(addresses.length === 3 && addresses.every(isIPv4), 'stockholm.store_addresses');
   const credentials = {accessKeyId: randomBytes(16).toString('hex'), secretAccessKey: randomBytes(24).toString('hex')};
   const certPath = join(directory, 'store.crt'), keyPath = join(directory, 'store.key');
@@ -109,7 +114,7 @@ export async function installStockholmStore({nodes, addresses, image, directory,
   const secret = (name, values) => ({apiVersion: 'v1', kind: 'Secret', metadata: {name, namespace}, stringData: values});
   try {
     await kube(['create', '-f', '-'], manifest([
-      secret('store-tls', {'tls.crt': ca, 'tls.key': key}),
+      secret('store-tls', {'tls.crt': ca, 'tls.key': key, ...(openId && {'issuer.crt': openId.ca})}),
       secret('store-credentials', {MINIO_ROOT_USER: credentials.accessKeyId, MINIO_ROOT_PASSWORD: credentials.secretAccessKey}),
     ]));
   } catch {

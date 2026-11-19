@@ -13,18 +13,19 @@ const {
   S3Client, CreateBucketCommand, PutBucketVersioningCommand, GetBucketVersioningCommand, ListObjectsV2Command,
   CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand,
 } = require('@aws-sdk/client-s3');
-const bucket = 'cloud-storage-rehearsal';
+export const storageBucket = 'cloud-storage-rehearsal';
 
-function storageClient({ip}, {ca, credentials}) {
+export function storageClient({ip}, {ca, credentials}, bucket = storageBucket) {
   const location = {endpoint: 'https://' + ip + ':' + storeNodePort, region: 'us-east-1', bucket};
   const client = new S3Client({...location, credentials, forcePathStyle: true, maxAttempts: 1,
     requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED',
     requestHandler: {httpsAgent: new Agent({ca})}});
   const send = (Command, args, signal) => client.send(new Command({Bucket: bucket, ...args}), {abortSignal: signal});
-  return {objects: new BackupObjects(location, credentials, ca), send, close: () => client.destroy()};
+  const objects = new BackupObjects(location, credentials, ca);
+  return {objects, send, close() {objects.close(); client.destroy();}};
 }
 
-async function readObject({objects}, name, key, signal) {
+export async function readObject({objects}, name, key, signal) {
   const object = await objects.stage(name, key, {signal, maxBytes: 10 * 1024 * 1024});
   try {
     const chunks = [];
@@ -112,8 +113,8 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-export async function runKubernetesStorage({nodes, cluster, directory, run, kube, stopNode, signal}) {
-  const image = cluster + ':store', names = nodes.map(node => node.name), clients = new Map();
+export async function withStockholmStore({nodes, cluster, directory, run, kube, signal}, verify, openId) {
+  const image = cluster + ':store';
   const bootstrap = await readFile(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url), 'utf8');
   let failure;
   try {
@@ -124,7 +125,32 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       await run('docker', ['exec', '-i', node.id, 'bash', '-s', '--', 'object-storage'], {input: bootstrap});
     }
     process.stderr.write('Waiting for all six store peers\n');
-    const account = await installStockholmStore({nodes: names, addresses: nodes.map(node => node.ip), image, directory, run, kube, signal});
+    const account = await installStockholmStore({nodes: nodes.map(node => node.name),
+      addresses: nodes.map(node => node.ip), image, directory, run, kube, signal, openId});
+    return await verify(account);
+  } catch (error) {
+    failure = error;
+    const pods = await kube(['-n', 'd621-store', 'get', 'pods', '-o', 'wide'], {signal: null}).catch(String);
+    process.stderr.write('Store pods:\n' + pods + '\n');
+    throw error;
+  } finally {
+    if (await run('docker', ['image', 'inspect', image], {signal: null}).catch(() => '')) {
+      try {await run('docker', ['image', 'rm', image], {signal: null});}
+      catch (error) {
+        if (!failure) throw error;
+        throw new AggregateError([failure, error], failure.message + '; store image cleanup failed');
+      }
+    }
+  }
+}
+
+export function runKubernetesStorage(context) {
+  return withStockholmStore(context, account => proveStockholmStorage(context, account));
+}
+
+async function proveStockholmStorage({nodes, stopNode, signal}, account) {
+  const names = nodes.map(node => node.name), clients = new Map();
+  try {
     nodes.forEach(node => clients.set(node.name, storageClient(node, account)));
     const waitForDrives = (machine, drives, deadline) => {
       const ordinal = names.indexOf(machine.name) * 2;
@@ -165,19 +191,7 @@ export async function runKubernetesStorage({nodes, cluster, directory, run, kube
       const listed = await client.send(ListObjectsV2Command, {}, stopped);
       assert.deepEqual(listed.Contents.map(row => row.Key).sort(), ['baseline', multipart, name]);
     }});
-  } catch (error) {
-    failure = error;
-    const pods = await kube(['-n', 'd621-store', 'get', 'pods', '-o', 'wide'], {signal: null}).catch(String);
-    process.stderr.write('Store pods:\n' + pods + '\n');
-    throw error;
   } finally {
     for (const client of clients.values()) client.close();
-    if (await run('docker', ['image', 'inspect', image], {signal: null}).catch(() => '')) {
-      try {await run('docker', ['image', 'rm', image], {signal: null});}
-      catch (error) {
-        if (!failure) throw error;
-        throw new AggregateError([failure, error], failure.message + '; store image cleanup failed');
-      }
-    }
   }
 }
