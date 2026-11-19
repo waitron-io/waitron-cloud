@@ -137,7 +137,7 @@ test('bucket repair exposes a stopped job and an invalid start', async () => {
 const bucketHealPath = '/minio/admin/v3/heal/cloud-storage-rehearsal';
 const returnedPeers = ['store-0', 'store-1'];
 const returnedDisk = peer => 'https://' + peer + '.store-peers.d621-store.svc.cluster.local:9000/disk';
-const baselineReport = (secondState = 'ok') => ({type: 'object', object: 'baseline', before: {drives: [
+const baselineReport = (secondState = 'ok') => ({type: 'object', object: 'repair-probe-baseline', before: {drives: [
   {endpoint: returnedDisk('store-0'), state: 'ok'}, {endpoint: returnedDisk('store-1'), state: secondState},
 ]}});
 
@@ -156,7 +156,7 @@ function mockRepair(probes, repair, onLastProbe = () => {}) {
       assert.equal(current, undefined, 'repair started before the last probe finished');
       return repair(binary, args, {input, signal});
     }
-    assert.equal(pathname, bucketHealPath + '/baseline', 'dry-run target must be the synthetic baseline');
+    assert.equal(pathname, bucketHealPath + '/repair-probe-baseline', 'dry-run target must be the synthetic baseline');
     const token = searchParams.get('clientToken');
     if (!token) {
       assert.equal(current, undefined, 'another probe started before the prior probe finished');
@@ -182,12 +182,12 @@ test('repair waits for both serving peers to read both returned disks', async ()
     ['first:3', [{Summary: 'finished', Items: [baselineReport()]}]],
     ['repeat:3', [{Summary: 'finished', Items: [baselineReport()]}]],
     ['partial:2', [{Summary: 'finished', Items: [baselineReport('offline')]}]],
-    ['after-partial:2', [{Summary: 'finished', Items: [baselineReport()]}]],
-    ['other:3', [{Summary: 'running', Items: [baselineReport()]}, {Summary: 'finished'}]],
+    ['after-partial:3', [{Summary: 'finished', Items: [baselineReport()]}]],
+    ['other:2', [{Summary: 'running', Items: [baselineReport()]}, {Summary: 'finished'}]],
   ].map(([token, replies]) => ({token, replies}));
   const actualRepair = [{clientToken: 'repair:3'}, {Summary: 'finished'}];
   const run = mockRepair(reports, async () => JSON.stringify(actualRepair.shift()));
-  await healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run, signal: AbortSignal.timeout(5000)});
+  await healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run, signal: AbortSignal.timeout(9000)});
   assert.deepEqual(actualRepair, []);
 });
 
@@ -195,10 +195,20 @@ test('repair deadline names the missing data path without starting repair', asyn
   const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
   const deadline = new AbortController();
   const run = mockRepair([{token: 'partial:2', replies: [{Summary: 'finished', Items: [baselineReport('offline')]}]}],
-    () => assert.fail('bucket repair started with a disk offline'), () => deadline.abort());
+    () => assert.fail('bucket repair started with a disk offline'), () => deadline.abort(new DOMException('test deadline', 'TimeoutError')));
   await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
     signal: deadline.signal}), error => error.message.includes('peer 2') &&
       error.message.includes(returnedDisk('store-1') + '=offline'));
+});
+
+test('repair pauses between probes and names a missing serving peer', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const deadline = new AbortController();
+  const run = mockRepair([{token: 'first:2', replies: [{Summary: 'finished', Items: [baselineReport()]}]}],
+    () => assert.fail('bucket repair started after just one serving peer reported'),
+    () => setImmediate(() => deadline.abort(new DOMException('test deadline', 'TimeoutError'))));
+  await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
+    signal: deadline.signal}), /waiting for two complete reports from different serving peers.*peer 2/);
 });
 
 test('repair refuses a probe token without a peer suffix', async () => {

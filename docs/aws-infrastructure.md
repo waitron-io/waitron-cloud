@@ -1233,8 +1233,9 @@ waits for six online drives. It uses a dry run on the synthetic baseline object
 to check both serving peers can read both returned disks. It then requests one
 bucket repair, checks both returned disks for the restored shards and compares
 both objects through the returned machine. The drive wait, probes, repair and
-checks share a 180-second deadline from rejoin. The JSON output reports outage
-and repair times. This check uses curl with Signature V4. Running the bucket
+checks share a 180-second deadline that starts once the node is Ready and its
+identity and cluster membership checks pass. The JSON output reports outage and
+repair times. This check uses curl with Signature V4. Running the bucket
 repair as part of the Cloud services' consecutive-outage proof remains open for
 run 9.
 

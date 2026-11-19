@@ -14,7 +14,7 @@ const {
   CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand,
 } = require('@aws-sdk/client-s3');
 export const storageBucket = 'cloud-storage-rehearsal';
-const repairProbeObject = 'baseline';
+const repairProbeObject = 'repair-probe-baseline';
 
 export function storageClient({ip}, {ca, credentials}, bucket = storageBucket) {
   const location = {endpoint: 'https://' + ip + ':' + storeNodePort, region: 'us-east-1', bucket};
@@ -174,10 +174,12 @@ export async function healStoreBucket({returnedPeers, ...request}) {
       const complete = states.every(state => state === 'ok');
       if (complete && previousPeer && peer !== previousPeer) break;
       previousPeer = complete ? peer : undefined;
+      await delay(1000, undefined, {signal: request.signal});
     }
   } catch (error) {
-    if (!request.signal.aborted) throw error;
-    throw Error('storage_loss.probe_deadline ' + lastProbe, {cause: error});
+    if (request.signal.reason?.name !== 'TimeoutError') throw error;
+    throw Error('storage_loss.probe_deadline waiting for two complete reports from different serving peers. Last report: ' + lastProbe,
+      {cause: error});
   }
   await runStoreHeal(request, false);
 }
@@ -259,7 +261,8 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
     const encrypted = {SSECustomerAlgorithm: 'AES256', SSECustomerKey: key,
       SSECustomerKeyMD5: createHash('md5').update(Buffer.from(key, 'base64')).digest('base64')};
     const baseline = randomBytes(512), bytes = randomBytes(512);
-    await first.objects.putStaged(repairProbeObject, bufferObject(baseline), key, {signal: ready});
+    await first.objects.putStaged('baseline', bufferObject(baseline), key, {signal: ready});
+    await first.objects.putStaged(repairProbeObject, bufferObject(randomBytes(512)), key, {signal: ready});
     const name = 'outage-0', multipart = 'multipart-0';
     const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
     await waitForDrives(nodes[0], 6, uploadLimit);
@@ -273,7 +276,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       const driveCounts = await waitForDrives(survivor, 4, stopped);
       process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + driveCounts + ')\n');
       for (const survivingClient of survivors) {
-        assert.deepEqual(await readObject(survivingClient, repairProbeObject, key, stopped), baseline);
+        assert.deepEqual(await readObject(survivingClient, 'baseline', key, stopped), baseline);
       }
       await client.objects.putStaged(name, bufferObject(bytes), key, {signal: stopped});
       assert.deepEqual(await readObject(client, name, key, stopped), bytes, name);
@@ -282,7 +285,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       assert.deepEqual(await readObject(client, multipart, key, stopped), upload.bytes, multipart);
       await assert.rejects(readObject(client, multipart, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
       const listed = await client.send(ListObjectsV2Command, {}, stopped);
-      assert.deepEqual(listed.Contents.map(row => row.Key).sort(), [repairProbeObject, multipart, name]);
+      assert.deepEqual(listed.Contents.map(row => row.Key).sort(), ['baseline', multipart, name, repairProbeObject]);
       rejoinSince = new Date().toISOString();
     }});
     const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
