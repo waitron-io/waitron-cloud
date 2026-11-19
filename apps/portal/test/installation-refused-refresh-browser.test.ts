@@ -26,19 +26,19 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    const request=route.request(),path=new URL(request.url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
    if(path.endsWith('/installations'))return status===200?route.fulfill({json:{installations:[installation]}}):route.fulfill({status,json:{error:status===401?'unauthenticated':status===403?'forbidden':'temporarily_unavailable'}});
-   if(path.endsWith('/installations/revoke'))writes.push(request.postDataJSON());
+   if(path.endsWith('/installations/remove'))writes.push(request.postDataJSON());
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
   await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.installations.loaded);
-  const c=translations[locale],region=page.getByRole('region',{name:c.installations,exact:true}),rows=region.locator('article.installation'),prompt=region.getByRole('group',{name:c.stopAccess,exact:true});
+  const c=translations[locale],region=page.getByRole('region',{name:c.installations,exact:true}),rows=region.locator('article.installation'),prompt=region.getByRole('group',{name:c.removeVenue,exact:true});
   const refresh=async()=>{await region.locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.waitForFunction(()=>!(window as any).app.installations.pending);};
   for(const refused of [401,403]){
-   assert.equal(await rows.count(),1);await rows.getByRole('button',{name:c.stopAccess,exact:true}).click();assert.equal(await prompt.count(),1);
+   assert.equal(await rows.count(),1);await rows.getByRole('button',{name:c.removeVenue,exact:true}).click();assert.equal(await prompt.count(),1);
    status=503;await refresh();assert.equal(await rows.count(),1);assert.equal(await prompt.count(),1);
    status=refused;await refresh();
    assert.equal(await rows.count(),0);assert.equal(await prompt.count(),0);
-   assert.equal(await region.getByRole('button',{name:c.stopAccess,exact:true}).count(),0);
+   assert.equal(await region.getByRole('button',{name:c.removeVenue,exact:true}).count(),0);
    assert.equal(await region.getByRole('alert').filter({hasText:refused===401?c.pairSession:c.forbidden}).count(),1);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(writes,[]);
    if(process.env.INSTALLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.INSTALLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.INSTALLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-${refused}.png`,fullPage:true});}

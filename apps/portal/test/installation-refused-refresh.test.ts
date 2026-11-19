@@ -21,7 +21,7 @@ for(const status of [401,403,0,429,503])test(`refresh ${status}: refused access 
  if(status===401||status===403){
   assert.deepEqual(controller.installations,[]);assert.deepEqual(controller.visible,[]);assert.deepEqual(controller.organisations,[]);
   assert.equal(controller.selectedOrganisation,undefined);assert.equal(controller.confirming,undefined);
-  controller.choose(id);await controller.revoke();assert.deepEqual(writes,[]);
+  controller.choose(id);await controller.remove();assert.deepEqual(writes,[]);
   failure=false;await controller.load();assert.equal(controller.error,undefined);assert.equal(controller.visible.length,1);
   assert.equal(controller.selectedOrganisation,id);assert.equal(controller.confirming,undefined);
  }else{

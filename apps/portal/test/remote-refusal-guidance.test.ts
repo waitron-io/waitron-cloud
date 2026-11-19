@@ -26,7 +26,7 @@ for(const code of ['remote_plan_required','remote_setup_required','remote_test_o
   Object.defineProperty(globalThis,'document',{configurable:true,value:{cookie:'__Host-cloud_csrf=browser-proof'}});
   t.after(()=>{for(const [key,prior] of [['location',priorLocation],['document',priorDocument]] as const){if(prior)Object.defineProperty(globalThis,key,prior);else Reflect.deleteProperty(globalThis,key);}});
   t.mock.method(globalThis,'fetch',async()=>Response.json({error:code},{status}));
-  for(const path of ['/remote-access/status','/remote-access/dns','/remote-access/apply','/remote-access/unknown','/pairing/approve','/installations/revoke']){
+  for(const path of ['/remote-access/status','/remote-access/dns','/remote-access/apply','/remote-access/unknown','/pairing/approve','/installations/remove']){
    assert.deepEqual(await accountRequest(path),{ok:false,status,code:status===403&&['/remote-access/status','/remote-access/dns','/remote-access/apply'].includes(path)?code:'unexpected_response',retryAfterMs:0});
   }
  });

@@ -20,7 +20,7 @@ export interface InstallationView {
   installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;
   revision:number;revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;
   services:{service:Service|'content_translation';state:State;configuration:Record<string,unknown>;health:Health;failure:Failure|null;observedAt:string|null}[];
-  lease?:SignedEnvelope;canRevoke?:boolean;
+  lease?:SignedEnvelope;canRevoke?:boolean;portalRemovedAt?:string|null;
   emailRelay?:{version:1;grant:RelayGrantHint|null};
 }
 interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;configuration_revision:number;environment:'test'|'production'}
@@ -50,10 +50,11 @@ async function lock(client:PoolClient,id:string):Promise<Row> {
   const {rows}=await client.query<Row>(`SELECT i.*,v.environment,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1 FOR UPDATE OF i`,[id]);
   if(!rows[0])return fail('unavailable');return rows[0];
 }
-async function view(client:PoolClient,id:string,servicesVersion:1|2=1):Promise<InstallationView> {
+async function view(client:PoolClient,id:string,servicesVersion:1|2=1,account=false):Promise<InstallationView> {
   const {rows}=await client.query(`SELECT i.id AS "installationId",i.venue_id AS "venueId",v.organisation_id AS "organisationId",
     v.legal_business_id AS "legalBusinessId",v.environment,i.configuration_revision AS revision,i.revoked_at AS "revokedAt",
     i.last_contact_at AS "lastContactAt",i.lease_expires_at AS "leaseExpiresAt"
+    ${account ? ',i.portal_removed_at AS "portalRemovedAt"' : ''}
     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[id]);
   const services=await client.query(`SELECT s.service,s.state,s.configuration,
     CASE WHEN o.revision=i.configuration_revision AND o.received_at>clock_timestamp()-interval '5 minutes'
@@ -194,7 +195,7 @@ export class InstallationStore {
           if(row.superseded_by)continue;
           plan=venuePlans.get(i.venue_id)!;
         }else plan=await installationPlan(client,(await client.query('SELECT venue_id FROM installations WHERE id=$1',[i.id])).rows[0].venue_id,this.#planMode);
-        const v=await view(client,i.id);
+        const v=await view(client,i.id,1,true);
         if(this.#planMode==='test-venue-levels'&&(v.venueId!==i.venue_id||v.organisationId!==i.organisation_id||v.legalBusinessId!==i.legal_business_id))fail('permission_denied');
         maskPlan(v,plan,this.#planMode);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
         // Provisioning values may contain adapter authority; account screens receive status only.
@@ -202,20 +203,39 @@ export class InstallationStore {
       await resolveSession(client,token,{touch:false});return result;
     });
   }
-  async revokeWithSession(token:string,csrfToken:string,id:string):Promise<InstallationView> {
+  async revokeWithSession(token:string,csrfToken:string,id:string,removeFromPortal=false):Promise<InstallationView> {
     if(!isPairingUuid(id))fail('permission_denied');
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{csrfToken,touch:false});
-      const permission=await client.query(`SELECT m.organisation_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id
+      const permission=await client.query(`SELECT m.organisation_id,v.id AS venue_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id
         JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner AND ${organisationScopeSql('m.account_id','m.organisation_id')} FOR SHARE OF m`,[id,session.accountId]);
-      if(!permission.rowCount)fail('permission_denied');await lock(client,id);
+      const membership=permission.rows[0];
+      if(!membership)fail('permission_denied');
+      if(removeFromPortal){
+        // Publication and replacement both take the venue lock before touching an installation.
+        const venue=(await client.query('SELECT organisation_id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[membership.venue_id])).rows[0];
+        if(venue?.organisation_id!==membership.organisation_id)fail('permission_denied');
+      }
+      const row=await lock(client,id);
+      if(removeFromPortal&&(row.superseded_by||row.venue_id!==membership.venue_id||row.organisation_id!==membership.organisation_id))fail('permission_denied');
       await resolveSession(client,token,{csrfToken});
-      await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);
+      if(removeFromPortal&&(await client.query("SELECT 1 FROM guest_menus WHERE venue_id=$1 AND state='current'",[row.venue_id])).rowCount)fail('conflict');
+
+      const revoke=!removeFromPortal||!row.revoked_at;
+      if(revoke)await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);
       const result=await view(client,id);for(const s of result.services)s.configuration={};
+      if(removeFromPortal){
+        const removal=await client.query<{portal_removed_at:Date}>('UPDATE installations SET portal_removed_at=COALESCE(portal_removed_at,clock_timestamp()) WHERE id=$1 RETURNING portal_removed_at',[id]);
+        result.portalRemovedAt=removal.rows[0]!.portal_removed_at.toISOString();
+      }
       await resolveSession(client,token,{csrfToken,touch:false});
-      await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'account',$2,'user_requested',$3) ON CONFLICT DO NOTHING",[id,session.accountId,result]);
-      const revocation=(await client.query<{actor_kind:SecurityAuditActorKind;actor_id:string}>('SELECT actor_kind,actor_id FROM installation_revocations WHERE installation_id=$1',[id])).rows[0]!;
-      await recordSecurityAuditEvent(client,{organisationId:permission.rows[0].organisation_id,venueId:result.venueId,type:'installation.revoked',actorKind:revocation.actor_kind,actorId:revocation.actor_id,subjectKind:'installation',subjectId:id,sourceId:id});return result;
+      if(revoke){
+        const {portalRemovedAt:_,...revoked}=result;
+        await client.query("INSERT INTO installation_revocations(installation_id,actor_kind,actor_id,reason,result) VALUES($1,'account',$2,'user_requested',$3) ON CONFLICT DO NOTHING",[id,session.accountId,revoked]);
+        const revocation=(await client.query<{actor_kind:SecurityAuditActorKind;actor_id:string}>('SELECT actor_kind,actor_id FROM installation_revocations WHERE installation_id=$1',[id])).rows[0]!;
+        await recordSecurityAuditEvent(client,{organisationId:membership.organisation_id,venueId:result.venueId,type:'installation.revoked',actorKind:revocation.actor_kind,actorId:revocation.actor_id,subjectKind:'installation',subjectId:id,sourceId:id});
+      }
+      return result;
     });
   }
 }

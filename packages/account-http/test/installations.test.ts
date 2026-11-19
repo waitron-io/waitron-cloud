@@ -62,6 +62,81 @@ test('machine authority, browser sessions and configured issuer remain separate'
  assert.equal((await request('/api/installations/renew',proof('renew'))).status,403);
  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config()});assert.equal((await request('/api/installations/renew',proof('renew'))).status,503);
 });
+test('remove stops an active connection and retries without writing a second revocation',async()=>{
+ const before=(await (await browser('')).json()).installations[0];
+ const reply=await browser('/remove',{installationId:id});
+ assert.equal(reply.status,200);
+ const removed=await reply.json();
+ assert.equal(removed.installationId,id);
+ assert.ok(Date.parse(removed.portalRemovedAt)>0);
+ assert.ok(Date.parse(removed.revokedAt)>0);
+ assert.equal((await request('/api/installations/renew',proof('renew'))).status,403);
+ assert.deepEqual(await (await browser('/remove',{installationId:id})).json(),removed);
+ const listed=(await (await browser('')).json()).installations[0];
+ assert.equal(listed.venueId,before.venueId);
+ assert.equal(listed.portalRemovedAt,removed.portalRemovedAt);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installation_revocations WHERE installation_id=$1',[id])).rows[0].count,'1');
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked' AND subject_id=$1",[id])).rows[0].count,'1');
+});
+test('remove leaves an active trial visible in Billing',async()=>{
+ const {venueId}=(await (await browser('')).json()).installations[0];
+ const {account_id:accountId}=(await db.pool.query('SELECT account_id FROM organisation_memberships')).rows[0];
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer,planMode:'test-venue-levels',billingAccount:{accountIds:[accountId]}});
+ const billing=(action:string,body:unknown)=>request('/api/account/billing/'+action,body,{origin,cookie,'x-csrf-token':csrf});
+ const started=await billing('start-trial',{venueId});
+ assert.equal(started.status,200);
+ const plan=await started.json();
+ assert.equal(plan.venues[0].trial.state,'active');
+ assert.equal((await browser('/remove',{installationId:id})).status,200);
+ assert.deepEqual(await (await billing('read',{})).json(),plan);
+});
+test('remove refuses a shared menu even after the connection has stopped',async()=>{
+ const {venue_id:venue}= (await db.pool.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+ await db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
+  VALUES($1,1,'current',$2,$3,'en',clock_timestamp(),'{"en":"Menu"}')`,[venue,id,'a'.repeat(64)]);
+ assert.equal((await browser('/revoke',{installationId:id})).status,200);
+ const refused=await browser('/remove',{installationId:id});
+ assert.equal(refused.status,409);
+ assert.deepEqual(await refused.json(),{error:'guest_menu_shared'});
+ assert.equal((await (await browser('')).json()).installations[0].portalRemovedAt,null);
+ await db.pool.query("UPDATE guest_menus SET state='blocked',revision=2,source_installation_id=NULL,body_sha256=NULL,default_language=NULL,received_at=NULL,pages=NULL WHERE venue_id=$1",[venue]);
+ const removed=await browser('/remove',{installationId:id});
+ assert.equal(removed.status,200);
+ assert.ok(Date.parse((await removed.json()).portalRemovedAt)>0);
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked' AND subject_id=$1",[id])).rows[0].count,'1');
+});
+test('remove uses the guarded account write path',async()=>{
+ assert.equal((await browser('/remove',{installationId:id},{'x-csrf-token':'wrong'})).status,403);
+ assert.equal((await (await browser('')).json()).installations[0].revokedAt,null);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false');
+ assert.equal((await browser('/remove',{installationId:id})).status,403);
+});
+test('remove checks the current installation after a concurrent replacement',async()=>{
+ const held=await db.secondPool.connect();
+ const replacement=randomUUID();
+ let pending:Promise<Response>|undefined;
+ try{
+  await held.query('BEGIN');
+  const {venue_id:venue}=(await held.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+  await held.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[venue]);
+  const {pid}=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0];
+  let early:Response|undefined;
+  pending=Promise.resolve(browser('/remove',{installationId:id})).then(response=>early=response);
+  const deadline=performance.now()+5000;
+  let waiting=false;
+  while(!early&&!waiting&&performance.now()<deadline){
+   waiting=!!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,pid])).rowCount;
+   if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(waiting,early?`remove returned ${early.status} before taking the venue lock`:'remove did not wait for the venue lock');
+  await held.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE id=$1',[id,replacement]);
+  await held.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[replacement,venue,'replacement-key']);
+  await held.query('COMMIT');
+  assert.equal((await pending).status,403);
+  const listed=(await (await browser('')).json()).installations;
+  assert.deepEqual(listed.map((row:{installationId:string;portalRemovedAt:string|null})=>[row.installationId,row.portalRemovedAt]),[[replacement,null]]);
+ }finally{await held.query('ROLLBACK');held.release();await pending;}
+});
 test('machine limits persist across app workers',async()=>{
  for(let n=0;n<30;n++){assert.equal((await request('/api/installations/renew',proof('renew'))).status,200);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:config(),leaseIssuer:issuer});}
  const limited=await request('/api/installations/renew',proof('renew'));assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);

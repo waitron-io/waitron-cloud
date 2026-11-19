@@ -556,10 +556,17 @@ ones. See the [box report contract](../../docs/box-error-reports.md) for the bou
 fields, retry rules and synthetic-only version holds.
 
 From the account portal, you can inspect your organisation's installations. The
-account API provides GET `/api/account/installations` and POST
-`/api/account/installations/revoke` with `{"installationId":"<uuid>"}`. Both require
-a live customer membership; the POST additionally requires ownership, the exact
-Origin and CSRF token. Platform permissions alone do not grant access. Account routes
+account API provides GET `/api/account/installations`. POST
+`/api/account/installations/revoke` stops the Cloud connection. POST
+`/api/account/installations/remove` stops the connection if active and records the
+time it was hidden from Venues and Remote access. Both writes take
+`{"installationId":"<uuid>"}`. The list and removal reply include
+`portalRemovedAt`, which is null on a listed connection you can still see.
+A currently shared guest menu makes removal return `409 guest_menu_shared` until
+you stop sharing it. Recovery and Billing still have the venue.
+
+All three routes require a live customer membership. The writes also require
+ownership, the exact Origin and an anti-forgery token (CSRF). Account routes
 allow 30 requests per minute per account and return status without installation keys,
 lease signatures or adapter configuration. Revocation records the actor, time, reason
 and result while keeping the venue and service records.

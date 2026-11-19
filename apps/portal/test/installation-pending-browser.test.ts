@@ -162,7 +162,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await disabled(page, expanded ? [c.remoteReview, c.remoteUseAssigned, c.remoteConfirm] : [c.remoteSetup]);
           if (expanded) assert.equal(await page.locator('#remote-kind').isDisabled(), true);
         } else {
-          await disabled(page, [c.stopAccess, c.diagnosticDownload, c.translationConsentAgree,
+          await disabled(page, [c.removeVenue, c.diagnosticDownload, c.translationConsentAgree,
             ...(expanded ? [c.latestSnapshots, c.olderSnapshots] : [c.viewSnapshots])]);
           if (expanded) assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).isDisabled(), true);
         }

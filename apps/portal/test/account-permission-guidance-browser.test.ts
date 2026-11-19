@@ -50,6 +50,6 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const actions=page.locator('.permission-actions');logoutFails=true;await actions.getByRole('button',{name:c.signout,exact:true}).click();
   await page.getByRole('alert').filter({hasText:c.logoutFailed}).waitFor();assert.equal(logoutCalls,1);assert.equal(page.url(),'https://portal.test/account/venues');
   logoutFails=false;await actions.getByRole('button',{name:c.signout,exact:true}).click();await page.waitForURL('**/login');assert.equal(logoutCalls,2);
-  assert.equal(writes.some(path=>['installations/revoke','remote-access/apply','sessions/revoke','passkeys/remove','authenticator/begin'].includes(path)),false);
+  assert.equal(writes.some(path=>['installations/remove','remote-access/apply','sessions/revoke','passkeys/remove','authenticator/begin'].includes(path)),false);
  }finally{await browser.close();}
 });

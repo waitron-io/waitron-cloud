@@ -19,7 +19,7 @@ const writes = [
   {path: '/session/activity', body: {}},
   {path: '/logout', body: {}},
   {path: '/sessions/revoke', body: {id: 'other-session'}},
-  {path: '/installations/revoke', body: {installationId: 'old-installation', revision: 3}},
+  {path: '/installations/remove', body: {installationId: 'old-installation', revision: 3}},
   {path: '/pairing/inspect', body: {requestId: 'connection', code: '12345678'}},
   {path: '/pairing/approve', body: {requestId: 'connection', legalBusinessId: 'business'}},
   {path: '/passkeys/registration/options', body: {password: 'exact password ' }},
