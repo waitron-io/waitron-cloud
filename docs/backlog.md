@@ -1789,10 +1789,13 @@ implementation or production evidence.
   continuity, grant expiry and renewal during one machine outage, and an encrypted
   read with the renewed grant after rejoin. Two renewals reached the ten-second
   deadline. Their cause, multipart when a DNS host stops, repair and multipart
-  through consecutive outages, and switching Cloud services to replicated data
-  remain open.
-  Real Stockholm machine loss and cold restart remain open.
-  Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
+  through consecutive outages remain open. The
+  [healthy Kind services rehearsal](aws-infrastructure.md#rehearse-signup-pairing-and-backup-on-a-healthy-kind-cell)
+  checks production-mode signup, pairing and backup against replicated PostgreSQL
+  and MinIO. Stockholm and Flux startup with the real services, worker redundancy,
+  durable mail and a storage address that survives machine loss remain outside
+  rehearsal checks. Real Stockholm machine loss and cold restart remain open.
+  Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
   across 15 modules, with the manifest worker replaced after its host stopped,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createPrivateKey, generateKeyPairSync} from 'node:crypto';
+import {createPrivateKey, generateKeyPairSync, randomBytes} from 'node:crypto';
 import {chmod, mkdir, writeFile} from 'node:fs/promises';
 import {Agent} from 'node:https';
 import {createRequire} from 'node:module';
@@ -52,7 +52,7 @@ function policy(bucket) {
   ]};
 }
 
-async function configurePolicy({directory, run, signal}, endpoint, {ca, credentials}) {
+export async function configurePolicy({directory, run, signal}, endpoint, {ca, credentials}, services = false) {
   const config = join(directory, 'mc-config'), binary = join(directory, 'mc');
   await mkdir(join(config, 'certs', 'CAs'), {recursive: true, mode: 0o700});
   await writeFile(join(config, 'certs', 'CAs', 'store.crt'), ca);
@@ -70,7 +70,25 @@ async function configurePolicy({directory, run, signal}, endpoint, {ca, credenti
   const {info} = JSON.parse(await mc(['idp', 'openid', 'info', 'rehearsal']));
   const role = info.find(({key}) => key === 'roleARN')?.value;
   assert.match(role ?? '', /^arn:minio:iam:[^:]*::role\/[\w-]+$/, 'storage_identity.role');
-  return role;
+  if (!services) return role;
+  const account = async (name, actions) => {
+    const accessKeyId = 'services-' + name;
+    const secretAccessKey = randomBytes(32).toString('base64url');
+    const servicePolicy = join(config, name + '.json');
+    await writeFile(servicePolicy, JSON.stringify({Version: '2012-10-17', Statement: [{
+      Effect: 'Allow', Action: actions,
+      Resource: ['incoming/*', 'snapshots/*'].map(prefix => 'arn:aws:s3:::' + storageBucket + '/' + prefix),
+    }]}));
+    await mc(['admin', 'policy', 'create', 'rehearsal', accessKeyId, servicePolicy]);
+    // Keep the password in stdin and keep the command's diagnostics free of credentials.
+    await run('sh', ['-ec', 'IFS= read -r password; "$1" --config-dir "$2" admin user add rehearsal "$3" "$password" >/dev/null 2>&1',
+      'create-storage-user', binary, config, accessKeyId], {input: secretAccessKey + '\n', signal, timeout: 30_000});
+    await mc(['admin', 'policy', 'attach', 'rehearsal', accessKeyId, '--user', accessKeyId]);
+    return {accessKeyId, secretAccessKey};
+  };
+  const accountCredentials = await account('account', ['s3:GetObject', 's3:PutObject', 's3:DeleteObject']);
+  const workerCredentials = await account('worker', ['s3:GetObject', 's3:DeleteObject']);
+  return {role, accountCredentials, workerCredentials};
 }
 
 async function checkRejectedTokens(custody, role, endpoint, ca, scope) {
@@ -242,7 +260,7 @@ async function checkGrants(context, account, custodyDirectory) {
   }
 }
 
-export async function runStorageIdentity(context) {
+export async function withStockholmStorageIdentity(context, verify) {
   const {directory, kube, run, signal} = context;
   const custodyDirectory = join(directory, 'storage-custody');
   const custody = await createStorageCustody(custodyDirectory, (binary, args) => run(binary, args, {signal}));
@@ -257,7 +275,11 @@ export async function runStorageIdentity(context) {
   await kube(['apply', '-f', '-'], manifest(resources.filter(row => row.kind !== 'Secret')));
   await kube(['-n', storageNamespace, 'rollout', 'status', 'deployment/storage-identity', '--timeout=180s'],
     {signal, timeout: 185_000});
-  return withStockholmStore(context, account => checkGrants(context, account, custodyDirectory), {
+  return withStockholmStore(context, account => verify(account, custody, custodyDirectory), {
     configUrl: issuer + discoveryPath, clientId: audience, rolePolicy: policyName, ca: custody.certificate,
   });
+}
+
+export function runStorageIdentity(context) {
+  return withStockholmStorageIdentity(context, (account, _custody, custodyDirectory) => checkGrants(context, account, custodyDirectory));
 }

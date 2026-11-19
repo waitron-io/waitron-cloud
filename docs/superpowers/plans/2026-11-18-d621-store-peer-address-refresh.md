@@ -28,7 +28,7 @@ The separate HTTP retry loop can still wait up to 30 seconds.
   repair leg in 18.746 seconds. Both logged data reconnects preceded the repair
   request. This run combined both DNS changes with one explicit repair.
   See [the storage rehearsal notes](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal).
-- [ ] Send the combined branch through whole-branch review and CI before
+- [x] Send the combined branch through whole-branch review and CI before
   landing the cell change and repair proof together. In that PR, link the
   peer refresh and single bucket repair to the consecutive-outage check in
   the country-cell plan. Update the AWS guide and backlog. Keep the
@@ -38,3 +38,5 @@ The separate HTTP retry loop can still wait up to 30 seconds.
 
 The peer refresh is one environment setting and one render assertion. The
 Linux rehearsal checks the first-outage and repair outcomes for both changes.
+
+The returned-drive repair and peer refresh landed together in [#1317](https://github.com/waitron-io/waitron-cloud/pull/1317).

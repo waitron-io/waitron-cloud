@@ -1219,9 +1219,9 @@ The bounded Stockholm launcher waits for the three control planes, the network
 proxy rollout and the DNS rollout before starting PostgreSQL in the `d621-data`
 namespace. The Kind rehearsal and the launcher put the two CoreDNS replicas on
 separate machines so one stopped machine leaves a DNS replica available. The
-legacy journey still uses its own
-database and the network share on A. Switching the Cloud services to the
-replicated database and checking machine loss in Stockholm are later steps.
+legacy Stockholm journey still uses its own database and the network share on
+A. Switching that journey to the replicated database and checking machine loss
+in Stockholm remain outside rehearsal steps.
 
 Run `node scripts/kubernetes-check.mjs --storage-loss` in the Linux guest to
 rehearse object storage loss independently of the Cloud services. The check builds
@@ -1252,7 +1252,37 @@ failures. Allow at least 15 minutes for the original grant to expire.
 The bounded Stockholm launcher transfers the same test store image and waits
 for all six peers after joining the three machines. It runs the store in
 `d621-store` with disposable credentials. The legacy fixture keeps its existing
-store. A later slice connects Cloud services to the replicated store.
+store. Use the production-mode Kind rehearsal below to exercise the Cloud
+services against the replicated database and store while all three nodes are up.
+
+### Rehearse signup, pairing and backup on a healthy Kind cell
+
+Use a disposable x86-64 Linux Docker host with the same Kind, kubectl and Buildx
+versions as the storage rehearsal. Run as root in the disposable host so the
+check can mount its private 1 GiB ext4 scratch filesystem for the verifier.
+Set `TEST_CLOUD_INTEGRATION_IMAGE` to the
+local Cloud image ID and `TEST_CLOUD_INTEGRATION_WAITRON_IMAGE` to the local
+Waitron verifier image ID built with `node scripts/build-backup-verifier.mjs --amazon-test`.
+This uses the shared test verifier pin in `deploy/backup-verifier/amazon-test-target.json`.
+
+```sh
+TEST_KUBERNETES_SERVICES=1 node --test scripts/kubernetes-services.test.mjs
+```
+
+The check migrates PostgreSQL over TLS before starting the existing Cloud
+commands in production mode. Mail stays in the private authenticated inbox.
+The journey uses a synthetic account and box, checks pairing and the stored
+archive, then waits for the backup worker to admit a matching restore using the existing
+test verifier and a policy pinned to the image in the disposable database. It
+also checks that altered bytes cannot be published. The worker uses its
+own Docker daemon and removes the isolated restore container. The restore
+child's 1 GiB memory limit stays in place. The check prints the archive size
+and scratch bound after it removes the Kind cluster, native client resources
+and scratch filesystem it created.
+
+Use the outside rehearsal for Stockholm and Flux startup, worker redundancy,
+durable mail and a storage address that survives machine loss. The outside
+rehearsal must also check returned disks and multipart through consecutive outages.
 
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file

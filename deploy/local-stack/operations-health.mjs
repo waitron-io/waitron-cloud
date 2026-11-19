@@ -14,11 +14,11 @@ export async function readAccountRequests({fetcher=fetch,timeoutMs=2000}={}){
  }finally{void reader?.cancel().catch(()=>{});}
 }
 
-// Node fetch replaces Host with the destination. Compose DNS is "account", while
-// the account API requires its configured localhost authority even on health routes.
-export function localHealthFetch(url,{signal}){
+// The account API requires its configured authority even when a health reader connects by private address.
+export function localHealthFetch(url,{signal,host='localhost:3000',forwardedFor}){
  return new Promise((resolve,reject)=>{
-  const request=get(url,{headers:{host:'localhost:3000'},signal},response=>{
+  const headers = forwardedFor ? {host, 'x-forwarded-for': forwardedFor} : {host};
+  const request=get(url,{headers,signal},response=>{
    try{resolve(new Response(Readable.toWeb(response),{status:response.statusCode,headers:response.headers}));}
    catch(error){response.destroy();reject(error);}
   });

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
-import {mkdtemp, rm} from 'node:fs/promises';
+import {mkdir, mkdtemp, rm, stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
+import {cleanUp} from './kubernetes-database.mjs';
+import {verifierScratchPath} from '../deploy/kubernetes/services.mjs';
 
 export const kindNodeImage = 'kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48';
 const pauseImage = 'registry.k8s.io/pause:3.10';
@@ -65,10 +67,13 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand, database, storage} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
+  const scratchMount = join(directory, 'verifier-mount');
+  const scratchDisk = join(directory, 'verifier.ext4');
+  const scratchWork = join(scratchMount, 'work');
   const kubeconfig = join(directory, 'kubeconfig');
   const env = {...process.env, KUBECONFIG: kubeconfig, DOCKER_CONTEXT: 'default', KIND_EXPERIMENTAL_PROVIDER: 'docker',
     KIND_EXPERIMENTAL_DOCKER_NETWORK: cluster};
@@ -89,7 +94,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     assert.deepEqual(rows.map(row => row.Id), ids, 'node_loss.container_identity');
     return rows;
   };
-  let networkId, creating = false, kubeBound = false, failure;
+  let networkId, creating = false, kubeBound = false, scratchMountAttempted = false, failure;
   const owned = new Set();
   function owns(row) {
     const name = row.Name.slice(1), labels = row.Config.Labels;
@@ -136,13 +141,24 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     assert.equal(JSON.parse(await run('kubectl', ['version', '--client', '-o', 'json'])).clientVersion.gitVersion, 'v1.34.3');
     assert.equal(await list(), '', 'node_loss.cluster_exists');
     assert.equal(await networks(), '', 'node_loss.network_exists');
+    if (services) {
+      await mkdir(scratchMount, {mode: 0o700});
+      await run('fallocate', ['-l', '1G', scratchDisk]);
+      await run('mkfs.ext4', ['-q', '-m', '0', scratchDisk]);
+      scratchMountAttempted = true;
+      await run('mount', ['-o', 'loop,nodev,nosuid,noexec', scratchDisk, scratchMount]);
+      await run('install', ['-d', '-m', '0700', '-o', '1000', '-g', '1000', scratchWork]);
+    }
     networkId = await docker(['network', 'create', '--driver', 'bridge', '--subnet', subnet, '--label', `${networkLabel}=${cluster}`, cluster]);
     assert.match(networkId, dockerId, 'node_loss.network_id');
     await verifyNetwork();
     creating = true;
     process.stderr.write(`Creating owned Kind cluster ${cluster}\n`);
     const input = JSON.stringify({kind: 'Cluster', apiVersion: 'kind.x-k8s.io/v1alpha4',
-      networking: {apiServerAddress: '127.0.0.1', ipFamily: 'ipv4'}, nodes: names.map(() => ({role: 'control-plane'}))});
+      networking: {apiServerAddress: '127.0.0.1', ipFamily: 'ipv4'}, nodes: names.map((_, index) => ({
+        role: 'control-plane',
+        ...(services && index === 0 ? {extraMounts: [{hostPath: scratchWork, containerPath: verifierScratchPath}]} : {}),
+      }))});
     // Retain a partial create so cleanup can check container IDs before removing anything.
     await run('kind', ['create', 'cluster', '--name', cluster, '--image', kindNodeImage, '--wait', '180s', '--retain', '--config', '-'],
       {input, timeout: 600_000});
@@ -210,6 +226,11 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       const result = await storage({nodes, cluster, directory, run, kube, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, storage: result};
     }
+    if (services) {
+      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});
+      return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members,
+        services: {...result, verifierScratchBytes: (await stat(scratchDisk)).size}};
+    }
     const legs = [];
     for (const [index, node] of nodes.entries()) {
       legs.push(await stopNode(node.name, {whileStopped: async failover => {
@@ -257,11 +278,19 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
         assert.equal(await networks(cleanup), '', 'node_loss.network_remains');
       }
     } catch (error) {
-      if (!failure) throw error;
-      throw new AggregateError([failure, error], `${failure.message}\nKind cleanup failed for ${cluster}: ${error.message}`);
+      failure = failure ? new AggregateError([failure, error], `${failure.message}\nKind cleanup failed for ${cluster}: ${error.message}`) : error;
+      throw failure;
     } finally {
-      await rm(directory, {recursive: true, force: true});
-      process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);
+      try {
+        await cleanUp(failure, async () => {
+          if (scratchMountAttempted) {
+            await run('sh', ['-ec', 'if mountpoint -q "$1"; then umount "$1"; fi', 'cleanup', scratchMount], cleanup);
+          }
+          await rm(directory, {recursive: true, force: true});
+        });
+      } finally {
+        process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);
+      }
     }
   }
 }

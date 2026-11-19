@@ -661,3 +661,13 @@ else if (args[1] === 'inspect') console.log(JSON.stringify([{Id: ${JSON.stringif
   assert.deepEqual(calls.find(call => call.name === 'docker' && call.args.includes('rm'))?.args, ['network', 'rm', id], result.stderr);
   assert.match(result.stderr, /synthetic Kind startup error/);
 });
+
+test('the services command checks its image bindings before starting Kind', async t => {
+  const {env, log} = await commandFixture(t, 'services-images');
+  const run = spawnSync(process.execPath, ['scripts/kubernetes-check.mjs', '--services'], {
+    env: {...env, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: ''}, encoding: 'utf8', timeout: 5000,
+  });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /services\.waitron_image_id/);
+  await assert.rejects(readFile(log), {code: 'ENOENT'});
+});

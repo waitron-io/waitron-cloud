@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {rm, writeFile, truncate} from 'node:fs/promises';
+import {dirname} from 'node:path';
 import test from 'node:test';
 
 import {runKubernetesNodeLoss as runCheck} from './kubernetes-node-loss.mjs';
@@ -266,4 +268,64 @@ test('the fault check retries a bare Kubernetes API EOF while the node stays dow
   assert.equal(result.legs.length, 3);
   assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
   assert.deepEqual(f.mutations('start'), f.mutations('kill'));
+});
+
+function servicesFixture({unmountError} = {}) {
+  const {execute: executeKind, calls, remaining} = fixture();
+  let workPath;
+  const execute = async (binary, args, options) => {
+    if (binary === 'fallocate') {
+      assert.deepEqual(args.slice(0, 2), ['-l', '1G']);
+      await writeFile(args[2], '');
+      await truncate(args[2], 1024 ** 3);
+      return '';
+    }
+    if (binary === 'mkfs.ext4') return '';
+    if (binary === 'mount') {
+      assert.deepEqual(args.slice(0, 2), ['-o', 'loop,nodev,nosuid,noexec']);
+      return '';
+    }
+    if (binary === 'install') {
+      assert.deepEqual(args.slice(0, -1), ['-d', '-m', '0700', '-o', '1000', '-g', '1000']);
+      workPath = args.at(-1);
+      return '';
+    }
+    if (binary === 'sh') {
+      assert.equal(remaining(), 0, 'remove the cluster before unmounting scratch');
+      assert.equal(args.at(-1) + '/work', workPath);
+      calls.push({binary, args});
+      if (unmountError) throw unmountError;
+      return '';
+    }
+    if (binary === 'kind' && args[0] === 'create') {
+      assert.ok(workPath, 'prepare the filesystem before creating Kind');
+      assert.deepEqual(JSON.parse(options.input).nodes.map(node => node.extraMounts), [
+        [{hostPath: workPath, containerPath: '/var/local/d621-verifier-scratch'}], undefined, undefined,
+      ]);
+    }
+    return executeKind(binary, args, options);
+  };
+  return {execute, calls, directory: () => dirname(dirname(workPath))};
+}
+
+test('the healthy services rehearsal uses the three owned nodes without stopping them', async () => {
+  const {execute, calls} = servicesFixture();
+  const result = await runCheck({execute, services: async ({nodes, cluster, kube}) => {
+    assert.deepEqual(nodes.map(node => node.ip), ['172.30.250.2', '172.30.250.3', '172.30.250.4']);
+    assert.equal((await kube(['get', '--raw=/readyz'])), 'ok');
+    return {network: cluster};
+  }});
+  assert.deepEqual(result.services, {network: result.cluster, verifierScratchBytes: 1024 ** 3});
+  assert.equal(calls.filter(({binary, args}) => binary === 'docker' && args[0] === 'kill').length, 0);
+  assert.equal(calls.filter(({binary}) => binary === 'sh').length, 1);
+});
+
+test('a scratch unmount failure preserves the service failure', async t => {
+  const serviceError = Error('restore failed'), unmountError = Error('scratch busy');
+  const {execute, directory} = servicesFixture({unmountError});
+  t.after(() => rm(directory(), {recursive: true, force: true}));
+  await assert.rejects(runCheck({execute, services: async () => {throw serviceError;}}), error => {
+    assert.deepEqual(error.errors, [serviceError, unmountError]);
+    return true;
+  });
 });

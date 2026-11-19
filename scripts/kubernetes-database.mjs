@@ -15,7 +15,7 @@ const service = database + '-rw';
 const client = 'cloud-db-client';
 const reader = 'proofreader', writer = 'proofwriter';
 const caPath = '/run/db-ca/ca.crt';
-const caVolume = {name: 'db-ca', secret: {secretName: database + '-ca', items: [{key: 'ca.crt', path: 'ca.crt'}]}};
+export const caVolume = {name: 'db-ca', secret: {secretName: database + '-ca', items: [{key: 'ca.crt', path: 'ca.crt'}]}};
 const caMount = {name: caVolume.name, mountPath: '/run/db-ca', readOnly: true};
 
 export async function installDatabaseOperator({directory, run, kube}) {
@@ -58,12 +58,12 @@ function databaseSecret(name) {
     uri: `postgresql://${name}:${password}@${service}:5432/app`}};
 }
 
-function cloudContainer(image, name, secret, command) {
+export function cloudContainer(image, name, secret, command) {
   return {name, image, imagePullPolicy: 'Never', workingDir: '/app', command,
     env: [ref('PGURI', secret, 'uri')], volumeMounts: [caMount]};
 }
 
-const requireTls = `export DATABASE_URL="$PGURI?sslmode=verify-full&sslrootcert=${caPath}"\n`;
+export const requireTls = `export DATABASE_URL="$PGURI?sslmode=verify-full&sslrootcert=${caPath}"\n`;
 const probe = requireTls + `
 until node --input-type=module -e '
   import {createRequire} from "node:module";
@@ -103,7 +103,7 @@ function clientPod(image, nodeName) {
   ]};
 }
 
-function migrationJob(image) {
+export function migrationJob(image) {
   const container = cloudContainer(image, 'migrate', database + '-app', ['sh', '-ec',
     requireTls + 'exec node packages/registration/src/migrate-cli.ts']);
   return {backoffLimit: 0, activeDeadlineSeconds: 120, template: {spec: {restartPolicy: 'Never',
@@ -114,7 +114,7 @@ function within(signal, ms) {
   return {signal: AbortSignal.any([signal, AbortSignal.timeout(ms)]), timeout: ms + 2_000};
 }
 
-async function cleanUp(failure, action) {
+export async function cleanUp(failure, action) {
   try {
     await action();
   } catch (error) {

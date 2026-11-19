@@ -3,6 +3,7 @@
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --node-loss checks three control planes without venue images.
 // --storage-loss uses the pinned private store and needs a Linux Docker host.
+// --services rehearses production-mode signup, pairing and backup on private Linux Kind.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
 // The loss checks need three owned nodes, 10 GiB RAM and 30 GiB disk. Use the approved shared Docker wrapper.
@@ -21,6 +22,7 @@ import {observeP1, readP1Signals} from './p1-observer.mjs';
 import {installFlux} from './kubernetes-git.mjs';
 import {kindNodeImage, runKubernetesNodeLoss} from './kubernetes-node-loss.mjs';
 import {runTestCloudClients, parseIntegrationJson, assertAmazonBinding} from './test-cloud-integration.mjs';
+import {readRehearsalVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 export async function loadVerifierImage(image, kubeArgs, env, signal) {
   signal?.throwIfAborted();
   const exporter = spawn('docker', ['save', image], {env, signal, stdio: ['ignore', 'pipe', 'pipe']});
@@ -37,6 +39,21 @@ export async function loadVerifierImage(image, kubeArgs, env, signal) {
   finally {clearTimeout(timer); for (const child of children) child.kill('SIGKILL'); await Promise.all(exits);}
 }
 
+export function forwardKubernetesPod(kubeArgs, name, ports, env, forwards) {
+  const child = spawn('kubectl', [...kubeArgs, 'port-forward', '--address', '127.0.0.1', 'pod/' + name,
+    ...ports.map(port => ':' + port)], {env, stdio: ['ignore', 'pipe', 'pipe']});
+  const closed = new Promise(resolve => child.once('close', resolve)); forwards.push({child, closed});
+  return new Promise((resolve, reject) => {
+    const found = {}, timer = setTimeout(() => reject(Error('kubernetes.forward_timeout')), 15000);
+    child.once('error', () => {clearTimeout(timer); reject(Error('kubernetes.forward_failed'));});
+    child.once('close', () => {clearTimeout(timer); reject(Error('kubernetes.forward_closed'));});
+    child.stdout.on('data', part => {
+      for (const match of String(part).matchAll(/127\.0\.0\.1:(\d+) -> (\d+)/g)) found[match[2]] = Number(match[1]);
+      if (ports.every(port => found[port])) {clearTimeout(timer); resolve(found);}
+    }); child.stderr.resume();
+  });
+}
+
 export function createKubernetesVerifier({template, kube, pod, loadImage, classicImages = false}) {
   const status = async () => (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
   const exec = args => kube(['exec', '-i', 'pod/verifier', '-c', 'verifier', '--', ...args]);
@@ -46,7 +63,7 @@ export function createKubernetesVerifier({template, kube, pod, loadImage, classi
         /^sha256:[a-f0-9]{64}$/.test(image) && /^[a-f0-9]{40}$/.test(revision), 'kubernetes.verifier_binding');
       const value = structuredClone(template), worker = value.spec.containers.find(row => row.name === 'verifier');
       if (classicImages) value.spec.containers.find(row => row.name === 'docker').args.push('--feature=containerd-snapshotter=false');
-      value.spec.hostAliases[0].ip = (await pod('cloud')).status.podIP;
+      if (value.spec.hostAliases) value.spec.hostAliases[0].ip = (await pod('cloud')).status.podIP;
       const environment = {CLOUD_INTEGRATION_POINT_ID: pointId, CLOUD_VERIFIER_IMAGE: image, CLOUD_INTEGRATION_WAITRON_REVISION: revision};
       for (const row of worker.env) if (Object.hasOwn(environment, row.name)) row.value = environment[row.name];
       await verifierDiagnostics(kube, pod);
@@ -93,6 +110,15 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
+if (target === 'kind-services') {
+  const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage} = process.env;
+  assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, 'services.cloud_image_id');
+  assert.match(waitronImage ?? '', /^sha256:[a-f0-9]{64}$/, 'services.waitron_image_id');
+  assert.equal(process.platform, 'linux', 'services.requires_linux');
+  const verificationTarget = await readRehearsalVerificationTarget();
+  const {runKubernetesServices} = await import('./kubernetes-services.mjs');
+  return runKubernetesNodeLoss({services: context => runKubernetesServices({...context, image, waitronImage, verificationTarget})});
+}
 if (target === 'kind-storage-identity') {
   const {runStorageIdentity} = await import('./kubernetes-storage-identity.mjs');
   return runKubernetesNodeLoss({storage: runStorageIdentity});
@@ -160,18 +186,7 @@ const exec = async (role, args, input, requestSignal) => kube(['exec', '-i', (aw
   '-c', role, '--', ...args], input, false, requestSignal);
 async function forward(role, ports) {
   const name = (await pod(role)).metadata.name;
-  const child = spawn('kubectl', ['--context', context, '--namespace', 'default', 'port-forward', '--address', '127.0.0.1', 'pod/' + name,
-    ...ports.map(port => ':' + port)], {env, stdio: ['ignore', 'pipe', 'pipe']});
-  const closed = new Promise(resolve => child.once('close', resolve)); forwards.push({child, closed});
-  return new Promise((resolve, reject) => {
-    const found = {}, timer = setTimeout(() => reject(Error('kubernetes.forward_timeout')), 15000);
-    child.once('error', () => {clearTimeout(timer); reject(Error('kubernetes.forward_failed'));});
-    child.once('close', () => {clearTimeout(timer); reject(Error('kubernetes.forward_closed'));});
-    child.stdout.on('data', part => {
-      for (const match of String(part).matchAll(/127\.0\.0\.1:(\d+) -> (\d+)/g)) found[match[2]] = Number(match[1]);
-      if (ports.every(port => found[port])) {clearTimeout(timer); resolve(found);}
-    }); child.stderr.resume();
-  });
+  return forwardKubernetesPod(['--context', context, '--namespace', 'default'], name, ports, env, forwards);
 }
 try {
   assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
@@ -361,7 +376,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
     ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss'],
-    ['--storage-identity', 'kind-storage-identity']]);
+    ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services']]);
   const target = extra.length ? undefined : file !== undefined ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');
