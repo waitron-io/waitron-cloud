@@ -1776,9 +1776,10 @@ implementation or production evidence.
   startup in the same Kind setup. The bounded launcher brings up the private
   six-peer store. Run `node scripts/kubernetes-check.mjs --storage-loss` in the
   Linux guest to check encrypted objects and multipart completion through the
-  first outage. After rejoin the rehearsal requests one bucket repair and checks
-  both returned disks and both objects' bytes. The rehearsals spread Kubernetes
-  DNS across machines before starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
+  first outage. After rejoin the rehearsal checks from both serving peers that
+  both returned disks can read the synthetic baseline. It runs one bucket repair
+  and checks the restored shards and bytes of both outage objects. The rehearsals
+  spread Kubernetes DNS across machines before starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
   record the Linux results and remaining storage limits. Run
   `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
   in the Linux guest to check temporary storage grants, issuer and backup-key

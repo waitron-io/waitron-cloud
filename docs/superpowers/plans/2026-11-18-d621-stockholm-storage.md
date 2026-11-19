@@ -114,8 +114,11 @@ holds `combined-live-01.log` (lines 77–104 and 155–209) and
 `receipts/d621-run9-storage-access/` within the lane.
 
 The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
-refreshes peer addresses every second and asks MinIO to repair the bucket once
-after the first machine returns. The Linux Kind recheck used the parked
+refreshes peer addresses every second. After the first machine returns, it waits
+for six drives and checks that both serving peers can read the synthetic baseline
+on both returned disks before requesting one bucket repair. The physical shard
+and encrypted byte checks share the same 180-second deadline as the wait and
+repair. An earlier Linux Kind recheck used the parked
 candidate `a2a254dbdf` with the DNS placement changes, tree
 `1abca994e6edb191f06b91f7d5b91c1d096ef557`. Both outage objects reached
 both returned disks, including both multipart parts. Both byte checks passed through the returned machine. The repair leg

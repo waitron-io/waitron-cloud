@@ -21,6 +21,7 @@ const labels = {app: storeName};
 const peers = Array.from({length: 6}, (_, index) => 'store-' + index);
 const dns = name => name + '.' + namespace + '.svc.cluster.local';
 const peerDns = name => name + '.' + dns(peerService);
+export const storeDiskEndpoint = peer => 'https://' + peerDns(peer) + ':' + port + '/disk';
 
 export function storeBuildArgs(image, args = []) {
   return ['buildx', 'build', '--builder', 'default', ...args, '--load',
@@ -60,7 +61,7 @@ export function stockholmStoreResources(nodes, image, openId) {
             whenUnsatisfiable: 'DoNotSchedule', labelSelector: {matchLabels: labels}}],
           containers: [{name: storeName, image, imagePullPolicy: 'Never',
             args: ['server', '--address', ':' + port, '--certs-dir', '/certs',
-              ...peers.map(peer => 'https://' + peerDns(peer) + ':' + port + '/disk')],
+              ...peers.map(storeDiskEndpoint)],
             envFrom: [{secretRef: {name: 'store-credentials'}}],
             env: [{name: 'MINIO_STORAGE_CLASS_STANDARD', value: 'EC:3'}, {name: 'MINIO_BROWSER', value: 'off'},
               {name: 'MINIO_UPDATE', value: 'off'}, {name: 'MINIO_DNS_CACHE_TTL', value: '1s'}, ...(openId ? [

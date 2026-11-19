@@ -186,8 +186,9 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
   into the run 9 decision. Setup spreads DNS across machines after the cluster
   nodes are ready. PR 4 remains the step that qualifies scoped access.
 - [ ] Extend the [first-outage repair rehearsal](2026-11-18-d621-stockholm-store-repair.md)
-  through consecutive outages. Verify an outage object on both returned disks
-  before any client reads it. After verifying the first repair, start a
+  through consecutive outages. The first-outage check waits for both serving
+  peers to read both returned disks before requesting repair. Verify an outage
+  object on both returned disks before any client reads it. After verifying the first repair, start a
   multipart upload and stop the next machine before completing it. Require
   missing-part refusal, then complete the upload and verify its bytes. Check
   earlier acknowledged objects and both returned disks after that machine

@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
 import {BackupObjects} from '../packages/backups/src/storage.ts';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
-import {installStockholmStore, storeBuildArgs, storeNodePort, storePath, waitForStore} from './kubernetes-storage.mjs';
+import {installStockholmStore, storeBuildArgs, storeDiskEndpoint, storeNodePort, storePath, waitForStore} from './kubernetes-storage.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {
@@ -14,6 +14,7 @@ const {
   CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand,
 } = require('@aws-sdk/client-s3');
 export const storageBucket = 'cloud-storage-rehearsal';
+const repairProbeObject = 'baseline';
 
 export function storageClient({ip}, {ca, credentials}, bucket = storageBucket) {
   const location = {endpoint: 'https://' + ip + ':' + storeNodePort, region: 'us-east-1', bucket};
@@ -113,8 +114,10 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
   assert.ok(done.VersionId && done.VersionId !== 'null', 'storage_loss.multipart_version');
 }
 
-export async function healStoreBucket({node, account, run, signal}) {
-  const url = new URL('/minio/admin/v3/heal/' + storageBucket, 'https://' + node.ip + ':' + storeNodePort);
+async function runStoreHeal({node, account, run, signal}, dryRun) {
+  // MinIO can delete a dangling version during a dry run. Probe only the synthetic baseline.
+  const path = '/minio/admin/v3/heal/' + storageBucket + (dryRun ? '/' + repairProbeObject : '');
+  const url = new URL(path, 'https://' + node.ip + ':' + storeNodePort);
   const {accessKeyId, secretAccessKey} = account.credentials;
   const post = async body => {
     signal.throwIfAborted();
@@ -129,21 +132,54 @@ export async function healStoreBucket({node, account, run, signal}) {
     try {return JSON.parse(output);}
     catch {throw Error('storage_loss.heal_reply');}
   };
-  const started = await post(JSON.stringify({recursive: true, dryRun: false, remove: false, scanMode: 1}));
+  const started = await post(JSON.stringify({recursive: !dryRun, dryRun, remove: false, scanMode: 1}));
   assert.ok(typeof started?.clientToken === 'string' && started.clientToken, 'storage_loss.heal_token');
+  const peer = dryRun ? /:([0-9]+)$/.exec(started.clientToken)?.[1] : undefined;
+  if (dryRun) assert.ok(peer, 'storage_loss.probe_peer');
   url.searchParams.set('clientToken', started.clientToken);
+  const items = [];
   for (;;) {
     const reply = await post('');
     for (const item of reply?.Items ?? []) {
       if (item.type !== 'object') continue;
-      const states = phase => (phase?.drives ?? []).map(drive => drive.state).join(', ');
-      process.stderr.write('Store healed ' + item.object + ' (' + states(item.before) + ') to (' + states(item.after) + ')\n');
+      if (dryRun) {
+        if (item.object === repairProbeObject) items.push(item);
+      } else {
+        const states = phase => (phase?.drives ?? []).map(drive => drive.state).join(', ');
+        process.stderr.write('Store healed ' + item.object + ' (' + states(item.before) + ') to (' + states(item.after) + ')\n');
+      }
     }
-    if (reply?.Summary === 'finished') return;
+    if (reply?.Summary === 'finished') return {peer, items};
     assert.notEqual(reply?.Summary, 'stopped', 'storage_loss.heal_stopped');
     assert.ok(reply?.Summary === 'running' || reply?.Summary === 'not started', 'storage_loss.heal_status');
     await delay(1000, undefined, {signal});
   }
+}
+
+export async function healStoreBucket({returnedPeers, ...request}) {
+  const endpoints = returnedPeers.map(storeDiskEndpoint);
+  let lastProbe = 'no completed probe for ' + endpoints.join(', ');
+  try {
+    let previousPeer;
+    for (;;) {
+      const {peer, items} = await runStoreHeal(request, true);
+      const drives = items.length === 1 ? items[0].before?.drives ?? [] : [];
+      const states = endpoints.map(endpoint => {
+        const matching = drives.filter(drive => drive.endpoint === endpoint);
+        return matching.length === 1 ? matching[0].state : 'unreported';
+      });
+      lastProbe = 'peer ' + peer + ': ' + endpoints.map((endpoint, index) => endpoint + '=' + states[index]).join(', ');
+      process.stderr.write('Store repair probe ' + lastProbe + '\n');
+      // Either local serving peer can receive the bucket repair through the NodePort.
+      const complete = states.every(state => state === 'ok');
+      if (complete && previousPeer && peer !== previousPeer) break;
+      previousPeer = complete ? peer : undefined;
+    }
+  } catch (error) {
+    if (!request.signal.aborted) throw error;
+    throw Error('storage_loss.probe_deadline ' + lastProbe, {cause: error});
+  }
+  await runStoreHeal(request, false);
 }
 
 export async function requireRepairedPieces(run, node, keys, signal, multipart) {
@@ -223,7 +259,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
     const encrypted = {SSECustomerAlgorithm: 'AES256', SSECustomerKey: key,
       SSECustomerKeyMD5: createHash('md5').update(Buffer.from(key, 'base64')).digest('base64')};
     const baseline = randomBytes(512), bytes = randomBytes(512);
-    await first.objects.putStaged('baseline', bufferObject(baseline), key, {signal: ready});
+    await first.objects.putStaged(repairProbeObject, bufferObject(baseline), key, {signal: ready});
     const name = 'outage-0', multipart = 'multipart-0';
     const uploadLimit = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
     await waitForDrives(nodes[0], 6, uploadLimit);
@@ -237,7 +273,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       const driveCounts = await waitForDrives(survivor, 4, stopped);
       process.stderr.write('Store drives after stop on ' + survivor.name + ' (' + driveCounts + ')\n');
       for (const survivingClient of survivors) {
-        assert.deepEqual(await readObject(survivingClient, 'baseline', key, stopped), baseline);
+        assert.deepEqual(await readObject(survivingClient, repairProbeObject, key, stopped), baseline);
       }
       await client.objects.putStaged(name, bufferObject(bytes), key, {signal: stopped});
       assert.deepEqual(await readObject(client, name, key, stopped), bytes, name);
@@ -246,7 +282,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       assert.deepEqual(await readObject(client, multipart, key, stopped), upload.bytes, multipart);
       await assert.rejects(readObject(client, multipart, wrongKey, stopped), error => error.$metadata?.httpStatusCode === 403);
       const listed = await client.send(ListObjectsV2Command, {}, stopped);
-      assert.deepEqual(listed.Contents.map(row => row.Key).sort(), ['baseline', multipart, name]);
+      assert.deepEqual(listed.Contents.map(row => row.Key).sort(), [repairProbeObject, multipart, name]);
       rejoinSince = new Date().toISOString();
     }});
     const repairStart = performance.now(), repair = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
@@ -255,7 +291,7 @@ async function proveStockholmStorage({nodes, run, kube, stopNode, signal}, accou
       await waitForStore({nodes: names, kube, signal: repair});
       const driveCounts = await waitForDrives(survivor, 6, repair);
       process.stderr.write('Store drives online after rejoin on ' + survivor.name + ' (' + driveCounts + ')\n');
-      await healStoreBucket({node: survivor, account, run, signal: repair});
+      await healStoreBucket({node: survivor, account, returnedPeers: peersOn(node), run, signal: repair});
       await requireRepairedPieces(run, node, [name, multipart], repair, multipart);
       assert.deepEqual(await readObject(first, name, key, repair), bytes, name);
       assert.deepEqual(await readObject(first, multipart, key, repair), upload.bytes, multipart);

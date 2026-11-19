@@ -1228,11 +1228,13 @@ rehearse object storage loss independently of the Cloud services. The check buil
 the pinned MinIO test image with Docker Buildx and serves it over private HTTPS.
 It starts six peers, with two local volumes per machine. It reads and writes
 encrypted bytes while the first machine is down and checks that multipart
-completion refuses a missing part. After the machine returns, the rehearsal asks
-MinIO to repair the test bucket once and follows that job to completion. It checks
-both returned disks and compares both objects through the returned machine. Its
-JSON output reports the outage time and the time from node rejoin until the shard
-and byte checks pass. This check uses curl with Signature V4. Running the bucket
+completion refuses a missing part. After the machine returns, the rehearsal
+waits for six online drives. It uses a dry run on the synthetic baseline object
+to check both serving peers can read both returned disks. It then requests one
+bucket repair, checks both returned disks for the restored shards and compares
+both objects through the returned machine. The drive wait, probes, repair and
+checks share a 180-second deadline from rejoin. The JSON output reports outage
+and repair times. This check uses curl with Signature V4. Running the bucket
 repair as part of the Cloud services' consecutive-outage proof remains open for
 run 9.
 

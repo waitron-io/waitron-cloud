@@ -101,7 +101,7 @@ test('bucket repair starts once and polls only its returned token', async () => 
   const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
   const replies = [{clientToken: 'fixture:3'}, {Summary: 'running'}, {Summary: 'finished'}];
   const operations = [];
-  const run = async (binary, args, {input}) => {
+  const run = mockRepair(connectedReports(), async (binary, args, {input}) => {
     assert.equal(binary, 'curl');
     assert.ok(args.includes('--aws-sigv4') && args.includes('--cacert') && args.includes('--config'));
     assert.ok(args.includes('--fail-with-body'), 'keep the store error body on an HTTP failure');
@@ -112,8 +112,8 @@ test('bucket repair starts once and polls only its returned token', async () => 
     assert.equal(parsed.pathname, '/minio/admin/v3/heal/cloud-storage-rehearsal');
     operations.push([parsed.search, args[args.indexOf('--data-binary') + 1]]);
     return JSON.stringify(replies.shift());
-  };
-  await healStoreBucket({node: repairEndpoint, account: repairAccount, run, signal: AbortSignal.timeout(5000)});
+  });
+  await healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run, signal: AbortSignal.timeout(5000)});
   assert.deepEqual(operations, [
     ['', '{"recursive":true,"dryRun":false,"remove":false,"scanMode":1}'],
     ['?clientToken=fixture%3A3', ''],
@@ -127,11 +127,85 @@ test('bucket repair exposes a stopped job and an invalid start', async () => {
     [[{clientToken: 'fixture:3'}, {Summary: 'stopped'}], /storage_loss.heal_stopped/],
     [[{}], /storage_loss.heal_token/],
   ]) {
-    const run = async () => JSON.stringify(replies.shift());
-    await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, run,
+    const run = mockRepair(connectedReports(), async () => JSON.stringify(replies.shift()));
+    await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
       signal: AbortSignal.timeout(2000)}), error);
     assert.deepEqual(replies, []);
   }
+});
+
+const bucketHealPath = '/minio/admin/v3/heal/cloud-storage-rehearsal';
+const returnedPeers = ['store-0', 'store-1'];
+const returnedDisk = peer => 'https://' + peer + '.store-peers.d621-store.svc.cluster.local:9000/disk';
+const baselineReport = (secondState = 'ok') => ({type: 'object', object: 'baseline', before: {drives: [
+  {endpoint: returnedDisk('store-0'), state: 'ok'}, {endpoint: returnedDisk('store-1'), state: secondState},
+]}});
+
+const connectedReports = () => ['first:2', 'second:3'].map(token =>
+  ({token, replies: [{Summary: 'finished', Items: [baselineReport()]}]}));
+
+function mockRepair(probes, repair, onLastProbe = () => {}) {
+  const pending = [...probes];
+  let current;
+  return async (binary, args, {input, signal}) => {
+    const [, url] = /^url = "([^"]+)"/m.exec(input);
+    const {pathname, searchParams} = new URL(url);
+    const body = args[args.indexOf('--data-binary') + 1];
+    if (pathname === bucketHealPath) {
+      assert.equal(pending.length, 0, 'repair started before every required probe');
+      assert.equal(current, undefined, 'repair started before the last probe finished');
+      return repair(binary, args, {input, signal});
+    }
+    assert.equal(pathname, bucketHealPath + '/baseline', 'dry-run target must be the synthetic baseline');
+    const token = searchParams.get('clientToken');
+    if (!token) {
+      assert.equal(current, undefined, 'another probe started before the prior probe finished');
+      assert.deepEqual(JSON.parse(body), {recursive: false, dryRun: true, remove: false, scanMode: 1});
+      current = pending.shift();
+      assert.ok(current, 'unexpected extra probe');
+      return JSON.stringify({clientToken: current.token});
+    }
+    assert.equal(token, current.token);
+    assert.equal(body, '');
+    const reply = current.replies.shift();
+    if (reply.Summary === 'finished') {
+      current = undefined;
+      if (!pending.length) onLastProbe();
+    }
+    return JSON.stringify(reply);
+  };
+}
+
+test('repair waits for both serving peers to read both returned disks', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const reports = [
+    ['first:3', [{Summary: 'finished', Items: [baselineReport()]}]],
+    ['repeat:3', [{Summary: 'finished', Items: [baselineReport()]}]],
+    ['partial:2', [{Summary: 'finished', Items: [baselineReport('offline')]}]],
+    ['after-partial:2', [{Summary: 'finished', Items: [baselineReport()]}]],
+    ['other:3', [{Summary: 'running', Items: [baselineReport()]}, {Summary: 'finished'}]],
+  ].map(([token, replies]) => ({token, replies}));
+  const actualRepair = [{clientToken: 'repair:3'}, {Summary: 'finished'}];
+  const run = mockRepair(reports, async () => JSON.stringify(actualRepair.shift()));
+  await healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run, signal: AbortSignal.timeout(5000)});
+  assert.deepEqual(actualRepair, []);
+});
+
+test('repair deadline names the missing data path without starting repair', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const deadline = new AbortController();
+  const run = mockRepair([{token: 'partial:2', replies: [{Summary: 'finished', Items: [baselineReport('offline')]}]}],
+    () => assert.fail('bucket repair started with a disk offline'), () => deadline.abort());
+  await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
+    signal: deadline.signal}), error => error.message.includes('peer 2') &&
+      error.message.includes(returnedDisk('store-1') + '=offline'));
+});
+
+test('repair refuses a probe token without a peer suffix', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const run = mockRepair([{token: 'fixture', replies: []}], () => assert.fail('bucket repair started with an invalid token'));
+  await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
+    signal: AbortSignal.timeout(2000)}), /storage_loss\.probe_peer/);
 });
 
 test('repair checks metadata and both multipart parts on both disks', async t => {
