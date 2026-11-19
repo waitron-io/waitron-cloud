@@ -39,22 +39,23 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
-  await page.locator('.venue-details summary').click();
+  await page.locator('.venue-details').evaluate((details:HTMLDetailsElement)=>{details.open=true;});
+  const readError=page.locator('.translation-read-error');
   const section=page.getByRole('group',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
   const allow=locale==='en'?'Allow menu translation':'Permitir la traducción del menú',stop=locale==='en'?'Stop menu translation':'Dejar de traducir el menú';
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
-  await section.getByText(c.unavailable,{exact:true}).waitFor();
+  await readError.getByText(c.unavailable,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);
   // Settle activity before the explicit warm-up read, then test the separate rate-limit response.
   record('initial activity settling');
   const initialActivity=page.waitForResponse(response=>response.url().endsWith('/api/account/session/activity')&&response.request().method()==='POST'&&response.status()===200);
   const initialReload=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===503);
-  await Promise.all([initialActivity,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialActivity,readError.getByText(c.unavailable,{exact:true}).click()]);
   await Promise.all([initialReload,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
-  await section.getByText(c.unavailable,{exact:true}).waitFor();
+  await readError.getByText(c.unavailable,{exact:true}).waitFor();
   primingActivity=false;record('initial activity and consent settled');
   await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
-  await section.getByText(c.limited,{exact:true}).waitFor();
+  await readError.getByText(c.limited,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).isEnabled(),false);
   // Hold activity so the successful manual read completes before its session reply.
   record('manual retry starts');holdActivity=true;

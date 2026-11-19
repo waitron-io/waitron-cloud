@@ -123,7 +123,7 @@ test('venue cards sort by signed name and disclose secondary status', async t =>
   const detail=venue.getByText('No verified snapshot yet',{exact:true});
   const translation=venue.getByText('Menu translation',{exact:true});
   const alerts=page.getByRole('region',{name:'Service alerts',exact:true});
-  assert.equal(await alerts.evaluate(element=>Boolean(document.querySelector('article.installation')!
+  assert.equal(await alerts.evaluate(element=>Boolean(document.querySelector('article.installation:last-of-type')!
     .compareDocumentPosition(element)&Node.DOCUMENT_POSITION_FOLLOWING)),true);
   assert.equal(await detail.isVisible(),false);
   assert.equal(await translation.isVisible(),false);

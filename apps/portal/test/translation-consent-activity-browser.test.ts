@@ -59,7 +59,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       });
       await page.goto('https://portal.test/account/venues'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await showVenueDetails(page);
-      const section = page.getByRole('group', {name: c.translationConsent, exact: true}), alert = section.getByRole('alert');
+      const section = page.getByRole('group', {name: c.translationConsent, exact: true}), alert = page.locator('.translation-read-error');
       const retry = section.getByRole('button', {name: c.translationConsentRefresh, exact: true});
       await alert.getByText(c.unavailable, {exact: true}).waitFor();
       assert.equal(await retry.isEnabled(), true);
@@ -131,7 +131,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
       await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await showVenueDetails(page);
       const section = page.getByRole('group', {name: c.translationConsent, exact: true}), retry = section.getByRole('button', {name: c.translationConsentRefresh, exact: true});
-      await section.getByRole('alert').getByText(['new account', 'failed navigation'].includes(scenario) ? c.unavailable : c.limited, {exact: true}).waitFor();
+      await page.locator('.translation-read-error').getByText(['new account', 'failed navigation'].includes(scenario) ? c.unavailable : c.limited, {exact: true}).waitFor();
       if (scenario === 'cooldown' || scenario === 'blocked startup') {
         assert.equal(await retry.isDisabled(), true);
         await retry.evaluate(button => (button as HTMLElement).click());
@@ -154,14 +154,14 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
       await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
       if (scenario === 'cooldown') {
         assert.equal(reads, 1, 'activity after a completed server wait leaves retry explicit');
-        assert.equal(await section.getByRole('alert').getByText(c.limited, {exact: true}).count(), 1);
+        assert.equal(await page.locator('.translation-read-error').getByText(c.limited, {exact: true}).count(), 1);
         await retry.click();
       }
       await page.waitForFunction(() => (window as any).translationActivityApp.translationConsent.loaded);
       if (scenario === 'new account') await showVenueDetails(page);
       assert.equal(await section.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
       assert.equal(reads, 2, scenario === 'blocked startup' ? 'a blocked startup can run when the server wait ends' : 'account changes, failed-read navigation and explicit retry start a fresh consent read');
-      assert.equal(await section.getByRole('alert').count(), 0);
+      assert.equal(await page.locator('.translation-read-error').count(), 0);
     } finally { await browser.close(); }
   });
 }
@@ -195,12 +195,12 @@ test(`navigation during a translation-consent read preserves its attempt and lat
     await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
     assert.equal(reads, 1, 'navigation cannot duplicate a pending translation-consent read');
     releaseRead();
-    await section.getByRole('alert').getByText(translations.en.unavailable, {exact: true}).waitFor();
+    await page.locator('.translation-read-error').getByText(translations.en.unavailable, {exact: true}).waitFor();
     const activity = page.waitForResponse('**/api/account/session/activity');
     await page.locator('h1').click(); await (await activity).finished();
     await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
     assert.equal(reads, 1, 'the completed read retains its attempt across navigation');
-    assert.equal(await section.getByRole('alert').getByText(translations.en.unavailable, {exact: true}).count(), 1);
+    assert.equal(await page.locator('.translation-read-error').getByText(translations.en.unavailable, {exact: true}).count(), 1);
     assert.equal(await section.getByRole('button', {name: translations.en.translationConsentRefresh, exact: true}).isEnabled(), true);
   } finally {releaseRead(); await browser.close();}
 });

@@ -1093,8 +1093,7 @@ implementation or production evidence.
 
   The [Juniper portal trial follow-up](superpowers/plans/2026-11-19-cloud-portal-feedback.md)
   still needs venue removal and a phone check of how long a synthetic menu takes
-  to reappear after sharing is enabled. The Amazon test Cloud must also be checked
-  with the venue name, shorter Account and Venues pages, and Remote access actions.
+  to reappear after sharing is enabled.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
