@@ -254,7 +254,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmGatewayMachineLoss = false, kubernetes}, fixedProject, waitronSource) {
   const origin = services ? servicesOrigin : composeOrigin;
   const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
@@ -817,7 +817,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           const remote = await proveIntegrationPaidRemote({docker, control, account, image, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), machineLoss: options.stockholmGatewayMachineLoss, revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
+              origin, signal: runSignal(), machineLoss: stockholmGatewayMachineLoss, revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
             }, own: id => {owned.push(id); record('container', id);}});
           result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
           return;
