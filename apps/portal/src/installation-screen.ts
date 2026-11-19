@@ -21,7 +21,7 @@ export function installationScreen(app:PortalApp, remoteOnly = false){
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
  return html`<section aria-label=${c.installations}><h2>${c.installations}</h2>
   ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
-  ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.organisations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
+  ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.organisations.length&&!controller.error?html`<p>${controller.installations.length?c.removedVenuesElsewhere:c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
   ${translationReadError?html`<p class="translation-read-error" role="alert">${c[translationReadError]}</p>${permissionActions(app,translationReadError)}`:nothing}
   ${!remoteOnly&&venues.length?html`<p class="help">${c.addVenue}</p>`:nothing}

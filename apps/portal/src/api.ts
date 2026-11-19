@@ -58,7 +58,6 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if (path === '/pairing/businesses') return validBusinesses(data.businesses);
   if (path === '/pairing/inspect' || path === '/pairing/approve') return validPairingView(data);
   if(path==='/installations') return Array.isArray(data.installations)&&data.installations.every(v=>validInstallation(v)&&typeof v.canRevoke==='boolean');
-  if(path==='/installations/revoke') return validInstallation(data);
   if(path==='/installations/remove') return status===200&&validInstallation(data)&&typeof data.portalRemovedAt==='string';
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
   if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt)) && (data.billingTrialAvailable === undefined || data.billingTrialAvailable === true) && (data.enrollmentRequired === undefined || data.enrollmentRequired === true);
@@ -69,7 +68,7 @@ function validResult(path: string, value: unknown, status: number): boolean {
   return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
 }
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
-  const installationWrite = path === '/installations/revoke' || path === '/installations/remove';
+  const installationWrite = path === '/installations/remove';
   const headers: Record<string, string> = {};
   if (body) headers['Content-Type'] = 'application/json';
   if (path.startsWith('/owner-transfers/') || path.startsWith('/operator/actions/') || path.startsWith('/security/') || path.startsWith('/action-proof/') || path.startsWith('/billing/') || path.startsWith('/recovery/') || path.startsWith('/remote-access/') || path.startsWith('/guest-menu/') || path === '/usage/read' || path === '/diagnostics/read' || (path === '/alerts' && body) || (path === '/translation-consent' && body) || path === '/backups/list' || path === '/session/activity' || path === '/logout' || path === '/sessions/revoke' || installationWrite || (path.startsWith('/pairing/') && body) || path.startsWith('/passkeys/registration/') || path === '/passkeys/remove' || (path.startsWith('/authenticator/') && body)) {

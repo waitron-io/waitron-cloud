@@ -221,3 +221,14 @@ for (const operation of ['load', 'remove'] as const) {
     assert.deepEqual(c.installations, [{...installation(), ...(operation === 'remove' ? {revokedAt: stamp, portalRemovedAt: stamp} : {})}]);
   });
 }
+
+test('shared-menu refusal tells the owner how to remove the same venue',async t=>{
+ const {controller:c,replies,calls}=harness(t);
+ await c.load();c.choose(installationId);
+ replies['/api/account/installations/remove']={status:409,body:{error:'guest_menu_shared'}};
+ await c.remove();
+ assert.equal(c.error,'removeSharedMenu');
+ assert.equal(c.confirming,installationId);
+ assert.deepEqual(c.visible,[installation()]);
+ assert.equal(calls.length,2);
+});

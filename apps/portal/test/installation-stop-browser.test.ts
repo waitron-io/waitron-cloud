@@ -41,7 +41,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await page.evaluate(async first=>{const controller=(window as any).app.installations;await controller.load();controller.selectOrganisation(first);},first);
    await page.locator('article.installation').filter({has:page.getByRole('heading',{name:'First venue',exact:true})}).getByRole('button',{name:remove,exact:true}).click();
    assert.equal(await prompt.count(),1);
-   assert.match(await prompt.innerText(),locale==='en'?/charges continue.*Billing/s:/Los cobros continúan.*Facturación/s);
+   assert.match(await prompt.innerText(),locale==='en'?/Charges for this venue continue.*Billing/s:/Los cobros de este local continúan.*Facturación/s);
    assert.equal(await prompt.getByRole('button',{name:c.confirmRemove,exact:true}).isEnabled(),true);
    if(process.env.INSTALLATION_STOP_RECEIPT_DIR&&change==='permission'){
     await mkdir(process.env.INSTALLATION_STOP_RECEIPT_DIR,{recursive:true});
@@ -62,5 +62,10 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.equal(await page.getByRole('heading',{name:'First venue',exact:true}).count(),0);
    }
   });
+  if(locale==='en'&&theme==='light'&&width===390){
+   installations=initialRows.map(row=>({...row,revokedAt:stamp,portalRemovedAt:stamp}));
+   await page.evaluate(()=>(window as any).app.installations.load());
+   assert.equal(await page.getByText('Removed venues remain in Billing and Recovery.',{exact:true}).count(),1);
+  }
  }finally{await browser.close();}
 });

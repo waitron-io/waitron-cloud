@@ -35,7 +35,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await f.db.pool.query('DELETE FROM guest_menus WHERE venue_id=$1',[f.venueId]);await f.seed();
   await open();await region.waitFor();
   await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installationId]);
-  const refresh=page.getByRole('button',{name:c.refreshStatus,exact:true});
+  const refresh=page.getByRole('region',{name:c.installations,exact:true}).locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true});
   await refresh.click();
   await page.getByText(c.accessStopped,{exact:true}).waitFor();
   assert.equal(await region.count(),0);
