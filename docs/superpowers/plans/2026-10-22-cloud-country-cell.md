@@ -182,6 +182,11 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
 
 ### Task 7: Deploy API, email, usage, monitor, probe and operations (40–60 calls)
 
+The [healthy Kind service check](2026-11-19-d621-stockholm-cloud-services.md) runs
+one of each role against three PostgreSQL copies and six storage peers. The
+outside rehearsal still checks Stockholm and Flux startup, worker redundancy,
+mail surviving machine loss and a storage address that survives machine loss.
+
 - Carry the [observed storage limits](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
   into the run 9 decision. Setup spreads DNS across machines after the cluster
   nodes are ready. PR 4 remains the step that qualifies scoped access.
