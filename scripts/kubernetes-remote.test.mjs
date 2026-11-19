@@ -5,11 +5,22 @@ import {createSocket} from 'node:dgram';
 import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
+import {setTimeout as delay} from 'node:timers/promises';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as remoteRehearsal from './kubernetes-remote.mjs';
 
 test('handover can use the fractional time left after pausing the election', async () => {
   assert.equal(await remoteRehearsal.untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
+});
+
+test('a timed-out probe preserves the last observation from before the deadline', async () => {
+  const last = Error('old endpoint still serving');
+  let tried = false;
+  await assert.rejects(remoteRehearsal.untilRemote(async signal => {
+    if (tried) return delay(5000, undefined, {signal});
+    tried = true;
+    throw last;
+  }, 750, undefined, 'machine_loss_90_seconds'), {message: 'remote.machine_loss_90_seconds', cause: last});
 });
 
 test('machine loss follows the Lease while the dead gateway still looks Ready', {timeout: 3000}, async t => {

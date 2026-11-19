@@ -13,7 +13,10 @@ export async function untilRemote(probe, ms, signal, stage) {
     try {
       const result = await probe(limit);
       if (result && performance.now() < end) return result;
-    } catch (error) {last = error;}
+    } catch (error) {
+      // A command aborted by the deadline tells us nothing new about the last probe.
+      if (!limit.aborted || last === undefined) last = error;
+    }
     await delay(250, undefined, {signal: limit}).catch(() => {});
   }
   signal?.throwIfAborted();
