@@ -14,7 +14,8 @@ const {Pool}=createRequire(new URL('../../packages/registration/package.json',im
 export async function runTestBackupWorker(env=process.env,args=process.argv.slice(2),{expectedRevision}={}){
  const planMode=parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS,env.CLOUD_VENUE_SERVICE_LEVELS);
  if(env.CLOUD_TEST_AMAZON_BACKUPS==='1'){
-  if(planMode!=='test-venue-levels'||env.NODE_ENV==='production'||env.CLOUD_VERIFIER_SCRATCH_VOLUME!==undefined||!/^sha256:[a-f0-9]{64}$/.test(env.CLOUD_VERIFIER_IMAGE??''))throw Error('test_cloud.amazon_backups');
+  if(planMode!=='test-venue-levels'||env.NODE_ENV==='production'||env.CLOUD_VERIFIER_SCRATCH_VOLUME!=='amazon-test-verifier-scratch'||
+   env.CLOUD_BACKUP_STAGE_ROOT!=='/run/backup-stage'||!/^sha256:[a-f0-9]{64}$/.test(env.CLOUD_VERIFIER_IMAGE??''))throw Error('test_cloud.amazon_backups');
   expectedRevision=amazonTarget.runtime.revision;
  }
  if(!['test-free-paid','test-venue-levels'].includes(planMode))throw Error('test_cloud.plan_mode');

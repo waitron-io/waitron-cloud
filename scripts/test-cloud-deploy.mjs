@@ -32,14 +32,26 @@ export function validatePreflight(value,{image,ownedIds=[],target='lan'}={}){
 }
 const backupRoles=new Set(['bootstrap','account','proxy','backup-worker']);
 const dockerSocket='/var/run/docker.sock';
+const workerStage='/opt/waitron-cloud/amazon-backup-stages/worker/mount/work';
+const verifierStage='/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work';
+function isBackupStage(mount){
+ return mount.type==='bind'&&mount.read_only!==true&&mount.bind?.create_host_path===false&&
+  (mount.source===workerStage&&mount.target==='/run/backup-stage'||mount.source===verifierStage&&mount.target===verifierStage);
+}
 function isBackupSocket(mount){
  return mount.type==='bind'&&mount.source===dockerSocket&&mount.target===dockerSocket&&mount.read_only===true&&mount.bind?.create_host_path===false;
 }
 function validateBackupWorker(services,image){
  const worker=services['backup-worker'],mounts=worker?.volumes??[];
  if(!worker?.read_only||worker.ports?.length||worker.profiles?.length||worker.environment?.TEST_CLOUD_AMAZON!=='1'||
-  worker.environment.CLOUD_VERIFIER_IMAGE!==image||worker.environment.CLOUD_VERIFIER_SCRATCH_VOLUME!==undefined||
-  mounts.length!==3||!mounts.some(isBackupSocket)||
+  worker.environment.CLOUD_VERIFIER_IMAGE!==image||worker.environment.CLOUD_VERIFIER_SCRATCH_VOLUME!=='amazon-test-verifier-scratch'||
+  worker.environment.CLOUD_BACKUP_STAGE_ROOT!=='/run/backup-stage'||
+  worker.cap_drop?.length!==1||worker.cap_drop[0]!=='ALL'||worker.cap_add?.length!==2||
+  !worker.cap_add.includes('DAC_OVERRIDE')||!worker.cap_add.includes('FOWNER')||
+  worker.security_opt?.length!==1||worker.security_opt[0]!=='no-new-privileges:true'||
+  mounts.length!==5||!mounts.some(isBackupSocket)||
+  !mounts.some(v=>v.source===workerStage&&isBackupStage(v))||
+  !mounts.some(v=>v.source===verifierStage&&isBackupStage(v))||
   !mounts.some(v=>v.type==='volume'&&v.source==='local-stack-config'&&v.target==='/run/local-stack'&&v.read_only===true)||
   !mounts.some(v=>v.type==='volume'&&v.source==='test-backup-verifier-state'&&v.target==='/run/backup-verifier'&&!v.read_only))throw new Error('test_cloud.rendered');
 }
@@ -51,7 +63,7 @@ export function validateDeployment(value,{image,target='lan',origin,certificateS
  for(const [name,service] of Object.entries(services)){
   if(service.environment?.CLOUD_TEST_AMAZON_BACKUPS!==(backups&&backupRoles.has(name)?'1':undefined)||
    name!=='backup-worker'&&service.volumes?.some(v=>v.source==='test-backup-verifier-state'||v.target==='/run/backup-verifier'))throw new Error('test_cloud.rendered');
-  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true||backups&&name==='backup-worker'&&isBackupSocket(v)))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
+  if(!Number.isFinite(Number(service.mem_limit))||Number(service.mem_limit)<=0||service.build||service.volumes?.some(v=>v.type==='bind'&&!(amazon&&name==='bootstrap'&&v.source===resolve(certificateSource)&&v.target==='/run/public-certificate'&&v.read_only===true||amazon&&name==='http-challenges'&&v.source==='/opt/waitron-cloud/acme-webroot'&&v.target==='/run/account-webroot'&&v.read_only===true||backups&&name==='backup-worker'&&(isBackupSocket(v)||isBackupStage(v))))||service.environment?.CLOUD_TEST_SERVICE_PLANS==='1'||service.environment?.CLOUD_TRANSLATION==='1'||!['postgres','mailpit'].includes(name)&&service.image!==image)throw new Error('test_cloud.rendered');
   for(const port of service.ports??[]){
    if(name==='proxy'){if(port.host_ip!==(amazon?'0.0.0.0':'192.168.10.10')||String(port.published)!==(amazon?'443':'3000')||port.target!==(amazon?443:3000)||port.protocol&&port.protocol!=='tcp')throw new Error('test_cloud.rendered');}
    else if(amazon&&name==='http-challenges'){if(port.host_ip!=='0.0.0.0'||String(port.published)!=='80'||port.target!==8080||port.protocol!=='tcp')throw new Error('test_cloud.rendered');}

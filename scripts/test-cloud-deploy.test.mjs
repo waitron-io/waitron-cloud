@@ -239,11 +239,15 @@ function amazonBackupDeployment(){
  services.account.environment.TEST_CLOUD_AMAZON='1';
  services['backup-worker']={
   image,mem_limit:144*1024*1024,read_only:true,
-  environment:{...services.account.environment,CLOUD_VERIFIER_IMAGE:amazonVerifier},
+  cap_drop:['ALL'],cap_add:['DAC_OVERRIDE','FOWNER'],security_opt:['no-new-privileges:true'],
+  environment:{...services.account.environment,CLOUD_VERIFIER_IMAGE:amazonVerifier,
+   CLOUD_VERIFIER_SCRATCH_VOLUME:'amazon-test-verifier-scratch',CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'},
   volumes:[
    {type:'volume',source:'local-stack-config',target:'/run/local-stack',read_only:true},
    {type:'volume',source:'test-backup-verifier-state',target:'/run/backup-verifier'},
-   {type:'bind',source:'/var/run/docker.sock',target:'/var/run/docker.sock',read_only:true,bind:{create_host_path:false}}
+   {type:'bind',source:'/var/run/docker.sock',target:'/var/run/docker.sock',read_only:true,bind:{create_host_path:false}},
+   {type:'bind',source:'/opt/waitron-cloud/amazon-backup-stages/worker/mount/work',target:'/run/backup-stage',bind:{create_host_path:false}},
+   {type:'bind',source:'/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work',target:'/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work',bind:{create_host_path:false}}
   ]
  };
  return value;
@@ -257,6 +261,16 @@ test('Amazon deployment admits Docker control and private writable state only fo
   s=>{s.account.volumes=[s['backup-worker'].volumes[2]];},
   s=>{s.account.volumes=[s['backup-worker'].volumes[1]];},
   s=>{s['backup-worker'].volumes.pop();},
+  s=>{s['backup-worker'].volumes.splice(3,1);},
+  s=>{s['backup-worker'].volumes[3].source='/tmp/unbounded-stage';},
+  s=>{s['backup-worker'].volumes[4].target='/tmp/misplaced-scratch';},
+  s=>{s['backup-worker'].volumes[4].read_only=true;},
+  s=>{s['backup-worker'].volumes[3].bind.create_host_path=true;},
+  s=>{s.account.volumes=[s['backup-worker'].volumes[3]];},
+  s=>{s['backup-worker'].cap_add.push('SYS_ADMIN');},
+  s=>{s['backup-worker'].cap_drop=[];},
+  s=>{s['backup-worker'].security_opt=[];},
+  s=>{delete s['backup-worker'].environment.CLOUD_BACKUP_STAGE_ROOT;},
   s=>{s['backup-worker'].volumes.push({type:'volume',source:'unrelated',target:'/extra'});},
   s=>{s['backup-worker'].read_only=false;},
   s=>{s['backup-worker'].ports=[{host_ip:'127.0.0.1',published:'9000',target:9000}];},

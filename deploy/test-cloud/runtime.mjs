@@ -35,6 +35,8 @@ export function testRuntimeEnvironment(role,config,environment={}){
   const origin=environment.TEST_CLOUD_ORIGIN;
   if(environment.TEST_CLOUD_AMAZON!=='1'||environment.NODE_ENV==='production'||mode!=='test-venue-levels'||!origin||new URL(origin).port)throw Error('test_cloud.amazon_backups');
   if(role==='account'||role==='backup')result.CLOUD_TEST_AMAZON_BACKUPS='1';
+  if(role==='backup')for(const name of ['CLOUD_VERIFIER_SCRATCH_VOLUME','CLOUD_BACKUP_STAGE_ROOT'])
+   if(environment[name]!==undefined)result[name]=environment[name];
  }
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  if(role==='account'&&mode==='test-venue-levels'){

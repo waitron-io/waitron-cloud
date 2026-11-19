@@ -69,13 +69,14 @@ generated pin and about 80 guide lines. The disk amendment adds about 55 runtime
 and configuration lines and 45 test lines. The upload ceiling stays 512 MiB.
 Continuous upload, activation and fiscal proof sit outside this slice.
 
-**Bounded disk scratch amendment, pending watcher clearance.** The pinned release
+**Bounded disk scratch amendment, cleared by the watcher at 13:28 and 14:08 on 19 November.** The pinned release
 reserves 256 MiB free before it can expand a compressed backup. Lane K's real
 uploader stored 102,338 bytes in disposable Linux and the verifier returned
-`unavailable / resource_limit` at the 256 MiB cap. Set the verifier size to Lane G's
-verified bound once its archive size and margin are recorded. Use a separate 1 GiB
+`unavailable / resource_limit` at the 256 MiB cap. Use a 1 GiB verifier filesystem,
+which leaves more than the decoder's 256 MiB reserve for this measured archive.
+Use a separate 1 GiB
 worker object stage for one download up to the 512 MiB upload ceiling. Keep the
-account stage used by the successful small upload. Run the disposable disk-backed
+account's existing staging path. Run the disposable disk-backed
 restore first and require at least 8 GiB still free after both allocations on Amazon.
 
 On the existing Amazon disk, use fixed-size private ext4 filesystems under

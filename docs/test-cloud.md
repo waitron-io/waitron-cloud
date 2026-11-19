@@ -513,9 +513,42 @@ driver's Amazon `up`. The override enables one storage upload path on the
 existing account HTTPS name and starts the trusted backup worker. That worker
 controls Docker and can act as root on the host. The proxy verifies the storage
 server against the private local CA's certificate.
-The restore child has no network, 1 GiB of RAM and 256 MiB of memory-backed
-scratch. Keep the trial archive small enough for both its extracted data and
+The restore child has no network, 1 GiB of RAM and one private 1 GiB disk
+workspace. The worker has a separate 1 GiB disk for its staged download.
+Use the existing host disk and keep at least 8 GiB free after allocating both
+filesystems. Keep the trial archive small enough for its expanded data and
 temporary copies to fit.
+
+On first setup, run these commands on the test host as root. The `work`
+directories live inside the mounted filesystems, so an absent mount leaves
+Compose with no directory to bind.
+
+```sh
+(
+  set -eu
+  stages=/opt/waitron-cloud/amazon-backup-stages
+  test "$(df -Pk /opt/waitron-cloud | awk 'END {print $4}')" -ge 10485760
+  mkdir -m 0700 "$stages"
+  for stage in worker verifier; do
+    mkdir -p "$stages/$stage/mount"
+    fallocate -l 1G "$stages/$stage/disk"
+    mkfs.ext4 -q -m 0 "$stages/$stage/disk"
+    mount -o loop,nodev,nosuid,noexec "$stages/$stage/disk" "$stages/$stage/mount"
+  done
+  install -d -m 0700 "$stages/worker/mount/work"
+  install -d -m 0700 -o 1000 -g 1000 "$stages/verifier/mount/work"
+  docker volume create --driver local \
+    --label cloud.backup-verifier.scratch=waitron-cloud-test-backup \
+    --opt type=none --opt o=bind --opt "device=$stages/verifier/mount/work" \
+    amazon-test-verifier-scratch
+  test "$(df -Pk "$stages" | awk 'END {print $4}')" -ge 8388608
+)
+```
+
+After a reboot, remount each existing `disk` at its own `mount` directory
+using the same mount options before starting the backup worker. Do not format
+either disk again. Check both mounts and the 8 GiB free space before running
+Amazon `up` with the verifier ID.
 
 Wait until Juniper Test Cafe is paired, then privately confirm its active test
 installation and Connected level. Use the following from the existing Amazon
@@ -583,7 +616,8 @@ stale backup notice can still appear.
 
 To turn the route off, stop the backup worker from the owned deployment using
 the same four Compose files. Pass `CLOUD_VERIFIER_IMAGE` with the worker's
-current image ID to that Compose command. Then unset
+current image ID to that Compose command. Stop the worker before unmounting
+either disk workspace. Then unset
 `CLOUD_TEST_AMAZON_VERIFIER_IMAGE` and run Amazon `up` again. Keep the private storage, configuration, verifier state
 and database volumes for rollback. Confirm an upload to the former public path
 cannot reach storage and the account remains healthy.

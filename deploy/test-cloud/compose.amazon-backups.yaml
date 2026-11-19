@@ -13,15 +13,28 @@ services:
     profiles: !reset []
     mem_limit: 144m
     cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE, FOWNER]
     security_opt: [no-new-privileges:true]
     environment:
       TEST_CLOUD_AMAZON: "1"
       CLOUD_TEST_AMAZON_BACKUPS: "1"
       CLOUD_VERIFIER_IMAGE: ${CLOUD_VERIFIER_IMAGE:?Set the immutable Amazon test verifier image ID}
+      CLOUD_VERIFIER_SCRATCH_VOLUME: amazon-test-verifier-scratch
+      CLOUD_BACKUP_STAGE_ROOT: /run/backup-stage
     volumes:
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
         read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/waitron-cloud/amazon-backup-stages/worker/mount/work
+        target: /run/backup-stage
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/waitron-cloud/amazon-backup-stages/verifier/mount/work
+        target: /opt/waitron-cloud/amazon-backup-stages/verifier/mount/work
         bind:
           create_host_path: false

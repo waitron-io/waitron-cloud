@@ -280,13 +280,18 @@ test('Amazon capture advertises HTTPS while the verifier keeps its private stora
  const {testRuntimeEnvironment}=await import('./runtime.mjs');
  const dir=await mkdtemp(join(tmpdir(),'cloud-amazon-backup-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const config=await bootstrap(dir);
- const flags={TEST_CLOUD_AMAZON:'1',CLOUD_TEST_AMAZON_BACKUPS:'1',CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_ORIGIN:'https://cloud.example.test',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64)};
- const account=testRuntimeEnvironment('account',config,flags),worker=testRuntimeEnvironment('backup',config,flags);
+ const flags={TEST_CLOUD_AMAZON:'1',CLOUD_TEST_AMAZON_BACKUPS:'1',CLOUD_VENUE_SERVICE_LEVELS:'test',TEST_CLOUD_ORIGIN:'https://cloud.example.test',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64),
+  CLOUD_VERIFIER_SCRATCH_VOLUME:'amazon-test-verifier-scratch'};
+ const account=testRuntimeEnvironment('account',config,flags),worker=testRuntimeEnvironment('backup',config,{...flags,CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'});
  assert.equal(account.CLOUD_TEST_AMAZON_BACKUPS,'1');
  assert.equal(account.CLOUD_VERIFIER_IMAGE,undefined);
  assert.equal(worker.CLOUD_TEST_AMAZON_BACKUPS,'1');
  assert.equal(worker.CLOUD_BACKUP_ENDPOINT,'https://waitron.local:8333');
  assert.equal(worker.CLOUD_VERIFIER_IMAGE,flags.CLOUD_VERIFIER_IMAGE);
+ assert.equal(worker.CLOUD_VERIFIER_SCRATCH_VOLUME,'amazon-test-verifier-scratch');
+ assert.equal(worker.CLOUD_BACKUP_STAGE_ROOT,'/run/backup-stage');
+ assert.equal(account.CLOUD_VERIFIER_SCRATCH_VOLUME,undefined);
+ assert.equal(testRuntimeEnvironment('backup',config,{...flags,CLOUD_TEST_AMAZON_BACKUPS:'0'}).CLOUD_VERIFIER_SCRATCH_VOLUME,undefined);
  assert.equal(testRuntimeEnvironment('email',config,flags).CLOUD_TEST_AMAZON_BACKUPS,undefined);
  for(const change of [{TEST_CLOUD_AMAZON:undefined},{NODE_ENV:'production'},{CLOUD_VENUE_SERVICE_LEVELS:undefined},{TEST_CLOUD_ORIGIN:undefined},{TEST_CLOUD_ORIGIN:'https://cloud.example.test:8333'}])
   assert.throws(()=>testRuntimeEnvironment('account',config,{...flags,...change}),/test_cloud.amazon_backups/);

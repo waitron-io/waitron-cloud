@@ -67,11 +67,14 @@ test('the disk-backed verifier is available only to the venue-level test worker 
   /test_cloud.backup_configuration/);
 });
 
-test('Amazon verification refuses disk scratch and a missing immutable image before database work',async()=>{
+test('Amazon verification requires its private disk scratch, stage and immutable image before database work',async()=>{
  const {runTestBackupWorker}=await import('./backup-worker.mjs');
  const env={DATABASE_URL:'postgres://127.0.0.1:1/fixture',CLOUD_VERIFIER_STATE_DIR:'/run/backup-verifier',
-  CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_AMAZON_BACKUPS:'1',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64)};
- for(const change of [{CLOUD_VERIFIER_SCRATCH_VOLUME:'private-scratch',CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'},
+  CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_AMAZON_BACKUPS:'1',CLOUD_VERIFIER_IMAGE:'sha256:'+'a'.repeat(64),
+  CLOUD_VERIFIER_SCRATCH_VOLUME:'amazon-test-verifier-scratch',CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'};
+ await assert.rejects(runTestBackupWorker(env,['--invalid']),/test_cloud.backup_configuration/);
+ for(const change of [{CLOUD_VERIFIER_SCRATCH_VOLUME:'foreign-scratch'},{CLOUD_VERIFIER_SCRATCH_VOLUME:undefined},
+  {CLOUD_BACKUP_STAGE_ROOT:undefined},{CLOUD_BACKUP_STAGE_ROOT:'/tmp/unbounded-stage'},
   {CLOUD_VERIFIER_IMAGE:'waitron-backup-verifier:amazon-test'},{NODE_ENV:'production'},{CLOUD_VENUE_SERVICE_LEVELS:undefined,CLOUD_TEST_SERVICE_PLANS:'1'}])
   await assert.rejects(runTestBackupWorker({...env,...change},[]),/test_cloud.amazon_backups/);
 });
