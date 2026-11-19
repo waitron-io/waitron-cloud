@@ -52,6 +52,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           });
           await page.goto('https://portal.test' + path); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
           if (action === 'passkey-add' || action === 'passkey-remove') {  await page.clock.runFor(1000); }
+          if (action === 'session-revoke') await page.locator('.sessions summary').click();
           const target = action === 'session-list' ? page.locator('.sessions').getByRole('button', {name: c.retry, exact: true})
             : page.getByRole('button', {name: action === 'session-revoke' ? c.sessionRevoke : login ? c.passkeySignIn : action === 'passkey-remove' ? c.passkeyRemove : c.passkeyAdd, exact: true});
           if (!action.endsWith('-list')) await target.click();

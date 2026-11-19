@@ -30,6 +30,9 @@ button:disabled { cursor: default; opacity: .6; }
 .business-choice select { max-width: 100%; min-height: 2.75rem; }
 
 .installation { border-block-start: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .75rem; }
+.installation h3 { overflow-wrap: anywhere; }
+.venue-details, .credential-settings { margin-block: 1rem; }
+summary { cursor: pointer; }
 .installation dd { margin-inline-start: 0; overflow-wrap: anywhere; }
 
 .usage { border-block: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .75rem; }
@@ -46,7 +49,6 @@ button:disabled { cursor: default; opacity: .6; }
 
 .remote-setup { overflow-wrap: anywhere; margin-block: 1rem; }
 .remote-setup details { margin-block: 1rem; }
-.remote-setup summary { cursor: pointer; }
 
 .separator { align-items: center; display: flex; gap: .75rem; margin: 1.25rem 0; }
 .separator::before, .separator::after { background: var(--wt-color-border); content: ""; flex: 1; height: 1px; }

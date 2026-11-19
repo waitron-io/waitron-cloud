@@ -26,6 +26,9 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await region.screenshot({path:new URL(`../dist/guest-${locale}-${colorScheme}-${width}-blocked.png`,import.meta.url).pathname});
   await page.reload();await page.getByRole('heading',{level:1,name:c.remoteAccess,exact:true}).waitFor();await open();await enable.waitFor();await enable.click();
   await region.getByText(locale==='en'?'No menu shared':'No se comparte ningún menú',{exact:true}).waitFor();
+  assert.equal(await region.getByRole('button',{name:c.guestMenuTakedown,exact:true}).count(),0);
+  await page.getByRole('button',{name:locale==='en'?'Close details':'Cerrar detalles',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:locale==='en'?'Close details':'Cerrar detalles',exact:true}).count(),0);
   await f.db.pool.query('DELETE FROM guest_menus WHERE venue_id=$1',[f.venueId]);await f.seed();
   await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installationId]);
   await page.reload();await page.getByRole('heading',{level:1,name:c.remoteAccess,exact:true}).waitFor();

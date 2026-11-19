@@ -81,7 +81,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await section.getByText(allowed,{exact:true}).count(),0);
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
-  await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
+  await page.reload();await page.getByRole('heading',{name:new RegExp('^'+c.venueTitle+' · ')}).waitFor();assert.equal(await section.count(),0);
  }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));await failConsentDatabaseWait(f.db.pool,f.db.schema,error,value=>console.error('Translation consent database',value));}finally{releaseActivity();await f.close();}
 });
 

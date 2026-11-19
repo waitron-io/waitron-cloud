@@ -9,7 +9,7 @@ let browser: Browser;
 before(async () => { browser = await chromium.launch({headless: true}); });
 after(async () => { await browser?.close(); });
 
-async function account(t: TestContext, billingTrialAvailable = true, enrollmentRequired = false) {
+async function account(t: TestContext, billingTrialAvailable = true, enrollmentRequired = false, installations: unknown[] = []) {
   const page = await browser.newPage({locale: 'en'});
   t.after(() => page.close());
   page.setDefaultTimeout(3500);
@@ -33,7 +33,7 @@ async function account(t: TestContext, billingTrialAvailable = true, enrollmentR
     if (endpoint === '/logout') { signedIn = false; return route.fulfill({status: 204}); }
     const data: Record<string, unknown> = {
       '/sessions': {sessions: []},
-      '/installations': {installations: []},
+      '/installations': {installations},
       '/passkeys': {passkeys: []},
       '/authenticator': {active: false, version: 0, recoveryCodesRemaining: 0, available: false},
       '/alerts': {enabled: false, locale: 'en'},
@@ -84,6 +84,46 @@ test('the account navigation opens distinct pages and restores the selection on 
   await page.waitForURL(origin + '/account/billing');
   await page.getByRole('heading', {name: 'Connected trial', exact: true}).waitFor();
   assert.equal(await current.textContent(), 'Billing');
+});
+
+test('secondary account controls start collapsed and remain available', async t => {
+  const {page} = await account(t);
+  await page.goto(origin + '/account');
+  const security = page.getByRole('region', {name: 'Account security', exact: true});
+  await security.waitFor();
+  const credentials = security.getByLabel('New password', {exact: true});
+  const sessions = security.getByText('A session ends after 30 minutes without activity or after 12 hours, whichever comes first.', {exact: true});
+  assert.equal(await credentials.isVisible(), false);
+  assert.equal(await sessions.isVisible(), false);
+  await page.getByRole('button', {name: 'Sign out', exact: true}).waitFor();
+  await security.locator('summary').filter({hasText: 'Password and email'}).click();
+  await credentials.waitFor();
+  await security.locator('summary').filter({hasText: 'Active sessions'}).click();
+  await sessions.waitFor();
+});
+
+test('venue cards sort by signed name and disclose secondary status', async t => {
+  const first='11111111-1111-4111-8111-111111111111';
+  const installation=(digit:string,venueName?:string)=>{
+    const id=first.replaceAll('1',digit);
+    return {installationId:id,venueId:id,organisationId:first,legalBusinessId:first,environment:'test',revision:0,
+      revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
+      overview:{organisationName:'Cloud Company',businessName:'Cloud Company SL',countryCode:'ES',
+        latestSnapshotAt:null,verifiedSnapshotAt:null,...(venueName ? {venueName} : {})},
+      services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({
+        service,state:'unconfigured',health:'unknown',failure:null,observedAt:null
+      }))};
+  };
+  const {page}=await account(t,true,false,[installation('2','Zest Café'),installation('3'),installation('4','Alba Bakery')]);
+  await page.goto(origin+'/account/venues');
+  const titles=page.locator('article.installation').getByRole('heading',{level:3});
+  await titles.first().waitFor();
+  assert.deepEqual(await titles.allTextContents(),['Alba Bakery','Venue · 33333333','Zest Café']);
+  const venue=page.locator('article.installation').first();
+  const detail=venue.getByText('No verified snapshot yet',{exact:true});
+  assert.equal(await detail.isVisible(),false);
+  await venue.locator('summary').filter({hasText:'Details'}).click();
+  await detail.waitFor();
 });
 
 test('direct Billing hides the link and returns to Account when Billing is unavailable', async t => {

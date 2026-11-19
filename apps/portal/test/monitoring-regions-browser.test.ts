@@ -78,7 +78,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         assert.deepEqual(counts, [c.monitoring, c.monitorPublic, c.monitorStaff].map(name => ({name, regions: 0, groups: 2})));
         for (let n = 0; n < 2; n++) {
           const venue = venues.nth(n), monitoring = venue.getByRole('group', {name: c.monitoring, exact: true});
-          assert.equal(await venue.getByRole('heading', {name: `Sol SL · ${n + 1}0000000`, exact: true}).count(), 1);
+          assert.equal(await venue.getByRole('heading', {name: `${c.venueTitle} · ${n + 1}0000000`, exact: true}).count(), 1);
           for (const name of [c.monitorPublic, c.monitorStaff]) assert.equal(await monitoring.getByRole('group', {name, exact: true}).count(), 1);
         }
       });

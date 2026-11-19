@@ -91,6 +91,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.evaluate(async () => {const app = (window as unknown as {sessionListApp: {security: {load(): Promise<void>}}}).sessionListApp; await app.security.load();});
       assert.equal(reads, 2, 'pending retries cannot duplicate the read');
       releaseRetry();
+      await section.locator('details:not([open]) > summary').click();
       await section.getByText(c.currentSession, {exact: true}).waitFor();
       assert.equal(await retry.count(), 0); assert.equal(await alert.count(), 0);
       await section.getByRole('button', {name: c.sessionSignOut, exact: true}).waitFor();
@@ -100,6 +101,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
       await (await navigationList).finished();
       await page.waitForFunction(() => {const security = (window as unknown as {sessionListApp: {security: {loaded: boolean; pending: boolean}}}).sessionListApp.security; return security.loaded && !security.pending;});
+      await section.locator('details:not([open]) > summary').click();
       await section.getByText(c.currentSession, {exact: true}).waitFor();
       assert.equal(reads, 3, 'returning to Account still refreshes the list');
       assert.deepEqual(writes, ['/session/activity'], 'list retry never revokes a session');
@@ -152,6 +154,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup'] as const) 
         assert.equal(await section.getByRole('alert').getByText(c.limited, {exact: true}).count(), 1);
         await retry.click();
       }
+      await section.locator('details:not([open]) > summary').click();
       await section.getByText(c.currentSession, {exact: true}).waitFor();
       assert.equal(reads, 2, scenario === 'blocked startup' ? 'a blocked startup can run when the server wait ends' : 'a new account or explicit retry starts a fresh list read');
       assert.equal(await section.getByRole('alert').count(), 0);
@@ -191,6 +194,7 @@ test(`session activity preserves an uncertain revoke when its follow-up list fai
     await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
     const section = page.locator('.sessions'), alert = section.getByRole('alert');
     const activityRequest = page.waitForRequest('**/api/account/session/activity');
+    await section.locator('summary').click();
     await section.getByRole('button', {name: c.sessionRevoke, exact: true}).click(); await activityRequest;
     await alert.getByText(c.sessionRevokeUncertain, {exact: true}).waitFor();
     assert.equal(reads, 2); assert.equal(revokes, 1);

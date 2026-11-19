@@ -73,6 +73,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.goto('https://portal.test/account');
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.locator('.sessions summary').click();
       await page.locator('.sessions').getByRole('button', {name: c.sessionSignOut, exact: true}).waitFor();
       if (scenario === 'passive' || scenario === 'expired' || scenario === 'passive-list') {
         ended = true;

@@ -31,6 +31,11 @@ Upgrade your box to a Waitron build that supports pairing version 3 before you
 pair it with this Cloud. If you started pairing before the version switch, start
 again from the updated box.
 
+In Cloud, open **Venues** to see the name your box sent when it paired. When
+Cloud has no name, it shows **Venue** and a short identifier. Open **Details**
+for the full identifier, connection times, service health and snapshot status.
+To add a venue, start in Cloud services on that venue's Waitron box.
+
 ## Run the local integration proof
 
 Build the Cloud portal and the dashboard in your Waitron checkout first. Use a Waitron checkout containing the installation lifecycle adapter and

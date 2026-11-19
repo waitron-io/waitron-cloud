@@ -75,6 +75,55 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  }finally{await browser.close();}
 });
 
+test('Remote access offers an explicit trial for the eligible connected box', async () => {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage({locale:'en'});
+    page.setDefaultTimeout(3000);
+    const services=['continuous_backup','remote_access','retained_snapshots'].map(service=>({
+      service,state:'unconfigured',health:'unknown',failure:null,observedAt:null
+    }));
+    const installation=(venueId:string)=>({
+      installationId:venueId,venueId,organisationId:first,legalBusinessId:first,environment:'test',
+      revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,services
+    });
+    const usedTrial='33333333-3333-4333-8333-333333333333';
+    let started:unknown;
+    await page.route('https://portal.test/account/remote-access',route=>route.fulfill({
+      contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'
+    }));
+    await page.route('**/api/account/**',route=>{
+      const endpoint=new URL(route.request().url()).pathname.slice('/api/account'.length);
+      if(endpoint==='/session'||endpoint==='/session/activity')return route.fulfill({
+        json:{accountId:'owner',expiresAt:'2099-01-01T00:00:00Z',billingTrialAvailable:true}
+      });
+      if(endpoint==='/installations')return route.fulfill({json:{installations:[installation(second),installation(usedTrial)]}});
+      const venues=[
+        {venueId:first,level:'registered',trial:null,canStartTrial:true},
+        {venueId:second,level:'registered',trial:null,canStartTrial:true},
+        {venueId:usedTrial,level:'registered',trial:null,canStartTrial:false}
+      ];
+      if(endpoint==='/billing/read')return route.fulfill({json:{venues}});
+      if(endpoint==='/billing/start-trial'){
+        started=route.request().postDataJSON();
+        return route.fulfill({json:{venues}});
+      }
+      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+    });
+    await page.goto('https://portal.test/account/remote-access');
+    await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+    const start=page.getByRole('link',{name:'Start free trial',exact:true});
+    await start.click();
+    await page.waitForURL('**/account/billing');
+    assert.equal(started,undefined);
+    assert.equal(await page.getByRole('combobox',{name:'Venue',exact:true}).inputValue(),second);
+    const submission=page.waitForResponse('**/billing/start-trial');
+    await page.getByRole('button',{name:'Start free trial',exact:true}).click();
+    await submission;
+    assert.deepEqual(started,{venueId:second});
+  } finally { await browser.close(); }
+});
+
 for(const status of [403,503])test(`unavailable trial chooser ${status} adds no refused-account panel`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{

@@ -163,6 +163,7 @@ test('sign-out stays disabled until authenticator startup settles',async()=>{
     return route.continue();
    });
    await page.goto(f.origin+'/account');await started;
+   await page.locator('.sessions summary').click();
    await page.getByText(c.currentSession,{exact:true}).waitFor();
    const signOut=page.getByRole('button',{name:c.signout,exact:true});assert.equal(await signOut.isDisabled(),true);assert.equal(attempts,0);
    if(process.env.CLOUD_LOGOUT_SHOTS){await mkdir(process.env.CLOUD_LOGOUT_SHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_LOGOUT_SHOTS}/${locale}-${colorScheme}-${width}.png`,fullPage:true});}

@@ -63,6 +63,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
    });
    await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+   await page.locator('.sessions summary').click();
    const signout=page.locator('.sessions').getByRole('button',{name:c.sessionSignOut,exact:true});await signout.waitFor();
    const waitForOldHandler=()=>t.waitFor(()=>{assert.equal(oldHandlerEntered,true,'the old session route handler must enter');},{timeout:4000});
    await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});
