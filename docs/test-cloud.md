@@ -394,7 +394,15 @@ fails, it stops the recorded project containers. Unset the switch and rerun
 After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
 choose **Turn sharing on**. Open the published address on a phone using mobile
 data. In the Cloud portal, turn the guest menu off for the venue and confirm
-the same address returns 404. Turn it on and wait for the box to publish again.
+the same address returns 404. Turn sharing back on and immediately open the
+menu over mobile data in a fresh phone browser session that has opened neither
+site. Record the browser, first response and seconds until the menu opens.
+A 404 can persist until the box publishes. Record any 403 separately.
+
+In Chromium, open the account and then the published menu in one tab. Repeat in
+a fresh browser profile starting with the menu. Both pages should open in both
+orders. The disposable Chromium test showed that a 421 makes it retry on the
+requested hostname's own connection. The original refusals were never captured.
 
 To close the test reader, unset `TEST_CLOUD_GUEST_MENU` and run the Amazon
 driver's `up` command again with the installed image. The shared certificate

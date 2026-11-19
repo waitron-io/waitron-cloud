@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
+import {once} from 'node:events';
+import {connect as http2Connect} from 'node:http2';
 import {promisify} from 'node:util';
 import {request} from 'node:https';
 import test,{before,after} from 'node:test';
@@ -142,6 +144,26 @@ test('the Amazon guest name uses the shared TLS listener, exact authority and a 
  assert.equal(seen.headers.forwarded,undefined);assert.equal(seen.headers['x-real-ip'],undefined);
  assert.equal((await send(account,guest)).status,403);
  assert.equal((await send(guest,account)).status,403);
+ for(const [servername,otherHost] of [[account,guest],[guest,account]]){
+  await t.test(`HTTP/2 connection for ${servername} refuses a request for ${otherHost} with a retry status`,async()=>{
+   const session=http2Connect(`https://127.0.0.1:${port}`,{servername,ca});
+   try{
+    await once(session,'connect');
+    assert.equal(session.alpnProtocol,'h2');
+    const status=async authority=>{
+     const stream=session.request({':authority':authority});
+     stream.end();
+     const [headers]=await once(stream,'response');
+     stream.resume();
+     await once(stream,'end');
+     return headers[':status'];
+    };
+    assert.equal(await status(servername),200);
+    assert.equal(await status(otherHost),421);
+    assert.equal(await status('other.example.test'),403);
+   }finally{session.destroy();}
+  });
+ }
  assert.equal((await send(account,account,'/wrong-backend-name')).body,'replaced');
  assert.equal((await send(guest)).status,503);
 });
