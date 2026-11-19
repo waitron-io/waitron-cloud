@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {spreadCoreDns} from './kubernetes-placement.mjs';
+import {cleanUp} from './kubernetes-database.mjs';
 import {verifierScratchPath} from '../deploy/kubernetes/services.mjs';
 
 export const kindNodeImage = 'kindest/node:v1.34.3@sha256:08497ee19eace7b4b5348db5c6a1591d7752b164530a36f855cb0f2bdcbadd48';
@@ -277,14 +278,19 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
         assert.equal(await networks(cleanup), '', 'node_loss.network_remains');
       }
     } catch (error) {
-      if (!failure) throw error;
-      throw new AggregateError([failure, error], `${failure.message}\nKind cleanup failed for ${cluster}: ${error.message}`);
+      failure = failure ? new AggregateError([failure, error], `${failure.message}\nKind cleanup failed for ${cluster}: ${error.message}`) : error;
+      throw failure;
     } finally {
-      process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);
-      if (scratchMountAttempted) {
-        await run('sh', ['-ec', 'if mountpoint -q "$1"; then umount "$1"; fi', 'cleanup', scratchMount], cleanup);
+      try {
+        await cleanUp(failure, async () => {
+          if (scratchMountAttempted) {
+            await run('sh', ['-ec', 'if mountpoint -q "$1"; then umount "$1"; fi', 'cleanup', scratchMount], cleanup);
+          }
+          await rm(directory, {recursive: true, force: true});
+        });
+      } finally {
+        process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);
       }
-      await rm(directory, {recursive: true, force: true});
     }
   }
 }
