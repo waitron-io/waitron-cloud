@@ -185,13 +185,13 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
 - Carry the [observed storage limits](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
   into the run 9 decision. Setup spreads DNS across machines after the cluster
   nodes are ready. PR 4 remains the step that qualifies scoped access.
-- [ ] Returned-drive repair remains open. Before declaring redundancy restored,
-  verify both outage objects on both returned disks and read their acknowledged
-  bytes through the returned machine. Consecutive-outage multipart also remains
-  open. After verifying the first repair, start a multipart upload and stop the
-  next machine before completing it. Require missing-part refusal, then complete
-  the upload and verify its bytes. Check earlier acknowledged objects and both
-  returned disks. Keep the approved spending check and $10 stop for run 9.
+- [ ] Extend the [first-outage repair rehearsal](2026-11-18-d621-stockholm-store-repair.md)
+  through consecutive outages. Verify an outage object on both returned disks
+  before any client reads it. After verifying the first repair, start a
+  multipart upload and stop the next machine before completing it. Require
+  missing-part refusal, then complete the upload and verify its bytes. Check
+  earlier acknowledged objects and both returned disks after that machine
+  returns. Keep the approved spending check and $10 stop for run 9.
 
 
 **Files:** `base/services/account.yaml`, `base/workers/{email,usage,monitor,probe,operations}.yaml`; mail/runtime/operations adapters and tests; `local/mail/{sink,service}.yaml`.

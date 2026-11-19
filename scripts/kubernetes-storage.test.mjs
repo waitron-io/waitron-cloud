@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
+import {mkdir, mkdtemp, rm, unlink, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import test from 'node:test';
 import {promisify} from 'node:util';
 import {stockholmStoreResources} from './kubernetes-storage.mjs';
@@ -90,7 +93,80 @@ test('both serving peers must report four online drives during the outage and si
     /store-2=5, store-3=unseen/);
 });
 
-test('encrypted bytes, listing and multipart survive the first machine outage', {
+const repairEndpoint = {ip: '172.30.250.10'};
+const repairAccount = {caPath: '/fixture/store.crt', credentials: {accessKeyId: 'fixture', secretAccessKey: 'synthetic-password'}};
+
+test('bucket repair starts once and polls only its returned token', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const replies = [{clientToken: 'fixture:3'}, {Summary: 'running'}, {Summary: 'finished'}];
+  const operations = [];
+  const run = async (binary, args, {input}) => {
+    assert.equal(binary, 'curl');
+    assert.ok(args.includes('--aws-sigv4') && args.includes('--cacert') && args.includes('--config'));
+    assert.ok(!args.join(' ').includes('synthetic-password'));
+    assert.match(input, /user = "fixture:synthetic-password"/);
+    const [, url] = /^url = "([^"]+)"/m.exec(input);
+    const parsed = new URL(url);
+    assert.equal(parsed.pathname, '/minio/admin/v3/heal/cloud-storage-rehearsal');
+    operations.push([parsed.search, args[args.indexOf('--data-binary') + 1]]);
+    return JSON.stringify(replies.shift());
+  };
+  await healStoreBucket({node: repairEndpoint, account: repairAccount, run, signal: AbortSignal.timeout(5000)});
+  assert.deepEqual(operations, [
+    ['', '{"recursive":true,"dryRun":false,"remove":false,"scanMode":1}'],
+    ['?clientToken=fixture%3A3', ''],
+    ['?clientToken=fixture%3A3', ''],
+  ]);
+});
+
+test('bucket repair exposes a stopped job and an invalid start', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  for (const [replies, error] of [
+    [[{clientToken: 'fixture:3'}, {Summary: 'stopped'}], /storage_loss.heal_stopped/],
+    [[{Code: 'HealAlreadyRunning'}], /storage_loss.heal_token/],
+  ]) {
+    const run = async () => JSON.stringify(replies.shift());
+    await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, run,
+      signal: AbortSignal.timeout(2000)}), error);
+    assert.deepEqual(replies, []);
+  }
+});
+
+test('repair checks metadata and both multipart parts on both disks', async t => {
+  const {requireRepairedPieces} = await import('./kubernetes-storage-proof.mjs');
+  const temp = await mkdtemp(join(tmpdir(), 'store-shards-test-'));
+  t.after(() => rm(temp, {recursive: true, force: true}));
+  for (const disk of ['0', '1']) {
+    const directory = join(temp, disk, 'cloud-storage-rehearsal', 'multipart-0');
+    await mkdir(join(directory, 'data-version'), {recursive: true});
+    await writeFile(join(directory, 'xl.meta'), 'metadata');
+    await writeFile(join(directory, 'data-version', 'part.1'), 'data');
+    const ordinary = join(temp, disk, 'cloud-storage-rehearsal', 'outage-0');
+    await mkdir(ordinary);
+    await writeFile(join(ordinary, 'xl.meta'), 'inline data');
+  }
+  await writeFile(join(temp, '0/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
+  async function run(binary, [exec, id, shell, flag, script, name, ...args]) {
+    assert.deepEqual([binary, exec, id], ['docker', 'exec', 'example-node']);
+    const paths = args.map(path => path.replace('/var/local/d621-store', temp));
+    const {stdout} = await promisify(execFile)(shell, [flag, script, name, ...paths]);
+    return stdout.trim();
+  }
+  const files = ['outage-0', 'multipart-0'];
+  const node = {id: 'example-node'};
+  const signal = AbortSignal.timeout(3000);
+  await assert.rejects(requireRepairedPieces(run, node, files, signal, 'multipart-0'), /storage_loss.missing_shards/);
+  await writeFile(join(temp, '1/cloud-storage-rehearsal/multipart-0/data-version/part.2'), 'data');
+  for (const file of ['0/cloud-storage-rehearsal/multipart-0/xl.meta', '1/cloud-storage-rehearsal/outage-0/xl.meta']) {
+    const metadata = join(temp, file);
+    await unlink(metadata);
+    await assert.rejects(requireRepairedPieces(run, node, files, signal, 'multipart-0'), /storage_loss.missing_shards/);
+    await writeFile(metadata, 'metadata');
+  }
+  await requireRepairedPieces(run, node, files, signal, 'multipart-0');
+});
+
+test('encrypted bytes, listing and multipart survive the first machine outage and repair', {
   skip: process.env.TEST_KUBERNETES_STOCKHOLM_STORAGE !== '1', timeout: 2_100_000,
 }, async () => {
   const child = promisify(execFile)(process.execPath, ['scripts/kubernetes-check.mjs', '--storage-loss'],
@@ -100,5 +176,6 @@ test('encrypted bytes, listing and multipart survive the first machine outage', 
   const {storage, nodes} = JSON.parse(stdout);
   assert.equal(storage.stopped, nodes[0].name);
   assert.ok(storage.failoverMs <= 90_000);
+  assert.ok(storage.repairMs > 0 && storage.repairMs <= 180_000);
   console.log(JSON.stringify(storage));
 });

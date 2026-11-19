@@ -16,7 +16,7 @@ const apiName = 's3';
 const uid = 10001;
 const port = 9000;
 export const storeNodePort = 30900;
-const storePath = '/var/local/d621-store';
+export const storePath = '/var/local/d621-store';
 const labels = {app: storeName};
 const peers = Array.from({length: 6}, (_, index) => 'store-' + index);
 const dns = name => name + '.' + namespace + '.svc.cluster.local';
@@ -130,7 +130,7 @@ export async function installStockholmStore({nodes, addresses, image, directory,
     if (events) process.stderr.write(namespace + ' events:\n' + events + '\n');
     throw error;
   }
-  return {ca, credentials};
+  return {ca, caPath: certPath, credentials};
 }
 
 async function main() {

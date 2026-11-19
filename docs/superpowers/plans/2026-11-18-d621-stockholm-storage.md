@@ -111,9 +111,12 @@ holds `combined-live-01.log` (lines 77–104 and 155–209) and
 `receipts/storage-read-during-outage/`. The second renewal timeout is in
 `receipts/d621-run9-storage-access/` within the lane.
 
-The separate candidate that refreshes peer addresses and requests explicit
-repair restored both outage objects and both multipart parts on both returned
-disks in 18.746 seconds. The returned machine read the bytes and the rehearsal
-passed all seven checks (`post-land-returned-drive-live-02.log`, lines 86–109).
-That result applies to the unpublished repair candidate. Multipart through
-consecutive outages and real Stockholm machine loss remain open.
+The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
+refreshes peer addresses every second and asks MinIO to repair the bucket once
+after the first machine returns. In the Linux Kind recheck with DNS placement,
+both outage objects reached both returned disks, including both multipart
+parts. Both byte checks passed through the returned machine. The repair leg
+took 18.746 seconds and the run passed all seven checks
+(`receipts/storage-read-during-outage/post-land-returned-drive-live-02.log` in
+Lane G, lines 86–109). Repair and multipart through consecutive outages and
+real Stockholm machine loss remain open.
