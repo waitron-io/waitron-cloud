@@ -87,12 +87,14 @@ unavailable too.
 
 On disposable Linux, holding activation for 2,958 ms across the next code
 boundary returned HTTP 403 and reproduced the eight-second wait on main.
-With the updated fixture, the same probe held activation for 2,760 ms across
+With the updated fixture, the same probe held activation for 2,960 ms across
 the boundary. It returned HTTP 200, and all eight language, theme and width
 combinations completed the handover.
-The fixture uses one database instant to generate and check three distinct
-codes for enrolment, sign-in and handover proof. It verifies that PostgreSQL
-recorded all three code steps. The session checks still read the live clock.
+The fixture sets its clock two minutes behind database time so a code check
+that falls back to live time fails. The authenticator setup and proof deadlines
+use that same test clock. PostgreSQL records three distinct code steps for
+enrolment, sign-in and handover proof. The session checks still read the live
+clock.
 Run `node scripts/test-postgres.mjs exec node --test --test-timeout=120000
 apps/portal/test/owner-transfer-browser.test.ts` after building the portal.
 
