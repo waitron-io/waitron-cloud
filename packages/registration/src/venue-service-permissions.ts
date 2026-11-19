@@ -91,5 +91,6 @@ export async function requireVenueService(client:PoolClient,venueId:string,servi
   return;
  }
  if(mode!=='test-venue-levels')throw new Error('invalid_plan_mode');
- if(!levelAllows((await readVenuePermissions(client,venueId,mode)).level,service))throw new Error('permission_denied');
+ if(!levelAllows((await readVenuePermissions(client,venueId,mode)).level,service))
+  throw new Error('permission_denied',{cause:'venue_service_plan_required'});
 }

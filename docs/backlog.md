@@ -1084,10 +1084,12 @@ implementation or production evidence.
   Recovery approval remains off.
 
   Automatic remote access starts from the box's signed tunnel key in venue-level
-  test mode. The focused worker test starts the Connected trial through the
-  account endpoint and gets the assigned address. The joint test still needs a
-  fresh pairing on the pre-production box, the assigned Staff page on mobile
-  data, and confirmation that the box switch stops access.
+  test mode. The tunnel request returns `403 remote_plan_required` for a signed
+  box whose venue plan excludes remote access. The focused worker test starts
+  the Connected trial through the account endpoint and gets the assigned
+  address. The joint test still needs a fresh pairing on the pre-production
+  box, the assigned Staff page on mobile data, and confirmation that the box
+  switch stops access.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings

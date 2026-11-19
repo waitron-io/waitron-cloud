@@ -59,8 +59,11 @@ test('automatic mode provisions only eligible signed boxes and preserves a stopp
   const app=createAccountApp({...f.options,tunnelProvision:automatic});
   const other=await connectedVenue(f.db,f.issuer,origin),otherKey=peer();
   const postOther=()=>f.request(other.proof('tunnel-provision',{peerPublicKey:otherKey},randomUUID(),other.lease),app);
+  await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[other.installationId]);
+  const revoked=await postOther();assert.equal(revoked.status,403);assert.deepEqual(await revoked.json(),{error:'permission_denied'});
+  await f.db.pool.query('UPDATE installations SET revoked_at=NULL WHERE id=$1',[other.installationId]);
   const denied=await postOther();assert.equal(denied.status,403,await denied.clone().text());
-  assert.deepEqual(await denied.json(),{error:'permission_denied'});
+  assert.deepEqual(await denied.json(),{error:'remote_plan_required'});
   assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM remote_placements')).rows[0].n,0);
   const billing=new BillingStore(f.db.pool);
   for(const venue of [f.v,other]){
@@ -106,7 +109,8 @@ test('bad body, forged proof, foreign box and lease scope cannot allocate',async
   assert.equal((await f.request(f.v.proof('configuration',{},randomUUID(),f.v.lease))).status,401);
   assert.equal((await f.request(f.v.proof('tunnel-provision',{peerPublicKey:f.key}))).status,401);
   const other=await connectedVenue(f.db,f.issuer,origin);
-  assert.equal((await f.request(other.proof('tunnel-provision',{peerPublicKey:f.key},randomUUID(),other.lease))).status,403);
+  const foreign=await f.request(other.proof('tunnel-provision',{peerPublicKey:f.key},randomUUID(),other.lease));
+  assert.equal(foreign.status,403);assert.deepEqual(await foreign.json(),{error:'permission_denied'});
   assert.equal((await f.request(f.proof(undefined,other.lease))).status,401);
   assert.equal((await f.request({},f.app,{'content-type':'text/plain'})).status,415);
   assert.equal((await f.request({payload:'a'.repeat(17000),signature:'a'})).status,413);
@@ -220,7 +224,7 @@ test('the selected plan mode refuses a paid permission withdrawn during its poli
  try{
   await holder.query('BEGIN');await holder.query("UPDATE organisations SET service_plan='free' WHERE id=$1",[f.v.organisationId]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;pending=f.post();await blocked(f,pid);await holder.query('COMMIT');
-  assert.equal((await pending).status,403);await untouched(f);
+  const denied=await pending;assert.equal(denied.status,403);assert.deepEqual(await denied.json(),{error:'remote_plan_required'});await untouched(f);
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
 test('the native listener forwards the configured trial and shares the installation request limit',async()=>{

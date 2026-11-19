@@ -47,6 +47,12 @@ export class TunnelProvisionMachine{
    try{await this.#store.provisionInTransaction(client,id,this.#trial.cellId,(body as {peerPublicKey:string}).peerPublicKey,443,automatic?'restore-cleared':'restore-any');}
    catch(error){
     if(error instanceof Error&&error.message==='cell_unavailable')await this.#authorize(client,envelope,id,initial.venue_id);
+    if(error instanceof Error&&error.message==='permission_denied'&&
+      (error.cause==='remote_plan_required'||error.cause==='venue_service_plan_required')){
+     // The plan read can wait. Recheck the signed installation before revealing its plan.
+     const current=await this.#authorize(client,envelope,id,initial.venue_id);
+     if(!current.revoked_at)throw new AccountHttpError(403,'remote_plan_required');
+    }
     throw error;
    }
    const result=await installationView(client,id);
