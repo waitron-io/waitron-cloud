@@ -1,72 +1,68 @@
 # Cloud backup and restore check on the Amazon test machine
 
-After one private setup, the paired test box can send a small synthetic, non-fiscal
-backup, then see the restore-check result for those same bytes with the operator.
-The watcher put this first on 19 November at 09:16 under the owner's 16 November
-request in the [Amazon plan](2026-11-16-test-cloud-aws.md). Guest menus, switch
-trials and email follow this slice.
+The paired Juniper Test Cafe box sends a synthetic, non-fiscal backup and the
+operator shows the owner the isolated restore-check result for those same bytes.
+The portal row stays pending because recovery remains unavailable. This is part of
+the [Amazon test Cloud request](2026-11-16-test-cloud-aws.md). The watcher cleared
+the public route and result on 19 November at 10:05/10:13 and the exact-release
+verifier on 10:18.
 
-1. **Bind the verifier to the reset release.** At 10:18 on 19 November the watcher
-   cleared a verifier from Lane J's exact installed Waitron SHA for this Amazon
-   test Cloud. Lane J owns the authorised single reset and records the release.
-   The owner pairs Juniper Test Cafe again before live capture. Read back the
-   source image and confirm the venue is wholly synthetic and non-fiscal.
-   The 10:15 comparison found that both existing pins differ in core migrations
-   from a fresh install on Waitron main.
-   Generate `deploy/backup-verifier/amazon-test-target.json` from
-   `currentBackupVerificationTarget()` in the exact release's compiled bundle.
-   Add `--amazon-test` to `scripts/build-backup-verifier.mjs`. Keep committed-source
-   archival and the Dockerfile check that the built target equals the full pin.
-   In `deploy/test-cloud/{runtime,backup-worker,backup-verifier-runtime}.mjs`,
-   select that pin via the explicit Amazon backup opt-in and have only the
-   backup worker receive the immutable verifier image ID. Verify its revision
-   label against the pin. Build and verify a fresh archive from the same release
-   through the real proxy on disposable Linux. Retain 1 GiB memory and 256 MiB
-   scratch. Measure archive, image and peak RAM and disk. Stop with the measured
-   sizes if they exceed the limits. Privately transfer the matching image and
-   read back its ID. The default and streamed pins keep their existing paths.
-   `scripts/build-backup-verifier.test.mjs` checks source selection and defaults.
-   `runtime.test.mjs` checks opt-in and role selection. `backup-worker.test.mjs`
-   checks the image/SHA binding and standard limits.
+1. **Bind the verifier to the reset release.** Lane J owns the single authorised
+   reset and records the installed release SHA and immutable app image. The
+   owner must pair the new synthetic venue before live capture. Confirm the
+   installed image and source, and keep that exact Git commit fetchable.
+   On disposable Linux run the same app image with network off, no volumes and a
+   Node entrypoint to read `currentBackupVerificationTarget()` from
+   `/app/backup-verification.js`. The output supplies
+   `deploy/backup-verifier/amazon-test-target.json`. Check its SHA against the
+   app image label. `scripts/build-backup-verifier.mjs --amazon-test` archives
+   only that commit and retains the check that its compiled target equals the pin.
+   `deploy/test-cloud/{runtime,backup-worker}.mjs` passes
+   `CLOUD_TEST_AMAZON_BACKUPS=1` to the test backup worker to supply the pin's SHA
+   to its existing `expectedRevision` option. Refuse another mode or disk-backed
+   scratch. The shared verifier runtime and its two pins keep their current
+   paths. Extend `scripts/{build-backup-verifier,ci-proof-inputs}.test.mjs`,
+   `ci-proof-inputs.mjs` and `deploy/test-cloud/{runtime,backup-worker}.test.mjs`
+   for the Amazon pin, defaults, mode, image ID and revision checks.
 2. **Accept the upload on existing HTTPS.** In `packages/backups/src/captures.ts`
    and `deploy/test-cloud/{account-worker,service-runtime}.mjs`, substitute the
-   canonical origin only in the reply to the signed reservation in explicit Amazon
-   test mode. Keep the stored location, grant exchange and server-side object
-   traffic private. In `proxy.amazon.cfg`, forward only a length-bounded
+   canonical origin only in the signed reservation reply in explicit Amazon test
+   mode. Provisioning, grants and server-side storage stay private. In
+   `proxy.amazon.cfg`, forward only length-bounded
    `PUT /venue-<UUID>/incoming/<UUID>` on the exact host. Preserve signed fields,
-   allow the SDK's `x-id=PutObject` query and strip forwarding headers. Refuse other
-   storage methods, paths, copy headers and queries. Storage checks the scoped
-   signature. The proxy verifies `waitron.local` with the public portion of the
-   private storage CA from `bootstrap.mjs` in the existing certificate volume.
-   `venue-service-captures.test.ts` checks the split and the test-only gate.
-   `bootstrap.test.mjs` checks the CA copy. `proxy-proof.test.mjs` checks backend TLS,
-   a real signed PUT, and unsigned, wrong or expired signatures, oversize, alternate
-   paths/methods and non-test mode through the proxy.
-3. **Use the existing verifier and show the result.** Opt in through
-   `deploy/test-cloud/compose.amazon.yaml`. Validate the immutable image, worker
-   and mount roles in `scripts/test-cloud-deploy.mjs`. Only the trusted
-   worker gets Docker control and private controller state. Its child has no
-   network. Use `scripts/test-cloud-deploy.test.mjs` for opt-in and mount refusals.
-   Add private operator steps to `docs/test-cloud.md`: create `venue-<venueId>`, call
-   `BackupCatalogue.provision` for that paired installation, load the Amazon-test
-   expected target and call `setVerificationPolicy(client, expectedTarget,
-   'local.waitron-verifier@' + builtImageId, false)`; exercise both steps on disposable
-   Linux. Run the existing release-disabled check in
-   `packages/backups/test/verification-admission.test.ts` and recovery refusals in
-   `packages/backups/test/recovery-qualification.test.ts` against throwaway PostgreSQL.
-   Keep `release_ready=false`: no backup becomes eligible for recovery approval.
-   Use the existing backup and rollback procedure.
-   After named tests, whole-branch review and green CI, use the running host for
-   one agreed synthetic capture. Read back matching bytes, the check, child
-   cleanup and continued Staff access. Show the owner the matching admitted
-   restore-check result in the guided trial. The portal row stays pending and
-   recovery stays gated.
-   Record how to turn off the upload in the PR and update `docs/backlog.md`.
-   The source stays the sole writer.
+   allow the SDK's `x-id=PutObject` query and strip forwarding headers. Refuse
+   other storage methods, paths, copy headers and queries. Storage checks the
+   scoped signature. Verify backend TLS at `waitron.local` with only the public
+   portion of the private CA, copied by `bootstrap.mjs`. The existing
+   `venue-service-captures.test.ts` and `bootstrap.test.mjs` check the endpoint and
+   CA. `proxy-proof.test.mjs` checks the real signed PUT, plus unsigned, wrong or
+   expired signatures, oversize, other paths and methods, and non-test refusal.
+3. **Verify and show the result.** Opt in through Amazon Compose.
+   `scripts/test-cloud-deploy.test.mjs` checks the driver's selection and private
+   mounts. Only the trusted worker gets Docker control. The child has no network
+   and retains 1 GiB RAM and 256 MiB memory-backed scratch. In `docs/test-cloud.md`
+   add the venue bucket and `BackupCatalogue.provision` steps. Set the existing
+   test Cloud policy to the validated full Amazon pin and exact image ID with
+   `release_ready=false`. Confirm only the synthetic venue uses this policy.
+   After step 2, rehearse with a fresh archive and real uploader from the exact
+   release on disposable Linux. Use the snapshot fixture's capture and
+   publication pieces. The ordinary recovery proof retains its current policy.
+   Measure archive, image, scratch and host RAM/disk during the verifier run.
+   Stop on capacity or failed checks and record the exact sizes, status and
+   reason. Privately transfer the matching verifier and read back its image ID.
+   The private trial read identifies the latest admitted passed attempt for the
+   capture, current policy and image, matching archive digest and bytes, complete
+   required module results and confirmed child cleanup.
+   `verification-admission.test.ts` checks that result alongside pending
+   qualification and `recovery-qualification.test.ts` checks recovery refusal.
+   Readiness stays false, so the normal 48-hour stale snapshot notice can still
+   appear. Explain it during the trial.
 
-Estimate +235/−20 runtime/build/configuration lines, +225/−10 test lines,
-one generated target JSON and about 40 guide lines. The existing machine, disk,
-DNS and 512 MiB archive ceiling
-stand. The continuous-stream endpoint stays private, so stream uploads may retry.
-Show the retained backup result only. Restoring onto a box and fiscal checks
-remain separate.
+Run focused tests first, whole-branch review and current-head CI before Amazon
+rollout. Capture only from the confirmed synthetic venue. Show the readout and
+continued Staff access. Record the upload route, off and rollback steps and trial
+result in the PR and update `docs/backlog.md`. The source stays the sole writer.
+Estimate +250/−20 runtime and configuration lines, +245/−10 test lines, one
+generated pin and about 45 guide lines. The upload ceiling stays 512 MiB. The
+trial archive must fit the verifier's smaller scratch budget. Continuous upload,
+activation and fiscal proof sit outside this slice.
