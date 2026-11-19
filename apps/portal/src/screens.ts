@@ -50,7 +50,7 @@ export function screen(app: PortalApp) {
     ? html`<nav class="account-nav" aria-label=${c.accountNav}><ul role="list">
       ${Object.entries(accountPages).filter(([, page]) => page !== 'billing' || state.billingTrialAvailable === true)
         .map(([path, page]) => html`<li><a href=${path} aria-current=${page === accountPage ? 'page' : nothing}
-          @click=${(event: MouseEvent) => app.follow(event, path)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
+          @click=${(event: MouseEvent) => app.follow(event, path, true)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
       </ul></nav>` : nothing;
   let content;
   if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;

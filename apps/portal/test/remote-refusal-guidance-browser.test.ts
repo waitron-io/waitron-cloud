@@ -42,7 +42,9 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      if(action==='apply')await section.getByRole('button',{name:c.remoteConfirm,exact:true}).click();
      await section.getByRole('alert').filter({hasText:c[key]}).waitFor();
      assert.equal(await section.locator('input').count(),0);assert.equal(await section.getByRole('group').count(),0);
-     const back=section.getByRole('link',{name:c.permissionBack,exact:true});await back.waitFor();
+     if (cause === 'remote_test_only') assert.ok((await section.getByRole('alert').innerText()).includes(
+      locale === 'en' ? 'Choose a test venue here.' : 'Elige aquí un local de prueba.'));
+     const back=section.getByRole('link',{name:locale==='en'?'Account':'Cuenta',exact:true});await back.waitFor();
      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
      if(process.env.REMOTE_REFUSAL_RECEIPT_DIR&&action==='dns'){
       await mkdir(process.env.REMOTE_REFUSAL_RECEIPT_DIR,{recursive:true});await section.scrollIntoViewIfNeeded();

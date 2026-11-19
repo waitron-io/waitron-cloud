@@ -13,6 +13,7 @@ for(const locale of ['en','es'] as const)test('service mail renders fixed '+loca
   assert(mail.text.includes(message.venueId));assert(mail.text.includes('https://cloud.example.test/account'));assert(!mail.text.includes('token='));assert(!mail.text.includes(message.incidentId));
   assert.match(mail.subject,locale==='es'?/local|comprobación/:/venue/);
   if(state==='recovered')assert(mail.text.includes(locale==='es'?'Contacto con Cloud':'Contact with Cloud'));
+  assert(mail.text.includes(locale==='es'?'En Cloud, abre Locales para consultar el estado actual de los servicios.':'In Cloud, open Venues to check current service status.'));
  }
 });
 
@@ -44,7 +45,7 @@ for(const locale of ['en','es'] as const)test('reminder renders the agreed '+loc
  const alert={...message,locale,issue:'public_route_failed' as const,state:'open' as const,notification:'reminder' as const,checkedAt};
  const mail=accountMail(new URL('https://cloud.example.test'),'service_alert',alert);
  assert.equal(mail.subject,locale==='en'?'Waitron Cloud: a venue still needs attention':'Waitron Cloud: un local sigue necesitando atención');
- assert(mail.text.includes(locale==='en'?'This issue is still open. Check your account for current service status.':'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.'));
+ assert(mail.text.includes(locale==='en'?'This issue is still open. In Cloud, open Venues to check current service status.':'Esta incidencia sigue abierta. En Cloud, abre Locales para consultar el estado actual de los servicios.'));
  assert(mail.text.includes(message.venueId));assert(mail.text.includes('https://cloud.example.test/account'));
  assert(mail.text.includes(locale==='en'?'Public website':'Sitio público'));assert(mail.text.includes(locale==='en'?'Sep 25, 2026, 12:00:00 PM UTC':'25 sept 2026, 12:00:00 UTC'));
  assert(!mail.text.includes(message.incidentId));assert(!mail.text.includes('reminder'));assert(!mail.text.includes('token='));

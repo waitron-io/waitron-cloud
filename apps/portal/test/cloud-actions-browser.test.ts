@@ -43,7 +43,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(process.env.CLOUD_ACTION_SCREENSHOTS){await mkdir(process.env.CLOUD_ACTION_SCREENSHOTS,{recursive:true});await page.screenshot({path:`${process.env.CLOUD_ACTION_SCREENSHOTS}/${locale}-${theme}-${width}.png`,fullPage:true});}
   refused=true;await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
   await page.getByRole('alert').waitFor();assert.equal(await page.getByRole('listitem').count(),0);assert.equal(reads,2);
-  await page.getByRole('link',{name:locale==='en'?'Account overview':'Resumen de la cuenta',exact:true}).click();
+  await page.getByRole('link',{name:locale==='en'?'Account':'Cuenta',exact:true}).click();
   assert.equal(new URL(page.url()).pathname,'/account');
   assert.equal(await page.getByRole('link',{name:title,exact:true}).count(),0);
   await page.evaluate(()=>(window as any).app.navigate('/operator/actions'));

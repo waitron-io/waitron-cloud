@@ -61,7 +61,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  }finally{await browser.close();}
 });
 
-test('Stripe test redirect returns to plain account and verifies the saved setup without a browser reference',async()=>{
+test('Stripe test redirect returns to Billing and verifies the saved setup without a browser reference',async()=>{
  const browser=await chromium.launch({headless:true});try{
   const page=await browser.newPage();page.setDefaultTimeout(5000);const server=await fixture(page);await page.goto('https://portal.test/account/billing');
   await page.getByRole('button',{name:'Add or switch test direct debit',exact:true}).click();await page.waitForURL('https://checkout.stripe.com/c/pay/synthetic');server.state='verified';
@@ -194,6 +194,7 @@ test('trial feedback stays above payment-method controls',async()=>{
   await page.route('**/api/account/billing/start-trial',route=>route.fulfill({status:429,headers:{'retry-after':'1'},json:{error:'rate_limited'}}));
   await page.goto('https://portal.test/account/billing');await page.getByRole('button',{name:translations.en.billingStart,exact:true}).click();
   await page.getByRole('alert').filter({hasText:translations.en.limited}).waitFor();
+  await page.getByRole('status').filter({hasText: /^You can try again in/}).waitFor();
   assert.equal(await page.getByRole('region',{name:translations.en.billingMethodsTitle,exact:true}).getByRole('alert').count(),0);
  }finally{await browser.close();}
 });

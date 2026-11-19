@@ -43,7 +43,7 @@ async function account(t: TestContext, billingTrialAvailable = true, enrollmentR
     return endpoint in data ? route.fulfill({json: data[endpoint]})
       : route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
   });
-  return {page, calls, expire() { signedIn = false; }};
+  return {page, calls, expire() { signedIn = false; }, switchAccount() { session.accountId = 'second-owner'; }};
 }
 
 test('the account navigation opens distinct pages and restores the selection on Back and reload', async t => {
@@ -64,6 +64,9 @@ test('the account navigation opens distinct pages and restores the selection on 
   await page.getByRole('heading', {name: 'Your venues', exact: true}).waitFor();
   assert.equal(await page.getByRole('heading', {name: 'Account security', exact: true}).count(), 0);
   assert.ok(!calls.includes('/billing/read'), calls.join(', '));
+  const historyLength = await page.evaluate(() => history.length);
+  await nav.getByRole('link', {name: 'Venues', exact: true}).click();
+  assert.equal(await page.evaluate(() => history.length), historyLength);
 
   await nav.getByRole('link', {name: 'Remote access', exact: true}).click();
   await page.waitForURL(origin + '/account/remote-access');
@@ -144,4 +147,28 @@ test('opening Billing again retries a read interrupted by leaving the page', asy
   } finally {
     release();
   }
+});
+
+test('Billing offers a retry after the read wait when a different account signs in', async t => {
+  const {page, switchAccount} = await account(t);
+  let reads = 0;
+  await page.clock.install();
+  await page.route('**/api/account/billing/read', route => ++reads === 1
+    ? route.fulfill({status: 429, headers: {'retry-after': '20'}, json: {error: 'rate_limited'}})
+    : route.fulfill({json: {venues: []}}));
+  await page.goto(origin + '/account/billing');
+  await page.getByRole('alert').filter({hasText: /Too many requests/}).waitFor();
+  switchAccount();
+  const activity = page.waitForResponse('**/api/account/session/activity');
+  await page.keyboard.press('Tab');
+  assert.equal((await activity).status(), 200);
+  const retry = page.getByRole('button', {name: 'Try again', exact: true});
+  await retry.waitFor();
+  assert.equal(await retry.isDisabled(), true);
+  await page.clock.runFor(21_000);
+  assert.equal(await retry.isEnabled({timeout: 1000}), true);
+  assert.equal(reads, 1);
+  await retry.click();
+  await page.getByRole('heading', {name: 'Connected trial', exact: true}).waitFor();
+  assert.equal(reads, 2);
 });

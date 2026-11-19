@@ -396,10 +396,10 @@ in P1 deployments, qualify the gateway/collector mounts, primary-only reads and
 backup exclusion in that deployment. No deployment is enabled by this change;
 reporting remains disabled in deployments.
 
-### Inspect the last recorded attempt in Account
+### Inspect the last recorded attempt in Remote access
 
-If a venue page is unavailable, open **Remote access** for that venue in
-Account. **Last recorded forwarding attempt** shows the latest accepted gateway
+If a venue page is unavailable, choose **Remote access** in the navigation bar
+and open the affected venue. **Last recorded forwarding attempt** shows the latest accepted gateway
 result, its observation time and its expiry. In Spanish these labels are
 **Acceso remoto** and **Último intento de conexión registrado**.
 Only the current organisation owner can read it.
@@ -421,7 +421,7 @@ The panel clears its evidence before refresh, on account or venue changes, on
 sign-out and when permission is lost. It keeps no browser storage or download.
 Outside probes and installation service reports remain separate observations.
 Visitor responses, aggregate gateway status, diagnostics downloads, logs and
-backups do not carry this private Account record.
+backups do not carry this private record.
 
 ## Inspect staff problem reports
 

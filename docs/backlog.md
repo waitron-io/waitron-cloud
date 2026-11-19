@@ -2826,8 +2826,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   unchanged; PostgreSQL scope checks run in CI.
 - R5 venue panels now distinguish denied permission from request verification.
   Installations, snapshots, diagnostics, usage, remote setup and translation consent
-  ask you to check your account, organisation and venue. Both languages offer Account
-  overview without reloading and Sign out beside the refusal, with retry if sign-out
+  ask you to check your account, organisation and venue. Both languages offer **Account**
+  without reloading and **Sign out** beside the refusal, with retry if sign-out
   fails. Native HTTP/controller and two-venue browser checks cover six reachable
   panels, heading focus and cleared private state; real database/locking checks run
   in CI. Existing permission conditions remain; specific remote refusals get a
@@ -2836,8 +2836,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   in R3. Pairing keeps its existing guidance.
   Remote setup now explains a missing paid trial plan, missing gateway setup,
   a production venue outside the test-only trial and stopped installation access
-  in English and Spanish. Account overview and a read-only installation refresh
-  give you current context; plan changes, gateway provisioning and restoring stopped
+  in English and Spanish. Use **Account** to check your sign-in and refresh installations
+  to check current service status. Plan changes, gateway provisioning and restoring stopped
   access are unavailable here. Shared callers keep `permission_denied`; Account
   exposes only a known refusal cause after its ownership check. Native SQL-boundary,
   API/controller and browser checks cover the mapping; real database and late-DNS

@@ -89,6 +89,8 @@ for(const status of [403,503])test(`unavailable trial chooser ${status} adds no 
   await page.goto('https://portal.test/account/billing');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const billing=(window as any).app.billing;return billing.loadAttempted&&!billing.pending;});
   assert.equal(await page.getByRole('region',{name:translations.en.billingTitle,exact:true}).count(),0);
+  await page.getByText('We could not load billing details.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Try again',exact:true}).isEnabled(),true);
  }finally{await browser.close();}
 });
 

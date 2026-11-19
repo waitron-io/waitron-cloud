@@ -283,9 +283,10 @@ export class PortalApp {
     if (this.sessionPage) void this.session.check();
     this.#offerPasskeys();
   }
-  follow(event: MouseEvent, path: string) {
+  follow(event: MouseEvent, path: string, skipCurrent = false) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); this.navigate(path);
+    event.preventDefault();
+    if (!skipCurrent || path !== this.path) this.navigate(path);
   }
   openAccountSecurity(event: MouseEvent) {
     this.follow(event, '/account');

@@ -8,8 +8,10 @@ import type {LitElement} from 'lit';
 export function billingScreen(app:PortalApp){
  const controller=app.billing,c=app.copy,venue=controller.venue,disabled=controller.pending||!!controller.waiting;
  if (!controller.loaded && !controller.error) {
-  return controller.pending ? html`<wt-spinner .label=${c.wait}></wt-spinner>`
-   : html`<wt-button .disabled=${disabled} @click=${() => {void controller.load();}}>${c.retry}</wt-button>`;
+  return controller.pending
+   ? html`<wt-spinner .label=${c.wait}></wt-spinner>`
+   : html`${controller.loadAttempted ? html`<p role="status">${c.billingReadUnavailable}</p>` : nothing}
+     <wt-button .disabled=${disabled} @click=${() => {void controller.load();}}>${c.retry}</wt-button>`;
  }
  const methodError=controller.error&&(controller.error.startsWith('billingMethod')||['pairEnrollment','actionProofUnavailable','billingProofRequired'].includes(controller.error));
  const draft=controller.taxDraft;

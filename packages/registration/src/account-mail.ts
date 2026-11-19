@@ -78,7 +78,11 @@ export function accountMail(origin: URL, kind: AccountMailKind, message: Account
     };
     const labels=locale==='es'?{disconnected:'Contacto con Cloud',snapshot_stale:'Antigüedad de las instantáneas',verification_failed:'Verificación de instantáneas',public_route_failed:'Sitio público',staff_route_failed:'Acceso del personal',public_probe_stale:'Sitio público',staff_probe_stale:'Acceso del personal',public_record_moved:'Sitio público',staff_record_moved:'Acceso del personal'}:{disconnected:'Contact with Cloud',snapshot_stale:'Snapshot freshness',verification_failed:'Snapshot verification',public_route_failed:'Public website',staff_route_failed:'Staff access',public_probe_stale:'Public website',staff_probe_stale:'Staff access',public_record_moved:'Public website',staff_record_moved:'Staff access'};
     const subject=message.notification==='reminder'?(locale==='es'?'Waitron Cloud: un local sigue necesitando atención':'Waitron Cloud: a venue still needs attention'):subjects[message.state];
-    const detail=message.notification==='reminder'?(locale==='es'?'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.':'This issue is still open. Check your account for current service status.'):message.state==='open'?issues[message.issue]:locale==='es'?'La condición que provocó esta alerta ya no está presente. Consulta el estado actual de los servicios en tu cuenta.':'The condition that caused this alert is no longer present. Check your account for current service status.';
+    const status=locale==='es'?'En Cloud, abre Locales para consultar el estado actual de los servicios.':'In Cloud, open Venues to check current service status.';
+    const detail=message.notification==='reminder'
+      ? (locale==='es'?'Esta incidencia sigue abierta. ':'This issue is still open. ')+status
+      : message.state==='open'?`${issues[message.issue]}\n${status}`
+      : (locale==='es'?'La condición que provocó esta alerta ya no está presente. ':'The condition that caused this alert is no longer present. ')+status;
     const when=(value:string,label:string)=>`${label}: ${new Intl.DateTimeFormat(locale,{dateStyle:'medium',timeStyle:'long',timeZone:'UTC'}).format(new Date(value))}.`;
     return {subject,text:[subject,'',`${locale==='es'?'Local':'Venue'}: ${message.venueId}`,labels[message.issue],detail,...(message.checkedAt?['',when(message.checkedAt,locale==='es'?'Última comprobación externa':'Last external check')]:[]),'',new URL('/account',origin).href].join('\n')};
   }

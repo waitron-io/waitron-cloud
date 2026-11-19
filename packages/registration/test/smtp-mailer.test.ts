@@ -70,7 +70,7 @@ test('reminders render through verified local TLS with stable delivery IDs',asyn
    assert.equal(receipt.messageId,`<${delivery.deliveryId}@example.test>`);const captured=smtp.data.at(-1)!;assert.equal(captured.secure,true);assert.deepEqual(captured.to,['reminder@example.test']);
    // The MIME body uses base64 for accented Spanish text.
    const body=captured.raw.split(/\r\n\r\n/).slice(1).join('\r\n\r\n'),text=/Content-Transfer-Encoding: base64/i.test(captured.raw)?Buffer.from(body.replaceAll(/\s/g,''),'base64').toString():readable(body);
-   assert(text.includes(locale==='en'?'This issue is still open. Check your account for current service status.':'Esta incidencia sigue abierta. Consulta el estado actual de los servicios en tu cuenta.'));assert(text.includes(venueId));assert(text.includes('https://cloud.example.test/account'));assert(!text.includes('notification'));
+   assert(text.includes(locale==='en'?'This issue is still open. In Cloud, open Venues to check current service status.':'Esta incidencia sigue abierta. En Cloud, abre Locales para consultar el estado actual de los servicios.'));assert(text.includes(venueId));assert(text.includes('https://cloud.example.test/account'));assert(!text.includes('notification'));
   }
   assert.equal(smtp.data.length,2);
  }finally{await smtp.close();}

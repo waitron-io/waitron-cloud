@@ -176,7 +176,7 @@ test('independentEmailProcessesClaimReminderOnce',async()=>{
  const peers=[child('mail-once'),child('mail-once')];
  try{await Promise.all(peers.map(p=>p.finished));}finally{for(const p of peers)if(p.handle.exitCode===null)p.handle.kill('SIGTERM');await Promise.allSettled(peers.map(p=>p.finished));}
  const final=(await reminders())[0];assert.equal(final.id,row.id);assert.equal(final.status,'sent');assert.equal(final.attempts,1);assert.equal(final.message_id,null,'local capture commits sent without optional SMTP metadata');
- const captured=await capturedReminders();assert.equal(captured.length,1);assert.equal(captured[0]!.To[0]!.Address,'quiet@example.test');assert(captured[0]!.Text.includes('This issue is still open. Check your account for current service status.'));assert(!captured[0]!.Text.includes((await episode()).id));
+ const captured=await capturedReminders();assert.equal(captured.length,1);assert.equal(captured[0]!.To[0]!.Address,'quiet@example.test');assert(captured[0]!.Text.includes('This issue is still open. In Cloud, open Venues to check current service status.'));assert(!captured[0]!.Text.includes((await episode()).id));
 });
 
 for(const change of ['owner','preference','disabled','verified'] as const)test('due reminder cancels its slot permanently after '+change+' loss',async()=>{
