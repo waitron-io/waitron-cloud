@@ -68,6 +68,13 @@ await assert.rejects(send('control@example.test', 'wrong-password'), {code:'EAUT
 await assert.rejects(send('control@example.invalid', process.env.CLOUD_SMTP_PASSWORD), {code:'EENVELOPE'});
 `;
 
+export function servicesCredentialFiles(smtpPassword, inboxPassword) {
+  return {
+    mail: {'smtp-auth': 'sender:' + smtpPassword + '\n', 'ui-auth': 'inbox:' + inboxPassword + '\n'},
+    corpus: createHash('sha256').update('Synthetic compromised D621 password').digest('hex') + '\n',
+  };
+}
+
 async function configureServices(context, kube, store, custody) {
   const node = context.nodes[0], endpoint = 'https://' + node.ip + ':' + storeNodePort;
   const s3 = storageClient(node, store);
@@ -97,12 +104,11 @@ async function configureServices(context, kube, store, custody) {
   await secret('services-monitor', emailVariables);
   await secret('services-backup', backup);
   await secret('services-email', {...emailVariables, CLOUD_SMTP_USER: 'sender', CLOUD_SMTP_PASSWORD: smtpPassword});
-  await secret('services-mail', {'tls.crt': tls.cert, 'tls.key': tls.key,
-    'smtp-auth': 'sender:' + smtpPassword + '\\n', 'ui-auth': 'inbox:' + inboxPassword + '\\n'});
+  const {mail, corpus} = servicesCredentialFiles(smtpPassword, inboxPassword);
+  await secret('services-mail', {'tls.crt': tls.cert, 'tls.key': tls.key, ...mail});
   await secret('services-proxy-key', {'proxy.pem': tls.cert + tls.key});
   const proxy = (await asset('deploy/test-cloud/proxy.cfg'))
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
-  const corpus = createHash('sha256').update('Synthetic compromised D621 password').digest('hex') + '\\n';
   await create(resource('ConfigMap', 'services-proxy', {data: {'haproxy.cfg': proxy, 'ca.crt': tls.root, 'passwords.sha256': corpus}}));
   await create(resource('ConfigMap', 'services-store-ca', {data: {'ca.crt': store.ca}}));
   return {ca: tls.root, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
@@ -120,7 +126,7 @@ export async function runKubernetesServices(context) {
   await run('docker', ['tag', image, tag]);
   try {
     await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
-    process.stderr.write('Preparing the three PostgreSQL copies and Cloud schema\\n');
+    process.stderr.write('Preparing the three PostgreSQL copies and Cloud schema\n');
     await installServicesDatabase(context, tag);
     return await withStockholmStorageIdentity(context, async (store, custody) => {
       const {ca, mailAuthorization} = await configureServices(context, kube, store, custody);
@@ -154,7 +160,7 @@ export async function runKubernetesServices(context) {
       const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag);
       const verifier = createKubernetesVerifier({template, kube, pod, classicImages: true,
         loadImage: id => loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal)});
-      process.stderr.write('Running authenticated signup, box pairing and native backup verification\\n');
+      process.stderr.write('Running authenticated signup, box pairing and native backup verification\n');
       const result = await runTestCloudClients({image, waitronImage, services: true, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, verifier,
@@ -188,7 +194,7 @@ export async function runKubernetesServices(context) {
       ['verifier', ['verifier', 'docker']], ['job/migrate', ['migrate']], ['job/services-inspection', ['inspect']],
     ]) for (const container of containers) {
       const logs = await kube(['logs', pod, '-c', container, '--tail=20'], undefined, true).catch(() => '');
-      if (logs) process.stderr.write(pod + '/' + container + '\\n' + logs + '\\n');
+      if (logs) process.stderr.write(pod + '/' + container + '\n' + logs + '\n');
     }
     throw error;
   } finally {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 
-import {installServicesDatabase} from './kubernetes-services.mjs';
+import {installServicesDatabase, servicesCredentialFiles} from './kubernetes-services.mjs';
 
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {
   const nodes = [1, 2, 3].map(number => ({name: 'node-' + number, id: 'id-' + number}));
@@ -52,4 +52,11 @@ test('an owned Linux Kind cell signs in and admits a genuine restored backup', {
   assert.equal(services.alteredPublicationRefused, true);
   assert.equal(services.operationsReady, true);
   assert.deepEqual(services.cleanup.remaining, []);
+});
+
+test('rehearsal credential files contain complete password and digest lines', () => {
+  const files = servicesCredentialFiles('synthetic-smtp', 'synthetic-inbox');
+  assert.equal(files.mail['smtp-auth'], 'sender:synthetic-smtp\n');
+  assert.equal(files.mail['ui-auth'], 'inbox:synthetic-inbox\n');
+  assert.match(files.corpus, /^[a-f0-9]{64}\n$/);
 });
