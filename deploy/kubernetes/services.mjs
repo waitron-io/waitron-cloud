@@ -62,12 +62,17 @@ export function servicesVerifier(template, image, revision, nodeName) {
   pod.metadata.namespace = servicesNamespace;
   pod.spec.nodeName = nodeName;
   pod.spec.automountServiceAccountToken = false;
+  pod.spec.securityContext = {...pod.spec.securityContext, fsGroup: 1000};
   delete pod.spec.hostAliases;
   const scratch = {name: 'verifier-scratch', mountPath: verifierScratchPath};
   pod.spec.volumes = [...pod.spec.volumes.filter(row => row.name !== 'config'), caVolume, publicStoreCa,
     {name: scratch.name, hostPath: {path: verifierScratchPath, type: 'Directory'}}];
-  pod.spec.containers.find(row => row.name === 'docker').volumeMounts.push(scratch);
+  const daemon = pod.spec.containers.find(row => row.name === 'docker');
+  daemon.volumeMounts.push(scratch);
+  daemon.args.push('--group=1000');
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
+  // The capability-free worker must own scratch to clear it after the child exits.
+  worker.securityContext = {...worker.securityContext, runAsUser: 1000, runAsGroup: 1000};
   const backup = service(image, 'verifier', 'packages/backups/src/worker-cli.ts', {
     storage: true, secret: 'services-backup', variables: {LOCAL_STACK_CONFIG_DIR: '/run/backup-verifier',
       CLOUD_VERIFIER_OWNER: 'waitron-cloud-test-backup', CLOUD_VERIFIER_IMAGE: '', CLOUD_VERIFIER_WAITRON_REVISION: revision,

@@ -49,7 +49,9 @@ test('the backup worker waits for its exact release image before using its priva
   const revision = 'bd0f485bfc4dd951e69e417d98fbbde194879424';
   const pod = deployment.servicesVerifier({metadata: {name: 'verifier'}, spec: {
     hostAliases: [{ip: 'unused'}], volumes: [{name: 'config', hostPath: {path: '/host'}}, {name: 'socket', emptyDir: {}}],
-    containers: [{name: 'docker', volumeMounts: []}, {name: 'verifier', env: [{name: 'DOCKER_HOST', value: 'unix:///docker-socket/docker.sock'}],
+    containers: [{name: 'docker', args: ['--host=unix:///docker-socket/docker.sock'], volumeMounts: []},
+      {name: 'verifier', securityContext: {capabilities: {drop: ['ALL']}},
+      env: [{name: 'DOCKER_HOST', value: 'unix:///docker-socket/docker.sock'}],
       volumeMounts: [{name: 'config', mountPath: '/run/local-stack'}, {name: 'socket', mountPath: '/docker-socket'}]}],
   }}, 'owned:cloud', revision, 'owned-control-plane');
   const worker = pod.spec.containers.find(row => row.name === 'verifier');
@@ -72,6 +74,11 @@ test('the backup worker waits for its exact release image before using its priva
   }
   assert.equal(env.DOCKER_HOST, 'unix:///docker-socket/docker.sock');
   assert.deepEqual(worker.envFrom, [{secretRef: {name: 'services-backup'}}]);
+  assert.equal(worker.securityContext.runAsUser, 1000);
+  assert.equal(worker.securityContext.runAsGroup, 1000);
+  assert.deepEqual(worker.securityContext.capabilities, {drop: ['ALL']});
+  assert.equal(pod.spec.securityContext.fsGroup, 1000);
+  assert.ok(pod.spec.containers.find(row => row.name === 'docker').args.includes('--group=1000'));
 });
 
 test('snapshot inspection uses worker storage credentials without account signing keys', () => {
