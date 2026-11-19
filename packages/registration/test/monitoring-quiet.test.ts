@@ -131,6 +131,11 @@ test('enabledTimingsDoNotAdmitLegacyMailAfterUpgrade',async()=>{
    const tables=['cloud_accounts','cloud_credentials','organisations','organisation_memberships','legal_businesses','venues','installations','installation_services','account_alert_preferences'];
    for(const table of tables){
     const columns=table==='cloud_accounts'?'id,disabled_at':table==='organisations'?'id,name':table==='venues'?'id,organisation_id,legal_business_id,id,environment':table==='legal_businesses'?'id,organisation_id,name,country_code':'*';
+    if(table==='installations'){
+     const fields='id,venue_id,public_key,revoked_at,configuration_revision,last_contact_at,lease_expires_at,superseded_by';
+     await client.query('INSERT INTO '+legacy.schema+'.installations ('+fields+') SELECT '+fields+' FROM installations');
+     continue;
+    }
     await client.query('INSERT INTO '+legacy.schema+'.'+table+' SELECT '+columns+' FROM '+table+(table==='installation_services'?" WHERE service<>'content_translation'":''));
    }
   }finally{client.release();}
