@@ -8,7 +8,7 @@ import {translations} from '../src/locale.ts';
 const first='20000000-0000-4000-8000-000000000001',second='20000000-0000-4000-8000-000000000002';
 const initial=[first,second].map((id,index)=>({
  installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
- overview:{organisationName:index?'Z second organisation':'A first organisation',businessName:index?'Second venue':'First venue',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},
+ overview:{organisationName:index?'Z second organisation':'A first organisation',businessName:'Fixture SL',venueName:index?'Second venue':'First venue',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},
  services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null})),
 }));
 const bundle=await build({stdin:{contents:`
@@ -37,7 +37,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   for(const change of ['permission','organisation','fallback','unchanged'] as const)await t.test(`${change}: only the still offered confirmation remains`,async()=>{
    installations=initial;
    await page.evaluate(async first=>{const controller=(window as any).app.installations;await controller.load();controller.selectOrganisation(first);},first);
-   await page.locator('article.installation').filter({has:page.getByRole('heading',{name:'First venue · 20000000',exact:true})}).getByRole('button',{name:c.stopAccess,exact:true}).click();
+   await page.locator('article.installation').filter({has:page.getByRole('heading',{name:'First venue',exact:true})}).getByRole('button',{name:c.stopAccess,exact:true}).click();
    assert.equal(await prompt.count(),1);assert.equal(await prompt.getByRole('button',{name:c.confirmStop,exact:true}).isEnabled(),true);
    if(process.env.INSTALLATION_STOP_RECEIPT_DIR&&change==='permission'){
     await mkdir(process.env.INSTALLATION_STOP_RECEIPT_DIR,{recursive:true});
