@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process';
 import test from 'node:test';
 import {promisify} from 'node:util';
 
-test('real scoped grants expire and renew while a Kind machine is stopped', {
+test('a real grant renews during a Kind machine outage and reads after rejoin', {
   skip: process.env.TEST_KUBERNETES_STORAGE_IDENTITY !== '1', timeout: 2_700_000,
 }, async () => {
   const child = promisify(execFile)(process.execPath, ['scripts/kubernetes-check.mjs', '--storage-identity'],
@@ -16,5 +16,6 @@ test('real scoped grants expire and renew while a Kind machine is stopped', {
   assert.notEqual(storage.issuerSurvivor, storage.stopped);
   assert.ok(storage.failoverMs <= 90_000);
   assert.equal(storage.expiredGrantRefused, true);
+  assert.equal(storage.renewedGrantReadAfterRejoin, true);
   console.log(JSON.stringify(storage));
 });

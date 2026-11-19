@@ -31,8 +31,9 @@ installer. Its real exchange checks all three temporary fields, a maximum 901-se
 encrypted bytes, wrong audience/signature/expired-token refusals and scoped operations. Prove
 each policy guard with a disposable control. Replace an identity pod and compare its public key;
 reopen a synthetic backup-key envelope with custody reloaded. Time the 90-second outage leg
-around the actual 900-second expiry so a surviving store peer refuses an expired grant and accepts
-the renewal while the node is down. Run with `TEST_KUBERNETES_STORAGE_IDENTITY=1` on the approved
+around the actual 900-second expiry so a surviving store peer refuses an expired grant and issues
+a fresh one while the node is down. Verify the encrypted read with that grant after the node
+rejoins. Run with `TEST_KUBERNETES_STORAGE_IDENTITY=1` on the approved
 Linux guest. Run the renderer and `scripts/kubernetes-storage.test.mjs` files locally. Update
 D621's existing `docs/backlog.md` entry. Estimate 340–450 implementation and 180–250 test lines.
 
@@ -42,3 +43,7 @@ was observed in the Linux outage. Preserve both observations and check issuance 
 outage leg. The watcher cleared the plan at 01:14 on 19 November 2026. Keep the existing retry
 behavior unless the real credential exchange returns a 503 during that outage. If it does, add a
 bounded retry with a failing test in this slice. Store repair remains open.
+
+On 19 November at 02:36 the watcher cleared the read after rejoin in `questions.md` for Lane G.
+Encrypted reads during the outage returned HTTP 503 `SlowDownRead` and remain open under
+`STORAGE-READ-DURING-OUTAGE`. Expiry refusal and grant issuance still run during the outage.

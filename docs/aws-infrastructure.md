@@ -1235,9 +1235,10 @@ run 9.
 Run `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
 in the same x86-64 Linux guest to check temporary grants. The rehearsal uses the pinned
 MinIO admin client and Cloud's real credential exchange. It checks object and method
-permissions and reads an encrypted object through a surviving machine. It checks that
-the same read is refused after expiry, then gets a fresh grant while the outage continues.
-Allow at least 15 minutes for the original grant to expire.
+permissions, then verifies that a surviving machine refuses the expired grant and issues
+a fresh grant during the outage. After the stopped machine rejoins, it uses that fresh
+grant to read the encrypted object. Reads during the outage have returned HTTP 503 and
+remain under investigation. Allow at least 15 minutes for the original grant to expire.
 
 The bounded Stockholm launcher transfers the same test store image and waits
 for all six peers after joining the three machines. It runs the store in
