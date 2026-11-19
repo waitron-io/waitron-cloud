@@ -2311,9 +2311,10 @@ test reports their timing on failure. The historical CI order and a separate
 changed-email sign-in wait remain untraced.
 See [the recovery and changed-email evidence](backlog/portal-panel-waits.md#owner-recovery-enrolment-wait).
 
-PR #1282 also exposed an owner-handover enrolment wait. A controlled request delay
-reproduces it across an authenticator-code boundary; the original CI cause remains
-unproved. See [the recorded timing probe](backlog/portal-panel-waits.md#owner-handover-enrolment-wait).
+The owner-handover fixture now holds its authenticator clock through a code
+boundary. The cause of the earlier CI waits remains unverified. Capture the
+activation response if the wait returns.
+See [the Linux reproduction and fix](backlog/portal-panel-waits.md#owner-handover-enrolment-wait).
 
 15 November 2026: [run 43694844056, portal job 132753088334](https://github.com/waitron-io/waitron-cloud/actions/runs/43694844056/job/132753088334) has one `account_without_registry es light 1280` sign-out timeout waiting four seconds for the sign-in heading (`fiscal-registry-removed-browser.test.ts:63`); no matching history was found, and the cause remains unknown. Preserve every assertion and deadline; a recurrence needs priority root-cause investigation.
 

@@ -14,8 +14,8 @@ export async function prepareConnectionProof(pool:Pool,accountId:string,token:st
  await openProofWindow(pool,token);
 }
 
-export function actionTestTotp(secret:string,offset=0){
+export function actionTestTotp(secret:string,offset=0,nowMs=Date.now()){
  const bits=[...secret].map(c=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5,'0')).join('');
- const key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(Date.now()/30000)+offset));
+ const key=Buffer.from(bits.match(/.{8}/g)!.map(b=>parseInt(b,2))),counter=Buffer.alloc(8);counter.writeBigUInt64BE(BigInt(Math.floor(nowMs/30000)+offset));
  const mac=createHmac('sha1',key).update(counter).digest();return ((mac.readUInt32BE(mac[19]!&15)&0x7fffffff)%1000000).toString().padStart(6,'0');
 }

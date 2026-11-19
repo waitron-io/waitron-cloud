@@ -5,6 +5,7 @@ import {translations} from '../src/locale.ts';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {test} from 'node:test';
+import type {PoolClient,QueryResult} from 'pg';
 import {SignupStore} from '@waitron-cloud/registration';
 import {addVirtualAuthenticator,contextSignIn,completeBrowserEmail,mailFor,prepareBrowserActionWindow,startPortalFixture} from './fixtures.ts';
 const password='A real ownership handover password';
@@ -89,6 +90,42 @@ test('recipient’s first passkey preserves the offer but requires a new proof b
 
 test('first-time recipients verify, sign up without a business, enroll and explicitly accept',async t=>{
  const f=await startPortalFixture(undefined,undefined,{keys:{activeKeyId:'test',keys:{test:'07'.repeat(32)}},policy:emailLoginPolicy});
+ const pool=f.db.pool,queries=new Map<PoolClient,PoolClient['query']>();
+ let factorClock:{accountId:string;now:Date;reads:number;sessionReads:number}|undefined;
+ const acquire=(client:PoolClient)=>{
+  const query=client.query;
+  queries.set(client,query);
+  let factorAccountId:string|undefined,sessionClockNext=false;
+  client.query=((...args:unknown[])=>{
+   const result=Reflect.apply(query,client,args);
+   const [sql,values,callback]=args;
+   if(typeof sql!=='string'||typeof values==='function'||typeof callback==='function')return result;
+   const clock=factorClock;
+   const readClock=clock&&factorAccountId===clock.accountId&&sql==='SELECT clock_timestamp() AS now';
+   // Session expiry uses the database time read immediately after the session row lock.
+   const readSessionTime=sessionClockNext;
+   sessionClockNext=sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash FROM cloud_sessions');
+   if(sql==='SELECT * FROM cloud_authenticator_factors WHERE account_id=$1 FOR UPDATE'&&Array.isArray(values)){
+    factorAccountId=values[0];
+   }
+   if(!readClock)return result;
+   return result.then((actual:QueryResult)=>{
+    if(readSessionTime){
+     clock.sessionReads++;
+     return actual;
+    }
+    clock.reads++;
+    return {...actual,rows:[{...actual.rows[0],now:clock.now}]};
+   });
+  }) as PoolClient['query'];
+ };
+ const release=(_error:Error|undefined,client:PoolClient)=>{
+  const query=queries.get(client);
+  if(query)client.query=query;
+  queries.delete(client);
+ };
+ pool.on('acquire',acquire);
+ pool.on('release',release);
  try{for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark'] as const)for(const width of [390,1280]){
   await f.db.pool.query('DELETE FROM account_rate_limits');
   const c=translations[locale],senderEmail=`sender-${randomUUID()}@example.test`,email=`first-${randomUUID()}@example.test`,signup=new SignupStore(f.db.pool,f.db.outbox);
@@ -115,16 +152,40 @@ test('first-time recipients verify, sign up without a business, enroll and expli
    await page.getByRole('button',{name:c.actionProofEmail,exact:true}).click();await page.locator('input[name=actionProofCode]').waitFor();await f.drainMail();
    const proofMail=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence),code=proofMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
    await page.locator('input[name=actionProofCode]').fill(code);await page.locator('#action-proof-verify').click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
-   await look('pending');await page.locator('#factor-enable').click();await page.locator('.factor-secret').waitFor();const secret=(await page.locator('.factor-secret').textContent())!;
-   await page.getByLabel(c.factorConfirmation,{exact:true}).fill(actionTestTotp(secret,-1));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.locator('.factor-codes').waitFor();await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();
-   await login();await page.locator('input[name=factorProof]').fill(actionTestTotp(secret));await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
+   await look('pending');
+   // Keep the fixture codes outside the live window so their validation must use fixture time.
+   const {now}=(await pool.query<{now:Date}>("SELECT clock_timestamp() - interval '2 minutes' AS now")).rows[0]!;
+   const clock=factorClock={accountId:recipient,now,reads:0,sessionReads:0};
+   await page.locator('#factor-enable').click();await page.locator('.factor-secret').waitFor();const secret=(await page.locator('.factor-secret').textContent())!;
+   let reads=clock.reads,sessionReads=clock.sessionReads;
+   await page.getByLabel(c.factorConfirmation,{exact:true}).fill(actionTestTotp(secret,-1,now.getTime()));await page.getByRole('button',{name:c.factorActivate,exact:true}).click();await page.locator('.factor-codes').waitFor();
+   assert.ok(clock.reads>reads,'activation reads the controlled factor clock');
+   assert.ok(clock.sessionReads>sessionReads,'activation checks session expiry against live time');
+   await page.getByRole('button',{name:c.factorCodesSaved,exact:true}).click();
+   await login();await page.locator('input[name=factorProof]').fill(actionTestTotp(secret,0,now.getTime()));
+   reads=clock.reads;
+   await page.getByRole('button',{name:c.factorVerify,exact:true}).click();
    const incoming=page.locator('#owner-transfer-section'),accept=locale==='en'?'Accept handover':'Aceptar traspaso';await incoming.getByRole('button',{name:accept,exact:true}).waitFor();
-   await page.reload();await incoming.getByRole('button',{name:accept,exact:true}).waitFor();await page.locator('input[name=actionProofCode]').fill(actionTestTotp(secret,1));await page.getByRole('button',{name:c.factorTotp,exact:true}).click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+   assert.ok(clock.reads>reads,'sign-in reads the controlled factor clock');
+   await page.reload();await incoming.getByRole('button',{name:accept,exact:true}).waitFor();await page.locator('input[name=actionProofCode]').fill(actionTestTotp(secret,1,now.getTime()));
+   reads=clock.reads;sessionReads=clock.sessionReads;
+   await page.getByRole('button',{name:c.factorTotp,exact:true}).click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
+   assert.ok(clock.reads>reads,'handover proof reads the controlled factor clock');
+   assert.ok(clock.sessionReads>sessionReads,'handover proof checks session expiry against live time');
+   factorClock=undefined;
+   const step=Math.floor(now.getTime()/30_000);
+   const replays=await pool.query<{time_step:string}>('SELECT time_step FROM cloud_factor_replays WHERE account_id=$1 ORDER BY time_step',[recipient]);
+   assert.deepEqual(replays.rows.map(row=>Number(row.time_step)),[step-1,step,step+1]);
    await incoming.getByText(senderEmail,{exact:true}).waitFor();await incoming.getByRole('button',{name:accept,exact:true}).click();await incoming.getByText(locale==='en'?'Accepted':'Aceptado',{exact:true}).waitFor();await look('accepted');
    assert.equal((await f.db.pool.query('SELECT state FROM owner_transfers WHERE id=$1',[offer.id])).rows[0].state,'accepted');
    assert.deepEqual((await f.db.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner',[sender.organisationId])).rows,[{account_id:recipient}]);
-  }finally{await sending.close();await context.close();}
- }}finally{await f.close();}
+  }finally{factorClock=undefined;await sending.close();await context.close();}
+ }}finally{
+  pool.off('acquire',acquire);
+  pool.off('release',release);
+  for(const [client,query] of queries)client.query=query;
+  await f.close();
+ }
 });
 
 test('unavailable handover keeps the verified link usable for business signup in both languages',async()=>{
