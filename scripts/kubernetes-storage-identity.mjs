@@ -96,16 +96,18 @@ async function checkRejectedTokens(custody, role, endpoint, ca, scope) {
   } finally { client.destroy(); }
 }
 
-async function reportGrantTiming({nodes, kube, signal}, stoppedName, since) {
+export async function reportGrantTiming({nodes, kube, signal}, stoppedName, since) {
   const peers = nodes.flatMap((node, index) => node.name === stoppedName ? [] : [2 * index, 2 * index + 1]);
-  await Promise.all(peers.map(async index => {
+  const found = await Promise.all(peers.map(async index => {
     const name = 'store-' + index;
     const output = await kube(['-n', storageNamespace, 'logs', name, '--since-time=' + since, '--timestamps'],
       {signal, timeout: 10_000}).catch(() => null);
     const timings = output?.match(/^\S+ WAITRON grant [a-z-]+ elapsed=[\d.µa-z]+$/gm);
     if (timings?.length) process.stderr.write(name + ' grant timing:\n' + timings.join('\n') + '\n');
     else if (output === null) process.stderr.write(name + ' grant timing unavailable\n');
+    return Boolean(timings?.length);
   }));
+  if (!found.some(Boolean)) process.stderr.write('No grant timing markers found on surviving store peers\n');
 }
 
 async function checkGrants(context, account, custodyDirectory) {

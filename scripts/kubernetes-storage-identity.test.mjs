@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import test from 'node:test';
 import {promisify} from 'node:util';
+import {reportGrantTiming} from './kubernetes-storage-identity.mjs';
 import {withStockholmStore} from './kubernetes-storage-proof.mjs';
 
 test('only the storage identity rehearsal builds a store with grant timing', async () => {
@@ -22,6 +23,15 @@ test('only the storage identity rehearsal builds a store with grant timing', asy
   }
 });
 
+test('the grant timing report says when no surviving store logged a phase', async ({mock}) => {
+  const nodes = ['first', 'second', 'third'].map(name => ({name}));
+  const output = mock.method(process.stderr, 'write', () => true);
+  await reportGrantTiming({nodes, kube: async () => '2026-11-19T05:00:01Z unrelated store record'},
+    'first', '2026-11-19T05:00:00Z');
+  assert.deepEqual(output.mock.calls.map(call => call.arguments[0]),
+    ['No grant timing markers found on surviving store peers\n']);
+});
+
 test('a real grant renews during a Kind machine outage and reads after rejoin', {
   skip: process.env.TEST_KUBERNETES_STORAGE_IDENTITY !== '1', timeout: 2_700_000,
 }, async () => {
@@ -37,8 +47,10 @@ test('a real grant renews during a Kind machine outage and reads after rejoin', 
   assert.equal(storage.expiredGrantRefused, true);
   assert.equal(storage.renewedGrantReadAfterRejoin, true);
   assert.match(stderr, /WAITRON grant validation-start elapsed=/);
+  assert.match(stderr, /WAITRON grant validation-end elapsed=/);
   assert.match(stderr, /WAITRON grant save-start elapsed=/);
   assert.match(stderr, /WAITRON grant peer-reload-start elapsed=/);
+  assert.match(stderr, /WAITRON grant peer-reload-end elapsed=/);
   assert.match(stderr, /WAITRON grant response-ready elapsed=/);
   console.log(JSON.stringify(storage));
 });

@@ -89,7 +89,8 @@ next two, the store refused a multipart completion request with HTTP 503
 `SlowDownWrite` where the missing-part check expected `InvalidPart`. In the
 last control, the Kubernetes endpoint snapshot still listed the stopped DNS
 host as ready (`post-land-dns-host-loss-live.log`, lines 75–86 and 438–476).
-Diagnosing that refusal is a prerequisite for the timed dry run.
+Diagnosing that refusal is a prerequisite for the timed dry run. Lane G keeps
+the 19 November logs cited here under `receipts/storage-read-during-outage/`.
 
 With DNS placement fixed, one scoped grant renewal hit Cloud's ten-second
 deadline while the machine was still down (`placement-storage-identity-live.log`,
