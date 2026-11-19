@@ -503,6 +503,136 @@ The [owner’s Amazon access steps](test-cloud-amazon-access.md) are still requi
 There is no dedicated launch profile yet. Do not substitute the staging or D618
 profile, create the paid DNS zone or request production sending access.
 
+## Rehearse backup on the Amazon test Cloud
+
+Use the exact [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box).
+Transfer the image privately and confirm its full `sha256:` image ID on the
+test host. Transfer `deploy/test-cloud/compose.amazon-backups.yaml` with the
+other deployment files. Set `CLOUD_TEST_AMAZON_VERIFIER_IMAGE` to that ID for the
+driver's Amazon `up`. The override enables one storage upload path on the
+existing account HTTPS name and starts the trusted backup worker. That worker
+controls Docker and can act as root on the host. The proxy verifies the storage
+server against the private local CA's certificate.
+The restore child has no network, 1 GiB of RAM and one private 1 GiB disk
+workspace. The worker has a separate 1 GiB disk for its staged download.
+Use the existing host disk and keep at least 8 GiB free after allocating both
+filesystems. Keep the trial archive small enough for its expanded data and
+temporary copies to fit. The in-memory workspace is capped at 256 MiB and the
+pinned Waitron release reserves 256 MiB free before it can expand a backup.
+The disk workspace leaves room for expanded files within the existing RAM limit.
+
+On first setup, run these commands on the test host as root. The `work`
+directories live inside the mounted filesystems, so an absent mount leaves
+Compose with no directory to bind.
+
+```sh
+(
+  set -eu
+  stages=/opt/waitron-cloud/amazon-backup-stages
+  test "$(df -Pk /opt/waitron-cloud | awk 'END {print $4}')" -ge 10485760
+  mkdir -m 0700 "$stages"
+  for stage in worker verifier; do
+    mkdir -p "$stages/$stage/mount"
+    fallocate -l 1G "$stages/$stage/disk"
+    mkfs.ext4 -q -m 0 "$stages/$stage/disk"
+    mount -o loop,nodev,nosuid,noexec "$stages/$stage/disk" "$stages/$stage/mount"
+  done
+  install -d -m 0700 "$stages/worker/mount/work"
+  install -d -m 0700 -o 1000 -g 1000 "$stages/verifier/mount/work"
+  docker volume create --driver local \
+    --label cloud.backup-verifier.scratch=waitron-cloud-test-backup \
+    --opt type=none --opt o=bind --opt "device=$stages/verifier/mount/work" \
+    amazon-test-verifier-scratch
+  test "$(df -Pk "$stages" | awk 'END {print $4}')" -ge 8388608
+)
+```
+
+After a reboot, remount the existing filesystems as root before starting the
+backup worker.
+
+```sh
+(
+  set -eu
+  stages=/opt/waitron-cloud/amazon-backup-stages
+  for stage in worker verifier; do
+    mount -o loop,nodev,nosuid,noexec "$stages/$stage/disk" "$stages/$stage/mount"
+  done
+  test "$(df -Pk "$stages" | awk 'END {print $4}')" -ge 8388608
+)
+```
+
+Wait until Juniper Test Cafe is paired, then privately confirm its active test
+installation and Connected level. Use the following from the existing Amazon
+deployment directory. Set `INSTALLATION_ID` to the confirmed installation ID
+and use the same verifier ID as startup. Running this selects the policy for the
+test Cloud database, so stop if any other venue has retained backup storage.
+
+```sh
+docker compose --env-file deploy/test-cloud/test.env \
+  -f compose.yaml -f deploy/test-cloud/compose.yaml \
+  -f deploy/test-cloud/compose.amazon.yaml exec -T account \
+  node --input-type=module - "$INSTALLATION_ID" "$CLOUD_TEST_AMAZON_VERIFIER_IMAGE" <<'JS'
+import assert from 'node:assert/strict';
+import {Agent} from 'node:https';
+import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+import {loadRuntime, runtimeEnvironment} from './deploy/local-stack/runtime.mjs';
+import {openTestCaptureRuntime} from './deploy/test-cloud/service-runtime.mjs';
+import {BackupCatalogue} from './packages/backups/src/catalogue.ts';
+import {setVerificationPolicy} from './packages/backups/src/verification-admission.ts';
+import {transaction} from './packages/registration/src/transaction.ts';
+const [installation, image] = process.argv.slice(2);
+assert.match(image, /^sha256:[a-f0-9]{64}$/);
+const require = createRequire(process.cwd() + '/packages/backups/package.json');
+const {Pool} = require('pg');
+const {S3Client, CreateBucketCommand} = require('@aws-sdk/client-s3');
+const directory = '/run/local-stack', mode = 'test-venue-levels';
+const config = await loadRuntime(directory);
+const pool = new Pool({connectionString: runtimeEnvironment('migrate', config).DATABASE_URL});
+const target = JSON.parse(await readFile('./deploy/backup-verifier/amazon-test-target.json'));
+let runtime, storage;
+try {
+  const {rows: [venue]} = await pool.query(`
+    SELECT v.id FROM venues v JOIN installations i ON i.venue_id=v.id
+    WHERE i.id=$1 AND v.environment='test' AND i.revoked_at IS NULL
+      AND i.superseded_by IS NULL`, [installation]);
+  assert.ok(venue);
+  const {rowCount} = await pool.query('SELECT 1 FROM backup_locations WHERE venue_id<>$1', [venue.id]);
+  assert.equal(rowCount, 0);
+  const bucket = 'venue-' + venue.id, endpoint = 'https://waitron.local:8333', region = 'local';
+  const ca = await readFile(directory + '/lan/ca.pem');
+  storage = new S3Client({endpoint, region, forcePathStyle:true, requestHandler:{httpsAgent:new Agent({ca})}, credentials:{
+    accessKeyId:config.storage.accessKeyId, secretAccessKey:config.storage.secretAccessKey
+  }});
+  try { await storage.send(new CreateBucketCommand({Bucket:bucket}), {abortSignal:AbortSignal.timeout(10000)}); }
+  catch (error) { if (error.name !== 'BucketAlreadyOwnedByYou') throw error; }
+  runtime = await openTestCaptureRuntime({pool, directory, mode});
+  await new BackupCatalogue(pool, runtime.options.vault, runtime.options.objects, mode)
+    .provision(installation, {endpoint, bucket, region});
+  await transaction(pool, client => setVerificationPolicy(client, target, 'local.waitron-verifier@' + image, false));
+  console.log('Ready for the agreed synthetic capture');
+} finally { runtime?.close(); storage?.destroy(); await pool.end(); }
+JS
+```
+
+Request one backup from the paired box. Read the capture's latest attempt in the
+private database. Join `backup_points.last_attempt_id` to
+`backup_verification_attempts.id` and compare the capture ID, archive digest and
+byte count with the box's report. Require `admitted_at`, `status='passed'`,
+`cleanup_confirmed=true`, the current policy revision and image, and each
+required module's passing checks. Confirm the verifier child ID is absent from
+Docker. Show the owner this result and confirm Staff access still works. The
+portal row stays pending because recovery approval is off. Its normal 48-hour
+stale backup notice can still appear.
+
+To turn the route off, stop the backup worker from the owned deployment using
+the same four Compose files. Pass `CLOUD_VERIFIER_IMAGE` with the worker's
+current image ID to that Compose command. Stop the worker before unmounting
+either disk workspace. Then unset
+`CLOUD_TEST_AMAZON_VERIFIER_IMAGE` and run Amazon `up` again. Keep both `disk` files and the private storage,
+configuration, verifier state and database volumes for rollback. Confirm an upload to the former public path
+cannot reach storage and the account remains healthy.
+
 ## Trust the public CA
 
 Bootstrap generates the account keys, database password, local CA and leaf private keys inside the private configuration volume. No generated secret is written into the host deployment directory. Restart keeps the same identity; partial state, changed certificates and weakened permissions fail closed.

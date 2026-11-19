@@ -1074,8 +1074,10 @@ implementation or production evidence.
   joint box handoff qualification remain open. A fresh named pairing on the Amazon
   test Cloud remains part of the joint box trial after both builds speak pairing
   version 3. The [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box)
-  uses the installed test box release. The upload, test worker setup and
-  synthetic backup restore check still need the fresh pairing.
+  uses the installed test box release. The [Amazon backup rehearsal](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud)
+  documents the upload route and disk workspace for the isolated restore worker.
+  The live capture and guided result still need the fresh synthetic pairing.
+  Recovery approval remains off.
 
   Automatic remote access starts from the box's signed tunnel key in venue-level
   test mode. The focused worker test starts the Connected trial through the

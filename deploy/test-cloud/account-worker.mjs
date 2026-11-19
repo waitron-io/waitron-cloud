@@ -61,7 +61,9 @@ try {
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
-    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory}):undefined;
+    const uploadOrigin=process.env.CLOUD_TEST_AMAZON_BACKUPS==='1'?config.portalOrigin:undefined;
+    if(uploadOrigin!==undefined&&(planMode!=='test-venue-levels'||process.env.NODE_ENV==='production'))throw Error('test_cloud.amazon_backups');
+    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory,uploadOrigin}):undefined;
     let relay;
     try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
     catch{console.error('Test relay startup failed; restore private keys and check schema');}

@@ -229,3 +229,93 @@ test('Amazon startup monitoring retains a healthy small host for all three sampl
  for(let n=0;n<3;n++){t.mock.timers.tick(5000);await new Promise(setImmediate);}
  const result=await outcome;assert.equal(result.error,undefined);assert.deepEqual(result.value.ids,[id]);
 });
+
+const amazonVerifier='sha256:'+'e'.repeat(64);
+function amazonBackupDeployment(){
+ const value=amazonDeployment(),services=value.services;
+ services.account={...services.account};
+ for(const name of ['account','bootstrap','proxy'])
+  services[name].environment={...services[name].environment,CLOUD_TEST_AMAZON_BACKUPS:'1'};
+ services.account.environment.TEST_CLOUD_AMAZON='1';
+ services['backup-worker']={
+  image,mem_limit:144*1024*1024,read_only:true,
+  cap_drop:['ALL'],cap_add:['DAC_OVERRIDE','FOWNER'],security_opt:['no-new-privileges:true'],
+  environment:{...services.account.environment,CLOUD_VERIFIER_IMAGE:amazonVerifier,
+   CLOUD_VERIFIER_SCRATCH_VOLUME:'amazon-test-verifier-scratch',CLOUD_BACKUP_STAGE_ROOT:'/run/backup-stage'},
+  volumes:[
+   {type:'volume',source:'local-stack-config',target:'/run/local-stack',read_only:true},
+   {type:'volume',source:'test-backup-verifier-state',target:'/run/backup-verifier'},
+   {type:'bind',source:'/var/run/docker.sock',target:'/var/run/docker.sock',read_only:true,bind:{create_host_path:false}},
+   {type:'bind',source:'/opt/waitron-cloud/amazon-backup-stages/worker/mount/work',target:'/run/backup-stage',bind:{create_host_path:false}},
+   {type:'bind',source:'/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work',target:'/opt/waitron-cloud/amazon-backup-stages/verifier/mount/work',bind:{create_host_path:false}}
+  ]
+ };
+ return value;
+}
+
+test('Amazon deployment admits Docker control and private writable state only for the explicitly selected backup worker',async()=>{
+ const {validateDeployment}=await api(),options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',backupVerifierImage:amazonVerifier};
+ assert.equal(validateDeployment(amazonBackupDeployment(),options).ready,true);
+ assert.throws(()=>validateDeployment(amazonBackupDeployment(),{...options,backupVerifierImage:undefined}),/test_cloud.rendered/);
+ for(const breakIsolation of [
+  s=>{s.account.volumes=[s['backup-worker'].volumes[2]];},
+  s=>{s.account.volumes=[s['backup-worker'].volumes[1]];},
+  s=>{s['backup-worker'].volumes.pop();},
+  s=>{s['backup-worker'].volumes.splice(3,1);},
+  s=>{s['backup-worker'].volumes[3].source='/tmp/unbounded-stage';},
+  s=>{s['backup-worker'].volumes[3].target='/tmp/misplaced-stage';},
+  s=>{s['backup-worker'].volumes[3].read_only=true;},
+  s=>{s['backup-worker'].volumes[4].target='/tmp/misplaced-scratch';},
+  s=>{s['backup-worker'].volumes[4].read_only=true;},
+  s=>{s['backup-worker'].volumes[3].bind.create_host_path=true;},
+  s=>{s.account.volumes=[s['backup-worker'].volumes[3]];},
+  s=>{s['backup-worker'].cap_add.push('SYS_ADMIN');},
+  s=>{s['backup-worker'].cap_drop=[];},
+  s=>{s['backup-worker'].security_opt=[];},
+  s=>{delete s['backup-worker'].environment.CLOUD_BACKUP_STAGE_ROOT;},
+  s=>{s['backup-worker'].volumes.push({type:'volume',source:'unrelated',target:'/extra'});},
+  s=>{s['backup-worker'].read_only=false;},
+  s=>{s['backup-worker'].ports=[{host_ip:'127.0.0.1',published:'9000',target:9000}];},
+  s=>{delete s['backup-worker'].environment.TEST_CLOUD_AMAZON;},
+  s=>{s['backup-worker'].volumes[2].bind.create_host_path=true;},
+  s=>{s['email-worker']={...s['email-worker'],environment:{...s['email-worker'].environment,CLOUD_TEST_AMAZON_BACKUPS:'1'}};},
+  s=>{s['backup-worker'].volumes[0].read_only=false;},
+  s=>{s['backup-worker'].environment.CLOUD_VERIFIER_IMAGE=image;},
+  s=>{s['backup-worker'].environment.CLOUD_VERIFIER_SCRATCH_VOLUME='disk';},
+  s=>{s['backup-worker'].profiles=['unavailable'];},
+  s=>{delete s.proxy.environment.CLOUD_TEST_AMAZON_BACKUPS;}
+ ]){
+  const value=amazonBackupDeployment();breakIsolation(value.services);assert.throws(()=>validateDeployment(value,options),/test_cloud.rendered/);
+ }
+});
+
+test('Amazon admission accepts Compose JSON that omits false from long-form binds',async()=>{
+ const {validateDeployment}=await api(),value=amazonBackupDeployment();
+ const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',backupVerifierImage:amazonVerifier};
+ for(const mount of value.services['backup-worker'].volumes.filter(v=>v.type==='bind'))mount.bind={};
+ assert.equal(validateDeployment(value,options).ready,true);
+});
+
+test('the driver enables the Amazon backup override only for an explicit immutable image',async()=>{
+ const {deploy}=await api(),calls=[],id='d'.repeat(64);let reads=0;
+ const execute=async(_command,args,{environment}={})=>{
+  calls.push({args,environment});
+  if(args[0]==='image')return JSON.stringify({Id:args[2],Architecture:'amd64',Os:'linux'});
+  if(args.includes('config'))return JSON.stringify(amazonBackupDeployment());
+  return '';
+ };
+ const options={image,target:'amazon',origin:'https://cloud.example.test',certificateSource:'/private/certificates',backupVerifierImage:amazonVerifier,execute,
+  inventory:()=>({...good,availableMiB:2500,freeGiB:12,containers:reads++===0?[]:[{id,project:'waitron-cloud-test'}]}),settledSamples:0};
+ await deploy('up',options);
+ assert.ok(calls.some(c=>c.args[0]==='image'&&c.args[2]===amazonVerifier),'verify the immutable image before startup');
+ for(const command of ['config','up']){
+  const called=calls.find(c=>c.args.includes(command));
+  assert.ok(called.args.includes('deploy/test-cloud/compose.amazon-backups.yaml'));
+  assert.equal(called.environment.CLOUD_VERIFIER_IMAGE,amazonVerifier);
+ }
+ for(const change of [{target:'lan'},{backupVerifierImage:'waitron-backup-verifier:amazon-test'}]){
+  let inspected=false;
+  await assert.rejects(deploy('up',{...options,...change,inventory:()=>{inspected=true;return good;}}),/test_cloud.amazon_backups/);
+  assert.equal(inspected,false);
+ }
+});

@@ -31,6 +31,13 @@ export function testRuntimeEnvironment(role,config,environment={}){
   }
  }
  if(role==='email')result.CLOUD_MAIL_TRANSPORT='test-capture';
+ if(environment.CLOUD_TEST_AMAZON_BACKUPS==='1'){
+  const origin=environment.TEST_CLOUD_ORIGIN;
+  if(environment.TEST_CLOUD_AMAZON!=='1'||environment.NODE_ENV==='production'||mode!=='test-venue-levels'||!origin||new URL(origin).port)throw Error('test_cloud.amazon_backups');
+  if(role==='account'||role==='backup')result.CLOUD_TEST_AMAZON_BACKUPS='1';
+  if(role==='backup')for(const name of ['CLOUD_VERIFIER_SCRATCH_VOLUME','CLOUD_BACKUP_STAGE_ROOT'])
+   if(environment[name]!==undefined)result[name]=environment[name];
+ }
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  if(role==='account'&&mode==='test-venue-levels'){
   if(environment.TEST_CLOUD_AMAZON==='1'&&environment.TEST_CLOUD_GUEST_MENU==='1'&&environment.NODE_ENV!=='production'){
@@ -54,7 +61,7 @@ export async function launchTestRuntime(role,directory=process.env.LOCAL_STACK_C
  const args=role==='action-demo'?[demoCommand]:role==='usage'?['--watch']:role==='reconcile'?['/run/reconciler/config.json']:[];
  const childEnvironment={PATH:process.env.PATH,HOME:'/tmp',LOCAL_STACK_CONFIG_DIR:directory,...environment};
  // Replace the launcher to avoid retaining its heap beside the worker.
- if(['monitor','usage','probe','manifest'].includes(role)){
+ if(['monitor','usage','probe','manifest'].includes(role)||role==='backup'&&environment.CLOUD_TEST_AMAZON_BACKUPS==='1'){
   process.chdir('/app');
   return process.execve(process.execPath,[process.execPath,command,...args],childEnvironment);
  }

@@ -7,7 +7,7 @@ import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {request} from 'node:http';
 import {bootstrapStorageIssuer} from './storage-issuer.mjs';
-import {loadRuntime} from '../local-stack/runtime.mjs';
+import {canonicalHttpsOrigin,loadRuntime} from '../local-stack/runtime.mjs';
 import {captureRuntime} from '../../packages/backups/src/capture-config.ts';
 
 export function reloadTestStorage(directory){
@@ -20,13 +20,16 @@ export async function testStorageOptions({pool,directory,mode='test-free-paid',r
  const config=await loadRuntime(directory);
  return {pool,mode,directory:join(directory,'storage-authority/managed'),iamPath:join(directory,'storage-authority/iam.json'),admin:{accessKeyId:config.storage.accessKeyId,secretAccessKey:config.storage.secretAccessKey},endpoint:'https://waitron.local:8333',region:'local',ca:await readFile(join(directory,'lan/ca.pem'),'utf8'),reload};
 }
-export async function openTestCaptureRuntime({pool,mode,directory,stageRoot,openStorage=openPlanStorage}){
+export async function openTestCaptureRuntime({pool,mode,directory,stageRoot,uploadOrigin,openStorage=openPlanStorage}){
  if(!['test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
+ if(uploadOrigin!==undefined){
+  if(mode!=='test-venue-levels'||new URL(canonicalHttpsOrigin(uploadOrigin)).port)throw Error('test_cloud.amazon_backups');
+ }
  await bootstrapStorageIssuer(directory);
  const config=await loadRuntime(directory),storage=await testStorageOptions({pool,directory,mode});
  const managedStreams=await openStorage(storage);
  const runtime=captureRuntime({CLOUD_BACKUP_STAGE_ROOT:stageRoot,CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_AUTHORITY:await readFile(join(directory,'storage-authority/issuer.json'),'utf8'),CLOUD_BACKUP_CA_FILE:join(directory,'lan/ca.pem'),CLOUD_BACKUP_ENDPOINT:storage.endpoint,CLOUD_BACKUP_REGION:storage.region,CLOUD_BACKUP_ACCESS_KEY:storage.admin.accessKeyId,CLOUD_BACKUP_SECRET_KEY:storage.admin.secretAccessKey});
- runtime.options.planMode=mode;runtime.options.managedStreams=managedStreams;return runtime;
+ runtime.options.planMode=mode;runtime.options.uploadOrigin=uploadOrigin;runtime.options.managedStreams=managedStreams;return runtime;
 }
 export async function openRuntimeStorage({mode,...options}){
  if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
