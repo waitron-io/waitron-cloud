@@ -23,6 +23,7 @@ test('password and verified email changes work in both languages, themes and wid
     try{
       assert.equal((await contextSignIn(f,context,email,password)).status(),200);
       const page=await context.newPage();page.setDefaultTimeout(5000);page.on('response',r=>{if(r.status()>=400)t.diagnostic(`${locale} ${colorScheme} ${width}: ${new URL(r.url()).pathname} ${r.status()}`);});await page.goto(`${f.origin}/account#lang=${locale}`);
+      await page.locator('.credential-settings > summary').click();
       await page.locator('wt-input[name=newAccountEmail]').waitFor();
       await prepareBrowserActionWindow(f,page);
       await page.getByLabel(c.newEmail,{exact:true}).fill(next);await page.getByLabel(c.newEmail,{exact:true}).press('Enter');
@@ -34,6 +35,7 @@ test('password and verified email changes work in both languages, themes and wid
       await page.screenshot({path:new URL(`../dist/credential-change-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
       await page.getByRole('button',{name:c.emailChangeVerify,exact:true}).click();await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
       assert.equal((await contextSignIn(f,context,next,password)).status(),200);await page.goto(`${f.origin}/account#lang=${locale}`);await prepareBrowserActionWindow(f,page);
+      await page.locator('.credential-settings > summary').click();
       await page.getByLabel(c.newPassword,{exact:true}).fill('A changed synthetic password');
       await page.getByLabel(c.newPassword,{exact:true}).press('Enter');await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
       assert.equal((await contextSignIn(f,context,next,'A changed synthetic password')).status(),200);
@@ -75,6 +77,7 @@ test('account security is clear in both languages at phone and desktop widths', 
         const c = translations[locale];
         await page.goto(`${f.origin}/account#lang=${locale}`);
         await page.getByRole('heading', {name: c.accountSecurity, exact: true}).waitFor();
+        await page.locator('.sessions summary').click();
         await page.locator('.session-list li').first().waitFor();
         assert.equal(await page.locator('.session-list li').count(), 2);
         await page.getByText(c.currentSession, {exact: true}).waitFor();
@@ -110,6 +113,7 @@ test('lost session-revoke replies reconcile the list and current-session state',
       const page = await context.newPage(); page.setDefaultTimeout(5000);
       const c = translations.en;
       await page.goto(`${f.origin}/account`);
+      await page.locator('.sessions summary').click();
       await page.getByText(c.otherSession, {exact: true}).waitFor();
       f.loseAccountReply('/sessions/revoke');
       await page.locator('.session-list li').filter({hasText: c.otherSession}).getByRole('button', {name: c.sessionRevoke}).click();
@@ -165,6 +169,7 @@ test('sign out remains available while a passkey prompt is open', async t => {
       try {
         await page.goto(`${f.origin}/account`);
         const signOut = page.getByRole('button', {name: c.signout, exact: true});
+        await page.locator('.sessions summary').click();
         // Startup work has its own sign-out guards; isolate the browser prompt after it settles.
         await signOut.and(page.locator(':enabled')).waitFor();
 

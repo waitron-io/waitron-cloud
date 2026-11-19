@@ -33,6 +33,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    ['installations','installations'],['backups','backups/list'],['diagnostics','diagnostics/read'],['usage','usage/read'],['remote','remote-access/status'],['translationConsent','translation-consent'],
   ] as const){
    scenario=target;await start();denied=endpoint;
+   if(target==='translationConsent')await page.locator('article.installation').first().locator('.venue-details summary').click();
    await page.evaluate(async({target,id})=>{const a=(window as any).app,v=a[target];if(target==='backups'||target==='remote')await v.open(id);else if(target==='diagnostics')await v.download(id);else if(target==='usage'){v.organisation(id);v.refresh();await v.load();}else if(target==='translationConsent')await v.agree(id);else await v.load();}, {target,id});
    const alert=page.getByRole('alert').filter({hasText:c.permissionBusiness});await alert.waitFor().catch(async error=>{console.log('Refusal diagnostic',target,await page.evaluate(target=>{const a=(window as any).app;return {locale:a.locale,path:a.path,session:a.session.state,controller:{error:a[target].error,pending:a[target].pending,loaded:a[target].loaded,waiting:a[target].waiting}};},target));throw error;});assert.equal(await page.locator('.permission-actions').count(),1,'only the refused panel offers an account switch');
    const actions=alert.locator('..').locator('.permission-actions').filter({has:page.getByRole('link',{name:c.permissionBack,exact:true})}).first();

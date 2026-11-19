@@ -105,7 +105,7 @@ test('populated release37 upgrades concurrently preserving retained rows and dig
       action_proved_at:null,action_proof_method:null,action_credential_fingerprint:null,action_security_revision:0}}));
     const connectionDefaults=(rows:typeof expectedSessions)=>rows.map(({value})=>({value:{...value,cloud_session_id:null,cloud_security_revision:null}}));
     const expectedVenues=(before.venues as {value:Record<string,unknown>}[]).map(({value})=>{
-      const {local_venue_id,...retained}=value;return {value:retained};
+      const {local_venue_id,...retained}=value;return {value:{...retained,display_name:null}};
     });
     assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, {...before,cloud_accounts:(before.cloud_accounts as {value:Record<string,unknown>}[]).map(({value})=>({value:{...value,recovery_organisation_id:null}})),legal_businesses:(before.legal_businesses as {value:Record<string,unknown>}[]).map(({value})=>({value:{...value,billing_address:null,tax_number:null}})),venues:expectedVenues,cloud_sessions:expectedSessions,
       pairing_requests:connectionDefaults(before.pairing_requests as typeof expectedSessions)});

@@ -76,7 +76,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await panel.scrollIntoViewIfNeeded();
     await page.screenshot({path:`${process.env.REMOTE_REFUSAL_RECEIPT_DIR}/${locale}-${theme}-${width}-connected.png`});
    }
-   await panel.getByRole('link',{name:c.billingStart,exact:true}).click();
+   await page.locator('.installation').getByRole('link',{name:c.billingStart,exact:true}).click();
    const start=page.getByRole('button',{name:c.billingStart,exact:true});
    await start.waitFor();
    assert.equal(await page.getByLabel(c.billingVenue,{exact:true}).inputValue(),id);

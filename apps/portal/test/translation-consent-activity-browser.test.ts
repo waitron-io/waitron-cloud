@@ -3,13 +3,18 @@ import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
-import {chromium} from 'playwright';
+import {chromium, type Page} from 'playwright';
 import {translations} from '../src/locale.ts';
 
 const venue='20000000-0000-4000-8000-000000000001';
 const installation={installationId:venue,venueId:venue,organisationId:venue,legalBusinessId:venue,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
  overview:{organisationName:'Test organisation',businessName:'Test venue',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},
  services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))};
+
+// Opening the details as setup leaves the next user action responsible for session activity.
+async function showVenueDetails(page:Page) {
+  await page.locator('.venue-details').evaluate((details:HTMLDetailsElement)=>{details.open=true;});
+}
 
 const bundle = await build({stdin: {contents: `
  import {applyTokens} from '@waitron-io/ui-core/tokens';
@@ -53,7 +58,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
       await page.goto('https://portal.test/account/venues'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
-      const section = page.getByRole('group', {name: c.translationConsent, exact: true}), alert = section.getByRole('alert');
+      await showVenueDetails(page);
+      const section = page.getByRole('group', {name: c.translationConsent, exact: true}), alert = page.locator('.translation-read-error');
       const retry = section.getByRole('button', {name: c.translationConsentRefresh, exact: true});
       await alert.getByText(c.unavailable, {exact: true}).waitFor();
       assert.equal(await retry.isEnabled(), true);
@@ -89,6 +95,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
       await (await navigationCheck).finished();
       await page.getByRole('navigation', {name: c.accountNav}).getByRole('link', {name: c.venues, exact: true}).click();
+      await showVenueDetails(page);
       await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
       await page.waitForFunction(() => !(window as unknown as {translationActivityApp: {translationConsent: {pending: boolean}}}).translationActivityApp.translationConsent.pending);
       await page.waitForFunction(() => (window as any).translationActivityApp.translationConsent.loaded);
@@ -122,8 +129,9 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
       await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await showVenueDetails(page);
       const section = page.getByRole('group', {name: c.translationConsent, exact: true}), retry = section.getByRole('button', {name: c.translationConsentRefresh, exact: true});
-      await section.getByRole('alert').getByText(['new account', 'failed navigation'].includes(scenario) ? c.unavailable : c.limited, {exact: true}).waitFor();
+      await page.locator('.translation-read-error').getByText(['new account', 'failed navigation'].includes(scenario) ? c.unavailable : c.limited, {exact: true}).waitFor();
       if (scenario === 'cooldown' || scenario === 'blocked startup') {
         assert.equal(await retry.isDisabled(), true);
         await retry.evaluate(button => (button as HTMLElement).click());
@@ -146,13 +154,14 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
       await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
       if (scenario === 'cooldown') {
         assert.equal(reads, 1, 'activity after a completed server wait leaves retry explicit');
-        assert.equal(await section.getByRole('alert').getByText(c.limited, {exact: true}).count(), 1);
+        assert.equal(await page.locator('.translation-read-error').getByText(c.limited, {exact: true}).count(), 1);
         await retry.click();
       }
       await page.waitForFunction(() => (window as any).translationActivityApp.translationConsent.loaded);
+      if (scenario === 'new account') await showVenueDetails(page);
       assert.equal(await section.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
       assert.equal(reads, 2, scenario === 'blocked startup' ? 'a blocked startup can run when the server wait ends' : 'account changes, failed-read navigation and explicit retry start a fresh consent read');
-      assert.equal(await section.getByRole('alert').count(), 0);
+      assert.equal(await page.locator('.translation-read-error').count(), 0);
     } finally { await browser.close(); }
   });
 }
@@ -179,18 +188,19 @@ test(`navigation during a translation-consent read preserves its attempt and lat
       return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
     });
     await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+    await showVenueDetails(page);
     const section = page.getByRole('group', {name: translations.en.translationConsent, exact: true});
     await page.waitForFunction(() => (window as unknown as {translationActivityApp: {translationConsent: {pending: boolean}}}).translationActivityApp.translationConsent.pending);
     await page.evaluate(() => (window as unknown as {translationActivityApp: {navigate(path: string): void}}).translationActivityApp.navigate('/account/venues'));
     await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
     assert.equal(reads, 1, 'navigation cannot duplicate a pending translation-consent read');
     releaseRead();
-    await section.getByRole('alert').getByText(translations.en.unavailable, {exact: true}).waitFor();
+    await page.locator('.translation-read-error').getByText(translations.en.unavailable, {exact: true}).waitFor();
     const activity = page.waitForResponse('**/api/account/session/activity');
     await page.locator('h1').click(); await (await activity).finished();
     await page.waitForFunction(() => (window as unknown as {translationActivityApp: {session: {state: {expiresAt?: string}}}}).translationActivityApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
     assert.equal(reads, 1, 'the completed read retains its attempt across navigation');
-    assert.equal(await section.getByRole('alert').getByText(translations.en.unavailable, {exact: true}).count(), 1);
+    assert.equal(await page.locator('.translation-read-error').getByText(translations.en.unavailable, {exact: true}).count(), 1);
     assert.equal(await section.getByRole('button', {name: translations.en.translationConsentRefresh, exact: true}).isEnabled(), true);
   } finally {releaseRead(); await browser.close();}
 });
@@ -221,6 +231,7 @@ for (const status of [401, 403]) {
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
       await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await showVenueDetails(page);
       const section = page.getByRole('group', {name: c.translationConsent, exact: true});
       const choice = section.getByRole('button', {name: c.translationConsentAgree, exact: true});
       await page.waitForFunction(() => (window as any).translationActivityApp.translationConsent.loaded);

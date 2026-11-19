@@ -92,7 +92,7 @@ test('an enrollment refusal refreshes stale passkey settings into setup',async()
   await page.goto(`${f.origin}/login`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   await completeBrowserEmail(f,page,email,'en');await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
   await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
-  await page.getByText(c.accountIntro,{exact:true}).waitFor();await Promise.all(accountReady);await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
+  await page.getByText(c.accountIntro,{exact:true}).waitFor();await Promise.all(accountReady);await page.locator('.sessions summary').click();await page.getByRole('button',{name:c.sessionSignOut,exact:true}).waitFor();
   if(!activities.length)await Promise.all([page.waitForResponse(response=>response.url().endsWith('/session/activity')&&response.status()===200),page.locator('h1').click()]);
   const before=activities.length;await f.db.pool.query('DELETE FROM cloud_passkeys WHERE account_id=$1',[id]);
   const refused=page.waitForResponse(response=>response.url().endsWith('/sessions/revoke'));

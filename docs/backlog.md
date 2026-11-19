@@ -1091,6 +1091,10 @@ implementation or production evidence.
   box, the assigned Staff page on mobile data, and confirmation that the box
   switch stops access.
 
+  The [Juniper portal trial follow-up](superpowers/plans/2026-11-19-cloud-portal-feedback.md)
+  still needs venue removal and a phone check of how long a synthetic menu takes
+  to reappear after sharing is enabled.
+
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings
   exchange freshly after rollback; all 533 resource readings pass the original

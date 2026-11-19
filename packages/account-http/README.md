@@ -469,6 +469,10 @@ Never send the private key. The signature covers the Cloud origin, action, reque
 public key, requested venue UUID, environment, matching code or chosen business, current
 time and a display name supplied at start. Send an empty string for the name on status
 and completion.
+
+After successful pairing, `GET /api/account/installations`
+includes the signed name as `overview.venueName` for that venue. A retry or a
+pairing without a name keeps the name already saved. Older pairings may omit it.
 The signature is accepted within 60 seconds; retry later with a fresh signature over
 the same request. Start accepts `test` or `production` environment.
 

@@ -11,7 +11,7 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
  return transaction(pool,async client=>{
   const session=await resolveSession(client,token,{touch:false});
   const memberships=await client.query(`SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 AND ${organisationScopeSql('account_id','organisation_id')} FOR SHARE`,[session.accountId]);
-  const rows=await client.query(`SELECT v.id,v.organisation_id,o.name AS organisation_name,b.name AS business_name,b.country_code,
+  const rows=await client.query(`SELECT v.id,v.organisation_id,v.display_name,o.name AS organisation_name,b.name AS business_name,b.country_code,
    (SELECT max(p.captured_at) FROM backup_points p WHERE p.venue_id=v.id AND p.kind='snapshot' AND NOT p.deleting AND p.deleted_at IS NULL) AS latest_snapshot_at,
    (SELECT max(p.captured_at) FROM backup_points p JOIN backup_point_qualification q ON q.point_id=p.id WHERE p.venue_id=v.id AND q.current_verification='verified') AS verified_snapshot_at,
    mon.checked_at,COALESCE(mon.checked_at>clock_timestamp()-interval '5 minutes',false) AS monitor_fresh,
@@ -31,7 +31,7 @@ export async function venueOverview(pool:Pool,token:string,installations:Install
    FROM venues v JOIN organisations o ON o.id=v.organisation_id JOIN legal_businesses b ON b.id=v.legal_business_id JOIN installations n ON n.venue_id=v.id AND n.superseded_by IS NULL LEFT JOIN venue_monitors mon ON mon.venue_id=v.id
    WHERE v.id=ANY($1::uuid[]) AND v.organisation_id=ANY($2::uuid[])`,[installations.map(i=>i.venueId),memberships.rows.map(m=>m.organisation_id)]);
   const result=installations.flatMap(i=>{const row=rows.rows.find(r=>r.id===i.venueId&&r.organisation_id===i.organisationId);if(!row)return [];
-   return [{...i,monitoring:{enabled:row.monitor_enabled,fresh:row.monitor_fresh,checkedAt:row.checked_at?.toISOString()??null,incidents:row.monitor_enabled?row.incidents:[],remoteChecks:row.monitor_enabled?remoteChecks(row.remote_checks):null},canRevoke:memberships.rows.find(m=>m.organisation_id===i.organisationId).is_owner,overview:{organisationName:row.organisation_name?.trim()??i.organisationId,businessName:row.business_name?.trim()??i.legalBusinessId,countryCode:row.country_code,latestSnapshotAt:row.latest_snapshot_at?.toISOString()??null,verifiedSnapshotAt:row.verified_snapshot_at?.toISOString()??null}}];});
+   return [{...i,monitoring:{enabled:row.monitor_enabled,fresh:row.monitor_fresh,checkedAt:row.checked_at?.toISOString()??null,incidents:row.monitor_enabled?row.incidents:[],remoteChecks:row.monitor_enabled?remoteChecks(row.remote_checks):null},canRevoke:memberships.rows.find(m=>m.organisation_id===i.organisationId).is_owner,overview:{...(row.display_name?{venueName:row.display_name}:{}),organisationName:row.organisation_name?.trim()??i.organisationId,businessName:row.business_name?.trim()??i.legalBusinessId,countryCode:row.country_code,latestSnapshotAt:row.latest_snapshot_at?.toISOString()??null,verifiedSnapshotAt:row.verified_snapshot_at?.toISOString()??null}}];});
   await resolveSession(client,token,{touch:false});return result;
  });
 }

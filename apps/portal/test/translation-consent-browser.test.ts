@@ -39,21 +39,23 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
+  await page.locator('.venue-details').evaluate((details:HTMLDetailsElement)=>{details.open=true;});
+  const readError=page.locator('.translation-read-error');
   const section=page.getByRole('group',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
   const allow=locale==='en'?'Allow menu translation':'Permitir la traducción del menú',stop=locale==='en'?'Stop menu translation':'Dejar de traducir el menú';
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
-  await section.getByText(c.unavailable,{exact:true}).waitFor();
+  await readError.getByText(c.unavailable,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);
   // Settle activity before the explicit warm-up read, then test the separate rate-limit response.
   record('initial activity settling');
   const initialActivity=page.waitForResponse(response=>response.url().endsWith('/api/account/session/activity')&&response.request().method()==='POST'&&response.status()===200);
   const initialReload=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===503);
-  await Promise.all([initialActivity,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialActivity,readError.getByText(c.unavailable,{exact:true}).click()]);
   await Promise.all([initialReload,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
-  await section.getByText(c.unavailable,{exact:true}).waitFor();
+  await readError.getByText(c.unavailable,{exact:true}).waitFor();
   primingActivity=false;record('initial activity and consent settled');
   await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
-  await section.getByText(c.limited,{exact:true}).waitFor();
+  await readError.getByText(c.limited,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).isEnabled(),false);
   // Hold activity so the successful manual read completes before its session reply.
   record('manual retry starts');holdActivity=true;
@@ -73,15 +75,15 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);releaseWrite();
   await section.getByText(allowed,{exact:true}).waitFor();
   const saved=(await f.db.pool.query('SELECT venue_id,consent_version,withdrawn_at FROM translation_consents')).rows[0];assert.equal(saved.venue_id,installed.venueId);assert.equal(saved.consent_version,'providers-2026-10-14');assert.equal(saved.withdrawn_at,null);
-  trace!.stage('reload saved consent');await page.reload();await section.getByRole('button',{name:stop,exact:true}).waitFor();
+  trace!.stage('reload saved consent');await page.reload();await page.locator('.venue-details summary').click();await section.getByRole('button',{name:stop,exact:true}).waitFor();
   f.loseAccountReply('/translation-consent','body');await section.getByRole('button',{name:stop,exact:true}).click();
   await section.getByText(locale==='en'?'We could not confirm your choice. Try again.':'No hemos podido confirmar tu elección. Vuelve a intentarlo.',{exact:true}).waitFor();
   assert.ok((await f.db.pool.query('SELECT withdrawn_at FROM translation_consents')).rows[0].withdrawn_at);
   await section.getByRole('button',{name:stop,exact:true}).click();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   assert.equal(await section.getByText(allowed,{exact:true}).count(),0);
-  await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
+  await page.reload();await page.locator('.venue-details summary').click();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
-  await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
+  await page.reload();await page.getByRole('heading',{name:new RegExp('^'+c.venueTitle+' · ')}).waitFor();assert.equal(await section.count(),0);
  }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));await failConsentDatabaseWait(f.db.pool,f.db.schema,error,value=>console.error('Translation consent database',value));}finally{releaseActivity();await f.close();}
 });
 
@@ -97,7 +99,7 @@ for(const locale of ['en','es'] as const)test(`${locale}: two venues keep access
   const context=await f.browser.newContext({locale}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
-  const articles=page.locator('article.installation');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).waitFor();assert.equal(await articles.count(),2);
+  const articles=page.locator('article.installation');await articles.first().locator('.venue-details summary').click();await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).waitFor();assert.equal(await articles.count(),2);
   await page.evaluate(axe.source);const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations);
   f.loseAccountReply('/translation-consent','body');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).click();await page.getByText(c.translationConsentUncertain,{exact:true}).first().waitFor();
   assert.equal((await f.db.pool.query('SELECT count(*) FROM translation_consents WHERE withdrawn_at IS NULL')).rows[0].count,'1');

@@ -12,13 +12,12 @@ export function accountSecurityScreen(app: PortalApp) {
   const dateTime = new Intl.DateTimeFormat(app.locale, {dateStyle: 'medium', timeStyle: 'short'});
   return html`<section class="account-security" aria-labelledby="account-security-heading">
     <h2 id="account-security-heading" tabindex="-1">${c.accountSecurity}</h2>
-    <p>${c.accountSecurityIntro}</p>
     <section class="sessions" aria-labelledby="sessions-heading">
-      <h3 id="sessions-heading">${c.activeSessions}</h3>
-      <p class="help">${c.sessionsIntro}</p>
       ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
       ${app.security.error && !app.security.loaded ? html`<wt-button .disabled=${app.security.pending || !!app.security.waiting}
         @click=${() => {void app.security.load();}}>${c.retry}</wt-button>` : nothing}
+      <details><summary id="sessions-heading">${c.activeSessions}</summary>
+      <p class="help">${c.sessionsIntro}</p>
       <ul class="session-list">${app.security.sessions.map(session => html`<li>
         <div class="security-details">
           <strong>${session.current ? c.currentSession : c.otherSession}</strong>
@@ -28,10 +27,10 @@ export function accountSecurityScreen(app: PortalApp) {
         </div>
         <wt-button .disabled=${app.security.pending || !!app.security.waiting}
           @click=${() => {void app.revokeSession(session.id);}}>${session.current ? c.sessionSignOut : c.sessionRevoke}</wt-button>
-      </li>`)}</ul>
+      </li>`)}</ul></details>
     </section>
     ${accountActionProofScreen(app)}
-    <section aria-labelledby="credentials-heading"><h3 id="credentials-heading">${c.credentialChanges}</h3>
+    <details class="credential-settings" ?open=${!!app.link.emailChangeToken}><summary>${c.credentialChanges}</summary>
       <p class="help">${c.credentialChangesHelp}</p>
       ${app.link.emailChangeToken ? html`<p>${c.emailChangeConfirm}</p><wt-button .disabled=${app.security.pending||!!app.security.waiting}
         @click=${()=>{void app.changeCredentials('verify');}}>${c.emailChangeVerify}</wt-button>`:nothing}
@@ -47,7 +46,7 @@ export function accountSecurityScreen(app: PortalApp) {
         @keydown=${(e:KeyboardEvent)=>submitOnEnter(e,app.root.querySelector('#change-email'))}></wt-input>
       <wt-button id="change-email" .disabled=${app.security.pending||!!app.security.waiting||!app.security.newEmail}
         @click=${()=>{void app.changeCredentials('email');}}>${c.saveEmail}</wt-button>
-    </section>
+    </details>
     ${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}
   </section>`;
 }

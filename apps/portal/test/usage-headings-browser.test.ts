@@ -70,9 +70,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await writeFile(`${dir}/${locale}-${theme}-${width}.json`, JSON.stringify({outline, metrics}, null, 2));
       }
       assert.deepEqual(outline, [
-        {level: 2, name: c.installations}, {level: 3, name: c.usageTitle},
+        {level: 2, name: c.installations},
+        {level: 3, name: `${c.venueTitle} · 10000000`}, {level: 3, name: `${c.venueTitle} · 20000000`},
+        {level: 3, name: c.usageTitle},
         ...[c.usageStorage, c.usageTransfer, c.usageOperations, c.usageMessages].map(name => ({level: 4, name})),
-        {level: 3, name: 'Sol SL · 10000000'}, {level: 3, name: 'Sol SL · 20000000'},
       ]);
       assert.deepEqual(await usage.getByRole('heading').evaluateAll(nodes => nodes.map(node => {
         const style = getComputedStyle(node);

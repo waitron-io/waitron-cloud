@@ -5,7 +5,7 @@ import {request as httpRequest} from 'node:http';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {after,before,beforeEach,test} from 'node:test';
 import type {HttpBindings} from '@hono/node-server';
-import {SignupStore} from '@waitron-cloud/registration';
+import {SignupStore,createLeaseIssuer} from '@waitron-cloud/registration';
 import {pairingPayload,type PairingClaims} from '../../registration/src/pairing-proof.ts';
 import {startAccountServer} from '../src/server.ts';
 import {createAccountApp} from '../src/app.ts';
@@ -13,6 +13,7 @@ import {database,completeEmailProof,emailLoginPolicy} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;let app:ReturnType<typeof createAccountApp>;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string};let cookie:string;let csrf:string;
 const origin='https://cloud.example.test',password='A long enough café password';
+const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 const settings=()=>({portalOrigin:origin,production:true,rateKey:db.rateKey,trustedProxyIps:[]});
 function request(path:string,body?:unknown,headers:Record<string,string>={},target=app,method=body===undefined?'GET':'POST'){
   return target.request(origin+path,{method,headers:{'content-type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
@@ -25,7 +26,7 @@ function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClai
 const choice=(m:ReturnType<typeof machine>)=>({requestId:m.c.requestId,code:m.c.code,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{
-  await resetSchema(db.pool);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings()});
+  await resetSchema(db.pool);app=createAccountApp({leaseIssuer:issuer,factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:settings()});
   const signup=new SignupStore(db.pool,db.outbox);await signup.request('owner@example.test');const mail=db.outbox.open((await db.pool.query('SELECT * FROM email_outbox')).rows[0]);assert.ok('token' in mail);
   owner=await signup.complete(mail.token,{password,organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
   const logged=await completeEmailProof(db,await request('/api/account/login',{email:'owner@example.test',password},{origin}),body=>request('/api/account/login/email',body,{origin}));assert.equal(logged.status,200);
@@ -70,6 +71,35 @@ test('only browser pairing replies show the original signed venue name after a s
     assert.equal(Object.hasOwn(await reply.json(),'venueName'),false);
   }
 });
+test('the account sees the signed venue name after pairing and nameless replacement',async()=>{
+  const named=machine();
+  assert.equal((await named.call('start',{venueName:'Café Luna'})).status,200);
+  assert.equal((await browser('approve',choice(named))).status,200);
+  const completed=await named.call('complete');
+  assert.equal(completed.status,200);
+  const {registration:{venueId,installationId}}=await completed.json();
+  const name=async()=>{
+    const response=await request('/api/account/installations',undefined,{cookie});
+    assert.equal(response.status,200);
+    const {installations}=await response.json();
+    assert.equal(installations.length,1);
+    assert.equal(installations[0].venueId,venueId);
+    return installations[0].overview.venueName;
+  };
+  assert.equal(await name(),'Café Luna');
+  assert.equal((await named.call('complete')).status,200);
+  assert.equal(await name(),'Café Luna');
+
+  // A stopped box can pair again to the same venue with a new key.
+  await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[installationId]);
+  const replacement=machine();
+  replacement.c.venueId=venueId;
+  assert.equal((await replacement.call('start')).status,200);
+  assert.equal((await browser('approve',choice(replacement))).status,200);
+  assert.equal((await replacement.call('complete')).status,200);
+  assert.equal(await name(),'Café Luna');
+});
+
 test('machine and browser authority, action, origin, method and shape stay separate',async()=>{
   const m=machine();
   assert.equal((await request('/api/pairing/start',m.proof('start'),{origin})).status,403);

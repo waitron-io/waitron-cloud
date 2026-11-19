@@ -23,14 +23,15 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
   await page.getByRole('button',{name:stop,exact:true}).waitFor();
-  await page.getByRole('heading',{name:/Sol SL/}).waitFor();
+  await page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true}).waitFor();
+  await page.locator('.venue-details summary').click();
   await page.getByText(locale==='en'?'No verified snapshot yet':'Todavía no hay una instantánea verificada',{exact:true}).waitFor();
   const downloadStarted=page.waitForEvent('download');await page.getByRole('button',{name:c.diagnosticDownload,exact:true}).click();const download=await downloadStarted;
   assert.match(download.suggestedFilename(),/^waitron-cloud-diagnostic-[0-9a-f]{8}-\d{8}T\d{6}Z\.json$/);
   const downloadPath=await download.path();assert.ok(downloadPath);const diagnostic=JSON.parse(await readFile(downloadPath,'utf8'));
   assert.equal(diagnostic.version,1);assert.equal(diagnostic.installation.installationId,installed.installationId);assert.equal(diagnostic.installation.venueId,installed.venueId);
   const encoded=JSON.stringify(diagnostic);for(const forbidden of [owner.accountId,owner.organisationId,other.installationId,other.venueId,b2.installationKey])assert.equal(encoded.includes(forbidden),false,forbidden);
-  const choose=page.getByLabel(locale==='en'?'Organisation':'Organización',{exact:true});await choose.selectOption(org2);await page.getByRole('heading',{name:/Luna SL/}).waitFor();assert.equal(await page.getByRole('heading',{name:/Sol SL/}).count(),0);await choose.selectOption(owner.organisationId);
+  const choose=page.getByLabel(locale==='en'?'Organisation':'Organización',{exact:true});await choose.selectOption(org2);await page.getByRole('heading',{name:`${c.venueTitle} · ${other.venueId.slice(0,8)}`,exact:true}).waitFor();assert.equal(await page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true}).count(),0);await choose.selectOption(owner.organisationId);
   const pointId=randomUUID(),capturedAt=new Date(Date.now()-3*86400000).toISOString();
   await f.db.pool.query("INSERT INTO backup_locations(venue_id,installation_id,endpoint,bucket,region) VALUES($1,$2,'https://store.test','browser-fixture','local')",[installed.venueId,installed.installationId]);
   await f.db.pool.query("INSERT INTO backup_key_versions(venue_id,version,sealed) VALUES($1,1,'unusable-fixture-key')",[installed.venueId]);
@@ -43,6 +44,7 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await f.db.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[installed.installationId]);
   await f.db.pool.query("INSERT INTO installation_observations(installation_id,service,revision,health,observed_at) VALUES($1,'remote_access',0,'healthy',clock_timestamp()-interval '299 seconds')",[installed.installationId]);
   await page.getByRole('button',{name:locale==='en'?'Refresh status':'Actualizar estado',exact:true}).click();
+  await page.locator('.venue-details summary').click();
   await page.getByText(c.snapshotOld,{exact:true}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
   await page.getByText(locale==='en'?'Configured · Working':'Configurado · Funcionando',{exact:true}).waitFor();
   await page.getByText(locale==='en'?'Configured · Health unknown':'Configurado · Estado desconocido',{exact:true}).waitFor({timeout:3000});
@@ -52,7 +54,7 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   let revokes=0;await page.route('**/installations/revoke',async route=>{revokes++;const response=await route.fetch();if(revokes===1)await route.abort('failed');else await route.fulfill({response});});
   await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(locale==='en'?'We could not confirm whether access stopped. Retry or refresh the status.':'No hemos podido confirmar si se detuvo el acceso. Reinténtalo o actualiza el estado.').waitFor();
   await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(stopped,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:stop,exact:true}).count(),0);
-  await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
+  await page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
   await page.reload();await page.getByText(stopped,{exact:true}).waitFor();assert.equal((await f.db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
  }finally{await f.close();}
 });

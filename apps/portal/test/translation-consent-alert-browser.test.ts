@@ -39,6 +39,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const app=(window as any).app;return app.installations.loaded&&app.translationConsent.error==='unavailable'&&!app.translationConsent.pending;});
   const c=translations[locale],list=page.getByRole('region',{name:c.installations,exact:true}),venues=list.locator('article.installation');
+  assert.equal(await list.getByRole('alert').filter({hasText:c.unavailable}).count(),1);
+  for (const index of [0,1]) await venues.nth(index).locator('.venue-details summary').click();
   const group=(index:number)=>venues.nth(index).getByRole('group',{name:c.translationConsent,exact:true});
   const readAlerts=list.getByRole('alert').filter({hasText:c.unavailable});
   await t.test('one failed account-wide read produces one message for two venues',async()=>{
@@ -51,12 +53,14 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     await page.screenshot({path:`${process.env.TRANSLATION_ALERT_RECEIPT_DIR}/${locale}-${theme}-${width}-read.png`,fullPage:true});
    }
   });
-  await t.test('the first offered translation control carries the read warning when the first venue has no control',async()=>{
+  await t.test('the read warning remains visible when only the second venue has translation controls',async()=>{
    installations=initial.map((i,index)=>({...i,canRevoke:index===1}));
    await page.evaluate(async()=>{await (window as any).app.installations.load();});
    try{
     assert.equal(await readAlerts.count(),1);
-    assert.equal(await group(1).getByRole('alert').count(),1);
+    assert.equal(await group(0).count(),0);
+    await group(1).waitFor();
+    assert.equal(await group(1).getByRole('alert').count(),0);
    }finally{
     installations=initial;
     await page.evaluate(async()=>{await (window as any).app.installations.load();});

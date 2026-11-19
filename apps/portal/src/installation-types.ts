@@ -3,7 +3,7 @@ export interface RemoteCheck {status:'healthy'|'failed';checkedAt:string;certifi
 export interface AccountInstallation {
  installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;revision:number;
  revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;canRevoke?:boolean;
- overview?:{organisationName:string;businessName:string;countryCode:string|null;latestSnapshotAt:string|null;verifiedSnapshotAt:string|null};
+ overview?:{venueName?:string;organisationName:string;businessName:string;countryCode:string|null;latestSnapshotAt:string|null;verifiedSnapshotAt:string|null};
  monitoring?:{enabled:boolean;fresh:boolean;checkedAt:string|null;incidents:{kind:MonitoringIncidentKind;openedAt:string;changedAt:string}[];remoteChecks?:{public:RemoteCheck|null;staff:RemoteCheck|null}|null};
  services:{service:'continuous_backup'|'remote_access'|'retained_snapshots';state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';failure:string|null;observedAt:string|null}[];
 }
@@ -19,7 +19,9 @@ export function validInstallation(value:unknown):value is AccountInstallation {
 function validOverview(value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;const v=value as Record<string,unknown>;
  const date=(s:unknown)=>s===null||(typeof s==='string'&&Number.isFinite(Date.parse(s)));
- return ['organisationName','businessName'].every(k=>typeof v[k]==='string'&&v[k].length>0&&[...v[k]].length<=200)&&(v.countryCode===null||(typeof v.countryCode==='string'&&/^[A-Z]{2}$/.test(v.countryCode)))&&date(v.latestSnapshotAt)&&date(v.verifiedSnapshotAt);
+ const {venueName}=v;
+ return (venueName===undefined||(typeof venueName==='string'&&venueName.trim().length>0&&[...venueName].length<=120))
+  &&['organisationName','businessName'].every(k=>typeof v[k]==='string'&&v[k].length>0&&[...v[k]].length<=200)&&(v.countryCode===null||(typeof v.countryCode==='string'&&/^[A-Z]{2}$/.test(v.countryCode)))&&date(v.latestSnapshotAt)&&date(v.verifiedSnapshotAt);
 }
 
 function validMonitoring(value:unknown):boolean{

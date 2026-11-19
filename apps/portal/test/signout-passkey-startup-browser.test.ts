@@ -53,6 +53,7 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
         await page.waitForFunction(() => (window as any).signoutStartupApp.installations.pending);
         await page.getByRole('link', {name: c.accountLink, exact: true}).click();
       }
+      await page.locator('.sessions summary').click();
       await page.getByText(c.currentSession, {exact: true}).waitFor();
       await page.waitForFunction(delayed => {
         const app = (window as unknown as {signoutStartupApp: import('../src/app.ts').PortalApp}).signoutStartupApp;

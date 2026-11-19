@@ -5,34 +5,43 @@ import {remoteScreen} from './remote-screen.ts';
 import {alertScreen,monitoringScreen} from './alert-screen.ts';
 import {backupScreen} from './backup-screen.ts';
 import {html,nothing} from 'lit';
+import {repeat} from 'lit/directives/repeat.js';
+import type {AccountInstallation} from './installation-types.ts';
 import type {PortalApp} from './app.ts';
 import {usageScreen} from './usage-screen.ts';
 export function installationScreen(app:PortalApp, remoteOnly = false){
  const c=app.copy,controller=app.installations,disabled=controller.pending||!!controller.waiting;
+ const title=(i:AccountInstallation)=>i.overview?.venueName??`${c.venueTitle} · ${i.venueId.slice(0,8)}`;
+ const venues=controller.visible.sort((a,b)=>title(a).localeCompare(title(b),app.locale)||a.venueId.localeCompare(b.venueId));
+ const consent=app.translationConsent;
+ const translationReadError=!remoteOnly&&!consent.errorVenueId&&venues.some(i=>i.canRevoke)?consent.error:undefined;
  const date=(v:string|null)=>v?html`<time datetime=${v}>${formatDateTime(v,app.locale)}</time>`:c.neverContacted;
  const labels={remote_access:c.remoteAccess,continuous_backup:c.continuousBackup,retained_snapshots:c.retainedSnapshots};
  const states={unconfigured:c.serviceUnconfigured,provisioning:c.serviceProvisioning,ready:c.serviceReady,failed:c.serviceFailed};
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
- return html`${remoteOnly ? nothing : alertScreen(app)}<section aria-label=${c.installations}><h2>${c.installations}</h2>
+ return html`<section aria-label=${c.installations}><h2>${c.installations}</h2>
   ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
   ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
-  ${remoteOnly ? nothing : usageScreen(app)}
-  ${controller.visible.map(i=>html`<article class="installation"><h3>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId.slice(0,8)}</h3><p>${i.environment==='test'?c.pairTest:c.pairProduction}${i.overview?.countryCode?html` · ${i.overview.countryCode}`:nothing}</p>
-    <dl><dt>${c.pairVenue}</dt><dd class="venue-id">${i.venueId}</dd></dl>
+  ${translationReadError?html`<p class="translation-read-error" role="alert">${c[translationReadError]}</p>${permissionActions(app,translationReadError)}`:nothing}
+  ${!remoteOnly&&venues.length?html`<p class="help">${c.addVenue}</p>`:nothing}
+  ${repeat(venues,i=>i.installationId,i=>html`<article class="installation"><h3>${title(i)}</h3>
     ${remoteOnly ? html`
       ${i.revokedAt ? html`<p role="status">${c.accessStopped}</p><p>${c.remoteRevoked}</p>` : nothing}
-      ${i.canRevoke ? remoteScreen(app, i.installationId, !!i.revokedAt) : nothing}
+      ${i.canRevoke ? remoteScreen(app, i) : nothing}
     ` : html`
     <p role="status">${i.revokedAt?c.accessStopped:!i.lastContactAt?c.accessPending:!i.leaseExpiresAt||Date.parse(i.leaseExpiresAt)<=Date.now()||Date.parse(i.lastContactAt)<Date.now()-300000?c.accessStale:c.accessActive}</p>
     ${i.revokedAt?html`<p>${c.remoteRevoked}</p>`:nothing}
-    <dl><dt>${c.lastContact}</dt><dd>${date(i.lastContactAt)}</dd><dt>${c.accessExpires}</dt><dd>${date(i.leaseExpiresAt)}</dd>
+    <details class="venue-details"><summary>${c.venueDetails}</summary>
+    <p>${i.environment==='test'?c.pairTest:c.pairProduction}${i.overview?.countryCode?html` · ${i.overview.countryCode}`:nothing}</p>
+    <dl>${i.overview?html`<dt>${c.legalName}</dt><dd>${i.overview.businessName}</dd>`:nothing}<dt>${c.pairVenue}</dt><dd class="venue-id">${i.venueId}</dd><dt>${c.lastContact}</dt><dd>${date(i.lastContactAt)}</dd><dt>${c.accessExpires}</dt><dd>${date(i.leaseExpiresAt)}</dd>
       ${i.services.map(s=>html`<dt>${labels[s.service]}</dt><dd>${states[s.state]} · ${health[!i.revokedAt&&s.observedAt&&Date.parse(s.observedAt)>Date.now()-300000?s.health:'unknown']}</dd>`)}</dl>
     ${i.overview?html`<dl><dt>${c.latestSnapshot}</dt><dd>${i.overview.latestSnapshotAt?date(i.overview.latestSnapshotAt):c.noSnapshot}</dd><dt>${c.verifiedSnapshot}</dt><dd>${i.overview.verifiedSnapshotAt?date(i.overview.verifiedSnapshotAt):c.noVerifiedSnapshot}</dd></dl>
       ${i.overview.verifiedSnapshotAt&&Date.parse(i.overview.verifiedSnapshotAt)<Date.now()-172800000?html`<p>${c.snapshotOld}</p>`:nothing}`:nothing}
+    ${i.canRevoke?translationConsentScreen(app,i.venueId):nothing}
+    </details>
     ${monitoringScreen(app,i)}
     ${i.canRevoke?backupScreen(app,i.venueId):nothing}
-    ${i.canRevoke?translationConsentScreen(app,i.venueId,i===controller.visible.find(venue=>venue.canRevoke)):nothing}
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${app.diagnostics.error&&app.diagnostics.errorInstallationId===i.installationId?html`<p role="alert">${c[app.diagnostics.error]}</p>${permissionActions(app,app.diagnostics.error)}`:nothing}
@@ -42,5 +51,6 @@ export function installationScreen(app:PortalApp, remoteOnly = false){
     `}
   </article>`)}
   <wt-button .disabled=${disabled} @click=${()=>{void controller.load();}}>${c.refreshStatus}</wt-button>
- </section>`;
+  ${remoteOnly ? nothing : usageScreen(app)}
+ </section>${remoteOnly ? nothing : alertScreen(app)}`;
 }
