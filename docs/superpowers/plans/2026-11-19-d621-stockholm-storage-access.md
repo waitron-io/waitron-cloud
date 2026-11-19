@@ -42,7 +42,8 @@ POST from `StorageAuthority.grant` after a busy exchange response. Only the obje
 was observed in the Linux outage. Preserve both observations and check issuance during the new
 outage leg. The watcher cleared the plan at 01:14 on 19 November 2026. Keep the existing retry
 behavior unless the real credential exchange returns a 503 during that outage. If it does, add a
-bounded retry with a failing test in this slice. Store repair remains open.
+bounded retry with a failing test in this slice. The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
+checks repair after the first outage. Consecutive-outage repair remains a run 9 gate.
 
 On 19 November at 02:36 the watcher cleared the read after rejoin in `questions.md` for Lane G.
 Expiry refusal and grant issuance still run during the outage. At 06:00 the watcher directed

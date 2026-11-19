@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 import {setTimeout as delay} from 'node:timers/promises';
 import {BackupObjects} from '../packages/backups/src/storage.ts';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
-import {installStockholmStore, storeBuildArgs, storeNodePort} from './kubernetes-storage.mjs';
+import {installStockholmStore, storeBuildArgs, storeNodePort, storePath, waitForStore} from './kubernetes-storage.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {
