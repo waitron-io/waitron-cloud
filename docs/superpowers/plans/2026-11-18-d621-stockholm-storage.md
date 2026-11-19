@@ -46,9 +46,9 @@ and raw S3 for listings and the multipart missing-part case. Use a private NodeP
 on the contacted host and matching TLS names. Within the 90-second outage, check old bytes, list,
 new encrypted writes, AES256 metadata and wrong-key refusal. Start multipart before
 the stop. During it, reject completion that references a missing part, then upload
-that part, complete and compare bytes. The Cloud services task in the
-country-cell plan tracks returned-disk repair and multipart through consecutive
-outages.
+that part, complete and compare bytes. After rejoin, the [first-outage repair check](2026-11-18-d621-stockholm-store-repair.md)
+verifies both objects on both returned disks. The Cloud services task in the
+country-cell plan tracks repair and multipart through consecutive outages.
 
 Start with the placement checks and name the live fault cases in
 `scripts/kubernetes-storage.test.mjs`. Check the launcher store install order and
@@ -66,9 +66,9 @@ On 18 November, two runs of the unpublished repair candidates used
 `TEST_KUBERNETES_STOCKHOLM_STORAGE=1 node --test scripts/kubernetes-storage.test.mjs`
 in disposable three-machine Kind clusters and found two limits for run 9:
 
-- The store did not always repair a returned machine. Both serving peers reported
-  six online drives once the machine returned, but the repair check still found a
-  missing object shard on a returned disk. The local
+- In the first repair attempt, both serving peers reported six online drives
+  once the machine returned. The repair check found a missing object shard on
+  a returned disk. The local
   `repair-reconnect-capture-01.log` records the drive counts at lines 95–98 and
   the failed disk check at line 647.
 - In a separate run, both serving peers reported four of six drives online

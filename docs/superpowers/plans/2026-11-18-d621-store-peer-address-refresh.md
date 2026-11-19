@@ -10,9 +10,8 @@ The returning pod addresses changed. A survivor dialled both old addresses
 during reconnect and got no reply. It later skipped the repair reads because
 both HTTP clients remained offline, even after both serving peers reported six
 online drives. The job finished with missing pieces on disk. The capture did
-not establish what address the cache held at repair time. Refreshing DNS sooner
-addresses the old dials. The separate HTTP retry loop can still wait up to 30
-seconds, so the change needs live verification.
+not establish what address the cache held at repair time. The one-second refresh limits how long a peer caches a resolved address. The
+separate HTTP retry loop can still wait up to 30 seconds.
 [MinIO setting](https://github.com/minio/minio/blob/9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a/cmd/server-main.go#L121-L132)
 [MinIO DNS refresh](https://github.com/minio/minio/blob/9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a/cmd/common-main.go#L527-L552)
 [HTTP reconnect](https://github.com/minio/minio/blob/9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a/internal/rest/client.go#L475-L508)
@@ -22,23 +21,20 @@ seconds, so the change needs live verification.
   rendered store container. Run that file and check the assertion fails. Set
   the environment variable in `scripts/kubernetes-storage.mjs`, which renders
   the same store for Kind and bounded Stockholm, then rerun the file.
-- [ ] Apply the cell commit to the explicit-repair branch. Run the existing
-  live case on that exact combined commit twice in approved Linux guests.
-  Record the commit, source snapshot and repair times. Use the pinned MinIO
-  image without the scratch logging. Each run must finish the first outage
-  within 90 seconds, make one
-  bucket repair request after rejoin, and verify both ordinary and multipart
-  pieces on each returned disk and both encrypted byte streams within the
-  existing 180-second repair deadline. The failing capture is the unchanged
-  comparison. If either run misses repair, keep the failure and return to the
-  watcher before changing anything else.
+- Keep the cell setting and the explicit repair together. The original Linux run
+  stopped on an HTTP 503 read during the outage before requesting repair. After
+  DNS placement landed, the watcher's 04:32 note on 19 November cleared one
+  recheck. It passed the 90-second outage leg in 45.890 seconds and the 180-second
+  repair leg in 18.746 seconds. Both logged data reconnects preceded the repair
+  request. This run combined both DNS changes with one explicit repair.
+  See [the storage rehearsal notes](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal).
 - [ ] Send the combined branch through whole-branch review and CI before
   landing the cell change and repair proof together. In that PR, link the
   peer refresh and single bucket repair to the consecutive-outage check in
   the country-cell plan. Update the AWS guide and backlog. Keep the
   consecutive-outage check and paid run gates. Use the existing store,
-  disk assignments, peer names and repair call. This slice adds no polling,
-  retry or upstream patch.
+  disk assignments and peer names. The rehearsal polls only the explicit
+  repair job returned by the pinned test store.
 
 Expected size is one configuration line and about four test lines, plus
 short guide and backlog updates. The render test owns the configuration.
