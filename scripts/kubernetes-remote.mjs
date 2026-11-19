@@ -20,18 +20,6 @@ export async function untilRemote(probe, ms, signal, stage) {
   throw Error('remote.' + stage, {cause: last});
 }
 
-// The existing peer dials 51820. The private relay forwards it to Kind's UDP NodePort.
-const relay = `
-const {createSocket} = require('node:dgram');
-const inbound = createSocket('udp4'), upstream = createSocket('udp4');
-let peer;
-upstream.connect(31820, process.argv[1], () => {
-  inbound.on('message', (data, source) => {peer = source; upstream.send(data);});
-  inbound.bind(51820, '0.0.0.0');
-});
-upstream.on('message', data => {if (peer) inbound.send(data, peer.port, peer.address);});
-`;
-
 export async function startRemoteRehearsal({context, kube, create, tag, settings}) {
   const {cluster, nodes, run, signal} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
@@ -72,7 +60,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       rows.map(row => row.metadata.name);
   }, 180000, signal, 'gateway_candidates');
   const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
-    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, '-e', relay, nodes[0].ip]);
+    '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs', nodes[0].ip]);
   assert.match(relayId, /^[a-f0-9]{64}$/);
   const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
   try {
