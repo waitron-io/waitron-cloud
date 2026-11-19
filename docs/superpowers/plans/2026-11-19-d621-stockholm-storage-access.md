@@ -39,4 +39,6 @@ D621's existing `docs/backlog.md` entry. Estimate 340–450 implementation and 1
 The loopback HTTPS receipts show two GETs from `BackupObjects` after one busy response and one
 POST from `StorageAuthority.grant` after a busy exchange response. Only the object read refusal
 was observed in the Linux outage. Preserve both observations and check issuance during the new
-outage leg. The watcher decides whether this slice changes retry behavior. Store repair remains open.
+outage leg. The watcher cleared the plan at 01:14 on 19 November 2026. Keep the existing retry
+behavior unless the real credential exchange returns a 503 during that outage. If it does, add a
+bounded retry with a failing test in this slice. Store repair remains open.

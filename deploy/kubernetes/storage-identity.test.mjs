@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
+import {X509Certificate} from 'node:crypto';
 import {mkdtemp, rm, stat, unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -22,6 +23,17 @@ test('storage custody survives reopening and refuses a lost key', async t => {
   assert.deepEqual(await readStorageCustody(directory), initial);
   await assert.rejects(createStorageCustody(directory, run), {code: 'EEXIST'});
   await unlink(join(directory, 'master.key'));
+  await assert.rejects(readStorageCustody(directory), /storage_identity\.custody_unavailable/);
+});
+
+test('reopening custody refuses an expired issuer certificate', async t => {
+  const parent = await mkdtemp(join(tmpdir(), 'storage-identity-test-'));
+  t.after(() => rm(parent, {recursive: true, force: true}));
+  const directory = join(parent, 'custody');
+  const {createStorageCustody, readStorageCustody} = await import('./secrets.mjs');
+  const {certificate} = await createStorageCustody(directory, run);
+  const expiry = new X509Certificate(certificate).validToDate.getTime();
+  t.mock.method(Date, 'now', () => expiry + 1000);
   await assert.rejects(readStorageCustody(directory), /storage_identity\.custody_unavailable/);
 });
 

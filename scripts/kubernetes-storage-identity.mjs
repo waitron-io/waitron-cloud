@@ -12,6 +12,7 @@ import {StorageAuthority} from '../packages/backups/src/storage.ts';
 import {bufferObject} from '../packages/backups/src/object-transfer.ts';
 import {readObject, storageBucket, storageClient, withStockholmStore} from './kubernetes-storage-proof.mjs';
 import {storeNodePort} from './kubernetes-storage.mjs';
+import {retryApi} from './kubernetes-node-loss.mjs';
 
 const require = createRequire(new URL('../packages/backups/package.json', import.meta.url));
 const {CreateBucketCommand, DeleteObjectCommand, ListObjectsV2Command, PutBucketVersioningCommand} =
@@ -190,14 +191,16 @@ async function checkGrants(context, account, custodyDirectory) {
       assert.equal(reopened.options.vault.open(venue, 1, sealed).streamKey, streamKey);
       const expires = Date.parse(restore.expiresAt);
       process.stderr.write('Issuer replacement and custody reopen passed; waiting for the expiry window\n');
-      await delay(Math.max(0, expires - Date.now() - 30_000), undefined, {signal});
+      await delay(Math.max(0, expires - Date.now() - 45_000), undefined, {signal});
       return await stopNode(stoppedName, {whileStopped: async ({signal: stopped}) => {
-        assert.ok(Date.now() < expires, 'storage_identity.grant_expired_before_stop');
+        assert.ok(Date.now() < expires, 'storage_identity.grant_expired_before_check');
+        const originalGrant = client(survivor, restore.credentials);
+        assert.deepEqual(await get(originalGrant, snapshot, stopped), bytes);
         await delay(Math.max(0, expires - Date.now() + 2_000), undefined, {signal: stopped});
-        const expired = client(survivor, restore.credentials);
-        await assert.rejects(get(expired, snapshot, stopped),
+        await assert.rejects(get(originalGrant, snapshot, stopped),
           error => error.name === 'InvalidAccessKeyId' && error.$metadata?.httpStatusCode === 403);
-        assert.deepEqual(await getJwks(remainingIssuer.metadata.name, stopped), expectedJwks);
+        const survivingKey = await retryApi(() => getJwks(remainingIssuer.metadata.name, stopped), stopped, 'issuer JWKS');
+        assert.deepEqual(survivingKey, expectedJwks);
         const renewed = await open(reopened, survivor, 'restore', snapshot);
         assert.deepEqual(await get(client(survivor, renewed.credentials), snapshot, stopped), bytes);
         return {expiredGrantRefused: true, issuerKeyStable: true, issuerSurvivor: survivor.name};
