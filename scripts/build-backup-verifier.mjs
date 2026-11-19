@@ -3,7 +3,7 @@ import {copyFile,mkdir,mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-const checkout=process.env.WAITRON_CHECKOUT,image=process.env.CLOUD_VERIFIER_IMAGE??'waitron-backup-verifier:local';
+const checkout=process.env.WAITRON_CHECKOUT;
 if(!checkout||!process.env.NODE_AUTH_TOKEN)throw Error('Set WAITRON_CHECKOUT and NODE_AUTH_TOKEN before building the verifier');
 const [profile,...extra]=process.argv.slice(2);
 const targets = new Map([
@@ -13,6 +13,8 @@ const targets = new Map([
 ]);
 const targetFile = targets.get(profile);
 if(extra.length||!targetFile)throw Error('Choose at most one verifier target: --streamed or --amazon-test');
+const defaultImage=profile==='--amazon-test'?'waitron-backup-verifier:amazon-test':'waitron-backup-verifier:local';
+const image=process.env.CLOUD_VERIFIER_IMAGE??defaultImage;
 // Public source must remain readable by the unprivileged image user under a private caller mask.
 process.umask(0o022);
 const root=fileURLToPath(new URL('../',import.meta.url)),context=await mkdtemp(join(tmpdir(),'cloud-verifier-build-'));

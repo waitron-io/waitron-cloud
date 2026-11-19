@@ -5,7 +5,14 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
+import {validateBackupVerificationTarget} from '../packages/backups/src/verification-protocol.ts';
 const cloud=fileURLToPath(new URL('../',import.meta.url));
+
+test('the committed Amazon verifier pin passes backup target validation', async () => {
+ const pin=JSON.parse(await readFile(join(cloud,'deploy/backup-verifier/amazon-test-target.json'),'utf8'));
+ validateBackupVerificationTarget(pin);
+});
+
 test('verifier build archives the pinned committed source and supplies its generated runtime stamp',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-build-contract-')),source=join(root,'source'),candidate=join(root,'cloud'),bin=join(root,'bin'),capture=join(root,'capture');
  try{
@@ -40,7 +47,7 @@ function walk(name){
  if(directory)for(const child of fs.readdirSync(path.join(context,name)))walk(path.join(name,child));
 }
 walk('waitron');walk('verifier');
-fs.writeFileSync(${JSON.stringify(modes)},JSON.stringify({root:fs.statSync(context).mode&0o777,entries}));
+fs.writeFileSync(${JSON.stringify(modes)},JSON.stringify({root:fs.statSync(context).mode&0o777,entries,tag:process.argv[process.argv.indexOf('-t')+1]}));
 fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wrapper,0o700);
   const callerMask=process.umask(0o077);
   try{
@@ -60,8 +67,11 @@ fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wr
    {env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
   assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'later','the streamed image must use its separately reviewed release');
   assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/streamed-target.json'),'utf8'));
+  const amazonEnv={...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'};
+  delete amazonEnv.CLOUD_VERIFIER_IMAGE;
   execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs'),'--amazon-test'],
-   {env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+   {env:amazonEnv,stdio:'pipe'});
+  assert.equal(JSON.parse(await readFile(modes,'utf8')).tag,'waitron-backup-verifier:amazon-test');
   assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'installed release');
   assert.deepEqual(JSON.parse(await readFile(join(capture,'waitron/build/hour-release.json'),'utf8')),{sourceCommit:installed,fixture:'real-generator-boundary'});
   assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/amazon-test-target.json'),'utf8'));

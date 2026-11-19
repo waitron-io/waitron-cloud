@@ -42,13 +42,14 @@ The build checks that the compiled verifier reports the same target.
 
 On your isolated Linux Docker host, set `WAITRON_CHECKOUT` to a checkout that
 contains the pinned commit and set `NODE_AUTH_TOKEN` as for a local verifier
-build. From the Cloud repository, fetch the exact source if needed, then give
-the test image its own local tag.
+build. From the Cloud repository, fetch the exact source if needed and build
+the image. The default tag is `waitron-backup-verifier:amazon-test`. Set
+`CLOUD_VERIFIER_IMAGE` to use a different tag.
 
 ```sh
 revision=$(node -p 'require("./deploy/backup-verifier/amazon-test-target.json").runtime.revision')
 git -C "$WAITRON_CHECKOUT" fetch --no-tags https://github.com/clintongormley/waitron.git "$revision"
-CLOUD_VERIFIER_IMAGE=waitron-backup-verifier:amazon-test node scripts/build-backup-verifier.mjs --amazon-test
+node scripts/build-backup-verifier.mjs --amazon-test
 ```
 
 This builds a local image. The Amazon trial needs a separately configured upload
