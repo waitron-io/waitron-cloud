@@ -1311,6 +1311,10 @@ HTTPS through a standby. The check also verifies certificate replacement and
 owner account revocation. Each of those stages allows 180 seconds for the
 projected files to reach all three candidates.
 
+An idle synthetic box missed the 90-second deadline. With periodic traffic
+from the fixture, the same peer restored both routes in 21.841 seconds.
+Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).
+
 Use the outside rehearsal to check a stopped Stockholm machine and changes
 to its private address, with the outside TCP and UDP listener and shared ingress.
 
