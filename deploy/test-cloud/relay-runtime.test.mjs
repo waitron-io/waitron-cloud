@@ -42,7 +42,12 @@ async function startAccount(db,context,environment={}){
   CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_HTTP_PORT:'0',...environment},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stderr.on('data',chunk=>stderr+=chunk);
  const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
- const close=async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;};
+ const close=async()=>{
+  if(child.exitCode!==null||child.signalCode!==null)return exited;
+  child.kill('SIGTERM');
+  const deadline=setTimeout(()=>child.kill('SIGKILL'),12000).unref();
+  try{return await exited;}finally{clearTimeout(deadline);}
+ };
  try{
   const {port,guestPort}=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]));})),
    exited.then(code=>{throw Error(`account exited ${code}: ${stderr}`);}),new Promise((_,reject)=>setTimeout(()=>reject(Error('account startup deadline')),15000).unref())]);
@@ -110,6 +115,11 @@ test('the Amazon test account accepts a signed publication and closes its privat
  const body=JSON.stringify({defaultLanguage:'en',pages:{en:html}});
  const signed=box.proof('guest-menu-publish',{version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),box.lease);
  const publish=running=>accountRequest(running,'/api/installations/guest-menu-publish',{...signed,body});
+ await assert.rejects(async()=>{
+  const refused=await startAccount(db,context,{CLOUD_VENUE_SERVICE_LEVELS:'0',GUEST_ORIGIN:'https://'+host,
+   GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0'});
+  await refused.close();
+ },/account exited 1: Account server failed/);
  const off=await startAccount(db,context);
  try{assert.equal(off.guestPort,undefined);assert.equal((await publish(off)).status,503);}
  finally{await off.close();}
@@ -129,6 +139,18 @@ test('the Amazon test account accepts a signed publication and closes its privat
   await running.close();
   await assert.rejects(read(),{code:'ECONNREFUSED'});
  }finally{await running.close();}
+});
+
+test('the guest listener closes when the account listener reports a shutdown failure',{timeout:20000},async t=>{
+ const {db,context}=await setup(t);
+ await prepareAccount(t,context);
+ const preload=`import {Server} from 'node:http';
+  const close=Server.prototype.close;
+  Server.prototype.close=function(callback){return close.call(this,()=>callback(new Error('account close failed')));};`;
+ const running=await startAccount(db,context,{GUEST_ORIGIN:'https://menus.cloud.example.test',
+  GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0',NODE_OPTIONS:'--import=data:text/javascript,'+encodeURIComponent(preload)});
+ assert.ok(running.guestPort>0);
+ assert.equal(await running.close(),1,'worker must exit with the original shutdown failure');
 });
 
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{

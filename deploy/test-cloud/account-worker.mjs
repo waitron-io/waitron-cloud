@@ -94,7 +94,9 @@ try {
   process.exitCode = 1;
 } finally {
   stop();
-  try {await actionDemo?.close();await running?.close(); await guest?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
+  try {await guest?.close();} catch {process.exitCode = 1;}
+  try {await actionDemo?.close();await running?.close();} catch {process.exitCode = 1;}
+  try {captures?.close();await pool?.end();} catch {process.exitCode = 1;}
   clearInterval(cleanup); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }

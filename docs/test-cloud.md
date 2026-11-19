@@ -381,18 +381,22 @@ certificate only if it covers both names. A refused import preserves the
 certificate the proxy is using. Check HTTPS for the account and an existing
 venue gateway address before enabling the reader.
 
-Set `TEST_CLOUD_GUEST_MENU=1` in the host's private `test.env`. Run bootstrap
-with the three Compose files above, then use those files to recreate `account`
-and `proxy` with `up -d --no-deps --force-recreate account proxy`. The new
-setting takes effect when those containers start.
+Set `TEST_CLOUD_GUEST_MENU=1` in the host's private `test.env`. Run the
+one-off bootstrap command above and confirm it prints `{"status":"ready"}`.
+If it fails, unset the switch and leave the running containers in place.
+Check that the certificate directory holds the new certificate and its key
+before trying again. After bootstrap succeeds, run the Amazon deployment
+driver's `up` command with the installed image. It starts the account and
+proxy with the new setting and updates the recorded container IDs.
 
 After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
 choose **Turn sharing on**. Open the published address on a phone using mobile
 data. In the Cloud portal, turn the guest menu off for the venue and confirm
 the same address returns 404. Turn it on and wait for the box to publish again.
 
-To close the test reader, unset `TEST_CLOUD_GUEST_MENU` and recreate `account`
-and `proxy`. The shared certificate can keep both names while this image is
+To close the test reader, unset `TEST_CLOUD_GUEST_MENU` and run the Amazon
+driver's `up` command again with the installed image. The shared certificate
+can keep both names while this image is
 in use. Before restoring an image that lacks the guest challenge handler,
 restore the saved account-only Certbot configuration and verify its renewal.
 
