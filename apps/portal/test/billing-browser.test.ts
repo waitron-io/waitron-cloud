@@ -25,7 +25,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    {venueId:usedTrial,...registered,canStartTrial:false,connectedPrice},
    {venueId:free,...registered,connectedPrice:{...connectedPrice,netCents:0,grossCents:0}},
   ];
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/billing',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
@@ -38,7 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    }
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/billing');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   const section=page.getByRole('region',{name:c.billingTitle,exact:true});await section.waitFor();
   const price=section.getByText(locale==='en'?'€10.00/month + VAT (€12.10)':'10,00 €/mes + IVA (12,10 €)',{exact:true});
   const timing=section.getByText(locale==='en'
@@ -79,14 +79,14 @@ for(const status of [403,503])test(`unavailable trial chooser ${status} adds no 
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();page.setDefaultTimeout(4000);
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/billing',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session'))return route.fulfill({json:{accountId:'ordinary',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
    return route.fulfill({status:path.endsWith('/billing/read')?status:503,json:{error:path.endsWith('/billing/read')&&status===403?'permission_denied':'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/billing');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const billing=(window as any).app.billing;return billing.loadAttempted&&!billing.pending;});
   assert.equal(await page.getByRole('region',{name:translations.en.billingTitle,exact:true}).count(),0);
  }finally{await browser.close();}
@@ -96,7 +96,7 @@ for(const hint of [undefined,false,'true'])test(`ordinary or malformed discovery
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();page.setDefaultTimeout(4000);let reads=0,activities=0;
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/billing',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity')){
@@ -107,10 +107,10 @@ for(const hint of [undefined,false,'true'])test(`ordinary or malformed discovery
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/billing');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>['authenticated','unavailable'].includes((window as any).app.session.state.kind));
   if(hint===undefined){
-   await page.waitForFunction(()=>(window as any).app.installations.loaded);
+   await page.waitForURL('https://portal.test/account');
    const activity=page.waitForResponse('**/session/activity');await page.keyboard.press('Tab');await activity;
   }
   await page.waitForLoadState('networkidle');
@@ -125,7 +125,7 @@ for(const retain of [false,true])test(`activity ${retain?'retains discovery':'fe
  const reply=new Promise<void>(resolve=>{release=resolve;});
  try{
   const page=await browser.newPage();page.setDefaultTimeout(4000);let reads=0,hint=true;
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/billing',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),...(hint?{billingTrialAvailable:true}:{})}});
@@ -133,7 +133,7 @@ for(const retain of [false,true])test(`activity ${retain?'retains discovery':'fe
    if(path.endsWith('/billing/read')){reads++;if(reads===1)await reply;return route.fulfill({json:{venues:[{venueId:first,level:'registered',trial:null,canStartTrial:true}]}});}
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/billing');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.billing.pending);
   hint=retain;const activity=page.waitForResponse('**/session/activity');await page.keyboard.press('Tab');await activity;
   await page.waitForFunction((expected)=>(window as any).app.session.state.billingTrialAvailable===expected,retain?true:undefined);
@@ -142,7 +142,9 @@ for(const retain of [false,true])test(`activity ${retain?'retains discovery':'fe
   assert.equal(reads,1);assert.equal(await section.count(),retain?1:0);
   if(!retain){
    assert.deepEqual(await page.evaluate(()=>(window as any).app.billing.venues),[]);
-   hint=true;await page.evaluate(()=>(window as any).app.session.check());await section.waitFor();
+   hint=true;await page.evaluate(()=>(window as any).app.session.check());
+   await page.getByRole('navigation',{name:translations.en.accountNav}).getByRole('link',{name:'Billing',exact:true}).click();
+   await section.waitFor();
    await page.waitForLoadState('networkidle');assert.equal(reads,2);
   }
  }finally{release();await browser.close();}

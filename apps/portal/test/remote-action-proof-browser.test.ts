@@ -13,7 +13,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  const browser=await chromium.launch({headless:true});try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
   const c=translations[locale];let enrolled=false,freshUntil:string|null=null,applies=0;
-  await page.route('https://portal.test/account',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/remote-access',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/account','');
    if(path==='/session'||path==='/session/activity')return route.fulfill({json:{accountId:'owner',expiresAt:'2099-01-01T00:00:00Z'}});
@@ -25,15 +25,20 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path==='/remote-access/apply'){applies++;return route.fulfill({json:{...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:'staff.cafe.example'}}}});}
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/remote-access');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();const section=page.locator('.remote-setup');
   await section.locator('wt-input[name=remoteHostname] input').fill('staff.cafe.example');await section.getByRole('button',{name:c.remoteReview,exact:true}).click();
   const confirm=section.getByRole('button',{name:c.remoteConfirm,exact:true});await confirm.click();
   await section.getByText(c.pairEnrollment,{exact:true}).waitFor();assert.equal(applies,0,'enrollment guidance precedes the write');
   const capture=async(state:string)=>{await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=>(await window.axe.run(document)).violations),[]);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));if(process.env.REMOTE_PROOF_RECEIPT_DIR){await mkdir(process.env.REMOTE_PROOF_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.REMOTE_PROOF_RECEIPT_DIR}/${locale}-${theme}-${width}-${state}.png`,fullPage:true});}};
   await capture('enroll');await section.getByRole('link',{name:c.accountSecurity,exact:true}).click();await page.waitForLoadState('networkidle');
-  assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading','the local link focuses security without navigating');await capture('security-focus');
-  enrolled=true;await confirm.click();await section.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();await section.getByText(c.remoteProofRequired,{exact:true}).waitFor();assert.equal(await section.getByRole('alert').count(),0,'the initial proof prompt is not a failed verification');assert.equal(applies,0,'the prompt precedes the write');await capture('proof');
+  assert.equal(new URL(page.url()).pathname,'/account');
+  assert.equal(await page.evaluate(()=>document.activeElement?.id),'account-security-heading','the account link focuses security');await capture('security-focus');
+  enrolled=true;
+  await page.getByRole('navigation',{name:c.accountNav}).getByRole('link',{name:c.remoteAccess,exact:true}).click();
+  await section.locator('wt-input[name=remoteHostname] input').fill('staff.cafe.example');
+  await section.getByRole('button',{name:c.remoteReview,exact:true}).click();
+  await confirm.click();await section.getByRole('link',{name:c.actionProofTitle,exact:true}).waitFor();await section.getByText(c.remoteProofRequired,{exact:true}).waitFor();assert.equal(await section.getByRole('alert').count(),0,'the initial proof prompt is not a failed verification');assert.equal(applies,0,'the prompt precedes the write');await capture('proof');
   const proofInput=page.locator('wt-input[name=actionProofCode] input');await proofInput.fill('11111111222222223333333344444444');
   await section.getByRole('link',{name:c.actionProofTitle,exact:true}).click();await page.waitForLoadState('networkidle');
   assert.equal(await page.evaluate(()=>document.activeElement?.id),'action-proof-heading');assert.equal(await proofInput.inputValue(),'11111111222222223333333344444444','the local link preserves an entered proof');

@@ -9,13 +9,28 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
     const f=await startPortalFixture();
     try {
       const page=await f.browser.newPage({locale,colorScheme,viewport:{width:375,height:812}});page.setDefaultTimeout(5000);
-      await page.route('**/api/account/session',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString()}}));
+      await page.route('**/api/account/session',route=>route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+600_000).toISOString(),billingTrialAvailable:true}}));
       const id='12345678-1234-4234-8234-123456789abc',services=['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}));
       await page.route('**/api/account/installations',route=>route.fulfill({json:{installations:[{installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,overview:{organisationName:'Café Sol',businessName:'Sol SL',countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null},services}]}}));
       await page.route('**/api/account/usage/read',route=>route.fulfill({json:{version:1,organisationId:id,storage:{currentBytes:'0',addedBytes:'0',removedBytes:'0'},transfer:{uploadedBytes:'0',restoredBytes:'0'},operations:{installationCompleted:'0',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},latestEventAt:null,measuredThrough:null}}));
-      for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password','/account']) {
+      await page.route('**/api/account/billing/read', route => route.fulfill({json: {venues: []}}));
+      const c = translations[locale];
+      const headings: Record<string, string> = {
+        '/account': c.account, '/account/venues': c.venues, '/account/remote-access': c.remoteAccess, '/account/billing': c.billing,
+      };
+      for(const route of ['/login','/signup','/signup#token='+'a'.repeat(43),'/forgot-password','/reset-password#token='+'b'.repeat(43),'/reset-password',...Object.keys(headings)]) {
         await page.goto(f.origin+route);await page.locator('wt-card').waitFor();
-        if(route==='/account') {await page.getByText(translations[locale].accountIntro).waitFor();await page.getByRole('heading',{name:translations[locale].usageTitle,exact:true}).waitFor();await page.getByRole('button',{name:translations[locale].diagnosticDownload,exact:true}).waitFor();}
+        if (route in headings) {
+          await page.getByRole('heading', {level: 1, name: headings[route], exact: true}).waitFor();
+          await page.getByRole('navigation', {name: c.accountNav}).locator('a[aria-current="page"]').waitFor();
+        }
+        if (route === '/account') await page.getByText(c.accountIntro, {exact: true}).waitFor();
+        if (route === '/account/venues') {
+          await page.getByRole('heading', {name: c.usageTitle, exact: true}).waitFor();
+          await page.getByRole('button', {name: c.diagnosticDownload, exact: true}).waitFor();
+        }
+        if (route === '/account/remote-access') await page.getByRole('button', {name: c.remoteSetup, exact: true}).waitFor();
+        if (route === '/account/billing') await page.getByRole('heading', {name: c.billingTitle, exact: true}).waitFor();
         await page.evaluate(axe.source);
         const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})));
         assert.deepEqual(violations,[],route);
@@ -34,11 +49,14 @@ for(const locale of ['en','es'] as const) for(const colorScheme of ['light','dar
           await page.setViewportSize({width:375,height:812});
         }
         if(route.startsWith('/signup#')) await page.screenshot({path:new URL(`../dist/preview-${locale}-${colorScheme}.png`,import.meta.url).pathname,fullPage:true});
-        if(route==='/account'){
-          await page.screenshot({path:new URL(`../dist/diagnostics-${locale}-${colorScheme}-phone.png`,import.meta.url).pathname,fullPage:true});
-          await page.setViewportSize({width:1280,height:800});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-          await page.screenshot({path:new URL(`../dist/diagnostics-${locale}-${colorScheme}-desktop.png`,import.meta.url).pathname,fullPage:true});
-          await page.setViewportSize({width:375,height:812});
+        if (route in headings) {
+          for (const width of [390, 1280]) {
+            await page.setViewportSize({width, height: 812});
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${route} ${width}`);
+            const name = route.slice(1).replaceAll('/', '-');
+            await page.screenshot({path: new URL(`../dist/${name}-${locale}-${colorScheme}-${width}.png`, import.meta.url).pathname, fullPage: true});
+          }
+          await page.setViewportSize({width: 375, height: 812});
         }
       }
       await page.goto(`${f.origin}/login`);await page.getByRole('button',{name:translations[locale].login,exact:true}).click();

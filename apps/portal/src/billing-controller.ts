@@ -13,7 +13,7 @@ export class BillingController{
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.#taxDrafts.clear();this.venues=[];this.selected=undefined;this.loaded=false;this.loadAttempted=false;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();}}
  select(id:string){if(id!==this.selected&&this.venues.some(venue=>venue.venueId===id)){this.selected=id;this.#generation++;this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();this.#changed();}}
  get venue(){return this.venues.find(venue=>venue.venueId===this.selected);}
- fence(){this.#generation++;this.#taxDrafts.clear();this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();}
+ fence(){if (this.pending && !this.loaded) this.loadAttempted = false;this.#generation++;this.#taxDrafts.clear();this.pending=false;this.error=undefined;this.taxInvalid=undefined;this.taxSaved=false;this.#clearMethod();}
  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  async load(){
   if(!this.#account||this.pending||this.waiting)return;

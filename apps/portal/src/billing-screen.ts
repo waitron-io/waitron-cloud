@@ -7,7 +7,10 @@ import type {LitElement} from 'lit';
 
 export function billingScreen(app:PortalApp){
  const controller=app.billing,c=app.copy,venue=controller.venue,disabled=controller.pending||!!controller.waiting;
- if(!controller.loaded&&!controller.error)return nothing;
+ if (!controller.loaded && !controller.error) {
+  return controller.pending ? html`<wt-spinner .label=${c.wait}></wt-spinner>`
+   : html`<wt-button .disabled=${disabled} @click=${() => {void controller.load();}}>${c.retry}</wt-button>`;
+ }
  const methodError=controller.error&&(controller.error.startsWith('billingMethod')||['pairEnrollment','actionProofUnavailable','billingProofRequired'].includes(controller.error));
  const draft=controller.taxDraft;
  const saveTax=async()=>{
@@ -53,7 +56,7 @@ export function billingScreen(app:PortalApp){
   </form>`:nothing}
   ${venue?.paymentMethods?html`<section class="billing-methods" aria-label=${c.billingMethodsTitle}><h3>${c.billingMethodsTitle}</h3>
    ${controller.error&&methodError?html`<p role=${controller.error==='billingProofRequired'?'status':'alert'}>${c[controller.error]}</p>`:nothing}
-   ${controller.error==='pairEnrollment'?html`<a href="#account-security-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#account-security-heading')?.focus();}}>${c.accountSecurity}</a>`:controller.error==='actionProofUnavailable'||controller.error==='billingProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
+   ${controller.error==='pairEnrollment'?html`<a href="/account" @click=${(event: MouseEvent) => app.openAccountSecurity(event)}>${c.accountSecurity}</a>`:controller.error==='actionProofUnavailable'||controller.error==='billingProofRequired'?html`<a href="#action-proof-heading" @click=${(event:MouseEvent)=>{event.preventDefault();app.root.querySelector<HTMLElement>('#action-proof-heading')?.focus();}}>${c.actionProofTitle}</a>`:nothing}
    <p>${c.billingMethodsIntro}</p><p>${c.billingSelectedMethod} ${venue.paymentMethods.selected==='card'?c.billingMethodCard:venue.paymentMethods.selected==='direct_debit'?c.billingMethodDebit:c.billingMethodNone}</p>
    <div class="factor-actions"><wt-button .disabled=${disabled} @click=${()=>{void app.startPaymentMethod('card');}}>${c.billingAddCard}</wt-button>
    <wt-button .disabled=${disabled} @click=${()=>{void app.startPaymentMethod('direct_debit');}}>${c.billingAddDebit}</wt-button></div>

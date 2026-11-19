@@ -22,7 +22,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const c = translations[locale], other = locale === 'en' ? 'es' : 'en';
       const writes: unknown[] = [];
       let uncertain = false;
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html',
         body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
@@ -43,7 +43,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account');
+      await page.goto('https://portal.test/account/venues');
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const checkbox = page.getByRole('checkbox', {name: c.alertsReceive, exact: true});

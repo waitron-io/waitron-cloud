@@ -67,7 +67,7 @@ export function createTestBillingMethodClient(options:{stripeKey:string;sumupKey
    ||origin.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(origin.hostname)
    ||! /^(sk|rk)_test_[A-Za-z0-9_]+$/.test(options.stripeKey)
    ||typeof options.sumupKey!=='string'||!options.sumupKey.trim()||/[^\x20-\x7e]/.test(options.sumupKey))throw new Error();
-  returnUrl=origin.origin+'/account';
+  returnUrl=origin.origin+'/account/billing';
  }catch{throw new Error('billing_methods.invalid_config');}
  const fetcher=options.fetcher??fetch;
  async function request(provider:'stripe'|'sumup',path:string,body?:Record<string,unknown>,authorize?:()=>Promise<void>):Promise<unknown>{

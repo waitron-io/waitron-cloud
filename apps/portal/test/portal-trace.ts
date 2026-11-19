@@ -12,7 +12,7 @@ export function portalTrace(page:Page) {
  page.on('requestfinished',request=>{const data=details(request);if(data)record({event:'finished',...data,elapsed:Math.round(performance.now()-(requests.get(request)??performance.now()))});});
  page.on('requestfailed',request=>{const data=details(request);if(data)record({event:'failed',...data,elapsed:Math.round(performance.now()-(requests.get(request)??performance.now()))});});
  page.on('pageerror',()=>record({event:'pageerror'}));
- page.on('framenavigated',frame=>{if(frame===page.mainFrame()){const path=new URL(frame.url()).pathname;record({event:'navigation',path:['/account','/recover','/login'].includes(path)?path:'other'});}});
+ page.on('framenavigated',frame=>{if(frame===page.mainFrame()){const path=new URL(frame.url()).pathname;record({event:'navigation',path:['/account','/account/venues','/account/remote-access','/account/billing','/recover','/login'].includes(path)?path:'other'});}});
  return {events,stage:(stage:string)=>record({stage})};
 }
 
@@ -49,7 +49,7 @@ export async function failPortalWait(page:Page,trace:ReturnType<typeof portalTra
    const session=app?.session?.state?.kind;
    const failure=usage?.error;
    return {clock:new Date().toISOString(),
-    path:['/account','/recover','/login'].includes(app?.path)?app.path:'other',
+    path:['/account','/account/venues','/account/remote-access','/account/billing','/recover','/login'].includes(app?.path)?app.path:'other',
     session:['checking','unavailable','anonymous','authenticated'].includes(session)?session:'other',
     recovery:panel(()=>{const recovery=app?.recovery;return recovery?{pending:flag(recovery.pending),uncertain:flag(recovery.uncertain),codePresent:typeof recovery.code==='string'&&recovery.code.length>0,viewPresent:recovery.view!==undefined}:{unavailable:true};}),
     remote:panel(()=>{const remote=app?.remote;return remote?{pending:flag(remote.pending),viewPresent:remote.view!==undefined,confirmationPresent:remote.confirmation!==undefined,errorPresent:remote.error!==undefined,hostnameChanged:flag(remote.hostnameChanged)}:{unavailable:true};}),

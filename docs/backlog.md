@@ -411,10 +411,13 @@ internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for
 email capture. SMTP capture tests select by subject and recipient because concurrent
 database fixtures share the inbox. The account HTTP API now provides signup, login, session activity,
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
-network handling. The bilingual account portal now covers signup, sign-in, sign-out
-and password recovery, served by that API with real browser and Mailpit tests.
-The account venue overview groups one organisation at a time, shows business context,
-connection/service state and separate latest/verified snapshot capture times. Verified
+network handling. The bilingual portal supports signup and password recovery.
+After signing in, use Account for sign-in and security, Venues for services and
+backups, and Remote access for addresses and guest menus. Billing appears for
+eligible accounts and holds the Connected trial, tax details and test payment methods.
+You can sign out from each page. Browser and Mailpit tests exercise the portal
+through the account API. Venues shows one organisation at a time, with business
+details, connection and service state, and separate latest and verified snapshot times. Verified
 snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
 protected copies. The local durable worker now verifies real Waitron restores, retries failures and
 cleans expired snapshots and abandoned captures. The local monitor now persists contact,

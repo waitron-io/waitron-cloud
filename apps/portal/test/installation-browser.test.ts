@@ -20,6 +20,7 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await r.start(b2);await r.approveCloud(b2,owner.accountId);await r.approveLocal(b2,randomUUID());const other=await r.complete(b2);
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
+  await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
   await page.getByRole('button',{name:stop,exact:true}).waitFor();
   await page.getByRole('heading',{name:/Sol SL/}).waitFor();

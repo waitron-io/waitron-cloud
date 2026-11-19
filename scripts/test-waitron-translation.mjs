@@ -102,7 +102,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Translation Proof SL',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Connect this venue',exact:true}).click();await page.getByText('Connected',{exact:true}).waitFor();
   const connected=await request('GET','cloud/status');receipt.installationId=connected.registration.installationId;
-  stage='consent';await portal.goto(f.origin+'/account');await portal.getByRole('button',{name:'Allow menu translation',exact:true}).click();
+  stage='consent';await portal.goto(f.origin+'/account/venues');await portal.getByRole('button',{name:'Allow menu translation',exact:true}).click();
   await portal.getByText('Menu translation is allowed for this venue.',{exact:true}).waitFor();
   const consents=await (await context.request.get(f.origin+'/api/account/translation-consent')).json();
   receipt.consent={venueId:connected.registration.venueId,consents:consents.consents};

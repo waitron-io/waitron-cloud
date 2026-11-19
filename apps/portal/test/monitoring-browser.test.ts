@@ -30,6 +30,7 @@ for(const locale of ['en','es'] as const)test(`${locale} owner manages service a
   const monitor=new MonitorWorker(f.db.pool,f.db.outbox);await monitor.schedule();await monitor.runOnce();
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812},colorScheme:locale==='en'?'light':'dark'}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
+  await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const receive=locale==='en'?'Receive service alerts by email':'Recibir alertas de servicio por correo',language=locale==='en'?'Email language':'Idioma del correo',save=locale==='en'?'Save alert preferences':'Guardar preferencias de alertas',saved=locale==='en'?'Alert preferences saved.':'Preferencias de alertas guardadas.';
   const checkbox=page.getByRole('checkbox',{name:receive});await checkbox.waitFor();assert.equal(await checkbox.isChecked(),false);
   await checkbox.check();await page.getByLabel(language,{exact:true}).selectOption(locale);await page.getByRole('button',{name:save,exact:true}).click();await page.getByText(saved,{exact:true}).waitFor();

@@ -26,7 +26,8 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
     });
     const authenticator = await addVirtualAuthenticator(page.context(), page);
     try {
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal"></div>'}));
+      const entry = delayed === '/installations' ? '/account/venues' : '/account';
+      await page.route('https://portal.test' + entry, route => route.fulfill({contentType: 'text/html', body: '<div id="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const actionProof=mockActionProof(route);if(actionProof)return actionProof;
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
@@ -46,8 +47,12 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
         if (path === '/logout') { logouts++; return route.fulfill({status: 204}); }
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.goto('https://portal.test' + entry); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const c = translations.en;
+      if (delayed === '/installations') {
+        await page.waitForFunction(() => (window as any).signoutStartupApp.installations.pending);
+        await page.getByRole('link', {name: c.accountLink, exact: true}).click();
+      }
       await page.getByText(c.currentSession, {exact: true}).waitFor();
       await page.waitForFunction(delayed => {
         const app = (window as unknown as {signoutStartupApp: import('../src/app.ts').PortalApp}).signoutStartupApp;

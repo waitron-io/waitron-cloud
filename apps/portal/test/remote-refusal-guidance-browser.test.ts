@@ -34,7 +34,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    });
    for(const [cause,key] of [['remote_plan_required','remotePlanRequired'],['remote_setup_required','remoteSetupRequired'],['remote_test_only','remoteTestOnly'],['revoked','remoteRevoked']] as const){
     for(const action of ['dns','apply']){
-     denied='';revoked=false;await page.goto('https://portal.test/account');
+     denied='';revoked=false;await page.goto('https://portal.test/account/remote-access');
      await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
      const section=page.locator('.remote-setup');await section.locator('input').fill('staff.cafe.example');
      code=cause;denied='remote-access/'+action;
@@ -57,7 +57,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      }else{await back.click();await page.getByRole('heading',{name:c.account,exact:true}).waitFor();}
     }
    }
-   denied='';revoked=false;statusRevoked=true;await page.goto('https://portal.test/account');
+   denied='';revoked=false;statusRevoked=true;await page.goto('https://portal.test/account/remote-access');
    await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
    await page.locator('.remote-setup').getByRole('status').filter({hasText:c.remoteRevoked}).waitFor();
    assert.equal(await page.locator('.remote-setup').getByRole('button',{name:c.refreshStatus,exact:true}).count(),1,'revoked status names its existing refresh control');
@@ -65,7 +65,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await page.locator('.remote-setup a[target=_blank]').count(),0);
    assert.equal(writes.filter(path=>path==='remote-access/apply').length,4,'one deliberate save refusal per cause; no automatic replay');
    assert.equal(writes.includes('installations/revoke'),false);
-   connectedRequired=true;await page.goto('https://portal.test/account');
+   connectedRequired=true;await page.goto('https://portal.test/account/remote-access');
    await page.getByRole('button',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true}).click();
    const panel=page.locator('.remote-setup');
    await panel.getByRole('status').filter({hasText:locale==='en'?'Remote access comes with Connected.':'El acceso remoto está incluido en Connected.'}).waitFor();

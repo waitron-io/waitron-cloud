@@ -49,7 +49,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           staff: {status: 'healthy', checkedAt, certificateNotAfter: null},
         }},
       }));
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html',
         body: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="portal" class="portal"></div></body></html>'}));
       await page.route('**/api/account/**', route => {
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
@@ -64,7 +64,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (path === '/translation-consent') return route.fulfill({json: {consents: []}});
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account');
+      await page.goto('https://portal.test/account/venues');
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const venues = page.locator('article.installation');

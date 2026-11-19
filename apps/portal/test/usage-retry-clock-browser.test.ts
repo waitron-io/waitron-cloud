@@ -25,7 +25,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    performance.now = () => clock.elapsed;
   });
   let reads=0;
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
       const proof=mockActionProof(route);if(proof)return proof;
       if(new URL(route.request().url()).pathname==='/api/account/owner-transfers')return route.fulfill({json:{organisations:[],offers:[]}});
@@ -40,7 +40,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/alerts'))return route.fulfill({json:{enabled:false,locale}});
    throw new Error(`unplanned account endpoint: ${path}`);
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.usage.error==='limited');
   const refresh=page.locator('section.usage').getByRole('button',{name:translations[locale].usageRefresh,exact:true});
   assert.equal(await page.evaluate(()=>(window as any).app.waiting),2);

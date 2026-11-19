@@ -106,7 +106,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     });
     for (const source of ['snapshot', 'continuous'] as const) await t.test(`the recovery template independently hides an unoffered stale ${source} source`, async () => {
       await page.evaluate(async ({production, source}) => {
-        const app = (window as any).app; app.path = '/account'; await app.backups.open(production);
+        const app = (window as any).app; app.path = '/account/venues'; await app.backups.open(production);
         if (source === 'continuous') {app.backups.page.continuousRecovery = {recoverableAt: '2026-10-23T10:00:00.000Z', checkedAt: '2026-10-23T10:00:00.000Z', sourceNodeId: production}; app.backups.selectContinuous();}
         app.path = '/recover'; (window as any).renderRecovery();
       }, {production, source});

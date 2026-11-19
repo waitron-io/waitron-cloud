@@ -38,6 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await route.continue();
   });
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
+  await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const section=page.getByRole('group',{name:locale==='en'?'Menu translation':'Traducción del menú',exact:true});
   const allow=locale==='en'?'Allow menu translation':'Permitir la traducción del menú',stop=locale==='en'?'Stop menu translation':'Dejar de traducir el menú';
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
@@ -62,7 +63,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await Promise.all([retryReply,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
   record('manual retry replied');holdActivity=false;releaseActivity();
   await section.getByRole('button',{name:allow,exact:true}).waitFor();
-  assert.equal(new URL(page.url()).pathname,'/account');
+  assert.equal(new URL(page.url()).pathname,'/account/venues');
   const help=await section.innerText();for(const provider of ['OpenAI','Anthropic','Google'])assert.ok(help.includes(provider));assert.ok(help.includes('24'));
   await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -95,6 +96,7 @@ for(const locale of ['en','es'] as const)test(`${locale}: two venues keep access
   }
   const context=await f.browser.newContext({locale}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
+  await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
   const articles=page.locator('article.installation');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).waitFor();assert.equal(await articles.count(),2);
   await page.evaluate(axe.source);const violations=await page.evaluate(async()=> (await window.axe.run(document)).violations);
   f.loseAccountReply('/translation-consent','body');await articles.first().getByRole('button',{name:c.translationConsentAgree,exact:true}).click();await page.getByText(c.translationConsentUncertain,{exact:true}).first().waitFor();

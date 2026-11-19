@@ -24,7 +24,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       let activity = 0;
       const dns: unknown[] = [], apply: unknown[] = [];
       await page.clock.install();
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
+      await page.route('https://portal.test/account/remote-access', route => route.fulfill({contentType: 'text/html',
         body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
         const endpoint = new URL(route.request().url()).pathname.replace('/api/account', '');
@@ -43,7 +43,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (endpoint === '/remote-access/apply') apply.push(route.request().postDataJSON());
         return route.fulfill({status: 503, json: {error: 'unavailable'}});
       });
-      await page.goto('https://portal.test/account');
+      await page.goto('https://portal.test/account/remote-access');
       await page.evaluate(() => {
         const observed = window as typeof window & {sessionActivityCalls: number};
         observed.sessionActivityCalls = 0;

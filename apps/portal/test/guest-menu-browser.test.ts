@@ -13,6 +13,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   const c=translations[locale];await page.goto(portal.origin+'/login');await page.getByLabel(c.email).fill(f.email);await page.locator('input[name=password]').fill(f.password);
   await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(portal,page,f.email,locale);
   await page.getByText(c.accountIntro,{exact:true}).waitFor();
+  await page.goto(portal.origin+'/account/remote-access');
   const open=async()=>page.getByRole('button',{name:c.remoteSetup,exact:true}).click();await open();
   const region=page.getByRole('region',{name:locale==='en'?'Guest menu':'Menú para clientes',exact:true});
   await region.waitFor();
@@ -23,11 +24,11 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await region.getByRole('button',{name:locale==='en'?'Stop sharing':'Dejar de compartir',exact:true}).click();
   const enable=region.getByRole('button',{name:locale==='en'?'Allow sharing':'Permitir compartir',exact:true});await enable.waitFor();
   await region.screenshot({path:new URL(`../dist/guest-${locale}-${colorScheme}-${width}-blocked.png`,import.meta.url).pathname});
-  await page.reload();await page.getByText(c.accountIntro,{exact:true}).waitFor();await open();await enable.waitFor();await enable.click();
+  await page.reload();await page.getByRole('heading',{level:1,name:c.remoteAccess,exact:true}).waitFor();await open();await enable.waitFor();await enable.click();
   await region.getByText(locale==='en'?'No menu shared':'No se comparte ningún menú',{exact:true}).waitFor();
   await f.db.pool.query('DELETE FROM guest_menus WHERE venue_id=$1',[f.venueId]);await f.seed();
   await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installationId]);
-  await page.reload();await page.getByText(c.accountIntro,{exact:true}).waitFor();
+  await page.reload();await page.getByRole('heading',{level:1,name:c.remoteAccess,exact:true}).waitFor();
   await page.getByText(c.accessStopped,{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:c.remoteSetup,exact:true}).count(),0);
   await page.locator('.installation').screenshot({path:new URL(`../dist/guest-${locale}-${colorScheme}-${width}-revoked-entry.png`,import.meta.url).pathname});

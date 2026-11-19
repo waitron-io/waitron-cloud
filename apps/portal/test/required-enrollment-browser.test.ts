@@ -88,7 +88,7 @@ test('an enrollment refusal refreshes stale passkey settings into setup',async()
  try{
   await f.db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[id]);
   await f.db.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[id,email,await hashSecret(password)]);
-  const accountReady=['/sessions','/alerts','/translation-consent','/installations','/authenticator'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
+  const accountReady=['/sessions','/authenticator'].map(path=>page.waitForResponse(response=>response.url().endsWith(path)&&response.status()===200));
   await page.goto(`${f.origin}/login`);await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();
   await completeBrowserEmail(f,page,email,'en');await page.getByRole('heading',{name:c.enrollmentRequiredTitle,exact:true}).waitFor();
   await prepareBrowserActionWindow(f,page);await page.getByRole('button',{name:c.passkeyAdd,exact:true}).click();
