@@ -25,7 +25,7 @@ test('a timed-out probe preserves the last observation from before the deadline'
 });
 
 test('machine loss follows the Lease while the dead gateway still looks Ready', {timeout: 3000}, async t => {
-  let now = 100, down = false, slices = 0, standbyChecks = 0;
+  let now = 100, down = false, rejoined = false, slices = 0, standbyLeaseReads = 0, standbyChecks = 0;
   t.mock.method(performance, 'now', () => now);
   t.mock.method(Date, 'now', () => 1_000_250);
   const pod = (name, nodeName) => ({metadata: {name}, spec: {nodeName},
@@ -34,7 +34,9 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
   const kube = async args => {
     const [verb, resource, name] = args;
     if (verb === 'get' && resource === 'lease') {
-      return lease(name === 'kube-controller-manager' ? 'gateway-node_controller' : down || slices ? 'next' : 'old');
+      if (name === 'kube-controller-manager') return lease('gateway-node_controller');
+      if (rejoined) return lease(++standbyLeaseReads === 1 ? 'old' : 'next');
+      return lease(down ? 'next' : 'old');
     }
     if (verb === 'get' && resource === 'pods') {
       return JSON.stringify({items: [pod('old', 'gateway-node'), pod('next', 'standby-node')]});
@@ -66,14 +68,15 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
       down = true;
       const result = await whileStopped({signal: new AbortController().signal});
       down = false;
+      rejoined = true;
       return {stopped: node, ...result};
     }});
   assert.equal(result.replacement, 'next');
   assert.equal(result.controllerNode, 'gateway-node');
   assert.equal(result.endpointWithdrawnMs, 50);
   assert.equal(result.handshakeMs, 6750);
+  assert.equal(standbyLeaseReads, 3, 'the rebooted gateway must also give up the Lease');
   assert.equal(standbyChecks, 2, 'the rebooted gateway must pass the standby check before recovery completes');
-  assert.equal(result.rejoinedStandby, true);
   assert.deepEqual([result.receivedBytes, result.sentBytes], [12, 15]);
 });
 

@@ -18,11 +18,11 @@ test('the Waitron companion uses the venue key and its own traffic', async t => 
     {address: '10.77.4.2', gatewayPublicKey: 'synthetic gateway key', endpoint: '172.30.250.7:51820'});
 
   const calls = [], image = 'sha256:' + 'b'.repeat(64);
-  let ifindex = 12;
+  let ifindex = 12, started = 'true original';
   const docker = async args => {
     calls.push(args);
     if (args[0] === 'create') return 'companion';
-    if (args[0] === 'inspect') return 'true original';
+    if (args[0] === 'inspect') return started;
     if (args.includes('public-key')) return 'paired';
     if (args.includes('link')) return JSON.stringify([{ifindex}]);
     if (args[0] === 'start') return '';
@@ -42,8 +42,13 @@ test('the Waitron companion uses the venue key and its own traffic', async t => 
   assert.equal(calls.some(args => args.includes('ping')), false);
   assert.equal(result.fixtureTraffic, false);
 
+  const replaced = {code: 'ERR_ASSERTION', message: /^integration\.waitron_tunnel_replaced\b/};
   await assert.rejects(measureCompanion(async () => {
     ifindex = 13;
     return {stopped: 'old'};
-  }), {code: 'ERR_ASSERTION', message: /^integration\.waitron_tunnel_replaced\b/});
+  }), replaced);
+  await assert.rejects(measureCompanion(async () => {
+    started = 'true restarted';
+    return {stopped: 'old'};
+  }), replaced);
 });
