@@ -323,8 +323,9 @@ currently deployed image. Allowlisted owners of test venues can then open the
 payment controls.
 
 Invalid payment settings stop the account service from starting. If the logs
-say it refused the test payment configuration, check the account allowlist and
-provider settings. To bring the service back with payment setup off, set the
+say it refused the test payment configuration, check the mode and provider
+settings and confirm the allowlist contains an account. To bring the service
+back with payment setup off, set the
 mode to `off`, remove the four provider settings and run `up` again.
 
 On an authorised machine, use Certbot to obtain and renew the public certificate.
