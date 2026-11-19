@@ -19,7 +19,9 @@ the first machine is down.
    scheduler. Reuse the worker image, identity mounts and per-pod scratch. Start
    the handover rehearsal with one worker. Use the existing five-second venue
    fixture traffic during handover so the check can reach publication. Have the
-   first worker publish the baseline and same-route replacement before scaling to two. The fixture forgets only the saved request using a version-checked
+   first worker publish the baseline and same-route replacement before scaling to two.
+   Keep the first worker off the database primary and verify its placement again
+   just before stopping it. Account recovery across database failover has its own slice. The fixture forgets only the saved request using a version-checked
    Secret write, leaving the served certificate in place. Pin the remote inspection
    job to the account node in `deploy/kubernetes/services.mjs` and its caller,
    `scripts/kubernetes-services.mjs`. Read worker diagnostics by pod label.

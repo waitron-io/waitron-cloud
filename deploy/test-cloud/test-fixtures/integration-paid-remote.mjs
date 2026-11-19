@@ -182,9 +182,10 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     assert.deepEqual(original.routes.map(route => route.installationId), [paid.installationId]);
     assert.ok(original.certificate && original.certificate !== publicResponse.certificateSha256);
     assert.ok(original.request, 'integration.stockholm_public_request_missing');
+    const {retryApi} = await import('../../../scripts/kubernetes-node-loss.mjs');
     let withdrawalStarted;
     const publicationMachineLoss = await target.stopPublicationWorker(async ({signal}) => {
-      const jobs = await idleJobs(signal);
+      const jobs = await retryApi(() => idleJobs(signal), signal, 'publication jobs before renewal');
       assert.deepEqual(await phase('stockholm-remote-renew', {}, signal), {scheduled: true});
       await untilRemote(async limit => {
         const {certificate_public: certificate} = await phase('stockholm-remote-publication', {}, limit);

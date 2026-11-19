@@ -1315,8 +1315,9 @@ public certificate on the same route, with up to 180 seconds for all three
 gateways to receive it.
 
 The check starts a second publication worker on a different machine. Both
-workers stay off the account machine so the account can accept the owner's
-revocation while the first worker's machine is stopped. During the 90-second
+workers stay off the account machine so it can accept the owner's revocation.
+The check also keeps the database primary on a remaining machine to measure
+publication separately from database failover. During the 90-second
 stop window, the surviving worker must complete a new certificate job with
 the same certificate and signing request, then publish a newer signed route
 manifest without the revoked venue. After the machine rejoins, the check makes

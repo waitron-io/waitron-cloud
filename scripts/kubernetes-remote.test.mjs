@@ -13,20 +13,29 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as remoteRehearsal from './kubernetes-remote.mjs';
 
-test('publication workers start away from the account and use different machines', async t => {
+test('publication workers start away from the account and database primary and use different machines', async t => {
   const runtimeDirectory = await mkdtemp(join(tmpdir(), 'cloud-remote-workers-'));
   t.after(() => rm(runtimeDirectory, {recursive: true, force: true}));
   await mkdir(join(runtimeDirectory, 'public-certs'));
   for (const file of ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json',
     'gateway-bot.key', 'public-certs/default.pem']) await writeFile(join(runtimeDirectory, file), 'fixture');
-  const placed = Error('worker manifest captured');
+  const placed = Error('worker manifest captured'), placement = [];
   await assert.rejects(remoteRehearsal.startRemoteRehearsal({
-    context: {nodes: [{name: 'account-node'}]}, tag: 'owned:cloud',
+    context: {nodes: ['account-node', 'database-node', 'worker-node'].map(name => ({name}))}, tag: 'owned:cloud',
+    async kube(args) {
+      if (args[1] === 'clusters.postgresql.cnpg.io') return JSON.stringify({status: {currentPrimary: 'cloud-db-1'}});
+      if (args[1] === 'pod') {
+        assert.equal(args[2], 'cloud-db-1');
+        return JSON.stringify({spec: {nodeName: 'database-node'}});
+      }
+      placement.push(args.join(' '));
+    },
     settings: {config: {gateway: {cellId: 'fixture-cell'}}, tls: {root: 'root', caKey: 'key'}, runtimeDirectory},
     async create(value) {
       if (value.metadata?.name !== 'remote-worker') return;
       assert.equal(value.kind, 'Deployment');
       assert.equal(value.spec.replicas, 1);
+      assert.deepEqual(placement, ['cordon database-node']);
       const {affinity} = value.spec.template.spec;
       assert.deepEqual(affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
         [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: ['account-node']}]}]);
@@ -35,6 +44,7 @@ test('publication workers start away from the account and use different machines
       throw placed;
     },
   }), error => error === placed);
+  assert.deepEqual(placement, ['cordon database-node', 'uncordon database-node']);
 });
 
 test('handover can use the fractional time left after pausing the election', async () => {
@@ -150,6 +160,8 @@ test('the paired venue keeps its endpoint through an elected gateway handover', 
   const loss = remote.publicationMachineLoss;
   assert.equal(loss.stopped, loss.originalNode);
   assert.equal(new Set([nodes[0].name, loss.stopped, loss.survivingNode]).size, 3);
+  assert.ok(nodes.some(node => node.name === loss.databasePrimaryNode));
+  assert.notEqual(loss.databasePrimaryNode, loss.stopped);
   assert.ok(loss.withdrawnSequence > loss.originalSequence);
   assert.ok(loss.failoverMs <= 90000);
   assert.deepEqual(remote.cleanup.remaining, []);

@@ -132,12 +132,6 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
   const affinity = {...separateByHost(workerLabels), nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {
     nodeSelectorTerms: [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: [accountNode]}]}],
   }}};
-  await create({apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
-    replicas: 1, selector: {matchLabels: workerLabels}, template: {metadata: {labels: workerLabels}, spec: {
-      affinity, serviceAccountName: 'remote-worker', containers: [worker], volumes: [caVolume,
-        {name: 'identity', secret: {secretName: 'remote-worker-identity', defaultMode: 384}}, {name: 'work', emptyDir: {}}],
-    }},
-  }});
   const call = (args, limit) => kube(args, undefined, false, limit);
   const readyWorkers = async (count, limit) => {
     const {items} = JSON.parse(await call(['get', 'pods', '-l', 'app=remote-worker', '-o', 'json'], limit));
@@ -145,8 +139,31 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     return rows.length === count && rows.every(row => row.status.conditions?.some(
       condition => condition.type === 'Ready' && condition.status === 'True')) && rows;
   };
-  const [originalWorker] = await untilRemote(limit => readyWorkers(1, limit), 180000, signal, 'publication_worker');
-  assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
+  async function databasePrimaryNode(limit) {
+    const {status} = JSON.parse(await call(['get', 'clusters.postgresql.cnpg.io', 'cloud-db', '-o', 'json'], limit));
+    assert.ok(status?.currentPrimary, 'remote.database_primary_missing');
+    const {spec} = JSON.parse(await call(['get', 'pod', status.currentPrimary, '-o', 'json'], limit));
+    assert.ok(nodes.some(node => node.name === spec.nodeName), 'remote.database_primary_outside_cell');
+    return spec.nodeName;
+  }
+  const primaryAtPlacement = stopGatewayNode ? accountNode : await databasePrimaryNode(signal);
+  // Exclude the primary until the first worker is Ready, then admit the other replica without replacing the first.
+  const cordonPrimary = primaryAtPlacement !== accountNode;
+  if (cordonPrimary) await call(['cordon', primaryAtPlacement], signal);
+  let originalWorker;
+  try {
+    await create({apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
+      replicas: 1, selector: {matchLabels: workerLabels}, template: {metadata: {labels: workerLabels}, spec: {
+        affinity, serviceAccountName: 'remote-worker', containers: [worker], volumes: [caVolume,
+          {name: 'identity', secret: {secretName: 'remote-worker-identity', defaultMode: 384}}, {name: 'work', emptyDir: {}}],
+      }},
+    }});
+    [originalWorker] = await untilRemote(limit => readyWorkers(1, limit), 180000, signal, 'publication_worker');
+    assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
+    assert.notEqual(originalWorker.spec.nodeName, primaryAtPlacement, 'remote.publication_worker_on_database_primary');
+  } finally {
+    if (cordonPrimary) await kube(['uncordon', primaryAtPlacement], undefined, true);
+  }
   const trust = createPublicKey(bootstrap['gateway-issuer.pem']);
   async function readPublication(limit) {
     const secret = JSON.parse(await call(['get', 'secret', 'remote-routes', '-o', 'json'], limit));
@@ -225,8 +242,10 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         const originalNode = original.spec.nodeName;
         const survivingNode = rows.find(row => row !== original).spec.nodeName;
         assert.equal(new Set([accountNode, originalNode, survivingNode]).size, 3, 'remote.publication_worker_placement');
+        const primaryNode = await databasePrimaryNode(signal);
+        assert.notEqual(originalNode, primaryNode, 'remote.publication_stop_would_kill_database_primary');
         const result = await stopNode(originalNode, {whileStopped});
-        return {...result, originalNode, survivingNode};
+        return {...result, originalNode, survivingNode, databasePrimaryNode: primaryNode};
       },
     };
   } catch (failure) {
