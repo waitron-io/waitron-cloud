@@ -6,11 +6,13 @@ Cloud account permitted to register venues for the chosen business. Enrol a pass
 or authenticator app in your Cloud account before connecting a box.
 
 1. In Waitron, choose **Connect to Cloud**. Keep the eight-digit code on screen.
-2. Choose **Open Cloud**, sign in and enter that code. Check **New venue** (or the existing Cloud venue identifier) and
-   choose the business that owns it. Verify your identity, then choose **Approve this venue**.
+2. Choose **Open Cloud**, sign in and enter that code. Check **Venue name** when
+   the box sends one. Check **Venue identifier** to see **New venue** or the existing
+   Cloud identifier. Choose the business that owns the venue, verify your identity
+   and choose **Approve this venue**.
    One verification covers sensitive actions in that session for ten minutes.
-   Cloud shows the venue identifier, installation type, organisation and legal business,
-   with a link back to your Cloud account.
+   The approved page repeats the venue, installation type, organisation and legal
+   business and links back to your Cloud account.
 3. Return to Waitron and choose **Check connection**. Check the organisation and
    legal business, then choose **Connect this venue**.
 
@@ -24,6 +26,10 @@ the installation; remote access and backups still show **Not configured**. You c
 retry a failed check or confirmation. If Cloud reports the request unavailable,
 choose **Start again** in Waitron to obtain another code. This keeps the installation
 key and replaces the unavailable request.
+
+Upgrade your box to a Waitron build that supports pairing version 3 before you
+pair it with this Cloud. If you started pairing before the version switch, start
+again from the updated box.
 
 ## Run the local integration proof
 
@@ -43,7 +49,8 @@ not create invoices, configure payment providers or submit fiscal records. It re
 its own processes, containers and temporary directories when the run finishes.
 
 The proof connects both venues through the browser screens using real local and
-Cloud sessions. It restarts a venue before local confirmation, discards a committed
+Cloud sessions. Both Cloud screens show **Cloud Test Venue** from the Waitron fixture.
+It restarts a venue before local confirmation, discards a committed
 completion reply and recovers the result, and refuses a proof that mixes one
 installation's key with the other's request. It then discards renewal and revocation
 responses after Cloud commits and restarts the actual Waitron processes. Their
@@ -124,16 +131,16 @@ Before public deployment, complete ingress controls and
 operation/pairing audit retention work in the backlog. This local proof does not establish an
 AWS deployment or a working remote-access/backup service.
 
-Pairing accepts only version 2. Each retry signs the id its request started with, so
+Pairing accepts only version 3. Each retry signs the id its request started with, so
 an empty request stays empty even after its reply contains the allocated Cloud id.
 An unknown or foreign supplied id is refused before approval. A different installation
 key cannot take over an existing venue through pairing.
 
-Migration 064 discards old pairing and connection requests without removing venues,
-installations, keys or backups. Start again for a fresh code after this cutover.
-Configure the separately held [pairing-code key](pairing-code-keys.md) before starting
-account workers. The stored code verifier keeps its version-1 domain; the signed
-pairing protocol is version 2.
+Migration 064 discarded old pairing and connection requests and preserved venues,
+installations, keys and backups. Start again for a fresh code when you switch to
+a Waitron build that uses the version 3 proof. Configure the separately held
+[pairing-code key](pairing-code-keys.md) before starting account workers. The
+stored code verifier keeps its version-1 domain.
 
 If the completion reply is lost before Waitron saves its allocated venue id, retry
 the original request. A fresh empty-id request with the same key is refused; once

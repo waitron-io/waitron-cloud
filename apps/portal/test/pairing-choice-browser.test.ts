@@ -21,7 +21,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-async function start(page: Page, single = false) {
+async function start(page: Page, single = false, pairing: typeof view & {venueName?:string} = view) {
   const writes: {path: string; body: unknown}[] = [];
   let failure: {status: number; error: string} | undefined;
   let freshUntil:string|null='2099-01-01T00:00:00Z';
@@ -34,11 +34,11 @@ async function start(page: Page, single = false) {
     if(path==='/action-proof/factor'){freshUntil='2099-01-01T00:00:00Z';return route.fulfill({json:{}});}
     if (path === '/pairing/businesses') return route.fulfill({json: {businesses: single ? [businesses[0]] : businesses}});
     if (request.method() === 'POST') writes.push({path, body: request.postDataJSON()});
-    if (path === '/pairing/inspect') return route.fulfill({json: view});
+    if (path === '/pairing/inspect') return route.fulfill({json: pairing});
     if (path === '/pairing/approve') {
       if (failure) return route.fulfill({status: failure.status, json: {error: failure.error}});
       const chosen = businesses.find(b => b.legalBusinessId === request.postDataJSON().legalBusinessId)!;
-      return route.fulfill({json: {...view, ...chosen, state: 'awaiting_local'}});
+      return route.fulfill({json: {...pairing, ...chosen, state: 'awaiting_local'}});
     }
     return route.fulfill({status: 503, json: {error: 'unavailable'}});
   });
@@ -137,14 +137,21 @@ for (const locale of ['en', 'es'] as const) test(`${locale}: a single business s
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage({locale}); page.setDefaultTimeout(4000);
-    const c = translations[locale], api = await start(page, true);
+    const existingVenueId = '40000000-0000-4000-8000-000000000001', venueName = 'Café Sol';
+    const c = translations[locale], api = await start(page, true, {...view, venueId: existingVenueId, venueName});
+    const details = page.locator('.pairing-details');
+    const nameLabel = details.getByText(locale === 'en' ? 'Venue name' : 'Nombre del local', {exact: true});
     await page.locator('wt-input[name=pairingCode] input').fill('12345678');
     await page.getByRole('button', {name: c.pairInspect, exact: true}).click();
     await page.getByRole('button', {name: c.pairApprove, exact: true}).waitFor();
     assert.equal(await page.locator('dt').filter({hasText: c.pairBusiness}).locator('+ dd').textContent(), 'Sol SL');
+    assert.equal(await nameLabel.locator('+ dd').textContent(), venueName);
+    assert.equal(await details.locator('.venue-id').textContent(), existingVenueId);
     await page.getByRole('button', {name: c.pairApprove, exact: true}).click();
     await page.getByText(c.pairApproved, {exact: true}).waitFor();
     assert.equal(await page.locator('select[name=legalBusinessId]').count(), 0);
+    assert.equal(await nameLabel.locator('+ dd').textContent(), venueName);
+    assert.equal(await details.locator('.venue-id').textContent(), existingVenueId);
     assert.deepEqual(api.writes, [{path: '/pairing/inspect', body: {requestId, code: '12345678'}}, {path: '/pairing/approve', body: {requestId, code: '12345678', organisationId: businesses[0]!.organisationId, legalBusinessId: businesses[0]!.legalBusinessId}}]);
   } finally { await browser.close(); }
 });

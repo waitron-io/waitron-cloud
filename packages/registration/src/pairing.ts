@@ -10,13 +10,13 @@ import {AccountActionProofError} from './account-action-proof.ts';
 import {requireConnectionProof,requirePendingConnectionProof} from './connection-proof.ts';
 interface Row {
   cloud_session_id?:string|null;cloud_security_revision?:number|null;
-  id:string;public_key:string;requested_venue_id:string|null;environment:string;code_hash:string;expires_at:Date;
+  id:string;public_key:string;requested_venue_id:string|null;venue_name:string|null;environment:string;code_hash:string;expires_at:Date;
   failed_codes:number;cloud_account_id:string|null;organisation_id:string|null;legal_business_id:string|null;result:Registration|null;
 }
 export interface PairingView {
   requestId:string;venueId:string;environment:string;expiresAt:string;
   state:'awaiting_cloud'|'awaiting_local'|'complete';organisationId?:string;legalBusinessId?:string;
-  organisationName?:string;legalBusinessName?:string;registration?:Registration;
+  venueName?:string;organisationName?:string;legalBusinessName?:string;registration?:Registration;
 }
 function machineBinding(row:Row,c:PairingClaims) {
   if(row.public_key!==c.publicKey||(row.requested_venue_id??'')!==c.venueId||row.environment!==c.environment)throw new PairingError('binding_conflict');
@@ -65,8 +65,8 @@ export class PairingStore {
   constructor(pool:Pool,keys:PairingCodeKeys|null|undefined=pairingCodeKeysFromEnv(process.env)){this.#pool=pool;this.#codes=new PairingCodes(keys??undefined);}
   async start(c:PairingClaims):Promise<PairingView> {
     return transaction(this.#pool,async client=>{
-      await client.query(`INSERT INTO pairing_requests(id,public_key,requested_venue_id,environment,code_hash) VALUES($1,$2,$3,$4,$5)
-        ON CONFLICT(id) DO NOTHING`,[c.requestId,c.publicKey,c.venueId||null,c.environment,this.#codes.protect({id:c.requestId,public_key:c.publicKey,requested_venue_id:c.venueId||null,environment:c.environment},c.code)]);
+      await client.query(`INSERT INTO pairing_requests(id,public_key,requested_venue_id,environment,code_hash,venue_name) VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT(id) DO NOTHING`,[c.requestId,c.publicKey,c.venueId||null,c.environment,this.#codes.protect({id:c.requestId,public_key:c.publicKey,requested_venue_id:c.venueId||null,environment:c.environment},c.code),c.venueName||null]);
       const row=await lock(client,c.requestId);machineBinding(row,c);
       if(!this.#codes.matches(row,row.code_hash,c.code))throw new PairingError('binding_conflict');
       await available(client,row);return view(client,row);
@@ -109,7 +109,10 @@ export class PairingStore {
         await recordSecurityAuditEvent(client,{organisationId:choice.org,venueId:null,type:'pairing.cloud_approved',actorKind:'account',actorId:session.accountId,subjectKind:'pairing_request',subjectId:row.id,sourceId:row.id});
       }
       if(choice)await requireConnectionProof(client,token,csrf);
-      await resolveSession(client,token,{csrfToken:csrf,touch:false});return view(client,row);
+      await resolveSession(client,token,{csrfToken:csrf,touch:false});
+      const reply=await view(client,row);
+      if(row.venue_name)reply.venueName=row.venue_name;
+      return reply;
     });
     // Commit the failed-code count before returning the refusal to the caller.
     if(!result)throw new PairingError('pairing_unavailable');return result;

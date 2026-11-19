@@ -200,7 +200,7 @@ test('upgrade refuses duplicate owners and preserves both rows until the duplica
   assert.deepEqual((await legacy.pool.query('SELECT account_id FROM organisation_memberships WHERE organisation_id=$1 AND is_owner ORDER BY account_id',[org])).rows,[first,second].sort().map(account_id=>({account_id})));
   assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'67');
   await legacy.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[second]);await migrate(legacy.pool);
-  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'75');
+  assert.equal((await legacy.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'76');
  }finally{await legacy.close();await old.close();}
 });
 
@@ -213,7 +213,7 @@ test('acceptance promotes an existing non-owner membership without a second owne
 
 test('a pending venue connection loses its former owner approval at handover',async()=>{
  const sender=await signedAccount(),recipient=await signedAccount(),pairing=new PairingStore(db.pool),store=new OwnerTransferStore(db.pool,db.outbox);
- const claims:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+ const claims:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now(),venueName:''};
  await pairing.start(claims);await pairing.approve(claims.requestId,claims.code,sender.organisationId,sender.legalBusinessId,sender.token,sender.csrfToken);
  const offer=await store.create(sender.token,sender.csrfToken,sender.organisationId,recipient.email);await store.decide(recipient.token,recipient.csrfToken,offer.id,'accept');
  await assert.rejects(pairing.complete({...claims,action:'complete',code:'',organisationId:sender.organisationId,legalBusinessId:sender.legalBusinessId}),/permission_denied|pairing_unavailable/);

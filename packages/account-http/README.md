@@ -444,10 +444,10 @@ customer service.
 
 ## Pair a venue
 
-The [version 1 pairing contract](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md)
-binds an installation key, local venue, environment and chosen Cloud business.
-Use this for local integration testing. Cloud verifies signatures and Cloud permission;
-the implemented Waitron adapter checks a real local administrator before starting and
+The [version 3 pairing contract](../../docs/waitron-integration-contract.md#pairing-version-3-and-managed-stream-version-2)
+binds an installation key, requested Cloud venue, environment and chosen Cloud business.
+Use this for local integration testing. Cloud verifies signatures and Cloud permission.
+The Waitron adapter checks a local administrator before starting and
 before signing completion.
 
 Before approving in Cloud, enrol an app or passkey and open the shared ten-minute
@@ -464,7 +464,9 @@ Machine POSTs use `/api/pairing/start`, `/api/pairing/status` and
 without an Origin header. Generate the Ed25519 key on the installation; sign the
 canonical bytes from `pairingPayload` with Node's `sign(null, bytes, privateKey)`.
 Never send the private key. The signature covers the Cloud origin, action, request UUID,
-public key, venue UUID, environment, matching code or chosen business, and current time.
+public key, requested venue UUID, environment, matching code or chosen business, current
+time and a display name supplied at start. Send an empty string for the name on status
+and completion.
 The signature is accepted within 60 seconds; retry later with a fresh signature over
 the same request. Start accepts `test` or `production` environment.
 
@@ -474,11 +476,12 @@ locally. Cloud stores its digest. From a signed-in Cloud browser, use:
 | Request | Body | Result |
 | --- | --- | --- |
 | GET `/api/account/pairing/businesses` | Session cookie | `{businesses:[{organisationId,organisationName,legalBusinessId,legalBusinessName,countryCode}]}` |
-| POST `/api/account/pairing/inspect` | `requestId`, `code` | Bound local venue and current approval state |
+| POST `/api/account/pairing/inspect` | `requestId`, `code` | Requested venue and current approval state |
 | POST `/api/account/pairing/approve` | `requestId`, `code`, `organisationId`, `legalBusinessId` | Enrolled app/passkey and fresh session proof; approval bound to the current account and chosen business |
 
 Both browser POSTs require the exact portal Origin, session cookie and its
-`X-CSRF-Token`. They do not renew the session. Start and approval do not create an
+`X-CSRF-Token`. Their replies include `venueName` when the first signed start supplied
+a name. They do not renew the session. Start and approval do not create an
 installation. Waitron polls signed status, shows the selected names locally and requires
 local administrator confirmation before signing complete with the selected IDs.
 Completion returns `registration` and state `complete`; services remain unconfigured.

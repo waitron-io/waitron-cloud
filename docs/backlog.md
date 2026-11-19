@@ -1067,8 +1067,9 @@ implementation or production evidence.
   and relay commands have synthetic checks. An independent test backup command
   withdraws the writer and refuses fresh setup while keeping remote access on.
   SES startup and authenticated feedback composition, real email delivery and
-  joint box handoff qualification remain open. Pairing still needs the box to send
-  its venue display name in the signed request and Cloud to show it.
+  joint box handoff qualification remain open. A fresh named pairing on the Amazon
+  test Cloud remains part of the joint box trial after both builds speak pairing
+  version 3.
 
   Automatic remote access starts from the box's signed tunnel key in venue-level
   test mode. The focused worker test starts the Connected trial through the
@@ -2181,7 +2182,7 @@ outer nightly invocation (`scripts/ci-reuse-source.test.mjs`,
 `scripts/ci-root-inputs.test.mjs`).
 Measure its hosted job-minute saving on a healthy natural eligible PR. Then model
 registration test times by area over recent merged PRs before proposing a package
-split; agree the boundary with pairing v2 before moving code. Review the retained
+split and agree the pairing boundary before moving code. Review the retained
 receipt fallback and weekly cost-check policy separately. Sample infrastructure
 and cost-input PRs as they arrive naturally; no measurement-only reruns.
 

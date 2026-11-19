@@ -90,6 +90,9 @@ const invalidViews = [
   {name: 'unknown environment', change: (v: typeof approval) => ({...v, environment: 'staging'})},
   {name: 'invalid expiry', change: (v: typeof approval) => ({...v, expiresAt: 'tomorrow'})},
   {name: 'unknown state', change: (v: typeof approval) => ({...v, state: 'approved'})},
+  {name: 'non-text venue name', change: (v: typeof approval) => ({...v, venueName: 7})},
+  {name: 'blank venue name', change: (v: typeof approval) => ({...v, venueName: ' '})},
+  {name: 'venue name over 120 code points', change: (v: typeof approval) => ({...v, venueName: '🌙'.repeat(121)})},
   {name: 'incomplete accepted binding', change: (v: typeof approval) => ({...v, state: 'awaiting_local', organisationId: undefined})},
   {name: 'blank accepted business name', change: (v: typeof approval) => ({...v, state: 'complete', legalBusinessName: ' '})},
 ];
@@ -164,4 +167,17 @@ test('a new venue keeps its empty requested id through inspection and approval',
   const accepted={...requested,...business,state:'awaiting_local'};
   replies['/api/account/pairing/approve']=accepted;await c.approve();assert.deepEqual(c.view,accepted);
   assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)),{requestId,code:'12345678',organisationId,legalBusinessId});
+});
+
+test('pairing accepts a venue name of 120 Unicode code points', async t => {
+  const {controller:c,replies}=harness(t);
+  const venueName='🌙'.repeat(120);
+  replies['/api/account/pairing/inspect']={...inspection,venueName};
+  replies['/api/account/pairing/approve']={...approval,venueName};
+  await c.load();
+  c.code='12345678';
+  await c.inspect();
+  assert.deepEqual(c.view,{...inspection,venueName});
+  await c.approve();
+  assert.deepEqual(c.view,{...approval,venueName});
 });

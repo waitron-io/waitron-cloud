@@ -25,7 +25,7 @@ async function approved(f:Fixture,kind:'registration'|'pairing',replay:boolean){
   const first=replay?await writer.complete(binding):undefined;
   return {run:()=>reader.complete(binding),first,venueId};
  }
- const c:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:key,venueId,environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
+ const c:PairingClaims={origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:key,venueId,environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now(),venueName:''};
  const writer=new PairingStore(f.pool),reader=new PairingStore(f.peer);
  await writer.start(c);
  await f.pool.query('INSERT INTO cloud_credentials(account_id,email,password_hash) VALUES($1,$2,$3)',[account,`${account}@example.test`,await hashSecret('Synthetic pairing password')]);

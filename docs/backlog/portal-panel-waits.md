@@ -66,6 +66,11 @@ not establish that run's cause. The Mac result does not qualify Linux. Keep the
 enrolment, session, membership and explicit acceptance checks while investigating
 the fixture's code timing; a later green CI run is not a repair.
 
+On 19 November, [PR #1313’s portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44443554874/job/135290208342)
+reported the same wait for `.factor-codes` at `owner-transfer-browser.test.ts:119`.
+The handover test and its authenticator code match the pairing branch’s base
+commit. The job log gives no activation response to compare with the timing probe.
+
 ## Owner recovery enrolment wait
 
 [PR #1284's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44200297572/job/134452537917)
