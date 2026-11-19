@@ -55,3 +55,27 @@ test('local health uses the configured account authority over a private address'
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('a readiness reader on the trusted loopback address identifies its own source', async () => {
+  const {clientAddress} = await import('../../packages/account-http/src/client-address.ts');
+  const server = createServer((request, response) => {
+    try {
+      clientAddress(request.socket.remoteAddress, request.headers['x-forwarded-for'], ['127.0.0.1']);
+      response.statusCode = 200;
+    } catch {
+      response.statusCode = 400;
+    }
+    response.end();
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = new URL('http://127.0.0.1:' + server.address().port + '/api/health/ready');
+    const response = await localHealthFetch(url, {signal: AbortSignal.timeout(2000), host: 'cloud.example.test:3000',
+      forwardedFor: '127.0.0.1'});
+    assert.equal(response.status, 200);
+    await response.text();
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});

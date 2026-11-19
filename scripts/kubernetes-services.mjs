@@ -155,9 +155,12 @@ export async function runKubernetesServices(context) {
         import {localHealthFetch} from "./deploy/local-stack/operations-health.mjs";
         const host = new URL(process.env.CLOUD_PORTAL_ORIGIN).host;
         const response = await localHealthFetch(new URL("http://127.0.0.1:3000/api/health/ready"),
-          {host, signal: AbortSignal.timeout(2000)});
+          {host, forwardedFor: "127.0.0.1", signal: AbortSignal.timeout(2000)});
         await response.text();
-        if (response.status !== 200) process.exitCode = 1;
+        if (response.status !== 200) {
+          console.error("services.account_readiness_status:" + response.status);
+          process.exitCode = 1;
+        }
       `;
       for (let attempt = 0; ; attempt++) {
         try {await exec('cloud-services', 'account', ['node', '--input-type=module', '-e', ready]); break;}
@@ -188,7 +191,7 @@ export async function runKubernetesServices(context) {
         const host = new URL(process.env.CLOUD_PORTAL_ORIGIN).host;
         try {
           const status = await operationsStatus(pool, {controlApiUrl: "http://127.0.0.1:3000",
-            fetch: (url, options) => localHealthFetch(url, {...options, host})});
+            fetch: (url, options) => localHealthFetch(url, {...options, host, forwardedFor: "127.0.0.1"})});
           console.log(JSON.stringify(status.components.controlApi));
         } finally {await pool.end();}
       '`));

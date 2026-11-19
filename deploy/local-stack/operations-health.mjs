@@ -15,9 +15,10 @@ export async function readAccountRequests({fetcher=fetch,timeoutMs=2000}={}){
 }
 
 // The account API requires its configured authority even when a health reader connects by private address.
-export function localHealthFetch(url,{signal,host='localhost:3000'}){
+export function localHealthFetch(url,{signal,host='localhost:3000',forwardedFor}){
  return new Promise((resolve,reject)=>{
-  const request=get(url,{headers:{host},signal},response=>{
+  const headers = forwardedFor ? {host, 'x-forwarded-for': forwardedFor} : {host};
+  const request=get(url,{headers,signal},response=>{
    try{resolve(new Response(Readable.toWeb(response),{status:response.statusCode,headers:response.headers}));}
    catch(error){response.destroy();reject(error);}
   });
