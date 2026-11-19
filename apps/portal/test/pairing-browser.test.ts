@@ -75,3 +75,39 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.goto(`${f.origin}/connect`);await page.getByText(c.pairMissing).waitFor();
   }finally{await f.close();}
 });
+
+test('a linked code checks the venue once after sign-in and leaves approval to the owner', async () => {
+  const f = await startPortalFixture();
+  try {
+    const email = `pair-link-${randomUUID()}@example.test`, password = 'A real café owner password';
+    const signup = new SignupStore(f.db.pool, f.db.outbox);
+    await signup.request(email);
+    const row = (await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];
+    const payload = f.db.outbox.open(row);
+    assert.ok('token' in payload);
+    await signup.complete(payload.token, {password, organisationName: 'Café Sol', legalBusinessName: 'Sol SL', countryCode: 'ES'});
+    const requestId = randomUUID(), code = '01234567', venueName = 'Café Luna';
+    await new PairingStore(f.db.pool).start({origin: f.origin, action: 'start', requestId,
+      publicKey: generateKeyPairSync('ed25519').publicKey.export({type: 'spki', format: 'der'}).toString('base64url'),
+      venueId: '', environment: 'test', code, organisationId: '', legalBusinessId: '', issuedAt: Date.now(), venueName});
+    const page = await f.browser.newPage({locale: 'en'});
+    page.setDefaultTimeout(5000);
+    const c = translations.en;
+    const requests: string[] = [];
+    page.on('request', request => requests.push(request.url()));
+    await page.goto(`${f.origin}/connect#request=${requestId}&code=${code}`);
+    await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+    assert.equal(new URL(page.url()).hash, '');
+    assert.equal(requests.filter(url => url.endsWith('/pairing/inspect')).length, 0);
+    await page.getByLabel(c.email).fill(email);
+    await page.locator('input[name=password]').fill(password);
+    await page.getByRole('button', {name: c.login, exact: true}).click();
+    await completeBrowserEmail(f, page, email, 'en');
+    await page.getByRole('button', {name: c.pairApprove, exact: true}).waitFor();
+    assert.equal(await page.locator('.pairing-details').getByText(venueName, {exact: true}).isVisible(), true);
+    assert.equal(requests.filter(url => url.endsWith('/pairing/inspect')).length, 1);
+    assert.equal(requests.filter(url => url.endsWith('/pairing/approve')).length, 0);
+    assert.equal((await f.db.pool.query('SELECT cloud_account_id FROM pairing_requests WHERE id=$1', [requestId])).rows[0].cloud_account_id, null);
+    assert.ok(requests.every(url => !url.includes(requestId) && !url.includes(code)));
+  } finally { await f.close(); }
+});

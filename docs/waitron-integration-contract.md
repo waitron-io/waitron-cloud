@@ -767,7 +767,13 @@ full consumer pins before the affected adapters. Lane D retains deployment/D88.
 
 1. You open Cloud services while signed into the local Waitron administrator account.
 2. Waitron creates a short-lived connection request tied to that installation.
-3. You sign into Cloud, choose your organisation and confirm the venue.
+3. Open Cloud from the box and sign in if asked. Cloud accepts
+   `/connect#request=<uuid>&code=<eight digits>` and removes the fragment from the
+   address as the page opens. The code stays in that tab through sign-in. After
+   Cloud finds an eligible business, it checks the code once and shows the venue.
+   Choose the business if asked and approve the venue. With a request-only link,
+   enter the code shown on the box. If Cloud refuses the code, you can retry it
+   by hand. If you reload or change accounts, open the box’s link again.
 4. The local server retrieves the approval through an outbound connection and completes
    registration. Cloud does not need an inbound route to the venue for this exchange.
 5. Waitron shows remote-access and backup setup separately. Registration alone does

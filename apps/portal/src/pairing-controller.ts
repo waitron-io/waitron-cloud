@@ -7,14 +7,39 @@ export class PairingController {
   pending=false;loaded=false;codeError=false;error:keyof Copy|undefined;
   // Server retry waits use elapsed time so clock corrections cannot change the request gate.
   #retryUntil=0;
+  #linkedCode: string | undefined;
+  #fromLink = false;
+  #eligible = true;
   #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
   constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
   #clear(){this.#generation++;this.code='';this.businesses=[];this.selected='';this.view=undefined;this.pending=false;this.loaded=false;this.codeError=false;this.error=undefined;}
-  open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
-  account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
+  open(id: string | undefined, linkedCode?: string) {
+    if (id === this.requestId && linkedCode === undefined) return;
+    this.#clear();
+    this.requestId = id;
+    this.#linkedCode = linkedCode;
+    this.#fromLink = linkedCode !== undefined;
+  }
+  discardLinkedCode() {
+    if (!this.#fromLink) return;
+    this.#linkedCode = undefined;
+    this.#fromLink = false;
+    this.#clear();
+  }
+  account(id: string | undefined, eligible = true) {
+    if (id === this.#account && eligible === this.#eligible) return;
+    // The first sign-in may claim the linked code. A later account must never inherit it.
+    if (this.#account !== undefined && id !== this.#account) {
+      this.#linkedCode = undefined;
+      this.#fromLink = false;
+    }
+    this.#clear();
+    this.#account = id;
+    this.#eligible = eligible;
+  }
   get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
   get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
-  #ready(){return !!this.requestId&&!!this.#account&&!this.pending&&!this.waiting;}
+  #ready(){return !!this.requestId&&!!this.#account&&this.#eligible&&!this.pending&&!this.waiting;}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){
     this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     const cause=bodyRefusal(result);
@@ -26,7 +51,14 @@ export class PairingController {
     const result=await this.#request<{businesses:PairingBusiness[]}>('/pairing/businesses');
     if(generation!==this.#generation)return;this.pending=false;
     if(result.ok){this.businesses=result.value.businesses;this.selected=this.businesses.length===1?this.businesses[0]!.legalBusinessId:'';this.loaded=true;}
-    else this.#failure(result);this.#changed();
+    else this.#failure(result);
+    if (this.#linkedCode !== undefined && result.ok && this.businesses.length) {
+      this.code = this.#linkedCode;
+      this.#linkedCode = undefined;
+      await this.inspect();
+    } else {
+      this.#changed();
+    }
   }
   async inspect(){await this.#exchange(false);}
   async approve(){await this.#exchange(true);}
