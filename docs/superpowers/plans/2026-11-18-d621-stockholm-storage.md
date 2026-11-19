@@ -82,8 +82,12 @@ Linux trace found both Kubernetes DNS replicas on the stopped machine. MinIO
 could read its local drive and timed out looking up three surviving remote
 drives. The [DNS placement repair](2026-11-19-stockholm-storage-dns-placement.md)
 moves the replicas onto separate machines before workloads start. The Linux
-control stopped one DNS host and passed both survivors' encrypted reads, the
-write, listing and multipart checks within the existing 90-second outage window.
+rehearsal passed both survivors' encrypted reads, writes, listing and multipart
+within the existing 90-second outage window. Both reads also passed in two
+controls that stopped a DNS host. The first control passed multipart. The
+second received HTTP 503 `SlowDownWrite` when the test submitted an invalid
+multipart completion and expected `InvalidPart`.
 
-PR 4 still qualifies scoped credentials. Returned-drive repair, multipart through
-consecutive outages and real Stockholm machine loss remain unqualified.
+PR 4 remains the step that qualifies scoped credentials. Returned-drive repair,
+multipart through consecutive outages and real Stockholm machine loss remain
+unqualified.

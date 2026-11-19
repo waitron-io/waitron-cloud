@@ -9,8 +9,8 @@ their records in under 3 ms and spent about 4 s waiting for peer reloads. They
 returned before the client deadline. The earlier 10-second timeout remains
 unexplained. [Country-cell storage and credential checks](2026-10-22-cloud-country-cell.md#task-6-keep-genuine-s3-reads-and-writes-available-3555-calls)
 
-- [ ] Post the one-hour findings and wait for watcher clearance before building.
-- [ ] Use the existing Linux encrypted read during the outage as the failing
+- [x] Post the one-hour findings and wait for watcher clearance before building.
+- [x] Use the existing Linux encrypted read during the outage as the failing
   behaviour. In `scripts/kubernetes-node-loss.test.mjs`, add a focused case
   called “the three-machine rehearsal waits for DNS across machines before
   starting workloads”. Verify that cluster setup requires the
@@ -20,7 +20,7 @@ unexplained. [Country-cell storage and credential checks](2026-10-22-cloud-count
   setup step on current main. Verify the case fails on removal of the hard
   placement rule. Extend the existing boot order assertions in
   `scripts/amazon-run.test.mjs` to cover the same placement and wait.
-- [ ] Move the existing `separateByHost(matchLabels)` and the CoreDNS deployment
+- [x] Move the existing `separateByHost(matchLabels)` and the CoreDNS deployment
   patch and bounded rollout wait into `scripts/kubernetes-placement.mjs` as
   `separateByHost(matchLabels)` and `spreadCoreDns(kube)`. Keep the
   PostgreSQL operator's existing use of `separateByHost`. Replace the database
@@ -39,7 +39,7 @@ unexplained. [Country-cell storage and credential checks](2026-10-22-cloud-count
   repair, run the existing `TEST_KUBERNETES_STORAGE_IDENTITY=1` file with
   real expiry, the single renewal request and the read after rejoin. The
   watcher asked to keep those checks in the 03:20 lane G decision.
-- [ ] Update the existing D621 entry in `docs/backlog.md` with the result.
+- [x] Update the existing D621 entry in `docs/backlog.md` with the result.
   Returned-drive repair, consecutive outages and paid qualification stay
   open. Leave MinIO, its deadlines and the credential policy as they are.
   Expect about 25–45 changed implementation lines and 30–50 test lines.

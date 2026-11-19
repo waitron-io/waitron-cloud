@@ -184,7 +184,8 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
 - Carry the [observed storage limits](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
   into the run 9 decision. Setup spreads DNS across machines after the cluster
   nodes are ready. The Linux rehearsal recovered encrypted reads with one DNS
-  host stopped. PR 4 still qualifies scoped storage access on the existing store.
+  host stopped. One control still got HTTP 503 on a multipart request after
+  both reads passed. PR 4 remains the step that qualifies scoped access.
 - [ ] Returned-drive repair remains open. Before declaring redundancy restored,
   verify both outage objects on both returned disks and read their acknowledged
   bytes through the returned machine. Consecutive-outage multipart also remains

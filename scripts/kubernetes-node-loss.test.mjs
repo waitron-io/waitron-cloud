@@ -136,21 +136,31 @@ test('the Kind fault loop stops each exact container, schedules on a survivor an
 
 test('the three-machine rehearsal waits for DNS across machines before starting workloads', async () => {
   const f = fixture();
-  await runCheck({execute: f.execute, storage: async () => {
-    const commands = f.calls.filter(({binary}) => binary === 'kubectl').map(({args}) => args.slice(3));
-    const nodesReady = commands.findIndex(args => args[0] === 'wait' && args.includes('nodes'));
-    const patch = commands.findIndex(args => args[0] === 'patch' && args[2] === 'coredns');
-    const rollout = commands.findIndex(args => args[0] === 'rollout' && args[2] === 'deployment/coredns');
-    assert.ok(nodesReady >= 0 && nodesReady < patch, 'place DNS after the three nodes are ready');
-    assert.deepEqual(commands[patch].slice(0, -1),
-      ['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p']);
-    const template = JSON.parse(commands[patch].at(-1)).spec.template.spec;
-    assert.deepEqual(template.affinity?.podAntiAffinity?.requiredDuringSchedulingIgnoredDuringExecution, [{
-      labelSelector: {matchLabels: {'k8s-app': 'kube-dns'}}, topologyKey: 'kubernetes.io/hostname',
-    }]);
-    assert.ok(patch < rollout, 'wait for the DNS rollout before handing off to storage');
-    assert.deepEqual(commands[rollout], ['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s']);
-  }});
+  let dnsReady = false;
+  const execute = async (binary, args, options) => {
+    const output = await f.execute(binary, args, options);
+    if (binary === 'kubectl' && args[3] === 'rollout' && args[5] === 'deployment/coredns') {
+      await new Promise(setImmediate);
+      dnsReady = true;
+    }
+    return output;
+  };
+  const {storage: handoff} = await runCheck({execute, storage: async () => ({dnsReady, commandCount: f.calls.length})});
+  assert.ok(handoff, 'cluster setup hands off to storage');
+  assert.ok(handoff.dnsReady, 'the DNS rollout finishes before the storage workload starts');
+  const commands = f.calls.slice(0, handoff.commandCount).filter(({binary}) => binary === 'kubectl').map(({args}) => args.slice(3));
+  const nodesReady = commands.findIndex(args => args[0] === 'wait' && args.includes('nodes'));
+  const patch = commands.findIndex(args => args[0] === 'patch' && args[2] === 'coredns');
+  const rollout = commands.findIndex(args => args[0] === 'rollout' && args[2] === 'deployment/coredns');
+  assert.ok(nodesReady >= 0 && nodesReady < patch, 'place DNS after the three nodes are ready');
+  assert.deepEqual(commands[patch].slice(0, -1),
+    ['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p']);
+  const template = JSON.parse(commands[patch].at(-1)).spec.template.spec;
+  assert.deepEqual(template.affinity?.podAntiAffinity?.requiredDuringSchedulingIgnoredDuringExecution, [{
+    labelSelector: {matchLabels: {'k8s-app': 'kube-dns'}}, topologyKey: 'kubernetes.io/hostname',
+  }]);
+  assert.ok(patch < rollout, 'wait for the DNS rollout before handing off to storage');
+  assert.deepEqual(commands[rollout], ['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s']);
 });
 
 test('a container with an unrelated Kind label is never stopped or removed', async () => {
