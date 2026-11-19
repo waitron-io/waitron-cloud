@@ -2182,7 +2182,7 @@ outer nightly invocation (`scripts/ci-reuse-source.test.mjs`,
 `scripts/ci-root-inputs.test.mjs`).
 Measure its hosted job-minute saving on a healthy natural eligible PR. Then model
 registration test times by area over recent merged PRs before proposing a package
-split; agree the boundary with pairing v2 before moving code. Review the retained
+split and agree the pairing boundary before moving code. Review the retained
 receipt fallback and weekly cost-check policy separately. Sample infrastructure
 and cost-input PRs as they arrive naturally; no measurement-only reruns.
 

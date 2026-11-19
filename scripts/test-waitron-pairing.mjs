@@ -59,11 +59,12 @@ try{
     await cloud.getByLabel('Email').fill(email);await cloud.locator('input[name=password]').fill(password);await cloud.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,cloud,email);
     await cloud.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await cloud.getByRole('button',{name:'Check code',exact:true}).click();
     const venueDetails=cloud.locator('.pairing-details');
-    await venueDetails.getByText('Venue name',{exact:true}).waitFor();
-    assert.equal(await venueDetails.locator('.venue-id').textContent(),'Cloud Test Venue');
+    const nameLabel=venueDetails.getByText('Venue name',{exact:true});
+    await nameLabel.waitFor();
+    assert.equal(await nameLabel.locator('+ dd').textContent(),'Cloud Test Venue');
     await prepareBrowserActionWindow(f,cloud,owner.accountId);await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
-    await venueDetails.getByText('Venue name',{exact:true}).waitFor();
-    assert.equal(await venueDetails.locator('.venue-id').textContent(),'Cloud Test Venue');
+    await nameLabel.waitFor();
+    assert.equal(await nameLabel.locator('+ dd').textContent(),'Cloud Test Venue');
     await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Two Cafés SL',{exact:true}).waitFor();
     if(index===0){await stop(server);server=await launch(root);await page.reload();await page.getByRole('button',{name:'Connect this venue',exact:true}).waitFor();}
     let completions=0,completionStatus;
