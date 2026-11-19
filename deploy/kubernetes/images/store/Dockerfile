@@ -4,6 +4,9 @@ WORKDIR /src
 RUN git init && git fetch --depth 1 https://github.com/minio/minio.git refs/tags/RELEASE.2025-10-15T17-29-55Z \
     && test "$(git rev-parse FETCH_HEAD^{commit})" = 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a \
     && git checkout --detach FETCH_HEAD
+ARG WAITRON_GRANT_TIMING=0
+COPY grant-timing.patch /grant-timing.patch
+RUN if [ "$WAITRON_GRANT_TIMING" = 1 ]; then git apply /grant-timing.patch; fi
 RUN go build -trimpath -ldflags "-s -w" -o /minio .
 
 FROM scratch

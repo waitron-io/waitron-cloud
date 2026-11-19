@@ -1232,10 +1232,20 @@ completion refuses a missing part. Its JSON output reports the outage time.
 The Cloud services slice must prove disk repair and consecutive outages before
 run 9.
 
+Run `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
+in the same x86-64 Linux guest to check temporary grants. The rehearsal uses the pinned
+MinIO admin client and Cloud's real credential exchange. It checks object and method
+permissions, then verifies that a surviving machine refuses the expired grant and issues
+a fresh grant during the outage. After the stopped machine rejoins, it uses that fresh
+grant to read the encrypted object. One renewal hit Cloud's ten-second deadline after
+DNS placement was fixed. A traced Linux run renewed and read successfully. The identity
+rehearsal prints the store's validation, credential save and peer reload timing for future
+failures. Allow at least 15 minutes for the original grant to expire.
+
 The bounded Stockholm launcher transfers the same test store image and waits
 for all six peers after joining the three machines. It runs the store in
 `d621-store` with disposable credentials. The legacy fixture keeps its existing
-store. Scoped credentials and Cloud service cutover follow in later slices.
+store. A later slice connects Cloud services to the replicated store.
 
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file

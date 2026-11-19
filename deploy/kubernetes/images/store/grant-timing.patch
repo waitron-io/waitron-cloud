@@ -1,0 +1,46 @@
+--- a/cmd/iam.go
++++ b/cmd/iam.go
+@@ -795,12 +795,16 @@
+ 		policyName = ""
+ 	}
+ 
++	started := time.Now()
++	fmt.Println("WAITRON grant save-start elapsed=0s")
+ 	updatedAt, err := sys.store.SetTempUser(ctx, accessKey, cred, policyName)
+ 	if err != nil {
+ 		return time.Time{}, err
+ 	}
+ 
++	fmt.Printf("WAITRON grant peer-reload-start elapsed=%s\n", time.Since(started))
+ 	sys.notifyForUser(ctx, cred.AccessKey, true)
++	fmt.Printf("WAITRON grant peer-reload-end elapsed=%s\n", time.Since(started))
+ 
+ 	return updatedAt, nil
+ }
+--- a/cmd/sts-handlers.go
++++ b/cmd/sts-handlers.go
+@@ -444,6 +444,8 @@
+ 		return
+ 	}
+ 
++	started := time.Now()
++	fmt.Println("WAITRON grant validation-start elapsed=0s")
+ 	// Validate JWT; check clientID in claims matches the one associated with the roleArn
+ 	if err := globalIAMSys.OpenIDConfig.Validate(r.Context(), roleArn, token, accessToken, r.Form.Get(stsDurationSeconds), claims); err != nil {
+ 		switch err {
+@@ -463,6 +465,7 @@
+ 		return
+ 	}
+ 
++	fmt.Printf("WAITRON grant validation-end elapsed=%s\n", time.Since(started))
+ 	var policyName string
+ 	if isRolePolicyProvider {
+ 		// If roleArn is used, we set it as a claim, and use the
+@@ -621,6 +624,7 @@
+ 		encodedSuccessResponse = encodeResponse(webIdentityResponse)
+ 	}
+ 
++	fmt.Printf("WAITRON grant response-ready elapsed=%s\n", time.Since(started))
+ 	writeSuccessResponseXML(w, encodedSuccessResponse)
+ }
+ 

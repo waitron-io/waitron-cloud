@@ -93,6 +93,10 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
+if (target === 'kind-storage-identity') {
+  const {runStorageIdentity} = await import('./kubernetes-storage-identity.mjs');
+  return runKubernetesNodeLoss({storage: runStorageIdentity});
+}
 if (target === 'kind-storage-loss') {
   const {runKubernetesStorage} = await import('./kubernetes-storage-proof.mjs');
   return runKubernetesNodeLoss({storage: runKubernetesStorage});
@@ -356,7 +360,8 @@ return result;
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
-    ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss']]);
+    ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss'],
+    ['--storage-identity', 'kind-storage-identity']]);
   const target = extra.length ? undefined : file !== undefined ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');
