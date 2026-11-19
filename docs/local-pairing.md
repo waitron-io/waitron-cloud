@@ -27,8 +27,9 @@ retry a failed check or confirmation. If Cloud reports the request unavailable,
 choose **Start again** in Waitron to obtain another code. This keeps the installation
 key and replaces the unavailable request.
 
-Use a Waitron build that supports pairing version 3. If you started pairing before
-the version switch, start again from the updated box.
+Upgrade your box to a Waitron build that supports pairing version 3 before you
+pair it with this Cloud. If you started pairing before the version switch, start
+again from the updated box.
 
 ## Run the local integration proof
 

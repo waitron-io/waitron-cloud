@@ -62,6 +62,7 @@ try{
     const nameLabel=venueDetails.getByText('Venue name',{exact:true});
     await nameLabel.waitFor();
     assert.equal(await nameLabel.locator('+ dd').textContent(),'Cloud Test Venue');
+    await venueDetails.getByText('New venue',{exact:true}).waitFor();
     await prepareBrowserActionWindow(f,cloud,owner.accountId);await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
     await nameLabel.waitFor();
     assert.equal(await nameLabel.locator('+ dd').textContent(),'Cloud Test Venue');
