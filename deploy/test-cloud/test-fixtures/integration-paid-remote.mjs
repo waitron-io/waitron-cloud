@@ -150,7 +150,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       assert.deepEqual(JSON.parse(publicReply.body), client.availability);
       if (expectedPublic) assert.equal(publicReply.certificateSha256, expectedPublic);
     };
-    const verifyRoutes = signal => check(signal, publicResponse.certificateSha256);
+    const verifyRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);
     const pairedPeer = {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')};
     if (stockholm.machineLoss) {
       const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);

@@ -1307,9 +1307,12 @@ certificate and signing request in the same Kubernetes Secret.
 The check first pauses the active gateway's lease renewal. The watchdog must
 remove the old WireGuard interface. The same venue peer has 90 seconds to
 complete a new handshake and serve verified HTTPS through a standby. The
-fixture sends one packet from the venue every five seconds during handover. Then
-the first worker replaces the public certificate on the same route, with up
-to 180 seconds for all three gateways to receive it.
+fixture sends one packet from the venue every five seconds during handover.
+It records what the old public cookie returns. If the gateway challenges it
+again, the fixture solves the challenge and verifies the same response and
+certificate within the same 90 seconds. Then the first worker replaces the
+public certificate on the same route, with up to 180 seconds for all three
+gateways to receive it.
 
 The check starts a second publication worker on a different machine. Both
 workers stay off the account machine so the account can accept the owner's

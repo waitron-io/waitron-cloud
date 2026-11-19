@@ -182,7 +182,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
         const next = await active(limit);
         assert.notEqual(next, old, 'remote.standby_required');
         await exec(old, noGatewayInterface, limit);
-        await checkRoutes(limit);
+        await checkRoutes(limit, () => performance.now() - start);
         const {handshake, receivedBytes, sentBytes} = await peerCounters(call, next, peer, limit);
         assert.ok(handshake >= cut && receivedBytes > 0 && sentBytes > 0, 'remote.standby_handshake');
         return {durationMs: Math.ceil(performance.now() - start), interfaceWithdrawn: true, handshake: true};
