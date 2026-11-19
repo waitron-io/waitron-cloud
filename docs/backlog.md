@@ -703,6 +703,9 @@ database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle jou
 
 Qualify Waitron's signed sender and its published menu from a phone on mobile
 data using the [Amazon test Cloud guest address](test-cloud.md#open-the-synthetic-venues-guest-menu).
+The Amazon test proxy returns a retry response when the browser reuses the account
+connection for the guest menu, or the reverse. The proxy fixture checks both
+directions over HTTP/2. Recheck the two pages on the test Cloud after rollout.
 Production DNS and certificates remain open. Every venue connected to Cloud
 qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
 cover variant publication. Live forwarding belongs to Waitron A509 online ordering.
