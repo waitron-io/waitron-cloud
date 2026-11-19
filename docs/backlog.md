@@ -1073,7 +1073,9 @@ implementation or production evidence.
   SES startup and authenticated feedback composition, real email delivery and
   joint box handoff qualification remain open. A fresh named pairing on the Amazon
   test Cloud remains part of the joint box trial after both builds speak pairing
-  version 3.
+  version 3. The [Amazon test verifier build](backup-verifier-containment.md#build-the-verifier-for-the-amazon-test-box)
+  uses the installed test box release. The upload, test worker setup and
+  synthetic backup restore check still need the fresh pairing.
 
   Automatic remote access starts from the box's signed tunnel key in venue-level
   test mode. The focused worker test starts the Connected trial through the

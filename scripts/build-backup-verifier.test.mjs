@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 const cloud=fileURLToPath(new URL('../',import.meta.url));
+
 test('verifier build archives the pinned committed source and supplies its generated runtime stamp',async()=>{
  const root=await mkdtemp(join(tmpdir(),'cloud-build-contract-')),source=join(root,'source'),candidate=join(root,'cloud'),bin=join(root,'bin'),capture=join(root,'capture');
  try{
@@ -22,6 +23,11 @@ test('verifier build archives the pinned committed source and supplies its gener
   await writeFile(join(source,'tracked'),'later');git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-s','-qm','later fixture');
   const streamed=git('rev-parse','HEAD');
   await writeFile(join(candidate,'deploy/backup-verifier/streamed-target.json'),JSON.stringify({runtime:{revision:streamed},digest:'b'.repeat(64)}));
+  await writeFile(join(source,'tracked'),'installed release');
+  git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-s','-qm','installed fixture');
+  const installed=git('rev-parse','HEAD');
+  await writeFile(join(candidate,'deploy/backup-verifier/amazon-test-target.json'),JSON.stringify({runtime:{revision:installed},digest:'c'.repeat(64)}));
+  await writeFile(join(source,'tracked'),'dirty');
   await writeFile(join(source,'private-untracked'),'must stay out');
   await chmod(join(candidate,'packages/backups/src/container-entry.mjs'),0o600);
   await chmod(join(candidate,'deploy/backup-verifier/target.json'),0o600);
@@ -35,13 +41,16 @@ function walk(name){
  if(directory)for(const child of fs.readdirSync(path.join(context,name)))walk(path.join(name,child));
 }
 walk('waitron');walk('verifier');
-fs.writeFileSync(${JSON.stringify(modes)},JSON.stringify({root:fs.statSync(context).mode&0o777,entries}));
+fs.writeFileSync(${JSON.stringify(modes)},JSON.stringify({root:fs.statSync(context).mode&0o777,entries,tag:process.argv[process.argv.indexOf('-t')+1]}));
 fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wrapper,0o700);
+  const buildEnv={...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'};
+  delete buildEnv.CLOUD_VERIFIER_IMAGE;
   const callerMask=process.umask(0o077);
   try{
-   execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs')],{env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+   execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs')],{env:buildEnv,stdio:'pipe'});
   }finally{process.umask(callerMask);}
   const staged=JSON.parse(await readFile(modes,'utf8'));
+  assert.equal(staged.tag,'waitron-backup-verifier:local');
   assert.equal(staged.root,0o700,'the build context stays private');
   for(const {name,mode,directory} of staged.entries){
    const required=directory?0o005:0o004;
@@ -52,8 +61,15 @@ fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wr
   assert.deepEqual(JSON.parse(await readFile(join(capture,'waitron/build/hour-release.json'),'utf8')),{sourceCommit:pinned,fixture:'real-generator-boundary'});
   assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/target.json'),'utf8'));
   execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs'),'--streamed'],
-   {env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+   {env:buildEnv,stdio:'pipe'});
   assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'later','the streamed image must use its separately reviewed release');
   assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/streamed-target.json'),'utf8'));
+  assert.equal(JSON.parse(await readFile(modes,'utf8')).tag,'waitron-backup-verifier:local');
+  execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs'),'--amazon-test'],
+   {env:buildEnv,stdio:'pipe'});
+  assert.equal(JSON.parse(await readFile(modes,'utf8')).tag,'waitron-backup-verifier:amazon-test');
+  assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'installed release');
+  assert.deepEqual(JSON.parse(await readFile(join(capture,'waitron/build/hour-release.json'),'utf8')),{sourceCommit:installed,fixture:'real-generator-boundary'});
+  assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/amazon-test-target.json'),'utf8'));
  }finally{await rm(root,{recursive:true,force:true});}
 });

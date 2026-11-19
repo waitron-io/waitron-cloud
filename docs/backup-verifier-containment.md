@@ -33,6 +33,28 @@ both count against scratch. The ceilings are independent: a tight memory setting
 fail before the scratch quota is full. The 512 MiB catalogue limit is an upload ceiling, not a promise
 that a snapshot of that size fits this verifier configuration.
 
+## Build the verifier for the Amazon test box
+
+Build the verifier from the same Waitron release as the test box. The
+[Amazon test target](../deploy/backup-verifier/amazon-test-target.json) records
+the full revision and the expected backup format read from the installed image.
+The build checks that the compiled verifier reports the same target.
+
+On your isolated Linux Docker host, set `WAITRON_CHECKOUT` to a checkout that
+contains the pinned commit and set `NODE_AUTH_TOKEN` as for a local verifier
+build. From the Cloud repository, fetch the exact source if needed and build
+the image. The default tag is `waitron-backup-verifier:amazon-test`. Set
+`CLOUD_VERIFIER_IMAGE` to use a different tag.
+
+```sh
+revision=$(node -p 'require("./deploy/backup-verifier/amazon-test-target.json").runtime.revision')
+git -C "$WAITRON_CHECKOUT" fetch --no-tags https://github.com/clintongormley/waitron.git "$revision"
+node scripts/build-backup-verifier.mjs --amazon-test
+```
+
+This builds a local image. The Amazon trial needs a separately configured upload
+and test backup worker before a paired box can use it.
+
 ## Use a private disk for the venue-level trial
 
 Keep the encrypted input and unpacked database on a dedicated scratch filesystem so

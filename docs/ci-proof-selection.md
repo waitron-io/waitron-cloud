@@ -136,7 +136,9 @@ still includes former receipt inputs, whose package CI remains in place. Shared 
 and fixture data, installation inputs, the workflow and planner also select it. This includes the registration venue-service
 fixture, backup verification helpers and fake translation provider. The imported
 `deploy/local-stack/{runtime,lease,bootstrap}.mjs` helpers and
-`deploy/backup-verifier/target.json` also select venue.
+the standard, streamed and Amazon test pins under `deploy/backup-verifier/`
+also select venue. The Amazon pin selects the proof ahead of the test worker
+wiring. The root CI checks already validate the committed pin.
 
 Other product-source edits use package CI without repeating this composition
 proof on every PR. A complete manual run remains available, and the
