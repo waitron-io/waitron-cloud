@@ -21,8 +21,8 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   const context=await f.browser.newContext({locale,viewport:{width:375,height:812}}),page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.waitForURL(f.origin+'/account');await page.goto(f.origin+'/account/venues');
-  const stop=locale==='en'?'Stop Cloud access':'Detener el acceso a Cloud',confirm=locale==='en'?'Confirm stop':'Confirmar detención',cancel=locale==='en'?'Keep Cloud access':'Mantener el acceso a Cloud',stopped=locale==='en'?'Cloud access stopped':'Acceso a Cloud detenido';
-  await page.getByRole('button',{name:stop,exact:true}).waitFor();
+  const remove=locale==='en'?'Remove venue':'Quitar local',confirm=locale==='en'?'Confirm removal':'Confirmar retirada',cancel=locale==='en'?'Keep venue':'Conservar local';
+  await page.getByRole('button',{name:remove,exact:true}).waitFor();
   await page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true}).waitFor();
   await page.locator('.venue-details summary').click();
   await page.getByText(locale==='en'?'No verified snapshot yet':'Todavía no hay una instantánea verificada',{exact:true}).waitFor();
@@ -48,13 +48,17 @@ for(const locale of ['en','es'] as const)test(`${locale} installation status and
   await page.getByText(c.snapshotOld,{exact:true}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
   await page.getByText(locale==='en'?'Configured · Working':'Configurado · Funcionando',{exact:true}).waitFor();
   await page.getByText(locale==='en'?'Configured · Health unknown':'Configurado · Estado desconocido',{exact:true}).waitFor({timeout:3000});
-  await page.getByRole('button',{name:stop,exact:true}).click();await page.getByRole('button',{name:cancel,exact:true}).click();assert.equal((await f.db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[installed.installationId])).rows[0].revoked_at,null);
-  await page.getByRole('button',{name:stop,exact:true}).click();await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.getByRole('button',{name:remove,exact:true}).click();await page.getByRole('button',{name:cancel,exact:true}).click();assert.equal((await f.db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[installed.installationId])).rows[0].revoked_at,null);
+  await page.getByRole('button',{name:remove,exact:true}).click();await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:new URL(`../dist/installations-${locale}.png`,import.meta.url).pathname,fullPage:true});
-  let revokes=0;await page.route('**/installations/revoke',async route=>{revokes++;const response=await route.fetch();if(revokes===1)await route.abort('failed');else await route.fulfill({response});});
-  await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(locale==='en'?'We could not confirm whether access stopped. Retry or refresh the status.':'No hemos podido confirmar si se detuvo el acceso. Reinténtalo o actualiza el estado.').waitFor();
-  await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(stopped,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:stop,exact:true}).count(),0);
-  await page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true}).waitFor();assert.equal(await page.locator('time[datetime="'+capturedAt+'"]').count(),2);
-  await page.reload();await page.getByText(stopped,{exact:true}).waitFor();assert.equal((await f.db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
+  let revokes=0;await page.route('**/installations/remove',async route=>{revokes++;const response=await route.fetch();if(revokes===1)await route.abort('failed');else await route.fulfill({response});});
+  await page.getByRole('button',{name:confirm,exact:true}).click();await page.getByText(c.removeUncertain,{exact:true}).waitFor();
+  await page.getByRole('button',{name:confirm,exact:true}).click();
+  const removedHeading=page.getByRole('heading',{name:`${c.venueTitle} · ${installed.venueId.slice(0,8)}`,exact:true});
+  const otherHeading=page.getByRole('heading',{name:`${c.venueTitle} · ${other.venueId.slice(0,8)}`,exact:true});
+  await otherHeading.waitFor();assert.equal(await removedHeading.count(),0);assert.equal(revokes,2);
+  await page.reload();await otherHeading.waitFor();assert.equal(await removedHeading.count(),0);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM venues')).rows[0].count,'2');
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM backup_points WHERE id=$1 AND deleted_at IS NULL',[pointId])).rows[0].count,'1');
  }finally{await f.close();}
 });

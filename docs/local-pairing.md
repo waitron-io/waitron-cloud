@@ -126,11 +126,16 @@ local fixture generates its own test issuer. Waitron refreshes access once a min
 and renews with ten minutes left. The screen separates configuration from observed
 health, and shows the last contact and expiry.
 
-Choose **Stop Cloud access** in Waitron, or sign in to Cloud as the organisation owner
-and choose it for the installation. Confirm the consequences before submitting.
-You can retry a lost response. This permanently retires the installation identity,
-preserves stored backups and venue records, and leaves local trading and billing alone.
-Replacement recovery will issue a fresh identity.
+Choose **Stop Cloud access** in Waitron to retire the installation's connection.
+As an organisation owner, you can also choose **Remove venue** under **Venues** in
+Cloud. This stops its Cloud connection and hides its card, even if you already
+stopped the connection. The same confirmation takes down any shared guest menu.
+If Cloud cannot take the menu down, you can retry removal from the same card.
+
+Local trading continues and Cloud keeps your saved backups. For a test venue,
+you can still select it in Recovery. Charges continue and the venue stays in
+**Billing**. You can retry if you lose the removal reply. Replacement recovery
+issues a fresh installation identity.
 
 Before public deployment, complete ingress controls and
 operation/pairing audit retention work in the backlog. This local proof does not establish an

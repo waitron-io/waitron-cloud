@@ -21,10 +21,10 @@ export function installationScreen(app:PortalApp, remoteOnly = false){
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
  return html`<section aria-label=${c.installations}><h2>${c.installations}</h2>
   ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
-  ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
+  ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.organisations.length&&!controller.error?html`<p>${controller.installations.length?c.removedVenuesElsewhere:c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
   ${translationReadError?html`<p class="translation-read-error" role="alert">${c[translationReadError]}</p>${permissionActions(app,translationReadError)}`:nothing}
-  ${!remoteOnly&&venues.length?html`<p class="help">${c.addVenue}</p>`:nothing}
+  ${!remoteOnly&&controller.installations.length?html`<p class="help">${c.addVenue}</p>`:nothing}
   ${repeat(venues,i=>i.installationId,i=>html`<article class="installation"><h3>${title(i)}</h3>
     ${remoteOnly ? html`
       ${i.revokedAt ? html`<p role="status">${c.accessStopped}</p><p>${c.remoteRevoked}</p>` : nothing}
@@ -45,9 +45,9 @@ export function installationScreen(app:PortalApp, remoteOnly = false){
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
     ${app.diagnostics.error&&app.diagnostics.errorInstallationId===i.installationId?html`<p role="alert">${c[app.diagnostics.error]}</p>${permissionActions(app,app.diagnostics.error)}`:nothing}
-    ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.stopAccess}><p>${c.stopHelp}</p>
-      <wt-form-actions><wt-button .disabled=${controller.pending} @click=${()=>controller.choose()}>${c.cancelStop}</wt-button><wt-button .disabled=${disabled} @click=${()=>{void controller.revoke();}}>${c.confirmStop}</wt-button></wt-form-actions></div>`
-      :i.canRevoke&&!i.revokedAt?html`<wt-button .disabled=${disabled} @click=${()=>controller.choose(i.installationId)}>${c.stopAccess}</wt-button>`:nothing}
+    ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.removeVenue} aria-describedby=${'remove-help-'+i.installationId}><div id=${'remove-help-'+i.installationId}><p>${c.removeHelp}</p>${i.guestMenuShared?html`<p>${c.removeMenuHelp}</p>`:nothing}</div>
+      <wt-form-actions><wt-button .disabled=${controller.pending} @click=${()=>controller.choose()}>${c.cancelRemove}</wt-button><wt-button .disabled=${disabled} @click=${()=>{void controller.remove();}}>${controller.error==='removeMenuTakedownFailed'?c.retry:c.confirmRemove}</wt-button></wt-form-actions></div>`
+      :i.canRevoke?html`<wt-button .disabled=${disabled} @click=${()=>controller.choose(i.installationId)}>${c.removeVenue}</wt-button>`:nothing}
     `}
   </article>`)}
   <wt-button .disabled=${disabled} @click=${()=>{void controller.load();}}>${c.refreshStatus}</wt-button>

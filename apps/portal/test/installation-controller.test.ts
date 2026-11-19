@@ -8,19 +8,19 @@ const id='12345678-1234-4234-8234-123456789abc';
 const view={installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:0,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,services:[],canRevoke:true};
 test('stop requires an offered owner action and explicit confirmation; a lost reply remains recoverable',async()=>{
  const calls:string[]=[];let lost=true;
- const c=new InstallationController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return path.endsWith('/revoke')&&lost?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:true,value:(path.endsWith('/revoke')?{...view,revokedAt:new Date().toISOString()}:{installations:[view]}) as T};});
- c.account('owner');await c.load();await c.revoke();assert.equal(calls.length,1);c.choose('unknown');await c.revoke();assert.equal(calls.length,1);
- c.choose(id);await c.revoke();assert.equal(c.error,'stopUncertain');assert.equal(c.confirming,id);lost=false;await c.revoke();assert.ok(c.installations[0]?.revokedAt);assert.equal(c.confirming,undefined);
+ const c=new InstallationController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{calls.push(path);return path.endsWith('/remove')&&lost?{ok:false,status:0,code:'network_error',retryAfterMs:0}:{ok:true,value:(path.endsWith('/remove')?{...view,revokedAt:new Date().toISOString(),portalRemovedAt:new Date().toISOString()}:{installations:[view]}) as T};});
+ c.account('owner');await c.load();await c.remove();assert.equal(calls.length,1);c.choose('unknown');await c.remove();assert.equal(calls.length,1);
+ c.choose(id);await c.remove();assert.equal(c.error,'removeUncertain');assert.equal(c.confirming,id);lost=false;await c.remove();assert.ok(c.installations[0]?.revokedAt);assert.equal(c.confirming,undefined);
 });
 test('changing accounts fences delayed list and revoke responses and clears confirmation',async()=>{
  let finish!:(value:ApiResult<unknown>)=>void;
  const c=new InstallationController(()=>{},<T>()=>new Promise<ApiResult<T>>(r=>{finish=r as typeof finish;}));c.account('first');const p=c.load();c.account('second');finish({ok:true,value:{installations:[view]}});await p;assert.deepEqual(c.installations,[]);
- c.installations=[view];c.choose(id);const revoking=c.revoke();c.account(undefined);finish({ok:true,value:{...view,revokedAt:new Date().toISOString()}});await revoking;assert.deepEqual(c.installations,[]);assert.equal(c.confirming,undefined);
+ c.installations=[view];c.choose(id);const revoking=c.remove();c.account(undefined);finish({ok:true,value:{...view,revokedAt:new Date().toISOString(),portalRemovedAt:new Date().toISOString()}});await revoking;assert.deepEqual(c.installations,[]);assert.equal(c.confirming,undefined);
 });
 test('foreign replies and rate limits do not replace the selected installation or allow repeated writes',async()=>{
- let calls=0,limited=false;const c=new InstallationController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return limited?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:{ok:true,value:{...view,installationId:'other',revokedAt:new Date().toISOString()} as T};});
- c.account('owner');c.installations=[view];c.choose(id);await c.revoke();assert.equal(c.error,'unavailable');assert.equal(c.installations[0]?.revokedAt,null);
- limited=true;await c.revoke();assert.equal(c.error,'limited');await c.revoke();assert.equal(calls,2);c.installations=[{...view,canRevoke:false}];c.choose(id);assert.equal(c.confirming,undefined);
+ let calls=0,limited=false;const c=new InstallationController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return limited?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:{ok:true,value:{...view,installationId:'other',revokedAt:new Date().toISOString(),portalRemovedAt:new Date().toISOString()} as T};});
+ c.account('owner');c.installations=[view];c.choose(id);await c.remove();assert.equal(c.error,'unavailable');assert.equal(c.installations[0]?.revokedAt,null);
+ limited=true;await c.remove();assert.equal(c.error,'limited');await c.remove();assert.equal(calls,2);c.installations=[{...view,canRevoke:false}];c.choose(id);assert.equal(c.confirming,undefined);
 });
 
 test('one organisation is visible at a time and account changes clear selection',async()=>{
@@ -32,6 +32,30 @@ test('one organisation is visible at a time and account changes clear selection'
  c.choose(otherId);c.error='unavailable';c.selectOrganisation(id);assert.equal(c.confirming,undefined);assert.equal(c.error,'unavailable');
  c.selectOrganisation('unknown');assert.equal(c.visible[0]?.organisationId,id);
  c.account(undefined);assert.deepEqual(c.visible,[]);assert.equal(c.selectedOrganisation,undefined);
+});
+
+test('Recovery still offers the venue after other portal pages hide it',async()=>{
+ const stamp='2026-10-24T00:00:00.000Z',removed={...view,revokedAt:stamp,portalRemovedAt:stamp};
+ const c=new InstallationController(()=>{},async<T>()=>({ok:true,value:{installations:[removed]} as T}));
+ c.account('owner');await c.load();
+ assert.deepEqual(c.visible,[]);assert.deepEqual(c.organisations,[]);
+ c.showRecovery(true);
+ assert.deepEqual(c.visible,[removed]);assert.equal(c.selectedOrganisation,id);
+ c.showRecovery(false);
+ assert.deepEqual(c.visible,[]);assert.equal(c.selectedOrganisation,undefined);
+});
+
+test('an explicit Venues organisation choice replaces the remembered Recovery choice',async()=>{
+ const second='22345678-1234-4234-8234-123456789abc',third='32345678-1234-4234-8234-123456789abc';
+ const stamp='2026-10-24T00:00:00.000Z';
+ const rows=[{...view,revokedAt:stamp,portalRemovedAt:stamp},
+  {...view,organisationId:second,installationId:second},{...view,organisationId:third,installationId:third}];
+ const controller=new InstallationController(()=>{},async<T>()=>({ok:true,value:{installations:rows} as T}));
+ controller.account('owner');await controller.load();
+ controller.showRecovery(true);controller.selectOrganisation(id);
+ controller.showRecovery(false);controller.selectOrganisation(third);
+ controller.showRecovery(true);
+ assert.equal(controller.selectedOrganisation,third);
 });
 
 test('overview accepts database character limits for Unicode names',()=>{
@@ -55,19 +79,19 @@ test('remote monitoring accepts only redacted route evidence and known incidents
  assert.equal(validInstallation({...item,monitoring:{...item.monitoring,incidents:[{kind:'remote_failed',openedAt:checkedAt,changedAt:checkedAt}]}}),false);
 });
 
-for(const change of ['permission','organisation','fallback','removed','revoked','unchanged'] as const)test(`refresh ${change}: stop confirmation belongs to the still offered installation and organisation`,async()=>{
+for(const change of ['permission','organisation','fallback','missing','removed','unchanged'] as const)test(`refresh ${change}: stop confirmation belongs to the still offered installation and organisation`,async()=>{
  const other='22345678-1234-4234-8234-123456789abc';
  let items:AccountInstallation[]=[view];const writes:unknown[]=[];
  const c=new InstallationController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
   if(body)writes.push(body);
-  return {ok:true,value:(path.endsWith('/revoke')?{...view,revokedAt:'2026-10-24T00:00:00.000Z'}:{installations:items}) as T};
+  return {ok:true,value:(path.endsWith('/remove')?{...view,revokedAt:'2026-10-24T00:00:00.000Z',portalRemovedAt:'2026-10-24T00:00:00.000Z'}:{installations:items}) as T};
  });
  c.account('owner');await c.load();c.choose(id);assert.equal(c.confirming,id);
- items=change==='permission'?[{...view,canRevoke:false}]:change==='organisation'?[{...view,organisationId:other},{...view,installationId:other,venueId:other}]:change==='fallback'?[{...view,organisationId:other}]:change==='removed'?[]:change==='revoked'?[{...view,revokedAt:'2026-10-24T00:00:00.000Z'}]:[view];
+ items=change==='permission'?[{...view,canRevoke:false}]:change==='organisation'?[{...view,organisationId:other},{...view,installationId:other,venueId:other}]:change==='fallback'?[{...view,organisationId:other}]:change==='missing'?[]:change==='removed'?[{...view,revokedAt:'2026-10-24T00:00:00.000Z',portalRemovedAt:'2026-10-24T00:00:00.000Z'}]:[view];
  await c.load();
- assert.equal(c.selectedOrganisation,change==='removed'?undefined:change==='fallback'?other:id);
+ assert.equal(c.selectedOrganisation,['removed','missing'].includes(change)?undefined:change==='fallback'?other:id);
  assert.equal(c.confirming,change==='unchanged'?id:undefined);
- await c.revoke();assert.deepEqual(writes,change==='unchanged'?[{installationId:id}]:[]);
+ await c.remove();assert.deepEqual(writes,change==='unchanged'?[{installationId:id}]:[]);
 });
 
 for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as const)test(`installation revoke body refusal ${status} retains confirmation`,async()=>{
@@ -75,9 +99,9 @@ for(const [status,cause] of [[408,'Interrupted'],[413,'Size'],[415,'Format']] as
  const c=new InstallationController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
   calls.push({path,body});return {ok:false,status,code:'invalid_input',retryAfterMs:0};
  });
- c.account('owner');c.installations=[view];c.choose(id);await c.revoke();
+ c.account('owner');c.installations=[view];c.choose(id);await c.remove();
  assert.equal(c.error,`installationsRequest${cause}`);assert.equal(c.pending,false);assert.equal(c.confirming,id);assert.equal(c.installations[0]?.revokedAt,null);
- assert.deepEqual(calls,[{path:'/installations/revoke',body:{installationId:id}}]);
+ assert.deepEqual(calls,[{path:'/installations/remove',body:{installationId:id}}]);
 });
 
 for(const kind of ['public_certificate_expiring','staff_certificate_expiring'])test('an installation reply naming '+kind+' is refused',()=>{

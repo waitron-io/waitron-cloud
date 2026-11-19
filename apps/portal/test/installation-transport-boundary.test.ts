@@ -19,12 +19,12 @@ function row(): AccountInstallation {
       {service: 'retained_snapshots', state: 'ready', health: 'healthy', failure: null, observedAt: stamp},
     ]};
 }
-type Operation = 'load' | 'revoke';
+type Operation = 'load' | 'remove';
 function path(operation: Operation) {
-  return `/api/account/installations${operation === 'revoke' ? '/revoke' : ''}`;
+  return `/api/account/installations${operation === 'remove' ? '/remove' : ''}`;
 }
 function accepted(operation: Operation) {
-  return Response.json(operation === 'load' ? {installations: [row()]} : {...row(), revokedAt: stamp});
+  return Response.json(operation === 'load' ? {installations: [row()]} : {...row(), revokedAt: stamp, portalRemovedAt: stamp});
 }
 function harness(t: TestContext) {
   for (const [key, value] of [
@@ -53,7 +53,7 @@ function harness(t: TestContext) {
     assert.deepEqual(violations, [], 'fixture refusals must not be swallowed by the HTTP client');
     assert.equal(replies.length, 0, 'every planned request must execute');
     for (const call of calls) {
-      const write = call.url.endsWith('/revoke');
+      const write = call.url.endsWith('/remove');
       assert.equal(call.init?.credentials, 'same-origin');
       assert.equal(call.init?.method, write ? 'POST' : 'GET');
       assert.equal(new Headers(call.init?.headers).get('X-CSRF-Token'), write ? 'stop-proof' : null);
@@ -70,7 +70,7 @@ function harness(t: TestContext) {
 }
 
 // Accepting a refused status or replaying a failed write would change the visible stop result.
-for (const operation of ['load', 'revoke'] as const) {
+for (const operation of ['load', 'remove'] as const) {
   for (const refusal of ['lost reply', 'broken JSON', 'unreadable body', 'success-shaped refusal', 'private refusal'] as const) {
     test(`installation ${operation} ${refusal} retains the selected row for an explicit retry`, async t => {
       const {controller: c, calls, enqueue, seed} = harness(t);
@@ -82,7 +82,7 @@ for (const operation of ['load', 'revoke'] as const) {
           start(stream) { stream.error(new Error('private body detail')); },
         }), {status: 200});
         if (refusal === 'success-shaped refusal') return Response.json(
-          operation === 'load' ? {installations: []} : {...row(), revokedAt: stamp}, {status: 503});
+          operation === 'load' ? {installations: []} : {...row(), revokedAt: stamp, portalRemovedAt: stamp}, {status: 503});
         return Response.json({error: 'private database detail'}, {status: 409});
       });
       await c[operation]();
@@ -91,7 +91,7 @@ for (const operation of ['load', 'revoke'] as const) {
       assert.equal(c.confirming, id);
       assert.equal(c.selectedOrganisation, organisationId);
       assert.equal(c.pending, false);
-      assert.equal(c.error, operation === 'load' ? 'unavailable' : 'stopUncertain');
+      assert.equal(c.error, operation === 'load' ? 'unavailable' : 'removeUncertain');
       assert.equal(calls.length, 2, 'a failed request cannot dispatch its own retry or read-back');
       enqueue(operation);
       await c[operation]();
@@ -99,7 +99,7 @@ for (const operation of ['load', 'revoke'] as const) {
       assert.equal(c.pending, false);
       assert.equal(c.error, undefined);
       assert.equal(c.confirming, operation === 'load' ? id : undefined);
-      assert.deepEqual(c.installations, [{...row(), revokedAt: operation === 'load' ? null : stamp}]);
+      assert.deepEqual(c.installations, [{...row(), ...(operation === 'load' ? {} : {revokedAt: stamp, portalRemovedAt: stamp})}]);
     });
   }
 
@@ -112,7 +112,7 @@ for (const operation of ['load', 'revoke'] as const) {
     const running = c[operation]();
     assert.equal(c.pending, true);
     try {
-      await c.load(); await c.revoke();
+      await c.load(); await c.remove();
       c.choose(); c.selectOrganisation(organisationId);
       assert.equal(calls.length, 2);
       assert.equal(c.confirming, id);
@@ -122,7 +122,7 @@ for (const operation of ['load', 'revoke'] as const) {
     assert.equal(c.pending, false);
     assert.equal(c.error, undefined);
     assert.equal(c.confirming, operation === 'load' ? id : undefined);
-    assert.deepEqual(c.installations, [{...row(), revokedAt: operation === 'load' ? null : stamp}]);
+    assert.deepEqual(c.installations, [{...row(), ...(operation === 'load' ? {} : {revokedAt: stamp, portalRemovedAt: stamp})}]);
   });
 
   // Dropping a wait on navigation, misreading its units or ignoring its date admits another request early.
@@ -142,20 +142,20 @@ for (const operation of ['load', 'revoke'] as const) {
       assert.equal(c.waiting, 30);
       assert.deepEqual(c.installations, [row()]);
       assert.equal(c.confirming, id);
-      await c.load(); await c.revoke();
+      await c.load(); await c.remove();
       assert.equal(calls.length, 2);
       for (const account of ['other', undefined, 'owner']) {
         c.account(account);
-        await c.load(); await c.revoke();
+        await c.load(); await c.remove();
         assert.equal(c.retryAt, start + 30_000);
         assert.equal(calls.length, 2);
       }
       now = start - 5_000;
-      await c.load(); await c.revoke();
+      await c.load(); await c.remove();
       assert.equal(c.waiting, 30);
       assert.equal(calls.length, 2);
       now = start + 29_999; elapsed = 29_999;
-      await c.load(); await c.revoke();
+      await c.load(); await c.remove();
       assert.equal(c.waiting, 1);
       assert.equal(calls.length, 2);
       now = start + 30_000; elapsed = 30_000;
@@ -165,10 +165,10 @@ for (const operation of ['load', 'revoke'] as const) {
       assert.equal(c.error, undefined);
       assert.deepEqual(c.installations, [row()]);
       c.choose(id);
-      enqueue('revoke');
-      await c.revoke();
+      enqueue('remove');
+      await c.remove();
       assert.equal(calls.length, 4);
-      assert.deepEqual(c.installations, [{...row(), revokedAt: stamp}]);
+      assert.deepEqual(c.installations, [{...row(), revokedAt: stamp, portalRemovedAt: stamp}]);
       assert.equal(c.confirming, undefined);
       assert.equal(c.error, undefined);
     });
@@ -181,7 +181,7 @@ test('installation initial unreadable list cannot supply a stop target and permi
   await c.load();
   assert.equal(c.error, 'unavailable');
   c.choose(id);
-  await c.revoke();
+  await c.remove();
   assert.equal(calls.length, 1);
   assert.deepEqual(c.installations, []);
   assert.equal(c.confirming, undefined);

@@ -9,7 +9,7 @@ import {translations} from '../src/locale.ts';
 const first = '20000000-0000-4000-8000-000000000001', second = '20000000-0000-4000-8000-000000000002', production = '20000000-0000-4000-8000-000000000003', point = '20000000-0000-4000-8000-000000000004', request = '20000000-0000-4000-8000-000000000005';
 const installations = [first, second, production].map((id, index) => ({
   installationId: id, venueId: id, organisationId: index ? second : first, legalBusinessId: id,
-  environment: index === 2 ? 'production' : 'test', revision: 0, revokedAt: null, lastContactAt: null, leaseExpiresAt: null, canRevoke: true,
+  environment: index === 2 ? 'production' : 'test', revision: 0, revokedAt: null as string|null, portalRemovedAt: null as string|null, lastContactAt: null, leaseExpiresAt: null, canRevoke: true,
   overview: {organisationName: index ? 'Z second organisation' : 'A first organisation', businessName: index === 2 ? 'Production venue' : index ? 'Second test venue' : 'First test venue', countryCode: 'ES', latestSnapshotAt: null, verifiedSnapshotAt: null},
   services: ['continuous_backup', 'remote_access', 'retained_snapshots'].map(service => ({service, state: 'unconfigured', health: 'unknown', failure: null, observedAt: null})),
 }));
@@ -31,6 +31,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
     const approvals: unknown[] = [];
+    let offeredInstallations = installations;
     let installationGate: Promise<void> | undefined, releaseInstallations: (() => void) | undefined, installationRead: (() => void) | undefined;
     await page.route('https://portal.test/recover', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**', async route => {
@@ -40,7 +41,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       if (path.endsWith('/installations')) {
         if (installationGate && handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
         if (handler !== 'missing') installationRead?.();
-        await installationGate; return route.fulfill({json: {installations}});
+        await installationGate; return route.fulfill({json: {installations: offeredInstallations}});
       }
       if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: null, defaultPointId: point, continuousRecovery: null}});
       if (path.endsWith('/recovery/approve')) approvals.push(route.request().postDataJSON());
@@ -66,6 +67,25 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await t.test('recovery organisation displays the selected second organisation', async () => {
       assert.equal(await organisation.inputValue(), second);
       assert.equal(await organisation.locator('option:checked').textContent(), 'Z second organisation');
+    });
+    if(locale==='en'&&theme==='light'&&width===390&&handler==='ordinary')await t.test('a removed venue stays available in Recovery across a visit to Venues',async()=>{
+      const stamp='2026-11-19T00:00:00.000Z';
+      offeredInstallations=installations.map(row=>row.venueId===first?{...row,revokedAt:stamp,portalRemovedAt:stamp}:row);
+      const refresh=()=>page.evaluate(()=>(window as any).app.installations.load());
+      try {
+        await refresh();
+        await organisation.selectOption(first);
+        assert.deepEqual(await venue.locator('option:not([value=""])').evaluateAll(rows=>rows.map(row=>(row as HTMLOptionElement).value)),[first]);
+        await openVenues();
+        assert.equal(await page.getByText('A first organisation',{exact:true}).count(),0);
+        await returnToRecovery();
+        assert.equal(await organisation.inputValue(),first);
+        assert.equal(await venue.locator(`option[value="${first}"]`).count(),1);
+      } finally {
+        offeredInstallations=installations;
+        await refresh();
+        await organisation.selectOption(second);
+      }
     });
     await t.test('a test venue opened on Venues stays selected on return', async () => {
       await openVenues();

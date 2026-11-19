@@ -27,7 +27,7 @@ const failures=[
 ] as const;
 type Operation='list'|'stop';
 function reply(operation:Operation,row:AccountInstallation):ApiResult<unknown> {
- return {ok:true,value:operation==='list'?{installations:[row]}:{...row,revokedAt:stoppedAt}};
+ return {ok:true,value:operation==='list'?{installations:[row]}:{...row,revokedAt:stoppedAt,portalRemovedAt:stoppedAt}};
 }
 function harness() {
  const requests:Array<{path:string;body?:Record<string,unknown>;finish:(result:ApiResult<unknown>)=>void}>=[];
@@ -53,10 +53,10 @@ async function populate(h:ReturnType<typeof harness>,row:AccountInstallation) {
  h.controller.choose(row.installationId);assert.equal(h.controller.confirming,row.installationId);
 }
 function begin(h:ReturnType<typeof harness>,operation:Operation,row:AccountInstallation) {
- const count=h.requests.length,promise=operation==='list'?h.controller.load():h.controller.revoke();
+ const count=h.requests.length,promise=operation==='list'?h.controller.load():h.controller.remove();
  assert.equal(h.requests.length,count+1);
  const call=h.requests[count]!;
- assert.equal(call.path,operation==='list'?'/installations':'/installations/revoke');
+ assert.equal(call.path,operation==='list'?'/installations':'/installations/remove');
  assert.deepEqual(call.body,operation==='list'?undefined:{installationId:row.installationId});
  assert.equal(h.controller.pending,true);
  return {promise,finish:call.finish};
@@ -80,8 +80,9 @@ for(const operation of ['list','stop'] as const) {
    assert.deepEqual(state(h),before,'old reply must not alter current data, confirmation, feedback, cooldown or pending work');
    if(phase==='pending'){current.finish(reply(operation,currentRow));await current.promise;}
    assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.retryAt,0);
-   assert.equal(c.selectedOrganisation,currentRow.organisationId);
-   assert.deepEqual(c.visible,[operation==='stop'?{...currentRow,revokedAt:stoppedAt}:currentRow]);
+   assert.equal(c.selectedOrganisation,operation==='stop'?undefined:currentRow.organisationId);
+   assert.deepEqual(c.visible,operation==='stop'?[]:[currentRow]);
+   assert.deepEqual(c.installations,[operation==='stop'?{...currentRow,revokedAt:stoppedAt,portalRemovedAt:stoppedAt}:currentRow]);
    assert.equal(c.confirming,operation==='stop'?undefined:currentRow.installationId);
   });
  }
@@ -93,10 +94,10 @@ for(const operation of ['list','stop'] as const) {
   assert.equal(c.pending,false);assert.equal(c.loaded,false);assert.equal(c.error,undefined);
   const before=state(h),count=h.requests.length;old.finish(result);await old.promise;
   assert.deepEqual(state(h),before);
-  c.choose(first);await c.load();await c.revoke();assert.equal(h.requests.length,count);
+  c.choose(first);await c.load();await c.remove();assert.equal(h.requests.length,count);
   c.account('luna-owner');await populate(h,newRow);
   const stop=begin(h,'stop',newRow);stop.finish(reply('stop',newRow));await stop.promise;
-  assert.deepEqual(c.visible,[{...newRow,revokedAt:stoppedAt}]);
+  assert.deepEqual(c.visible,[]);assert.deepEqual(c.installations,[{...newRow,revokedAt:stoppedAt,portalRemovedAt:stoppedAt}]);
  });
  test(`${operation} selecting the same account retains the pending request and accepts its reply`,async()=>{
   const h=harness(),c=h.controller;c.account('sol-owner');await populate(h,oldRow);
@@ -104,7 +105,8 @@ for(const operation of ['list','stop'] as const) {
   assert.deepEqual(state(h),before);
   current.finish(reply(operation,oldRow));await current.promise;
   assert.equal(c.pending,false);assert.equal(c.error,undefined);
-  assert.deepEqual(c.visible,[operation==='stop'?{...oldRow,revokedAt:stoppedAt}:oldRow]);
+  assert.deepEqual(c.visible,operation==='stop'?[]:[oldRow]);
+  assert.deepEqual(c.installations,[operation==='stop'?{...oldRow,revokedAt:stoppedAt,portalRemovedAt:stoppedAt}:oldRow]);
  });
 }
 

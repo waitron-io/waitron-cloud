@@ -75,7 +75,7 @@ for (const panel of panels) {
   });
 }
 
-const paths = ['/installations', '/installations/revoke', '/diagnostics/read', '/remote-access/status', '/remote-access/dns',
+const paths = ['/installations', '/installations/remove', '/diagnostics/read', '/remote-access/status', '/remote-access/dns',
   '/remote-access/apply', '/recovery/inspect', '/recovery/approve', '/recovery/close', '/recovery/replace', '/translation-consent'];
 // Reading JSON must consume the original header wait, including when the server clock differs.
 for (const path of paths) for (const entry of [

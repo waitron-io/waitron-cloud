@@ -1,3 +1,4 @@
+import {readGuestMenu} from '@waitron-cloud/remote-access/guest-menu';
 import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {verifyPointFixture,verificationOutput} from '../../backups/test/fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
@@ -61,6 +62,101 @@ test('machine authority, browser sessions and configured issuer remain separate'
  assert.equal((await browser('/revoke',{installationId:id})).status,200);
  assert.equal((await request('/api/installations/renew',proof('renew'))).status,403);
  app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config()});assert.equal((await request('/api/installations/renew',proof('renew'))).status,503);
+});
+test('remove stops an active connection and retries without writing a second revocation',async()=>{
+ const before=(await (await browser('')).json()).installations[0];
+ const reply=await browser('/remove',{installationId:id});
+ assert.equal(reply.status,200);
+ const removed=await reply.json();
+ assert.equal(removed.installationId,id);
+ assert.ok(Date.parse(removed.portalRemovedAt)>0);
+ assert.ok(Date.parse(removed.revokedAt)>0);
+ assert.equal((await request('/api/installations/renew',proof('renew'))).status,403);
+ assert.deepEqual(await (await browser('/remove',{installationId:id})).json(),removed);
+ const listed=(await (await browser('')).json()).installations[0];
+ assert.equal(listed.venueId,before.venueId);
+ assert.equal(listed.portalRemovedAt,removed.portalRemovedAt);
+ assert.equal((await db.pool.query('SELECT count(*) FROM installation_revocations WHERE installation_id=$1',[id])).rows[0].count,'1');
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked' AND subject_id=$1",[id])).rows[0].count,'1');
+});
+test('remove leaves an active trial visible in Billing',async()=>{
+ const {venueId}=(await (await browser('')).json()).installations[0];
+ const {account_id:accountId}=(await db.pool.query('SELECT account_id FROM organisation_memberships')).rows[0];
+ app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.pool,outbox:db.outbox,config:config(),leaseIssuer:issuer,planMode:'test-venue-levels',billingAccount:{accountIds:[accountId]}});
+ const billing=(action:string,body:unknown)=>request('/api/account/billing/'+action,body,{origin,cookie,'x-csrf-token':csrf});
+ const started=await billing('start-trial',{venueId});
+ assert.equal(started.status,200);
+ const plan=await started.json();
+ assert.equal(plan.venues[0].trial.state,'active');
+ assert.equal((await browser('/remove',{installationId:id})).status,200);
+ assert.deepEqual(await (await billing('read',{})).json(),plan);
+});
+async function seedSharedMenu():Promise<string>{
+ const {venue_id:venue}=(await db.pool.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+ await db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
+  VALUES($1,1,'current',$2,$3,'en',clock_timestamp(),'{"en":"Menu"}')`,[venue,id,'a'.repeat(64)]);
+ return venue;
+}
+test('remove takes a shared menu down even after the connection has stopped',async()=>{
+ const venue=await seedSharedMenu();
+ assert.equal((await browser('/revoke',{installationId:id})).status,200);
+ assert.equal((await readGuestMenu(db.pool,venue))?.html,'Menu');
+ const removed=await browser('/remove',{installationId:id});
+ assert.equal(removed.status,200);
+ assert.ok(Date.parse((await removed.json()).portalRemovedAt)>0);
+ assert.equal(await readGuestMenu(db.pool,venue),null);
+ assert.equal((await (await browser('')).json()).installations[0].guestMenuShared,false);
+ assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked' AND subject_id=$1",[id])).rows[0].count,'1');
+});
+test('remove leaves the connection and menu in place when menu takedown fails',async()=>{
+ const venue=await seedSharedMenu();
+ await db.pool.query(`CREATE FUNCTION refuse_menu_takedown() RETURNS trigger LANGUAGE plpgsql AS $$
+   BEGIN RAISE EXCEPTION 'test menu write refused'; END; $$;
+   CREATE TRIGGER refuse_menu_takedown BEFORE UPDATE ON guest_menus FOR EACH ROW EXECUTE FUNCTION refuse_menu_takedown()`);
+ try{
+  const response=await browser('/remove',{installationId:id});
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{error:'guest_menu_takedown_failed'});
+  const listed=(await (await browser('')).json()).installations[0];
+  assert.equal(listed.portalRemovedAt,null);
+  assert.equal(listed.revokedAt,null);
+  assert.equal(listed.guestMenuShared,true);
+  assert.equal((await readGuestMenu(db.pool,venue))?.html,'Menu');
+ }finally{await db.pool.query('DROP TRIGGER refuse_menu_takedown ON guest_menus; DROP FUNCTION refuse_menu_takedown()');}
+ assert.equal((await browser('/remove',{installationId:id})).status,200);
+ assert.equal(await readGuestMenu(db.pool,venue),null);
+});
+test('remove uses the guarded account write path',async()=>{
+ assert.equal((await browser('/remove',{installationId:id},{'x-csrf-token':'wrong'})).status,403);
+ assert.equal((await (await browser('')).json()).installations[0].revokedAt,null);
+ await db.pool.query('UPDATE organisation_memberships SET is_owner=false');
+ assert.equal((await browser('/remove',{installationId:id})).status,403);
+});
+test('remove checks the current installation after a concurrent replacement',async()=>{
+ const held=await db.secondPool.connect();
+ const replacement=randomUUID();
+ let pending:Promise<Response>|undefined;
+ try{
+  await held.query('BEGIN');
+  const {venue_id:venue}=(await held.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+  await held.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[venue]);
+  const {pid}=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0];
+  let early:Response|undefined;
+  pending=Promise.resolve(browser('/remove',{installationId:id})).then(response=>early=response);
+  const deadline=performance.now()+5000;
+  let waiting=false;
+  while(!early&&!waiting&&performance.now()<deadline){
+   waiting=!!(await db.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[db.schema,pid])).rowCount;
+   if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  assert.ok(waiting,early?`remove returned ${early.status} before taking the venue lock`:'remove did not wait for the venue lock');
+  await held.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE id=$1',[id,replacement]);
+  await held.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[replacement,venue,'replacement-key']);
+  await held.query('COMMIT');
+  assert.equal((await pending).status,403);
+  const listed=(await (await browser('')).json()).installations;
+  assert.deepEqual(listed.map((row:{installationId:string;portalRemovedAt:string|null})=>[row.installationId,row.portalRemovedAt]),[[replacement,null]]);
+ }finally{await held.query('ROLLBACK');held.release();await pending;}
 });
 test('machine limits persist across app workers',async()=>{
  for(let n=0;n<30;n++){assert.equal((await request('/api/installations/renew',proof('renew'))).status,200);app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:config(),leaseIssuer:issuer});}

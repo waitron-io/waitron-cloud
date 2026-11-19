@@ -38,7 +38,7 @@ function harness(t: TestContext) {
   }
   const replies: Record<string, {body: unknown; status?: number; retry?: string}> = {
     '/api/account/installations': {body: {installations: [installation()]}},
-    '/api/account/installations/revoke': {body: {...installation(), revokedAt: stamp}},
+    '/api/account/installations/remove': {body: {...installation(), revokedAt: stamp, portalRemovedAt: stamp}},
   };
   const calls: Array<{url: string; init: RequestInit}> = [];
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
@@ -63,6 +63,7 @@ const invalidRows = [
   {name: 'negative revision', patch: () => ({revision: -1})},
   {name: 'invalid contact time', patch: () => ({lastContactAt: 'yesterday'})},
   {name: 'invalid stop time', patch: () => ({revokedAt: 'yesterday'})},
+  {name: 'invalid removal time', patch: () => ({portalRemovedAt: 'yesterday'})},
   {name: 'missing service', patch: () => ({services: installation().services.slice(1)})},
   {name: 'duplicate services', patch: () => ({services: Array(3).fill(installation().services[0])})},
   {name: 'unknown service state', patch: () => ({services: installation().services.map(s => ({...s, state: 'stopped'}))})},
@@ -122,24 +123,25 @@ for (const entry of invalidRows) {
     await c.load();
     c.choose(installationId);
     const row = changedRow(entry);
-    replies['/api/account/installations/revoke'] = {body: row === null ? null : {...row,
-      ...(entry.name === 'invalid stop time' ? {} : {revokedAt: stamp})}};
-    await c.revoke();
+    replies['/api/account/installations/remove'] = {body: row === null ? null : {...row,
+      ...(entry.name === 'invalid stop time' ? {} : {revokedAt: stamp}),
+      ...(entry.name === 'invalid removal time' ? {} : {portalRemovedAt: stamp})}};
+    await c.remove();
     assert.deepEqual(c.installations, [installation()]);
     assert.equal(c.confirming, installationId);
-    assert.equal(c.error, 'stopUncertain');
+    assert.equal(c.error, 'removeUncertain');
     assert.equal(c.pending, false);
     assert.equal(calls.length, 2, 'a malformed reply must not automatically repeat a stop');
-    replies['/api/account/installations/revoke'] = {body: {...installation(), revokedAt: stamp,
+    replies['/api/account/installations/remove'] = {body: {...installation(), revokedAt: stamp, portalRemovedAt: stamp,
       canRevoke: false, overview: undefined}};
-    await c.revoke();
-    assert.deepEqual(c.installations, [{...installation(), revokedAt: stamp}]);
+    await c.remove();
+    assert.deepEqual(c.installations, [{...installation(), revokedAt: stamp, portalRemovedAt: stamp}]);
     assert.equal(c.confirming, undefined);
     assert.equal(c.error, undefined);
     assert.equal(c.pending, false);
     assert.equal(calls.length, 3);
     const write = calls.at(-1)!;
-    assert.equal(write.url, '/api/account/installations/revoke');
+    assert.equal(write.url, '/api/account/installations/remove');
     assert.equal(write.init.method, 'POST');
     assert.equal(write.init.credentials, 'same-origin');
     assert.equal(new Headers(write.init.headers).get('X-CSRF-Token'), 'stop-proof');
@@ -147,30 +149,30 @@ for (const entry of invalidRows) {
   });
 }
 
-for (const field of ['installationId', 'venueId', 'organisationId', 'legalBusinessId', 'revokedAt'] as const) {
+for (const field of ['installationId', 'venueId', 'organisationId', 'legalBusinessId', 'revokedAt', 'portalRemovedAt'] as const) {
   test(`well-shaped stop reply with mismatched ${field} cannot confirm the selected stop`, async t => {
     const {controller: c, replies, calls} = harness(t);
     await c.load();
     c.choose(installationId);
-    replies['/api/account/installations/revoke'] = {body: {...installation(), revokedAt: stamp,
-      [field]: field === 'revokedAt' ? null : otherId}};
-    await c.revoke();
+    replies['/api/account/installations/remove'] = {body: {...installation(), revokedAt: stamp, portalRemovedAt: stamp,
+      [field]: field.endsWith('At') ? null : otherId}};
+    await c.remove();
     assert.deepEqual(c.installations, [installation()]);
     assert.equal(c.confirming, installationId);
     assert.equal(c.selectedOrganisation, organisationId);
-    assert.equal(c.error, 'unavailable');
+    assert.equal(c.error, field.endsWith('At') ? 'removeUncertain' : 'unavailable');
     assert.equal(c.pending, false);
     assert.equal(calls.length, 2);
-    replies['/api/account/installations/revoke'] = {body: {...installation(), revokedAt: stamp}};
-    await c.revoke();
-    assert.deepEqual(c.installations, [{...installation(), revokedAt: stamp}]);
+    replies['/api/account/installations/remove'] = {body: {...installation(), revokedAt: stamp, portalRemovedAt: stamp}};
+    await c.remove();
+    assert.deepEqual(c.installations, [{...installation(), revokedAt: stamp, portalRemovedAt: stamp}]);
     assert.equal(c.confirming, undefined);
     assert.equal(c.error, undefined);
     assert.equal(calls.length, 3);
   });
 }
 
-for (const operation of ['load', 'revoke'] as const) {
+for (const operation of ['load', 'remove'] as const) {
   for (const refusal of [
     {status: 401, code: 'session_expired', error: 'pairSession'},
     {status: 403, code: 'permission_denied', error: 'permissionBusiness'},
@@ -180,7 +182,7 @@ for (const operation of ['load', 'revoke'] as const) {
       const {controller: c, replies, calls} = harness(t);
       await c.load();
       c.choose(installationId);
-      replies[`/api/account/installations${operation === 'revoke' ? '/revoke' : ''}`] = {
+      replies[`/api/account/installations${operation === 'remove' ? '/remove' : ''}`] = {
         status: refusal.status, body: {error: refusal.code}};
       await c[operation]();
       assert.deepEqual(c.installations, operation === 'load' ? [] : [installation()]);
@@ -199,7 +201,7 @@ for (const operation of ['load', 'revoke'] as const) {
     t.mock.method(performance, 'now', () => now - 1_800_000_000_000);
     await c.load();
     c.choose(installationId);
-    const path = `/api/account/installations${operation === 'revoke' ? '/revoke' : ''}`;
+    const path = `/api/account/installations${operation === 'remove' ? '/remove' : ''}`;
     const valid = replies[path]!;
     replies[path] = {status: 429, body: {error: 'rate_limited'}, retry: '30'};
     await c[operation]();
@@ -215,7 +217,18 @@ for (const operation of ['load', 'revoke'] as const) {
     await c[operation]();
     assert.equal(calls.length, 3);
     assert.equal(c.error, undefined);
-    assert.equal(c.confirming, operation === 'revoke' ? undefined : installationId);
-    assert.deepEqual(c.installations, [{...installation(), revokedAt: operation === 'revoke' ? stamp : null}]);
+    assert.equal(c.confirming, operation === 'remove' ? undefined : installationId);
+    assert.deepEqual(c.installations, [{...installation(), ...(operation === 'remove' ? {revokedAt: stamp, portalRemovedAt: stamp} : {})}]);
   });
 }
+
+test('menu takedown failure leaves removal ready to retry',async t=>{
+ const {controller:c,replies,calls}=harness(t);
+ await c.load();c.choose(installationId);
+ replies['/api/account/installations/remove']={status:503,body:{error:'guest_menu_takedown_failed'}};
+ await c.remove();
+ assert.equal(c.error,'removeMenuTakedownFailed');
+ assert.equal(c.confirming,installationId);
+ assert.deepEqual(c.visible,[installation()]);
+ assert.equal(calls.length,2);
+});

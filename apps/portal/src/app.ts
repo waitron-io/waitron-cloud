@@ -123,7 +123,8 @@ export class PortalApp {
     this.installations = new InstallationController(() => {
       this.usage.organisation(this.installations.selectedOrganisation);
       if (this.accountPage === 'venues' && this.session?.state.kind === 'authenticated' && this.usage.organisationId && !this.usage.loaded) void this.usage.load();
-      if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
+      if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId
+        &&i.canRevoke&&!i.portalRemovedAt&&(!i.revokedAt||this.remote.view?.revoked)))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
       this.draw();
     });
@@ -137,6 +138,7 @@ export class PortalApp {
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
+    this.installations.showRecovery(this.path==='/recover');
     this.draw(); void this.session.check();
   }
   #capture() { return captureLink(new URL(location.href), url => history.replaceState(null, '', url)); }
@@ -279,6 +281,7 @@ export class PortalApp {
     this.errors = {}; this.error = undefined; this.notice = undefined; this.requested = false;
     this.pending = false; this.reveal = false; this.differentOrg = false; this.receivingBusiness = false; this.countryCode = 'ES'; this.refusedCountry = undefined;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
+    this.installations.showRecovery(path==='/recover');
     this.draw(); this.focusHeading();
     if (this.sessionPage) void this.session.check();
     this.#offerPasskeys();

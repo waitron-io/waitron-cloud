@@ -29,7 +29,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(endpoint===denied){writes.push(endpoint);return route.fulfill({status:403,json:{error:code}});}
     if(endpoint==='remote-access/status')return route.fulfill({json:connectedRequired?{...view,connectedRequired:true,names:null,service:{...view.service,state:'unconfigured'}}:{...view,revoked:statusRevoked||revoked}});
     if(endpoint==='remote-access/dns')return route.fulfill({json:{installationId:id,kind:'staff',hostname:'staff.cafe.example',records:[{type:'CNAME',name:'staff.cafe.example',value:view.names.staff.assigned}]}});
-    if(endpoint==='remote-access/apply'||endpoint==='installations/revoke')writes.push(endpoint);
+    if(endpoint==='remote-access/apply'||endpoint==='installations/remove')writes.push(endpoint);
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });
    for(const [cause,key] of [['remote_plan_required','remotePlanRequired'],['remote_setup_required','remoteSetupRequired'],['remote_test_only','remoteTestOnly'],['revoked','remoteRevoked']] as const){
@@ -66,7 +66,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await page.locator('.remote-setup input').count(),0);
    assert.equal(await page.locator('.remote-setup a[target=_blank]').count(),0);
    assert.equal(writes.filter(path=>path==='remote-access/apply').length,4,'one deliberate save refusal per cause; no automatic replay');
-   assert.equal(writes.includes('installations/revoke'),false);
+   assert.equal(writes.includes('installations/remove'),false);
    connectedRequired=true;await page.goto('https://portal.test/account/remote-access');
    await page.getByRole('button',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true}).click();
    const panel=page.locator('.remote-setup');

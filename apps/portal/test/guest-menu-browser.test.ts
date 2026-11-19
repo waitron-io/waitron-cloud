@@ -33,12 +33,22 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   assert.equal(await page.getByRole('button',{name:locale==='en'?'Close details':'Cerrar detalles',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:c.remoteSetup,exact:true}).evaluate(element=>element.matches(':focus-within')),true);
   await f.db.pool.query('DELETE FROM guest_menus WHERE venue_id=$1',[f.venueId]);await f.seed();
+  await open();await region.waitFor();
   await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installationId]);
-  await page.reload();await page.getByRole('heading',{level:1,name:c.remoteAccess,exact:true}).waitFor();
+  const refresh=page.getByRole('region',{name:c.installations,exact:true}).locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true});
+  await refresh.click();
   await page.getByText(c.accessStopped,{exact:true}).waitFor();
+  assert.equal(await region.count(),0);
   assert.equal(await page.getByRole('button',{name:c.remoteSetup,exact:true}).count(),0);
   await page.locator('.installation').screenshot({path:new URL(`../dist/guest-${locale}-${colorScheme}-${width}-revoked-entry.png`,import.meta.url).pathname});
   await page.getByRole('button',{name:c.guestMenuTitle,exact:true}).click();
-  await region.getByRole('button',{name:locale==='en'?'Stop sharing':'Dejar de compartir',exact:true}).click();await enable.waitFor();
+  const stopSharing=region.getByRole('button',{name:c.guestMenuTakedown,exact:true});
+  await stopSharing.waitFor();
+  await refresh.click();
+  await stopSharing.click();await enable.waitFor();
+  await page.reload();
+  await page.getByText(c.accessStopped,{exact:true}).waitFor();
+  await page.getByRole('button',{name:c.guestMenuTitle,exact:true}).click();
+  await enable.waitFor();
  }finally{await portal.close();}
 });
