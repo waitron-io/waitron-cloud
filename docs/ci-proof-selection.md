@@ -138,7 +138,7 @@ fixture, backup verification helpers and fake translation provider. The imported
 `deploy/local-stack/{runtime,lease,bootstrap}.mjs` helpers and
 the standard, streamed and Amazon test pins under `deploy/backup-verifier/`
 also select venue. The Amazon pin selects the proof ahead of the test worker
-wiring. The root builder test validates the committed pin now.
+wiring. The root CI checks already validate the committed pin.
 
 Other product-source edits use package CI without repeating this composition
 proof on every PR. A complete manual run remains available, and the

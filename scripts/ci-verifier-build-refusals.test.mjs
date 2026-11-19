@@ -5,9 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import { parseBackupVerificationJson, validateBackupVerificationTarget } from "../packages/backups/src/verification-protocol.ts";
 
 const execute = promisify(execFile);
 const repository = new URL("../", import.meta.url);
+
+test("the committed Amazon verifier pin passes backup target validation", async () => {
+  const raw = await readFile(new URL("deploy/backup-verifier/amazon-test-target.json", repository), "utf8");
+  validateBackupVerificationTarget(parseBackupVerificationJson(raw, 30_000));
+});
 
 async function fixture(t, { generatorFails = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "cloud-build-refusal-test-"));
