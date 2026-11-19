@@ -92,7 +92,7 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   };
   stage='pairing';await request('POST','session',{email:'owner@example.test',password:'Local integration password'});
   await request('POST','session/me/fresh-sign-in',{method:'password',password:'Local integration password'},204);
-  await page.goto(server.origin+'/manage/cloud');await page.getByRole('button',{name:'Connect to Cloud',exact:true}).click();
+  await page.goto(server.origin+'/cloud');await page.getByRole('button',{name:'Connect to Cloud',exact:true}).click();
   const localScreen=page.locator('dashboard-cloud-services-screen');await localScreen.locator('.code').waitFor();
   const code=(await localScreen.locator('.code').innerText()).trim();assert.match(code,/^\d{8}$/);
   const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const portal=await popupPromise;portal.setDefaultTimeout(15000);
@@ -115,13 +115,13 @@ export async function runTranslationProof(caseName,{failAfterLaunch=false,readFi
   stage='content';await request('PUT','content-languages',{defaultLanguage:'es',languages:['es','en']},204);
   const languages=await request('GET','content-languages');receipt.languages=languages;assert.equal(languages.defaultLanguage,'es');assert.deepEqual(languages.languages,['es','en']);
   await request('GET','content-language-rules');
-  const existingMenus=await request('GET','catalogues');
+  const existingMenus=await request('GET','menus');
   assert.equal(existingMenus.length,1,'translation_proof_initial_menu');
-  await request('PATCH',`catalogues/${existingMenus[0].id}`,{names:{es:'Menú inicial',en:'Initial menu'}},204);
-  const catalogue=await request('POST','catalogues',{name:'Interruption menu',names:{es:'Menú de prueba',en:'Test menu'}},201);
+  await request('PATCH',`menus/${existingMenus[0].id}`,{names:{es:'Menú inicial',en:'Initial menu'}},204);
+  await request('POST','menus',{name:'Interruption menu',names:{es:'Menú de prueba',en:'Test menu'}},201);
   const expectedProducts=new Map();
   for(let index=1;index<=3;index++){
-   const name=`Proof coffee ${index}`,product=await request('POST','products',{catalogueId:catalogue.id,categoryId:null,name,customerName:{es:`Café de prueba ${index}`},pricingUnit:'each',unitPrice:'2.00',vatClass:'general'},201);
+   const name=`Proof coffee ${index}`,product=await request('POST','products',{categoryId:null,name,customerName:{es:`Café de prueba ${index}`},pricingUnit:'each',unitPrice:'2.00',vatClass:'general'},201);
    expectedProducts.set(product.id,translated(name));
   }
   const gaps=await request('GET','content-translation-gaps');
