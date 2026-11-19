@@ -45,5 +45,9 @@ behavior unless the real credential exchange returns a 503 during that outage. I
 bounded retry with a failing test in this slice. Store repair remains open.
 
 On 19 November at 02:36 the watcher cleared the read after rejoin in `questions.md` for Lane G.
-Encrypted reads during the outage returned HTTP 503 `SlowDownRead` and remain open under
-`STORAGE-READ-DURING-OUTAGE`. Expiry refusal and grant issuance still run during the outage.
+Expiry refusal and grant issuance still run during the outage. At 06:00 the watcher directed
+Lane G to keep the ten-second deadline and log the store's stages for the one renewal request.
+Build that logging into the local identity proof image and report only timing markers from
+the surviving stores. Check that the live proof reports the stages. See the
+[run 9 storage notes](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
+for the timeout and the subsequent traced run.

@@ -96,6 +96,18 @@ async function checkRejectedTokens(custody, role, endpoint, ca, scope) {
   } finally { client.destroy(); }
 }
 
+async function reportGrantTiming({nodes, kube, signal}, stoppedName, since) {
+  const peers = nodes.flatMap((node, index) => node.name === stoppedName ? [] : [2 * index, 2 * index + 1]);
+  await Promise.all(peers.map(async index => {
+    const name = 'store-' + index;
+    const output = await kube(['-n', storageNamespace, 'logs', name, '--since-time=' + since, '--timestamps'],
+      {signal, timeout: 10_000}).catch(() => null);
+    const timings = output?.match(/^\S+ WAITRON grant [a-z-]+ elapsed=[\d.µa-z]+$/gm);
+    if (timings?.length) process.stderr.write(name + ' grant timing:\n' + timings.join('\n') + '\n');
+    else if (output === null) process.stderr.write(name + ' grant timing unavailable\n');
+  }));
+}
+
 async function checkGrants(context, account, custodyDirectory) {
   const {nodes, directory, kube, stopNode, signal} = context;
   const [origin] = nodes;
@@ -187,6 +199,7 @@ async function checkGrants(context, account, custodyDirectory) {
     const survivor = nodes.find(node => node.name === remainingIssuer.spec.nodeName);
     assert.ok(survivor, 'storage_identity.issuer_survivor');
     const reopened = runtime(await readStorageCustody(custodyDirectory), survivor);
+    let renewalStartedAt;
     try {
       assert.equal(reopened.options.vault.open(venue, 1, sealed).streamKey, streamKey);
       const expires = Date.parse(restore.expiresAt);
@@ -202,7 +215,11 @@ async function checkGrants(context, account, custodyDirectory) {
         const survivingKey = await retryApi(() => getJwks(remainingIssuer.metadata.name, stopped), stopped, 'issuer JWKS');
         assert.deepEqual(survivingKey, expectedJwks);
         process.stderr.write('Requesting a fresh grant while the machine is stopped\n');
-        const renewed = await open(reopened, survivor, 'restore', snapshot);
+        renewalStartedAt = new Date().toISOString();
+        const started = performance.now();
+        const renewed = await open(reopened, survivor, 'restore', snapshot).finally(() => {
+          process.stderr.write('Fresh grant request ended after ' + Math.round(performance.now() - started) + ' ms\n');
+        });
         process.stderr.write('Fresh grant issued while the machine is stopped\n');
         return {expiredGrantRefused: true, issuerKeyStable: true, issuerSurvivor: survivor.name, renewed};
       }});
@@ -213,7 +230,10 @@ async function checkGrants(context, account, custodyDirectory) {
       process.stderr.write('Store peers ready; reading the encrypted snapshot with the renewed grant\n');
       assert.deepEqual(await get(client(survivor, renewed.credentials), snapshot, restored), bytes);
       return {...outage, renewedGrantReadAfterRejoin: true};
-    } finally { reopened.close(); }
+    } finally {
+      reopened.close();
+      if (renewalStartedAt) await reportGrantTiming(context, stoppedName, renewalStartedAt);
+    }
   } finally {
     first.close();
     for (const connection of clients) connection.close();

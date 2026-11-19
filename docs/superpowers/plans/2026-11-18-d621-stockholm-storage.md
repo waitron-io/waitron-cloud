@@ -83,12 +83,25 @@ could read its local drive and timed out looking up three surviving remote
 drives. The [DNS placement repair](2026-11-19-stockholm-storage-dns-placement.md)
 moves the replicas onto separate machines before workloads start. The Linux
 rehearsal passed both survivors' encrypted reads, writes, listing and multipart
-within the existing 90-second outage window. Both reads also passed in two
+within the existing 90-second outage window. Both reads also passed in three
 controls that stopped a DNS host. The first control passed multipart. In the
-second, the store refused a multipart completion request with HTTP 503
-`SlowDownWrite` where the missing-part check expected `InvalidPart`.
-Multipart completion during DNS host loss remains unqualified.
+next two, the store refused a multipart completion request with HTTP 503
+`SlowDownWrite` where the missing-part check expected `InvalidPart`. In the
+last control, the Kubernetes endpoint snapshot still listed the stopped DNS
+host as ready (`post-land-dns-host-loss-live.log`, lines 75–86 and 438–476).
+Diagnosing that refusal is a prerequisite for the timed dry run.
 
-PR 4 remains the step that qualifies scoped credentials. Returned-drive repair,
-multipart through consecutive outages and real Stockholm machine loss remain
-unqualified.
+With DNS placement fixed, one scoped grant renewal hit Cloud's ten-second
+deadline while the machine was still down (`placement-storage-identity-live.log`,
+lines 506–531). A later Linux run with server timing refused the expired grant,
+renewed in 18 ms, and read the encrypted snapshot after all six peers returned
+(`post-land-renewal-live.log`, lines 101–107, 161–172 and 404–419). The cause of
+the timeout remains open. The identity rehearsal keeps the same expiry,
+deadline and single renewal request and captures store timing.
+
+The separate candidate that refreshes peer addresses and requests explicit
+repair restored both outage objects and both multipart parts on both returned
+disks in 18.746 seconds. The returned machine read the bytes and the rehearsal
+passed all seven checks (`post-land-returned-drive-live-02.log`, lines 86–109).
+That result applies to the unpublished repair candidate. Multipart through
+consecutive outages and real Stockholm machine loss remain open.

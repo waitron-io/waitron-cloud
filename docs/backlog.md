@@ -1782,9 +1782,10 @@ implementation or production evidence.
   `TEST_KUBERNETES_STORAGE_IDENTITY=1 node --test scripts/kubernetes-storage-identity.test.mjs`
   in the Linux guest to check temporary storage grants, issuer and backup-key
   continuity, grant expiry and renewal during one machine outage, and an encrypted
-  read with the renewed grant after rejoin. The encrypted read failed with HTTP 503
-  during the outage. That failure, returned-drive repair, consecutive-outage
-  multipart and switching Cloud services to replicated data remain open.
+  read with the renewed grant after rejoin. One renewal hit its ten-second
+  deadline. Multipart when a DNS host stops, returned-drive repair,
+  consecutive-outage multipart and switching Cloud services to replicated data
+  remain open.
   Real Stockholm machine loss and cold restart remain open.
   Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`

@@ -119,7 +119,8 @@ export async function withStockholmStore({nodes, cluster, directory, run, kube, 
   let failure;
   try {
     process.stderr.write('Building pinned private store image\n');
-    await run('docker', storeBuildArgs(image), {timeout: 900_000});
+    const buildOptions = openId ? ['--build-arg', 'WAITRON_GRANT_TIMING=1'] : [];
+    await run('docker', storeBuildArgs(image, buildOptions), {timeout: 900_000});
     await run('kind', ['load', 'docker-image', '--name', cluster, image], {timeout: 180_000});
     for (const node of nodes) {
       await run('docker', ['exec', '-i', node.id, 'bash', '-s', '--', 'object-storage'], {input: bootstrap});

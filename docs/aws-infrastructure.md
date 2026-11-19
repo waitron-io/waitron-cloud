@@ -1237,8 +1237,10 @@ in the same x86-64 Linux guest to check temporary grants. The rehearsal uses the
 MinIO admin client and Cloud's real credential exchange. It checks object and method
 permissions, then verifies that a surviving machine refuses the expired grant and issues
 a fresh grant during the outage. After the stopped machine rejoins, it uses that fresh
-grant to read the encrypted object. Reads during the outage have returned HTTP 503 and
-remain under investigation. Allow at least 15 minutes for the original grant to expire.
+grant to read the encrypted object. One renewal hit Cloud's ten-second deadline after
+DNS placement was fixed. A traced Linux run renewed and read successfully. The identity
+rehearsal prints the store's validation, credential save and peer reload timing for future
+failures. Allow at least 15 minutes for the original grant to expire.
 
 The bounded Stockholm launcher transfers the same test store image and waits
 for all six peers after joining the three machines. It runs the store in
