@@ -1,7 +1,8 @@
 # Switch test remote access, backups, guest pages and box email
 
-You can stop a test venue's remote access or backups, withdraw its guest menu and control box email without
-changing its paid level. Run the local command inside the test account container,
+Use `remote-access` and `backups` for a paired installation, `guest-menu` for one
+venue, and `relay-stop` or `relay-resume` for all box email on this test Cloud.
+Run these commands inside the test account container,
 where it can read the private configuration and database. Start the test Cloud with
 `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`; the command
 reads those existing container settings and refuses other modes. Translation stays
@@ -14,7 +15,8 @@ For example, save this synthetic command as a private file outside the checkout:
 ```
 
 Replace the venue ID with your test venue. On the configured Amazon test
-layout, use the same settings you used to launch it:
+layout, use the same image ID, HTTPS origin and certificate directory you used
+to start it:
 
 ```sh
 docker compose --env-file deploy/test-cloud/test.env \
@@ -24,6 +26,9 @@ docker compose --env-file deploy/test-cloud/test.env \
 ```
 
 The command reads the running container's test settings and `TEST_CLOUD_ORIGIN`.
+If you started the [Amazon backup layout](test-cloud.md#rehearse-backup-on-the-amazon-test-cloud),
+add `-f deploy/test-cloud/compose.amazon-backups.yaml` before `exec` and set
+`CLOUD_VERIFIER_IMAGE` to the verifier image ID you used at startup.
 The ordinary home-network Compose layout leaves venue-level mode dormant and
 refuses these commands. Do not override its mode on an individual command.
 
@@ -77,8 +82,9 @@ For backups, use the same command with a private input file containing:
 ```
 
 Replace the installation ID with your paired test box. A successful command returns
-`{"enabled":false}` after withdrawing the storage writer. The connected level and
-remote route stay available. The existing backup setup holds `testCloudEnabled:false`;
+`{"enabled":false}` after withdrawing the storage writer. The deployment keeps
+running and the Connected level and remote route stay available. The existing
+backup setup holds `testCloudEnabled:false`;
 new signed stream setup and snapshot provisioning refuse while it is off. Restarting
 storage preserves that refusal. Existing backup bytes and the stored read-only
 credential remain; new reader grants and signed stream-position reads refuse while off.

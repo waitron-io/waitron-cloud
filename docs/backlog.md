@@ -1067,9 +1067,9 @@ implementation or production evidence.
   `node scripts/test-postgres.mjs exec node --test deploy/test-cloud/deployment.test.mjs`. Signed configuration now discovers a
   relay-grant hint without advancing service configuration. The test-only private-origin
   approval core accepts a signed statement under the current key-bound lease and
-  owner consent, with synthetic checks for production refusal. Local guest-menu
-  and relay commands have synthetic checks. An independent test backup command
-  withdraws the writer and refuses fresh setup while keeping remote access on.
+  owner consent, with synthetic checks for production refusal. The
+  [test Cloud service controls](test-cloud-service-controls.md) show how to switch
+  remote access, backups, the guest menu and box email on the Amazon layout.
   SES startup and authenticated feedback composition, real email delivery and
   joint box handoff qualification remain open. A fresh named pairing on the Amazon
   test Cloud remains part of the joint box trial after both builds speak pairing
