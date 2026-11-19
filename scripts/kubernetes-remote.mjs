@@ -36,7 +36,7 @@ async function peerCounters(kube, pod, peer, limit) {
   return {handshake, receivedBytes, sentBytes};
 }
 
-export async function measureGatewayMachineLoss({kube, accountNode, stopNode, moveGateway, checkRoutes, peer, signal}) {
+export async function measureGatewayMachineLoss({kube, accountNode, stopNode, moveGateway, checkRoutes, prepareRoutes = checkRoutes, peer, signal}) {
   const holder = async limit => JSON.parse(await kube(['get', 'lease', 'remote-gateway', '-o', 'json'], limit)).spec.holderIdentity?.split(':')[0];
   const nodeFor = async (name, limit) => (await readGatewayPods(kube, limit)).find(row => row.metadata.name === name)?.spec.nodeName;
   const baseline = async limit => {
@@ -51,7 +51,7 @@ export async function measureGatewayMachineLoss({kube, accountNode, stopNode, mo
   };
   let old = await untilRemote(baseline, remoteDeadlineMs, signal, 'machine_loss_baseline');
   if (old.node === accountNode) {
-    await moveGateway(checkRoutes, peer);
+    await moveGateway(prepareRoutes, peer);
     old = await untilRemote(baseline, remoteDeadlineMs, signal, 'machine_loss_moved_baseline');
   }
   assert.notEqual(old.node, accountNode, 'remote.keep_account_node_up');
@@ -160,8 +160,8 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), signal, 'handover_90_seconds');
     }
     return {gatewayIp, host: nodes[0].ip, port: 30443, ca: tls.root, close, handover,
-      ...(stopGatewayNode ? {machineLoss: (checkRoutes, peer) => measureGatewayMachineLoss({kube: call,
-        accountNode: nodes[0].name, stopNode, moveGateway: handover, checkRoutes, peer, signal})} : {}),
+      ...(stopGatewayNode ? {machineLoss: (checkRoutes, peer, prepareRoutes) => measureGatewayMachineLoss({kube: call,
+        accountNode: nodes[0].name, stopNode, moveGateway: handover, checkRoutes, prepareRoutes, peer, signal})} : {}),
       async peers(limit) {return exec(await active(limit), ['wg', 'show', 'wg-cloud', 'peers'], limit);},
       projected(venueId, limit) {
         return Promise.all(candidates.map(async name => JSON.parse(await exec(name, ['node', '-e', `

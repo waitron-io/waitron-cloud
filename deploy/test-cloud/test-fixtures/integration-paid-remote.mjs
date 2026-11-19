@@ -53,14 +53,14 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   180000, stockholm.signal, 'public_ready');
   else assert.equal((await probe(placement.publicHostname, '/management-api/cloud/status')).status, 404);
   assert.equal((await probe(placement.publicHostname, '/public/availability')).status, 403);
-  const solvePublic = async () => {
-    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge')).body);
+  const solvePublic = async signal => {
+    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge', {signal})).body);
     let nonce = 0;
     const deadline = Date.now() + 10000;
     while (createHash('sha256').update(challenge.challenge + ':' + nonce).digest().readUInt32BE(0) >= 2 ** (32 - challenge.difficulty)) {
       nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
     }
-    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}});
+    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}, signal});
     assert.equal(solved.status, 204);
     return solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
   };
@@ -75,9 +75,15 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   const peers = signal => stockholm ? target.peers(signal) : docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers']);
   assert.ok((await peers()).split(/\s+/).includes(peer.peerPublicKey));
   if (stockholm) {
-    const check = async (signal, expectedPublic) => {
+    const check = async (signal, expectedPublic, refreshPublicCookie = false) => {
       const staffReply = await probe(placement.staffHostname, '/public/availability', {signal});
-      const publicReply = await probe(placement.publicHostname, '/public/availability', {cookie, signal});
+      let publicReply = await probe(placement.publicHostname, '/public/availability', {cookie, signal});
+      if (refreshPublicCookie && publicReply.status === 403) {
+        assert.match(publicReply.body, /src="\/_cloud\/challenge\.js"/);
+        cookie = await solvePublic(signal);
+        publicReply = await probe(placement.publicHostname, '/public/availability', {cookie, signal});
+        process.stderr.write('D621 preparation public cookie ' + JSON.stringify({previousStatus: 403, refreshedStatus: publicReply.status}) + '\n');
+      }
       assert.equal(staffReply.status, 200);
       assert.equal(staffReply.certificateSha256, client.certificateSha256);
       assert.equal(publicReply.status, 200);
@@ -100,7 +106,8 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
         }
       })();
       try {
-        const machineLoss = await target.machineLoss(verifyRoutes, peer.peerPublicKey);
+        const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);
+        const machineLoss = await target.machineLoss(verifyRoutes, peer.peerPublicKey, prepareRoutes);
         return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true, privatePathRefused: true,
           machineLoss: {...machineLoss, fixtureTraffic: true}};
       } finally {
