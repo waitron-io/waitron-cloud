@@ -1775,11 +1775,9 @@ implementation or production evidence.
   Linux guest to check encrypted objects and multipart completion through the
   first outage. The rehearsals now spread Kubernetes DNS across machines before
   starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
-  record the Linux read failure and recovery with one DNS host stopped. One
-  such control still got HTTP 503 on a multipart request. PR 4 remains the step
-  that qualifies scoped store credentials. Returned-drive repair, multipart
-  through consecutive outages and switching Cloud services to replicated data
-  remain open.
+  record the Linux results and remaining storage limits. PR 4 remains the step
+  that qualifies scoped store credentials. Switching Cloud services to
+  replicated data remains open.
   Real Stockholm machine loss and cold restart remain open.
   Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
