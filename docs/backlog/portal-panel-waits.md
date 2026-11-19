@@ -71,6 +71,11 @@ reported the same wait for `.factor-codes` at `owner-transfer-browser.test.ts:11
 The handover test and its authenticator code match the pairing branch’s base
 commit. The job log gives no activation response to compare with the timing probe.
 
+[PR #1318’s portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44477827768/job/135402680094)
+hit the same eight-second wait on 19 November. The payment startup branch
+changes neither the portal package nor the account and registration packages
+used by this fixture. The failed run again has no activation response.
+
 ## Owner recovery enrolment wait
 
 [PR #1284's portal job](https://github.com/waitron-io/waitron-cloud/actions/runs/44200297572/job/134452537917)

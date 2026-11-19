@@ -6,6 +6,7 @@ import {createRequire} from 'node:module';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '../../packages/registration/src/index.ts';
 import { accountHttpConfig, billingAccountOptionsFromEnv, passwordScreeningFromEnv, factorConfigFromEnv } from '../../packages/account-http/src/config.ts';
+import { billingMethodsOptionsFromEnv } from '../../packages/account-http/src/billing-methods.ts';
 import { AccountRateLimiter } from '../../packages/account-http/src/rate-limit.ts';
 import { loadPortalAssets } from '../../packages/account-http/src/portal.ts';
 import { startAccountServer } from '../../packages/account-http/src/server.ts';
@@ -39,6 +40,7 @@ try {
   if(translationFlag!=='0')throw Error();
   const translation=false;
   const config = accountHttpConfig(process.env);
+  const billingMethods=billingMethodsOptionsFromEnv(process.env,planMode,billingAccount,config.portalOrigin);
   const factor = factorConfigFromEnv(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
   const portText = process.env.CLOUD_HTTP_PORT ?? '3000';
@@ -56,7 +58,7 @@ try {
     let relay;
     try{relay=await openTestRelayRuntime({pool,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
     catch{console.error('Test relay startup failed; restore private keys and check schema');}
-    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,billingAccount,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
@@ -71,9 +73,11 @@ try {
     await stopped;
   }
 } catch(error) {
-  console.error(error instanceof Error&&error.message==='backup.installation_issuer_required'
-    ?'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured'
-    :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
+  const code=error instanceof Error?error.message:'';
+  if(code.startsWith('billing_methods.'))console.error('Account server refused test payment configuration');
+  else if(code==='backup.installation_issuer_required')console.error('Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured');
+  else console.error('Account server failed; check database, migrations and configuration');
+  process.exitCode = 1;
 } finally {
   stop();
   try {await actionDemo?.close();await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}

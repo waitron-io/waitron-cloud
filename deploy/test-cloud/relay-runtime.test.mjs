@@ -74,6 +74,34 @@ test('the test Cloud account worker lets an allowlisted owner start Connected be
  }finally{await running.close();}
 });
 
+test('the test Cloud account worker presents enabled payment methods',async t=>{
+ const {db,context}=await setup(t);
+ const box=await connectedVenue(db,context.issuer,origin),session=await transaction(db.pool,c=>createSession(c,box.accountId));
+ await prepareAccount(t,context);
+ const settings={CLOUD_BILLING_ACCOUNT_TEST_IDS:box.accountId,CLOUD_BILLING_METHODS_MODE:'test',
+  CLOUD_BILLING_STRIPE_TEST_ACCOUNT:'acct_synthetic',CLOUD_BILLING_STRIPE_TEST_KEY:'rk_test_synthetic',
+  CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'};
+ for(const [mode,expected] of [['test',{selected:null,setup:null}],['off',undefined]]){
+  const running=await startAccount(db,context,{...settings,CLOUD_BILLING_METHODS_MODE:mode});
+  try{
+   const view=await accountRequest(running,'/api/account/billing/read',{},{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken});
+   assert.equal(view.status,200,JSON.stringify(view.body));
+   assert.deepEqual(view.body.venues.find(venue=>venue.venueId===box.venueId).paymentMethods,expected,mode);
+  }finally{await running.close();}
+ }
+});
+
+test('the test Cloud account worker refuses a live Stripe key before listening',async t=>{
+ const {db,context}=await setup(t);
+ await prepareAccount(t,context);
+ await assert.rejects(async()=>{
+  const running=await startAccount(db,context,{CLOUD_BILLING_ACCOUNT_TEST_IDS:randomUUID(),CLOUD_BILLING_METHODS_MODE:'test',
+   CLOUD_BILLING_STRIPE_TEST_ACCOUNT:'acct_synthetic',CLOUD_BILLING_STRIPE_TEST_KEY:'sk_live_synthetic',
+   CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'});
+  await running.close();
+ },/account exited 1: Account server refused test payment configuration/);
+});
+
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{
  const {openTestRelayRuntime}=await api(),{context}=await setup(t);
  await openTestRelayRuntime(context);

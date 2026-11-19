@@ -82,6 +82,29 @@ test('only the venue-level account worker receives the automatic gateway and tri
  }
 });
 
+test('test payment settings reach only the account child',async t=>{
+ const {testRuntimeEnvironment}=await import('./runtime.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'cloud-payment-runtime-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
+ const credentials={CLOUD_BILLING_STRIPE_TEST_ACCOUNT:'acct_synthetic',CLOUD_BILLING_STRIPE_TEST_KEY:'rk_test_synthetic',
+  CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'};
+ const input={CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_ACTION_DEMO:'1',CLOUD_BILLING_METHODS_MODE:'test',...credentials};
+ const account=testRuntimeEnvironment('account',config,input);
+ assert.equal(account.CLOUD_BILLING_METHODS_MODE,'test');
+ for(const [key,value] of Object.entries(credentials))assert.equal(account[key],value,key);
+ for(const role of ['action-demo','migrate','storage','email','monitor','usage','probe','backup','gateway','manifest','reconcile','translation']){
+  const child=testRuntimeEnvironment(role,config,input);
+  for(const key of ['CLOUD_BILLING_METHODS_MODE',...Object.keys(credentials)])assert.equal(child[key],undefined,role+' '+key);
+ }
+ for(const environment of [
+  {...input,CLOUD_BILLING_METHODS_MODE:'off'}, {...input,CLOUD_BILLING_METHODS_MODE:undefined},
+  {...input,CLOUD_VENUE_SERVICE_LEVELS:undefined}, {...input,CLOUD_VENUE_SERVICE_LEVELS:undefined,CLOUD_TEST_SERVICE_PLANS:'1'},
+ ]){
+  const child=testRuntimeEnvironment('account',config,environment);
+  assert.equal(child.CLOUD_BILLING_METHODS_MODE,environment.CLOUD_VENUE_SERVICE_LEVELS==='test'?environment.CLOUD_BILLING_METHODS_MODE:undefined);
+  for(const key of Object.keys(credentials))assert.equal(child[key],undefined,key);
+ }
+});
+
 // A paid capture uses the advertised LAN endpoint; the verifier worker must read the same location.
 test('test backup worker uses canonical storage and normal LAN trust in enabled mode',async t=>{
  const api=await import('./runtime.mjs'),dir=await mkdtemp(join(tmpdir(),'cloud-backup-command-'));t.after(()=>rm(dir,{recursive:true,force:true}));const config=await bootstrap(dir);
