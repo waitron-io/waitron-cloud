@@ -387,7 +387,9 @@ If it fails, unset the switch and leave the running containers in place.
 Check that the certificate directory holds the new certificate and its key
 before trying again. After bootstrap succeeds, run the Amazon deployment
 driver's `up` command with the installed image. It starts the account and
-proxy with the new setting and updates the recorded container IDs.
+proxy with the new setting and updates the recorded container IDs. If `up`
+fails, it stops the recorded project containers. Unset the switch and rerun
+`up` with the same image to restore the account and gateway.
 
 After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
 choose **Turn sharing on**. Open the published address on a phone using mobile

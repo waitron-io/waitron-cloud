@@ -51,7 +51,7 @@ async function startAccount(db,context,environment={}){
  try{
   const {port,guestPort}=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]));})),
    exited.then(code=>{throw Error(`account exited ${code}: ${stderr}`);}),new Promise((_,reject)=>setTimeout(()=>reject(Error('account startup deadline')),15000).unref())]);
-  return {server:{address:()=>({port})},guestPort,close};
+  return {server:{address:()=>({port})},guestPort,close,get stderr(){return stderr;}};
  }catch(error){await close();throw error;}
 }
 function accountRequest(running,path,body,headers={}){
@@ -115,6 +115,8 @@ test('the Amazon test account accepts a signed publication and closes its privat
  const body=JSON.stringify({defaultLanguage:'en',pages:{en:html}});
  const signed=box.proof('guest-menu-publish',{version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),box.lease);
  const publish=running=>accountRequest(running,'/api/installations/guest-menu-publish',{...signed,body});
+ const existing=await startAccount(db,context,{CLOUD_VENUE_SERVICE_LEVELS:'0'});
+ assert.equal(await existing.close(),0);
  await assert.rejects(async()=>{
   const refused=await startAccount(db,context,{CLOUD_VENUE_SERVICE_LEVELS:'0',GUEST_ORIGIN:'https://'+host,
    GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0'});
@@ -151,6 +153,7 @@ test('the guest listener closes when the account listener reports a shutdown fai
   GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0',NODE_OPTIONS:'--import=data:text/javascript,'+encodeURIComponent(preload)});
  assert.ok(running.guestPort>0);
  assert.equal(await running.close(),1,'worker must exit with the original shutdown failure');
+ assert.doesNotMatch(running.stderr,/shutdown deadline exceeded/);
 });
 
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{
