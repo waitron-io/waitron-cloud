@@ -181,7 +181,8 @@ async function proveAmazonUpload(){
  await writeFile('/tmp/storage-ca.pem',storage.ca);
  const start=async enabled=>{
   const env={...process.env,TEST_CLOUD_HOST:host,TEST_CLOUD_ORIGIN:endpoint,TEST_CLOUD_CERTIFICATE:'/tmp/private/lan/proxy.pem'};
-  if(enabled)env.TEST_CLOUD_STORAGE_CA='/tmp/storage-ca.pem';
+  if(enabled)Object.assign(env,{TEST_CLOUD_STORAGE_CA:'/tmp/storage-ca.pem',
+   TEST_CLOUD_GUEST_HOST:'menus.waitron.local',TEST_CLOUD_GUEST_CA:'/tmp/private/lan/ca.pem'});
   const child=spawn('haproxy',['-W','-db','-f','/tmp/proxy.cfg','-f','/tmp/amazon.cfg'],{env,stdio:'inherit'});
   const exited=once(child,'exit');
   try{
@@ -225,5 +226,6 @@ test('Amazon backup proxy accepts only a bounded signed PUT to the reserved obje
  const source=fileURLToPath(new URL('../../',import.meta.url));
  const result=await exec('docker',['run','--rm','--memory','512m','--mount','type=bind,source='+source+',target=/workspace,readonly',
   '-w','/workspace',image,'node','--input-type=module','-e','await ('+proveAmazonUpload.toString()+')()'],{timeout:150000,maxBuffer:1024*1024}).catch(error=>assert.fail(error.stderr||error.message));
+ assert.doesNotMatch(result.stderr,/http-request.*placed after.*use_backend/);
  for(const line of result.stdout.split('\n').filter(Boolean))console.log(line);
 });

@@ -291,3 +291,9 @@ test('Amazon capture advertises HTTPS while the verifier keeps its private stora
  for(const change of [{TEST_CLOUD_AMAZON:undefined},{NODE_ENV:'production'},{CLOUD_VENUE_SERVICE_LEVELS:undefined},{TEST_CLOUD_ORIGIN:undefined},{TEST_CLOUD_ORIGIN:'https://cloud.example.test:8333'}])
   assert.throws(()=>testRuntimeEnvironment('account',config,{...flags,...change}),/test_cloud.amazon_backups/);
 });
+
+test('capture setup refuses a public upload address outside the Amazon HTTPS shape',async()=>{
+ const {openTestCaptureRuntime}=await import('./service-runtime.mjs');
+ await assert.rejects(openTestCaptureRuntime({mode:'test-free-paid',uploadOrigin:'https://cloud.example.test'}),/test_cloud.amazon_backups/);
+ await assert.rejects(openTestCaptureRuntime({mode:'test-venue-levels',uploadOrigin:'https://cloud.example.test:8333'}),/test_cloud.amazon_backups/);
+});

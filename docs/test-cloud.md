@@ -510,8 +510,9 @@ Transfer the image privately and confirm its full `sha256:` image ID on the
 test host. Transfer `deploy/test-cloud/compose.amazon-backups.yaml` with the
 other deployment files. Set `CLOUD_TEST_AMAZON_VERIFIER_IMAGE` to that ID for the
 driver's Amazon `up`. The override enables one storage upload path on the
-existing account HTTPS name and starts the trusted backup worker. The proxy
-verifies the private storage server against its public CA certificate.
+existing account HTTPS name and starts the trusted backup worker. That worker
+controls Docker and can act as root on the host. The proxy verifies the storage
+server against the private local CA's certificate.
 The restore child has no network, 1 GiB of RAM and 256 MiB of memory-backed
 scratch. Keep the trial archive small enough for both its extracted data and
 temporary copies to fit.
