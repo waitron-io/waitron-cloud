@@ -517,7 +517,9 @@ The restore child has no network, 1 GiB of RAM and one private 1 GiB disk
 workspace. The worker has a separate 1 GiB disk for its staged download.
 Use the existing host disk and keep at least 8 GiB free after allocating both
 filesystems. Keep the trial archive small enough for its expanded data and
-temporary copies to fit.
+temporary copies to fit. The in-memory workspace is capped at 256 MiB and the
+pinned Waitron release reserves 256 MiB free before it can expand a backup.
+The disk workspace leaves room for expanded files within the existing RAM limit.
 
 On first setup, run these commands on the test host as root. The `work`
 directories live inside the mounted filesystems, so an absent mount leaves
@@ -545,10 +547,19 @@ Compose with no directory to bind.
 )
 ```
 
-After a reboot, remount each existing `disk` at its own `mount` directory
-using the same mount options before starting the backup worker. Do not format
-either disk again. Check both mounts and the 8 GiB free space before running
-Amazon `up` with the verifier ID.
+After a reboot, remount the existing filesystems as root before starting the
+backup worker.
+
+```sh
+(
+  set -eu
+  stages=/opt/waitron-cloud/amazon-backup-stages
+  for stage in worker verifier; do
+    mount -o loop,nodev,nosuid,noexec "$stages/$stage/disk" "$stages/$stage/mount"
+  done
+  test "$(df -Pk "$stages" | awk 'END {print $4}')" -ge 8388608
+)
+```
 
 Wait until Juniper Test Cafe is paired, then privately confirm its active test
 installation and Connected level. Use the following from the existing Amazon
@@ -618,8 +629,8 @@ To turn the route off, stop the backup worker from the owned deployment using
 the same four Compose files. Pass `CLOUD_VERIFIER_IMAGE` with the worker's
 current image ID to that Compose command. Stop the worker before unmounting
 either disk workspace. Then unset
-`CLOUD_TEST_AMAZON_VERIFIER_IMAGE` and run Amazon `up` again. Keep the private storage, configuration, verifier state
-and database volumes for rollback. Confirm an upload to the former public path
+`CLOUD_TEST_AMAZON_VERIFIER_IMAGE` and run Amazon `up` again. Keep both `disk` files and the private storage,
+configuration, verifier state and database volumes for rollback. Confirm an upload to the former public path
 cannot reach storage and the account remains healthy.
 
 ## Trust the public CA

@@ -19,7 +19,7 @@ const image='local.waitron-verifier@sha256:'+'2'.repeat(64);
 before(async()=>{await admin.query('CREATE SCHEMA '+schema);await migrate(pool);});
 after(async()=>{await Promise.all([pool.end(),second.end()]);await admin.query('DROP SCHEMA '+schema+' CASCADE');await admin.end();});
 beforeEach(async()=>{await resetSchema(pool);});
-async function seed(leaseMs=120000,configure=true){
+async function seed(leaseMs=120000,configure=true,releaseReady=true){
  const c=await pool.connect();
  try{
  const organisation=randomUUID(),business=randomUUID(),venue=randomUUID(),installation=randomUUID(),id=randomUUID(),job=randomUUID(),claim=randomUUID();
@@ -32,7 +32,7 @@ async function seed(leaseMs=120000,configure=true){
  await c.query('INSERT INTO backup_captures(id,venue_id,installation_id,key_version) VALUES($1,$2,$3,1)',[id,venue,installation]);
  await c.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules)
  VALUES($1,$2,$3,1,'snapshot',$4,$5,42,'2026-10-20T08:00:00.000Z','daily',$6,'{"core":3}')`,[id,venue,installation,'snapshots/'+id,'1'.repeat(64),randomUUID()]);
- if(configure)await transaction(pool,c=>admission.setVerificationPolicy(c,target,image,true));
+ if(configure)await transaction(pool,c=>admission.setVerificationPolicy(c,target,image,releaseReady));
  await c.query("INSERT INTO backup_jobs(id,kind,venue_id,target_id,status,claim_id,lease_until,attempts,runs) VALUES($1,'verify',$2,$3,'running',$4,clock_timestamp()+$5*interval '1 millisecond',1,1)",[job,venue,id,claim,leaseMs]);
  const attempt=await transaction(pool,c=>admission.prepareVerification(c,{id:job,venueId:venue,pointId:id,claimId:claim,number:1,controllerScope:'admission-fixture'}));
  assert(attempt,'a live snapshot must prepare an immutable attempt');
@@ -67,6 +67,20 @@ for(const [status,reason,want] of [
  assert.equal(s.evidence[0].status,status);assert(s.evidence[0].admitted_at);assert.equal(s.point.last_attempt_id,s.evidence[0].id);
  assert.deepEqual(s.history,want==='unavailable'?[]:[{outcome:want}]);assert.equal(s.job.claim_id,null);assert.equal(s.job.lease_until,null);
  assert.equal(s.job.status,'pending');assert.equal(Number(s.job.failures),want==='verified'?0:1);assert.equal(Boolean(s.job.last_success_at),want==='verified');
+});
+test('an admitted restore check can pass while the backup remains pending for recovery',async()=>{
+ const f=await seed(undefined,true,false);
+ assert.equal(await admit(f),'verified');
+ const s=await state(f);
+ assert.equal(s.qualification.current_verification,'pending');
+ const [attempt]=s.evidence;
+ assert.equal(s.point.last_attempt_id,attempt.id);
+ assert.equal(attempt.status,'passed');
+ assert.ok(attempt.admitted_at);
+ assert.equal(attempt.cleanup_confirmed,true);
+ assert.equal(attempt.verifier_image,image);
+ assert.equal(attempt.target_digest,target.digest);
+ assert.deepEqual(attempt.result.measuredArchive,{sha256:f.attempt.request.archive.sha256,bytes:f.attempt.request.archive.bytes});
 });
 test('unavailable recheck clears current success and preserves historical fallback',async()=>{
  let f=await seed();await admit(f);f=await retry(f);assert.equal(await transaction(pool,c=>admission.recordVerificationUnavailable(c,f.attempt,'secret_unavailable')),'unavailable');
@@ -203,16 +217,8 @@ test('new attempt keeps a detached frozen publication snapshot and refuses repea
  assert.equal(repeated,undefined);assert.equal((await state(f)).evidence.length,1);
 });
 test('disabled release policy cannot qualify a passed data check',async()=>{
- let f=await seed();await transaction(pool,c=>admission.setVerificationPolicy(c,target,image,false));f=await retry(f);
- assert.equal(await admit(f),'verified');
- const s=await state(f);assert.equal(s.qualification.current_verification,'pending');
- const attempt=s.evidence.find(row=>row.id===s.point.last_attempt_id);
- assert.ok(attempt?.admitted_at);
- assert.equal(attempt.status,'passed');
- assert.equal(attempt.cleanup_confirmed,true);
- assert.equal(attempt.verifier_image,image);
- assert.equal(attempt.target_digest,target.digest);
- assert.deepEqual(attempt.result.measuredArchive,{sha256:f.attempt.request.archive.sha256,bytes:f.attempt.request.archive.bytes});
+ let f=await seed();await transaction(pool,c=>admission.setVerificationPolicy(c,target,image,false));f=await retry(f);await admit(f);
+ assert.equal((await state(f)).qualification.current_verification,'pending');
 });
 test('wrong key is unavailable and does not replace a prior archive verdict',async()=>{
  let f=await seed();await admit(f);f=await retry(f);await admit(f,output(f.attempt.request,'unavailable','decryption_unavailable'));

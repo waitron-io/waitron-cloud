@@ -263,6 +263,8 @@ test('Amazon deployment admits Docker control and private writable state only fo
   s=>{s['backup-worker'].volumes.pop();},
   s=>{s['backup-worker'].volumes.splice(3,1);},
   s=>{s['backup-worker'].volumes[3].source='/tmp/unbounded-stage';},
+  s=>{s['backup-worker'].volumes[3].target='/tmp/misplaced-stage';},
+  s=>{s['backup-worker'].volumes[3].read_only=true;},
   s=>{s['backup-worker'].volumes[4].target='/tmp/misplaced-scratch';},
   s=>{s['backup-worker'].volumes[4].read_only=true;},
   s=>{s['backup-worker'].volumes[3].bind.create_host_path=true;},
