@@ -20,7 +20,7 @@ export class InstallationController {
  }
  get organisations(){return [...new Map(this.#offered.map(i=>[i.organisationId,{id:i.organisationId,name:i.overview?.organisationName??i.organisationId}])).values()].sort((a,b)=>a.name.localeCompare(b.name)||a.id.localeCompare(b.id));}
  get visible(){return this.#offered.filter(i=>i.organisationId===this.selectedOrganisation).sort((a,b)=>(a.overview?.businessName??a.legalBusinessId).localeCompare(b.overview?.businessName??b.legalBusinessId)||a.venueId.localeCompare(b.venueId));}
- selectOrganisation(id:string){if(this.pending||!this.organisations.some(o=>o.id===id))return;this.selectedOrganisation=id;this.confirming=undefined;this.#changed();}
+ selectOrganisation(id:string){if(this.pending||!this.organisations.some(o=>o.id===id))return;this.selectedOrganisation=id;if(!this.#recovery)this.#recoveryOrganisation=undefined;this.confirming=undefined;this.#changed();}
  // Relative server waits keep their deadline across wall-clock corrections and account changes.
  #retryUntil=0;
  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
@@ -33,7 +33,7 @@ export class InstallationController {
   if(!this.visible.some(i=>i.installationId===this.confirming&&i.canRevoke&&!i.portalRemovedAt))this.confirming=undefined;
  }
  choose(id?:string){if(this.pending)return;this.confirming=this.installations.some(i=>i.installationId===id&&i.canRevoke&&!i.portalRemovedAt)?id:undefined;this.error=undefined;this.#changed();}
- #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);const cause=write&&bodyRefusal(result);this.error=cause?`installationsRequest${cause}`:result.code==='guest_menu_shared'?'removeSharedMenu':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):write?'removeUncertain':'unavailable';}
+ #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);const cause=write&&bodyRefusal(result);this.error=cause?`installationsRequest${cause}`:result.code==='guest_menu_takedown_failed'?'removeMenuTakedownFailed':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):write?'removeUncertain':'unavailable';}
  async load(){
   if(!this.#account||this.pending||this.waiting)return;const generation=this.#generation;this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<{installations:AccountInstallation[]}>('/installations');if(generation!==this.#generation)return;this.pending=false;this.loaded=true;

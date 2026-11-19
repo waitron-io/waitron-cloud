@@ -13,12 +13,15 @@ export async function guestMenuStatus(client:PoolClient,venueId:string,origin:st
   ?{bodySha256:row.body_sha256,defaultLanguage:row.default_language,receivedAt:row.received_at.toISOString()}:null};
 }
 /** The venue parent lock also serialises the first publish with a takedown on an absent row. */
-export async function setGuestMenuBlocked(client:PoolClient,venueId:string,blocked:boolean,origin:string):Promise<GuestMenuView>{
+export async function writeGuestMenuBlocked(client:PoolClient,venueId:string,blocked:boolean):Promise<void>{
  await client.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[venueId]);
  if(blocked)await client.query(`INSERT INTO guest_menus(venue_id,revision,state) VALUES($1,1,'blocked')
   ON CONFLICT(venue_id) DO UPDATE SET revision=guest_menus.revision+1,state='blocked',source_installation_id=NULL,
   body_sha256=NULL,default_language=NULL,received_at=NULL,pages=NULL WHERE guest_menus.state<>'blocked'`,[venueId]);
  else await client.query("UPDATE guest_menus SET revision=revision+1,state='off' WHERE venue_id=$1 AND state='blocked'",[venueId]);
+}
+export async function setGuestMenuBlocked(client:PoolClient,venueId:string,blocked:boolean,origin:string):Promise<GuestMenuView>{
+ await writeGuestMenuBlocked(client,venueId,blocked);
  return guestMenuStatus(client,venueId,origin);
 }
 export async function readGuestMenu(client:Pick<Pool,'query'>,venueId:string,language?:string|readonly string[]):Promise<{html:string;revision:number;language:string}|null>{

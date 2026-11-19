@@ -20,7 +20,7 @@ export interface InstallationView {
   installationId:string;venueId:string;organisationId:string;legalBusinessId:string;environment:string;
   revision:number;revokedAt:string|null;lastContactAt:string|null;leaseExpiresAt:string|null;
   services:{service:Service|'content_translation';state:State;configuration:Record<string,unknown>;health:Health;failure:Failure|null;observedAt:string|null}[];
-  lease?:SignedEnvelope;canRevoke?:boolean;portalRemovedAt?:string|null;
+  lease?:SignedEnvelope;canRevoke?:boolean;portalRemovedAt?:string|null;guestMenuShared?:boolean;
   emailRelay?:{version:1;grant:RelayGrantHint|null};
 }
 interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;configuration_revision:number;environment:'test'|'production'}
@@ -54,7 +54,8 @@ async function view(client:PoolClient,id:string,servicesVersion:1|2=1,account=fa
   const {rows}=await client.query(`SELECT i.id AS "installationId",i.venue_id AS "venueId",v.organisation_id AS "organisationId",
     v.legal_business_id AS "legalBusinessId",v.environment,i.configuration_revision AS revision,i.revoked_at AS "revokedAt",
     i.last_contact_at AS "lastContactAt",i.lease_expires_at AS "leaseExpiresAt"
-    ${account ? ',i.portal_removed_at AS "portalRemovedAt"' : ''}
+    ${account ? `,i.portal_removed_at AS "portalRemovedAt",
+    EXISTS(SELECT 1 FROM guest_menus m WHERE m.venue_id=i.venue_id AND m.state='current') AS "guestMenuShared"` : ''}
     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[id]);
   const services=await client.query(`SELECT s.service,s.state,s.configuration,
     CASE WHEN o.revision=i.configuration_revision AND o.received_at>clock_timestamp()-interval '5 minutes'
@@ -203,7 +204,8 @@ export class InstallationStore {
       await resolveSession(client,token,{touch:false});return result;
     });
   }
-  async revokeWithSession(token:string,csrfToken:string,id:string,removeFromPortal=false):Promise<InstallationView> {
+  async revokeWithSession(token:string,csrfToken:string,id:string,takeDownMenu?:(client:PoolClient,venueId:string)=>Promise<void>):Promise<InstallationView> {
+    const removeFromPortal=takeDownMenu!==undefined;
     if(!isPairingUuid(id))fail('permission_denied');
     return transaction(this.#pool,async client=>{
       const session=await resolveSession(client,token,{csrfToken,touch:false});
@@ -219,7 +221,8 @@ export class InstallationStore {
       const row=await lock(client,id);
       if(removeFromPortal&&(row.superseded_by||row.venue_id!==membership.venue_id||row.organisation_id!==membership.organisation_id))fail('permission_denied');
       await resolveSession(client,token,{csrfToken});
-      if(removeFromPortal&&(await client.query("SELECT 1 FROM guest_menus WHERE venue_id=$1 AND state='current'",[row.venue_id])).rowCount)fail('conflict');
+      if(takeDownMenu&&(await client.query("SELECT 1 FROM guest_menus WHERE venue_id=$1 AND state='current'",[row.venue_id])).rowCount)
+        await takeDownMenu(client,row.venue_id);
 
       const revoke=!removeFromPortal||!row.revoked_at;
       if(revoke)await client.query('UPDATE installations SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE id=$1',[id]);

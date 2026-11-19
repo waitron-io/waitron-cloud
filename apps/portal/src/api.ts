@@ -87,7 +87,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['proof_required','enrollment_required','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
-    if(path==='/installations/remove'&&response.status===409)codes.push('guest_menu_shared');
+    if(path==='/installations/remove'&&response.status===503)codes.push('guest_menu_takedown_failed');
     if(path==='/signup/complete'&&response.status===400)codes.push('country_unavailable');
     if(path==='/signup/transfer/complete'&&response.status===409)codes.push('handover_unavailable');
     if(path.startsWith('/owner-recovery/'))codes.push('recovery_scope_limited','recovery_unavailable','recovery_invalid','password_screening_unavailable');

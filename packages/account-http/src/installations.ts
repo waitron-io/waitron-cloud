@@ -1,8 +1,9 @@
 import {venueOverview} from './venue-overview.ts';
 import type {Context} from 'hono';
-import type {Pool} from 'pg';
+import type {Pool,PoolClient} from 'pg';
+import {writeGuestMenuBlocked} from '@waitron-cloud/remote-access/guest-menu';
 import {resolveSession} from '@waitron-cloud/identity';
-import {InstallationError,InstallationStore,transaction,type LeaseIssuer,type MachineAction,type PlanMode} from '@waitron-cloud/registration';
+import {InstallationStore,transaction,type LeaseIssuer,type MachineAction,type PlanMode} from '@waitron-cloud/registration';
 import {readAccountBody} from './request.ts';
 import {readSessionCookie} from './cookies.ts';
 import {AccountHttpError} from './errors.ts';
@@ -28,10 +29,9 @@ export async function installationResponse(c:Context,options:{pool:Pool;issuer?:
  await consume([{scope:'installation-account',subject:session.accountId,limit:30,windowSeconds:60}]);
  if(action==='')return c.json({installations:await venueOverview(pool,token,await store.listWithSession(token))});
  const body=await readAccountBody(c.req.raw,['installationId']);
- const remove=action==='/remove';
- try{return c.json(await store.revokeWithSession(token,csrf,body.installationId!,remove));}
- catch(error){
-  if(remove&&error instanceof InstallationError&&error.code==='conflict')throw new AccountHttpError(409,'guest_menu_shared');
-  throw error;
- }
+ const takeDownMenu=action==='/remove'?async(client:PoolClient,venueId:string)=>{
+  try{await writeGuestMenuBlocked(client,venueId,true);}
+  catch{throw new AccountHttpError(503,'guest_menu_takedown_failed');}
+ }:undefined;
+ return c.json(await store.revokeWithSession(token,csrf,body.installationId!,takeDownMenu));
 }

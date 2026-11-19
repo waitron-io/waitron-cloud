@@ -1,3 +1,4 @@
+import {readGuestMenu} from '@waitron-cloud/remote-access/guest-menu';
 import {setRecoveryScope} from '../../registration/test/fixtures/recovery-scope.ts';
 import {verifyPointFixture,verificationOutput} from '../../backups/test/fixtures/verification.ts';
 import {resetSchema} from '../../registration/test/fixtures/reset-schema.ts';
@@ -90,20 +91,40 @@ test('remove leaves an active trial visible in Billing',async()=>{
  assert.equal((await browser('/remove',{installationId:id})).status,200);
  assert.deepEqual(await (await billing('read',{})).json(),plan);
 });
-test('remove refuses a shared menu even after the connection has stopped',async()=>{
- const {venue_id:venue}= (await db.pool.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+async function seedSharedMenu():Promise<string>{
+ const {venue_id:venue}=(await db.pool.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
  await db.pool.query(`INSERT INTO guest_menus(venue_id,revision,state,source_installation_id,body_sha256,default_language,received_at,pages)
   VALUES($1,1,'current',$2,$3,'en',clock_timestamp(),'{"en":"Menu"}')`,[venue,id,'a'.repeat(64)]);
+ return venue;
+}
+test('remove takes a shared menu down even after the connection has stopped',async()=>{
+ const venue=await seedSharedMenu();
  assert.equal((await browser('/revoke',{installationId:id})).status,200);
- const refused=await browser('/remove',{installationId:id});
- assert.equal(refused.status,409);
- assert.deepEqual(await refused.json(),{error:'guest_menu_shared'});
- assert.equal((await (await browser('')).json()).installations[0].portalRemovedAt,null);
- await db.pool.query("UPDATE guest_menus SET state='blocked',revision=2,source_installation_id=NULL,body_sha256=NULL,default_language=NULL,received_at=NULL,pages=NULL WHERE venue_id=$1",[venue]);
+ assert.equal((await readGuestMenu(db.pool,venue))?.html,'Menu');
  const removed=await browser('/remove',{installationId:id});
  assert.equal(removed.status,200);
  assert.ok(Date.parse((await removed.json()).portalRemovedAt)>0);
+ assert.equal(await readGuestMenu(db.pool,venue),null);
+ assert.equal((await (await browser('')).json()).installations[0].guestMenuShared,false);
  assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked' AND subject_id=$1",[id])).rows[0].count,'1');
+});
+test('remove leaves the connection and menu in place when menu takedown fails',async()=>{
+ const venue=await seedSharedMenu();
+ await db.pool.query(`CREATE FUNCTION refuse_menu_takedown() RETURNS trigger LANGUAGE plpgsql AS $$
+   BEGIN RAISE EXCEPTION 'test menu write refused'; END; $$;
+   CREATE TRIGGER refuse_menu_takedown BEFORE UPDATE ON guest_menus FOR EACH ROW EXECUTE FUNCTION refuse_menu_takedown()`);
+ try{
+  const response=await browser('/remove',{installationId:id});
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{error:'guest_menu_takedown_failed'});
+  const listed=(await (await browser('')).json()).installations[0];
+  assert.equal(listed.portalRemovedAt,null);
+  assert.equal(listed.revokedAt,null);
+  assert.equal(listed.guestMenuShared,true);
+  assert.equal((await readGuestMenu(db.pool,venue))?.html,'Menu');
+ }finally{await db.pool.query('DROP TRIGGER refuse_menu_takedown ON guest_menus; DROP FUNCTION refuse_menu_takedown()');}
+ assert.equal((await browser('/remove',{installationId:id})).status,200);
+ assert.equal(await readGuestMenu(db.pool,venue),null);
 });
 test('remove uses the guarded account write path',async()=>{
  assert.equal((await browser('/remove',{installationId:id},{'x-csrf-token':'wrong'})).status,403);

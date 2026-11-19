@@ -562,8 +562,11 @@ account API provides GET `/api/account/installations`. POST
 time it was hidden from Venues and Remote access. Both writes take
 `{"installationId":"<uuid>"}`. The list and removal reply include
 `portalRemovedAt`, which is null on a listed connection you can still see.
-A currently shared guest menu makes removal return `409 guest_menu_shared` until
-you stop sharing it. The venue stays in Billing, and test venues also stay in Recovery.
+The list's `guestMenuShared` flag indicates whether the venue has a published
+guest menu. Removal takes that menu down before it stops the connection. If
+takedown fails, the write returns `503 guest_menu_takedown_failed` and the venue
+and menu stay in place. The venue stays in Billing, and test venues also stay in
+Recovery.
 
 All three routes require a live customer membership. The writes also require
 ownership, the exact Origin and an anti-forgery token (CSRF). Account routes

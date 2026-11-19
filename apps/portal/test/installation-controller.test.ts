@@ -45,6 +45,19 @@ test('Recovery still offers the venue after other portal pages hide it',async()=
  assert.deepEqual(c.visible,[]);assert.equal(c.selectedOrganisation,undefined);
 });
 
+test('an explicit Venues organisation choice replaces the remembered Recovery choice',async()=>{
+ const second='22345678-1234-4234-8234-123456789abc',third='32345678-1234-4234-8234-123456789abc';
+ const stamp='2026-10-24T00:00:00.000Z';
+ const rows=[{...view,revokedAt:stamp,portalRemovedAt:stamp},
+  {...view,organisationId:second,installationId:second},{...view,organisationId:third,installationId:third}];
+ const controller=new InstallationController(()=>{},async<T>()=>({ok:true,value:{installations:rows} as T}));
+ controller.account('owner');await controller.load();
+ controller.showRecovery(true);controller.selectOrganisation(id);
+ controller.showRecovery(false);controller.selectOrganisation(third);
+ controller.showRecovery(true);
+ assert.equal(controller.selectedOrganisation,third);
+});
+
 test('overview accepts database character limits for Unicode names',()=>{
  const item={...view,services:['remote_access','continuous_backup','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',observedAt:null})),overview:{organisationName:'☀️'.repeat(100),businessName:'🌞'.repeat(200),countryCode:'ES',latestSnapshotAt:null,verifiedSnapshotAt:null}};
  assert.equal(validInstallation(item),true);item.overview.businessName+='x';assert.equal(validInstallation(item),false);
