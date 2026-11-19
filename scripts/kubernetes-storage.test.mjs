@@ -104,6 +104,7 @@ test('bucket repair starts once and polls only its returned token', async () => 
   const run = async (binary, args, {input}) => {
     assert.equal(binary, 'curl');
     assert.ok(args.includes('--aws-sigv4') && args.includes('--cacert') && args.includes('--config'));
+    assert.ok(args.includes('--fail-with-body'), 'keep the store error body on an HTTP failure');
     assert.ok(!args.join(' ').includes('synthetic-password'));
     assert.match(input, /user = "fixture:synthetic-password"/);
     const [, url] = /^url = "([^"]+)"/m.exec(input);
@@ -124,7 +125,7 @@ test('bucket repair exposes a stopped job and an invalid start', async () => {
   const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
   for (const [replies, error] of [
     [[{clientToken: 'fixture:3'}, {Summary: 'stopped'}], /storage_loss.heal_stopped/],
-    [[{Code: 'HealAlreadyRunning'}], /storage_loss.heal_token/],
+    [[{}], /storage_loss.heal_token/],
   ]) {
     const run = async () => JSON.stringify(replies.shift());
     await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, run,

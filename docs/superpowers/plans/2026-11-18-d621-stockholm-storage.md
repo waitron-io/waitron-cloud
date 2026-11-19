@@ -64,7 +64,7 @@ the 15-minute full-service fault legs and cold restart. Paid work stays behind i
 
 On 18 November, two runs of the unpublished repair candidates used
 `TEST_KUBERNETES_STOCKHOLM_STORAGE=1 node --test scripts/kubernetes-storage.test.mjs`
-in disposable three-machine Kind clusters and found two limits for run 9:
+in disposable three-machine Kind clusters and failed at different points:
 
 - In the first repair attempt, both serving peers reported six online drives
   once the machine returned. The repair check found a missing object shard on
@@ -89,6 +89,8 @@ still listed the stopped DNS host as ready (`post-land-dns-host-loss-live.log`,
 lines 75–86 and 438–476). Two subsequent controls passed all four checks. One
 kept the stale entry. In the other, both surviving machines routed DNS only to
 the surviving replica. The cause of the earlier multipart refusals remains open.
+A shorter peer refresh also discards idle addresses sooner. If multipart fails
+again, check whether a reconnect needed a fresh lookup while DNS was unavailable.
 
 Two scoped grant renewals reached Cloud's ten-second deadline while a machine
 was down. In the second run, MinIO finished reloading the grant on its peers
@@ -113,9 +115,10 @@ holds `combined-live-01.log` (lines 77–104 and 155–209) and
 
 The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
 refreshes peer addresses every second and asks MinIO to repair the bucket once
-after the first machine returns. In the Linux Kind recheck with DNS placement,
-both outage objects reached both returned disks, including both multipart
-parts. Both byte checks passed through the returned machine. The repair leg
+after the first machine returns. The Linux Kind recheck used the parked
+candidate `a2a254dbdf` with the DNS placement changes, tree
+`1abca994e6edb191f06b91f7d5b91c1d096ef557`. Both outage objects reached
+both returned disks, including both multipart parts. Both byte checks passed through the returned machine. The repair leg
 took 18.746 seconds and the run passed all seven checks
 (`receipts/storage-read-during-outage/post-land-returned-drive-live-02.log` in
 Lane G, lines 86–109). Repair and multipart through consecutive outages and

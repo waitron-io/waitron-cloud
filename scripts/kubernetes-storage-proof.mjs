@@ -119,7 +119,7 @@ export async function healStoreBucket({node, account, run, signal}) {
   const post = async body => {
     signal.throwIfAborted();
     const hash = createHash('sha256').update(body).digest('hex');
-    const output = await run('curl', ['--disable', '--silent', '--show-error', '--fail', '--noproxy', '*',
+    const output = await run('curl', ['--disable', '--silent', '--show-error', '--fail-with-body', '--noproxy', '*',
       '--aws-sigv4', 'aws:amz:us-east-1:s3', '--cacert', account.caPath, '--request', 'POST',
       '--header', 'Content-Type: application/json', '--header', 'x-amz-content-sha256: ' + hash,
       '--data-binary', body, '--config', '-'], {
