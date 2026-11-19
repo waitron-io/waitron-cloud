@@ -39,7 +39,9 @@ const publicCopy = {pem: 'fixture certificate and key', csr: 'fixture signing re
 
 test('a fresh worker reuses the public copy only for the matching installation', async () => {
   const {artifacts, cellId, secret, current} = await publicationFixture();
+  const version = Number(current().metadata.resourceVersion);
   await artifacts.publishPublicCertificate(installationId, venueId, publicCopy);
+  assert.equal(Number(current().metadata.resourceVersion), version + 1);
   const generation = JSON.parse(Buffer.from(current().data['routes.json'], 'base64'));
   assert.equal(generation.manifest, await artifacts.readManifest());
   assert.deepEqual(generation.certificates, {[venueId]: publicCopy.pem});
@@ -47,6 +49,11 @@ test('a fresh worker reuses the public copy only for the matching installation',
   const restarted = secretArtifacts({secret, cellId});
   assert.deepEqual(await restarted.readPublicCertificate(installationId), publicCopy);
   assert.equal(await restarted.readPublicCertificate(replacementId), undefined);
+  const missingRequest = structuredClone(current());
+  delete generation.publicRequests[venueId].csr;
+  missingRequest.data['routes.json'] = Buffer.from(JSON.stringify(generation)).toString('base64');
+  await secret.replace(missingRequest);
+  assert.equal(await restarted.readPublicCertificate(installationId), undefined);
   await artifacts.publishPublicCertificate(replacementId, venueId, {...publicCopy, csr: 'new request'});
   assert.equal(await restarted.readPublicCertificate(installationId), undefined);
   assert.equal(await restarted.readPublicCertificate(replacementId).then(copy => copy.csr), 'new request');

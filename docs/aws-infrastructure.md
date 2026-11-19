@@ -1306,7 +1306,8 @@ certificate and signing request in the same Kubernetes Secret.
 
 The check first pauses the active gateway's lease renewal. The watchdog must
 remove the old WireGuard interface. The same venue peer has 90 seconds to
-complete a new handshake and serve verified HTTPS through a standby. Then
+complete a new handshake and serve verified HTTPS through a standby. The
+fixture sends one packet from the venue every five seconds during handover. Then
 the first worker replaces the public certificate on the same route, with up
 to 180 seconds for all three gateways to receive it.
 
@@ -1315,9 +1316,9 @@ workers stay off the account machine so the account can accept the owner's
 revocation while the first worker's machine is stopped. During the 90-second
 stop window, the surviving worker must complete a new certificate job with
 the same certificate and signing request, then publish a newer signed route
-manifest without the revoked venue. After the machine rejoins, the check
-allows 180 seconds for all three gateways to receive that withdrawal. It
-checks that the peer is gone and that both HTTPS routes refuse the venue.
+manifest without the revoked venue. After the machine rejoins, the check makes
+sure all three gateways received the withdrawal, the peer is gone and both HTTPS
+routes refuse the venue. It allows 180 seconds from revocation for those results.
 
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.

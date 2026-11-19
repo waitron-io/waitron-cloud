@@ -78,13 +78,13 @@ test('Secret-backed runtime reuses the saved public certificate without writing 
  const publication={cellId:local.cellId,readManifest:()=>readFile(join(directory,'gateway-manifest.json'),'utf8'),
   readPublicCertificate:async installation=>installation===id?saved:undefined,
   publishPublicCertificate:async (installation,venueId,copy)=>{writes.push({
-   installation,venueId,certificate:hash(copy?.pem??''),request:hash(copy?.csr??''),
+   matchesInstallation:installation===id,matchesVenue:venueId===venue,certificate:hash(copy?.pem??''),request:hash(copy?.csr??''),
   });}};
  const runtime=await openTestRemoteRuntime({...options,publication});
  const due=await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1 AND last_success_at IS NOT NULL",[id]);
  assert.equal(due.rowCount,1);
  assert.equal(await runtime.worker.runOnce(),true);
- assert.deepEqual(writes,[{installation:id,venueId:venue,certificate:hash(saved.pem),request:hash(saved.csr)}]);
+ assert.deepEqual(writes,[{matchesInstallation:true,matchesVenue:true,certificate:hash(saved.pem),request:hash(saved.csr)}]);
  await assert.rejects(stat(folder),{code:'ENOENT'});
  await assert.rejects(stat(served),{code:'ENOENT'});
 });

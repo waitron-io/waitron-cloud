@@ -16,7 +16,7 @@ export async function paidRemoteAccount({pool, config, organisationId, installat
   if (!stockholm) assert.equal((await plans.show(organisationId)).plan, 'paid');
   if (phase === 'stockholm-remote-publication') {
     assert.equal(stockholm, true);
-    const {rows} = await pool.query(`SELECT kind, last_success_at::text AS completed,
+    const {rows} = await pool.query(`SELECT kind, EXTRACT(EPOCH FROM last_success_at)::double precision AS completed,
         enabled AND status='pending' AND claim_id IS NULL AND available_at>clock_timestamp()
           AND applied_digest=desired_digest AND last_error IS NULL AS idle
       FROM remote_configuration_jobs WHERE (kind='certificate_public' AND target_id=$1)
