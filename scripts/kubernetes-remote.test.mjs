@@ -143,11 +143,11 @@ test('the paired venue keeps its endpoint when the active gateway machine stops'
 test('the same relay ports follow a changed address and then fail over to another node', {timeout: 15000}, async t => {
   const local = '127.0.0.1';
   const backend = async name => {
-    const tcp = createServer(socket => socket.once('data', () => socket.end(name)));
+    const tcp = createServer(socket => socket.once('data', bytes => socket.end(name + ':' + bytes)));
     let udp;
     async function bindUdp(port = 0) {
       udp = createSocket('udp4');
-      udp.on('message', (_data, peer) => udp.send(name, peer.port, peer.address));
+      udp.on('message', (bytes, peer) => udp.send(name + ':' + bytes, peer.port, peer.address));
       udp.bind(port, local);
       await once(udp, 'listening');
     }
@@ -220,14 +220,14 @@ test('the same relay ports follow a changed address and then fail over to anothe
     const reply = once(client, 'message', {signal});
     client.send('WireGuard', udp, local);
     const [datagram] = await reply;
-    assert.equal(datagram.toString(), expected);
+    assert.equal(datagram.toString(), expected + ':WireGuard');
   }
   const verifyReplies = expected => remoteRehearsal.untilRemote(async () => {
     const signal = AbortSignal.timeout(200);
     const socket = createConnection({host: local, port: tcp, signal}, () => socket.write('staff'));
     try {
       const [data] = await once(socket, 'data', {signal});
-      assert.equal(data.toString(), expected);
+      assert.equal(data.toString(), expected + ':staff');
       await verifyUdp(expected, signal);
       return true;
     } finally {socket.destroy();}
