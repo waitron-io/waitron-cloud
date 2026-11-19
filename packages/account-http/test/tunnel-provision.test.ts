@@ -59,9 +59,6 @@ test('automatic mode provisions only eligible signed boxes and preserves a stopp
   const app=createAccountApp({...f.options,tunnelProvision:automatic});
   const other=await connectedVenue(f.db,f.issuer,origin),otherKey=peer();
   const postOther=()=>f.request(other.proof('tunnel-provision',{peerPublicKey:otherKey},randomUUID(),other.lease),app);
-  await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[other.installationId]);
-  const revoked=await postOther();assert.equal(revoked.status,403);assert.deepEqual(await revoked.json(),{error:'permission_denied'});
-  await f.db.pool.query('UPDATE installations SET revoked_at=NULL WHERE id=$1',[other.installationId]);
   const denied=await postOther();assert.equal(denied.status,403,await denied.clone().text());
   assert.deepEqual(await denied.json(),{error:'remote_plan_required'});
   assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM remote_placements')).rows[0].n,0);
@@ -217,6 +214,17 @@ test('same-key setup restoration rolls back when the proof expires during the ce
   assert.equal((await pending).status,401);
   assert.deepEqual((await f.db.pool.query("SELECT state,configuration FROM installation_services WHERE installation_id=$1 AND service='remote_access'",[f.v.installationId])).rows,[{state:'unconfigured',configuration:{}}]);
   assert.equal((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.v.installationId])).rows[0].configuration_revision,f.revision+1);
+ }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
+});
+test('revocation during the plan wait keeps the refusal generic',async()=>{
+ const f=await fixture('test-venue-levels'),holder=await f.db.secondPool.connect();let pending:Promise<Response>|undefined;
+ try{
+  const app=createAccountApp({...f.options,tunnelProvision:{mode:'automatic',cellId:f.cellId}});
+  await holder.query('BEGIN');await holder.query('SELECT id FROM organisations WHERE id=$1 FOR UPDATE',[f.v.organisationId]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=f.request(f.proof(),app);await blocked(f,pid);
+  await holder.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.v.installationId]);await holder.query('COMMIT');
+  const denied=await pending;assert.equal(denied.status,403);assert.deepEqual(await denied.json(),{error:'permission_denied'});
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
 });
 test('the selected plan mode refuses a paid permission withdrawn during its policy wait',async()=>{

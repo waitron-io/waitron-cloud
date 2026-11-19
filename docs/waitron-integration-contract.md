@@ -436,7 +436,7 @@ limits follow the existing machine routes. Failures return `{error:code}`:
 | --- | --- |
 | 400 / 408 / 413 / 415 | `invalid_input`: malformed body, read timeout, size or content type. |
 | 401 | `invalid_proof`: signature, action, proof time, changed key or foreign/expired/untrusted lease. |
-| 403 | `remote_plan_required`: the signed installation's venue plan excludes remote access; `permission_denied`: foreign installation, production or changed venue/environment; `revoked` also covers supersession; `forbidden` rejects any browser Origin. |
+| 403 | `remote_plan_required`: the signed installation's venue plan excludes remote access; `permission_denied`: foreign installation, production, changed venue/environment or a revoked installation whose plan excludes remote access; `revoked` also covers supersession; `forbidden` rejects any browser Origin. |
 | 405 | `method_not_allowed`. |
 | 409 | `placement_conflict`: changed placement or a peer key already claimed. |
 | 429 | `rate_limited`, with `Retry-After`. |
