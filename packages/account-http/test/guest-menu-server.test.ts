@@ -154,3 +154,16 @@ test('guest budgets use only the direct source and ignore forwarding headers',as
   assert.equal((await send('192.0.2.1,192.0.2.2')).status,429);
  }finally{await running.close();await f.close();}
 });
+
+test('only the configured proxy can separate visitors into distinct rate budgets',async()=>{
+ const f=await guestTlsFixture();
+ const running=await startGuestMenuServer({...f.options,trustedProxyIps:['127.0.0.1']});
+ const address=running.server.address();assert(address&&typeof address!=='string');
+ const path='/m/'+f.venueId;
+ try{
+  assert.equal((await f.send(address.port,path,'GET',{'x-forwarded-for':'192.0.2.1'})).status,404);
+  await f.db.pool.query('UPDATE account_rate_limits SET attempts=120');
+  assert.equal((await f.send(address.port,path,'GET',{'x-forwarded-for':'192.0.2.2'})).status,404);
+  assert.equal((await f.send(address.port,path,'GET',{'x-forwarded-for':'192.0.2.1'})).status,429);
+ }finally{await running.close();await f.close();}
+});

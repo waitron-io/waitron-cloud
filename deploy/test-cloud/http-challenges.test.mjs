@@ -56,5 +56,11 @@ test('standalone process serves account challenges and shuts down without any Cl
  assert.equal(ready.status,'listening','the independent challenge command must stay up');assert.ok(ready.port>0);
  // node:http preserves the explicit Host; Node26 fetch derives it from the URL.
  const response=await new Promise((resolve,reject)=>{const req=request({host:'127.0.0.1',port:ready.port,path:'/.well-known/acme-challenge/account-token',headers:{host:zone}},res=>{let body='';res.on('data',part=>body+=part);res.on('end',()=>resolve({status:res.statusCode,body}));});req.on('error',reject);req.end();});assert.deepEqual(response,{status:200,body:'account proof'});
+ const guest=await new Promise((resolve,reject)=>{
+  const req=request({host:'127.0.0.1',port:ready.port,path:'/.well-known/acme-challenge/account-token',headers:{host:'menus.'+zone}},res=>{
+   let body='';res.on('data',part=>body+=part);res.on('end',()=>resolve({status:res.statusCode,body}));});
+  req.on('error',reject);req.end();
+ });
+ assert.deepEqual(guest,{status:200,body:'account proof'},'the guest certificate can renew before the reader is enabled');
  child.kill('SIGTERM');assert.equal(await exited,0);
 });

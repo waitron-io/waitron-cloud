@@ -20,7 +20,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
   const origin=new URL(process.env.TEST_CLOUD_ORIGIN),port=Number(process.env.TEST_CLOUD_HTTP_PORT??8080);
   if(origin.origin!==process.env.TEST_CLOUD_ORIGIN||origin.protocol!=='https:'||origin.port||!Number.isInteger(port)||port<0||port>65535)throw Error();
-  const server=createHttpChallengeServer({accountHostname:origin.hostname,zone:process.env.TEST_CLOUD_REMOTE_ZONE,accountWebroot:process.env.TEST_CLOUD_ACCOUNT_WEBROOT,remoteDirectory:process.env.TEST_CLOUD_CHALLENGE_DIR});
+  const server=createHttpChallengeServer({accountHostname:origin.hostname,guestHostname:'menus.'+origin.hostname,zone:process.env.TEST_CLOUD_REMOTE_ZONE,accountWebroot:process.env.TEST_CLOUD_ACCOUNT_WEBROOT,remoteDirectory:process.env.TEST_CLOUD_CHALLENGE_DIR});
   server.on('error',()=>{console.error('Test Cloud HTTP challenge listener failed');process.exitCode=1;});
   for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{server.close();server.closeAllConnections();});
   server.listen(port,'0.0.0.0',()=>console.log(JSON.stringify({status:'listening',port:server.address().port})));
@@ -32,7 +32,7 @@ export async function presentHttpChallenge(directory,hostname,token,value){
  try{await writeFile(temporary,value,{flag:'wx',mode:0o600});await rename(temporary,target);}finally{await rm(temporary,{force:true});}
 }
 export async function removeHttpChallenge(directory,hostname,token){await rm(challengePath(directory,hostname,token),{force:true});}
-export function createHttpChallengeServer({accountHostname,zone,accountWebroot,remoteDirectory}){
+export function createHttpChallengeServer({accountHostname,guestHostname,zone,accountWebroot,remoteDirectory}){
  if(!isHostname(accountHostname)||!isHostname(zone)||!isAbsolute(accountWebroot)||!isAbsolute(remoteDirectory))throw Error('test_cloud.http_configuration');
  return createServer(async(req,res)=>{
   req.resume();
@@ -40,7 +40,7 @@ export function createHttpChallengeServer({accountHostname,zone,accountWebroot,r
   const hosts=req.rawHeaders.filter((_,i)=>i%2===0&&req.rawHeaders[i].toLowerCase()==='host').length;
   if(req.method!=='GET'||!token||hosts!==1||!isHostname(hostname)){res.writeHead(404);res.end();return;}
   let path;
-  if(hostname===accountHostname)path=join(accountWebroot,'.well-known/acme-challenge',token);
+  if(hostname===accountHostname||hostname===guestHostname)path=join(accountWebroot,'.well-known/acme-challenge',token);
   else{
    if(isTestRemoteHostname(hostname,zone))path=challengePath(remoteDirectory,hostname,token);
   }

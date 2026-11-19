@@ -45,6 +45,7 @@ test('Amazon SNI shares TLS, preserves caller identity, refuses forged proxy inp
  const limits=JSON.parse(await run(['exec',id,'node','--input-type=module','-e',`import{connect}from'node:tls';const held=[];async function open(source){return new Promise(resolve=>{const s=connect({host:'127.0.0.1',port:443,localAddress:source,servername:${JSON.stringify(publicHostname)},rejectUnauthorized:false},()=>{held.push(s);resolve(true);});s.on('error',()=>resolve(false));s.setTimeout(2000,()=>{s.destroy();resolve(false);});});}const distinct=await Promise.all(Array.from({length:40},(_,n)=>open('127.0.1.'+(n+1))));for(const s of held.splice(0))s.destroy();const same=await Promise.all(Array.from({length:33},()=>open('127.0.3.1')));for(const s of held)s.destroy();console.log(JSON.stringify({distinct:distinct.filter(Boolean).length,same:same.filter(Boolean).length}));`]));assert.deepEqual(limits,{distinct:40,same:32},'caller limits must stay separate behind the front proxy');
  async function handshake(servername){return new Promise(resolve=>{let done=false;const finish=value=>{if(done)return;done=true;clearTimeout(timer);socket.destroy();resolve(value);};const socket=tlsConnect({host:'127.0.0.1',port,servername,rejectUnauthorized:false},()=>finish('accepted'));const timer=setTimeout(()=>finish('timeout'),2000);socket.on('error',()=>finish('refused'));});}
  assert.equal(await handshake('unknown.example.test'),'refused');assert.equal(await handshake(''),'refused');
+ assert.equal(await handshake('menus.waitron.local'),'refused');
  const direct=JSON.parse(await run(['exec',id,'node','--input-type=module','-e',`import{request}from'node:https';import{readFileSync}from'node:fs';const req=request({host:'127.0.0.1',localAddress:'127.0.0.3',port:4444,servername:${JSON.stringify(publicHostname)},ca:readFileSync('/tmp/private/lan/ca.pem'),headers:{host:${JSON.stringify(publicHostname)}}},r=>{let b='';r.on('data',v=>b+=v);r.on('end',()=>console.log(b));});req.on('error',()=>process.exit(1));req.end();`]));assert.equal(direct['x-waitron-client-ip'],'127.0.0.3');
  const forged=await run(['exec',id,'node','--input-type=module','-e',`import{connect}from'node:net';import{connect as tls}from'node:tls';const s=connect({host:'127.0.0.1',port:4444,localAddress:'127.0.0.3'},()=>{s.write('PROXY TCP4 192.0.2.9 127.0.0.1 12345 443\\r\\n');const c=tls({socket:s,servername:${JSON.stringify(publicHostname)},rejectUnauthorized:false},()=>{console.log('accepted');c.destroy();});c.on('error',()=>{console.log('refused');c.destroy();});});setTimeout(()=>{console.log('timeout');s.destroy();},8000).unref();`]);assert.equal(forged,'refused');
  const workers=async()=>JSON.parse(await run(['exec',id,'node','-e',"const fs=require('fs'),p=fs.readFileSync('/tmp/proxy.pid','utf8');console.log(JSON.stringify(fs.readFileSync('/proc/'+p+'/task/'+p+'/children','utf8').trim().split(/\\s+/).filter(Boolean)))"]));const before=await workers();assert.ok(before.length);
@@ -73,4 +74,74 @@ test('account HTTPS starts without a gateway and follows its replacement without
  const idle=await new Promise((resolve,reject)=>{const s=tlsConnect({host:'127.0.0.1',port,servername:name,rejectUnauthorized:false},()=>resolve(s));s.on('error',reject);});t.after(()=>idle.destroy());idle.on('error',()=>{});await new Promise(r=>setTimeout(r,16000));assert.equal(idle.destroyed,false,'front proxy shortened the gateway idle window');idle.destroy();
  await run(['rm','-f','-v',first]);ids.splice(ids.indexOf(first),1);await waitBody('waitron.local','account');
  await start(12,'second');await waitBody(name,'second');await waitBody('waitron.local','account');
+});
+
+test('the Amazon guest name uses the shared TLS listener, exact authority and a verified private backend',{timeout:45000},async t=>{
+ const account='cloud.example.test',guest='menus.'+account;
+ const program=`
+ import{bootstrapTestCloud}from'/app/deploy/test-cloud/bootstrap.mjs';
+ import{readFile,writeFile}from'node:fs/promises';
+ import{createServer as http}from'node:http';import{createServer as https}from'node:https';
+ import{spawn,execFileSync}from'node:child_process';
+ const dir='/tmp/private',lan=dir+'/lan',account=${JSON.stringify(account)},guest=${JSON.stringify(guest)};
+ await bootstrapTestCloud(dir);
+ const read=name=>readFile(lan+'/'+name),run=args=>execFileSync('openssl',args,{stdio:'ignore'});
+ run(['req','-new','-newkey','rsa:2048','-nodes','-keyout','/tmp/public.key','-out','/tmp/public.csr','-subj','/CN='+account]);
+ await writeFile('/tmp/public.ext','subjectAltName=DNS:'+account+',DNS:'+guest+'\\nbasicConstraints=critical,CA:FALSE\\n');
+ run(['x509','-req','-in','/tmp/public.csr','-CA',lan+'/ca.pem','-CAkey',lan+'/ca-key.pem','-set_serial','123','-out','/tmp/public.crt','-days','1','-extfile','/tmp/public.ext']);
+ await writeFile('/tmp/public.pem',Buffer.concat([await readFile('/tmp/public.key'),await readFile('/tmp/public.crt')]));
+ let listener;
+ const start=async tls=>{
+  listener=https(tls,(q,r)=>r.end(JSON.stringify({headers:q.headers,sni:q.socket.servername})));
+  await new Promise(resolve=>listener.listen(3443,'127.0.0.2',resolve));
+ };
+ await start({key:await read('key.pem'),cert:await read('cert.pem')});
+ await new Promise(resolve=>http((q,r)=>{
+  if(q.url==='/wrong-backend-name')listener.close(async()=>{
+   await start({key:await readFile('/tmp/public.key'),cert:await readFile('/tmp/public.crt')});r.end('replaced');
+  });else r.end('account');
+ }).listen(3001,'127.0.0.1',resolve));
+ process.env.TEST_CLOUD_HOST=account;process.env.TEST_CLOUD_ORIGIN='https://'+account;
+ process.env.TEST_CLOUD_GUEST_HOST=guest;process.env.TEST_CLOUD_CERTIFICATE='/tmp/public.pem';process.env.TEST_CLOUD_GUEST_CA=lan+'/ca.pem';
+ for(const [name,from,to] of [['proxy','account:3000','127.0.0.1:3001'],['proxy.amazon','10.79.0.3:3443','127.0.0.2:3443']]){
+  const cfg=await readFile('/app/deploy/test-cloud/'+name+'.cfg','utf8');
+  await writeFile('/tmp/'+name+'.cfg',cfg.replace(from,to));
+ }
+ const proxy=spawn('haproxy',['-W','-db','-f','/tmp/proxy.cfg','-f','/tmp/proxy.amazon.cfg'],{stdio:'inherit'});
+ proxy.on('exit',code=>process.exit(code??1));
+ console.log('PUBLIC_CA '+(await read('ca.pem')).toString('base64'));
+ `;
+ const run=async args=>(await exec('docker',args,{timeout:30000,maxBuffer:1024*1024})).stdout.trim();
+ const id=await run(['run','-d','--read-only','--memory','128m','--tmpfs','/tmp:mode=0700','-p','127.0.0.1::443',image,'node','--input-type=module','-e',program]);
+ t.after(async()=>{await run(['rm','-f','-v',id]);});
+ let ca;
+ for(let n=0;n<100;n++){
+  const line=(await run(['logs',id])).split('\n').find(line=>line.startsWith('PUBLIC_CA '));
+  if(line){ca=Buffer.from(line.slice(10),'base64');break;}
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ assert.ok(ca,'public CA missing');
+ const port=Number((await run(['port',id,'443/tcp'])).split(':').at(-1));
+ const send=(servername,host=servername,path='/',headers={})=>new Promise((resolve,reject)=>{
+  const req=request({host:'127.0.0.1',port,servername,ca,path,headers:{host,...headers}},res=>{
+   let body='';res.on('data',bytes=>body+=bytes);res.on('end',()=>resolve({status:res.statusCode,body}));
+  });req.setTimeout(2000,()=>req.destroy(Error('request timeout')));req.on('error',reject);req.end();
+ });
+ let ready;
+ for(let n=0;n<30;n++){
+  try{ready=await send(account);break;}catch{}
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ assert.deepEqual(ready,{status:200,body:'account'});
+ const response=await send(guest,guest,'/',{'x-forwarded-for':'192.0.2.99',forwarded:'for=spoof','x-real-ip':'192.0.2.99'});
+ assert.equal(response.status,200);
+ const seen=JSON.parse(response.body);
+ assert.equal(seen.sni,'waitron.local');assert.equal(seen.headers.host,guest);
+ assert.match(seen.headers['x-forwarded-for'],/^\d+\.\d+\.\d+\.\d+$/);
+ assert.notEqual(seen.headers['x-forwarded-for'],'192.0.2.99');
+ assert.equal(seen.headers.forwarded,undefined);assert.equal(seen.headers['x-real-ip'],undefined);
+ assert.equal((await send(account,guest)).status,403);
+ assert.equal((await send(guest,account)).status,403);
+ assert.equal((await send(account,account,'/wrong-backend-name')).body,'replaced');
+ assert.equal((await send(guest)).status,503);
 });

@@ -2,9 +2,10 @@
 
 ## Hosted menu (A670-CLOUD)
 
-Connect Waitron's sender to the signed publication/status/withdrawal routes in the
-[watcher-cleared contract](../superpowers/plans/2026-11-14-a670-cloud-guest-menu.md).
-Qualify public DNS, production certificates and outside-network access. Every venue
+Qualify Waitron's signed sender against the
+[Amazon test Cloud guest address](../test-cloud.md#open-the-synthetic-venues-guest-menu)
+and check a fresh publication, withdrawal and republication from a phone on
+mobile data. Qualify production DNS and certificates separately. Every venue
 connected to Cloud qualifies without a billing gate. Generalize publication keys beyond
 the current base-language keys and sole stored variant; keep guest preference
 matching separate from that publication change. Mirror Waitron’s shared 32-entry,

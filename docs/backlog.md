@@ -701,10 +701,11 @@ database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle jou
 
 ## Hosted guest menu (A670-CLOUD)
 
-Connect Waitron's sender to the signed publication routes with its content-language
-keys unchanged, then generalize variant publication and qualify public access.
-Public DNS, production certificates and outside-network checks remain open. Every venue connected to Cloud qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
-exclude live forwarding, which belongs to Waitron A509 online ordering.
+Qualify Waitron's signed sender and its published menu from a phone on mobile
+data using the [Amazon test Cloud guest address](test-cloud.md#open-the-synthetic-venues-guest-menu).
+Production DNS and certificates remain open. Every venue connected to Cloud
+qualifies without a new billing gate. The [contract plan and remaining work](backlog/guest-menu.md)
+cover variant publication. Live forwarding belongs to Waitron A509 online ordering.
 
 ## Custom domains with one record, and names that follow the venue
 

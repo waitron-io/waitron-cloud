@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
+import {createHash,generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
 import {mkdtemp,readFile,rm,stat,chmod,unlink} from 'node:fs/promises';
 import {request} from 'node:http';
+import {request as requestHttps} from 'node:https';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {tmpdir} from 'node:os';
@@ -43,9 +44,9 @@ async function startAccount(db,context,environment={}){
  const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
  const close=async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');await exited;};
  try{
-  const port=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]).port);})),
+  const {port,guestPort}=await Promise.race([new Promise(resolve=>child.stdout.on('data',chunk=>{stdout+=chunk;if(stdout.includes('\n'))resolve(JSON.parse(stdout.split('\n')[0]));})),
    exited.then(code=>{throw Error(`account exited ${code}: ${stderr}`);}),new Promise((_,reject)=>setTimeout(()=>reject(Error('account startup deadline')),15000).unref())]);
-  return {server:{address:()=>({port})},close};
+  return {server:{address:()=>({port})},guestPort,close};
  }catch(error){await close();throw error;}
 }
 function accountRequest(running,path,body,headers={}){
@@ -100,6 +101,34 @@ test('the test Cloud account worker refuses a live Stripe key before listening',
    CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'});
   await running.close();
  },/account exited 1: Account server refused test payment configuration/);
+});
+
+test('the Amazon test account accepts a signed publication and closes its private guest listener on shutdown',async t=>{
+ const {db,context}=await setup(t),box=await connectedVenue(db,context.issuer,origin);
+ await prepareAccount(t,context);
+ const host='menus.cloud.example.test',path='/m/'+box.venueId,html='<h1>Juniper test menu</h1>';
+ const body=JSON.stringify({defaultLanguage:'en',pages:{en:html}});
+ const signed=box.proof('guest-menu-publish',{version:1,expectedRevision:0,bodySha256:createHash('sha256').update(body).digest('hex'),bodyBytes:Buffer.byteLength(body)},randomUUID(),box.lease);
+ const publish=running=>accountRequest(running,'/api/installations/guest-menu-publish',{...signed,body});
+ const off=await startAccount(db,context);
+ try{assert.equal(off.guestPort,undefined);assert.equal((await publish(off)).status,503);}
+ finally{await off.close();}
+ const running=await startAccount(db,context,{GUEST_ORIGIN:'https://'+host,GUEST_HTTP_HOST:'127.0.0.1',GUEST_HTTP_PORT:'0'});
+ try{
+  const result=await publish(running);
+  assert.equal(result.status,200,JSON.stringify(result.body));
+  assert.equal(result.body.url,'https://'+host+path);
+  const ca=await readFile(join(context.directory,'lan/ca.pem'));
+  const read=()=>new Promise((resolve,reject)=>{
+   const req=requestHttps({host:'127.0.0.1',port:running.guestPort,servername:'waitron.local',ca,path,headers:{host}},res=>{
+    let body='';res.setEncoding('utf8');res.on('data',part=>body+=part);res.on('end',()=>resolve({status:res.statusCode,body}));});
+   req.on('error',reject);req.end();
+  });
+  assert.ok(running.guestPort>0);
+  assert.deepEqual(await read(),{status:200,body:html});
+  await running.close();
+  await assert.rejects(read(),{code:'ECONNREFUSED'});
+ }finally{await running.close();}
 });
 
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{

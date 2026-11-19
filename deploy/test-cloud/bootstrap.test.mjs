@@ -96,3 +96,20 @@ test('public-only internal leaf permits day61 renewal and retains the existing o
  t.mock.timers.enable({apis:['Date'],now:now+61*86400000});assert.deepEqual(await bootstrapTestCloud(dir,options),identity);
  t.mock.timers.setTime(now+366*86400000);await assert.rejects(bootstrapTestCloud(dir,options),/test_cloud.identity_invalid/);
 });
+
+test('guest certificate renewal keeps the bundle in use unless both public names validate',async()=>{
+ const {bootstrapTestCloud}=await api(),dir=await root(),source=await root(),proxy=await root(),origin='https://cloud.example.test';
+ const options={origin,certificateSource:source,certificateDirectory:proxy};
+ const issue=names=>execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(source,'privkey.pem'),'-out',join(source,'fullchain.pem'),'-days','2','-subj','/CN=synthetic','-addext','subjectAltName='+names.map(name=>'DNS:'+name).join(','),'-addext','basicConstraints=critical,CA:FALSE'],{stdio:'ignore'});
+ issue(['cloud.example.test']);await bootstrapTestCloud(dir,options);
+ const first=await readFile(join(proxy,'proxy.pem'));
+ const enabled={...options,guestMenu:true};
+ for(const host of ['cloud.example.test','menus.cloud.example.test']){
+  issue([host]);await assert.rejects(bootstrapTestCloud(dir,enabled),/test_cloud.certificate_invalid/);
+  assert.deepEqual(await readFile(join(proxy,'proxy.pem')),first);
+ }
+ issue(['cloud.example.test','menus.cloud.example.test']);await bootstrapTestCloud(dir,enabled);
+ assert.notDeepEqual(await readFile(join(proxy,'proxy.pem')),first);
+ assert.deepEqual(await readFile(join(proxy,'guest-ca.pem')),await readFile(join(dir,'lan/ca.pem')));
+ assert.deepEqual((await readdir(proxy)).sort(),['guest-ca.pem','proxy.pem']);
+});

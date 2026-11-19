@@ -3,6 +3,8 @@ import {startCloudActionDemo} from './cloud-action-demo.mjs';
 import {openTestCaptureRuntime} from './service-runtime.mjs';
 import {openTestRelayRuntime} from './relay-runtime.mjs';
 import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '../../packages/registration/src/index.ts';
 import { accountHttpConfig, billingAccountOptionsFromEnv, passwordScreeningFromEnv, factorConfigFromEnv } from '../../packages/account-http/src/config.ts';
@@ -10,9 +12,11 @@ import { billingMethodsOptionsFromEnv } from '../../packages/account-http/src/bi
 import { AccountRateLimiter } from '../../packages/account-http/src/rate-limit.ts';
 import { loadPortalAssets } from '../../packages/account-http/src/portal.ts';
 import { startAccountServer } from '../../packages/account-http/src/server.ts';
+import { startGuestMenuServer } from '../../packages/account-http/src/guest-menu-server.ts';
 let captures;let actionDemo;
 let pool;
 let running;
+let guest;
 let cleanup;
 let hardDeadline;
 let stopRequested = false;
@@ -40,6 +44,9 @@ try {
   if(translationFlag!=='0')throw Error();
   const translation=false;
   const config = accountHttpConfig(process.env);
+  const directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack';
+  const guestOrigin=process.env.GUEST_ORIGIN;
+  if(guestOrigin&&(planMode!=='test-venue-levels'||config.production))throw new Error();
   const billingMethods=billingMethodsOptionsFromEnv(process.env,planMode,billingAccount,config.portalOrigin);
   const factor = factorConfigFromEnv(process.env);
   const passwordScreening = await passwordScreeningFromEnv(process.env);
@@ -54,15 +61,22 @@ try {
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
-    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
+    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,stageRoot:process.env.CLOUD_BACKUP_STAGE_ROOT,directory}):undefined;
     let relay;
-    try{relay=await openTestRelayRuntime({pool,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
+    try{relay=await openTestRelayRuntime({pool,directory,issuer:leaseIssuer,origin:config.portalOrigin,mode:planMode});}
     catch{console.error('Test relay startup failed; restore private keys and check schema');}
-    running = await startAccountServer({operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    if(guestOrigin&&!stopRequested){
+      const key=await readFile(join(directory,'lan/key.pem')),cert=await readFile(join(directory,'lan/cert.pem'));
+      guest=await startGuestMenuServer({pool,rateKey:config.rateKey,origin:guestOrigin,tls:{key,cert},
+        host:process.env.GUEST_HTTP_HOST??'10.79.0.3',port:Number(process.env.GUEST_HTTP_PORT??3443),
+        trustedProxyIps:['10.79.0.2']});
+    }
+    running = await startAccountServer({guestOrigin,operatorAccountId:actionDemoEnabled?process.env.CLOUD_OPERATOR_ACCOUNT_ID:undefined,planMode,allowances,staffCertificates,translation,billingAccount,billingMethods,tunnelProvision,captures:captures?.options,relay:relay?.admission,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     if(actionDemoEnabled)actionDemo=await startCloudActionDemo({pool,outbox,operatorAccountId:process.env.CLOUD_OPERATOR_ACCOUNT_ID,directory:process.env.CLOUD_ACTION_DEMO_DIR??'/run/cloud-action-demo',environment:process.env});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
-    console.log(JSON.stringify({status: 'listening', port: address.port}));
+    const guestAddress=guest?.server.address();
+    console.log(JSON.stringify({status:'listening',port:address.port,...(guestAddress&&typeof guestAddress!=='string'?{guestPort:guestAddress.port}:{})}));
     const limiter = new AccountRateLimiter(pool, config.rateKey); let pruning = false;
     cleanup = setInterval(async () => {
       if (pruning || stopRequested) return;
@@ -80,7 +94,7 @@ try {
   process.exitCode = 1;
 } finally {
   stop();
-  try {await actionDemo?.close();await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
+  try {await actionDemo?.close();await running?.close(); await guest?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}
   clearInterval(cleanup); clearTimeout(hardDeadline);
   process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
 }

@@ -13,7 +13,7 @@ export function validateGuestOrigin(value:string):string{
 }
 const headers={'cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
  'referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY'};
-export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string}){
+export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;origin:string;tls:{key:Buffer;cert:Buffer};port?:number;host?:string;trustedProxyIps?:readonly string[]}){
  const origin=validateGuestOrigin(options.origin),limiter=new AccountRateLimiter(options.pool,options.rateKey);let active=0;
  const respond=(res:ServerResponse,status:number,code:string)=>{
   if(res.destroyed)return;
@@ -33,7 +33,9 @@ export async function startGuestMenuServer(options:{pool:Pool;rateKey:string;ori
    if((req.url??'').split('?')[0]!==url.pathname||!url.pathname.startsWith('/m/')||!isUuid(id)||url.hash||url.searchParams.getAll('lang').length>1
     ||req.headers['transfer-encoding']!==undefined||req.headers.upgrade!==undefined
     ||(req.headers['content-length']!==undefined&&req.headers['content-length']!=='0')){respond(res,400,'invalid_input');return;}
-   const rate=await limiter.consume([{scope:'guest-menu-ip',subject:clientAddress(req.socket.remoteAddress??'',undefined,[]),limit:120,windowSeconds:60}]);
+   const forwarded=req.headers['x-forwarded-for'];
+   const subject=clientAddress(req.socket.remoteAddress??'',typeof forwarded==='string'?forwarded:undefined,options.trustedProxyIps??[]);
+   const rate=await limiter.consume([{scope:'guest-menu-ip',subject,limit:120,windowSeconds:60}]);
    if(!rate.allowed){res.setHeader('retry-after',rate.retryAfterSeconds);respond(res,429,'limited');return;}
    const menu=await readGuestMenu(options.pool,id,language===undefined?guestMenuPreferences(req.headers['accept-language']):language);
    if(!menu){respond(res,404,'not_found');return;}

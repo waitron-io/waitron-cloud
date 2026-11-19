@@ -2790,7 +2790,10 @@ stored revision before releasing buffered HTML; bytes already sent cannot be
 recalled. It admits at most eight active requests and shares the existing bounded
 account connection pool. Database work may wait for that pool. The existing
 database-backed rate limiter permits 120 requests per source per minute, using
-the canonical direct connection address, with forwarded headers ignored. Capacity refusal is 503, rate refusal 429. Browser refusals at 404/429/503
+the canonical direct connection address. On the Amazon test Cloud, the reader
+uses the client address set by the proxy only when the socket peer is the
+fixed proxy address `10.79.0.2`. It ignores forwarding headers from other peers.
+Capacity refusal is 503, rate refusal 429. Browser refusals at 404/429/503
 show short EN/ES pages; 503 includes `Retry-After: 1`. Revoking an installation
 does not remove the stored copy; the owner can still reach takedown in the portal.
 
