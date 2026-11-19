@@ -109,6 +109,16 @@ The combined staff HTTPS, public HTTPS and new handshake check missed the
 through the fixed relay, the idle Waitron box and the outside listener with
 changed machine addresses still need proof.
 
+A signed run confirmed the stage that missed the deadline. During setup the
+public cookie returned 403 after the gateway moved off the account machine.
+A fresh challenge restored public HTTPS. During the actual machine stop,
+the standby on the account machine gained the gateway and Kubernetes
+withdrew the old endpoint after 49.163 seconds. A fresh handshake transferred
+bytes and staff returned 200 with its expected certificate. The public route
+again returned 403 with the existing cookie. The test ended at 90 seconds.
+A separate Chromium check showed that an actual browser automatically
+solves this challenge after the source IP changes.
+
 The existing Cloud fixture already preserves the key and endpoint, so this comparison
 adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
 separately scoped appliance procedure: define the authenticated trigger, preserve
