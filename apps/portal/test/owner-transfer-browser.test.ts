@@ -153,7 +153,7 @@ test('first-time recipients verify, sign up without a business, enroll and expli
    const proofMail=await mailFor(email,locale==='en'?'Your Waitron Cloud verification code':'Tu código de verificación de Waitron Cloud',f.mailEvidence),code=proofMail.match(/^([0-9]{6})$/m)?.[1];assert.ok(code);
    await page.locator('input[name=actionProofCode]').fill(code);await page.locator('#action-proof-verify').click();await page.getByText(c.actionProofReady,{exact:true}).waitFor();
    await look('pending');
-   // Keep the fixture outside the live code window so a missed clock substitution always fails.
+   // Keep the fixture codes outside the live window so their validation must use fixture time.
    const {now}=(await pool.query<{now:Date}>("SELECT clock_timestamp() - interval '2 minutes' AS now")).rows[0]!;
    const clock=factorClock={accountId:recipient,now,reads:0,sessionReads:0};
    await page.locator('#factor-enable').click();await page.locator('.factor-secret').waitFor();const secret=(await page.locator('.factor-secret').textContent())!;
