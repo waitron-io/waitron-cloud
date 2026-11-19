@@ -18,8 +18,8 @@ function request(path:string,body?:unknown,headers:Record<string,string>={},targ
   return target.request(origin+path,{method,headers:{'content-type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
 }
 const browser=(path:string,body?:unknown,headers:Record<string,string>={})=>request('/api/account/pairing/'+path,body,{origin,cookie,'x-csrf-token':csrf,...headers});
-function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClaims={origin,action:'start',requestId:randomUUID(),publicKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};
-  function proof(action:PairingClaims['action'],changes:Partial<PairingClaims>={}){const bytes=pairingPayload({...c,action,code:action==='start'?c.code:'',organisationId:action==='complete'?owner.organisationId:'',legalBusinessId:action==='complete'?owner.legalBusinessId:'',issuedAt:Date.now(),...changes});return {payload:bytes.toString('base64url'),signature:sign(null,bytes,keys.privateKey).toString('base64url')};}
+function machine(){const keys=generateKeyPairSync('ed25519');const c:PairingClaims={origin,action:'start',requestId:randomUUID(),publicKey:keys.publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now(),venueName:''};
+  function proof(action:PairingClaims['action'],changes:Partial<PairingClaims>={}){const bytes=pairingPayload({...c,action,code:action==='start'?c.code:'',venueName:action==='start'?c.venueName:'',organisationId:action==='complete'?owner.organisationId:'',legalBusinessId:action==='complete'?owner.legalBusinessId:'',issuedAt:Date.now(),...changes});return {payload:bytes.toString('base64url'),signature:sign(null,bytes,keys.privateKey).toString('base64url')};}
   return {c,proof,call:(action:PairingClaims['action'],changes:Partial<PairingClaims>={})=>request('/api/pairing/'+action,proof(action,changes))};
 }
 const choice=(m:ReturnType<typeof machine>)=>({requestId:m.c.requestId,code:m.c.code,organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
@@ -45,6 +45,30 @@ test('signed machines and browser approval link two distinct venues with durable
   app=createAccountApp({factor:{keys:null,policy:emailLoginPolicy},pool:db.secondPool,outbox:db.outbox,config:settings()});assert.deepEqual(await (await a.call('complete')).json(),result);
   assert.equal((await b.call('complete')).status,200);assert.equal((await db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'2');
   assert.equal((await a.call('status',{publicKey:b.c.publicKey})).status,401);
+});
+
+test('only browser pairing replies show the original signed venue name after a start retry',async()=>{
+  const m=machine();
+  const start=await m.call('start',{venueName:'Café Sol'});
+  assert.equal(start.status,200);
+  const initial=await start.json();
+  assert.equal(Object.hasOwn(initial,'venueName'),false);
+  const retry=await m.call('start',{venueName:'Café Luna'});
+  assert.equal(retry.status,200);
+  assert.deepEqual(await retry.json(),initial);
+
+  const inspect=await browser('inspect',{requestId:m.c.requestId,code:m.c.code});
+  assert.equal(inspect.status,200);
+  assert.equal((await inspect.json()).venueName,'Café Sol');
+  const approve=await browser('approve',choice(m));
+  assert.equal(approve.status,200);
+  assert.equal((await approve.json()).venueName,'Café Sol');
+
+  for(const action of ['status','complete'] as const){
+    const reply=await m.call(action);
+    assert.equal(reply.status,200);
+    assert.equal(Object.hasOwn(await reply.json(),'venueName'),false);
+  }
 });
 test('machine and browser authority, action, origin, method and shape stay separate',async()=>{
   const m=machine();

@@ -117,7 +117,7 @@ Cloud owns permission to use its services. Waitron owns permission to become the
 active primary. A Cloud login, restore grant or fresh machine credential alone
 must not activate trading or change fiscal identity.
 
-### Pairing and managed-stream version 2
+### Pairing version 3 and managed-stream version 2
 
 Use the shared `@waitron-io/contract` pairing encoder and verifier. A new request signs
 `venueId: ""`; its view keeps that requested value and `registration.venueId` returns
@@ -128,6 +128,20 @@ Then ordinary two-sided pairing requires a Cloud owner and supersedes the retire
 installation while retaining the venue id. It never reactivates the retired key.
 This applies in either environment; the tests are registration `test/registration.test.ts`
 and `test/pairing.test.ts`.
+
+Version 3 signs compact JSON in this order:
+
+```text
+["waitron-cloud-pair-v3",origin,action,requestId,publicKey,venueId,environment,code,organisationId,legalBusinessId,issuedAt,venueName]
+```
+
+On start, send the venue's display name trimmed to at most 120 Unicode code
+points. Use an empty string for a nameless venue and for status and completion.
+The first start fixes the displayed name for that request. Cloud includes a
+nonempty name in authenticated browser inspection and approval replies as
+`venueName`. It is display text. The venue ID and installation key still supply
+the binding. Upgrade the box and start again for any pairing in flight at the
+version switch. Existing installations use the separate machine-proof format.
 
 On test venues only, operator-run retained-snapshot and tunnel provisioning can reclaim
 the same venue's storage and placement from a revoked, superseded predecessor. Setup

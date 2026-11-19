@@ -48,7 +48,7 @@ try{
     assert.equal(login.status(),200,await login.text());
     const fresh=await context.request.post(`${server.origin}/management-api/session/me/fresh-sign-in`,{headers:{origin:server.origin},data:{method:'password',password:'Local integration password'}});
     assert.equal(fresh.status(),204,await fresh.text());
-    await page.goto(`${server.origin}/manage/cloud`);
+    await page.goto(`${server.origin}/cloud`);
     const [startReply]=await Promise.all([page.waitForResponse(response=>response.url()===server.origin+'/management-api/cloud/start'),page.getByRole('button',{name:'Connect to Cloud',exact:true}).click()]);
     assert.equal(startReply.status(),200,await startReply.text());
     const started=await startReply.json();assert.equal(started.state,'awaiting_cloud',JSON.stringify(started));
@@ -58,7 +58,12 @@ try{
     const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Open Cloud',exact:true}).click();const cloud=await popupPromise;cloud.setDefaultTimeout(10000);
     await cloud.getByLabel('Email').fill(email);await cloud.locator('input[name=password]').fill(password);await cloud.getByRole('button',{name:'Sign in',exact:true}).click();await completeBrowserEmail(f,cloud,email);
     await cloud.getByRole('textbox',{name:'Code shown in Waitron',exact:true}).fill(code);await cloud.getByRole('button',{name:'Check code',exact:true}).click();
-    await cloud.getByText('New venue',{exact:true}).waitFor();await prepareBrowserActionWindow(f,cloud,owner.accountId);await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
+    const venueDetails=cloud.locator('.pairing-details');
+    await venueDetails.getByText('Venue name',{exact:true}).waitFor();
+    assert.equal(await venueDetails.locator('.venue-id').textContent(),'Cloud Test Venue');
+    await prepareBrowserActionWindow(f,cloud,owner.accountId);await cloud.getByRole('button',{name:'Approve this venue',exact:true}).click();await cloud.getByText('Approved in Cloud.',{exact:false}).waitFor();
+    await venueDetails.getByText('Venue name',{exact:true}).waitFor();
+    assert.equal(await venueDetails.locator('.venue-id').textContent(),'Cloud Test Venue');
     await page.getByRole('button',{name:'Check connection',exact:true}).click();await page.getByText('Two Cafés SL',{exact:true}).waitFor();
     if(index===0){await stop(server);server=await launch(root);await page.reload();await page.getByRole('button',{name:'Connect this venue',exact:true}).waitFor();}
     let completions=0,completionStatus;
@@ -71,7 +76,7 @@ try{
   assert.notEqual(registrations[0].installationId,registrations[1].installationId);assert.notEqual(registrations[0].venueId,registrations[1].venueId);
   const first=JSON.parse(await readFile(join(locals[0].root,'cloud/connection.json'),'utf8'));
   const second=JSON.parse(await readFile(join(locals[1].root,'cloud/connection.json'),'utf8'));
-  const bytes=Buffer.from(JSON.stringify(['waitron-cloud-pair-v2',f.origin,'status',second.requestId,first.publicKey,'',first.environment,'','','',Date.now()]));
+  const bytes=Buffer.from(JSON.stringify(['waitron-cloud-pair-v3',f.origin,'status',second.requestId,first.publicKey,'',first.environment,'','','',Date.now(),'']));
   const signature=sign(null,bytes,createPrivateKey({key:Buffer.from(first.privateKey,'base64url'),format:'der',type:'pkcs8'})).toString('base64url');
   const swapped=await locals[0].context.request.post(`${f.origin}/api/pairing/status`,{data:{payload:bytes.toString('base64url'),signature}});assert.equal(swapped.status(),400);
   assert.equal((await swapped.json()).error,'binding_conflict');
@@ -120,7 +125,7 @@ try{
   const refused=await locals[0].context.request.post(`${f.origin}/api/installations/renew`,{data:revokedProof});assert.equal(refused.status(),403);assert.equal((await refused.json()).error,'revoked');
   assert.equal((await localPost(1,'refresh')).status(),200);
   const cloudHead=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();const waitronHead=execFileSync('git',['-C',waitron,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-  const receipt={cloudHead,waitronHead,waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='' ,venues:2,checks:['real boot and SQLite manager login','both browser confirmation screens','restart before completion','committed completion with lost reply','cross-installation proof rejected','renewal response lost after Cloud commit, recovered by real Waitron restart and worker','independent desired configuration and synthetic adapter observations','revocation response lost, recovered on restart','revoked renewal refused while second venue stays connected'],registrations};
+  const receipt={cloudHead,waitronHead,waitronDirty:execFileSync('git',['-C',waitron,'status','--porcelain'],{encoding:'utf8'}).trim()!=='' ,venues:2,checks:['real boot and SQLite manager login','both browser confirmation screens','Cloud Test Venue labelled before and after Cloud approval','restart before completion','committed completion with lost reply','cross-installation proof rejected','renewal response lost after Cloud commit, recovered by real Waitron restart and worker','independent desired configuration and synthetic adapter observations','revocation response lost, recovered on restart','revoked renewal refused while second venue stays connected'],registrations};
   if(process.env.PAIRING_RECEIPT)await writeFile(process.env.PAIRING_RECEIPT,JSON.stringify(receipt,null,2));
   console.log(JSON.stringify(receipt,null,2));
 }finally{

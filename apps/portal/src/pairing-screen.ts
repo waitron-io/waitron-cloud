@@ -14,7 +14,7 @@ export function pairingScreen(app:PortalApp){
   const approved = view && view.state !== 'awaiting_cloud';
   const business = approved ? view : p.businesses.length === 1 ? p.businesses[0] : undefined;
   const details = view ? html`<dl class="pairing-details">
-    <dt>${c.pairVenue}</dt><dd class="venue-id">${view.venueId || c.pairNewVenue}</dd>
+    <dt>${view.venueName ? c.pairVenueName : c.pairVenue}</dt><dd class="venue-id">${view.venueName || view.venueId || c.pairNewVenue}</dd>
     <dt>${c.pairInstallation}</dt><dd>${view.environment === 'test' ? c.pairTest : c.pairProduction}</dd>
     ${business ? html`<dt>${c.chooseOrganisation}</dt><dd>${business.organisationName}</dd>
       <dt>${c.pairBusiness}</dt><dd>${business.legalBusinessName}</dd>` : nothing}

@@ -1067,8 +1067,9 @@ implementation or production evidence.
   and relay commands have synthetic checks. An independent test backup command
   withdraws the writer and refuses fresh setup while keeping remote access on.
   SES startup and authenticated feedback composition, real email delivery and
-  joint box handoff qualification remain open. Pairing still needs the box to send
-  its venue display name in the signed request and Cloud to show it.
+  joint box handoff qualification remain open. A fresh named pairing on the Amazon
+  test Cloud remains part of the joint box trial after both builds speak pairing
+  version 3.
 
   Automatic remote access starts from the box's signed tunnel key in venue-level
   test mode. The focused worker test starts the Connected trial through the

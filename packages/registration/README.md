@@ -340,15 +340,16 @@ policy format, category guards and repeat-until-complete procedure.
 ## Signed pairing
 
 The pairing, machine-proof and access-lease functions use the pinned
-`@waitron-io/contract@0.2.9` release from Waitron. The existing Cloud exports remain;
-Cloud keeps trusted-key list parsing, configured trust and fixed wire vectors.
+`@waitron-io/contract` release from Waitron. Cloud keeps trusted-key list parsing,
+configured trust and fixed wire vectors.
 Shared format checks live in Waitron's signing tests; Cloud retains its trust, action and
 consumer checks. Follow the [shared-package update guide](../../docs/shared-ui-release.md#prepare-private-signing-packages-for-disposable-tests)
 before changing the pin.
 
 Use `verifyPairingProof(payload, signature, origin, action)` before calling the machine
-methods of `PairingStore`. It accepts the canonical version 1 Ed25519 format in the
-[pairing design](../../docs/superpowers/specs/2026-09-23-venue-pairing-design.md).
+methods of `PairingStore`. It accepts the [version 3 Ed25519 pairing format](../../docs/waitron-integration-contract.md#pairing-version-3-and-managed-stream-version-2).
+The first signed start stores the optional display name. Browser inspection and
+approval return it after the code check. Start retries preserve the original name.
 The HTTP adapter applies host, origin, body, session and persistent rate checks.
 A signed machine request alone is not local administrator proof: the real Waitron
 adapter must guard start and completion with its local administrator session.

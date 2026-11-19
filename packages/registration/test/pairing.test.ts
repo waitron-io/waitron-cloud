@@ -18,7 +18,7 @@ import type {PairingClaims} from '../src/pairing-proof.ts';
 let db:Awaited<ReturnType<typeof database>>;let store:PairingStore;let other:PairingStore;
 let owner:{accountId:string;organisationId:string;legalBusinessId:string};let session:{token:string;csrfToken:string};
 const password='a long enough local test password';
-function machine():PairingClaims {return {origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now()};}
+function machine():PairingClaims {return {origin:'https://cloud.example',action:'start',requestId:randomUUID(),publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code:'12345678',organisationId:'',legalBusinessId:'',issuedAt:Date.now(),venueName:''};}
 const status=(c:PairingClaims):PairingClaims=>({...c,action:'status',code:''});
 const completion=(c:PairingClaims):PairingClaims=>({...c,action:'complete',code:'',organisationId:owner.organisationId,legalBusinessId:owner.legalBusinessId});
 const approve=(c:PairingClaims,target=store)=>target.approve(c.requestId,c.code,owner.organisationId,owner.legalBusinessId,session.token,session.csrfToken);

@@ -13,9 +13,21 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     const signup=new SignupStore(f.db.pool,f.db.outbox);await signup.request(email);
     const row=(await f.db.pool.query("SELECT * FROM email_outbox WHERE kind='verification'")).rows[0];const payload=f.db.outbox.open(row);assert.ok('token' in payload);
     const owner=await signup.complete(payload.token,{password,organisationName:'Café Sol',legalBusinessName:'Sol SL',countryCode:'ES'});
-    const requestId=randomUUID(),code='12345678';
-    await new PairingStore(f.db.pool).start({origin:f.origin,action:'start',requestId,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code,organisationId:'',legalBusinessId:'',issuedAt:Date.now()});
-    const context=await f.browser.newContext({locale,viewport:{width:375,height:812},colorScheme:locale==='es'?'dark':'light'});const page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
+    const requestId=randomUUID(),code='12345678',venueName='Café <strong>Sol</strong>';
+    await new PairingStore(f.db.pool).start({origin:f.origin,action:'start',requestId,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url'),venueId:'',environment:'test',code,organisationId:'',legalBusinessId:'',issuedAt:Date.now(),venueName});
+    const context=await f.browser.newContext({locale,viewport:{width:390,height:812}});const page=await context.newPage();page.setDefaultTimeout(5000);const c=translations[locale];
+    const venueDetails=page.locator('.pairing-details');
+    const venueLabel=locale==='es'?'Nombre del local':'Venue name';
+    async function checkVenue(phase:string){
+      await venueDetails.getByText(venueLabel,{exact:true}).waitFor();
+      assert.equal(await venueDetails.locator('.venue-id').textContent(),venueName);
+      for(const width of [390,1280])for(const colorScheme of ['light','dark'] as const){
+        await page.setViewportSize({width,height:812});
+        await page.emulateMedia({colorScheme});
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+        await page.screenshot({path:new URL(`../dist/pairing-${phase}-${locale}-${colorScheme}-${width}.png`,import.meta.url).pathname,fullPage:true});
+      }
+    }
     const urls:string[]=[];page.on('request',r=>urls.push(r.url()));
     await page.goto(`${f.origin}/connect#request=${requestId}`);await page.getByRole('heading',{name:c.login,exact:true}).waitFor();
     assert.ok(!page.url().includes(requestId));
@@ -27,17 +39,16 @@ for(const locale of ['en','es'] as const)test(`${locale} connection requires cod
     await page.getByLabel(c.language,{exact:true}).selectOption(locale==='en'?'es':'en');
     assert.equal(await page.locator('input[name=pairingCode]').inputValue(),code);
     await page.getByLabel(translations[locale==='en'?'es':'en'].language,{exact:true}).selectOption(locale);
-    await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await page.getByText(c.pairNewVenue,{exact:true}).waitFor();
+    await page.getByRole('button',{name:c.pairInspect,exact:true}).click();await checkVenue('inspect');
     assert.equal((await f.db.pool.query('SELECT cloud_account_id FROM pairing_requests')).rows[0].cloud_account_id,null);
     assert.ok(await page.getByText('Sol SL',{exact:true}).isVisible());
     await page.evaluate(axe.source);assert.deepEqual(await page.evaluate(async()=> (await window.axe.run(document)).violations),[]);
-    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await page.screenshot({path:new URL(`../dist/pairing-${locale}.png`,import.meta.url).pathname,fullPage:true});
     const token=(await context.cookies()).find(cookie=>cookie.name==='cloud_session')!.value;
     await prepareConnectionProof(f.db.pool,owner.accountId,token);
     let approvals=0;await page.route('**/pairing/approve',async route=>{approvals++;const reply=await route.fetch();if(approvals===1)await route.abort('failed');else await route.fulfill({response:reply});});
     await page.getByRole('button',{name:c.pairApprove,exact:true}).click();await page.getByText(c.pairUncertain).waitFor();
     await page.getByRole('button',{name:c.pairApprove,exact:true}).click();await page.getByText(c.pairApproved).waitFor();
+    await checkVenue('approved');
     const approved=(await f.db.pool.query('SELECT * FROM pairing_requests')).rows[0];
     assert.equal(approved.cloud_account_id,owner.accountId);assert.equal(approved.result,null);
     assert.equal((await f.db.pool.query('SELECT count(*) FROM installations')).rows[0].count,'0');
