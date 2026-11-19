@@ -175,3 +175,22 @@ test('the private remote rehearsal cannot run with the paid plan or a foreign na
   await assert.rejects(runTestCloudClients({stockholmRemote: true, kubernetes: {namespace: 'default'}}),
     /integration\.stockholm_remote_binding/);
 });
+
+
+test('the gateway-machine fault requires the private Kind remote rehearsal', async () => {
+  const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({stockholmGatewayMachineLoss: true, services: true}),
+    /integration\.stockholm_machine_loss_scope/);
+  await assert.rejects(runTestCloudClients({stockholmGatewayMachineLoss: true}), /integration\.stockholm_machine_loss_scope/);
+});
+
+
+test('the Waitron tunnel image is accepted only by the private gateway-machine fault', async () => {
+  const {runTestCloudClients} = await load();
+  const waitronTunnelImage = 'sha256:' + 'b'.repeat(64);
+  for (const options of [{}, {stockholmRemote: true}, {services: true}]) {
+    await assert.rejects(runTestCloudClients({...options, waitronTunnelImage}), /integration\.waitron_tunnel_scope/);
+  }
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, stockholmGatewayMachineLoss: true,
+    waitronTunnelImage: 'waitron-tunnel:latest'}), /integration\.waitron_tunnel_image/);
+});

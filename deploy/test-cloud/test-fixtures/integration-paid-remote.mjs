@@ -5,7 +5,53 @@ import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
-export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false, target, observe, stockholm}) {
+export async function startRemotePeer({docker, paid, runId, own, image, waitronTunnelImage}) {
+  const root = paid.venueRoot.slice('/tmp/cloud-integration-state/'.length) + '/remote-peer';
+  const mount = (destination, subpath, readonly = '') =>
+    'type=volume,src=' + paid.stateVolume + ',dst=' + destination + readonly + ',volume-subpath=' + root + subpath;
+  const peerId = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
+    '--network', 'container:' + paid.id, '--cap-add', 'NET_ADMIN', '--memory', '64m', '--memory-swap', '64m',
+    ...(waitronTunnelImage ? ['--mount', mount('/control', '/control'), '--mount', mount('/keys', '/keys'), waitronTunnelImage] :
+      ['--mount', mount('/input', '', ',readonly'), image, 'node', 'packages/remote-access/src/peer-cli.ts']),
+  ], '', 'remote-peer-create');
+  own(peerId);
+  await docker(['start', peerId]);
+  return peerId;
+}
+
+export async function measureWithVenuePeer({docker, peerId, peer, waitronTunnelImage, target, checkRoutes, prepareRoutes, signal}) {
+  const measure = () => target.machineLoss(checkRoutes, peer.peerPublicKey, prepareRoutes);
+  const {untilRemote} = await import('../../../scripts/kubernetes-remote.mjs');
+  if (waitronTunnelImage) {
+    const identity = async () => {
+      const started = await docker(['inspect', '--format', '{{.State.Running}} {{.State.StartedAt}}', peerId]);
+      assert.match(started, /^true /, 'integration.waitron_tunnel_stopped');
+      const publicKey = await docker(['exec', peerId, 'wg', 'show', 'wg-cloud', 'public-key']);
+      assert.equal(publicKey, peer.peerPublicKey, 'integration.waitron_tunnel_peer');
+      const [{ifindex}] = JSON.parse(await docker(['exec', peerId, 'ip', '-j', 'link', 'show', 'wg-cloud']));
+      return {started, ifindex};
+    };
+    const before = await untilRemote(identity, 30000, signal, 'waitron_tunnel_configured');
+    const result = await measure();
+    assert.deepEqual(await identity(), before, 'integration.waitron_tunnel_replaced');
+    return {...result, fixtureTraffic: false, sameWaitronTunnel: true, waitronTunnelImage};
+  }
+  await docker(['exec', peerId, 'ping', '-V'], '', 'remote-ping-tool');
+  const trafficStop = new AbortController();
+  const trafficSignal = AbortSignal.any([trafficStop.signal, ...[signal].filter(Boolean)]);
+  process.stderr.write('D621 fixture traffic: one venue ping through the paired peer every five seconds\n');
+  const traffic = (async () => {
+    while (!trafficSignal.aborted) {
+      await docker(['exec', peerId, 'ping', '-n', '-I', 'wg-cloud', '-c', '1', '-W', '1', peer.gatewayAddress],
+        '', 'remote-venue-packet').catch(() => {});
+      await delay(5000, undefined, {signal: trafficSignal}).catch(() => {});
+    }
+  })();
+  try {return {...await measure(), fixtureTraffic: true};}
+  finally {trafficStop.abort(); await traffic;}
+}
+
+export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, waitronTunnelImage, runId, own, storageWithdrawal = false, target, observe, stockholm}) {
   const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
     JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase));
   const gateway = target ? 'kube-gateway' : await compose(['ps', '-q', 'gateway']);
@@ -16,13 +62,10 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   const sourceBefore = await control(paid.id, 'evidence');
   const placement = await phase('paid-remote-provision', peer);
   await control(paid.id, 'refresh');
-  const client = await control(paid.id, 'paid-remote', {phase: 'certificate', placement, gatewayIp, stockholmOrigin: stockholm?.origin});
+  const client = await control(paid.id, 'paid-remote', {phase: 'certificate', placement, gatewayIp,
+    stockholmOrigin: stockholm?.origin, waitronTunnel: Boolean(waitronTunnelImage)});
   assert.deepEqual(await phase('paid-remote-inspect', {csr: client.csr, certificate: client.certificate}), {certificateBoundToPairedVenue: true});
-  const peerId = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
-    '--network', 'container:' + paid.id, '--cap-add', 'NET_ADMIN', '--memory', '64m', '--memory-swap', '64m',
-    '--mount', 'type=volume,src=' + paid.stateVolume + ',dst=/input,readonly,volume-subpath=' + paid.venueRoot.slice('/tmp/cloud-integration-state/'.length) + '/remote-peer',
-    image, 'node', 'packages/remote-access/src/peer-cli.ts'], '', 'remote-peer-create');
-  own(peerId); await docker(['start', peerId]);
+  const peerId = await startRemotePeer({docker, paid, runId, own, image, waitronTunnelImage});
   const probe = (hostname, path, {trust = ca, verificationHostname, method = 'GET', body, cookie, signal} = {}) => new Promise((resolve, reject) => {
     const req = request({signal: AbortSignal.any([signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), host: stockholm ? target.host : '127.0.0.1', port, servername: hostname, ca: trust, path, method, agent: false,
       ...(verificationHostname ? {checkServerIdentity: (_hostname, certificate) => checkServerIdentity(verificationHostname, certificate)} : {}),
@@ -53,14 +96,14 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   180000, stockholm.signal, 'public_ready');
   else assert.equal((await probe(placement.publicHostname, '/management-api/cloud/status')).status, 404);
   assert.equal((await probe(placement.publicHostname, '/public/availability')).status, 403);
-  const solvePublic = async () => {
-    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge')).body);
+  const solvePublic = async signal => {
+    const challenge = JSON.parse((await probe(placement.publicHostname, '/_cloud/challenge', {signal})).body);
     let nonce = 0;
     const deadline = Date.now() + 10000;
     while (createHash('sha256').update(challenge.challenge + ':' + nonce).digest().readUInt32BE(0) >= 2 ** (32 - challenge.difficulty)) {
       nonce++; assert.ok(Date.now() < deadline, 'integration.remote_challenge_timeout');
     }
-    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}});
+    const solved = await probe(placement.publicHostname, '/_cloud/solve', {method: 'POST', body: {challenge: challenge.challenge, nonce}, signal});
     assert.equal(solved.status, 204);
     return solved.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
   };
@@ -75,9 +118,27 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   const peers = signal => stockholm ? target.peers(signal) : docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers']);
   assert.ok((await peers()).split(/\s+/).includes(peer.peerPublicKey));
   if (stockholm) {
-    const check = async (signal, expectedPublic) => {
-      const staffReply = await probe(placement.staffHostname, '/public/availability', {signal});
-      const publicReply = await probe(placement.publicHostname, '/public/availability', {cookie, signal});
+    const check = async (signal, expectedPublic, refreshPublicCookie = false, elapsed) => {
+      const route = async (name, hostname, options) => {
+        const log = result => {
+          if (elapsed) process.stderr.write('D621 HTTPS attempt ' + JSON.stringify({route: name, seconds: elapsed() / 1000, ...result}) + '\n');
+        };
+        try {
+          const response = await probe(hostname, '/public/availability', {signal, ...options});
+          log({status: response.status});
+          return response;
+        } catch (error) {
+          log({error: error.code ?? error.name}); throw error;
+        }
+      };
+      const staffReply = await route('staff', placement.staffHostname);
+      let publicReply = await route('public', placement.publicHostname, {cookie});
+      if (refreshPublicCookie && publicReply.status === 403) {
+        assert.match(publicReply.body, /src="\/_cloud\/challenge\.js"/);
+        cookie = await solvePublic(signal);
+        publicReply = await route('public after challenge', placement.publicHostname, {cookie});
+        if (!elapsed) process.stderr.write('D621 preparation public cookie ' + JSON.stringify({previousStatus: 403, refreshedStatus: publicReply.status}) + '\n');
+      }
       assert.equal(staffReply.status, 200);
       assert.equal(staffReply.certificateSha256, client.certificateSha256);
       assert.equal(publicReply.status, 200);
@@ -85,7 +146,15 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       assert.deepEqual(JSON.parse(publicReply.body), client.availability);
       if (expectedPublic) assert.equal(publicReply.certificateSha256, expectedPublic);
     };
-    const handover = await target.handover(signal => check(signal, publicResponse.certificateSha256), peer.peerPublicKey);
+    const verifyRoutes = signal => check(signal, publicResponse.certificateSha256);
+    if (stockholm.machineLoss) {
+      const prepareRoutes = signal => check(signal, publicResponse.certificateSha256, true);
+      const checkRoutes = (signal, elapsed) => check(signal, publicResponse.certificateSha256, true, elapsed);
+      const machineLoss = await measureWithVenuePeer({docker, peerId, waitronTunnelImage, target, checkRoutes, prepareRoutes,
+        peer: {...peer, gatewayAddress: placement.address.replace(/\.\d+$/, '.1')}, signal: stockholm.signal});
+      return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true, privatePathRefused: true, machineLoss};
+    }
+    const handover = await target.handover(verifyRoutes, peer.peerPublicKey);
     const publication = performance.now();
     await target.forgetPublicCopy(paid.installationId);
     assert.deepEqual(await phase('stockholm-remote-renew'), {scheduled: true});

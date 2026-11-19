@@ -70,6 +70,14 @@ existing connections or an appliance rollout. Matching handshake age does not fi
 every WireGuard timer or establish the cause of a faster result. The older local
 111-second result and the fresh-peer 14,967 ms milestone remain historical evidence.
 
+The existing Cloud fixture already preserves the key and endpoint, so this comparison
+adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
+separately scoped appliance procedure: define the authenticated trigger, preserve
+current tunnel authority and configuration, bound retries, and test repeated outages,
+lost triggers, active connections and several venues with a joint Cloud receipt.
+Choose and prove the launch recovery target in the selected deployment before making
+an availability promise.
+
 ## Idle venue limit in private Kind
 
 On 19 November 2026, the D621 rehearsal paused renewal on the active gateway.
@@ -93,12 +101,56 @@ seconds. Staff HTTPS and the public request with the original cookie both
 returned HTTP 200. The standby also issued a fresh challenge (200), accepted
 its solution (204) and returned public HTTPS (200) with the new cookie. The
 earlier 403 did not recur. Both traffic runs used packets supplied by the
-fixture. Recovery of an idle box within 90 seconds remains open.
+venue fixture.
 
-The existing Cloud fixture already preserves the key and endpoint, so this comparison
-adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
-separately scoped appliance procedure: define the authenticated trigger, preserve
-current tunnel authority and configuration, bound retries, and test repeated outages,
-lost triggers, active connections and several venues with a joint Cloud receipt.
-Choose and prove the launch recovery target in the selected deployment before making
-an availability promise.
+## Stop a gateway machine in private Kind
+
+On 19 November 2026, a disposable Linux diagnostic stopped the second Kind
+machine after verifying the two HTTPS routes and a handshake two seconds old.
+The first machine hosted the account, the fixed relay backend and the
+Kubernetes controller manager. Kubernetes withdrew the stopped gateway
+endpoint after 50.168 seconds. The standby was on the first machine at the
+end of the run. The venue fixture sent a packet every five seconds.
+
+The combined staff HTTPS, public HTTPS and new handshake check missed the
+90-second deadline. This run measured endpoint withdrawal.
+
+A signed run confirmed the stage that missed the deadline. During setup the
+public cookie returned 403 after the gateway moved off the account machine.
+A fresh challenge restored public HTTPS. During the actual machine stop,
+the standby on the account machine gained the gateway and Kubernetes
+withdrew the old endpoint after 49.163 seconds. A fresh handshake transferred
+bytes and staff returned 200 with its expected certificate. The public route
+again returned 403 with the existing cookie. The test ended at 90 seconds.
+A separate Chromium check showed that an actual browser automatically
+solves this challenge after the source IP changes.
+
+A later signed Kind run used the [Waitron companion from #3849](https://github.com/clintongormley/waitron/pull/3849)
+and its own traffic. Kubernetes withdrew the stopped endpoint at 46.019
+seconds. The replacement exchanged tunnel bytes for the paired key, staff
+HTTPS returned 200 at 51.942 seconds, and public HTTPS returned 403 at
+51.947 seconds with the old cookie. A fresh challenge restored verified
+public HTTPS at 52.185 seconds. Both response bodies and certificates
+passed before the 90-second deadline.
+
+The whole test failed after the stopped node rejoined. The former gateway
+pod was running and unready, but its standby check could not show that
+both the old interface and the readiness marker were absent. The three-minute
+standby check expired. The disposable guest was confirmed absent after
+cleanup.
+
+The follow-up at `4d02f4425033d3ee4a1baca8094b5049c311b906` used one
+private relay address for TCP and UDP. Kubernetes withdrew the endpoint at
+45.878 seconds. A fresh WireGuard handshake followed at 51.660 seconds.
+Staff and public HTTPS returned verified responses at 52.373 and 52.387
+seconds. The public request kept its original cookie. The companion used its
+own traffic and kept its original container, interface and peer key. The
+stopped machine returned with its original identity. Its former gateway no
+longer held the Lease and had neither the active interface nor a readiness
+marker. The disposable guest was removed.
+
+Run the [companion machine-stop check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
+to reproduce this result. The socket test separately changes a relay
+backend address while the old address can still answer and then stops the
+selected path. The Stockholm test still needs to exercise all three machine
+stops and an actual outside address change.

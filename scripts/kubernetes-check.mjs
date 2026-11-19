@@ -3,7 +3,7 @@
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --node-loss checks three control planes without venue images.
 // --storage-loss uses the pinned private store and needs a Linux Docker host.
-// --remote rehearses gateway handover on private Linux Kind.
+// --remote rehearses gateway handover on private Linux Kind; --stop-gateway-node selects machine loss.
 // --services rehearses production-mode signup, pairing and backup on private Linux Kind.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
@@ -109,7 +109,8 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
   return {stopped, replacement};
 }
 
-export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
+export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux, stopGatewayNode = false} = {}) {
+assert.ok(!stopGatewayNode || target === 'kind-remote', 'kubernetes.target');
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
 if (target === 'kind-services' || target === 'kind-remote') {
   const remote = target === 'kind-remote', stage = remote ? 'remote' : 'services';
@@ -119,7 +120,7 @@ if (target === 'kind-services' || target === 'kind-remote') {
   assert.equal(process.platform, 'linux', stage + '.requires_linux');
   const verificationTarget = await readRehearsalVerificationTarget();
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
-  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote});
+  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote, stopGatewayNode});
   return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse});
 }
 if (target === 'kind-storage-identity') {
@@ -380,10 +381,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
     ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss'],
     ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services'], ['--remote', 'kind-remote']]);
-  const target = extra.length ? undefined : file !== undefined ?
+  const stopGatewayNode = mode === '--remote' && file === '--stop-gateway-node';
+  const target = extra.length ? undefined : file !== undefined && !stopGatewayNode ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');
-  try {process.stdout.write(JSON.stringify(await runKubernetesCheck(target)) + '\n');}
+  try {process.stdout.write(JSON.stringify(await runKubernetesCheck(target, {stopGatewayNode})) + '\n');}
   catch (error) {
     if (error.diagnostic) {process.stderr.write('Kubernetes command failure ' + JSON.stringify(error.diagnostic) + '\n'); delete error.diagnostic;}
     throw error;

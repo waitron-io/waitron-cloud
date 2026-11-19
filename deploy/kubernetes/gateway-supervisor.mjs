@@ -48,6 +48,8 @@ export async function runGatewayElection({lease, holder, grant, signal, now = mo
 export async function watchGateway({channel = process, launch, ready = () => {}, unready = () => {}, withdraw, signal}) {
   let deadline, timer, child, exited;
   try {
+    // A readiness marker belongs to this watchdog's own Lease grant.
+    unready();
     await new Promise((resolve, reject) => {
       function finish(error) {
         clearTimeout(timer);

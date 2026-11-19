@@ -1315,6 +1315,34 @@ An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
 Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).
 
+To rehearse losing the active gateway's Kind machine with the real Waitron
+companion, build `deploy/tunnel/Dockerfile` from Waitron revision
+`42e453075c48508a63252caeb86b4a78ff5e249b` in the disposable guest. Set
+`TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE` to the resulting `sha256:` image
+ID and keep the separate Cloud and venue image pins from the services rehearsal.
+
+```sh
+TEST_KUBERNETES_REMOTE_MACHINE_LOSS=1 node --test scripts/kubernetes-remote.test.mjs
+```
+
+With the companion image set, the venue uses the companion's own traffic and
+checks that the original container, tunnel interface and peer key survive.
+Clear the companion image variable and include `iputils-ping` in the Cloud
+image to run the fixture control, which sends a marked ping every five seconds.
+Both paths keep the account machine up. HTTPS and WireGuard go through
+one private relay address. The relay resolves all three node names and
+checks their TCP paths to the gateway Service. The socket test exercises
+a changed backend address and a switch to another node. The Kind test
+measures when Kubernetes withdraws the old endpoint, when WireGuard
+handshakes and when staff and public HTTPS respond. If the public cookie gets
+403, the probe records it and completes a new challenge within the same
+90 seconds from the stop request. The restored machine must return with its
+original identity. The former gateway must no longer hold the Lease and
+must have neither the tunnel interface nor a readiness marker.
+
+You can also run `node scripts/kubernetes-check.mjs --remote --stop-gateway-node`
+with the same image pins.
+
 Use the outside rehearsal to check a stopped Stockholm machine and changes
 to its private address, with the outside TCP and UDP listener and shared ingress.
 

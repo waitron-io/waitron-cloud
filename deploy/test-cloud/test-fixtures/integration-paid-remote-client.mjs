@@ -5,8 +5,16 @@ import {createServer} from 'node:https';
 import {requestIntegrationVenue} from './integration-venue-request.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 
+export async function stageWaitronTunnel(directory, {address, gatewayPublicKey}, gatewayIp) {
+  await mkdir(directory + '/keys', {mode: 0o700});
+  await mkdir(directory + '/control', {mode: 0o700});
+  await writeFile(directory + '/keys/private-key', await readFile(directory + '/wireguard.key'), {mode: 0o600, flag: 'wx'});
+  await writeFile(directory + '/control/peer.json', JSON.stringify({address, gatewayPublicKey, endpoint: gatewayIp + ':51820'}),
+    {mode: 0o600, flag: 'wx'});
+}
+
 // The paired venue keeps both private keys; the account receives only its public peer key and CSR.
-export async function paidRemoteClient(root, {phase, placement, gatewayIp, requestId, stockholmOrigin}, localFetch) {
+export async function paidRemoteClient(root, {phase, placement, gatewayIp, requestId, stockholmOrigin, waitronTunnel}, localFetch) {
   const directory = root + '/remote-peer';
   await mkdir(directory, {mode: 0o700, recursive: true});
   if (phase === 'key') {
@@ -106,8 +114,9 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
     upstream.once('error', () => {res.destroy();});
     req.once('aborted', () => upstream.destroy()); req.pipe(upstream);
   });
-  await new Promise((resolve, reject) => {server.once('error', reject); server.listen(9443, '127.0.0.1', resolve);});
-  await writeFile(directory + '/peer.json', JSON.stringify({address: placement.address,
+  await new Promise((resolve, reject) => {server.once('error', reject); server.listen(waitronTunnel ? 8443 : 9443, '127.0.0.1', resolve);});
+  if (waitronTunnel) await stageWaitronTunnel(directory, placement, gatewayIp);
+  else await writeFile(directory + '/peer.json', JSON.stringify({address: placement.address,
     privateKey: await readFile(directory + '/wireguard.key', 'utf8'), gatewayPublicKey: placement.gatewayPublicKey,
     gatewayEndpoint: gatewayIp + ':51820', upstreamHost: '127.0.0.1', upstreamPort: 9443}), {mode: 0o600, flag: 'wx'});
   return {installationId, csr, certificate, requestId: reply.requestId, availability,

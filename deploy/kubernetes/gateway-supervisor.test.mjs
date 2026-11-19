@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {once} from 'node:events';
+import {EventEmitter, once} from 'node:events';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
@@ -32,6 +33,27 @@ test('a renewal arriving after the local deadline cannot extend gateway authorit
     },
   });
   assert.deepEqual(deadlines, [5000]);
+});
+
+test('a restarted watchdog removes stale readiness before its first Lease update', async t => {
+  const {watchGateway} = await import('./gateway-supervisor.mjs');
+  const state = await mkdtemp(join(tmpdir(), 'gateway-watchdog-'));
+  t.after(() => rm(state, {recursive: true, force: true}));
+  const marker = join(state, 'lease-active');
+  writeFileSync(marker, '');
+  const stop = new AbortController();
+  const watching = watchGateway({
+    channel: new EventEmitter(), signal: stop.signal,
+    launch: () => assert.fail('a standby has no Lease grant'),
+    unready: () => rmSync(marker, {force: true}),
+    withdraw() {},
+  });
+  try {
+    await assert.rejects(readFile(marker), {code: 'ENOENT'});
+  } finally {
+    stop.abort();
+    await watching;
+  }
 });
 
 test('the watchdog withdraws the gateway process group and interface without a renewal', {timeout: 10000}, async t => {
