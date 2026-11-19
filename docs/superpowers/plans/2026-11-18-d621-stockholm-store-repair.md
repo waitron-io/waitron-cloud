@@ -12,4 +12,6 @@ Six drives showed online on the failing Linux rehearsal, but one serving pod nev
 
 The watcher directed one recheck after DNS placement landed (19 November, 04:32), then cleared the separate PR after reviewing the passing result (06:14, Lane G questions). The recheck of `a2a254dbdf` with the landed DNS placement changes passed seven checks. One repair restored both outage objects on both returned disks. Both reads through the returned machine passed. The repair leg took 18.746 seconds and the guest was confirmed absent (`receipts/storage-read-during-outage/post-land-returned-drive-live-02.log`, lines 86–109). See the [peer refresh plan](2026-11-18-d621-store-peer-address-refresh.md) for the previous failed run and the limits of this comparison.
 
+The 07:40 watcher note requires a separate Linux run on the final PR tree after the rebase onto #1316. Record that run in the PR.
+
 Estimate 85 added script lines, 65 added test lines and focused guide updates against main. Reuse the owned Kind cluster, test bucket, fixture credentials, disk check and byte proof. The change stays in the local rehearsal. The later consecutive-outage slice will prove repair for an object nobody reads.
