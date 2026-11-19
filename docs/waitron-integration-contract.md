@@ -416,8 +416,9 @@ retaining the prior placement in `configuration`. Disconnect based on state.
 An automatic retry preserves that stop when the saved peer key matches.
 An explicit operator enable restores setup. A billing lapse clears setup, so
 an automatic retry after Connected returns can restore it with the same key.
-If Cloud returns `403 permission_denied` while the venue is Registered, retry
-on the box's normal refresh. A later Connected trial can make that key eligible.
+If Cloud returns `403 remote_plan_required`, the venue's plan excludes remote
+access. Retry on the box's normal refresh. A Connected trial can make the same
+key eligible.
 
 If you lose the reply, retry with a fresh proof and your persisted peer key.
 The same key, cell and port keep the allocation. Restoring setup advances the
@@ -435,7 +436,7 @@ limits follow the existing machine routes. Failures return `{error:code}`:
 | --- | --- |
 | 400 / 408 / 413 / 415 | `invalid_input`: malformed body, read timeout, size or content type. |
 | 401 | `invalid_proof`: signature, action, proof time, changed key or foreign/expired/untrusted lease. |
-| 403 | `permission_denied`: foreign installation, production, changed venue/environment or withdrawn plan permission; `revoked` also covers supersession; `forbidden` rejects any browser Origin. |
+| 403 | `remote_plan_required`: the signed installation's venue plan excludes remote access; `permission_denied`: foreign installation, production, changed venue/environment or a revoked or superseded installation whose plan excludes remote access; `revoked` also covers supersession; `forbidden` rejects any browser Origin. |
 | 405 | `method_not_allowed`. |
 | 409 | `placement_conflict`: changed placement or a peer key already claimed. |
 | 429 | `rate_limited`, with `Retry-After`. |
