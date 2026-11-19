@@ -73,9 +73,11 @@ try {
     await stopped;
   }
 } catch(error) {
-  console.error(error instanceof Error&&error.message==='backup.installation_issuer_required'
-    ?'Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured'
-    :'Account server failed; check database, migrations and configuration'); process.exitCode = 1;
+  const code=error instanceof Error?error.message:'';
+  if(code.startsWith('billing_methods.'))console.error('Account server refused test payment configuration');
+  else if(code==='backup.installation_issuer_required')console.error('Account server requires CLOUD_INSTALLATION_ISSUER_KEY when backup capture is configured');
+  else console.error('Account server failed; check database, migrations and configuration');
+  process.exitCode = 1;
 } finally {
   stop();
   try {await actionDemo?.close();await running?.close(); captures?.close(); await pool?.end();} catch {process.exitCode = 1;}

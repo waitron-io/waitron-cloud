@@ -316,11 +316,16 @@ CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT=<sandbox-merchant>
 CLOUD_BILLING_SUMUP_SANDBOX_KEY=<sandbox-key>
 ```
 
-Use a restricted Stripe test key when available. Recreate the account service
-with the same Compose files. Allowlisted owners of test venues can then open
-the payment controls. Use `config --quiet` to check the configuration without
-printing the provider values. To disable the controls, set the mode to `off`,
-remove the four provider settings and recreate the account service.
+Use a restricted Stripe test key when available. Use `config --quiet` to
+check the Compose configuration without printing the provider values. Apply
+the settings with the Amazon deployment driver's `up` command below and the
+currently deployed image. Allowlisted owners of test venues can then open the
+payment controls.
+
+Invalid payment settings stop the account service from starting. If the logs
+say it refused the test payment configuration, check the account allowlist and
+provider settings. To bring the service back with payment setup off, set the
+mode to `off`, remove the four provider settings and run `up` again.
 
 On an authorised machine, use Certbot to obtain and renew the public certificate.
 Its HTTP-01 challenge proves the name by serving a temporary response on port 80.

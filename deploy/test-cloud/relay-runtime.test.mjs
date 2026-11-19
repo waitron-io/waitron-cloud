@@ -99,7 +99,7 @@ test('the test Cloud account worker refuses a live Stripe key before listening',
    CLOUD_BILLING_STRIPE_TEST_ACCOUNT:'acct_synthetic',CLOUD_BILLING_STRIPE_TEST_KEY:'sk_live_synthetic',
    CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'});
   await running.close();
- },/account exited 1: Account server failed; check database, migrations and configuration/);
+ },/account exited 1: Account server refused test payment configuration/);
 });
 
 test('relay startup retains distinct private keys and refuses an insecure saved file',async t=>{
