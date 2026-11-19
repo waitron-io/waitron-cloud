@@ -191,9 +191,11 @@ export class PortalApp {
     this.installations.account(ordinary ? state.accountId : undefined);
     if ((page === 'venues' || page === 'remoteAccess' || this.path === '/recover') && ordinary && !this.installations.loaded) void this.installations.load();
     if (page === 'venues' && ordinary && this.usage.organisationId && !this.usage.loaded && !this.usage.error) void this.usage.load();
-    this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined, !restricted);
+    if (state.kind === 'unavailable') this.pairing.suspend();
+    else this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined, !restricted);
     if (this.path === '/connect' && ordinary && !this.pairing.loaded) void this.pairing.load();
-    if (this.sessionPage && state.kind === 'anonymous' && !(this.path === '/connect' && this.link.invalid)) {
+    const malformedPairingLink = this.path === '/connect' && this.link.invalid;
+    if (this.sessionPage && state.kind === 'anonymous' && (state.expired || !malformedPairingLink)) {
       const signedOut = this.#signOutCheck === this.session;
       if(this.path==='/operator/actions')this.#operatorSignin=true;
       this.navigate('/login');

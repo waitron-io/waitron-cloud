@@ -37,6 +37,10 @@ export class PairingController {
     this.#account = id;
     this.#eligible = eligible;
   }
+  suspend() {
+    // A failed session read fences pending replies while retaining the last known account.
+    this.account(this.#account, false);
+  }
   get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
   get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
   #ready(){return !!this.requestId&&!!this.#account&&this.#eligible&&!this.pending&&!this.waiting;}

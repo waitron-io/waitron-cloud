@@ -124,6 +124,10 @@ test('a linked code checks once after the first account and business list arrive
   await controller.load();
   assert.deepEqual(inspections, []);
   assert.equal(controller.code, '');
+  controller.account('first', false);
+  await controller.load();
+  assert.deepEqual(inspections, []);
+  assert.equal(controller.loaded, false);
   controller.account('first');
   assert.equal(controller.code, '');
   await Promise.all([controller.load(), controller.load()]);
