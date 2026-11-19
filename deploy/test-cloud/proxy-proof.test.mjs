@@ -145,3 +145,85 @@ test('the Amazon guest name uses the shared TLS listener, exact authority and a 
  assert.equal((await send(account,account,'/wrong-backend-name')).body,'replaced');
  assert.equal((await send(guest)).status,503);
 });
+
+// Run the real provider and proxy in the same disposable network namespace.
+async function proveAmazonUpload(){
+ const {default:assert}=await import('node:assert/strict');
+ const {startBackupStorage}=await import('./scripts/backup-storage-fixture.mjs');
+ const {bootstrapTestCloud}=await import('./deploy/test-cloud/bootstrap.mjs');
+ const {createRequire}=await import('node:module');
+ const {readFile,writeFile}=await import('node:fs/promises');
+ const {spawn}=await import('node:child_process');
+ const {once}=await import('node:events');
+ const {Agent,request}=await import('node:https');
+ const {createServer}=await import('node:http');
+ const {setTimeout:delay}=await import('node:timers/promises');
+ const {S3Client,PutObjectCommand}=createRequire(process.cwd()+'/packages/backups/package.json')('@aws-sdk/client-s3');
+ await bootstrapTestCloud('/tmp/private');
+ const storage=await startBackupStorage({tokenDuration:'8s',tlsHostname:'waitron.local'});
+ const account=createServer((q,r)=>{r.writeHead(q.url==='/ready'?200:404);r.end();});
+ await new Promise(resolve=>account.listen(3001,'127.0.0.1',resolve));
+ const ca=await readFile('/tmp/private/lan/ca.pem');
+ const agent=new Agent({ca,lookup(_host,options,callback){
+  if(options.all)callback(null,[{address:'127.0.0.1',family:4}]);else callback(null,'127.0.0.1',4);
+ }});
+ const host='waitron.local',endpoint='https://'+host;
+ const bucket='venue-11111111-1111-4111-8111-111111111111',key='incoming/22222222-2222-4222-8222-222222222222';
+ const path='/'+bucket+'/'+key,body=Buffer.from('synthetic backup bytes');
+ const send=(method,path,headers={})=>new Promise((resolve,reject)=>{
+  const req=request(endpoint+path,{agent,servername:host,method,headers,signal:AbortSignal.timeout(2000)},res=>{res.resume();res.once('end',()=>resolve(res.statusCode));});
+  req.once('error',error=>reject(new Error(method+' '+path+' ('+String(req.getHeader('host'))+', Length '+String(req.getHeader('content-length'))+') failed: '+error.code,{cause:error})));
+  req.end(headers['content-length']===1?'x':undefined);
+ });
+ const readConfig=name=>readFile('deploy/test-cloud/'+name+'.cfg','utf8');
+ await writeFile('/tmp/proxy.cfg',(await readConfig('proxy')).replace('account:3000','127.0.0.1:3001'));
+ await writeFile('/tmp/amazon.cfg',(await readConfig('proxy.amazon')).replace('storage:8333',new URL(storage.endpoint).host));
+ await writeFile('/tmp/storage-ca.pem',storage.ca);
+ const start=async enabled=>{
+  const env={...process.env,TEST_CLOUD_HOST:host,TEST_CLOUD_ORIGIN:endpoint,TEST_CLOUD_CERTIFICATE:'/tmp/private/lan/proxy.pem'};
+  if(enabled)env.TEST_CLOUD_STORAGE_CA='/tmp/storage-ca.pem';
+  const child=spawn('haproxy',['-W','-db','-f','/tmp/proxy.cfg','-f','/tmp/amazon.cfg'],{env,stdio:'inherit'});
+  const exited=once(child,'exit');
+  try{
+   for(let n=0;n<30;n++){
+    if(child.exitCode!==null)break;
+    if(await send('GET','/ready').catch(()=>null)===200)return async()=>{child.kill();await exited;};
+    await delay(100);
+   }
+   throw Error('Amazon test proxy never became ready');
+  }catch(error){if(child.exitCode===null)child.kill();await exited;throw error;}
+ };
+ let stop;
+ try{
+  stop=await start(true);
+  const location=await storage.bucket(bucket);
+  const grant=await storage.authority.grant(location,{kind:'capture',bucket,scope:key},storage.ca);
+  const put=async credentials=>{
+   const client=new S3Client({endpoint,region:'local',credentials,forcePathStyle:true,maxAttempts:1,requestChecksumCalculation:'WHEN_REQUIRED',requestHandler:{httpsAgent:agent}});
+   try{return (await client.send(new PutObjectCommand({Bucket:bucket,Key:key,Body:body,ContentLength:body.length}),{abortSignal:AbortSignal.timeout(3000)})).$metadata.httpStatusCode;}
+   catch(error){if(error.$metadata?.httpStatusCode)return error.$metadata.httpStatusCode;throw error;}
+   finally{client.destroy();}
+  };
+  assert.equal(await put(grant.credentials),200,'signed PUT reaches the real storage provider');
+  for(const [method,url,headers,status] of [
+   ['PUT',path,{'content-length':0},400],['PUT',path,{'content-length':536870913},413],
+   ['PUT',path,{'content-length':1,'x-amz-copy-source':'/private/key'},403],
+   ['PUT',path+'?uploads',{'content-length':1},403],['PUT','/'+bucket+'/snapshots/'+key.split('/')[1],{'content-length':1},403],
+   ['GET',path,{},403],['DELETE',path,{},403],['PUT',path,{'content-length':1,host:'other.example.test'},403]
+  ])assert.equal(await send(method,url,headers),status,method+' '+url);
+  assert.equal(await send('PUT',path,{'content-length':1}),403,'unsigned PUT');
+  assert.equal(await put({...grant.credentials,secretAccessKey:'incorrect-test-signing-key'}),403,'incorrect signature');
+  await delay(Math.max(0,Date.parse(grant.expiresAt)-Date.now()+1100));
+  assert.equal(await put(grant.credentials),403,'expired storage grant');
+  await stop();stop=await start(false);
+  assert.equal(await put(grant.credentials),404,'the ordinary proxy leaves the storage path closed');
+ }finally{await stop?.();account.closeAllConnections();await new Promise(resolve=>account.close(resolve));await storage.stop();agent.destroy();}
+}
+
+test('Amazon backup proxy accepts only a bounded signed PUT to the reserved object',{timeout:180000},async()=>{
+ const {fileURLToPath}=await import('node:url');
+ const source=fileURLToPath(new URL('../../',import.meta.url));
+ const result=await exec('docker',['run','--rm','--memory','512m','--mount','type=bind,source='+source+',target=/workspace,readonly',
+  '-w','/workspace',image,'node','--input-type=module','-e','await ('+proveAmazonUpload.toString()+')()'],{timeout:150000,maxBuffer:1024*1024}).catch(error=>assert.fail(error.stderr||error.message));
+ for(const line of result.stdout.split('\n').filter(Boolean))console.log(line);
+});

@@ -116,8 +116,10 @@ export async function startBackupStorage(options = {}) {
 }
 async function startBackupStorageAttempt(options) {
   const tokenDuration = options.tokenDuration ?? "15m";
+  const tlsHostname = options.tlsHostname ?? "host.docker.internal";
   if (!/^\d+[smh]$/.test(tokenDuration))
     throw Error("Invalid local storage token duration");
+  if (!/^[a-z0-9.-]+$/.test(tlsHostname)) throw Error("Invalid local storage TLS hostname");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
   let oidc, child, log, adminClient, allocatedPorts, readiness;
   const managed = new Map();
@@ -184,7 +186,7 @@ async function startBackupStorageAttempt(options) {
         "-subj",
         "/CN=127.0.0.1",
         "-addext",
-        "subjectAltName=IP:127.0.0.1,DNS:host.docker.internal",
+        "subjectAltName=IP:127.0.0.1,DNS:" + tlsHostname,
       ],
       { stdio: "ignore" },
     );

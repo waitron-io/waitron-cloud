@@ -145,3 +145,23 @@ test('the Amazon guest setting reaches only its private reader, certificate impo
   if(name!=='bootstrap'&&name!=='proxy')assert.ok(!service.volumes?.some(v=>v.source===bootstrap.source),name);
  assert.equal(amazon.proxy.volumes.find(v=>v.source===bootstrap.source).read_only,true);
 });
+
+test('the Amazon backup override activates only its intended worker and retains the host budget',async()=>{
+ const {validateDeployment}=await import('../../scripts/test-cloud-deploy.mjs');
+ const backupVerifierImage='sha256:'+'e'.repeat(64);
+ const origin='https://cloud.example.test',certificateSource='/tmp/synthetic-certificates';
+ const render=(withBackups,allProfiles)=>JSON.parse(execFileSync('docker',['compose',
+  ...(allProfiles?['--profile','*']:[]),'--env-file','deploy/test-cloud/test.env',
+  '-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml',
+  ...(withBackups?['-f','deploy/test-cloud/compose.amazon-backups.yaml']:[]),'config','--format','json'],
+  {cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:origin,TEST_CLOUD_CERTIFICATE_SOURCE:certificateSource,CLOUD_VERIFIER_IMAGE:backupVerifierImage}}));
+ const enabled=render(true,true),active=render(true,false),usual=render(false,false);
+ assert.equal(validateDeployment(enabled,{image:enabled.services.account.image,target:'amazon',origin,certificateSource,backupVerifierImage}).ready,true);
+ assert.ok(active.services['backup-worker']);
+ assert.equal(usual.services['backup-worker'],undefined);
+ for(const name of ['remote-reconciler','translation-worker','operations-collector'])
+  assert.equal(active.services[name],undefined);
+ for(const [name,service] of Object.entries(active.services)){
+  assert.equal(service.volumes?.some(v=>v.source==='/var/run/docker.sock')??false,name==='backup-worker',name);
+ }
+});

@@ -10,7 +10,7 @@ import {BackupKeyVault} from '../src/keys.ts';
 import {receipt,type StorageLocation,type StorageScope} from '../src/storage.ts';
 
 const origin='https://capture.example.test';
-async function fixture(){
+async function fixture(uploadOrigin?:string){
  const f=await venueServiceFixture();
  try{
   const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
@@ -20,7 +20,7 @@ async function fixture(){
   const location={endpoint:'https://storage.example.test',bucket:'venue-'+f.venues[0],region:'local'};
   const storage=()=>({async read(k:string){const bytes=objects.get(k);if(!bytes)throw Error('NoSuchKey');return Buffer.from(bytes);},async put(k:string,bytes:Uint8Array){objects.set(k,Buffer.from(bytes));return receipt(bytes);},async remove(k:string){objects.delete(k);}});
   let wait:undefined|(()=>Promise<void>);
-  const captures=new BackupCaptures(f.pool,issuer,origin,{vault,objects:storage,planMode:'test-venue-levels',async grant(l,s){grants.push({location:l,scope:s});await wait?.();return {credentials:{accessKeyId:'synthetic-access',secretAccessKey:'synthetic-secret',sessionToken:'synthetic-token'},expiresAt:new Date(Date.now()+900000).toISOString()};}});
+  const captures=new BackupCaptures(f.pool,issuer,origin,{vault,objects:storage,planMode:'test-venue-levels',uploadOrigin,async grant(l,s){grants.push({location:l,scope:s});await wait?.();return {credentials:{accessKeyId:'synthetic-access',secretAccessKey:'synthetic-secret',sessionToken:'synthetic-token'},expiresAt:new Date(Date.now()+900000).toISOString()};}});
   const catalogue=new BackupCatalogue(f.pool,vault,storage,'test-venue-levels'),legacyCatalogue=new BackupCatalogue(f.pool,vault,storage);
   function lease(expiresAt=Date.now()+3600000){return issuer.issue({origin,leaseId:randomUUID(),installationId:installation,venueId:f.venues[0]!,environment:'test',publicKey,issuedAt:Date.now(),expiresAt});}
   const currentLease=lease();
@@ -55,6 +55,21 @@ for(const enrolled of [false,true])test(`venue capture ${enrolled?'registered':'
   assert.equal(f.grants.length,0);assert.deepEqual(await state(f),before);
  }finally{await f.close();}
 });
+test('a public capture address changes only the signed reservation reply',async()=>{
+ const f=await fixture('https://cloud.example.test');try{
+  await provision(f);
+  const id=randomUUID(),reservation=await f.captures.execute('backup-reserve',f.proof('backup-reserve',id));
+  assert.ok('location' in reservation);
+  assert.deepEqual(reservation.location,{...f.location,endpoint:'https://cloud.example.test'});
+  assert.deepEqual(f.grants,[{location:f.location,scope:{kind:'capture',bucket:f.location.bucket,scope:'incoming/'+id}}]);
+  assert.equal((await f.pool.query('SELECT endpoint FROM backup_locations WHERE venue_id=$1',[f.venues[0]])).rows[0].endpoint,f.location.endpoint);
+  const bytes=Buffer.from('synthetic encrypted archive');
+  f.objects.set('incoming/'+id,bytes);
+  const point=await f.captures.execute('backup-publish',f.proof('backup-publish',id,{...receipt(bytes),capturedAt:new Date().toISOString(),retention:'daily',sourceNodeId:randomUUID(),modules:{core:1}}));
+  assert.equal(point.id,id);
+ }finally{await f.close();}
+});
+
 for(const level of ['connected','hosted'] as const)test(`venue ${level} capture grants keep their original keys and exact scope`,async()=>{
  const f=await fixture();try{
   await set(f,level);await f.catalogue.provision(f.installation,f.location);const id=randomUUID();

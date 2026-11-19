@@ -113,3 +113,13 @@ test('guest certificate renewal keeps the bundle in use unless both public names
  assert.deepEqual(await readFile(join(proxy,'guest-ca.pem')),await readFile(join(dir,'lan/ca.pem')));
  assert.deepEqual((await readdir(proxy)).sort(),['guest-ca.pem','proxy.pem']);
 });
+
+test('Amazon backup proxy receives only the public storage trust certificate',async()=>{
+ const {bootstrapTestCloud}=await api(),dir=await root(),source=await root(),proxy=await root(),origin='https://cloud.example.test';
+ execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(source,'privkey.pem'),'-out',join(source,'fullchain.pem'),'-days','2','-subj','/CN=cloud.example.test','-addext','subjectAltName=DNS:cloud.example.test','-addext','basicConstraints=critical,CA:FALSE'],{stdio:'ignore'});
+ await bootstrapTestCloud(dir,{origin,certificateSource:source,certificateDirectory:proxy,amazonBackups:true});
+ assert.deepEqual((await readdir(proxy)).sort(),['proxy.pem','storage-ca.pem']);
+ const ca=await readFile(join(proxy,'storage-ca.pem'));
+ assert.deepEqual(ca,await readFile(join(dir,'lan/ca.pem')));
+ assert.ok(new X509Certificate(ca).ca);
+});

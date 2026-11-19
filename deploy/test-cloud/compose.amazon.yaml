@@ -92,6 +92,10 @@ services:
           export TEST_CLOUD_GUEST_HOST="menus.$${TEST_CLOUD_HOST}"
           export TEST_CLOUD_GUEST_CA=/run/proxy-certificate/guest-ca.pem
         fi
+        unset TEST_CLOUD_STORAGE_CA
+        if [ "$${CLOUD_TEST_AMAZON_BACKUPS:-0}" = 1 ]; then
+          export TEST_CLOUD_STORAGE_CA=/run/proxy-certificate/storage-ca.pem
+        fi
         exec haproxy -W -db -f /app/deploy/test-cloud/proxy.cfg -f /app/deploy/test-cloud/proxy.amazon.cfg
     volumes: !override
       - test-cloud-public-certificate:/run/proxy-certificate:ro

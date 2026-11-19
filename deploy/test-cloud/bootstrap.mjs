@@ -42,9 +42,9 @@ export async function bootstrapTestCloudIdentity(directory,origin){
   await lease.assertOwned();await rename(scratch,target);return await existing(target,origin);
  }finally{await rm(scratch,{recursive:true,force:true});await lease.release();}
 }
-export async function bootstrapTestCloud(directory,{origin='https://waitron.local:3000',certificateSource,certificateDirectory,guestMenu=false}={}){
+export async function bootstrapTestCloud(directory,{origin='https://waitron.local:3000',certificateSource,certificateDirectory,guestMenu=false,amazonBackups=false}={}){
  canonicalHttpsOrigin(origin);
- if((origin!=='https://waitron.local:3000'||guestMenu)&&(!certificateSource||!certificateDirectory))throw new Error('test_cloud.certificate_source');
+ if((origin!=='https://waitron.local:3000'||guestMenu||amazonBackups)&&(!certificateSource||!certificateDirectory))throw new Error('test_cloud.certificate_source');
  const identity=await bootstrapTestCloudIdentity(directory,origin);
  if(certificateSource){
   let bundle;
@@ -59,9 +59,9 @@ export async function bootstrapTestCloud(directory,{origin='https://waitron.loca
   await mkdir(certificateDirectory,{recursive:true,mode:0o700});await chmod(certificateDirectory,0o700);
   const scratch=join(certificateDirectory,'.proxy-'+randomUUID());
   try{
-   if(guestMenu){
+   for(const name of [...(guestMenu?['guest-ca.pem']:[]),...(amazonBackups?['storage-ca.pem']:[])]){
     await writeFile(scratch,await readFile(join(directory,'lan/ca.pem')),{mode:0o600});
-    await rename(scratch,join(certificateDirectory,'guest-ca.pem'));
+    await rename(scratch,join(certificateDirectory,name));
    }
    await writeFile(scratch,bundle,{mode:0o600});
    await rename(scratch,join(certificateDirectory,'proxy.pem'));
@@ -72,6 +72,6 @@ export async function bootstrapTestCloud(directory,{origin='https://waitron.loca
  return identity;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- try{await bootstrapTestCloud(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',{origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,certificateDirectory:'/run/proxy-certificate',guestMenu:process.env.TEST_CLOUD_GUEST_MENU==='1'});console.log('{"status":"ready"}');}
+ try{await bootstrapTestCloud(process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack',{origin:process.env.TEST_CLOUD_ORIGIN,certificateSource:process.env.TEST_CLOUD_CERTIFICATE_SOURCE,certificateDirectory:'/run/proxy-certificate',guestMenu:process.env.TEST_CLOUD_GUEST_MENU==='1',amazonBackups:process.env.CLOUD_TEST_AMAZON_BACKUPS==='1'});console.log('{"status":"ready"}');}
  catch{console.error('Test Cloud bootstrap failed; inspect its private volume');process.exitCode=1;}
 }

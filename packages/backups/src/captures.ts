@@ -10,6 +10,7 @@ export interface CaptureOptions {
  objects:ObjectFactory;
  grant(location:StorageLocation,scope:StorageScope):Promise<{credentials:StorageCredentials;expiresAt:string}>;
  planMode?:PlanMode;
+ uploadOrigin?:string;
  managedStreams?:ManagedStreamAuthority;
 }
 export type CaptureAction='backup-reserve'|'backup-publish';
@@ -57,7 +58,8 @@ export class BackupCaptures {
    if(this.#options.planMode==='test-venue-levels'&&(current.location.endpoint!==capture.location.endpoint||current.location.bucket!==capture.location.bucket||current.location.region!==capture.location.region))backupFail('conflict');
    const expires=Date.parse(grant.expiresAt);
    if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+901000||!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)backupFail('storage_grant');
-   return {id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location:current.location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,...grant};
+   const location=this.#options.uploadOrigin===undefined?current.location:{...current.location,endpoint:this.#options.uploadOrigin};
+   return {id:current.id,installationId:routing.installationId,venueId:current.venueId,keyVersion:current.keyVersion,location,incomingKey:current.incomingKey,recoveryKey:current.keys.recoveryKey,...grant};
   }
   let metadata:PointMetadata;try{metadata=JSON.parse(routing.body);}catch{return backupFail('invalid_metadata');}
   const p=await this.#catalogue.publish(routing.installationId,routing.operationId,metadata,fence,deadline);

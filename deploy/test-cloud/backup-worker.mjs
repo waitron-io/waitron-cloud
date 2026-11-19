@@ -7,11 +7,16 @@ import {BackupCatalogue} from '../../packages/backups/src/catalogue.ts';
 import {BackupKeyVault} from '../../packages/backups/src/keys.ts';
 import {BackupWorker,backupWorkerStatus,retryFailedBackupJobs} from '../../packages/backups/src/worker.ts';
 import {workerObjects} from '../../packages/backups/src/worker-config.ts';
+import amazonTarget from '../backup-verifier/amazon-test-target.json' with {type:'json'};
 import {openTestBackupVerifier,claimTestBackupWorker} from './backup-verifier-runtime.mjs';
 export {openTestBackupVerifier,claimTestBackupWorker,verifierWaitronRevision} from './backup-verifier-runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 export async function runTestBackupWorker(env=process.env,args=process.argv.slice(2),{expectedRevision}={}){
  const planMode=parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS,env.CLOUD_VENUE_SERVICE_LEVELS);
+ if(env.CLOUD_TEST_AMAZON_BACKUPS==='1'){
+  if(planMode!=='test-venue-levels'||env.NODE_ENV==='production'||env.CLOUD_VERIFIER_SCRATCH_VOLUME!==undefined||!/^sha256:[a-f0-9]{64}$/.test(env.CLOUD_VERIFIER_IMAGE??''))throw Error('test_cloud.amazon_backups');
+  expectedRevision=amazonTarget.runtime.revision;
+ }
  if(!['test-free-paid','test-venue-levels'].includes(planMode))throw Error('test_cloud.plan_mode');
  const mode=args[0];if(args.length>1||mode&&!['--once','--status','--retry-failed'].includes(mode)||!env.DATABASE_URL)throw Error('test_cloud.backup_configuration');
  const scratchVolume=env.CLOUD_VERIFIER_SCRATCH_VOLUME;
@@ -38,7 +43,7 @@ export async function runTestBackupWorker(env=process.env,args=process.argv.slic
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  if(parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS)==='existing')await import('../../packages/backups/src/worker-cli.ts');
+  if(process.env.CLOUD_TEST_AMAZON_BACKUPS!=='1'&&parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS)==='existing')await import('../../packages/backups/src/worker-cli.ts');
   else await runTestBackupWorker();
  }catch{console.error('Test Cloud backup worker failed; check private configuration, pinned image and owned verifier state');process.exitCode=1;}
 }
