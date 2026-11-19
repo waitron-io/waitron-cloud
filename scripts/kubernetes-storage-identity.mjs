@@ -196,12 +196,16 @@ async function checkGrants(context, account, custodyDirectory) {
         assert.ok(Date.now() < expires, 'storage_identity.grant_expired_before_check');
         const originalGrant = client(survivor, restore.credentials);
         assert.deepEqual(await get(originalGrant, snapshot, stopped), bytes);
+        process.stderr.write('Original grant read succeeded at the surviving store before expiry\n');
         await delay(Math.max(0, expires - Date.now() + 2_000), undefined, {signal: stopped});
         await assert.rejects(get(originalGrant, snapshot, stopped),
           error => error.name === 'InvalidAccessKeyId' && error.$metadata?.httpStatusCode === 403);
+        process.stderr.write('Surviving store refused the expired grant\n');
         const survivingKey = await retryApi(() => getJwks(remainingIssuer.metadata.name, stopped), stopped, 'issuer JWKS');
         assert.deepEqual(survivingKey, expectedJwks);
+        process.stderr.write('Requesting a fresh grant while the machine is stopped\n');
         const renewed = await open(reopened, survivor, 'restore', snapshot);
+        process.stderr.write('Fresh grant issued; reading the encrypted snapshot\n');
         assert.deepEqual(await get(client(survivor, renewed.credentials), snapshot, stopped), bytes);
         return {expiredGrantRefused: true, issuerKeyStable: true, issuerSurvivor: survivor.name};
       }});
