@@ -16,7 +16,7 @@ test('a renewal arriving after the local deadline cannot extend gateway authorit
     now: () => tick,
     wait: async ms => {tick += ms;},
     lease: {
-      get: async () => current,
+      get: async () => version === 3 ? {...current, spec: {holderIdentity: 'standby'}} : current,
       replace: async value => {
         assert.equal(value.metadata.resourceVersion, String(version));
         current = {...value, metadata: {resourceVersion: String(++version)}};
