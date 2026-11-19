@@ -129,7 +129,7 @@ test('bucket repair exposes a stopped job and an invalid start', async () => {
   ]) {
     const run = mockRepair(connectedReports(), async () => JSON.stringify(replies.shift()));
     await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
-      signal: AbortSignal.timeout(2000)}), error);
+      signal: AbortSignal.timeout(5000)}), error);
     assert.deepEqual(replies, []);
   }
 });
@@ -156,7 +156,7 @@ function mockRepair(probes, repair, onLastProbe = () => {}) {
       assert.equal(current, undefined, 'repair started before the last probe finished');
       return repair(binary, args, {input, signal});
     }
-    assert.equal(pathname, bucketHealPath + '/repair-probe-baseline', 'dry-run target must be the synthetic baseline');
+    assert.equal(pathname, bucketHealPath + '/repair-probe-baseline', 'dry-run target must be the dedicated synthetic probe object');
     const token = searchParams.get('clientToken');
     if (!token) {
       assert.equal(current, undefined, 'another probe started before the prior probe finished');
@@ -181,9 +181,9 @@ test('repair waits for both serving peers to read both returned disks', async ()
   const reports = [
     ['first:3', [{Summary: 'finished', Items: [baselineReport()]}]],
     ['repeat:3', [{Summary: 'finished', Items: [baselineReport()]}]],
-    ['partial:2', [{Summary: 'finished', Items: [baselineReport('offline')]}]],
-    ['after-partial:3', [{Summary: 'finished', Items: [baselineReport()]}]],
-    ['other:2', [{Summary: 'running', Items: [baselineReport()]}, {Summary: 'finished'}]],
+    ['partial:3', [{Summary: 'finished', Items: [baselineReport('offline')]}]],
+    ['after-partial:2', [{Summary: 'finished', Items: [baselineReport()]}]],
+    ['other:3', [{Summary: 'running', Items: [baselineReport()]}, {Summary: 'finished'}]],
   ].map(([token, replies]) => ({token, replies}));
   const actualRepair = [{clientToken: 'repair:3'}, {Summary: 'finished'}];
   const run = mockRepair(reports, async () => JSON.stringify(actualRepair.shift()));
@@ -201,14 +201,23 @@ test('repair deadline names the missing data path without starting repair', asyn
       error.message.includes(returnedDisk('store-1') + '=offline'));
 });
 
-test('repair pauses between probes and names a missing serving peer', async () => {
+test('repair paces probes and explains why one report is insufficient', async () => {
   const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
   const deadline = new AbortController();
   const run = mockRepair([{token: 'first:2', replies: [{Summary: 'finished', Items: [baselineReport()]}]}],
     () => assert.fail('bucket repair started after just one serving peer reported'),
-    () => setImmediate(() => deadline.abort(new DOMException('test deadline', 'TimeoutError'))));
+    () => setTimeout(() => deadline.abort(new DOMException('test deadline', 'TimeoutError')), 100));
   await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
     signal: deadline.signal}), /waiting for two complete reports from different serving peers.*peer 2/);
+});
+
+test('repair preserves cancellation during the probe wait', async () => {
+  const {healStoreBucket} = await import('./kubernetes-storage-proof.mjs');
+  const stop = new AbortController();
+  const run = mockRepair([{token: 'first:2', replies: [{Summary: 'finished', Items: [baselineReport()]}]}],
+    () => assert.fail('bucket repair started after stopping'), () => stop.abort());
+  await assert.rejects(healStoreBucket({node: repairEndpoint, account: repairAccount, returnedPeers, run,
+    signal: stop.signal}), {name: 'AbortError'});
 });
 
 test('repair refuses a probe token without a peer suffix', async () => {

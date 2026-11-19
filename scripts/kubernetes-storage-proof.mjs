@@ -115,7 +115,7 @@ async function finishMultipart({send}, {Key, UploadId, ETag, last}, encrypted, s
 }
 
 async function runStoreHeal({node, account, run, signal}, dryRun) {
-  // MinIO can delete a dangling version during a dry run. Probe only the synthetic baseline.
+  // MinIO can delete a dangling version during a dry run. Probe only the dedicated fixture.
   const path = '/minio/admin/v3/heal/' + storageBucket + (dryRun ? '/' + repairProbeObject : '');
   const url = new URL(path, 'https://' + node.ip + ':' + storeNodePort);
   const {accessKeyId, secretAccessKey} = account.credentials;

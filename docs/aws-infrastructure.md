@@ -1229,7 +1229,7 @@ the pinned MinIO test image with Docker Buildx and serves it over private HTTPS.
 It starts six peers, with two local volumes per machine. It reads and writes
 encrypted bytes while the first machine is down and checks that multipart
 completion refuses a missing part. After the machine returns, the rehearsal
-waits for six online drives. It uses a dry run on the synthetic baseline object
+waits for six online drives. It uses a dry run on a dedicated synthetic object
 to check both serving peers can read both returned disks. It then requests one
 bucket repair, checks both returned disks for the restored shards and compares
 both objects through the returned machine. The drive wait, probes, repair and

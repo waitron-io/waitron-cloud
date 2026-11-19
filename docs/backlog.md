@@ -1777,7 +1777,7 @@ implementation or production evidence.
   six-peer store. Run `node scripts/kubernetes-check.mjs --storage-loss` in the
   Linux guest to check encrypted objects and multipart completion through the
   first outage. After rejoin the rehearsal checks that both serving peers can
-  read the synthetic baseline from both returned disks. It runs one bucket repair
+  read the dedicated probe object from both returned disks. It runs one bucket repair
   and checks the restored shards and bytes of both outage objects. The rehearsals
   spread Kubernetes DNS across machines before starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
   record the Linux results and remaining storage limits. Run

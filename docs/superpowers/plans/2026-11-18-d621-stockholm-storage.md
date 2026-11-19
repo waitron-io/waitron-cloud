@@ -115,7 +115,7 @@ holds `combined-live-01.log` (lines 77–104 and 155–209) and
 
 The [returned-drive rehearsal](2026-11-18-d621-stockholm-store-repair.md)
 refreshes peer addresses every second. After the first machine returns, it waits
-for six drives and checks that both serving peers can read the synthetic baseline
+for six drives and checks that both serving peers can read the dedicated synthetic probe object
 on both returned disks before requesting one bucket repair. The physical shard
 and encrypted byte checks share the same 180-second deadline as the wait and
 repair. An earlier Linux Kind recheck used the parked
