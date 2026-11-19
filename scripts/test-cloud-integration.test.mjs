@@ -149,7 +149,11 @@ test('production rehearsal refuses a remote target even with a valid local Kind 
       .map(name => [name, () => assert.fail('verifier must not start')])),
   };
   await assert.rejects(runTestCloudClients({services: true, kubernetes: local}), /integration\.image_invalid/);
-  for (const remote of [{remote: {worker: () => assert.fail('remote command must not start')}}, {amazon: {phase: 'before'}}]) {
+  for (const remote of [
+    {remote: {worker: () => assert.fail('remote command must not start')}},
+    {stockholmRemote: {handover: () => assert.fail('gateway command must not start')}},
+    {amazon: {phase: 'before'}},
+  ]) {
     await assert.rejects(runTestCloudClients({services: true, kubernetes: {...local, ...remote}}), /integration\.services_binding/);
   }
 });

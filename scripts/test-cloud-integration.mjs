@@ -208,7 +208,7 @@ export async function runTestCloudClients(options = {}) {
       /^172\.30\.250\.\d{1,3}$/.test(k.proxyIp) && Number.isInteger(k.port) && Number.isInteger(k.mailPort) &&
       typeof k.mailAuthorization === 'string' && typeof k.storeCa === 'string' && typeof k.exec === 'function' &&
       (remote ? typeof k.stockholmRemote?.handover === 'function' && typeof k.stockholmRemote?.projected === 'function' && !k.verifier :
-        ['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function')),
+        !k.stockholmRemote &&['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function')),
       remote ? 'integration.stockholm_remote_binding' : 'integration.services_binding');
     options = {...options, services: true, paidVerification: !remote};
   } else if (options.kubernetes) {
