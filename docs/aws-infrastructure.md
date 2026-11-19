@@ -1329,8 +1329,11 @@ With the companion image set, the venue uses the companion's own traffic and
 checks that the original container, tunnel interface and peer key survive.
 Clear the companion image variable and include `iputils-ping` in the Cloud
 image to run the fixture control, which sends a marked ping every five seconds.
-Both paths keep the machine hosting the account and fixed relay backend up.
-They report when Kubernetes withdraws the old endpoint, when WireGuard
+Both paths keep the account machine up. HTTPS and WireGuard go through
+one private relay address. The relay resolves all three node names and
+checks their TCP paths to the gateway Service. The socket test exercises
+a changed backend address and a switch to another node. The Kind test
+measures when Kubernetes withdraws the old endpoint, when WireGuard
 handshakes and when staff and public HTTPS respond. If the public cookie gets
 403, the probe records it and completes a new challenge within the same
 90 seconds from the stop request. The restored machine must return with its
