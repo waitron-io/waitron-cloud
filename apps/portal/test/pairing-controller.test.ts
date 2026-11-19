@@ -106,10 +106,13 @@ test(`${approve?'approval':'inspection'} still refuses malformed code ${JSON.str
   assert.equal(controller.error,'pairCodeError');assert.equal(controller.codeError,true);assert.equal(calls.length,before);
 });
 
-function linkedPairing() {
+function linkedPairing(businessesReady?: Promise<void>) {
   const inspections: unknown[] = [];
   const controller = new PairingController(() => {}, async <T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> => {
-    if (path === '/pairing/businesses') return {ok: true, value: {businesses: [business]} as T};
+    if (path === '/pairing/businesses') {
+      await businessesReady;
+      return {ok: true, value: {businesses: [business]} as T};
+    }
     assert.equal(path, '/pairing/inspect');
     inspections.push(body);
     return {ok: true, value: view as T};
@@ -150,3 +153,21 @@ for (const exit of ['sign out', 'switch accounts', 'replace the request', 'leave
     assert.equal(controller.loaded, true);
   });
 }
+
+test('a session outage fences the pending business list and keeps the unchecked code for the same account', async () => {
+  let releaseBusinesses!: () => void;
+  const businessesReady = new Promise<void>(resolve => { releaseBusinesses = resolve; });
+  const {controller, inspections} = linkedPairing(businessesReady);
+  controller.account('first');
+  const loading = controller.load();
+  controller.suspend();
+  releaseBusinesses();
+  await loading;
+  assert.equal(controller.loaded, false);
+  assert.deepEqual(inspections, []);
+
+  controller.account('first');
+  await controller.load();
+  assert.deepEqual(inspections, [{requestId, code: '01234567'}]);
+  assert.deepEqual(controller.view, view);
+});

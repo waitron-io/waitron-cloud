@@ -774,7 +774,7 @@ full consumer pins before the affected adapters. Lane D retains deployment/D88.
    Choose the business if asked and approve the venue. With a request-only link,
    enter the code shown on the box. If Cloud refuses the code, you can retry it
    by hand. Open the box’s link again if you leave sign-in to create an account or
-   reset your password, reload the page, or change accounts.
+   reset your password, reload the page, change accounts, or your session expires.
 4. The local server retrieves the approval through an outbound connection and completes
    registration. Cloud does not need an inbound route to the venue for this exchange.
 5. Waitron shows remote-access and backup setup separately. Registration alone does
