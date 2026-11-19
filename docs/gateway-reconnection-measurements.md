@@ -70,6 +70,21 @@ existing connections or an appliance rollout. Matching handshake age does not fi
 every WireGuard timer or establish the cause of a faster result. The older local
 111-second result and the fresh-peer 14,967 ms milestone remain historical evidence.
 
+## Idle venue limit in private Kind
+
+On 19 November 2026, the D621 rehearsal paused renewal on the active gateway.
+The standby was ready and the old WireGuard interface was gone after 17.3
+seconds. The venue's previous handshake was about one second old when the
+fault began. The same peer sent keepalives through the existing endpoint and
+started a new handshake about 142 seconds after the pause. The capture of UDP
+packet lengths and `wg show wg-cloud latest-handshakes` on both ends recorded
+the new exchange and subsequent tunnel bytes.
+
+The idle venue missed the 90-second handover deadline. An extra 60 seconds
+of observation captured the new handshake and left the joint staff and
+public HTTPS check unresolved. Keep the deadline when measuring recovery
+with outbound venue traffic.
+
 The existing Cloud fixture already preserves the key and endpoint, so this comparison
 adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
 separately scoped appliance procedure: define the authenticated trigger, preserve
