@@ -1,49 +1,49 @@
 # Cloud backup and restore check on the Amazon test machine
 
-After setup, the existing paired test box can send a synthetic, non-fiscal backup.
-The same encrypted backup is retained and passes the isolated data restore check.
+After one private setup, the paired test box can send a small synthetic, non-fiscal
+backup. In the portal's Venues page, you can see that same backup marked Verified.
 The watcher put this first on 19 November at 09:16 under the owner's 16 November
-test-workflow request in the [Amazon plan](2026-11-16-test-cloud-aws.md).
-This proposal awaits watcher clearance. Guest menus, switch trials, email,
-continuous streams, ordinary recovery and fiscal verification follow their own work.
+request in the [Amazon plan](2026-11-16-test-cloud-aws.md). This proposal awaits
+watcher clearance. Guest menus, switch trials and email follow this slice.
 
-1. **Accept the box's upload on existing HTTPS.** In `packages/backups/src/captures.ts`
-   and `deploy/test-cloud/{account-worker,service-runtime}.mjs`, allow the explicit
-   Amazon test setting to substitute the canonical account origin only in the
-   response to the box's signed reservation. Keep the catalogue, scoped credential
-   exchange and all server-side object operations on private storage. Have
-   `proxy.amazon.cfg` forward only the signed upload's `PUT /venue-<UUID>/incoming/<UUID>`
-   on the exact HTTPS host. Preserve the signed Host, path, query and headers.
-   The proxy verifies `waitron.local` against the private storage CA's public
-   certificate copied by `bootstrap.mjs` into its existing certificate volume. Storage has no
-   published port. Use the existing private bucket setup and
-   `BackupCatalogue.provision` for one synthetic test venue after confirming
-   current backup permission. Use `venue-service-captures.test.ts` for response
-   location and private grant location, and `proxy-proof.test.mjs` for the real
-   signed upload, rejection of other storage operations and backend TLS refusal.
-2. **Run the existing verifier with bounded storage.** Reuse the stage mounts
-   from #1285 and the disk-backed verifier from #1289. Add an explicit
-   `compose.amazon-backups.yaml` opt-in and validate it in
-   `scripts/test-cloud-deploy.mjs`. Mount Docker control only in the trusted
-   backup worker. Keep the verifier child networkless and retain its 1 GiB
-   memory limit. Pass the stage, scratch and immutable image settings only to
-   their consumers in `runtime.mjs`. Use the repository's streamed target and
-   matching Waitron verifier image. Confirm the real box's archive compatibility
-   before enabling it. The existing verification policy and catalogue APIs
-   handle admission. Use `test-cloud-deploy.test.mjs` for rendered mount and
-   profile admission, and `backup-worker.test.mjs` for image and scratch wiring.
-   Measure capacity with the existing disk/RAM floors and 512 MiB archive
-   ceiling. Stop for the watcher if the current machine cannot fit it.
-3. **Exercise one real backup.** Use named failing tests before each change,
-   then repeat them with disposable PostgreSQL and Linux where needed. Once
-   reviewed and green, use the existing private rollback procedure and stage
-   within the running host's space. Use one synthetic capture from the
-   pre-production box to show upload, retention of matching bytes and the
-   verifier's result. Read back the capture digest, child cleanup, peak resource
-   use and continued Staff access. The source stays the sole writer. Record the
-   result in `docs/test-cloud.md` and `docs/backlog.md`.
+1. **Check the inputs first.** Read the reserved test box's current image and pairing
+   without changing them. The 18 November 21:14 trial left revision `7cf65e7eea`
+   paired, but the current source and pairing need a fresh check. Agree a synthetic
+   non-fiscal venue on that box before capture. Leave the owner's restored data alone.
+   Rehearse an archive from that source on disposable Linux. Verify compatibility
+   and size against the standard pinned `deploy/backup-verifier/target.json` image
+   with 1 GiB memory and 256 MiB scratch. Use that profile, which needs no new
+   disk stages. Measure the image and peak RAM/disk against the current host floors.
+   If the archive needs a different target or disk-backed scratch, stop for a
+   smaller plan decision using the measured sizes.
+2. **Accept the upload on existing HTTPS.** In `packages/backups/src/captures.ts`
+   and `deploy/test-cloud/{account-worker,service-runtime}.mjs`, substitute the
+   canonical origin only in the reply to the signed reservation in explicit Amazon
+   test mode. Keep the stored location, grant exchange and server-side object
+   traffic private. In `proxy.amazon.cfg`, forward only a length-bounded
+   `PUT /venue-<UUID>/incoming/<UUID>` on the exact host. Preserve signed fields,
+   allow the SDK's `x-id=PutObject` query and strip forwarding headers. Refuse other
+   storage methods, paths, copy headers and queries. Storage checks the scoped
+   signature. The proxy verifies `waitron.local` with the public portion of the
+   private storage CA from `bootstrap.mjs` in the existing certificate volume.
+   `venue-service-captures.test.ts` checks the split and the test-only gate.
+   `proxy-proof.test.mjs` checks a real signed PUT, refusals and backend TLS.
+3. **Use the existing verifier and show the result.** Opt in through the Amazon
+   Compose configuration. Wire the immutable image and validate the selected
+   worker and mount roles in `scripts/test-cloud-deploy.mjs`. Only the trusted
+   worker gets Docker control and private controller state. Its child has no
+   network. Use `test-cloud-deploy.test.mjs` for opt-in and mount refusals and
+   `backup-worker.test.mjs` for the pinned image and controller. Add private
+   operator steps to `docs/test-cloud.md`: create the synthetic venue's bucket,
+   call `BackupCatalogue.provision` on that paired installation and install the
+   existing verification policy. Use the existing backup and rollback procedure.
+   After named tests, whole-branch review and green CI, use the running host for
+   one agreed synthetic capture. Read back matching bytes, the check, child
+   cleanup and continued Staff access. Show the owner the Verified row and
+   update `docs/backlog.md`. The source stays the sole writer.
 
-Estimate +230/−25 lines of runtime and configuration, +200/−10 of tests and
-about 40 lines of guides. If it needs separate pull requests, the first delivers
-upload and retention with verification pending. The second verifies that same
-retained capture. The plan uses the existing machine, DNS, disk and test box.
+Estimate +150/−15 runtime and configuration lines, +140/−10 test lines and
+about 40 guide lines. The existing machine, disk, DNS and 512 MiB archive ceiling
+stand. The continuous-stream endpoint stays private, so stream uploads may retry.
+Show the retained backup result only. Restoring onto a box and fiscal checks
+remain separate.
