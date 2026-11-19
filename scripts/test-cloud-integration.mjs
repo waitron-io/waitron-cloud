@@ -809,11 +809,12 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       if (services) {
         if (kubernetes.stockholmRemote) {
           journeyStage = 'stockholm-remote';
+          const {installationId, venueId} = evidence.registration;
           const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
           const remote = await proveIntegrationPaidRemote({docker, control, account, image, runId,
-            paid: {id, stateVolume, venueRoot, organisationId, venueId: persisted.venueId, installationId: persisted.installationId},
+            paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), revoke: () => api('/api/account/installations/revoke', {installationId: persisted.installationId}, browser),
+              origin, signal: runSignal(), revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
             }, own: id => {owned.push(id); record('container', id);}});
           result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
           return;
