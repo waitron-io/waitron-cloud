@@ -143,7 +143,7 @@ export async function runKubernetesServices(context) {
       const settings = await configureServices(context, kube, store, custody);
       const {ca, mailAuthorization, config} = settings;
       await create(servicesPod(tag, nodes[0].name, remote));
-      await create(servicesInspection(tag, remote ? config.gateway.cellId : undefined));
+      await create(remote ? servicesInspection(tag, config.gateway.cellId, nodes[0].name) : servicesInspection(tag));
       await kube(['wait', '--for=condition=Ready', 'pod/cloud-services', '--timeout=180s']);
       await kube(['wait', '--for=condition=Ready', 'pod', '-l', 'job-name=services-inspection', '--timeout=180s']);
       const exec = (pod, container, command, input, limit) =>
@@ -221,7 +221,7 @@ export async function runKubernetesServices(context) {
       for (const [name, args] of [
         ['gateway candidates', ['get', 'pods', '-l', 'app=remote-gateway', '-o', 'wide']],
         ['gateway processes', ['logs', '-l', 'app=remote-gateway', '--tail=20', '--prefix']],
-        ['remote worker', ['logs', 'pod/remote-worker', '--tail=20']],
+        ['remote worker', ['logs', '-l', 'app=remote-worker', '--tail=20', '--prefix']],
       ]) {
         const log = await kube(args, undefined, true).catch(() => '');
         if (log) process.stderr.write(name + '\n' + log + '\n');

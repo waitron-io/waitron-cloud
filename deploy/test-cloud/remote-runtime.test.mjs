@@ -57,6 +57,38 @@ test('volume-backed remote reconciler publishes paid routes and trusted certific
  await assert.rejects(api.openTestRemoteRuntime(options),/test_cloud.remote_cell_conflict/);
 });
 
+test('Secret-backed runtime reuses the saved public certificate without writing a local copy', {timeout:30000}, async t=>{
+ const {openTestRemoteRuntime}=await import('./remote-runtime.mjs');
+ const db=await venueServiceFixture();t.after(()=>db.close());
+ const directory=await mkdtemp(join(tmpdir(),'cloud-remote-secret-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ await bootstrapTestCloud(directory);
+ const venue=db.venues[0],mode='test-venue-levels';
+ await set(db,'connected',venue);
+ const {id}=(await db.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venue])).rows[0];
+ const options={pool:db.pool,directory,mode},local=await openTestRemoteRuntime(options);
+ const peer=generateKeyPairSync('x25519').publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64');
+ await new RemoteAccessStore(db.pool,mode).provision(id,local.cellId,peer);
+ await local.worker.schedule();
+ await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE kind<>'certificate_public'");
+ assert.equal(await local.worker.runOnce(),true);
+ const folder=join(directory,'remote',id),served=join(directory,'public-certs',venue+'.pem');
+ const saved={pem:await readFile(served,'utf8'),csr:await readFile(join(folder,'request.pem'),'utf8')};
+ await rm(folder,{recursive:true});await rm(served);
+ const writes=[],hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+ const publication={cellId:local.cellId,readManifest:()=>readFile(join(directory,'gateway-manifest.json'),'utf8'),
+  readPublicCertificate:async installation=>installation===id?saved:undefined,
+  publishPublicCertificate:async (installation,venueId,copy)=>{writes.push({
+   installation,venueId,certificate:hash(copy?.pem??''),request:hash(copy?.csr??''),
+  });}};
+ const runtime=await openTestRemoteRuntime({...options,publication});
+ const due=await db.pool.query("UPDATE remote_configuration_jobs SET available_at=clock_timestamp() WHERE kind='certificate_public' AND target_id=$1 AND last_success_at IS NOT NULL",[id]);
+ assert.equal(due.rowCount,1);
+ assert.equal(await runtime.worker.runOnce(),true);
+ assert.deepEqual(writes,[{installation:id,venueId:venue,certificate:hash(saved.pem),request:hash(saved.csr)}]);
+ await assert.rejects(stat(folder),{code:'ENOENT'});
+ await assert.rejects(stat(served),{code:'ENOENT'});
+});
+
 // Startup must reject a substituted authority rather than signing a new trusted route set.
 test('remote startup rejects private-key mismatch, bad permissions, corrupt signatures and invalid mode', {timeout:30000},async t=>{
  const {openTestRemoteRuntime}=await import('./remote-runtime.mjs'),db=await database();t.after(()=>db.close());

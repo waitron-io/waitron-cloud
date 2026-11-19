@@ -5,10 +5,37 @@ import {createSocket} from 'node:dgram';
 import {EventEmitter, once} from 'node:events';
 import {createConnection, createServer} from 'node:net';
 import {createInterface} from 'node:readline';
+import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 import * as remoteRehearsal from './kubernetes-remote.mjs';
+
+test('publication workers start away from the account and use different machines', async t => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'cloud-remote-workers-'));
+  t.after(() => rm(runtimeDirectory, {recursive: true, force: true}));
+  await mkdir(join(runtimeDirectory, 'public-certs'));
+  for (const file of ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json',
+    'gateway-bot.key', 'public-certs/default.pem']) await writeFile(join(runtimeDirectory, file), 'fixture');
+  const placed = Error('worker manifest captured');
+  await assert.rejects(remoteRehearsal.startRemoteRehearsal({
+    context: {nodes: [{name: 'account-node'}]}, tag: 'owned:cloud',
+    settings: {config: {gateway: {cellId: 'fixture-cell'}}, tls: {root: 'root', caKey: 'key'}, runtimeDirectory},
+    async create(value) {
+      if (value.metadata?.name !== 'remote-worker') return;
+      assert.equal(value.kind, 'Deployment');
+      assert.equal(value.spec.replicas, 1);
+      const {affinity} = value.spec.template.spec;
+      assert.deepEqual(affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+        [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: ['account-node']}]}]);
+      assert.deepEqual(affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution,
+        [{labelSelector: {matchLabels: {app: 'remote-worker'}}, topologyKey: 'kubernetes.io/hostname'}]);
+      throw placed;
+    },
+  }), error => error === placed);
+});
 
 test('handover can use the fractional time left after pausing the election', async () => {
   assert.equal(await remoteRehearsal.untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
@@ -110,7 +137,7 @@ test('a failed public challenge is reported within the machine-stop clock', asyn
 test('the paired venue keeps its endpoint through an elected gateway handover', {
   skip: process.env.TEST_KUBERNETES_REMOTE !== '1' || Boolean(process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE), timeout: 35 * 60 * 1000,
 }, async () => {
-  const {remote} = await runKubernetesCheck('kind-remote');
+  const {remote, nodes} = await runKubernetesCheck('kind-remote');
   assert.equal(remote.pairing.persistedRenewal, true);
   for (const key of ['staffHttps', 'publicHttps', 'unknownNameRefused', 'wrongCertificateRefused', 'privatePathRefused']) {
     assert.equal(remote[key], true, key);
@@ -120,6 +147,11 @@ test('the paired venue keeps its endpoint through an elected gateway handover', 
   assert.ok(remote.handover.durationMs <= 90000);
   assert.ok(remote.certificateReplacementMs <= 180000);
   assert.ok(remote.withdrawalMs <= 180000);
+  const loss = remote.publicationMachineLoss;
+  assert.equal(loss.stopped, loss.originalNode);
+  assert.equal(new Set([nodes[0].name, loss.stopped, loss.survivingNode]).size, 3);
+  assert.ok(loss.withdrawnSequence > loss.originalSequence);
+  assert.ok(loss.failoverMs <= 90000);
   assert.deepEqual(remote.cleanup.remaining, []);
   console.log('D621 gateway timings (ms)', {handover: remote.handover.durationMs,
     certificateReplacement: remote.certificateReplacementMs, withdrawal: remote.withdrawalMs});

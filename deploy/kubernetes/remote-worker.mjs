@@ -36,9 +36,20 @@ export function secretArtifacts({secret, cellId, trust}) {
         return {...previous, manifest};
       });
     },
-    async publishPublicCertificate(venueId, pem) {
+    async readPublicCertificate(installationId) {
+      if (!isUuid(installationId)) throw Error('remote.publication_installation');
+      const {certificates, publicRequests = {}} = decode(await secret.get());
+      const venueId = Object.keys(publicRequests).find(venue => publicRequests[venue]?.installationId === installationId);
+      if (venueId && certificates[venueId] && publicRequests[venueId].csr) {
+        return {pem: certificates[venueId], csr: publicRequests[venueId].csr};
+      }
+    },
+    async publishPublicCertificate(installationId, venueId, {pem, csr}) {
       if (!isUuid(venueId)) throw Error('remote.publication_venue');
-      await update(previous => ({...previous, certificates: {...previous.certificates, [venueId]: pem}}));
+      if (!isUuid(installationId)) throw Error('remote.publication_installation');
+      // Keep the gateway's certificate projection and the worker's reusable request in one versioned write.
+      await update(previous => ({...previous, certificates: {...previous.certificates, [venueId]: pem},
+        publicRequests: {...previous.publicRequests, [venueId]: {installationId, csr}}}));
     },
   };
 }

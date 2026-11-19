@@ -88,3 +88,8 @@ test('snapshot inspection uses worker storage credentials without account signin
   assert.deepEqual(inspect.envFrom, [{secretRef: {name: 'services-backup'}}]);
   assert.deepEqual(spec.volumes.map(volume => volume.name), ['db-ca', 'store-ca']);
 });
+
+test('remote inspection stays on the account machine during a worker-machine stop', () => {
+  const {spec} = deployment.servicesInspection('owned:cloud', 'fixture-cell', 'account-node').spec.template;
+  assert.equal(spec.nodeName, 'account-node');
+});

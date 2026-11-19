@@ -104,6 +104,7 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,re
  await mkdir(join(directory,'remote'),{recursive:true,mode:0o700});
  const artifacts={
   async readPublicCertificate(id){
+   if(publication)return publication.readPublicCertificate(id);
    const target=publicTarget(directory,id);
    try{return {pem:await privateFile(join(target,'key.pem'))+await privateFile(join(target,'certificate.pem')),csr:await privateFile(join(target,'request.pem'))};}catch(error){if(error.code!=='ENOENT')throw error;}
   },
@@ -111,8 +112,11 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,re
    if(!isUuid(venueId)||!cells.length||cells.some(cell=>cell!==cellId))throw Error('test_cloud.remote_target');
    const target=publicTarget(directory,id),begin=copy.pem.indexOf('-----BEGIN CERTIFICATE-----');if(begin<0)throw Error('test_cloud.remote_state_invalid');
    const key=createPrivateKey(copy.pem).export({format:'pem',type:'pkcs8'}),chain=copy.pem.slice(begin);
-   if(publication)await publication.publishPublicCertificate(venueId,copy.pem);
-   else await atomic(join(directory,'public-certs',venueId+'.pem'),copy.pem);
+   if(publication){
+    await publication.publishPublicCertificate(id,venueId,copy);
+    return {copied:cells,complete:true};
+   }
+   await atomic(join(directory,'public-certs',venueId+'.pem'),copy.pem);
    await mkdir(target,{recursive:true,mode:0o700});
    await atomic(join(target,'key.pem'),key);await atomic(join(target,'request.pem'),copy.csr);await atomic(join(target,'certificate.pem'),chain);
    if(id!==venueId)await rm(join(directory,'public-certs',id+'.pem'),{force:true});return {copied:cells,complete:true};

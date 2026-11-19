@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import {createHash, createPublicKey, X509Certificate} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {caVolume, cloudContainer, cleanUp, requireTls} from './kubernetes-database.mjs';
+import {verifyManifest} from '../packages/remote-access/src/manifest.ts';
 import {separateByHost} from './kubernetes-placement.mjs';
 
 export async function untilRemote(probe, ms, signal, stage) {
@@ -126,12 +128,30 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     CLOUD_VENUE_SERVICE_LEVELS: '0', CLOUD_STOCKHOLM_REMOTE_CELL: cellId, LOCAL_STACK_CONFIG_DIR: '/work'}).map(([name, value]) => ({name, value})));
   worker.volumeMounts.push({name: 'identity', mountPath: '/identity', readOnly: true}, {name: 'work', mountPath: '/work'});
   worker.readinessProbe = {exec: {command: ['test', '-f', '/tmp/remote-worker-ready']}, periodSeconds: 1};
-  await create({apiVersion: 'v1', kind: 'Pod', metadata: {name: 'remote-worker'}, spec: {
-    restartPolicy: 'Never', serviceAccountName: 'remote-worker', containers: [worker], volumes: [caVolume,
-      {name: 'identity', secret: {secretName: 'remote-worker-identity', defaultMode: 384}}, {name: 'work', emptyDir: {}}],
+  const workerLabels = {app: 'remote-worker'}, accountNode = nodes[0].name;
+  const affinity = {...separateByHost(workerLabels), nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {
+    nodeSelectorTerms: [{matchExpressions: [{key: 'kubernetes.io/hostname', operator: 'NotIn', values: [accountNode]}]}],
+  }}};
+  await create({apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
+    replicas: 1, selector: {matchLabels: workerLabels}, template: {metadata: {labels: workerLabels}, spec: {
+      affinity, serviceAccountName: 'remote-worker', containers: [worker], volumes: [caVolume,
+        {name: 'identity', secret: {secretName: 'remote-worker-identity', defaultMode: 384}}, {name: 'work', emptyDir: {}}],
+    }},
   }});
-  await kube(['wait', '--for=condition=Ready', 'pod/remote-worker', '--timeout=180s']);
   const call = (args, limit) => kube(args, undefined, false, limit);
+  const readyWorkers = async (count, limit) => {
+    const {items} = JSON.parse(await call(['get', 'pods', '-l', 'app=remote-worker', '-o', 'json'], limit));
+    const rows = items.filter(row => !row.metadata.deletionTimestamp);
+    return rows.length === count && rows.every(row => row.status.conditions?.some(
+      condition => condition.type === 'Ready' && condition.status === 'True')) && rows;
+  };
+  const [originalWorker] = await untilRemote(limit => readyWorkers(1, limit), 180000, signal, 'publication_worker');
+  assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
+  const trust = createPublicKey(bootstrap['gateway-issuer.pem']);
+  async function readPublication(limit) {
+    const secret = JSON.parse(await call(['get', 'secret', 'remote-routes', '-o', 'json'], limit));
+    return {secret, generation: JSON.parse(Buffer.from(secret.data['routes.json'], 'base64'))};
+  }
   const pods = limit => readGatewayPods(call, limit);
   const candidates = await untilRemote(async limit => {
     const rows = await pods(limit);
@@ -182,9 +202,31 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
           console.log(JSON.stringify({sequence, routes: routes.length, certificate: pem ? new X509Certificate(pem).fingerprint256.replaceAll(':','').toLowerCase() : null}));
         `, venueId], limit))));
       },
-      async forgetPublicCopy(id) {
-        assert.match(id, /^[a-f0-9-]{36}$/);
-        await exec('remote-worker', ['rm', '/work/remote/' + id + '/key.pem']);
+      async forgetPublicCopy(venueId, installationId) {
+        const {secret, generation} = await readPublication(signal);
+        const saved = generation.publicRequests?.[venueId];
+        assert.equal(saved?.installationId, installationId, 'remote.publication_request_binding');
+        delete saved.csr;
+        secret.data['routes.json'] = Buffer.from(JSON.stringify(generation)).toString('base64');
+        await kube(['replace', '-f', '-'], JSON.stringify(secret), false, signal);
+      },
+      async publication(venueId, limit) {
+        const {generation} = await readPublication(limit);
+        const {sequence, routes} = verifyManifest(JSON.parse(generation.manifest), trust, cellId);
+        const pem = generation.certificates[venueId], csr = generation.publicRequests?.[venueId]?.csr;
+        return {sequence, routes, certificate: pem && new X509Certificate(pem).fingerprint256.replaceAll(':', '').toLowerCase(),
+          request: csr && createHash('sha256').update(csr).digest('hex')};
+      },
+      async stopPublicationWorker(whileStopped) {
+        await call(['scale', 'deployment/remote-worker', '--replicas=2'], signal);
+        const rows = await untilRemote(limit => readyWorkers(2, limit), 180000, signal, 'publication_workers');
+        const original = rows.find(row => row.metadata.uid === originalWorker.metadata.uid);
+        assert.ok(original, 'remote.original_publication_worker_missing');
+        const originalNode = original.spec.nodeName;
+        const survivingNode = rows.find(row => row !== original).spec.nodeName;
+        assert.equal(new Set([accountNode, originalNode, survivingNode]).size, 3, 'remote.publication_worker_placement');
+        const result = await stopNode(originalNode, {whileStopped});
+        return {...result, originalNode, survivingNode};
       },
     };
   } catch (failure) {
