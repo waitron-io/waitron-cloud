@@ -563,7 +563,7 @@ time it was hidden from Venues and Remote access. Both writes take
 `{"installationId":"<uuid>"}`. The list and removal reply include
 `portalRemovedAt`, which is null on a listed connection you can still see.
 A currently shared guest menu makes removal return `409 guest_menu_shared` until
-you stop sharing it. Recovery and Billing still have the venue.
+you stop sharing it. The venue stays in Billing, and test venues also stay in Recovery.
 
 All three routes require a live customer membership. The writes also require
 ownership, the exact Origin and an anti-forgery token (CSRF). Account routes

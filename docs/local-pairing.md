@@ -132,10 +132,10 @@ Cloud. This stops its Cloud connection and hides its card, even if you already
 stopped the connection. If a guest menu is shared, stop sharing it under
 **Remote access** first.
 
-Local trading continues, and stored backups remain available through Recovery.
-Charges continue, and you can still find the venue in **Billing**. You can retry
-if you lose the removal reply. Replacement recovery issues a fresh installation
-identity.
+Local trading continues and Cloud keeps your saved backups. For a test venue,
+you can still select it in Recovery. Charges continue and the venue stays in
+**Billing**. You can retry if you lose the removal reply. Replacement recovery
+issues a fresh installation identity.
 
 Before public deployment, complete ingress controls and
 operation/pairing audit retention work in the backlog. This local proof does not establish an

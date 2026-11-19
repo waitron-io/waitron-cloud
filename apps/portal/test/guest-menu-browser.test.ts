@@ -46,5 +46,9 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
   await stopSharing.waitFor();
   await refresh.click();
   await stopSharing.click();await enable.waitFor();
+  await page.reload();
+  await page.getByText(c.accessStopped,{exact:true}).waitFor();
+  await page.getByRole('button',{name:c.guestMenuTitle,exact:true}).click();
+  await enable.waitFor();
  }finally{await portal.close();}
 });

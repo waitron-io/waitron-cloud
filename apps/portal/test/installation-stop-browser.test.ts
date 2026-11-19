@@ -65,7 +65,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(locale==='en'&&theme==='light'&&width===390){
    installations=initialRows.map(row=>({...row,revokedAt:stamp,portalRemovedAt:stamp}));
    await page.evaluate(()=>(window as any).app.installations.load());
-   assert.equal(await page.getByText('Removed venues remain in Billing and Recovery.',{exact:true}).count(),1);
+   assert.equal(await page.getByText('Removed venues stay in Billing. Test venues are also in Recovery.',{exact:true}).count(),1);
   }
  }finally{await browser.close();}
 });
