@@ -206,6 +206,11 @@ for (const path of ['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.
   }));
 }
 
+test('a standalone Amazon test verifier pin edit selects the venue proof', () => fixture(({put, commit, plan, pr}) => {
+  put('deploy/backup-verifier/amazon-test-target.json', '{}\n');
+  assert.equal(plan('venue', pr(commit())).required, true);
+}));
+
 test('deleting a consumed backend source still selects cost', () => fixture(({git, put, commit, plan, pr}) => {
   put('packages/remote-access/src/gateway-cli.ts'); const base = commit();
   git('rm', 'packages/remote-access/src/gateway-cli.ts');

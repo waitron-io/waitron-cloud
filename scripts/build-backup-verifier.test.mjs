@@ -22,6 +22,11 @@ test('verifier build archives the pinned committed source and supplies its gener
   await writeFile(join(source,'tracked'),'later');git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-s','-qm','later fixture');
   const streamed=git('rev-parse','HEAD');
   await writeFile(join(candidate,'deploy/backup-verifier/streamed-target.json'),JSON.stringify({runtime:{revision:streamed},digest:'b'.repeat(64)}));
+  await writeFile(join(source,'tracked'),'installed release');
+  git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-s','-qm','installed fixture');
+  const installed=git('rev-parse','HEAD');
+  await writeFile(join(candidate,'deploy/backup-verifier/amazon-test-target.json'),JSON.stringify({runtime:{revision:installed},digest:'c'.repeat(64)}));
+  await writeFile(join(source,'tracked'),'dirty');
   await writeFile(join(source,'private-untracked'),'must stay out');
   await chmod(join(candidate,'packages/backups/src/container-entry.mjs'),0o600);
   await chmod(join(candidate,'deploy/backup-verifier/target.json'),0o600);
@@ -55,5 +60,10 @@ fs.cpSync(context,${JSON.stringify(capture)},{recursive:true});`);await chmod(wr
    {env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
   assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'later','the streamed image must use its separately reviewed release');
   assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/streamed-target.json'),'utf8'));
+  execFileSync(process.execPath,[join(candidate,'scripts/build-backup-verifier.mjs'),'--amazon-test'],
+   {env:{...process.env,PATH:bin+':'+process.env.PATH,WAITRON_CHECKOUT:source,NODE_AUTH_TOKEN:'synthetic-build-only'},stdio:'pipe'});
+  assert.equal(await readFile(join(capture,'waitron/tracked'),'utf8'),'installed release');
+  assert.deepEqual(JSON.parse(await readFile(join(capture,'waitron/build/hour-release.json'),'utf8')),{sourceCommit:installed,fixture:'real-generator-boundary'});
+  assert.equal(await readFile(join(capture,'verifier/target.json'),'utf8'),await readFile(join(candidate,'deploy/backup-verifier/amazon-test-target.json'),'utf8'));
  }finally{await rm(root,{recursive:true,force:true});}
 });

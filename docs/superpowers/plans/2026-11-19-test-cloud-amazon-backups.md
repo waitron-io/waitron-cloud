@@ -5,7 +5,9 @@ operator shows the owner the isolated restore-check result for those same bytes.
 The portal row stays pending because recovery remains unavailable. This is part of
 the [Amazon test Cloud request](2026-11-16-test-cloud-aws.md). The watcher cleared
 the public route and result on 19 November at 10:05/10:13 and the exact-release
-verifier on 10:18.
+verifier on 10:18. On 19 November at 11:34 the watcher cleared the pin,
+builder and their checks to land first, so Lane G can use them for its
+local rehearsal. The upload and test worker changes follow after fresh pairing.
 
 1. **Bind the verifier to the reset release.** Lane J owns the single authorised
    reset and records the installed release SHA and immutable app image. The

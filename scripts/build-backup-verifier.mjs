@@ -6,12 +6,18 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 const checkout=process.env.WAITRON_CHECKOUT,image=process.env.CLOUD_VERIFIER_IMAGE??'waitron-backup-verifier:local';
 if(!checkout||!process.env.NODE_AUTH_TOKEN)throw Error('Set WAITRON_CHECKOUT and NODE_AUTH_TOKEN before building the verifier');
 const [profile,...extra]=process.argv.slice(2);
-if(extra.length||profile!==undefined&&profile!=='--streamed')throw Error('Use --streamed for the disk-backed test verifier');
+const targets = new Map([
+ [undefined, 'target.json'],
+ ['--streamed', 'streamed-target.json'],
+ ['--amazon-test', 'amazon-test-target.json'],
+]);
+const targetFile = targets.get(profile);
+if(extra.length||!targetFile)throw Error('Choose at most one verifier target: --streamed or --amazon-test');
 // Public source must remain readable by the unprivileged image user under a private caller mask.
 process.umask(0o022);
 const root=fileURLToPath(new URL('../',import.meta.url)),context=await mkdtemp(join(tmpdir(),'cloud-verifier-build-'));
 try{
- const targetBytes=await readFile(join(root,'deploy/backup-verifier',profile==='--streamed'?'streamed-target.json':'target.json'),'utf8');
+ const targetBytes=await readFile(join(root,'deploy/backup-verifier',targetFile),'utf8');
  const target=JSON.parse(targetBytes);
  if(!/^[a-f0-9]{40}$/.test(target.runtime?.revision??''))throw Error('Invalid pinned verifier source');
  const revision=execFileSync('git',['-C',checkout,'rev-parse','--verify',target.runtime.revision+'^{commit}'],{encoding:'utf8'}).trim();
