@@ -138,14 +138,20 @@ test('a lost email-code submission reply starts a fresh sign-in instead of repla
   assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
 });
 
-test('production rehearsal refuses a remote Kubernetes target before starting native clients', async () => {
+test('production rehearsal refuses a remote target even with a valid local Kind binding', async () => {
   const {runTestCloudClients} = await load();
-  await assert.rejects(runTestCloudClients({services: true, kubernetes: {
-    cluster: 'd620-12345678', namespace: 'default', network: 'kind', account: 'kube-account',
-    ca: 'test certificate', proxyIp: '172.30.250.2', port: 3000, mailPort: 8025,
-    exec: () => assert.fail('remote command must not start'),
-    remote: {worker: () => assert.fail('remote command must not start')},
-  }}), /integration\.services_binding/);
+  const cluster = 'd621-' + 'a'.repeat(32);
+  const local = {
+    cluster, namespace: 'd621-data', network: cluster, account: 'kube-account',
+    ca: 'test certificate', storeCa: 'test store certificate', mailAuthorization: 'synthetic',
+    proxyIp: '172.30.250.2', port: 3000, mailPort: 8025, exec: () => assert.fail('command must not start'),
+    verifier: Object.fromEntries(['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
+      .map(name => [name, () => assert.fail('verifier must not start')])),
+  };
+  await assert.rejects(runTestCloudClients({services: true, kubernetes: local}), /integration\.image_invalid/);
+  for (const remote of [{remote: {worker: () => assert.fail('remote command must not start')}}, {amazon: {phase: 'before'}}]) {
+    await assert.rejects(runTestCloudClients({services: true, kubernetes: {...local, ...remote}}), /integration\.services_binding/);
+  }
 });
 
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {

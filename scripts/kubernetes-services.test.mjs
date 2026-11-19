@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import {generateKeyPairSync} from 'node:crypto';
 import test from 'node:test';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 
-import {installServicesDatabase, servicesCredentialFiles} from './kubernetes-services.mjs';
+import {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} from './kubernetes-services.mjs';
 
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {
   const nodes = [1, 2, 3].map(number => ({name: 'node-' + number, id: 'id-' + number}));
@@ -59,4 +60,19 @@ test('rehearsal credential files contain complete password and digest lines', ()
   assert.equal(files.mail['smtp-auth'], 'sender:synthetic-smtp\n');
   assert.equal(files.mail['ui-auth'], 'inbox:synthetic-inbox\n');
   assert.match(files.corpus, /^[a-f0-9]{64}\n$/);
+});
+
+test('only the account role receives the proof signing key and write credentials', () => {
+  const {privateKey} = generateKeyPairSync('ed25519');
+  const custody = {signingKey: privateKey.export({type: 'pkcs8', format: 'pem'}), masterKey: 'a'.repeat(64)};
+  const credentials = {role: 'arn:minio:iam:::role/rehearsal',
+    accountCredentials: {accessKeyId: 'account-access', secretAccessKey: 'account-secret'},
+    workerCredentials: {accessKeyId: 'worker-access', secretAccessKey: 'worker-secret'}};
+  const values = servicesStorageSettings(custody, credentials, 'https://172.30.250.2:30900');
+  assert.equal(values['services-account'].CLOUD_BACKUP_ACCESS_KEY, 'account-access');
+  assert.equal(values['services-backup'].CLOUD_BACKUP_ACCESS_KEY, 'worker-access');
+  assert.equal(values['services-account'].CLOUD_BACKUP_SECRET_KEY, 'account-secret');
+  assert.equal(values['services-backup'].CLOUD_BACKUP_SECRET_KEY, 'worker-secret');
+  assert.ok(values['services-account'].CLOUD_BACKUP_AUTHORITY);
+  assert.equal(values['services-backup'].CLOUD_BACKUP_AUTHORITY, undefined);
 });

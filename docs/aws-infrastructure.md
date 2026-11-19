@@ -1269,8 +1269,9 @@ TEST_KUBERNETES_SERVICES=1 node --test scripts/kubernetes-services.test.mjs
 The check migrates PostgreSQL over TLS before starting the existing Cloud
 commands in production mode. Mail stays in the private authenticated inbox.
 The journey uses a synthetic account and box, checks pairing and the stored
-archive, then waits for the real restore worker to admit the matching backup.
-It also checks that altered bytes cannot be published. The worker uses its
+archive, then waits for the backup worker to admit a matching restore using the existing
+test verifier and a policy pinned to the image in the disposable database. It
+also checks that altered bytes cannot be published. The worker uses its
 own Docker daemon and removes the isolated restore container. The checkout
 removes the Kind cluster and native client resources it created.
 

@@ -9,7 +9,7 @@ import {runtimeEnvironment} from '../deploy/local-stack/runtime.mjs';
 import {storageRuntime} from '../deploy/kubernetes/storage-identity.mjs';
 import {servicesInspection, servicesNamespace, servicesOrigin, servicesPod, servicesVerifier, storeCaPath} from '../deploy/kubernetes/services.mjs';
 import {installStockholmDatabase} from './kubernetes-data.mjs';
-import {migrationJob, requireTls} from './kubernetes-database.mjs';
+import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
 import {storageBucket, storageClient} from './kubernetes-storage-proof.mjs';
 import {storeNodePort} from './kubernetes-storage.mjs';
@@ -75,14 +75,22 @@ export function servicesCredentialFiles(smtpPassword, inboxPassword) {
   };
 }
 
+export function servicesStorageSettings(custody, {role, accountCredentials, workerCredentials}, endpoint) {
+  const account = storageRuntime(custody, role, endpoint, 'us-east-1', storeCaPath, accountCredentials);
+  const {CLOUD_BACKUP_AUTHORITY, ...backup} = account;
+  return {'services-account': account, 'services-backup': {...backup,
+    CLOUD_BACKUP_ACCESS_KEY: workerCredentials.accessKeyId,
+    CLOUD_BACKUP_SECRET_KEY: workerCredentials.secretAccessKey,
+  }};
+}
+
 async function configureServices(context, kube, store, custody) {
   const node = context.nodes[0], endpoint = 'https://' + node.ip + ':' + storeNodePort;
   const s3 = storageClient(node, store);
   try {await s3.send(CreateBucketCommand, {}, context.signal);}
   finally {s3.close();}
-  const {role, accountCredentials, workerCredentials} = await configurePolicy(context, endpoint, store, true);
-  const location = credentials => storageRuntime(custody, role, endpoint, 'us-east-1', storeCaPath, credentials);
-  const accountStorage = location(accountCredentials), {CLOUD_BACKUP_AUTHORITY, ...backup} = location(workerCredentials);
+  const roles = await configurePolicy(context, endpoint, store, true);
+  const storage = servicesStorageSettings(custody, roles, endpoint);
   const config = await bootstrap(join(context.directory, 'services-runtime'));
   const emailVariables = {CLOUD_EMAIL_ACTIVE_KEY_ID: config.email.activeKeyId, CLOUD_EMAIL_KEYS: JSON.stringify(config.email.keys)};
   const {
@@ -100,9 +108,9 @@ async function configureServices(context, kube, store, custody) {
     challengeAttempts: 5, enrolmentAttempts: 5, loginAccount: limit, completeIp: limit, completeAccount: limit,
     completeChallenge: limit, manageIp: limit, manageAccount: limit});
   await secret('services-account', {...emailVariables, CLOUD_HTTP_RATE_KEY, CLOUD_INSTALLATION_ISSUER_KEY,
-    CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR, CLOUD_FACTOR_ACTIVE_KEY_ID, CLOUD_FACTOR_KEYS, CLOUD_FACTOR_POLICY, ...accountStorage});
+    CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR, CLOUD_FACTOR_ACTIVE_KEY_ID, CLOUD_FACTOR_KEYS, CLOUD_FACTOR_POLICY, ...storage['services-account']});
   await secret('services-monitor', emailVariables);
-  await secret('services-backup', backup);
+  await secret('services-backup', storage['services-backup']);
   await secret('services-email', {...emailVariables, CLOUD_SMTP_USER: 'sender', CLOUD_SMTP_PASSWORD: smtpPassword});
   const {mail, corpus} = servicesCredentialFiles(smtpPassword, inboxPassword);
   await secret('services-mail', {'tls.crt': tls.cert, 'tls.key': tls.key, ...mail});
@@ -123,6 +131,7 @@ export async function runKubernetesServices(context) {
   });
   const create = value => kube(['create', '-f', '-'], JSON.stringify(value));
   const forwards = [];
+  let failure;
   await run('docker', ['tag', image, tag]);
   try {
     await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
@@ -189,6 +198,7 @@ export async function runKubernetesServices(context) {
       return {...result, operationsReady: true, smtpRefusals: true};
     });
   } catch (error) {
+    failure = error;
     for (const [pod, containers] of [
       ['cloud-services', ['account', 'email', 'proxy', 'mailpit', 'monitor', 'usage', 'probe']],
       ['verifier', ['verifier', 'docker']], ['job/migrate', ['migrate']], ['job/services-inspection', ['inspect']],
@@ -199,6 +209,6 @@ export async function runKubernetesServices(context) {
     throw error;
   } finally {
     for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
-    await run('docker', ['image', 'rm', tag], {signal: null});
+    await cleanUp(failure, () => run('docker', ['image', 'rm', tag], {signal: null}));
   }
 }

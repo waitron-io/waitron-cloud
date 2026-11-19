@@ -75,10 +75,10 @@ export function servicesVerifier(template, image) {
 
 export function servicesInspection(image) {
   return {apiVersion: 'batch/v1', kind: 'Job', metadata: {name: 'services-inspection', namespace: servicesNamespace},
-    spec: {backoffLimit: 0, activeDeadlineSeconds: 900, template: {spec: {restartPolicy: 'Never',
+    spec: {backoffLimit: 0, template: {spec: {restartPolicy: 'Never',
       automountServiceAccountToken: false, volumes: [caVolume, publicStoreCa],
       containers: [service(image, 'inspect', `-e 'const timer = setInterval(() => {if (require("node:fs").existsSync("/tmp/inspection-complete")) clearInterval(timer)}, 250)'`, {
-        storage: true, secret: 'services-account',
+        storage: true, secret: 'services-backup',
       })],
     }}}};
 }

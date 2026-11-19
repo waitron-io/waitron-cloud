@@ -114,7 +114,7 @@ function within(signal, ms) {
   return {signal: AbortSignal.any([signal, AbortSignal.timeout(ms)]), timeout: ms + 2_000};
 }
 
-async function cleanUp(failure, action) {
+export async function cleanUp(failure, action) {
   try {
     await action();
   } catch (error) {

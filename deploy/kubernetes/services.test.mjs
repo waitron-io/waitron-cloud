@@ -63,3 +63,11 @@ test('the backup worker waits for its image before using its private daemon', ()
   assert.equal(env.DOCKER_HOST, 'unix:///docker-socket/docker.sock');
   assert.deepEqual(worker.envFrom, [{secretRef: {name: 'services-backup'}}]);
 });
+
+test('snapshot inspection uses worker storage credentials without account signing keys', () => {
+  const {spec} = deployment.servicesInspection('owned:cloud').spec.template;
+  const [inspect] = spec.containers;
+  assert.equal(inspect.name, 'inspect');
+  assert.deepEqual(inspect.envFrom, [{secretRef: {name: 'services-backup'}}]);
+  assert.deepEqual(spec.volumes.map(volume => volume.name), ['db-ca', 'store-ca']);
+});

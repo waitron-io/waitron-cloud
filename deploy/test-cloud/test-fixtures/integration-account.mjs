@@ -11,7 +11,8 @@ import {Agent} from 'node:https';
 import {readFile} from 'node:fs/promises';
 import {inspectIntegrationSnapshot} from './integration-snapshot-evidence.mjs';
 import {openTestCaptureRuntime} from '../service-runtime.mjs';
-import {captureRuntime} from '../../../packages/backups/src/capture-config.ts';
+import {BackupKeyVault} from '../../../packages/backups/src/keys.ts';
+import {workerObjects} from '../../../packages/backups/src/worker-config.ts';
 import {BackupCatalogue} from '../../../packages/backups/src/catalogue.ts';
 import {setVerificationPolicy} from '../../../packages/backups/src/verification-admission.ts';
 import {transaction} from '../../../packages/registration/src/transaction.ts';
@@ -197,22 +198,23 @@ try {
       assert.deepEqual(row, {reserved: true, published: false, attempted: false});
       console.log(JSON.stringify({unpublished: true}));
     } else if (services && ['provision-snapshot', 'inspect-snapshot'].includes(phase)) {
-      const runtime = captureRuntime(process.env);
+      const storage = workerObjects(process.env, await readFile(process.env.CLOUD_BACKUP_CA_FILE, 'utf8'));
       const location = {endpoint: process.env.CLOUD_BACKUP_ENDPOINT, bucket: 'cloud-storage-rehearsal',
         region: process.env.CLOUD_BACKUP_REGION};
       try {
         if (phase === 'provision-snapshot') {
-          await new BackupCatalogue(pool, runtime.options.vault, runtime.options.objects, 'existing').provision(installationId, location);
+          const vault = new BackupKeyVault(Buffer.from(process.env.CLOUD_BACKUP_MASTER_KEY, 'hex'));
+          await new BackupCatalogue(pool, vault, storage.objects, 'existing').provision(installationId, location);
           console.log(JSON.stringify({provisioned: true}));
         } else {
           const {rows: [point]} = await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3',
             [pointId, installationId, rows[0].venue_id]);
           assert.ok(point, 'integration.snapshot_binding');
-          const stored = await runtime.options.objects(location).read(point.object_key);
+          const stored = await storage.objects(location).read(point.object_key);
           console.log(JSON.stringify(inspectIntegrationSnapshot(point, stored,
             {pointId, installationId, venueId: rows[0].venue_id, sha256, bytes, sourceNodeId})));
         }
-      } finally {runtime.close();}
+      } finally {storage.close();}
     } else if (phase === 'provision-snapshot' || phase === 'inspect-snapshot') {
       const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
         ...(phase === 'inspect-snapshot' ? {openStorage: async () => undefined} : {})});
