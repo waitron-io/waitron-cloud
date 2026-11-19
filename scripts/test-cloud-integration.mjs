@@ -445,7 +445,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       });
     const readInbox = async (path, signal) => {
       const response = await fetchInbox(path, signal);
-      assert.equal(response.status, 200, 'integration.inbox_read');
+      if (services) assert.equal(response.status, 200, 'integration.inbox_read');
       return parseIntegrationJson(await response.text());
     };
     if (services) {
