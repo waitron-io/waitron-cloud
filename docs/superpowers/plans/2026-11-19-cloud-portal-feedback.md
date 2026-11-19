@@ -6,7 +6,7 @@ Claude reviewed this plan. The watcher cleared it on 19 November at 19:22 and di
 
 ## 1. Let browsers recover from a reused connection
 
-Chromium reproduced both 403s on one HTTP/2 connection. In `deploy/test-cloud/proxy.amazon.cfg` return 421 for HTTP/2 requests crossing between the configured account and menu hostnames on the wrong TLS connection, before the existing name check. Keep the 403 rules for other authorities and HTTP/1. Extend the two-host fixture in `deploy/test-cloud/proxy-proof.test.mjs` to assert HTTP/2 negotiation, 421 and correctly addressed 200s in both directions. Replay both navigation orders in a disposable browser fixture. Update the test Cloud guide and backlog. Time menu reappearance after sharing is switched back on once the change is live and a box is paired for the check.
+Chromium reproduced a 403 in each direction when it reused the other hostname's HTTP/2 connection. The original refusals were never captured. In `deploy/test-cloud/proxy.amazon.cfg` return 421 for HTTP/2 requests crossing between the configured account and menu hostnames on the wrong TLS connection, before the existing name check. Keep the 403 rules for other authorities and HTTP/1. Extend the two-host fixture in `deploy/test-cloud/proxy-proof.test.mjs` to assert HTTP/2 negotiation, 421 and correctly addressed 200s in both directions. Replay both navigation orders in a disposable browser fixture. Update the test Cloud guide and backlog. Time menu reappearance after sharing is switched back on once the change is live and a box is paired for the check.
 
 ## 2. Name venues, shorten the pages and match the remote actions to venue state
 
