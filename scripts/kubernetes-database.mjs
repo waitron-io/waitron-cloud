@@ -4,6 +4,7 @@ import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {retryApi} from './kubernetes-node-loss.mjs';
+import {separateByHost} from './kubernetes-placement.mjs';
 
 const operatorImage = 'ghcr.io/cloudnative-pg/cloudnative-pg:1.29.2@sha256:4710b10a4897a4f888cbe80bce8b279475315590fb9f2cb0ebb516f2f40ebf06';
 const postgresImage = 'ghcr.io/cloudnative-pg/postgresql:18.4-standard-trixie@sha256:ebf3919504d7523a63e8e2fee9b051211de714644b36469275558c624afd50ec';
@@ -16,10 +17,6 @@ const reader = 'proofreader', writer = 'proofwriter';
 const caPath = '/run/db-ca/ca.crt';
 const caVolume = {name: 'db-ca', secret: {secretName: database + '-ca', items: [{key: 'ca.crt', path: 'ca.crt'}]}};
 const caMount = {name: caVolume.name, mountPath: '/run/db-ca', readOnly: true};
-
-const separateByHost = matchLabels => ({podAntiAffinity: {requiredDuringSchedulingIgnoredDuringExecution: [
-  {labelSelector: {matchLabels}, topologyKey: 'kubernetes.io/hostname'}
-]}});
 
 export async function installDatabaseOperator({directory, run, kube}) {
   const path = join(directory, 'operator.yaml');
@@ -234,10 +231,6 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
     await run('docker', ['tag', image, imageTag]);
     tagged = true;
     await run('kind', ['load', 'docker-image', imageTag, '--name', cluster], {timeout: 180_000});
-    // A lone Kind node must not host every DNS pod needed by the write Service.
-    await kube(['patch', 'deployment', 'coredns', '-n', 'kube-system', '--type=merge', '-p',
-      JSON.stringify({spec: {template: {spec: {affinity: separateByHost({'k8s-app': 'kube-dns'})}}}})]);
-    await kube(['rollout', 'status', 'deployment/coredns', '-n', 'kube-system', '--timeout=120s'], {timeout: 125_000});
     await installDatabaseOperator({directory, run, kube});
     const started = within(signal, 360_000);
     for (const name of [reader, writer]) await apply('v1', 'Secret', name, databaseSecret(name));

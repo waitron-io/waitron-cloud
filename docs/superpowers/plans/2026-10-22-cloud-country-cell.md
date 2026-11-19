@@ -182,9 +182,8 @@ Tasks normally take 30–65 tool calls; no task below budgets 100. Split at a pa
 ### Task 7: Deploy API, email, usage, monitor, probe and operations (40–60 calls)
 
 - Carry the [observed storage limits](2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
-  into the run 9 decision. The store did not always repair a returned machine,
-  and a baseline object read once received HTTP 503 during the first outage.
-  PR 4 can qualify scoped storage access on the existing store.
+  into the run 9 decision. Setup spreads DNS across machines after the cluster
+  nodes are ready. PR 4 remains the step that qualifies scoped access.
 - [ ] Returned-drive repair remains open. Before declaring redundancy restored,
   verify both outage objects on both returned disks and read their acknowledged
   bytes through the returned machine. Consecutive-outage multipart also remains

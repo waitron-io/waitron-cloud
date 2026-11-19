@@ -248,6 +248,10 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (script.includes("'rollout' 'status' 'deployment/coredns'")) {
+          await new Promise(setImmediate);
+          calls.push(['dns rollout completed']);
+        }
         if(scenario==='complete'&&!releaseStage&&script==="'sudo' 'cp' '/tmp/d618-images.tar' '/var/local/d620-config/d618-images.tar'"){
           markStage();await new Promise(resolve=>{releaseStage=resolve;});
         }
@@ -389,6 +393,12 @@ for (const [scenario, expectedError] of [['complete', null], ['observer', null],
   const data = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-data.mjs'));
   assert.deepEqual(disks.map(row => row.at(-2)), ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
   assert.ok(nodeReady > lastJoin && nodeReady < data && ready < data && data < fixture);
+  const dnsPatch = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'patch' 'deployment' 'coredns'"));
+  const dnsRollout = calls.findIndex(row => row[0] === 'ssh' && row.at(-1).includes("'rollout' 'status' 'deployment/coredns'"));
+  const dnsReady = calls.findIndex(row => row[0] === 'dns rollout completed');
+  assert.ok(ready < dnsPatch && dnsPatch < dnsRollout && dnsRollout < dnsReady && dnsReady < data,
+    'place DNS after the proxy rollout and finish the DNS rollout before starting data setup');
+  assert.equal(transports.find(row => row.args.at(-1) === calls[dnsRollout].at(-1)).timeout, 125_000);
   assert.ok(disks.every(row => calls.indexOf(row) < data), 'all local directories exist before PostgreSQL starts');
   assert.equal(calls[data].at(-2), 'admin@203.0.113.1');
   // Allow the operator and database waits to finish and print their own diagnosis.
