@@ -679,3 +679,15 @@ test('the remote-only Kind target validates image pins before creating resources
   assert.equal(result.status, 1);
   assert.match(result.stderr, /remote\.cloud_image_id/);
 });
+
+
+test('the gateway-machine fault is accepted only alongside the private remote target', () => {
+  const cli = new URL('./kubernetes-check.mjs', import.meta.url).pathname;
+  const env = {...process.env, TEST_CLOUD_INTEGRATION_IMAGE: 'cloud:latest'};
+  const remote = spawnSync(process.execPath, [cli, '--remote', '--stop-gateway-node'], {encoding: 'utf8', env});
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /remote\.cloud_image_id/);
+  const services = spawnSync(process.execPath, [cli, '--services', '--stop-gateway-node'], {encoding: 'utf8', env});
+  assert.equal(services.status, 1);
+  assert.match(services.stderr, /kubernetes\.target/);
+});

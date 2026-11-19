@@ -1315,6 +1315,21 @@ An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
 Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).
 
+To stop the active gateway's Kind machine, include `iputils-ping` in the
+Cloud image and run:
+
+```sh
+TEST_KUBERNETES_REMOTE_MACHINE_LOSS=1 node --test scripts/kubernetes-remote.test.mjs
+```
+
+You can also run `node scripts/kubernetes-check.mjs --remote --stop-gateway-node`
+with the same image pins. The test sends a ping through the venue peer every
+five seconds. It keeps the machine hosting the account and fixed relay backend
+up. It reports when Kubernetes stops serving the old gateway endpoint and when
+verified staff and public HTTPS and a new handshake have returned. The deadline
+is 90 seconds from the stop request. The restored machine must return with
+its original identity and the former gateway must return as a standby.
+
 Use the outside rehearsal to check a stopped Stockholm machine and changes
 to its private address, with the outside TCP and UDP listener and shared ingress.
 

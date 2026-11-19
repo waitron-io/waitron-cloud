@@ -85,7 +85,30 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
       assert.deepEqual(JSON.parse(publicReply.body), client.availability);
       if (expectedPublic) assert.equal(publicReply.certificateSha256, expectedPublic);
     };
-    const handover = await target.handover(signal => check(signal, publicResponse.certificateSha256), peer.peerPublicKey);
+    const verifyRoutes = signal => check(signal, publicResponse.certificateSha256);
+    if (stockholm.machineLoss) {
+      await docker(['exec', peerId, 'ping', '-V'], '', 'remote-ping-tool');
+      const trafficStop = new AbortController();
+      const signal = AbortSignal.any([trafficStop.signal, stockholm.signal].filter(Boolean));
+      const gatewayAddress = placement.address.replace(/\.\d+$/, '.1');
+      process.stderr.write('D621 fixture traffic: one venue ping through the paired peer every five seconds\n');
+      const traffic = (async () => {
+        while (!signal.aborted) {
+          await docker(['exec', peerId, 'ping', '-n', '-I', 'wg-cloud', '-c', '1', '-W', '1', gatewayAddress],
+            '', 'remote-venue-packet').catch(() => {});
+          await delay(5000, undefined, {signal}).catch(() => {});
+        }
+      })();
+      try {
+        const machineLoss = await target.machineLoss(verifyRoutes, peer.peerPublicKey);
+        return {staffHttps: true, publicHttps: true, unknownNameRefused: true, wrongCertificateRefused: true, privatePathRefused: true,
+          machineLoss: {...machineLoss, fixtureTraffic: true}};
+      } finally {
+        trafficStop.abort();
+        await traffic;
+      }
+    }
+    const handover = await target.handover(verifyRoutes, peer.peerPublicKey);
     const publication = performance.now();
     await target.forgetPublicCopy(paid.installationId);
     assert.deepEqual(await phase('stockholm-remote-renew'), {scheduled: true});

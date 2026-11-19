@@ -6,10 +6,58 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
-import {untilRemote} from './kubernetes-remote.mjs';
+import * as remoteRehearsal from './kubernetes-remote.mjs';
 
 test('handover can use the fractional time left after pausing the election', async () => {
-  assert.equal(await untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
+  assert.equal(await remoteRehearsal.untilRemote(async () => 'standby', 500.5, undefined, 'standby'), 'standby');
+});
+
+test('machine loss follows the Lease while the dead gateway still looks Ready', {timeout: 3000}, async t => {
+  let now = 100, down = false, slices = 0;
+  t.mock.method(performance, 'now', () => now);
+  const pod = (name, nodeName) => ({metadata: {name}, spec: {nodeName},
+    status: {conditions: [{type: 'Ready', status: 'True'}]}});
+  const lease = name => JSON.stringify({spec: {holderIdentity: name + ':session'}});
+  const kube = async args => {
+    const [verb, resource, name] = args;
+    if (verb === 'get' && resource === 'lease') {
+      return lease(name === 'kube-controller-manager' ? 'gateway-node_controller' : down || slices ? 'next' : 'old');
+    }
+    if (verb === 'get' && resource === 'pods') {
+      return JSON.stringify({items: [pod('old', 'gateway-node'), pod('next', 'standby-node')]});
+    }
+    if (resource === 'endpointslices') {
+      const oldReady = ++slices === 1;
+      now = oldReady ? 115 : 150;
+      return JSON.stringify({items: [{endpoints: [
+        {targetRef: {name: 'old'}, conditions: {ready: oldReady}},
+        {targetRef: {name: 'next'}, conditions: {ready: true}},
+      ]}]});
+    }
+    assert.equal(verb, 'exec');
+    if (args[3] === 'sh') {
+      assert.equal(down, false, 'the old gateway is checked only after it has restarted');
+      assert.equal(resource, 'old');
+      return '';
+    }
+    assert.equal(resource, down ? 'next' : 'old', 'read WireGuard from the current Lease holder');
+    return args.at(-1) === 'transfer' ? 'peer\t12\t15' : 'peer\t' + Math.floor(Date.now() / 1000);
+  };
+  assert.equal(typeof remoteRehearsal.measureGatewayMachineLoss, 'function');
+  const result = await remoteRehearsal.measureGatewayMachineLoss({kube, accountNode: 'account-node', peer: 'peer',
+    checkRoutes: async () => {if (down && slices < 2) throw Error('paths still routed to old gateway');},
+    moveGateway: () => assert.fail('the account node does not hold the Lease'),
+    stopNode: async (node, {whileStopped}) => {
+      assert.equal(node, 'gateway-node');
+      down = true;
+      const result = await whileStopped({signal: new AbortController().signal});
+      down = false;
+      return {stopped: node, ...result};
+    }});
+  assert.equal(result.replacement, 'next');
+  assert.equal(result.controllerNode, 'gateway-node');
+  assert.equal(result.endpointWithdrawnMs, 50);
+  assert.deepEqual([result.receivedBytes, result.sentBytes], [12, 15]);
 });
 
 test('the paired venue keeps its endpoint through an elected gateway handover', {
@@ -28,6 +76,21 @@ test('the paired venue keeps its endpoint through an elected gateway handover', 
   assert.deepEqual(remote.cleanup.remaining, []);
   console.log('D621 gateway timings (ms)', {handover: remote.handover.durationMs,
     certificateReplacement: remote.certificateReplacementMs, withdrawal: remote.withdrawalMs});
+});
+
+test('the paired venue keeps its endpoint when the active gateway machine stops', {
+  skip: process.env.TEST_KUBERNETES_REMOTE_MACHINE_LOSS !== '1', timeout: 35 * 60 * 1000,
+}, async () => {
+  const {remote, nodes} = await runKubernetesCheck('kind-remote', {stopGatewayNode: true});
+  const loss = remote.machineLoss;
+  assert.notEqual(loss.stopped, nodes[0].name);
+  assert.ok(nodes.some(node => node.name === loss.controllerNode));
+  assert.equal(loss.fixtureTraffic, true);
+  assert.equal(loss.rejoinedStandby, true);
+  assert.ok(loss.endpointWithdrawnMs <= loss.durationMs);
+  assert.ok(loss.durationMs <= 90000);
+  assert.deepEqual(remote.cleanup.remaining, []);
+  console.log('D621 gateway-machine timings', loss);
 });
 
 test('the WireGuard relay forwards replies after the upstream endpoint returns', {timeout: 10000}, async t => {

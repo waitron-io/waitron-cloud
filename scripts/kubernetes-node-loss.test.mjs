@@ -230,6 +230,16 @@ test('lease recovery retries a connection timeout and waits out a stale heartbea
   assert.equal(result.legs.length, 3);
 });
 
+test('the remote rehearsal receives the owned node stop', async () => {
+  const f = fixture();
+  const result = await runCheck({execute: f.execute, async remote({nodes, stopNode}) {
+    assert.equal(typeof stopNode, 'function', 'remote rehearsals need the owned node stop');
+    return stopNode(nodes[1].name, {whileStopped: async () => ({measured: true})});
+  }});
+  assert.equal(result.remote.stopped, result.nodes[1].name);
+  assert.equal(result.remote.measured, true);
+});
+
 test('the database check can stop only an owned node and leaves cleanup to the Kind fixture', async () => {
   const f = fixture();
   await assert.rejects(runCheck({execute: f.execute, async database({nodes, stopNode}) {

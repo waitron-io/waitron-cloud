@@ -197,7 +197,10 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
 }
 
 export async function runTestCloudClients(options = {}) {
+  assert.ok(!options.stockholmGatewayMachineLoss || options.stockholmRemote === true, 'integration.stockholm_machine_loss_scope');
   if (options.services || options.stockholmRemote) {
+    assert.ok(!options.stockholmGatewayMachineLoss || typeof options.kubernetes?.stockholmRemote?.machineLoss === 'function',
+      'integration.stockholm_machine_loss_binding');
     const k = options.kubernetes, remote = options.stockholmRemote;
     assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream',
       'paidContinuousRecovery', 'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
@@ -814,7 +817,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           const remote = await proveIntegrationPaidRemote({docker, control, account, image, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
+              origin, signal: runSignal(), machineLoss: options.stockholmGatewayMachineLoss, revoke: () => api('/api/account/installations/revoke', {installationId}, browser),
             }, own: id => {owned.push(id); record('container', id);}});
           result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
           return;

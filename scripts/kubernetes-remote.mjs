@@ -20,8 +20,77 @@ export async function untilRemote(probe, ms, signal, stage) {
   throw Error('remote.' + stage, {cause: last});
 }
 
+const remoteDeadlineMs = 90_000;
+const readGatewayPods = async (kube, limit) => JSON.parse(await kube(['get', 'pods', '-l', 'app=remote-gateway', '-o', 'json'], limit)).items;
+const execGateway = (kube, pod, cmd, limit) => kube(['exec', pod, '--', ...cmd], limit);
+const noGatewayInterface = ['sh', '-ec', '! ip link show wg-cloud >/dev/null 2>&1 && test ! -e /state/lease-active'];
+
+async function peerCounters(kube, pod, peer, limit) {
+  const counters = async column => (await execGateway(kube, pod, ['wg', 'show', 'wg-cloud', column], limit))
+    .split('\n').map(line => line.split('\t')).find(fields => fields[0] === peer)?.slice(1).map(Number) ?? [];
+  const [handshake] = await counters('latest-handshakes');
+  const [receivedBytes, sentBytes] = await counters('transfer');
+  return {handshake, receivedBytes, sentBytes};
+}
+
+export async function measureGatewayMachineLoss({kube, accountNode, stopNode, moveGateway, checkRoutes, peer, signal}) {
+  const holder = async limit => JSON.parse(await kube(['get', 'lease', 'remote-gateway', '-o', 'json'], limit)).spec.holderIdentity?.split(':')[0];
+  const nodeFor = async (name, limit) => (await readGatewayPods(kube, limit)).find(row => row.metadata.name === name)?.spec.nodeName;
+  const baseline = async limit => {
+    const pod = await holder(limit);
+    const node = await nodeFor(pod, limit);
+    assert.ok(node, 'remote.gateway_lease_holder');
+    await checkRoutes(limit);
+    const {handshake, receivedBytes, sentBytes} = await peerCounters(kube, pod, peer, limit);
+    assert.ok(handshake > 0 && receivedBytes > 0 && sentBytes > 0, 'remote.baseline_handshake');
+    assert.equal(await holder(limit), pod, 'remote.baseline_gateway_changed');
+    return {pod, node, baselineHandshakeAgeSeconds: Math.floor(Date.now() / 1000) - handshake};
+  };
+  let old = await untilRemote(baseline, remoteDeadlineMs, signal, 'machine_loss_baseline');
+  if (old.node === accountNode) {
+    await moveGateway(checkRoutes, peer);
+    old = await untilRemote(baseline, remoteDeadlineMs, signal, 'machine_loss_moved_baseline');
+  }
+  assert.notEqual(old.node, accountNode, 'remote.keep_account_node_up');
+  const controller = JSON.parse(await kube(['get', 'lease', 'kube-controller-manager', '-n', 'kube-system', '-o', 'json'], signal));
+  const controllerNode = controller.spec.holderIdentity?.split('_')[0];
+  assert.ok(controllerNode, 'remote.controller_leader');
+  assert.equal(await holder(signal), old.pod, 'remote.gateway_changed_before_stop');
+  process.stderr.write('D621 gateway before machine stop ' + JSON.stringify({...old, controllerNode}) + '\n');
+
+  let endpointWithdrawnMs;
+  const cut = Math.floor(Date.now() / 1000), start = performance.now();
+  const result = await stopNode(old.node, {whileStopped: ({signal: faultSignal}) => untilRemote(async limit => {
+    const {items} = JSON.parse(await kube(['get', 'endpointslices', '-l', 'kubernetes.io/service-name=remote-gateway', '-o', 'json'], limit));
+    const endpoints = items.flatMap(slice => slice.endpoints.filter(endpoint => endpoint.conditions?.ready !== false));
+    if (endpoints.some(endpoint => endpoint.targetRef?.name === old.pod)) throw Error('remote.old_endpoint_still_ready');
+    if (endpointWithdrawnMs === undefined) {
+      endpointWithdrawnMs = Math.ceil(performance.now() - start);
+      process.stderr.write('D621 old endpoint unavailable ' + JSON.stringify({endpointWithdrawnMs, controllerNode}) + '\n');
+    }
+    // The dead pod can remain Ready after the Lease moved.
+    const replacement = await holder(limit);
+    const replacementNode = await nodeFor(replacement, limit);
+    assert.ok(replacementNode && replacementNode !== old.node && endpoints.some(row => row.targetRef?.name === replacement),
+      'remote.replacement_endpoint_unavailable');
+    const {handshake, receivedBytes, sentBytes} = await peerCounters(kube, replacement, peer, limit);
+    assert.ok(handshake >= cut && receivedBytes > 0 && sentBytes > 0, 'remote.machine_loss_handshake');
+    await checkRoutes(limit);
+    const durationMs = Math.ceil(performance.now() - start);
+    assert.ok(durationMs <= remoteDeadlineMs, 'remote.machine_loss_deadline');
+    return {replacement, controllerNode, baselineHandshakeAgeSeconds: old.baselineHandshakeAgeSeconds,
+      endpointWithdrawnMs, durationMs, receivedBytes, sentBytes};
+  }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), faultSignal, 'machine_loss_90_seconds')});
+  await untilRemote(async limit => {
+    assert.notEqual(await holder(limit), old.pod, 'remote.rejoined_gateway_should_be_standby');
+    await execGateway(kube, old.pod, noGatewayInterface, limit);
+    return true;
+  }, 180000, signal, 'machine_loss_rejoined_standby');
+  return {...result, rejoinedStandby: true};
+}
+
 export async function startRemoteRehearsal({context, kube, create, tag, settings}) {
-  const {cluster, nodes, run, signal} = context;
+  const {cluster, nodes, run, signal, stopNode, stopGatewayNode} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
   const names = ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json'];
   const bootstrap = Object.fromEntries(await Promise.all(names.map(async name => [name, await readFile(join(runtimeDirectory, name), 'utf8')])));
@@ -53,7 +122,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
   }});
   await kube(['wait', '--for=condition=Ready', 'pod/remote-worker', '--timeout=180s']);
   const call = (args, limit) => kube(args, undefined, false, limit);
-  const pods = async limit => JSON.parse(await call(['get', 'pods', '-l', 'app=remote-gateway', '-o', 'json'], limit)).items;
+  const pods = limit => readGatewayPods(call, limit);
   const candidates = await untilRemote(async limit => {
     const rows = await pods(limit);
     return rows.length === 3 && rows.every(row => row.status.phase === 'Running') && new Set(rows.map(row => row.spec.nodeName)).size === 3 &&
@@ -67,31 +136,30 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     await run('docker', ['start', relayId]);
     const gatewayIp = await run('docker', ['inspect', '--format', '{{(index .NetworkSettings.Networks "' + cluster + '").IPAddress}}', relayId]);
     assert.match(gatewayIp, /^172\.30\.250\.\d{1,3}$/, 'remote.relay_ip');
-    const exec = (pod, cmd, limit) => call(['exec', pod, '--', ...cmd], limit);
+    const exec = (pod, cmd, limit) => execGateway(call, pod, cmd, limit);
     const active = async limit => {
       const rows = (await pods(limit)).filter(row => row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True'));
       assert.equal(rows.length, 1, 'remote.active_gateway');
       return rows[0].metadata.name;
     };
-    return {gatewayIp, host: nodes[0].ip, port: 30443, ca: tls.root, close,
+    async function handover(checkRoutes, peer) {
+      const old = await active(signal);
+      const start = performance.now(), cut = Math.floor(Date.now() / 1000);
+      await exec(old, ['sh', '-ec', 'kill -STOP "$(cat /state/election.pid)"'], signal);
+      return untilRemote(async limit => {
+        const next = await active(limit);
+        assert.notEqual(next, old, 'remote.standby_required');
+        await exec(old, noGatewayInterface, limit);
+        await checkRoutes(limit);
+        const {handshake, receivedBytes, sentBytes} = await peerCounters(call, next, peer, limit);
+        assert.ok(handshake >= cut && receivedBytes > 0 && sentBytes > 0, 'remote.standby_handshake');
+        return {durationMs: Math.ceil(performance.now() - start), interfaceWithdrawn: true, handshake: true};
+      }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), signal, 'handover_90_seconds');
+    }
+    return {gatewayIp, host: nodes[0].ip, port: 30443, ca: tls.root, close, handover,
+      ...(stopGatewayNode ? {machineLoss: (checkRoutes, peer) => measureGatewayMachineLoss({kube: call,
+        accountNode: nodes[0].name, stopNode, moveGateway: handover, checkRoutes, peer, signal})} : {}),
       async peers(limit) {return exec(await active(limit), ['wg', 'show', 'wg-cloud', 'peers'], limit);},
-      async handover(checkRoutes, peer) {
-        const old = await active(signal);
-        const start = performance.now(), cut = Math.floor(Date.now() / 1000);
-        await exec(old, ['sh', '-ec', 'kill -STOP "$(cat /state/election.pid)"'], signal);
-        return untilRemote(async limit => {
-          const next = await active(limit);
-          assert.notEqual(next, old, 'remote.standby_required');
-          await exec(old, ['sh', '-ec', '! ip link show wg-cloud >/dev/null 2>&1 && test ! -e /state/lease-active'], limit);
-          await checkRoutes(limit);
-          const observed = async column => (await exec(next, ['wg', 'show', 'wg-cloud', column], limit))
-            .split('\n').map(line => line.split('\t')).find(fields => fields[0] === peer) ?? [];
-          const [, handshake] = await observed('latest-handshakes');
-          const [, received, sent] = await observed('transfer');
-          assert.ok(Number(handshake) >= cut && Number(received) > 0 && Number(sent) > 0, 'remote.standby_handshake');
-          return {durationMs: Math.ceil(performance.now() - start), interfaceWithdrawn: true, handshake: true};
-        }, Math.max(1, 90000 - (performance.now() - start)), signal, 'handover_90_seconds');
-      },
       projected(venueId, limit) {
         return Promise.all(candidates.map(async name => JSON.parse(await exec(name, ['node', '-e', `
           const {readFileSync} = require('node:fs');

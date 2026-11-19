@@ -175,3 +175,11 @@ test('the private remote rehearsal cannot run with the paid plan or a foreign na
   await assert.rejects(runTestCloudClients({stockholmRemote: true, kubernetes: {namespace: 'default'}}),
     /integration\.stockholm_remote_binding/);
 });
+
+
+test('the gateway-machine fault requires the private Kind remote rehearsal', async () => {
+  const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({stockholmGatewayMachineLoss: true, services: true}),
+    /integration\.stockholm_machine_loss_scope/);
+  await assert.rejects(runTestCloudClients({stockholmGatewayMachineLoss: true}), /integration\.stockholm_machine_loss_scope/);
+});

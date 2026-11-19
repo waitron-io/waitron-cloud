@@ -227,7 +227,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, storage: result};
     }
     if (remote) {
-      const result = await remote({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});
+      const result = await remote({nodes, cluster, directory, run, kube, env, kubeconfig, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {

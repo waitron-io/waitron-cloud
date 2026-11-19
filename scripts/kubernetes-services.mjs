@@ -125,7 +125,7 @@ async function configureServices(context, kube, store, custody) {
 }
 
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote} = context;
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote, stopGatewayNode} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -187,7 +187,7 @@ export async function runKubernetesServices(context) {
         }});
       process.stderr.write(remote ? 'Running authenticated signup, box pairing and gateway handover\n' :
         'Running authenticated signup, box pairing and native backup verification\n');
-      const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...(remote ? {stockholmRemote: true} : {services: true}), kubernetes: {
+      const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...(remote ? {stockholmRemote: true, stockholmGatewayMachineLoss: stopGatewayNode} : {services: true}), kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
         proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, ...(remote ? {stockholmRemote: remoteTarget} : {verifier}),
         exec: async (role, args, input, limit) => {

@@ -7,15 +7,19 @@ and a fresh handshake on the same venue peer before building the
 
 1. Pass the owned `stopNode` from `scripts/kubernetes-node-loss.mjs` through
    `scripts/kubernetes-services.mjs` to `scripts/kubernetes-remote.mjs`. In the
-   existing `--remote` command, opt in to a controlled machine stop through
+   existing `--remote` command, opt in with `--remote --stop-gateway-node` through
    `scripts/kubernetes-check.mjs`, `scripts/test-cloud-integration.mjs` and
    `deploy/test-cloud/test-fixtures/integration-paid-remote.mjs`. Reuse the
    paired venue, fixed relay, account node and gateway Service. Keep the account
-   node up. If it holds the gateway Lease, use the existing election pause to
-   move it. Before the timed stop, require healthy staff and public HTTPS and
+   node up. Start a logged venue ping through the existing peer every five
+   seconds. If the account node holds the gateway Lease, use the existing
+   election pause to move it before the timed stop. Before the timed stop, require healthy staff and public HTTPS and
    a handshake with the chosen gateway. Record that handshake's age.
-2. Stop the exact recorded node. Use the Lease to identify the replacement.
-   Record when the gateway Service's endpoint list marks the old pod unavailable.
+2. Start timing just before calling the owned stop for the recorded node.
+   Identify the replacement by its Lease. The dead pod can still show Ready,
+   so the timed stop calls neither `handover()` nor `active()`. Record when
+   the Service endpoint list marks the old pod unavailable and which machine
+   held the Kubernetes controller-manager Lease when the stop began.
    Measure both verified HTTPS responses, the new handshake and transfer bytes
    from the stop request. The machine-stop control uses fixture traffic. A miss
    at 90 seconds fails and retains the last observation. Verify that the node
@@ -26,11 +30,13 @@ and a fresh handshake on the same venue peer before building the
    the later outside proof. Run election pause, certificate replacement and
    revocation through the existing opt-in test.
 3. First fail the remote callback test in `scripts/kubernetes-node-loss.test.mjs`
-   when it cannot stop a recorded node. Use `scripts/kubernetes-check.test.mjs`
+   when the remote callback receives no owned stop function. In the remote
+   unit test, report the dead pod and the new holder as Ready. Require the
+   replacement from the Lease and time withdrawal from the endpoints. Use `scripts/kubernetes-check.test.mjs`
    and `scripts/test-cloud-integration.test.mjs` for dispatch and scope. Run
    them and `scripts/kubernetes-remote.test.mjs`, including the existing relay
-   recovery case. Run the new opt-in machine-stop case in private Linux with the
-   same peer, DNS and listener. Record the measurement and its limits in
+   recovery case. Time recovery in the opt-in private Linux Kind case with
+   the same peer, DNS and listener. Record the measurement and its limits in
    `docs/gateway-reconnection-measurements.md` and `docs/backlog.md`.
 
 Estimate 1.5–2 hours within PR 7's 10–13, with 110–170 implementation lines and
