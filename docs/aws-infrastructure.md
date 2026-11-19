@@ -1315,8 +1315,8 @@ An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
 Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).
 
-To stop the active gateway's Kind machine, include `iputils-ping` in the
-Cloud image and run:
+Include `iputils-ping` in the Cloud image to rehearse losing the active
+gateway's Kind machine.
 
 ```sh
 TEST_KUBERNETES_REMOTE_MACHINE_LOSS=1 node --test scripts/kubernetes-remote.test.mjs

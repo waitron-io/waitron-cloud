@@ -95,6 +95,20 @@ its solution (204) and returned public HTTPS (200) with the new cookie. The
 earlier 403 did not recur. Both traffic runs used packets supplied by the
 fixture. Recovery of an idle box within 90 seconds remains open.
 
+## Stop a gateway machine in private Kind
+
+On 19 November 2026, a disposable Linux diagnostic stopped the second Kind
+machine after verifying the two HTTPS routes and a handshake two seconds old.
+The first machine hosted the account, the fixed relay backend and the
+Kubernetes controller manager. Kubernetes withdrew the stopped gateway
+endpoint after 50.168 seconds. The standby was on the first machine at the
+end of the run. The venue fixture sent a packet every five seconds.
+
+The combined staff HTTPS, public HTTPS and new handshake check missed the
+90-second deadline. This run established endpoint withdrawal time. Recovery
+through the fixed relay, the idle Waitron box and the outside listener with
+changed machine addresses still need proof.
+
 The existing Cloud fixture already preserves the key and endpoint, so this comparison
 adds no Cloud runtime change. To use a peer candidate automatically, Waitron needs a
 separately scoped appliance procedure: define the authenticated trigger, preserve
