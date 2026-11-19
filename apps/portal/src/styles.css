@@ -9,6 +9,11 @@ h1:focus { outline: none; }
 wt-input { margin: 1rem 0; }
 .help { color: var(--wt-color-text-muted); font-size: .9rem; }
 nav { display: grid; gap: .8rem; margin-top: 1.25rem; }
+.account-nav { margin-block: 0 1rem; }
+.account-nav ul { display: flex; flex-wrap: wrap; gap: .25rem .75rem; list-style: none; margin: 0; padding: 0; }
+.account-nav a { display: inline-block; padding: .45rem .25rem; color: var(--wt-color-text); text-decoration: none; }
+.account-nav a:hover, .account-nav a[aria-current="page"] { text-decoration: underline; }
+.account-nav a[aria-current="page"] { font-weight: 700; }
 a, .text-button { color: var(--wt-color-primary); text-underline-offset: .15em; }
 button { font: inherit; cursor: pointer; }
 .reveal { border: 0; background: transparent; color: var(--wt-color-text); padding: .4rem; font-size: .8rem; }

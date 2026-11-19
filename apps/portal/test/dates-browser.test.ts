@@ -35,7 +35,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
    return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.installations.loaded);
   const c=translations[locale], expected=locale==='en'?/^November 10, 2026(?: at|,) 10:05:09 AM$/:/^10 de noviembre de 2026(?: a las|,) 10:05:09$/, expectedExpiry=locale==='en'?/^December 10, 2026(?: at|,) 10:05:09 AM$/:/^10 de diciembre de 2026(?: a las|,) 10:05:09$/;
   const assertTimes=async(minimum:number)=>{
@@ -79,7 +79,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
    return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.usage.loaded);
   const c=translations[locale],usage=page.getByRole('region',{name:c.usageTitle,exact:true});
   const measured=usage.locator('p').filter({hasText:c.usageMeasuredThrough}).locator('time'),activity=usage.locator('p').filter({hasText:c.usageLatestEvent}).locator('time');

@@ -17,10 +17,17 @@ import '@waitron-io/ui-core/components/wt-button';
 import '@waitron-io/ui-core/components/wt-form-actions';
 import '@waitron-io/ui-core/components/wt-form-error-summary';
 import '@waitron-io/ui-core/components/wt-spinner';
-import type { PortalApp, Fields } from './app.ts';
+import type {PortalApp, Fields} from './app.ts';
 import type { Copy, Locale } from './locale.ts';
 // ISO 3166-1 alpha-2 codes; Intl also names regions that are not countries.
 const countryCodes = 'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'.split(' ');
+export const accountPages = {
+  '/account': 'account',
+  '/account/venues': 'venues',
+  '/account/remote-access': 'remoteAccess',
+  '/account/billing': 'billing',
+} as const;
+
 export function screen(app: PortalApp) {
   const c = app.copy;
   const countryNames = new Intl.DisplayNames([app.locale], {type: 'region'});
@@ -37,6 +44,14 @@ export function screen(app: PortalApp) {
   const action = (label: string, fn = () => {void app.submit();}) => html`<wt-form-actions><wt-button variant="primary" id="submit" .disabled=${!!app.waiting || app.pending||app.authenticator.pending || (app.path === '/login' && app.passkeys.pending)}
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
+  const accountPage = app.accountPage;
+  const state = app.session.state;
+  const accountNav = accountPage && state.kind === 'authenticated' && !state.enrollmentRequired
+    ? html`<nav class="account-nav" aria-label=${c.accountNav}><ul role="list">
+      ${Object.entries(accountPages).filter(([, page]) => page !== 'billing' || state.billingTrialAvailable === true)
+        .map(([path, page]) => html`<li><a href=${path} aria-current=${page === accountPage ? 'page' : nothing}
+          @click=${(event: MouseEvent) => app.follow(event, path, true)}>${c[page === 'account' ? 'accountLink' : page]}</a></li>`)}
+      </ul></nav>` : nothing;
   let content;
   if (app.session.state.kind === 'authenticated' && app.session.state.enrollmentRequired) content = html`<p>${c.enrollmentRequiredHelp}</p><section aria-labelledby="enrollment-security-heading"><h2 id="enrollment-security-heading">${c.accountSecurity}</h2>${accountActionProofScreen(app)}${passkeyAccountScreen(app)}${authenticatorAccountScreen(app)}</section><wt-form-actions><wt-button .disabled=${app.logoutDisabled} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
   else if(app.path==='/operator/actions')content=cloudActionsScreen(app);
@@ -45,11 +60,21 @@ export function screen(app: PortalApp) {
   else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);
   else if (app.path === '/login' && app.authenticator.challenge) content = authenticatorLoginScreen(app);
   else if (app.notice && !['signedOut', 'sessionExpired','factorChanged','factorRemoved','factorChangeUncertain'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
-  else if (app.path === '/' || app.path === '/account') {
-    content = app.session.state.kind === 'authenticated'
-      ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${ownerTransferScreen(app)}${billingScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
-      : html`<p role="status">${app.session.state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
-          ${app.session.state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
+  else if (accountPage) {
+    const signout = html`<wt-form-actions><wt-button .disabled=${app.logoutDisabled || app.diagnostics.pending}
+      @click=${() => {void app.logout();}}>${c.signout}</wt-button></wt-form-actions>`;
+    const accountContent = () => {
+      switch (accountPage) {
+        case 'account': return html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${ownerTransferScreen(app)}${signout}<p>${link('/forgot-password', c.forgot)}</p>`;
+        case 'venues': return html`${installationScreen(app)}${signout}`;
+        case 'remoteAccess': return html`${installationScreen(app, true)}${app.remote.installationId ? accountActionProofScreen(app, 2) : nothing}${signout}`;
+        case 'billing': return html`${billingScreen(app)}${app.billing.venue?.paymentMethods ? accountActionProofScreen(app, 2) : nothing}${signout}`;
+      }
+    };
+    content = state.kind === 'authenticated'
+      ? accountContent()
+      : html`<p role="status">${state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
+          ${state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
   } else if(app.path==='/reset-password'&&app.ownerRecovery.stage!=='idle')content=ownerRecoveryScreen(app);
   else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
     content = html`<p>${app.link.invalid ? c.linkUnavailable : c.missingLink}</p><nav>${link(retryLink, c.requestLink)} ${link('/login', c.login)}</nav>`;
@@ -78,7 +103,7 @@ export function screen(app: PortalApp) {
   return html`<header><a class="brand" href="/" @click=${(event: MouseEvent) => app.follow(event, '/')}>Waitron <strong>Cloud</strong></a>
     <label class="language">${c.language}<select aria-label=${c.language} .value=${app.locale}
       @change=${(event: Event) => app.setLocale((event.target as HTMLSelectElement).value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label></header>
-    <main><wt-card><h1 tabindex="-1">${app.title()}</h1>
+    ${accountNav}<main><wt-card><h1 tabindex="-1">${app.title()}</h1>
       <form novalidate @submit=${(event: Event) => {event.preventDefault(); void app.submit();}}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, app.root.querySelector('#submit'))}>
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>

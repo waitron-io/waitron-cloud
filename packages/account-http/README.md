@@ -69,7 +69,9 @@ loads exactly `index.html`, `app.js` and `app.css` at startup. Missing configure
 assets prevent startup; omitting the setting retains the API-only server.
 
 The portal serves `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`
-and `/account`, plus `/connect` for pairing and `/recover` for snapshot recovery.
+and `/account` for sign-in settings. From Account, choose Venues (`/account/venues`),
+Remote access (`/account/remote-access`) or Billing (`/account/billing`, when available).
+Use `/connect` for pairing and `/recover` for snapshot recovery.
 Unknown paths still return 404, but browser requests receive a small English or Spanish
 error page chosen from `Accept-Language`. Rejected query strings and methods similarly
 retain their 400 or 405 status. Static GET/HEAD requests retain host checks
@@ -817,11 +819,11 @@ POST `/api/account/billing/method/start` with
 `{"venueId":"11111111-1111-4111-8111-111111111111","kind":"card"}` or
 `kind: "direct_debit"`, using the same origin, session cookie and CSRF header as the
 chooser. Cards return a `checkoutId` for SumUp's widget; direct debit returns a
-`url` restricted to `https://checkout.stripe.com`, which returns to `/account`.
+`url` restricted to `https://checkout.stripe.com`, which returns to `/account/billing`.
 The SumUp setup is a €1 sandbox checkout, as recorded in the
 [provider test](../../docs/billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge).
 Before starting, enroll a passkey or authenticator app and verify it’s you in the
-shared ten-minute window. On `/account`, choose **Add or switch test card** or **Add or switch test direct debit**.
+shared ten-minute window. On `/account/billing`, choose **Add or switch test card** or **Add or switch test direct debit**.
 Card details stay in SumUp’s widget; your bank details stay on Stripe’s page.
 After returning from Stripe, choose **Check saved method** to verify the saved setup.
 A pending or failed setup keeps your previous method selected. If a reply is lost,

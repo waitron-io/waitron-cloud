@@ -51,12 +51,12 @@ async function fixture(t:TestContext,change?:(path:string,value:Record<string,an
  return {requests,make,fetcher};
 }
 
-test('Stripe setup creates a fresh synthetic customer and a SEPA-only hosted session returning to account',async t=>{
+test('Stripe setup creates a fresh synthetic customer and a SEPA-only hosted session returning to Billing',async t=>{
  const f=await fixture(t),client=f.make();
  assert.deepEqual(await client.start(stripe),{customerId:'cus_synthetic',providerReference:'cs_test_synthetic',presentation:{url:'https://checkout.stripe.com/c/pay/cs_test_synthetic'}});
  assert.deepEqual(f.requests.map(r=>r.method+' '+r.path),['GET /v1/account','GET /v1/balance','POST /v1/customers','POST /v1/checkout/sessions']);
  assert.deepEqual(f.requests[2]!.body,{name:'Synthetic Cloud billing',email:'billing-test@example.invalid'});
- assert.deepEqual(f.requests[3]!.body,{mode:'setup',currency:'eur',customer:'cus_synthetic','payment_method_types[]':'sepa_debit',success_url:'http://localhost:3000/account',cancel_url:'http://localhost:3000/account'});
+ assert.deepEqual(f.requests[3]!.body,{mode:'setup',currency:'eur',customer:'cus_synthetic','payment_method_types[]':'sepa_debit',success_url:'http://localhost:3000/account/billing',cancel_url:'http://localhost:3000/account/billing'});
  assert.ok(f.requests.every(r=>r.authorization==='Bearer sk_test_synthetic'));
 });
 

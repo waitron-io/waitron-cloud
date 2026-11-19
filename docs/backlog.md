@@ -411,10 +411,13 @@ internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for
 email capture. SMTP capture tests select by subject and recipient because concurrent
 database fixtures share the inbox. The account HTTP API now provides signup, login, session activity,
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
-network handling. The bilingual account portal now covers signup, sign-in, sign-out
-and password recovery, served by that API with real browser and Mailpit tests.
-The account venue overview groups one organisation at a time, shows business context,
-connection/service state and separate latest/verified snapshot capture times. Verified
+network handling. The bilingual portal supports signup and password recovery.
+After signing in, use Account for sign-in and security, Venues for services and
+backups, and Remote access for addresses and guest menus. Billing appears for
+eligible accounts and holds the Connected trial, tax details and test payment methods.
+You can sign out from each page. Browser and Mailpit tests exercise the portal
+through the account API. Venues shows one organisation at a time, with business
+details, connection and service state, and separate latest and verified snapshot times. Verified
 snapshots older than 48 hours are labelled out of date. Owners can browse paginated snapshot history, verification and retention details, including
 protected copies. The local durable worker now verifies real Waitron restores, retries failures and
 cleans expired snapshots and abandoned captures. The local monitor now persists contact,
@@ -2823,8 +2826,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   unchanged; PostgreSQL scope checks run in CI.
 - R5 venue panels now distinguish denied permission from request verification.
   Installations, snapshots, diagnostics, usage, remote setup and translation consent
-  ask you to check your account, organisation and venue. Both languages offer Account
-  overview without reloading and Sign out beside the refusal, with retry if sign-out
+  ask you to check your account, organisation and venue. Both languages offer **Account**
+  without reloading and **Sign out** beside the refusal, with retry if sign-out
   fails. Native HTTP/controller and two-venue browser checks cover six reachable
   panels, heading focus and cleared private state; real database/locking checks run
   in CI. Existing permission conditions remain; specific remote refusals get a
@@ -2833,8 +2836,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   in R3. Pairing keeps its existing guidance.
   Remote setup now explains a missing paid trial plan, missing gateway setup,
   a production venue outside the test-only trial and stopped installation access
-  in English and Spanish. Account overview and a read-only installation refresh
-  give you current context; plan changes, gateway provisioning and restoring stopped
+  in English and Spanish. Use **Account** to check your sign-in and refresh installations
+  to check current service status. Plan changes, gateway provisioning and restoring stopped
   access are unavailable here. Shared callers keep `permission_denied`; Account
   exposes only a known refusal cause after its ownership check. Native SQL-boundary,
   API/controller and browser checks cover the mapping; real database and late-DNS

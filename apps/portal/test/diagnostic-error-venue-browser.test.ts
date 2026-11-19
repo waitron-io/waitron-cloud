@@ -23,7 +23,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
   let gate:Promise<void>|undefined,entered:(()=>void)|undefined;const requests:unknown[]=[];
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
@@ -31,7 +31,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/diagnostics/read')){requests.push(route.request().postDataJSON());entered?.();await gate;return route.fulfill({status:503,json:{error:'unavailable'}});}
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.installations.loaded);
   const c=translations[locale],list=page.getByRole('region',{name:c.installations,exact:true}),rows=list.locator('article.installation');
   const diagnosticAlerts=list.getByRole('alert').filter({hasText:c.diagnosticUnavailable});

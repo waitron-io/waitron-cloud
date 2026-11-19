@@ -28,7 +28,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations[locale]; let reads = 0, sessionReads = 0;
       const writes: string[] = [];
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (request.method() === 'POST') writes.push(path);
@@ -43,7 +43,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (path === '/installations') return route.fulfill({json: {installations: []}});
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.goto('https://portal.test/account/venues'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const section = page.getByRole('region', {name: c.serviceAlerts, exact: true}), alert = section.getByRole('alert');
       const retry = section.getByRole('button', {name: c.alertsLoad, exact: true});
       await alert.getByText(c.unavailable, {exact: true}).waitFor();
@@ -72,15 +72,17 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(reads, 2);
       assert.equal(await retry.count(), 0); assert.equal(await alert.count(), 0);
       await section.getByRole('button', {name: c.alertsSave, exact: true}).waitFor();
+      await page.getByRole('navigation', {name: c.accountNav}).getByRole('link', {name: c.accountLink, exact: true}).click();
       await page.getByRole('link', {name: c.forgot, exact: true}).click();
       await page.getByRole('link', {name: c.login, exact: true}).first().click();
       const navigationCheck = page.waitForResponse('**/api/account/session');
       await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
       await (await navigationCheck).finished();
+      await page.getByRole('navigation', {name: c.accountNav}).getByRole('link', {name: c.venues, exact: true}).click();
       await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
       await page.waitForFunction(() => !(window as unknown as {alertActivityApp: {alerts: {pending: boolean}}}).alertActivityApp.alerts.pending);
       await section.getByRole('checkbox', {name: c.alertsReceive, exact: true}).waitFor();
-      assert.equal(reads, 2, 'returning to Account keeps already loaded alert preferences');
+      assert.equal(reads, 2, 'returning to Venues keeps already loaded alert preferences');
       assert.deepEqual(writes, ['/session/activity'], 'preferences retry never saves choices');
     } finally { releaseActivity(); releaseRetry(); await browser.close(); }
   });
@@ -93,7 +95,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
       await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations.en; let reads = 0, sessionReads = 0;
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
         const path = new URL(route.request().url()).pathname.replace('/api/account', '');
         if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
@@ -105,7 +107,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
         if (path === '/installations') return route.fulfill({json: {installations: []}});
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const section = page.getByRole('region', {name: c.serviceAlerts, exact: true}), retry = section.getByRole('button', {name: c.alertsLoad, exact: true});
       await section.getByRole('alert').getByText(['new account', 'failed navigation'].includes(scenario) ? c.unavailable : c.limited, {exact: true}).waitFor();
       if (scenario === 'cooldown' || scenario === 'blocked startup') {
@@ -113,7 +115,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
         await retry.evaluate(button => (button as HTMLElement).click());
         assert.equal(reads, 1, 'a programmatic retry cannot bypass the server wait');
         if (scenario === 'blocked startup') {
-          await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account'));
+          await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account/venues'));
           await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
           assert.equal(reads, 1, 'navigation cannot bypass the server wait');
         }
@@ -122,7 +124,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
       }
       if (scenario === 'failed navigation') {
         const refreshed = page.waitForResponse('**/api/account/alerts');
-        await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account'));
+        await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account/venues'));
         await (await refreshed).finished();
       }
       const activity = page.waitForResponse('**/api/account/session/activity');
@@ -149,7 +151,7 @@ test('navigation during an alert read preserves its attempt and later failure', 
     const page = await browser.newPage(); page.setDefaultTimeout(4000);
     await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
     let reads = 0, sessionReads = 0;
-    await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+    await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname.replace('/api/account', '');
       if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
@@ -158,10 +160,10 @@ test('navigation during an alert read preserves its attempt and later failure', 
       if (path === '/installations') return route.fulfill({json: {installations: []}});
       return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
     });
-    await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+    await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
     const section = page.getByRole('region', {name: translations.en.serviceAlerts, exact: true});
     await page.waitForFunction(() => (window as unknown as {alertActivityApp: {alerts: {pending: boolean}}}).alertActivityApp.alerts.pending);
-    await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account'));
+    await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account/venues'));
     await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
     assert.equal(reads, 1, 'navigation cannot duplicate a pending alert read');
     releaseRead();
@@ -185,7 +187,7 @@ for (const status of [401, 403]) {
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
       await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations.en; let reads = 0, writes = 0, sessionReads = 0;
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
@@ -197,11 +199,11 @@ for (const status of [401, 403]) {
         if (path === '/installations') return route.fulfill({json: {installations: []}});
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.goto('https://portal.test/account/venues'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const section = page.getByRole('region', {name: c.serviceAlerts, exact: true});
       const choice = section.getByRole('checkbox', {name: c.alertsReceive, exact: true});
       await choice.waitFor();
-      await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account'));
+      await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account/venues'));
       await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
       const activityRequest = page.waitForRequest('**/api/account/session/activity');
       await choice.uncheck(); await activityRequest;

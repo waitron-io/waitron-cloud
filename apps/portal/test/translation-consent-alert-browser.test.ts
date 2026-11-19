@@ -23,7 +23,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
   let installations=initial,readStatus=503,writeStatus=503;
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
@@ -36,7 +36,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    }
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>{const app=(window as any).app;return app.installations.loaded&&app.translationConsent.error==='unavailable'&&!app.translationConsent.pending;});
   const c=translations[locale],list=page.getByRole('region',{name:c.installations,exact:true}),venues=list.locator('article.installation');
   const group=(index:number)=>venues.nth(index).getByRole('group',{name:c.translationConsent,exact:true});

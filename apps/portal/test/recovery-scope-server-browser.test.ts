@@ -60,6 +60,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
       await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).waitFor();
     } else {
       await page.getByRole('link', {name: c.account, exact: true}).click();
+      await page.getByRole('navigation', {name: c.accountNav}).getByRole('link', {name: c.venues, exact: true}).click();
       await page.getByRole('button', {name: c.viewSnapshots, exact: true}).click();
       await page.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
       assert.equal(await page.getByRole('button', {name: c.recoveryApprove, exact: true}).count(), 0);
@@ -69,6 +70,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
         approvals.push({sent, status: response.status()});
         assert.equal(response.status(), 403); assert.deepEqual(await response.json(), {error: 'local_integration_only'});
       } else {
+        await page.goBack(); await page.waitForURL(f.origin + '/account');
         await page.goBack(); await page.getByRole('heading', {name: c.recoveryTitle, exact: true}).waitFor();
       }
     }
@@ -83,7 +85,7 @@ for (const locale of ['en', 'es'] as const) for (const source of ['snapshot', 'c
     const rows = (await f.db.pool.query('SELECT venue_id,point_id,source_kind FROM backup_recoveries WHERE id=$1', [target.id])).rows;
     console.log('RECOVERY_SCOPE_JOURNEY', JSON.stringify({locale, source, journey, environment: journey === 'test-venue' ? 'test' : 'production', offered, exposed, approvals, stored: rows}));
     if (journey === 'return-from-account') {
-      assert.equal(exposed, 0, 'Recovery must not expose approval for a production venue opened on Account');
+      assert.equal(exposed, 0, 'Recovery must not expose approval for a production venue opened on Venues');
       assert.deepEqual(approvals, []); assert.deepEqual(rows, []);
       assert.equal(await page.getByRole('region', {name: c.recoverySource, exact: true}).count(), 0);
     } else if (journey === 'account-api') {

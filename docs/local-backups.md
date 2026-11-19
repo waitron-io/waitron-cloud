@@ -401,7 +401,7 @@ After you authorise the source, return to the replacement. Refresh its status, c
 the approved recovery time, then confirm the local restore. A snapshot downloads one
 encrypted object and passes it through Waitron's archive validation. A continuous
 restore receives one frozen recovery kit and follows Waitron's signed live pointer.
-Neither browser receives a recovery key or storage credentials. The account page's
+Neither browser receives a recovery key or storage credentials. The recovery page's
 authorised status means download permission. It does not mean that restore has
 completed or trading is enabled.
 
@@ -411,7 +411,7 @@ continuous generation and its replacement key. If an approval reply is lost, the
 instead of creating another operation. If you reload the page, reopen the link from
 the replacement and enter its code again.
 
-You can close recovery access from the account page. Closing it, losing owner access,
+Use the original recovery link to close recovery access. Closing it, losing owner access,
 or disabling the account stops new downloads. Storage credentials already issued
 can remain valid for up to fifteen minutes, and data already downloaded cannot be
 recalled. A replacement rechecks its approval after download before staging the restore.

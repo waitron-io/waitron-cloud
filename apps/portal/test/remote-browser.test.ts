@@ -23,6 +23,7 @@ for(const {locale,replyDelayMs} of [{locale:'en',replyDelayMs:0},{locale:'es',re
   page.on('pageerror',error=>record({pageError:error.name}));
   await page.goto(f.origin+'/login');await page.getByLabel(c.email).fill(email);await page.locator('input[name=password]').fill(password);await page.getByRole('button',{name:c.login,exact:true}).click();await completeBrowserEmail(f,page,email,locale);
   await page.getByText(c.accountIntro,{exact:true}).waitFor();
+  await page.goto(f.origin+'/account/remote-access');
   const sessionCookie=(await context.cookies()).find(c=>c.name==='cloud_session'||c.name==='__Host-cloud_session');assert.ok(sessionCookie);await prepareConnectionProof(f.db.pool,owner.accountId,sessionCookie.value);
   await page.getByRole('button',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true}).click();
   const section=page.getByRole('region',{name:locale==='en'?'Remote access':'Acceso remoto',exact:true});await section.waitFor();

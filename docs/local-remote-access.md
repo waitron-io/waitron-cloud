@@ -105,7 +105,7 @@ challenge record is absent. Pebble images are pinned by digest in
 
 ## Set up your venue in the account portal
 
-Open **Your venues**, then **Remote access** for your venue. You must be an
+Choose **Remote access** in the navigation bar, then open your venue’s panel. You must be an
 organisation owner. Start with the assigned staff and public addresses. If your
 server is still waiting for an address, the panel shows that status.
 
@@ -661,13 +661,13 @@ verification keep their separate refusal handling. You can still inspect public
 setup metadata. A paid organisation needs a test venue and explicit remote
 provisioning; the plan alone supplies neither a tunnel nor a certificate.
 
-Account explains these limits in English and Spanish. You can return to Account
-overview or refresh installations after a stopped-access refusal. Refresh reads
+Remote access explains these limits in English and Spanish. You can return to
+**Account** or refresh installations after a stopped-access refusal. Refresh reads
 current status; it does not restore access. Plan changes and gateway provisioning
 still use the operator commands below. Account has no customer control for those
 changes or for restoring stopped access.
 
-Before saving a hostname in Account, enroll a passkey or authenticator app and use
+Before saving a hostname in Remote access, enroll a passkey or authenticator app and use
 “Verify it’s you” to open the shared ten-minute proof window. Status and DNS
 instructions remain readable without that proof. The save rechecks your enrollment,
 ownership and session authority after DNS finishes; a sign-out, security change or

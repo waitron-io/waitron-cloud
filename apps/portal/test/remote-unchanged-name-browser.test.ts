@@ -28,7 +28,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    failedPage=page;trace=portalTrace(page);
    const c=translations[locale];let saved=structuredClone(original);
    const calls:{path:string;body:Record<string,string>}[]=[];
-   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+   await page.route('https://portal.test/account/remote-access',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
    await page.route('**/api/account/**',async route=>{
     const request=route.request(),path=new URL(request.url()).pathname.replace('/api/account','');
     if(path==='/action-proof')return route.fulfill({json:{methods:['passkey','recovery'],freshUntil:'2099-01-01T00:00:00Z'}});
@@ -44,7 +44,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     return route.fulfill({status:503,json:{error:'unavailable'}});
    });
    stage='remote navigation and startup';
-   await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+   await page.goto('https://portal.test/account/remote-access');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    stage='initial remote setup button';
    await page.getByRole('button',{name:c.remoteSetup,exact:true}).waitFor();
    for(const custom of [false,true])for(const kind of ['staff','public'] as const){

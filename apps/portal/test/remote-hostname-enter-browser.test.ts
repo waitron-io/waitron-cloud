@@ -30,7 +30,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const c = translations[locale], dnsRequests: unknown[] = [], applyRequests: unknown[] = [];
       let limited = false;
       const dnsHeld = new Promise<void>(resolve => {releaseDns = resolve;});
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+      await page.route('https://portal.test/account/remote-access', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
         if(endpoint==='/action-proof')return route.fulfill({json:{methods:['passkey','recovery'],freshUntil:'2099-01-01T00:00:00Z'}});
@@ -52,7 +52,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         return route.fulfill({status: 503, json: {error: 'unavailable'}});
       });
-      await page.goto('https://portal.test/account'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      await page.goto('https://portal.test/account/remote-access'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await page.getByRole('button', {name: c.remoteSetup, exact: true}).click();
       const section = page.locator('.remote-setup'), field = section.locator('wt-input[name=remoteHostname]'), input = field.locator('input');
       const review = section.getByRole('button', {name: c.remoteReview, exact: true});

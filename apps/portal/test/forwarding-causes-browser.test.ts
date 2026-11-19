@@ -34,7 +34,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(3000);
   const c=translations[locale],language=locale==='en'?0:1,now=Date.now();let saved:RemoteView=structuredClone(original),reads=0;
   await page.clock.install({time:now});
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/remote-access',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname.replace('/api/account','');
    if(path==='/session'||path==='/session/activity')return route.fulfill({json:{accountId:'owner',expiresAt:'2099-01-01T00:00:00Z'}});
@@ -42,7 +42,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path==='/remote-access/status'){reads++;return route.fulfill({json:saved});}
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});await page.getByRole('button',{name:c.remoteSetup,exact:true}).waitFor();
+  await page.goto('https://portal.test/account/remote-access');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});await page.getByRole('button',{name:c.remoteSetup,exact:true}).waitFor();
   const heading=locale==='en'?'Last recorded forwarding attempt':'Último intento de conexión registrado';
   for(const [category,text] of Object.entries(outcomes)){
    saved={...original,publicForward:category==='unknown'?null:{category:category==='success'?null:category as any,observedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString()}};

@@ -55,7 +55,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           operations: {installationCompleted: '0', monitoringProbes: '0'}, messages: {sent: '0', failed: '0', expired: '0', cancelled: '0'}, latestEventAt: null, measuredThrough: null}});
         unexpected.push(path); return route.fulfill({status: 500, json: {error: 'unplanned_request'}});
       });
-      await page.goto(`https://portal.test/${panel === 'recovery' ? 'recover#request=' + id : 'account'}`);
+      await page.goto(`https://portal.test/${panel === 'recovery' ? 'recover#request=' + id : panel === 'remote' ? 'account/remote-access' : 'account/venues'}`);
       await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       await page.waitForFunction(() => (window as any).app.installations.loaded);
       if (panel === 'translationConsent') await page.waitForFunction(() => (window as any).app.translationConsent.loaded);

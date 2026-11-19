@@ -46,7 +46,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
               certificateNotAfter: null},
           }},
       });
-      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html',
+      await page.route('https://portal.test/account/venues', route => route.fulfill({contentType: 'text/html',
         body: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="portal" class="portal"></div></body></html>'}));
       await page.route('**/api/account/**', route => {
         const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
@@ -61,7 +61,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
       });
-      await page.goto('https://portal.test/account');
+      await page.goto('https://portal.test/account/venues');
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const venue = page.locator('article.installation'), monitoring = venue.getByRole('group', {name: c.monitoring, exact: true});
@@ -95,6 +95,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
       });
       await t.test('the named remote access and refresh controls expose current evidence without changing setup', async () => {
+        const nav = page.getByRole('navigation', {name: c.accountNav});
+        await nav.getByRole('link', {name: c.remoteAccess, exact: true}).click();
         await venue.getByRole('button', {name: c.remoteSetup, exact: true}).click();
         const remote = venue.locator('.remote-setup');
         await remote.getByText(c.remotePending, {exact: true}).waitFor();
@@ -111,6 +113,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (process.env.MONITORING_ACTION_RECEIPT_DIR) await remote.screenshot({path: `${process.env.MONITORING_ACTION_RECEIPT_DIR}/${locale}-${theme}-${width}-setup.png`});
         condition = 'healthy';
         await remote.getByRole('button', {name: c.remoteClose, exact: true}).click();
+        await nav.getByRole('link', {name: c.venues, exact: true}).click();
         await page.getByRole('button', {name: c.refreshStatus, exact: true}).last().click();
         await monitoring.getByText(c.monitorNoAlerts, {exact: true}).waitFor();
         for (const kind of ['Public', 'Staff'] as const) {

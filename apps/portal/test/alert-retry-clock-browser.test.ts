@@ -26,7 +26,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   });
   let reads=0;const unexpected:string[]=[],pageErrors:string[]=[];
   page.on('pageerror',error=>pageErrors.push(error.message));
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
     const proof=mockActionProof(route);if(proof)return proof;
       if(new URL(route.request().url()).pathname==='/api/account/owner-transfers')return route.fulfill({json:{organisations:[],offers:[]}});
@@ -41,7 +41,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/alerts')){reads++;return reads===1?route.fulfill({status:429,headers:{'Retry-After':'2'},json:{error:'rate_limited'}}):route.fulfill({json:{enabled:false,locale}});}
    unexpected.push(path);return route.fulfill({status:500,json:{error:'unexpected_fixture_request'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.alerts.error==='limited');
   const section=page.getByRole('region',{name:translations[locale].serviceAlerts,exact:true});
   const refresh=section.getByRole('button',{name:translations[locale].alertsLoad,exact:true});

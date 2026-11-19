@@ -26,7 +26,7 @@ for(const item of cases)test(item.locale+' '+item.theme+' '+item.width+': tax fo
   context=await fixture.browser.newContext({locale,colorScheme:theme,viewport:{width,height:1000}});
   await context.addCookies([{name:'cloud_session',value:session.token,url:fixture.origin,httpOnly:true},{name:'cloud_csrf',value:session.csrfToken,url:fixture.origin}]);
   const page=await context.newPage();page.setDefaultTimeout(5000);
-  await page.goto(fixture.origin+'/account');
+  await page.goto(fixture.origin+'/account/billing');
   const form=page.getByRole('form',{name:c.billingTaxTitle,exact:true}),name=form.getByRole('textbox',{name:c.billingTaxName,exact:true}),address=form.getByRole('textbox',{name:c.billingTaxAddress,exact:true}),number=form.getByRole('textbox',{name:c.billingTaxNumber,exact:true});
   await form.waitFor().catch(async error=>{console.error(JSON.stringify({case:{locale,theme,width},trace:fixture.trace.slice(-20),body:await page.locator('body').innerText()}));throw error;});assert.equal(await name.getAttribute('aria-invalid'),'false');
   await form.getByRole('button',{name:c.billingTaxSave,exact:true}).click();

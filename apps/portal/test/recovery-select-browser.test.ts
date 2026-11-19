@@ -54,22 +54,31 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       app.installations.selectOrganisation(second); app.draw();
     }, {request, second});
     const c = translations[locale], organisation = page.getByLabel(c.recoveryOrganisation, {exact: true}), venue = page.getByLabel(c.recoveryVenue, {exact: true});
+    const openVenues = async () => {
+      await page.getByRole('link', {name: c.account, exact: true}).click();
+      await page.getByRole('navigation', {name: c.accountNav}).getByRole('link', {name: c.venues, exact: true}).click();
+    };
+    const returnToRecovery = async () => {
+      await page.goBack();
+      await page.goBack();
+      await venue.waitFor();
+    };
     await t.test('recovery organisation displays the selected second organisation', async () => {
       assert.equal(await organisation.inputValue(), second);
       assert.equal(await organisation.locator('option:checked').textContent(), 'Z second organisation');
     });
-    await t.test('a test venue opened on Account stays selected on return', async () => {
-      await page.getByRole('link', {name: c.account, exact: true}).click();
+    await t.test('a test venue opened on Venues stays selected on return', async () => {
+      await openVenues();
       await page.evaluate(async second => {await (window as any).app.backups.open(second);}, second);
-      await page.goBack(); await page.getByLabel(c.recoveryVenue, {exact: true}).waitFor();
+      await returnToRecovery();
       assert.equal(await venue.inputValue(), second);
       assert.equal(await venue.locator('option:checked').textContent(), 'Second test venue · ' + second);
       assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).inputValue(), point);
     });
-    await t.test('account organisation displays the selected second organisation', async () => {
-      await page.getByRole('link', {name: c.account, exact: true}).click();
+    await t.test('Venues organisation displays the selected second organisation', async () => {
+      await openVenues();
       const shown = await page.locator('#venue-organisation').inputValue(), name = await page.locator('#venue-organisation option:checked').textContent();
-      await page.goBack(); await page.getByLabel(c.recoveryVenue, {exact: true}).waitFor();
+      await returnToRecovery();
       assert.equal(shown, second); assert.equal(name, 'Z second organisation');
     });
     await t.test('refreshing installations disables the organisation choice until the list settles', async () => {
@@ -95,10 +104,10 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await organisation.isEnabled(), true); assert.equal(await organisation.inputValue(), second);
     });
     if (handler === 'missing') return;
-    await t.test('production backups from Account are cleared before returning to recovery', async () => {
-      await page.getByRole('link', {name: c.account, exact: true}).click();
+    await t.test('production backups from Venues are cleared before returning to recovery', async () => {
+      await openVenues();
       await page.evaluate(async production => {const app = (window as any).app; await app.backups.open(production); app.recovery.stopped = true; app.recovery.acceptLoss = true;}, production);
-      await page.goBack(); await page.getByLabel(c.recoveryVenue, {exact: true}).waitFor();
+      await returnToRecovery();
       assert.equal(await page.getByRole('region', {name: c.recoverySource, exact: true}).count(), 0);
       assert.equal(await page.getByRole('button', {name: c.recoveryApprove, exact: true}).count(), 0);
       assert.deepEqual(await page.evaluate(() => {const app = (window as any).app; return [app.backups.venueId ?? null, app.recovery.venueId ?? null, app.recovery.pointId ?? null, app.recovery.source ?? null, app.recovery.stopped, app.recovery.acceptLoss];}), [null, null, null, null, false, false]);
@@ -106,7 +115,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     });
     for (const source of ['snapshot', 'continuous'] as const) await t.test(`the recovery template independently hides an unoffered stale ${source} source`, async () => {
       await page.evaluate(async ({production, source}) => {
-        const app = (window as any).app; app.path = '/account'; await app.backups.open(production);
+        const app = (window as any).app; app.path = '/account/venues'; await app.backups.open(production);
         if (source === 'continuous') {app.backups.page.continuousRecovery = {recoverableAt: '2026-10-23T10:00:00.000Z', checkedAt: '2026-10-23T10:00:00.000Z', sourceNodeId: production}; app.backups.selectContinuous();}
         app.path = '/recover'; (window as any).renderRecovery();
       }, {production, source});

@@ -38,7 +38,7 @@ function send(port: number, path: string, method = 'GET', host = 'localhost', st
 test('portal serves only named documents and assets with host, method and security checks', async () => {
   const running = await host();
   try {
-    for (const path of ['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/signup?token=old', '/reset-password?token=old']) {
+    for (const path of ['/', '/signup', '/login', '/forgot-password', '/reset-password', '/account', '/account/venues', '/account/remote-access', '/account/billing', '/signup?token=old', '/reset-password?token=old']) {
       const res = await send(running.port, path).result;
       assert.equal(res.status, 200, path); assert.match(res.headers['content-type']!, /text\/html/);
       assert.equal(res.headers['cache-control'], 'no-store'); assert.equal(res.headers['referrer-policy'], 'no-referrer');
@@ -51,7 +51,7 @@ test('portal serves only named documents and assets with host, method and securi
       const res = await send(running.port, path!).result;
       assert.equal(res.status, 200); assert.ok(String(res.headers['content-type']).startsWith(mime!));
     }
-    for (const path of ['/index.html', '/package.json', '/%2e%2e/package.json', '/app.js.map'])
+    for (const path of ['/account/unknown', '/account/venues/', '/index.html', '/package.json', '/%2e%2e/package.json', '/app.js.map'])
       assert.equal((await send(running.port, path).result).status, 404, path);
     const missing = await send(running.port, '/missing').result;
     assert.equal(missing.status, 404); assert.match(missing.headers['content-type']!, /text\/html/);

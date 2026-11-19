@@ -21,7 +21,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
   let status=200;const writes:unknown[]=[];
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const request=route.request(),path=new URL(request.url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
@@ -29,7 +29,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path.endsWith('/installations/revoke'))writes.push(request.postDataJSON());
    return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.goto('https://portal.test/account/venues');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.waitForFunction(()=>(window as any).app.installations.loaded);
   const c=translations[locale],region=page.getByRole('region',{name:c.installations,exact:true}),rows=region.locator('article.installation'),prompt=region.getByRole('group',{name:c.stopAccess,exact:true});
   const refresh=async()=>{await region.locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.waitForFunction(()=>!(window as any).app.installations.pending);};

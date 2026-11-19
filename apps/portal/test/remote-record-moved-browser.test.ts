@@ -29,7 +29,7 @@ for(const locale of ['en','es'] as const)test(`the ${locale} record notice ident
    service:{state:'ready',health:'unknown',observedAt:null,validUntil:null}});
   const monitoring={enabled:true,fresh:true,checkedAt:now,incidents:[{kind:'staff_record_moved',openedAt:now,changedAt:now}],
    remoteChecks:{staff:null,public:null}};
-  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><title>Waitron Cloud</title></head><body><div id="portal"></div></body></html>'}));
+  await page.route('https://portal.test/account/venues',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><title>Waitron Cloud</title></head><body><div id="portal"></div></body></html>'}));
   await page.route('**/api/account/**',async route=>{
    switch(new URL(route.request().url()).pathname){
     case '/api/account/session':
@@ -48,10 +48,11 @@ for(const locale of ['en','es'] as const)test(`the ${locale} record notice ident
      return route.fulfill({status:503,json:{error:'unavailable'}});
    }
   });
-  await page.goto('https://portal.test/account');
+  await page.goto('https://portal.test/account/venues');
   await page.addStyleTag({content:styles});
   await page.addScriptTag({content:bundle.outputFiles[0]!.text});
   await page.getByRole('group',{name:c.monitorStaff,exact:true}).getByText(c.monitorRecordMoved,{exact:true}).waitFor();
+  await page.getByRole('navigation',{name:c.accountNav}).getByRole('link',{name:c.remoteAccess,exact:true}).click();
   await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
   const panel=page.getByRole('region',{name:c.remoteSetupTitle,exact:true});
   const sentence=locale==='en'

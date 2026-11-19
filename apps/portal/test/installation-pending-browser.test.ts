@@ -55,7 +55,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.goto('https://portal.test/recover'); await page.addStyleTag({content: styles}); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
     await page.waitForFunction(() => (window as any).app.installations.loaded);
     const c = translations[locale];
-    const prepare = async (path: '/account' | '/recover') => {
+    const prepare = async (path: '/account/venues' | '/account/remote-access' | '/recover') => {
       refreshed = installations; refreshFails = false;
       await page.evaluate(async ({installations, second, request, path}) => {
         const app = (window as any).app;
@@ -63,7 +63,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         app.remote.close(); app.backups.close(); app.path = path;
         app.recovery.open(undefined); app.recovery.open(request); app.recovery.code = '12345678';
         app.recovery.view = {requestId: request, state: 'awaiting_owner', expiresAt: new Date(Date.now() + 600000).toISOString(), operationId: null, operation: null};
-        if (path === '/account') await app.translationConsent.load();
+        if (path === '/account/venues') await app.translationConsent.load();
         app.draw();
       }, {installations, second, request, path});
     };
@@ -86,7 +86,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     };
     if (handler === 'missing') {
-      await prepare('/account');
+      await prepare('/account/venues');
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         await assert.rejects(Promise.race([holdRefresh(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
@@ -133,39 +133,46 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (result === 'failed') assert.equal(await page.getByRole('alert').filter({hasText: c.unavailable}).count(), 1);
       }
     });
-    for (const expanded of [false, true]) for (const result of ['removed', 'retained'] as const) await t.test(`account ${expanded ? 'open panels' : 'closed panels'} ${result}: per-venue actions wait`, async () => {
-      await prepare('/account');
+    for (const path of ['/account/venues', '/account/remote-access'] as const)
+    for (const expanded of [false, true]) for (const result of ['removed', 'retained'] as const) await t.test(`${path} ${expanded ? 'open panel' : 'closed panel'} ${result}: per-venue actions wait`, async () => {
+      await prepare(path);
+      const remote = path === '/account/remote-access';
       const article = page.locator('article.installation');
-      if (expanded) {
+      if (expanded && !remote) {
         await article.getByRole('button', {name: c.viewSnapshots, exact: true}).click();
         await article.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
+      }
+      if (expanded && remote) {
         await article.getByRole('button', {name: c.remoteSetup, exact: true}).click();
         await article.locator('wt-input[name=remoteHostname] input').fill('staff.cafe.example');
         await article.getByRole('button', {name: c.remoteReview, exact: true}).click();
         await article.getByRole('button', {name: c.remoteConfirm, exact: true}).waitFor();
       }
-      assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
+      if (!remote) assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
       const start = calls.length;
       refreshed = result === 'removed' ? installations.slice(0, 1) : installations;
       try {
         await holdRefresh();
-        await disabled(page, [c.stopAccess, c.diagnosticDownload, c.translationConsentAgree]);
-        if (expanded) {
-          await disabled(page, [c.latestSnapshots, c.olderSnapshots, c.remoteReview, c.remoteUseAssigned, c.remoteConfirm]);
-          assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).isDisabled(), true);
-          assert.equal(await page.locator('#remote-kind').isDisabled(), true);
-        } else await disabled(page, [c.viewSnapshots, c.remoteSetup]);
+        if (remote) {
+          await disabled(page, expanded ? [c.remoteReview, c.remoteUseAssigned, c.remoteConfirm] : [c.remoteSetup]);
+          if (expanded) assert.equal(await page.locator('#remote-kind').isDisabled(), true);
+        } else {
+          await disabled(page, [c.stopAccess, c.diagnosticDownload, c.translationConsentAgree,
+            ...(expanded ? [c.latestSnapshots, c.olderSnapshots] : [c.viewSnapshots])]);
+          if (expanded) assert.equal(await page.getByLabel(c.chooseSnapshot, {exact: true}).isDisabled(), true);
+        }
         assert.deepEqual(calls.slice(start), []);
-        if (expanded && result === 'removed') await screenshot('account-pending');
+        if (expanded && result === 'removed') await screenshot(remote ? 'remote-pending' : 'venues-pending');
       } finally {await settle();}
       if (result === 'removed') {
         assert.equal(await article.getByRole('heading', {name: /Second test venue/}).count(), 0);
         assert.deepEqual(await page.evaluate(() => {const app = (window as any).app; return [app.backups.venueId ?? null, app.remote.installationId ?? null];}), [null, null]);
+      } else if (remote) {
+        assert.equal(await article.getByRole('button', {name: expanded ? c.remoteConfirm : c.remoteSetup, exact: true}).isEnabled(), true);
       } else {
         assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
         assert.equal(await article.getByRole('button', {name: c.diagnosticDownload, exact: true}).isEnabled(), true);
-        if (expanded) assert.equal(await article.getByRole('button', {name: c.remoteConfirm, exact: true}).isEnabled(), true);
-        else assert.equal(await article.getByRole('button', {name: c.viewSnapshots, exact: true}).isEnabled(), true);
+        if (!expanded) assert.equal(await article.getByRole('button', {name: c.viewSnapshots, exact: true}).isEnabled(), true);
       }
     });
   } finally {await browser.close();}
