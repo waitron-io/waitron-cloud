@@ -267,3 +267,14 @@ test('the fault check retries a bare Kubernetes API EOF while the node stays dow
   assert.equal(f.calls.filter(({binary, args}) => binary === 'kubectl' && args.includes('configmap') && args.includes('node-loss-1')).length, 2);
   assert.deepEqual(f.mutations('start'), f.mutations('kill'));
 });
+
+test('the healthy services rehearsal uses the three owned nodes without stopping them', async () => {
+  const {execute, calls} = fixture();
+  const result = await runCheck({execute, services: async ({nodes, cluster, kube}) => {
+    assert.deepEqual(nodes.map(node => node.ip), ['172.30.250.2', '172.30.250.3', '172.30.250.4']);
+    assert.equal((await kube(['get', '--raw=/readyz'])), 'ok');
+    return {network: cluster};
+  }});
+  assert.deepEqual(result.services, {network: result.cluster});
+  assert.equal(calls.filter(({binary, args}) => binary === 'docker' && args[0] === 'kill').length, 0);
+});

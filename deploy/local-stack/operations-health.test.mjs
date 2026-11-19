@@ -38,3 +38,20 @@ test('local health transport aborts a stalled account response',async()=>{
   await assert.rejects(localHealthFetch(new URL(`http://127.0.0.1:${server.address().port}/api/health/ready`),{signal:AbortSignal.timeout(30)}));
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
+
+test('local health uses the configured account authority over a private address', async () => {
+  const server = createServer((request, response) => {
+    response.statusCode = request.headers.host === 'cloud.example.test:3000' ? 200 : 403;
+    response.end();
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = new URL('http://127.0.0.1:' + server.address().port + '/api/health/ready');
+    const response = await localHealthFetch(url, {signal: AbortSignal.timeout(2000), host: 'cloud.example.test:3000'});
+    assert.equal(response.status, 200);
+    await response.text();
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});

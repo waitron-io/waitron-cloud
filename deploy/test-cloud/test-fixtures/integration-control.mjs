@@ -22,7 +22,7 @@ assert.equal(login.status, 200, 'integration.local_login');
 const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
 const fresh=await post('/management-api/session/me/fresh-sign-in',{method:'password',password:'Local integration password'},cookie);
 assert.equal(fresh.status,204,'integration.local_fresh_sign_in');
-if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'rollback-refresh') {
+if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase === 'snapshot-refusal' || (phase === 'snapshot-publish' || phase === 'snapshot-altered') || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'rollback-refresh') {
   const result = await new Promise((resolve, reject) => {
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
       let text = ''; res.on('data', part => text += part);
@@ -31,7 +31,7 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
         resolve(JSON.parse(text));
       } catch (error) {reject(error);}});
     });
-    req.setTimeout(phase === 'stream-start' ? 90000 : phase === 'snapshot-publish' || phase === 'paid-remote' || phase === 'storage-withdrawal' ? 45000 : 15000, () => req.destroy(Error('integration.refusal_timeout'))); req.once('error', reject); req.end(phase === 'snapshot-exposure' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'storage-withdrawal' ? JSON.stringify(choice) : undefined);
+    req.setTimeout(phase === 'stream-start' ? 90000 : (phase === 'snapshot-publish' || phase === 'snapshot-altered') || phase === 'paid-remote' || phase === 'storage-withdrawal' ? 45000 : 15000, () => req.destroy(Error('integration.refusal_timeout'))); req.once('error', reject); req.end(phase === 'snapshot-exposure' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'storage-withdrawal' ? JSON.stringify(choice) : undefined);
   });
   console.log(JSON.stringify(result));
 } else if (phase === 'start' || phase === 'check' || phase === 'complete' || phase === 'refresh') {
@@ -48,7 +48,7 @@ if (phase === 'snapshot-exposure' || phase === 'storage-withdrawal' || phase ===
   const status = await response.json();
   const bytes = await readFile(root + '/cloud/connection.json');
   const saved = JSON.parse(bytes);
-  assert.equal(saved.origin, 'https://waitron.local:3000');
+  assert.equal(saved.origin, process.env.CLOUD_TEST_ORIGIN ?? 'https://waitron.local:3000');
   assert.equal(saved.environment, 'test');
   assert.equal(status.installation.state, 'active');
   assert.ok(saved.lifecycle.lease);

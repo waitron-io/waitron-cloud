@@ -137,3 +137,22 @@ test('a lost email-code submission reply starts a fresh sign-in instead of repla
   await assert.rejects(login(), /reply lost/);
   assert.deepEqual(await login(), {status: 200}); assert.equal(starts, 2);
 });
+
+test('production rehearsal refuses a remote Kubernetes target before starting native clients', async () => {
+  const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({services: true, kubernetes: {
+    cluster: 'd620-12345678', namespace: 'default', network: 'kind', account: 'kube-account',
+    ca: 'test certificate', proxyIp: '172.30.250.2', port: 3000, mailPort: 8025,
+    exec: () => assert.fail('remote command must not start'),
+    remote: {worker: () => assert.fail('remote command must not start')},
+  }}), /integration\.services_binding/);
+});
+
+test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
+  const {readSignupToken} = await load();
+  assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');
+  const token = 'a'.repeat(43);
+  const text = 'Verify\n\nhttps://cloud.example.test:3000/signup#token=' + token + '&lang=en\n\nExpires';
+  assert.equal(readSignupToken(text, 'https://cloud.example.test:3000'), token);
+  assert.throws(() => readSignupToken(text, 'https://other.example.test:3000'), /integration\.signup_mail/);
+});

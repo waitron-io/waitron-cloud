@@ -11,6 +11,7 @@ import {Agent} from 'node:https';
 import {readFile} from 'node:fs/promises';
 import {inspectIntegrationSnapshot} from './integration-snapshot-evidence.mjs';
 import {openTestCaptureRuntime} from '../service-runtime.mjs';
+import {captureRuntime} from '../../../packages/backups/src/capture-config.ts';
 import {BackupCatalogue} from '../../../packages/backups/src/catalogue.ts';
 import {setVerificationPolicy} from '../../../packages/backups/src/verification-admission.ts';
 import {transaction} from '../../../packages/registration/src/transaction.ts';
@@ -26,8 +27,13 @@ const {S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
 const {organisationId, plan, sessionToken, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus, generation, recoverableAt} = JSON.parse(input);
-const config = await loadRuntime('/run/local-stack');
-const pool = new Pool({connectionString: `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`, connectionTimeoutMillis: 5000, statement_timeout: 10000});
+const services = process.env.CLOUD_STOCKHOLM_REHEARSAL === '1';
+const config = services ? undefined : await loadRuntime('/run/local-stack');
+const connectionString = services ? process.env.DATABASE_URL :
+  `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`;
+if (services) assert.ok(installationId && typeof connectionString === 'string' &&
+  new URL(connectionString).searchParams.get('sslmode') === 'verify-full', 'integration.services_inspection_binding');
+const pool = new Pool({connectionString, connectionTimeoutMillis: 5000, statement_timeout: 10000});
 try {
   if (!installationId) {
     assert.ok(plan === 'free' || plan === 'paid');
@@ -183,6 +189,30 @@ try {
         assert.equal(Number((await pool.query('SELECT count(*) FROM backup_recoveries WHERE venue_id=$1', [rows[0].venue_id])).rows[0].count), 0);
         console.log(JSON.stringify({...evidence, noSupersession: true}));
       }
+    } else if (services && phase === 'inspect-unpublished') {
+      const {rows: [row]} = await pool.query(`SELECT
+        EXISTS(SELECT 1 FROM backup_captures WHERE id=$1 AND installation_id=$2) AS reserved,
+        EXISTS(SELECT 1 FROM backup_points WHERE id=$1) AS published,
+        EXISTS(SELECT 1 FROM backup_verification_attempts WHERE point_id=$1) AS attempted`, [pointId, installationId]);
+      assert.deepEqual(row, {reserved: true, published: false, attempted: false});
+      console.log(JSON.stringify({unpublished: true}));
+    } else if (services && ['provision-snapshot', 'inspect-snapshot'].includes(phase)) {
+      const runtime = captureRuntime(process.env);
+      const location = {endpoint: process.env.CLOUD_BACKUP_ENDPOINT, bucket: 'cloud-storage-rehearsal',
+        region: process.env.CLOUD_BACKUP_REGION};
+      try {
+        if (phase === 'provision-snapshot') {
+          await new BackupCatalogue(pool, runtime.options.vault, runtime.options.objects, 'existing').provision(installationId, location);
+          console.log(JSON.stringify({provisioned: true}));
+        } else {
+          const {rows: [point]} = await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3',
+            [pointId, installationId, rows[0].venue_id]);
+          assert.ok(point, 'integration.snapshot_binding');
+          const stored = await runtime.options.objects(location).read(point.object_key);
+          console.log(JSON.stringify(inspectIntegrationSnapshot(point, stored,
+            {pointId, installationId, venueId: rows[0].venue_id, sha256, bytes, sourceNodeId})));
+        }
+      } finally {runtime.close();}
     } else if (phase === 'provision-snapshot' || phase === 'inspect-snapshot') {
       const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid',
         ...(phase === 'inspect-snapshot' ? {openStorage: async () => undefined} : {})});

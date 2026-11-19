@@ -5,7 +5,7 @@ import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {randomUUID} from 'node:crypto';
+import {createHmac, randomUUID} from 'node:crypto';
 import {request} from 'node:https';
 import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
@@ -22,12 +22,13 @@ import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integrati
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
 import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
+import {servicesOrigin, servicesNamespace} from '../deploy/kubernetes/services.mjs';
 import {createP1Budget} from './p1-observer.mjs';
 import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
 export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const origin = 'https://waitron.local:3000', defaultWaitronRevision = '8eed667ab0586a3144ed7911b57cf50fcb3b0766', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
+const composeOrigin = 'https://waitron.local:3000', defaultWaitronRevision = '8eed667ab0586a3144ed7911b57cf50fcb3b0766', historicalWaitronRevision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
 const cancellation = new AsyncLocalStorage();
 const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
@@ -137,8 +138,78 @@ export function assertAmazonBinding(target) {
     'kubernetes.amazon_binding');
 }
 
+export function readSignupToken(text, origin) {
+  const prefix = origin + '/signup#';
+  const link = text.split(/\s+/).find(value => value.startsWith(prefix));
+  const token = new URLSearchParams(link?.slice(prefix.length)).get('token');
+  assert.ok(/^[A-Za-z0-9_-]{43}$/.test(token ?? ''), 'integration.signup_mail');
+  return token;
+}
+
+function authenticatorCode(secret) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  assert.ok(/^[A-Z2-7]+$/.test(secret), 'integration.authenticator_secret');
+  const bits = [...secret].map(letter => alphabet.indexOf(letter).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g).map(byte => parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const digest = createHmac('sha1', key).update(counter).digest();
+  return String((digest.readUInt32BE(digest.at(-1) & 15) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+
+const sessionCookies = reply => reply.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
+function browserSession(reply) {
+  const cookie = sessionCookies(reply);
+  const csrf = /__Host-cloud_csrf=([^;]+)/.exec(cookie)?.[1];
+  assert.ok(csrf, 'integration.session_csrf');
+  return {cookie, 'x-csrf-token': csrf};
+}
+
+async function completeServicesConnectionProof({api, mailbox, readMail, email, password, login}) {
+  const browser = browserSession(login);
+  const seen = new Set((await mailbox()).messages?.map(message => message.ID));
+  const challenge = await api('/api/account/action-proof/email', {}, browser);
+  assert.equal(challenge.status, 200, 'integration.action_proof_requested');
+  const message = await readMail(email, seen);
+  const code = /^\d{6}$/m.exec(message.Text)?.[0];
+  assert.ok(code, 'integration.action_proof_email');
+  const proof = await api('/api/account/action-proof/email/verify', {challengeToken: challenge.body.challengeToken, code}, browser);
+  assert.equal(proof.status, 204, 'integration.action_proof_verified');
+
+  const begun = await api('/api/account/authenticator/begin', {}, browser);
+  assert.equal(begun.status, 200, 'integration.authenticator_begin');
+  const {pendingToken, secret} = begun.body;
+  const activated = await api('/api/account/authenticator/activate', {pendingToken, code: authenticatorCode(secret)}, browser);
+  assert.equal(activated.status, 200, 'integration.authenticator_activated');
+  const [signInCode, actionCode] = activated.body.recoveryCodes;
+  assert.ok(signInCode && actionCode, 'integration.authenticator_recovery_codes');
+
+  const relogin = await api('/api/account/login', {email, password});
+  assert.equal(relogin.status, 202, 'integration.authenticator_required');
+  assert.equal(relogin.body.factorRequired, true, 'integration.authenticator_required');
+  const confirmed = await api('/api/account/login/factor', {challengeToken: relogin.body.challengeToken,
+    proof: {kind: 'recovery', code: signInCode}});
+  assert.equal(confirmed.status, 200, 'integration.authenticator_sign_in');
+  const enrolledBrowser = browserSession(confirmed);
+  const authorised = await api('/api/account/action-proof/factor', {kind: 'recovery', code: actionCode}, enrolledBrowser);
+  assert.equal(authorised.status, 204, 'integration.connection_proof');
+  return enrolledBrowser;
+}
+
 export async function runTestCloudClients(options = {}) {
-  if (options.kubernetes) {
+  if (options.services) {
+    const k = options.kubernetes;
+    assert.ok(k && /^d621-[a-f0-9]{32}$/.test(k.cluster) && k.network === k.cluster &&
+      k.namespace === servicesNamespace && k.account === 'kube-account' && !k.amazon && !k.remote &&
+      /^172\.30\.250\.\d{1,3}$/.test(k.proxyIp) && Number.isInteger(k.port) && Number.isInteger(k.mailPort) &&
+      typeof k.mailAuthorization === 'string' && typeof k.storeCa === 'string' && typeof k.exec === 'function' &&
+      ['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function'),
+      'integration.services_binding');
+    assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery', 'freeRemote',
+      'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration', 'schemaRollback', 'pairedExpiry', 'fixedProject']
+      .some(key => options[key]), 'integration.services_scope');
+    options = {...options, paidVerification: true};
+  } else if (options.kubernetes) {
     const k = options.kubernetes;
     if (k.amazon) assertAmazonBinding(k.amazon);
     const ownedTarget = k.amazon ? k.cluster === k.amazon.cluster && k.network === k.amazon.cluster : /^d620-[a-f0-9-]+$/.test(k.cluster) && k.network === 'kind';
@@ -177,7 +248,9 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, kubernetes}, fixedProject, waitronSource) {
+  const origin = services ? servicesOrigin : composeOrigin;
+  const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
@@ -290,6 +363,10 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
+      if (services) {
+        const pinned = JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json', import.meta.url), 'utf8'));
+        assert.equal(revision, pinned.runtime.revision, 'integration.services_waitron_pin');
+      }
       if ((paidVerification || paidRecovery) && revision !== historicalWaitronRevision) {
         const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
           '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -343,12 +420,12 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     let port = kubernetes?.port ?? Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = kubernetes?.mailPort ?? Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const budget = kubernetes?.observe ? createP1Budget() : undefined;
-    const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local', signal) => {
+    const api = (path, body, credentials = {}, trust = ca, servername = cloudHostname, signal) => {
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
       return new Promise((resolve, reject) => {
       const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
-        headers: {host: 'waitron.local:3000', ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
+        headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
         res.once('error', reject); res.once('end', () => {
@@ -363,14 +440,28 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
     const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
-    const mailbox = async signal => parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`,
-      {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)])})).text());
+    const fetchInbox = (path, signal, authorization = kubernetes?.mailAuthorization) =>
+      fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {
+        signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)]),
+        ...(authorization ? {headers: {authorization}} : {}),
+      });
+    const readInbox = async (path, signal) => {
+      const response = await fetchInbox(path, signal);
+      assert.equal(response.status, 200, 'integration.inbox_read');
+      return parseIntegrationJson(await response.text());
+    };
+    if (services) {
+      const request = await fetchInbox('messages', undefined, '');
+      assert.equal(request.status, 401, 'integration.inbox_requires_authentication');
+      await request.body?.cancel();
+    }
+    const mailbox = signal => readInbox('messages', signal);
     const readMail = async (email, seen, signal) => {
       let message;
       for (let attempt = 0; attempt < 100; attempt++) {
         const inbox = await mailbox(signal);
         const found = inbox.messages?.find(value => !seen.has(value.ID) && value.To.some(to => to.Address === email));
-        if (found) {message = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${found.ID}`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)])})).text()); break;}
+        if (found) {message = await readInbox('message/' + found.ID, signal); break;}
         await delay(100);
       }
       assert.ok(message, 'integration.mail_missing'); return message;
@@ -378,33 +469,38 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
     const signupAccount = async (email, password, name, signal) => {
       assert.equal((await api('/api/account/signup/request', {email}, {}, undefined, undefined, signal)).status, 202);
       const message = await readMail(email, new Set(), signal);
-      const token = /https:\/\/waitron\.local:3000\/signup#token=([A-Za-z0-9_-]{43})/.exec(message?.Text ?? '')?.[1];
-      assert.ok(token, 'integration.signup_mail');
+      const token = readSignupToken(message.Text, origin);
       const signup = await api('/api/account/signup/complete', {token, password, rememberBrowser:'true', organisationName: name, legalBusinessName: name + ' SL', countryCode: 'ES'}, {}, undefined, undefined, signal);
       assert.equal(signup.status, 201, 'integration.signup');
       return signup;
     };
     let repeatBackup, readBackups, observation;
-    for (const plan of ['free', 'paid']) {
+    for (const plan of services ? ['paid'] : ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       const signup = await signupAccount(email, password, plan + ' café');
       const {organisationId, legalBusinessId} = signup.body;
-      const login = await api('/api/account/login', {email, password}, {cookie:signup.headers['set-cookie'].map(value=>value.split(';')[0]).join('; ')}); assert.equal(login.status, 200, 'integration.login');
-      const cookie = login.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
-      const csrf = /__Host-cloud_csrf=([^;]+)/.exec(cookie)?.[1]; assert.ok(csrf);
-      const browser = {'cookie': cookie, 'x-csrf-token': csrf};
-      const sessionToken=/__Host-cloud_session=([^;]+)/.exec(cookie)?.[1];assert.ok(sessionToken);
-      const planResult = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'], JSON.stringify({organisationId, plan,sessionToken}), 'plan'));
+      const login = await api('/api/account/login', {email, password}, {cookie: sessionCookies(signup)});
+      assert.equal(login.status, 200, 'integration.login');
+      const browser = services ?
+        await completeServicesConnectionProof({api, mailbox, readMail, email, password, login}) :
+        browserSession(login);
+      const sessionToken = /__Host-cloud_session=([^;]+)/.exec(browser.cookie)?.[1];
+      assert.ok(sessionToken);
+      const planResult = services ? undefined : parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'], JSON.stringify({organisationId, plan,sessionToken}), 'plan'));
       const caFile = join(directory, 'ca.pem'); await writeFile(caFile, ca + '\n', {mode: 0o644});
+      const storeCaFile = join(directory, 'store-ca.pem');
+      if (services) await writeFile(storeCaFile, kubernetes.storeCa + '\n', {mode: 0o644});
       const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-' + plan + '-state']);
       record('volume', stateVolume);
       const captureSnapshot = (paidSnapshot || paidVerification || paidRecovery) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
-        ...(kubernetes ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
-        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', captureSnapshot ? '2240m' : '1024m', '--memory-swap', captureSnapshot ? '2240m' : '1024m', '--read-only', '--cap-drop', 'ALL',
+        ...(kubernetes && !services ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
+        '--add-host', cloudHostname + ':' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', captureSnapshot ? '2240m' : '1024m', '--memory-swap', captureSnapshot ? '2240m' : '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
+        ...(services ? ['--mount', 'type=bind,src=' + storeCaFile + ',dst=/proof/store-ca.pem,readonly',
+          '--env', 'CLOUD_TEST_STORE_CA=/proof/store-ca.pem'] : []),
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
         ...(revision !== historicalWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
@@ -460,9 +556,14 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         const recoveryAuthority = paidAuthorisedRecovery ? await control(id, 'recovery-authority') : undefined;
         if (paidVerification || paidRecovery) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
         let captured = await control(id, 'snapshot-publish');
+        const refused = services ? await control(id, 'snapshot-altered') : undefined;
+        if (refused) {
+          assert.equal(refused.refused, true);
+          assert.deepEqual(parseIntegrationJson(await accountPhase('inspect-unpublished', refused)), {unpublished: true});
+        }
         for (const [name, extra] of [
           ['stored-digest', {sha256: '0'.repeat(64)}],
-          ['organisation-binding', {organisationId: organisations[0].organisationId}],
+          ['organisation-binding', {organisationId: organisations[0]?.organisationId ?? randomUUID()}],
           ['source-node-binding', {sourceNodeId: randomUUID()}],
         ]) await assert.rejects(accountPhase('inspect-snapshot', {...captured, ...extra}), undefined, 'integration.snapshot_control:' + name);
         const independent = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
@@ -543,6 +644,9 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
               shippingQualification: false, baseline: hostCapacity.baseline, startup: {samples: startupCapacity.samples}, samples: measured.samples};
           } else await verify();
+          if (refused) {
+            assert.deepEqual(parseIntegrationJson(await accountPhase('inspect-unpublished', refused)), {unpublished: true});
+          }
         }
         if (paidStream) {
           journeyStage = 'stream';
@@ -701,6 +805,12 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             prePlacement: delivered.prePlacement, refusals, ordinaryRestore: refusal.ordinaryRestore, activation: refusal.activation,
             routeMoved: refusal.routeMoved, reportedRestored: refusal.reportedRestored, sourceStoppedDuringRead: true, requestClosed: true};
         }
+      }
+      if (services) {
+        result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
+          signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
+          backup: publishedSnapshot, alteredPublicationRefused: true};
+        return;
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
       await docker(['restart', '--time', '10', id]); await ready(); await control(id, 'refresh');
