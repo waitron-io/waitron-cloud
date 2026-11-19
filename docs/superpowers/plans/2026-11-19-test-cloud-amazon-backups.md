@@ -65,25 +65,33 @@ rollout. Capture only from the confirmed synthetic venue. Show the readout and
 continued Staff access. Record the upload route, off and rollback steps and trial
 result in the PR and update `docs/backlog.md`. The source stays the sole writer.
 Estimate +250/−20 runtime and configuration lines, +245/−10 test lines, one
-generated pin and about 45 guide lines. The upload ceiling stays 512 MiB. The
-trial archive must fit the verifier's smaller scratch budget. Continuous upload,
-activation and fiscal proof sit outside this slice.
+generated pin and about 80 guide lines. The disk amendment adds about 55 runtime
+and configuration lines and 45 test lines. The upload ceiling stays 512 MiB.
+Continuous upload, activation and fiscal proof sit outside this slice.
 
 **Bounded disk scratch amendment, pending watcher clearance.** The pinned release
 reserves 256 MiB free before it can expand a compressed backup. Lane K's real
 uploader stored 102,338 bytes in disposable Linux and the verifier returned
-`unavailable / resource_limit` at the 256 MiB cap. Use Lane G's measured archive
-size and verified volume bound with its margin once posted. Record both before
-building or equipping the test host.
+`unavailable / resource_limit` at the 256 MiB cap. Set the verifier size to Lane G's
+verified bound once its archive size and margin are recorded. Use a separate 1 GiB
+worker object stage for one download up to the 512 MiB upload ceiling. Keep the
+account stage used by the successful small upload. Run the disposable disk-backed
+restore first and require at least 8 GiB still free after both allocations on Amazon.
 
-On the existing Amazon disk use private, fixed-size ext4 filesystems under
+On the existing Amazon disk, use fixed-size private ext4 filesystems under
 `/opt/waitron-cloud/amazon-backup-stages`. Reuse the owner-labelled scratch volume
 in [verifier containment](../../backup-verifier-containment.md#use-a-private-disk-for-the-venue-level-trial)
-and the account/worker paths in `deploy/test-cloud/compose.backup-stage.yaml`.
-Mount only the separate `work` directories inside the filesystems so startup fails
-if the filesystems are missing. The controller sees verifier scratch at its absolute
-host path and the child sees it only at `/scratch`. Keep the exact image and 1 GiB
-memory limit, no child network, existing cleanup and `release_ready=false`.
-Use `deploy/test-cloud/{deployment,backup-worker}.test.mjs` to prove the mounts and
-refusal without the owned scratch. Rehearse the pinned uploader and isolated restore
-on disposable Linux and record the same digest, peak resource use and cleanup.
+and the worker stage mount from `deploy/test-cloud/compose.backup-stage.yaml`.
+Mount only the `work` directories created inside the filesystems and document
+remounting after reboot. The trusted worker needs root to read the private stack
+config and the Docker socket. Drop other capabilities and give it only
+`DAC_OVERRIDE` and `FOWNER` for the private uid-1000 scratch directory. Keep the
+child unprivileged with scratch at `/scratch`, 1 GiB RAM, no network, existing
+cleanup and `release_ready=false`.
+
+Update `deploy/test-cloud/{compose.amazon-backups.yaml,runtime.mjs,backup-worker.mjs}`,
+`scripts/test-cloud-deploy.mjs` and `docs/test-cloud.md` for these exact mounts,
+variables and off steps. Extend the existing deployment, runtime and worker tests
+to refuse missing or misplaced private mounts and prove the Amazon pin at startup.
+Rehearse the exact uploader and restore on disposable Linux, compare the digest,
+measure peak resources and confirm child and stage cleanup.
