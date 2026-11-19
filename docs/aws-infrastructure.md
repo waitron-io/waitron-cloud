@@ -1299,17 +1299,25 @@ Include HAProxy, iproute2, iptables and WireGuard tools in the Cloud image.
 TEST_KUBERNETES_REMOTE=1 node --test scripts/kubernetes-remote.test.mjs
 ```
 
-The check signs up and pairs one synthetic venue over HTTPS. It uses the existing
-remote configuration worker and the rehearsal CA to serve its staff and public
-routes through the elected gateway. Only that candidate serves traffic. The
-worker publishes routes and the public certificate together to one Secret.
+The check signs up and pairs one synthetic venue over HTTPS. Its peer uses
+the rehearsal certificate authority for staff and public HTTPS through the
+elected gateway. The publication worker saves signed routes and the public
+certificate and signing request in the same Kubernetes Secret.
 
-The fault pauses the active candidate's lease renewal. The watchdog must
-remove the old WireGuard interface. The same venue peer then has 90 seconds
-from the fault to complete a new handshake and serve verified staff and public
-HTTPS through a standby. The check also verifies certificate replacement and
-owner account revocation. Each of those stages allows 180 seconds for the
-projected files to reach all three candidates.
+The check first pauses the active gateway's lease renewal. The watchdog must
+remove the old WireGuard interface. The same venue peer has 90 seconds to
+complete a new handshake and serve verified HTTPS through a standby. Then
+the first worker replaces the public certificate on the same route, with up
+to 180 seconds for all three gateways to receive it.
+
+The check starts a second publication worker on a different machine. Both
+workers stay off the account machine so the account can accept the owner's
+revocation while the first worker's machine is stopped. During the 90-second
+stop window, the surviving worker must complete a new certificate job with
+the same certificate and signing request, then publish a newer signed route
+manifest without the revoked venue. After the machine rejoins, the check
+allows 180 seconds for all three gateways to receive that withdrawal. It
+checks that the peer is gone and that both HTTPS routes refuse the venue.
 
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.

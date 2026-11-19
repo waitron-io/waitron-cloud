@@ -1807,7 +1807,9 @@ implementation or production evidence.
   and MinIO. Stockholm and Flux startup with the real services, worker redundancy,
   durable mail and a storage address that survives machine loss remain outside
   rehearsal checks. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
-  uses the same peer through a standby and checks certificate replacement and account revocation.
+  uses the same peer through a standby and checks same-route certificate replacement,
+  then stops the original publication worker's machine and checks whether the
+  survivor reuses the certificate and publishes the owner's revocation.
   The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
   used the Waitron companion's own traffic and restored staff and public HTTPS
   in 52.373 and 52.387 seconds through one private relay address. The former
