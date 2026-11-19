@@ -143,11 +143,11 @@ The follow-up at `4d02f4425033d3ee4a1baca8094b5049c311b906` used one
 private relay address for TCP and UDP. Kubernetes withdrew the endpoint at
 45.878 seconds. A fresh WireGuard handshake followed at 51.660 seconds.
 Staff and public HTTPS returned verified responses at 52.373 and 52.387
-seconds. The companion used its own traffic and kept its original container,
-interface and peer key. The stopped machine returned with its original
-identity, and its former gateway returned as a standby. The run verified
-that the interface and readiness marker were absent there, and the disposable
-guest was removed.
+seconds. The public request kept its original cookie. The companion used its
+own traffic and kept its original container, interface and peer key. The
+stopped machine returned with its original identity. Its former gateway no
+longer held the Lease and had neither the active interface nor a readiness
+marker. The disposable guest was removed.
 
 Run the [companion machine-stop check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
 to reproduce this result. The socket test separately changes a relay

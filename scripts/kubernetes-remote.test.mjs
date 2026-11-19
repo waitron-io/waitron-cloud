@@ -25,7 +25,7 @@ test('a timed-out probe preserves the last observation from before the deadline'
 });
 
 test('machine loss follows the Lease while the dead gateway still looks Ready', {timeout: 3000}, async t => {
-  let now = 100, down = false, slices = 0;
+  let now = 100, down = false, slices = 0, standbyChecks = 0;
   t.mock.method(performance, 'now', () => now);
   t.mock.method(Date, 'now', () => 1_000_250);
   const pod = (name, nodeName) => ({metadata: {name}, spec: {nodeName},
@@ -51,6 +51,7 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
     if (args[3] === 'sh') {
       assert.equal(down, false, 'the old gateway is checked only after it has restarted');
       assert.equal(resource, 'old');
+      if (++standbyChecks === 1) throw Error('old gateway still has its tunnel interface');
       return '';
     }
     assert.equal(resource, down ? 'next' : 'old', 'read WireGuard from the current Lease holder');
@@ -71,6 +72,8 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
   assert.equal(result.controllerNode, 'gateway-node');
   assert.equal(result.endpointWithdrawnMs, 50);
   assert.equal(result.handshakeMs, 6750);
+  assert.equal(standbyChecks, 2, 'the rebooted gateway must pass the standby check before recovery completes');
+  assert.equal(result.rejoinedStandby, true);
   assert.deepEqual([result.receivedBytes, result.sentBytes], [12, 15]);
 });
 
@@ -172,14 +175,19 @@ test('the same relay ports follow a changed address and then fail over to anothe
       '192.0.2.1': original.ports, '192.0.2.2': replacement.ports, '192.0.2.3': standby.ports,
     })};
     const local = ${JSON.stringify(local)};
-    let primary = '192.0.2.1';
-    process.on('message', address => {primary = address; process.send('updated');});
+    let primary = '192.0.2.1', hangNextLookup = false;
+    process.on('message', address => {
+      primary = address;
+      hangNextLookup = true;
+      process.send('updated');
+    });
     const lookup = dns.lookup;
     dns.lookup = (name, options, done) => {
       if (name === 'node-first') return done(null, primary, 4);
       if (name === 'node-second') return done(null, '192.0.2.3', 4);
       if (name === 'node-third') {
         process.send('check');
+        if (hangNextLookup) {hangNextLookup = false; return;}
         return done(Object.assign(Error('unavailable'), {code: 'ENOTFOUND'}));
       }
       return lookup(name, options, done);
@@ -246,14 +254,15 @@ test('the same relay ports follow a changed address and then fail over to anothe
   await updated;
   await verifyReplies('replacement');
 
-  await new Promise(resolve => replacement.tcp.close(resolve));
+  await Promise.all([replacement, standby].map(node => new Promise(resolve => node.tcp.close(resolve))));
   const checked = () => once(events, 'check', {signal: t.signal});
+  for (let check = 0; check < 4; check++) await checked();
+  await verifyUdp('replacement', AbortSignal.timeout(500));
+
+  standby.tcp.listen(standby.ports.tcp, local);
+  await once(standby.tcp, 'listening');
   await checked();
   await checked();
   await verifyUdp('replacement', AbortSignal.timeout(500));
   await verifyReplies('standby');
-
-  await new Promise(resolve => standby.tcp.close(resolve));
-  for (let check = 0; check < 4; check++) await checked();
-  await verifyUdp('standby', AbortSignal.timeout(500));
 });

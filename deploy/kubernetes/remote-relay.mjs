@@ -7,10 +7,17 @@ import {setTimeout as delay} from 'node:timers/promises';
 const [primary, upstreamPort = '31820', listenPort = '51820', listenHost = '0.0.0.0', tcpPort = '30443', ...standbys] = process.argv.slice(2);
 const hosts = [primary, ...standbys];
 const inbound = createSocket('udp4');
+const probeTimeoutMs = 500;
 let peer, upstream, route, misses = 0;
 
 function lookupAddress(host) {
-  return new Promise(resolve => lookup(host, {family: 4}, (error, address) => resolve(error ? undefined : address)));
+  return new Promise(resolve => {
+    const timer = setTimeout(resolve, probeTimeoutMs);
+    lookup(host, {family: 4}, (error, address) => {
+      clearTimeout(timer);
+      resolve(error ? undefined : address);
+    });
+  });
 }
 
 function reachable(address) {
@@ -21,7 +28,7 @@ function reachable(address) {
     });
     socket.on('error', () => socket.destroy());
     socket.on('close', () => resolve(false));
-    socket.setTimeout(500, () => socket.destroy());
+    socket.setTimeout(probeTimeoutMs, () => socket.destroy());
   });
 }
 
@@ -31,10 +38,11 @@ async function checkRoutes() {
     return {host, address, healthy: address && await reachable(address)};
   }));
   const current = candidates.find(candidate => candidate.host === route?.host);
-  misses = current?.healthy ? 0 : misses + 1;
-  // A shared Service can briefly fail on healthy nodes while Kubernetes withdraws a stopped endpoint.
+  const healthy = candidates.find(candidate => candidate.healthy);
+  // Only count failures while another node has a working path to the shared Service.
+  misses = current?.healthy || !healthy ? 0 : misses + 1;
   const canSwitchNodes = !route || misses >= 3;
-  const next = current?.healthy ? current : canSwitchNodes && candidates.find(candidate => candidate.healthy);
+  const next = current?.healthy ? current : canSwitchNodes && healthy;
   if (!next || next.address === route?.address) return;
 
   const socket = createSocket('udp4');

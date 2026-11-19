@@ -1337,7 +1337,8 @@ measures when Kubernetes withdraws the old endpoint, when WireGuard
 handshakes and when staff and public HTTPS respond. If the public cookie gets
 403, the probe records it and completes a new challenge within the same
 90 seconds from the stop request. The restored machine must return with its
-original identity and the former gateway must return as a standby.
+original identity. The former gateway must no longer hold the Lease and
+must have neither the tunnel interface nor a readiness marker.
 
 You can also run `node scripts/kubernetes-check.mjs --remote --stop-gateway-node`
 with the same image pins.

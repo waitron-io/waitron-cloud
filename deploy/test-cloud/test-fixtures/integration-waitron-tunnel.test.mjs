@@ -18,19 +18,21 @@ test('the Waitron companion uses the venue key and its own traffic', async t => 
     {address: '10.77.4.2', gatewayPublicKey: 'synthetic gateway key', endpoint: '172.30.250.7:51820'});
 
   const calls = [], image = 'sha256:' + 'b'.repeat(64);
+  let ifindex = 12;
   const docker = async args => {
     calls.push(args);
     if (args[0] === 'create') return 'companion';
     if (args[0] === 'inspect') return 'true original';
     if (args.includes('public-key')) return 'paired';
-    if (args.includes('link')) return '[{"ifindex":12}]';
+    if (args.includes('link')) return JSON.stringify([{ifindex}]);
     if (args[0] === 'start') return '';
     assert.fail('unexpected Docker call: ' + args.slice(0, 4).join(' '));
   };
   const paid = {id: 'venue', stateVolume: 'venue-state', venueRoot: '/tmp/cloud-integration-state/paid'};
   const peerId = await remote.startRemotePeer({docker, paid, runId: 'owner', own: () => {}, waitronTunnelImage: image});
-  const result = await remote.measureWithVenuePeer({docker, peerId, peer: {peerPublicKey: 'paired'},
-    waitronTunnelImage: image, target: {machineLoss: async () => ({stopped: 'old'})}});
+  const measureCompanion = machineLoss => remote.measureWithVenuePeer({docker, peerId, peer: {peerPublicKey: 'paired'},
+    waitronTunnelImage: image, target: {machineLoss}});
+  const result = await measureCompanion(async () => ({stopped: 'old'}));
   assert.deepEqual(calls[0].slice(-5), [
     '--mount', 'type=volume,src=venue-state,dst=/control,volume-subpath=paid/remote-peer/control',
     '--mount', 'type=volume,src=venue-state,dst=/keys,volume-subpath=paid/remote-peer/keys', image,
@@ -39,4 +41,9 @@ test('the Waitron companion uses the venue key and its own traffic', async t => 
   assert.equal(calls[0].includes('NET_ADMIN'), true);
   assert.equal(calls.some(args => args.includes('ping')), false);
   assert.equal(result.fixtureTraffic, false);
+
+  await assert.rejects(measureCompanion(async () => {
+    ifindex = 13;
+    return {stopped: 'old'};
+  }), {code: 'ERR_ASSERTION', message: /^integration\.waitron_tunnel_replaced\b/});
 });
