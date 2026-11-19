@@ -1,7 +1,7 @@
 # Cloud backup and restore check on the Amazon test machine
 
 After one private setup, the paired test box can send a small synthetic, non-fiscal
-backup. In the portal's Venues page, you can see that same backup marked Verified.
+backup, then see the restore-check result for those same bytes with the operator.
 The watcher put this first on 19 November at 09:16 under the owner's 16 November
 request in the [Amazon plan](2026-11-16-test-cloud-aws.md). This proposal awaits
 watcher clearance. Guest menus, switch trials and email follow this slice.
@@ -9,11 +9,14 @@ watcher clearance. Guest menus, switch trials and email follow this slice.
 1. **Check the inputs first.** Read the reserved test box's current image and pairing
    without changing them. The 18 November 21:14 trial left revision `7cf65e7eea`
    paired, but the current source and pairing need a fresh check. Agree a synthetic
-   non-fiscal venue on that box before capture. Leave the owner's restored data alone.
-   Rehearse an archive from that source on disposable Linux. Verify compatibility
+   non-fiscal venue after Lane J's authorised reset and the owner's fresh pairing.
+   Confirm the archive source is wholly synthetic. Read the deployed uploader and
+   compare module schemas and migration digests with the pinned verifier. Rehearse
+   with that uploader through the real proxy on disposable Linux. Check compatibility
    and size against the standard pinned `deploy/backup-verifier/target.json` image
    with 1 GiB memory and 256 MiB scratch. Use that profile, which needs no new
-   disk stages. Measure the image and peak RAM/disk against the current host floors.
+   disk stages. Measure the image and peak RAM/disk against the host's floors.
+   Transfer the pinned Linux verifier image privately and confirm its ID on the host.
    If the archive needs a different target or disk-backed scratch, stop for a
    smaller plan decision using the measured sizes.
 2. **Accept the upload on existing HTTPS.** In `packages/backups/src/captures.ts`
@@ -27,22 +30,27 @@ watcher clearance. Guest menus, switch trials and email follow this slice.
    signature. The proxy verifies `waitron.local` with the public portion of the
    private storage CA from `bootstrap.mjs` in the existing certificate volume.
    `venue-service-captures.test.ts` checks the split and the test-only gate.
-   `proxy-proof.test.mjs` checks a real signed PUT, refusals and backend TLS.
+   `bootstrap.test.mjs` checks the CA copy. `proxy-proof.test.mjs` checks backend TLS,
+   a real signed PUT, and unsigned, wrong or expired signatures, oversize, alternate
+   paths/methods and non-test mode through the proxy.
 3. **Use the existing verifier and show the result.** Opt in through the Amazon
    Compose configuration. Wire the immutable image and validate the selected
    worker and mount roles in `scripts/test-cloud-deploy.mjs`. Only the trusted
    worker gets Docker control and private controller state. Its child has no
    network. Use `test-cloud-deploy.test.mjs` for opt-in and mount refusals and
    `backup-worker.test.mjs` for the pinned image and controller. Add private
-   operator steps to `docs/test-cloud.md`: create the synthetic venue's bucket,
-   call `BackupCatalogue.provision` on that paired installation and install the
-   existing verification policy. Use the existing backup and rollback procedure.
+   operator steps to `docs/test-cloud.md`: create `venue-<venueId>`, call
+   `BackupCatalogue.provision` for that paired installation and use the existing
+   target loader and policy setter. Exercise both steps on the disposable run.
+   Keep `release_ready` false and use the existing backup and rollback procedure.
    After named tests, whole-branch review and green CI, use the running host for
    one agreed synthetic capture. Read back matching bytes, the check, child
-   cleanup and continued Staff access. Show the owner the Verified row and
-   update `docs/backlog.md`. The source stays the sole writer.
+   cleanup and continued Staff access. Show the owner the matching admitted
+   restore result. The portal retains its pending status and recovery stays gated.
+   Record how to turn off the upload in the PR and update `docs/backlog.md`.
+   The source stays the sole writer.
 
-Estimate +150/−15 runtime and configuration lines, +140/−10 test lines and
+Estimate +165/−15 runtime and configuration lines, +155/−10 test lines and
 about 40 guide lines. The existing machine, disk, DNS and 512 MiB archive ceiling
 stand. The continuous-stream endpoint stays private, so stream uploads may retry.
 Show the retained backup result only. Restoring onto a box and fiscal checks
