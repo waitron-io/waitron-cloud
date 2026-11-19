@@ -62,13 +62,14 @@ export async function measureGatewayMachineLoss({kube, accountNode, stopNode, mo
   process.stderr.write('D621 gateway before machine stop ' + JSON.stringify({...old, controllerNode}) + '\n');
 
   let endpointWithdrawnMs;
-  const cut = Math.floor(Date.now() / 1000), start = performance.now();
+  const stoppedAt = Date.now(), start = performance.now();
+  const elapsed = () => Math.ceil(performance.now() - start);
   const result = await stopNode(old.node, {whileStopped: ({signal: faultSignal}) => untilRemote(async limit => {
     const {items} = JSON.parse(await kube(['get', 'endpointslices', '-l', 'kubernetes.io/service-name=remote-gateway', '-o', 'json'], limit));
     const endpoints = items.flatMap(slice => slice.endpoints.filter(endpoint => endpoint.conditions?.ready !== false));
     if (endpoints.some(endpoint => endpoint.targetRef?.name === old.pod)) throw Error('remote.old_endpoint_still_ready');
     if (endpointWithdrawnMs === undefined) {
-      endpointWithdrawnMs = Math.ceil(performance.now() - start);
+      endpointWithdrawnMs = elapsed();
       process.stderr.write('D621 old endpoint unavailable ' + JSON.stringify({endpointWithdrawnMs, controllerNode}) + '\n');
     }
     // The dead pod can remain Ready after the Lease moved.
@@ -77,12 +78,13 @@ export async function measureGatewayMachineLoss({kube, accountNode, stopNode, mo
     assert.ok(replacementNode && replacementNode !== old.node && endpoints.some(row => row.targetRef?.name === replacement),
       'remote.replacement_endpoint_unavailable');
     const {handshake, receivedBytes, sentBytes} = await peerCounters(kube, replacement, peer, limit);
-    assert.ok(handshake >= cut && receivedBytes > 0 && sentBytes > 0, 'remote.machine_loss_handshake');
-    await checkRoutes(limit);
-    const durationMs = Math.ceil(performance.now() - start);
+    assert.ok(handshake >= Math.floor(stoppedAt / 1000) && receivedBytes > 0 && sentBytes > 0, 'remote.machine_loss_handshake');
+    const handshakeMs = Math.max(0, handshake * 1000 - stoppedAt);
+    await checkRoutes(limit, elapsed);
+    const durationMs = elapsed();
     assert.ok(durationMs <= remoteDeadlineMs, 'remote.machine_loss_deadline');
     return {replacement, controllerNode, baselineHandshakeAgeSeconds: old.baselineHandshakeAgeSeconds,
-      endpointWithdrawnMs, durationMs, receivedBytes, sentBytes};
+      endpointWithdrawnMs, handshakeMs, durationMs, receivedBytes, sentBytes};
   }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), faultSignal, 'machine_loss_90_seconds')});
   await untilRemote(async limit => {
     assert.notEqual(await holder(limit), old.pod, 'remote.rejoined_gateway_should_be_standby');

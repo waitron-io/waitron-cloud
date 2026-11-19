@@ -197,6 +197,13 @@ async function completeServicesConnectionProof({api, mailbox, readMail, email, p
 }
 
 export async function runTestCloudClients(options = {}) {
+  const waitronTunnelImage = options.waitronTunnelImage ??
+    (options.stockholmGatewayMachineLoss ? process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE : undefined);
+  if (waitronTunnelImage !== undefined) {
+    assert.ok(options.stockholmRemote === true && options.stockholmGatewayMachineLoss === true, 'integration.waitron_tunnel_scope');
+    assert.ok(typeof waitronTunnelImage === 'string' && digest.test(waitronTunnelImage), 'integration.waitron_tunnel_image');
+    options = {...options, waitronTunnelImage};
+  }
   assert.ok(!options.stockholmGatewayMachineLoss || options.stockholmRemote === true, 'integration.stockholm_machine_loss_scope');
   if (options.services || options.stockholmRemote) {
     assert.ok(!options.stockholmGatewayMachineLoss || typeof options.kubernetes?.stockholmRemote?.machineLoss === 'function',
@@ -254,7 +261,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmGatewayMachineLoss = false, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmGatewayMachineLoss = false, waitronTunnelImage, kubernetes}, fixedProject, waitronSource) {
   const origin = services ? servicesOrigin : composeOrigin;
   const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
@@ -499,6 +506,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
         ...(kubernetes && !services ? ['--add-host', 'storage:' + kubernetes.proxyIp] : []),
+        ...(waitronTunnelImage ? ['--add-host', 'host.docker.internal:127.0.0.1'] : []),
         '--add-host', cloudHostname + ':' + (paidStream && plan === 'paid' ? '127.0.0.1' : kubernetes?.proxyIp ?? '10.79.0.2'), '--memory', captureSnapshot ? '2240m' : '1024m', '--memory-swap', captureSnapshot ? '2240m' : '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
@@ -814,7 +822,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
           journeyStage = 'stockholm-remote';
           const {installationId, venueId} = evidence.registration;
           const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
-          const remote = await proveIntegrationPaidRemote({docker, control, account, image, runId,
+          const remote = await proveIntegrationPaidRemote({docker, control, account, image, waitronTunnelImage, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
               origin, signal: runSignal(), machineLoss: stockholmGatewayMachineLoss, revoke: () => api('/api/account/installations/revoke', {installationId}, browser),

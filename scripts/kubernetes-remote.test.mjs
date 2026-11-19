@@ -26,6 +26,7 @@ test('a timed-out probe preserves the last observation from before the deadline'
 test('machine loss follows the Lease while the dead gateway still looks Ready', {timeout: 3000}, async t => {
   let now = 100, down = false, slices = 0;
   t.mock.method(performance, 'now', () => now);
+  t.mock.method(Date, 'now', () => 1_000_250);
   const pod = (name, nodeName) => ({metadata: {name}, spec: {nodeName},
     status: {conditions: [{type: 'Ready', status: 'True'}]}});
   const lease = name => JSON.stringify({spec: {holderIdentity: name + ':session'}});
@@ -52,7 +53,7 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
       return '';
     }
     assert.equal(resource, down ? 'next' : 'old', 'read WireGuard from the current Lease holder');
-    return args.at(-1) === 'transfer' ? 'peer\t12\t15' : 'peer\t' + Math.floor(Date.now() / 1000);
+    return args.at(-1) === 'transfer' ? 'peer\t12\t15' : down ? 'peer\t1007' : 'peer\t990';
   };
   assert.equal(typeof remoteRehearsal.measureGatewayMachineLoss, 'function');
   const result = await remoteRehearsal.measureGatewayMachineLoss({kube, accountNode: 'account-node', peer: 'peer',
@@ -68,11 +69,39 @@ test('machine loss follows the Lease while the dead gateway still looks Ready', 
   assert.equal(result.replacement, 'next');
   assert.equal(result.controllerNode, 'gateway-node');
   assert.equal(result.endpointWithdrawnMs, 50);
+  assert.equal(result.handshakeMs, 6750);
   assert.deepEqual([result.receivedBytes, result.sentBytes], [12, 15]);
 });
 
+test('a failed public challenge is reported within the machine-stop clock', async t => {
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const failure = Error('public challenge failed after 403');
+  let stopped = false, observed;
+  t.mock.method(AbortSignal, 'timeout', ms => timeout(stopped ? 20 : ms));
+  const kube = async ([verb, resource, name]) => {
+    if (verb === 'exec') return name === '--' ? 'peer\t22\t33' : assert.fail('unexpected command');
+    if (resource === 'lease') return JSON.stringify({spec: {holderIdentity:
+      name === 'kube-controller-manager' ? 'account-node_id' : stopped ? 'next' : 'old'}});
+    if (resource === 'pods') return JSON.stringify({items: ['old', 'next'].map(name =>
+      ({metadata: {name}, spec: {nodeName: name + '-node'}}))});
+    if (resource === 'endpointslices') return JSON.stringify({items: [{endpoints: [{targetRef: {name: 'next'}}]}]});
+    assert.fail('unexpected Kubernetes read');
+  };
+  const readKube = async args => args.at(-1) === 'latest-handshakes' ? 'peer\t' + Math.floor(Date.now() / 1000) : kube(args);
+  await assert.rejects(remoteRehearsal.measureGatewayMachineLoss({
+    kube: readKube, accountNode: 'account-node', peer: 'peer',
+    checkRoutes: async (_signal, elapsed) => {if (stopped) {observed = elapsed?.(); throw failure;}},
+    moveGateway: () => assert.fail('the account node does not hold the Lease'),
+    stopNode: async (_node, {whileStopped}) => {
+      stopped = true;
+      return whileStopped({signal: new AbortController().signal});
+    },
+  }), {message: 'remote.machine_loss_90_seconds', cause: failure});
+  assert.ok(observed >= 0 && observed < 90000);
+});
+
 test('the paired venue keeps its endpoint through an elected gateway handover', {
-  skip: process.env.TEST_KUBERNETES_REMOTE !== '1', timeout: 35 * 60 * 1000,
+  skip: process.env.TEST_KUBERNETES_REMOTE !== '1' || Boolean(process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE), timeout: 35 * 60 * 1000,
 }, async () => {
   const {remote} = await runKubernetesCheck('kind-remote');
   assert.equal(remote.pairing.persistedRenewal, true);
@@ -93,10 +122,16 @@ test('the paired venue keeps its endpoint when the active gateway machine stops'
   skip: process.env.TEST_KUBERNETES_REMOTE_MACHINE_LOSS !== '1', timeout: 35 * 60 * 1000,
 }, async () => {
   const {remote, nodes} = await runKubernetesCheck('kind-remote', {stopGatewayNode: true});
-  const loss = remote.machineLoss;
+  const loss = remote.machineLoss, companion = process.env.TEST_CLOUD_INTEGRATION_WAITRON_TUNNEL_IMAGE;
   assert.notEqual(loss.stopped, nodes[0].name);
   assert.ok(nodes.some(node => node.name === loss.controllerNode));
-  assert.equal(loss.fixtureTraffic, true);
+  assert.equal(loss.fixtureTraffic, !companion);
+  if (companion) {
+    assert.equal(loss.waitronTunnelImage, companion);
+    assert.equal(loss.sameWaitronTunnel, true);
+  }
+  assert.equal(remote.staffHttps, true);
+  assert.equal(remote.publicHttps, true);
   assert.equal(loss.rejoinedStandby, true);
   assert.ok(loss.endpointWithdrawnMs <= loss.durationMs);
   assert.ok(loss.durationMs <= 90000);
