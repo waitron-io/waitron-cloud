@@ -34,7 +34,12 @@ export function testRuntimeEnvironment(role,config,environment={}){
  if(role==='backup'&&enabled){result.CLOUD_VERIFIER_STATE_DIR='/run/backup-verifier';result.CLOUD_BACKUP_ENDPOINT='https://waitron.local:8333';result.CLOUD_BACKUP_CA_FILE='/run/local-stack/lan/ca.pem';if(environment.CLOUD_VERIFIER_IMAGE!==undefined)result.CLOUD_VERIFIER_IMAGE=environment.CLOUD_VERIFIER_IMAGE;}
  if(role==='account'&&mode==='test-venue-levels'){
   result.TEST_CLOUD_TUNNEL_CELL_ID=config.gateway.cellId;
-  for(const name of ['CLOUD_BACKUP_STAGE_ROOT','CLOUD_BILLING_ACCOUNT_TEST_IDS'])if(environment[name]!==undefined)result[name]=environment[name];
+  for(const name of ['CLOUD_BACKUP_STAGE_ROOT','CLOUD_BILLING_ACCOUNT_TEST_IDS','CLOUD_BILLING_METHODS_MODE'])if(environment[name]!==undefined)result[name]=environment[name];
+  if(result.CLOUD_BILLING_METHODS_MODE==='test'){
+   for(const name of ['CLOUD_BILLING_STRIPE_TEST_ACCOUNT','CLOUD_BILLING_STRIPE_TEST_KEY','CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT','CLOUD_BILLING_SUMUP_SANDBOX_KEY']){
+    if(environment[name]!==undefined)result[name]=environment[name];
+   }
+  }
  }
  return result;
 }

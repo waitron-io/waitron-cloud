@@ -43,6 +43,23 @@ test('unavailable backup profile has its own writable controller volume and read
  for(const [name,service] of Object.entries(value.services))if(name!=='backup-worker')assert.ok(!service.volumes?.some(v=>v.source===state.source),name+' can access private verifier state');
 });
 
+test('Amazon payment method settings reach only the account service',()=>{
+ const settings={CLOUD_BILLING_METHODS_MODE:'test',CLOUD_BILLING_STRIPE_TEST_ACCOUNT:'acct_synthetic',
+  CLOUD_BILLING_STRIPE_TEST_KEY:'rk_test_synthetic',CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT:'MSYNTHETIC',
+  CLOUD_BILLING_SUMUP_SANDBOX_KEY:'synthetic-sandbox-key'};
+ const env={...Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('CLOUD_BILLING_'))),
+  TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates'};
+ const render=environment=>JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env',
+  '-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],
+  {cwd:root,encoding:'utf8',env:environment})).services;
+ const services=render({...env,...settings});
+ for(const [key,value] of Object.entries(settings)){
+  assert.equal(services.account.environment[key],value,key);
+  for(const [name,service] of Object.entries(services))if(name!=='account')assert.equal(service.environment?.[key],undefined,name+' '+key);
+ }
+ assert.equal(render(env).account.environment.CLOUD_BILLING_METHODS_MODE,'off');
+});
+
 test('Amazon override configures HTTPS without publishing database, mail or internal storage',async()=>{
  const accountId='f3a33048-3e2b-498a-b8b5-66e1d143cb5b';
  const value=JSON.parse(execFileSync('docker',['compose','--profile','*','--env-file','deploy/test-cloud/test.env','-f','compose.yaml','-f','deploy/test-cloud/compose.yaml','-f','deploy/test-cloud/compose.amazon.yaml','config','--format','json'],{cwd:root,encoding:'utf8',env:{...process.env,TEST_CLOUD_ORIGIN:'https://cloud.example.test',TEST_CLOUD_CERTIFICATE_SOURCE:'/tmp/synthetic-certificates',CLOUD_BILLING_ACCOUNT_TEST_IDS:accountId}}));

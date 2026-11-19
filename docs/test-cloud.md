@@ -268,7 +268,7 @@ export TEST_CLOUD_CERTIFICATE_SOURCE=/absolute/private/certificate-directory
 export TEST_CLOUD_IMAGE=sha256:<reviewed-image-id>
 docker compose --env-file deploy/test-cloud/test.env \
   -f compose.yaml -f deploy/test-cloud/compose.yaml \
-  -f deploy/test-cloud/compose.amazon.yaml config
+  -f deploy/test-cloud/compose.amazon.yaml config --quiet
 ```
 
 The directory contains `fullchain.pem` and `privkey.pem`. Use regular copies in
@@ -304,6 +304,23 @@ test cell has allocated 64 addresses, a new request returns HTTP 503 and the
 portal shows no assigned address. The box gets the same reply while the cell
 starts. To check capacity, read the configured cell's `remote_cells.next_address`
 value. A value of 66 means it is full.
+
+To rehearse payment setup on **Billing**, put these settings in the same
+private `test.env`, with access limited to the deployment operator:
+
+```dotenv
+CLOUD_BILLING_METHODS_MODE=test
+CLOUD_BILLING_STRIPE_TEST_ACCOUNT=<test-account>
+CLOUD_BILLING_STRIPE_TEST_KEY=<test-key>
+CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT=<sandbox-merchant>
+CLOUD_BILLING_SUMUP_SANDBOX_KEY=<sandbox-key>
+```
+
+Use a restricted Stripe test key when available. Recreate the account service
+with the same Compose files. Allowlisted owners of test venues can then open
+the payment controls. Use `config --quiet` to check the configuration without
+printing the provider values. To disable the controls, set the mode to `off`,
+remove the four provider settings and recreate the account service.
 
 On an authorised machine, use Certbot to obtain and renew the public certificate.
 Its HTTP-01 challenge proves the name by serving a temporary response on port 80.
