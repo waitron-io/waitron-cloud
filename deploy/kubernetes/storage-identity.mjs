@@ -1,4 +1,4 @@
-import {createHash, createPublicKey} from 'node:crypto';
+import {createHash, createPublicKey, X509Certificate} from 'node:crypto';
 import {issuerHost, storageNamespace as namespace} from './secrets.mjs';
 
 const image = 'node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1';
@@ -27,14 +27,25 @@ createServer({
 }).listen(${port}, '0.0.0.0');
 `;
 
-export function storageIdentity(custody, role) {
+function signingIdentity(custody, role) {
   const publicKey = createPublicKey(custody.signingKey);
   const keyId = createHash('sha256').update(publicKey.export({format: 'der', type: 'spki'})).digest('base64url');
   const jwks = {keys: [{...publicKey.export({format: 'jwk'}), kid: keyId, alg: 'RS256', use: 'sig'}]};
+  return {jwks, authority: {issuer, audience, keyId, privateKey: custody.signingKey,
+    roles: {capture: role, stream: role, restore: role}}};
+}
+
+export function storageIdentity(custody, role) {
+  // Expired TLS stops the issuer without taking the backup master key out of custody.
+  const certificate = new X509Certificate(custody.certificate);
+  const now = Date.now();
+  if (now < certificate.validFromDate.getTime() || now > certificate.validToDate.getTime()) {
+    throw Error('storage_identity.issuer_certificate_time');
+  }
+  const {authority, jwks} = signingIdentity(custody, role);
   const discovery = {issuer, jwks_uri: issuer + '/jwks'};
   const metadata = {name, namespace};
-  return {discovery, jwks, authority: {issuer, audience, keyId, privateKey: custody.signingKey,
-    roles: {capture: role, stream: role, restore: role}}, resources: [
+  return {discovery, jwks, authority, resources: [
     {apiVersion: 'v1', kind: 'ConfigMap', metadata,
       data: {'discovery.json': JSON.stringify(discovery), 'jwks.json': JSON.stringify(jwks)}},
     {apiVersion: 'v1', kind: 'Secret', metadata, type: 'kubernetes.io/tls',
@@ -66,7 +77,7 @@ export function storageIdentity(custody, role) {
 export function storageRuntime(custody, role, endpoint, region, caFile, credentials) {
   return {
     CLOUD_BACKUP_MASTER_KEY: custody.masterKey,
-    CLOUD_BACKUP_AUTHORITY: JSON.stringify(storageIdentity(custody, role).authority),
+    CLOUD_BACKUP_AUTHORITY: JSON.stringify(signingIdentity(custody, role).authority),
     CLOUD_BACKUP_ENDPOINT: endpoint,
     CLOUD_BACKUP_REGION: region,
     CLOUD_BACKUP_CA_FILE: caFile,

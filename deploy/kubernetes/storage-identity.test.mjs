@@ -26,15 +26,23 @@ test('storage custody survives reopening and refuses a lost key', async t => {
   await assert.rejects(readStorageCustody(directory), /storage_identity\.custody_unavailable/);
 });
 
-test('reopening custody refuses an expired issuer certificate', async t => {
+test('expired issuer TLS stops projection and leaves the stored keys readable', async t => {
   const parent = await mkdtemp(join(tmpdir(), 'storage-identity-test-'));
   t.after(() => rm(parent, {recursive: true, force: true}));
   const directory = join(parent, 'custody');
   const {createStorageCustody, readStorageCustody} = await import('./secrets.mjs');
-  const {certificate} = await createStorageCustody(directory, run);
-  const expiry = new X509Certificate(certificate).validToDate.getTime();
-  t.mock.method(Date, 'now', () => expiry + 1000);
-  await assert.rejects(readStorageCustody(directory), /storage_identity\.custody_unavailable/);
+  const {storageIdentity, storageRuntime} = await import('./storage-identity.mjs');
+  const original = await createStorageCustody(directory, run);
+  const certificate = new X509Certificate(original.certificate);
+  let now = certificate.validToDate.getTime() + 1000;
+  t.mock.method(Date, 'now', () => now);
+  const reopened = await readStorageCustody(directory);
+  assert.deepEqual(reopened, original);
+  assert.equal(storageRuntime(reopened, 'role', 'https://store.local', 'us-east-1', '/store.crt', {})
+    .CLOUD_BACKUP_MASTER_KEY, original.masterKey);
+  assert.throws(() => storageIdentity(reopened, 'role'), /storage_identity\.issuer_certificate_time/);
+  now = certificate.validFromDate.getTime() - 1000;
+  assert.throws(() => storageIdentity(reopened, 'role'), /storage_identity\.issuer_certificate_time/);
 });
 
 test('only the public issuer documents and issuer TLS identity are projected to two pods', async t => {

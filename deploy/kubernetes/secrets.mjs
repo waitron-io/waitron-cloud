@@ -25,11 +25,9 @@ export async function readStorageCustody(directory) {
     const [signingKey, masterKey, certificate, tlsKey] = await Promise.all(
       ['signing.pem', 'master.key', 'issuer.crt', 'issuer.key'].map(name => readFile(join(directory, name), 'utf8')));
     const key = createPrivateKey(signingKey), tlsCertificate = new X509Certificate(certificate);
-    const now = Date.now();
     if (key.asymmetricKeyType !== 'rsa' || key.asymmetricKeyDetails.modulusLength < 2048 ||
         !/^[a-f0-9]{64}$/.test(masterKey) || !tlsCertificate.ca || !tlsCertificate.checkHost(issuerHost) ||
-        !tlsCertificate.checkPrivateKey(createPrivateKey(tlsKey)) ||
-        now < tlsCertificate.validFromDate.getTime() || now >= tlsCertificate.validToDate.getTime()) {
+        !tlsCertificate.checkPrivateKey(createPrivateKey(tlsKey))) {
       throw Error('invalid custody');
     }
     return {signingKey, masterKey, certificate, tlsKey};
