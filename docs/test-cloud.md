@@ -395,10 +395,11 @@ After pairing Juniper Test Cafe, open **Guest menu preview** on the box and
 choose **Turn sharing on**. Open the published address on a phone using mobile
 data. In the Cloud portal, turn the guest menu off for the venue and confirm
 the same address returns 404. Turn it on and wait for the box to publish again.
-In the same browser tab, open the account and then the published menu. Repeat
-starting with the menu in a fresh browser session. Both pages should open. If the
-browser reuses the other hostname's HTTP/2 connection, the proxy answers 421 so
-the browser can retry on a connection for the requested name.
+In the same Chromium tab, open the account and then the published menu. Repeat
+starting with the menu in a fresh session. When either request reuses the other
+hostname's HTTP/2 connection, the proxy answers 421. Chromium retries on a
+connection for the requested name. Check the newly shared menu on a phone that
+has not opened the account site, too.
 
 To close the test reader, unset `TEST_CLOUD_GUEST_MENU` and run the Amazon
 driver's `up` command again with the installed image. The shared certificate
