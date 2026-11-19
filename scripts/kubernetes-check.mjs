@@ -3,6 +3,7 @@
 // The owner-started amazon-run.mjs invokes --amazon on its control plane after setup.
 // --node-loss checks three control planes without venue images.
 // --storage-loss uses the pinned private store and needs a Linux Docker host.
+// --remote rehearses gateway handover on private Linux Kind.
 // --services rehearses production-mode signup, pairing and backup on private Linux Kind.
 // --database-loss uses the local Cloud image to check PostgreSQL and migration startup.
 // --worker-loss repeats journeys; --observer-worker-loss retains their clients through the fault.
@@ -110,14 +111,16 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
 
 export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux} = {}) {
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
-if (target === 'kind-services') {
+if (target === 'kind-services' || target === 'kind-remote') {
+  const remote = target === 'kind-remote', stage = remote ? 'remote' : 'services';
   const {TEST_CLOUD_INTEGRATION_IMAGE: image, TEST_CLOUD_INTEGRATION_WAITRON_IMAGE: waitronImage} = process.env;
-  assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, 'services.cloud_image_id');
-  assert.match(waitronImage ?? '', /^sha256:[a-f0-9]{64}$/, 'services.waitron_image_id');
-  assert.equal(process.platform, 'linux', 'services.requires_linux');
+  assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/, stage + '.cloud_image_id');
+  assert.match(waitronImage ?? '', /^sha256:[a-f0-9]{64}$/, stage + '.waitron_image_id');
+  assert.equal(process.platform, 'linux', stage + '.requires_linux');
   const verificationTarget = await readRehearsalVerificationTarget();
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
-  return runKubernetesNodeLoss({services: context => runKubernetesServices({...context, image, waitronImage, verificationTarget})});
+  const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget, remote});
+  return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse});
 }
 if (target === 'kind-storage-identity') {
   const {runStorageIdentity} = await import('./kubernetes-storage-identity.mjs');
@@ -376,7 +379,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const [mode, file, ...extra] = process.argv.slice(2);
   const localTargets = new Map([['--worker-loss', 'kind-worker-loss'], ['--observer-worker-loss', 'kind-worker-observer'],
     ['--node-loss', 'kind-node-loss'], ['--database-loss', 'kind-database-loss'], ['--storage-loss', 'kind-storage-loss'],
-    ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services']]);
+    ['--storage-identity', 'kind-storage-identity'], ['--services', 'kind-services'], ['--remote', 'kind-remote']]);
   const target = extra.length ? undefined : file !== undefined ?
     mode === '--amazon' && JSON.parse(await readFile(file, 'utf8')) : mode === undefined ? 'kind' : localTargets.get(mode);
   assert.ok(target, 'kubernetes.target');

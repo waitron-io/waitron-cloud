@@ -71,7 +71,7 @@ export async function issueTestRemoteCertificate(directory,target,publicRemote){
   target.signal.throwIfAborted();return await readFile(join(scratch,'certificate.pem'),'utf8')+await privateFile(join(directory,'lan/ca.pem'));
  }finally{await rm(scratch,{recursive:true,force:true});}
 }
-export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,resolveCname}){
+export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,resolveCname,publication}){
  if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  const zone=publicRemote?.zone??suffix,endpoint=publicRemote?.endpoint??'waitron.local:51820';
  if(publicRemote){
@@ -79,13 +79,13 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,re
   if(!isHostname(zone)||zone.length>180||endpoint!==zone+':51820'||url.protocol!=='https:'||url.username||url.password||url.hash)throw Error('test_cloud.remote_settings');
   createPrivateKey(publicRemote.accountKey);
  }
- const config=await loadRuntime(directory),cellId=config.gateway.cellId;
+ const cellId=publication?.cellId??(await loadRuntime(directory)).gateway.cellId;
  const key=createPrivateKey(await privateFile(join(directory,'gateway-signing-key.pem'))),trust=createPublicKey(await privateFile(join(directory,'gateway-issuer.pem')));
  if(!createPublicKey(key).equals(trust))throw Error('test_cloud.remote_state_invalid');
  const wireguard=Buffer.from((await privateFile(join(directory,'gateway-wireguard.key'))).trim(),'base64');if(wireguard.length!==32)throw Error('test_cloud.remote_state_invalid');
  const publicKey=createPublicKey(createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b656e04220420','hex'),wireguard]),format:'der',type:'pkcs8'})).export({format:'der',type:'spki'}).subarray(-32).toString('base64');
  // Recover only the sequence of an expired signed file; routes still come from current policy.
- const envelope=JSON.parse(await privateFile(join(directory,'gateway-manifest.json'))),issued=JSON.parse(Buffer.from(envelope.payload,'base64url')).issuedAt,manifest=verifyManifest(envelope,trust,cellId,issued);
+ const envelope=JSON.parse(await publication?.readManifest()??await privateFile(join(directory,'gateway-manifest.json'))),issued=JSON.parse(Buffer.from(envelope.payload,'base64url')).issuedAt,manifest=verifyManifest(envelope,trust,cellId,issued);
  await transaction(pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('test_cloud_remote_cell'))");
   await client.query("INSERT INTO remote_cells(id,country,provider,environment,suffix,subnet,public_key,endpoint,sequence) VALUES($1,'ES','aws','test',$2,61,$3,$4,$5) ON CONFLICT(id) DO NOTHING",[cellId,zone,publicKey,endpoint,manifest.sequence]);
@@ -111,11 +111,13 @@ export async function openTestRemoteRuntime({pool,directory,mode,publicRemote,re
    if(!isUuid(venueId)||!cells.length||cells.some(cell=>cell!==cellId))throw Error('test_cloud.remote_target');
    const target=publicTarget(directory,id),begin=copy.pem.indexOf('-----BEGIN CERTIFICATE-----');if(begin<0)throw Error('test_cloud.remote_state_invalid');
    const key=createPrivateKey(copy.pem).export({format:'pem',type:'pkcs8'}),chain=copy.pem.slice(begin);
-   await atomic(join(directory,'public-certs',venueId+'.pem'),copy.pem);await mkdir(target,{recursive:true,mode:0o700});
+   if(publication)await publication.publishPublicCertificate(venueId,copy.pem);
+   else await atomic(join(directory,'public-certs',venueId+'.pem'),copy.pem);
+   await mkdir(target,{recursive:true,mode:0o700});
    await atomic(join(target,'key.pem'),key);await atomic(join(target,'request.pem'),copy.csr);await atomic(join(target,'certificate.pem'),chain);
    if(id!==venueId)await rm(join(directory,'public-certs',id+'.pem'),{force:true});return {copied:cells,complete:true};
   },
-  async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');await atomic(join(directory,'gateway-manifest.json'),text);}
+  async publishManifest(id,text){if(id!==cellId)throw Error('test_cloud.remote_target');if(publication)await publication.publishManifest(id,text);else await atomic(join(directory,'gateway-manifest.json'),text);}
  };
  const {tlsChallengeDirectory,statusDirectory}=publicRemote??{};
  let gatewayStatus;

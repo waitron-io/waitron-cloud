@@ -5,13 +5,25 @@ import {validateCsr} from '../../../packages/remote-access/src/certificates.ts';
 import {certificateNeedsRenewal} from '../../../packages/remote-access/src/renewal.ts';
 
 export async function paidRemoteAccount({pool, config, organisationId, installationId, phase, peerPublicKey, csr, certificate}) {
-  assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
+  const cell = process.env.CLOUD_STOCKHOLM_REMOTE_CELL;
+  const stockholm = process.env.CLOUD_STOCKHOLM_REHEARSAL === '1' && Boolean(cell);
+  assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, stockholm ? '0' : '1');
+  if (stockholm) assert.equal(process.env.CLOUD_VENUE_SERVICE_LEVELS, '0');
   const binding = (await pool.query(`SELECT v.organisation_id,v.environment,i.venue_id,i.configuration_revision,i.public_key,i.revoked_at,i.superseded_by
     FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`, [installationId])).rows[0];
   assert.equal(binding.organisation_id, organisationId); assert.equal(binding.environment, 'test');
   const plans = new OrganisationPlanStore(pool);
-  assert.equal((await plans.show(organisationId)).plan, 'paid');
+  if (!stockholm) assert.equal((await plans.show(organisationId)).plan, 'paid');
+  if (phase === 'stockholm-remote-renew') {
+    assert.equal(stockholm, true);
+    const updated = await pool.query(`UPDATE remote_configuration_jobs SET available_at=clock_timestamp()
+      WHERE kind='certificate_public' AND target_id=$1 AND enabled AND status='pending' AND last_success_at IS NOT NULL
+      AND EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=$1 AND p.cell_id=$2)`, [installationId, cell]);
+    assert.equal(updated.rowCount, 1, 'integration.stockholm_renew_binding');
+    return {scheduled: true};
+  }
   if (phase === 'paid-remote-downgrade') {
+    assert.equal(stockholm, false);
     const result = await plans.set(organisationId, 'free');
     assert.equal(result.plan, 'free'); assert.equal(result.changed, true);
     const row = (await pool.query(`SELECT i.public_key,i.revoked_at,i.superseded_by,s.state,s.configuration
@@ -21,7 +33,7 @@ export async function paidRemoteAccount({pool, config, organisationId, installat
     return {plan: 'free', configurationCleared: true, installationPreserved: true};
   }
   if (phase === 'paid-remote-provision') {
-    const placement = await new RemoteAccessStore(pool, 'test-free-paid').provision(installationId, config.gateway.cellId, peerPublicKey);
+    const placement = await new RemoteAccessStore(pool, stockholm ? 'existing' : 'test-free-paid').provision(installationId, stockholm ? cell : config.gateway.cellId, peerPublicKey);
     return placement;
   }
   assert.equal(phase, 'paid-remote-inspect');

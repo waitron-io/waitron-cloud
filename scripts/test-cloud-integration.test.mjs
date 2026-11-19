@@ -149,7 +149,11 @@ test('production rehearsal refuses a remote target even with a valid local Kind 
       .map(name => [name, () => assert.fail('verifier must not start')])),
   };
   await assert.rejects(runTestCloudClients({services: true, kubernetes: local}), /integration\.image_invalid/);
-  for (const remote of [{remote: {worker: () => assert.fail('remote command must not start')}}, {amazon: {phase: 'before'}}]) {
+  for (const remote of [
+    {remote: {worker: () => assert.fail('remote command must not start')}},
+    {stockholmRemote: {handover: () => assert.fail('gateway command must not start')}},
+    {amazon: {phase: 'before'}},
+  ]) {
     await assert.rejects(runTestCloudClients({services: true, kubernetes: {...local, ...remote}}), /integration\.services_binding/);
   }
 });
@@ -161,4 +165,13 @@ test('the signup reader accepts the mailed language parameter and refuses anothe
   const text = 'Verify\n\nhttps://cloud.example.test:3000/signup#token=' + token + '&lang=en\n\nExpires';
   assert.equal(readSignupToken(text, 'https://cloud.example.test:3000'), token);
   assert.throws(() => readSignupToken(text, 'https://other.example.test:3000'), /integration\.signup_mail/);
+});
+
+test('the private remote rehearsal cannot run with the paid plan or a foreign namespace', async () => {
+  const {runTestCloudClients} = await load();
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, services: true}), /integration\.stockholm_remote_scope/);
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, paidVerification: true}), /integration\.stockholm_remote_scope/);
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, paidRemote: true}), /integration\.stockholm_remote_scope/);
+  await assert.rejects(runTestCloudClients({stockholmRemote: true, kubernetes: {namespace: 'default'}}),
+    /integration\.stockholm_remote_binding/);
 });

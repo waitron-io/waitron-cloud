@@ -52,7 +52,7 @@ async function certificates({directory, run}) {
   await openssl(['x509', '-req', '-in', csr, '-out', certificate, '-days', '1', '-CA', ca, '-CAkey', caKey,
     '-CAcreateserial', '-copy_extensions', 'copy']);
   const [root, cert, privateKey] = await Promise.all([ca, certificate, key].map(path => readFile(path, 'utf8')));
-  return {root, cert, key: privateKey};
+  return {root, cert, key: privateKey, caKey: await readFile(caKey, 'utf8')};
 }
 
 const smtpRefusals = `
@@ -92,7 +92,8 @@ async function configureServices(context, kube, store, custody) {
   finally {s3.close();}
   const roles = await configurePolicy(context, endpoint, store, true);
   const storage = servicesStorageSettings(custody, roles, endpoint);
-  const config = await bootstrap(join(context.directory, 'services-runtime'));
+  const runtimeDirectory = join(context.directory, 'services-runtime');
+  const config = await bootstrap(runtimeDirectory);
   const emailVariables = {CLOUD_EMAIL_ACTIVE_KEY_ID: config.email.activeKeyId, CLOUD_EMAIL_KEYS: JSON.stringify(config.email.keys)};
   const {
     CLOUD_HTTP_RATE_KEY, CLOUD_INSTALLATION_ISSUER_KEY, CLOUD_PAIRING_ACTIVE_KEY_ID, CLOUD_PAIRING_KEYS, CLOUD_PORTAL_ASSETS_DIR,
@@ -120,11 +121,11 @@ async function configureServices(context, kube, store, custody) {
     .replace('bind :3000', 'bind :3443').replace('server account account:3000', 'server account 127.0.0.1:3000');
   await create(resource('ConfigMap', 'services-proxy', {data: {'haproxy.cfg': proxy, 'ca.crt': tls.root, 'passwords.sha256': corpus}}));
   await create(resource('ConfigMap', 'services-store-ca', {data: {'ca.crt': store.ca}}));
-  return {ca: tls.root, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
+  return {ca: tls.root, tls, config, runtimeDirectory, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
 }
 
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal} = context;
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -132,16 +133,17 @@ export async function runKubernetesServices(context) {
   });
   const create = value => kube(['create', '-f', '-'], JSON.stringify(value));
   const forwards = [];
-  let failure;
+  let failure, remoteTarget;
   await run('docker', ['tag', image, tag]);
   try {
     await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
     process.stderr.write('Preparing the three PostgreSQL copies and Cloud schema\n');
     await installServicesDatabase(context, tag);
     return await withStockholmStorageIdentity(context, async (store, custody) => {
-      const {ca, mailAuthorization} = await configureServices(context, kube, store, custody);
-      await create(servicesPod(tag, nodes[0].name));
-      await create(servicesInspection(tag));
+      const settings = await configureServices(context, kube, store, custody);
+      const {ca, mailAuthorization, config} = settings;
+      await create(servicesPod(tag, nodes[0].name, remote));
+      await create(servicesInspection(tag, remote ? config.gateway.cellId : undefined));
       await kube(['wait', '--for=condition=Ready', 'pod/cloud-services', '--timeout=180s']);
       await kube(['wait', '--for=condition=Ready', 'pod', '-l', 'job-name=services-inspection', '--timeout=180s']);
       const exec = (pod, container, command, input, limit) =>
@@ -169,25 +171,31 @@ export async function runKubernetesServices(context) {
       }
       await exec('cloud-services', 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
       const ports = await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
-      const manifest = JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
-      const template = servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag,
+      if (remote) {
+        const {startRemoteRehearsal} = await import('./kubernetes-remote.mjs');
+        remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings});
+      }
+      const manifest = !remote && JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
+      const template = !remote && servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag,
         verificationTarget.runtime.revision, nodes[0].name);
-      const verifier = createKubernetesVerifier({template, kube, pod, classicImages: true,
+      const verifier = !remote && createKubernetesVerifier({template, kube, pod, classicImages: true,
         async loadImage(id) {
           await verifier.docker(['volume', 'create', '--driver', 'local',
             '--label', 'cloud.backup-verifier.scratch=waitron-cloud-test-backup',
             '--opt', 'type=none', '--opt', 'o=bind', '--opt', 'device=' + verifierScratchPath, verifierScratchVolume]);
           await loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal);
         }});
-      process.stderr.write('Running authenticated signup, box pairing and native backup verification\n');
-      const result = await runTestCloudClients({image, waitronImage, verificationTarget, services: true, kubernetes: {
+      process.stderr.write(remote ? 'Running authenticated signup, box pairing and gateway handover\n' :
+        'Running authenticated signup, box pairing and native backup verification\n');
+      const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...(remote ? {stockholmRemote: true} : {services: true}), kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
-        proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, verifier,
+        proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, ...(remote ? {stockholmRemote: remoteTarget} : {verifier}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);
           return command('job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);
         },
       }});
+      if (remote) return result;
       const operations = parseIntegrationJson(await command('cloud-services', 'account', `exec node --input-type=module -e '
         import {createRequire} from "node:module";
         import {operationsStatus} from "./packages/operations/src/status.ts";
@@ -209,6 +217,16 @@ export async function runKubernetesServices(context) {
     });
   } catch (error) {
     failure = error;
+    if (remote) {
+      for (const [name, args] of [
+        ['gateway candidates', ['get', 'pods', '-l', 'app=remote-gateway', '-o', 'wide']],
+        ['gateway processes', ['logs', '-l', 'app=remote-gateway', '--tail=20', '--prefix']],
+        ['remote worker', ['logs', 'pod/remote-worker', '--tail=20']],
+      ]) {
+        const log = await kube(args, undefined, true).catch(() => '');
+        if (log) process.stderr.write(name + '\n' + log + '\n');
+      }
+    }
     for (const [pod, containers] of [
       ['cloud-services', ['account', 'email', 'proxy', 'mailpit', 'monitor', 'usage', 'probe']],
       ['verifier', ['verifier', 'docker']], ['job/migrate', ['migrate']], ['job/services-inspection', ['inspect']],
@@ -219,6 +237,9 @@ export async function runKubernetesServices(context) {
     throw error;
   } finally {
     for (const {child, closed} of forwards) {child.kill('SIGKILL'); await closed;}
-    await cleanUp(failure, () => run('docker', ['image', 'rm', tag], {signal: null}));
+    await cleanUp(failure, async () => {
+      try {await remoteTarget?.close();}
+      finally {await run('docker', ['image', 'rm', tag], {signal: null});}
+    });
   }
 }

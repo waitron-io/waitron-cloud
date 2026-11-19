@@ -6,7 +6,7 @@ import {requestIntegrationVenue} from './integration-venue-request.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // The paired venue keeps both private keys; the account receives only its public peer key and CSR.
-export async function paidRemoteClient(root, {phase, placement, gatewayIp, requestId}, localFetch) {
+export async function paidRemoteClient(root, {phase, placement, gatewayIp, requestId, stockholmOrigin}, localFetch) {
   const directory = root + '/remote-peer';
   await mkdir(directory, {mode: 0o700, recursive: true});
   if (phase === 'key') {
@@ -16,7 +16,7 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   }
   const state = JSON.parse(await readFile(root + '/cloud/connection.json', 'utf8'));
   assert.equal(state.environment, 'test');
-  assert.equal(state.origin, 'https://waitron.local:3000');
+  assert.equal(state.origin, stockholmOrigin ?? 'https://waitron.local:3000');
   const installationId = state.view.registration.installationId;
   assert.equal(placement.installationId, installationId);
   const key = createPrivateKey({key: Buffer.from(state.privateKey, 'base64url'), format: 'der', type: 'pkcs8'});
@@ -59,7 +59,15 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   const saved = envelope('configuration', {servicesVersion: 2});
   const configured = await exchange('configuration', saved);
   assert.equal(configured.status, 200, 'integration.remote_configuration_status');
-  assert.ok(Object.keys(remoteService(await configured.json()).configuration).length > 0, 'integration.remote_paid_configuration_required');
+  const configuration = remoteService(await configured.json()).configuration;
+  assert.ok(Object.keys(configuration).length > 0, 'integration.remote_paid_configuration_required');
+  if (stockholmOrigin) {
+    assert.equal(configuration.endpoint, 'waitron.local:51820');
+    for (const key of ['gatewayPublicKey', 'address', 'staffHostname', 'publicHostname']) {
+      assert.equal(configuration[key], placement[key], 'integration.stockholm_remote_configuration');
+    }
+    assert.match(gatewayIp, /^172\.30\.250\.\d{1,3}$/);
+  }
   await writeFile(directory + '/configuration-envelope.json', JSON.stringify(saved), {mode: 0o600, flag: 'wx'});
   const submitted = await send('staff-certificate-submit', {version: 1, hostname: placement.staffHostname,
     revision: state.lifecycle.view.revision, csr, previousRequestId: null});

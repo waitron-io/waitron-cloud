@@ -67,7 +67,7 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, remote} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
@@ -225,6 +225,10 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     if (storage) {
       const result = await storage({nodes, cluster, directory, run, kube, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, storage: result};
+    }
+    if (remote) {
+      const result = await remote({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});
+      return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {
       const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});

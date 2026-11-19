@@ -19,12 +19,12 @@ function service(image, name, entry, {variables = {}, secret, storage = false, w
     ...(secret && {envFrom: [{secretRef: {name: secret}}]})};
 }
 
-export function servicesPod(image, nodeName) {
+export function servicesPod(image, nodeName, remote) {
   const mount = (name, mountPath) => ({name, mountPath, readOnly: true});
   const account = service(image, 'account', 'packages/account-http/src/server-cli.ts', {
     storage: true, secret: 'services-account', variables: {CLOUD_HTTP_HOST: '127.0.0.1',
       CLOUD_HTTP_TRUSTED_PROXY_IPS: '127.0.0.1', CLOUD_PORTAL_ORIGIN: servicesOrigin,
-      CLOUD_COMPROMISED_PASSWORD_CORPUS: '/run/proxy/passwords.sha256'},
+      ...(remote && {CLOUD_STAFF_CERTIFICATES: '1'}), CLOUD_COMPROMISED_PASSWORD_CORPUS: '/run/proxy/passwords.sha256'},
   });
   account.volumeMounts.push(mount('proxy', '/run/proxy'));
   const email = service(image, 'email', 'packages/registration/src/email-worker-cli.ts', {
@@ -85,12 +85,12 @@ export function servicesVerifier(template, image, revision, nodeName) {
   return pod;
 }
 
-export function servicesInspection(image) {
+export function servicesInspection(image, remoteCell) {
   return {apiVersion: 'batch/v1', kind: 'Job', metadata: {name: 'services-inspection', namespace: servicesNamespace},
     spec: {backoffLimit: 0, template: {spec: {restartPolicy: 'Never',
       automountServiceAccountToken: false, volumes: [caVolume, publicStoreCa],
       containers: [service(image, 'inspect', `-e 'const timer = setInterval(() => {if (require("node:fs").existsSync("/tmp/inspection-complete")) clearInterval(timer)}, 250)'`, {
-        storage: true, secret: 'services-backup',
+        storage: true, secret: 'services-backup', variables: remoteCell ? {CLOUD_STOCKHOLM_REMOTE_CELL: remoteCell} : {},
       })],
     }}}};
 }

@@ -671,3 +671,11 @@ test('the services command checks its image bindings before starting Kind', asyn
   assert.match(run.stderr, /services\.waitron_image_id/);
   await assert.rejects(readFile(log), {code: 'ENOENT'});
 });
+
+test('the remote-only Kind target validates image pins before creating resources', async () => {
+  const result = spawnSync(process.execPath, [new URL('./kubernetes-check.mjs', import.meta.url).pathname, '--remote'], {
+    encoding: 'utf8', env: {...process.env, TEST_CLOUD_INTEGRATION_IMAGE: 'cloud:latest'},
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /remote\.cloud_image_id/);
+});
