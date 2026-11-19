@@ -17,8 +17,9 @@ the first machine is down.
 2. In `scripts/kubernetes-remote.mjs`, replace the bare Pod with a two-replica
    Deployment. Require different machines and exclude the account node in the
    scheduler. Reuse the worker image, identity mounts and per-pod scratch. Start
-   the handover rehearsal with one worker. Have it publish both the baseline and the same-route replacement before
-   scaling to two. The fixture forgets only the saved request using a version-checked
+   the handover rehearsal with one worker. Use the existing five-second venue
+   fixture traffic during handover so the check can reach publication. Have the
+   first worker publish the baseline and same-route replacement before scaling to two. The fixture forgets only the saved request using a version-checked
    Secret write, leaving the served certificate in place. Pin the remote inspection
    job to the account node in `deploy/kubernetes/services.mjs` and its caller,
    `scripts/kubernetes-services.mjs`. Read worker diagnostics by pod label.

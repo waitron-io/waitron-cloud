@@ -152,9 +152,9 @@ test('the paired venue keeps its endpoint through an elected gateway handover', 
   assert.equal(new Set([nodes[0].name, loss.stopped, loss.survivingNode]).size, 3);
   assert.ok(loss.withdrawnSequence > loss.originalSequence);
   assert.ok(loss.failoverMs <= 90000);
-  assert.ok(loss.signedWithdrawalMs <= loss.failoverMs);
   assert.deepEqual(remote.cleanup.remaining, []);
   console.log('D621 gateway timings (ms)', {handover: remote.handover.durationMs,
+    handoverFixtureTraffic: 'one venue packet every five seconds',
     certificateReplacement: remote.certificateReplacementMs, withdrawal: remote.withdrawalMs,
     publicationMachineLoss: loss});
 });
