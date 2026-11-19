@@ -1773,10 +1773,10 @@ implementation or production evidence.
   startup in the same Kind setup. The bounded launcher brings up the private
   six-peer store. Run `node scripts/kubernetes-check.mjs --storage-loss` in the
   Linux guest to check encrypted objects and multipart completion through the
-  first outage. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
-  record a missed repair on a returned machine and a separate HTTP 503 reading
-  an existing object during the first outage. PR 4 can qualify scoped store
-  credentials on the existing store. Returned-drive repair, consecutive-outage
+  first outage. The rehearsals now spread Kubernetes DNS across machines before
+  starting workloads. The [run 9 storage notes](superpowers/plans/2026-11-18-d621-stockholm-storage.md#limits-found-in-the-linux-rehearsal)
+  record the Linux read failure and recovery with one DNS host stopped. PR 4
+  still qualifies scoped store credentials. Returned-drive repair, consecutive-outage
   multipart and switching Cloud services to replicated data remain open.
   Real Stockholm machine loss and cold restart remain open.
   Flux-hosting-node loss, original A/all-node loss and real services remain open. The three-node

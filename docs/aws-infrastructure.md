@@ -1215,8 +1215,11 @@ installer. PostgreSQL writes its data on the node where each copy runs. The
 test checks that all three copies are ready and that each node has its own
 bound volume and PostgreSQL data files. This check needs no Cloud image.
 
-The bounded Stockholm launcher starts PostgreSQL in the `d621-data` namespace
-after the three control planes are ready. The legacy journey still uses its own
+The bounded Stockholm launcher waits for the three control planes, the network
+proxy rollout and the DNS rollout before starting PostgreSQL in the `d621-data`
+namespace. The Kind rehearsal and the launcher put the two CoreDNS replicas on
+separate machines so one stopped machine leaves a DNS replica available. The
+legacy journey still uses its own
 database and the network share on A. Switching the Cloud services to the
 replicated database and checking machine loss in Stockholm are later steps.
 

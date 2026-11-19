@@ -77,7 +77,13 @@ in disposable three-machine Kind clusters and found two limits for run 9:
   or the check requested repair. The local `repair-peer-refresh-live-01.log`
   records the drive counts at line 83 and the read refusal at lines 423–445.
 
-Each run passed six focused checks and failed the live case. The cause of the
-read refusal remains open. PR 4 can qualify scoped credentials on the existing
-store. Returned-drive repair and multipart through consecutive outages remain
-unqualified.
+Each run passed six focused checks and failed the live case. The 19 November
+Linux trace found both Kubernetes DNS replicas on the stopped machine. MinIO
+could read its local drive and timed out looking up three surviving remote
+drives. The [DNS placement repair](2026-11-19-stockholm-storage-dns-placement.md)
+moves the replicas onto separate machines before workloads start. The Linux
+control stopped one DNS host and passed both survivors' encrypted reads, the
+write, listing and multipart checks within the existing 90-second outage window.
+
+PR 4 still qualifies scoped credentials. Returned-drive repair, multipart through
+consecutive outages and real Stockholm machine loss remain unqualified.
