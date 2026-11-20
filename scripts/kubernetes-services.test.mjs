@@ -122,6 +122,23 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
 });
 
+test('a surviving inbox stays readable while another service container restarts', () => {
+  assert.equal(typeof servicesScript.readyServicePods, 'function');
+  const pod = (name, readiness, containers) => ({
+    metadata: {name: 'service-' + name}, spec: {nodeName: name},
+    status: {conditions: [{type: 'Ready', status: readiness ? 'True' : 'False'}],
+      containerStatuses: containers.map(([name, ready]) => ({name, ready}))},
+  });
+  const rows = [
+    pod('a', true, [['account', true], ['mailpit', true], ['email', true]]),
+    pod('b', false, [['account', true], ['mailpit', true], ['email', false]]),
+    pod('c', false, [['account', true], ['mailpit', false], ['email', true]]),
+  ];
+  assert.deepEqual(servicesScript.readyServicePods(rows, {stopped: 'a', containers: ['account', 'mailpit']})
+    .map(row => row.metadata.name), ['service-b']);
+  assert.deepEqual(servicesScript.readyServicePods(rows, {}).map(row => row.metadata.name), ['service-a']);
+});
+
 test('a mail list combines surviving inboxes and finds a message outside the first one', async () => {
   assert.equal(typeof servicesScript.readServicesInbox, 'function');
   const fetch = async (pod, path) => {

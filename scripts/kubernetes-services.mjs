@@ -150,6 +150,16 @@ const inboxRequest = `
   console.log(JSON.stringify({status: response.status, text: await response.text()}));
 `;
 
+export function readyServicePods(rows, {stopped, containers = []}) {
+  return rows.filter(row => {
+    if (row.spec.nodeName === stopped || row.metadata.deletionTimestamp) return false;
+    // A worker restarting after database failover does not stop another container from serving.
+    if (containers.length) return containers.every(name => row.status.containerStatuses?.some(
+      container => container.name === name && container.ready));
+    return row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True');
+  });
+}
+
 export async function readServicesInbox(pods, fetch, path, authorization) {
   const completed = await Promise.allSettled(pods.map(pod => fetch(pod, path, authorization)));
   const replies = completed.filter(row => row.status === 'fulfilled').map(row => row.value);
@@ -201,15 +211,14 @@ export async function runKubernetesServices(context) {
         await kube(['wait', '--for=condition=Ready', 'pod', '-l', 'job-name=services-inspection', '--timeout=180s']);
       }
       let stopped;
-      const readyServices = async limit => {
+      const readyServices = async (limit, ...containers) => {
         const {items} = parseIntegrationJson(await kube(['get', 'pods', '-l', 'app=cloud-services', '-o', 'json'],
           undefined, false, limit));
-        return items.filter(row => row.spec.nodeName !== stopped && !row.metadata.deletionTimestamp &&
-          row.status.conditions?.some(condition => condition.type === 'Ready' && condition.status === 'True'));
+        return readyServicePods(items, {stopped, containers});
       };
-      const service = async limit => {
+      const service = async (container, limit) => {
         if (!baseline) return 'cloud-services';
-        const [healthy] = await readyServices(limit);
+        const [healthy] = await readyServices(limit, container);
         assert.ok(healthy, 'services.no_ready_copy');
         return healthy.metadata.name;
       };
@@ -233,10 +242,10 @@ export async function runKubernetesServices(context) {
         }
       `;
       for (let attempt = 0; ; attempt++) {
-        try {await exec(await service(signal), 'account', ['node', '--input-type=module', '-e', ready]); break;}
+        try {await exec(await service('account', signal), 'account', ['node', '--input-type=module', '-e', ready]); break;}
         catch (error) {if (attempt === 29) throw error; await delay(1000, undefined, {signal});}
       }
-      await exec(await service(signal), 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
+      await exec(await service('email', signal), 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
       const ports = baseline ? {3443: 3000} : await forwardKubernetesPod(kubeArgs(), 'cloud-services', [3443, 8025], env, forwards);
       if (remote || baseline) {
         if (!baseline) outside = await prepareOutside?.(context, tag);
@@ -248,7 +257,7 @@ export async function runKubernetesServices(context) {
         verificationTarget.runtime.revision, nodes[0].name);
       const verifier = !remote && createKubernetesVerifier({template, kube, pod, classicImages: true,
         ...(baseline && {async selectNode() {
-          const [healthy] = await readyServices(signal);
+          const [healthy] = await readyServices(signal, 'inspect');
           assert.ok(healthy, 'services.no_verifier_node');
           return healthy.spec.nodeName;
         }}),
@@ -269,7 +278,7 @@ export async function runKubernetesServices(context) {
         proxyIp: baseline ? remoteTarget.gatewayIp : context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
         stockholmRemote: remoteTarget, verifier, amazon,
         ...(baseline && {async readInbox(path, authorization, limit) {
-          return readServicesInbox((await readyServices(limit)).map(row => row.metadata.name),
+          return readServicesInbox((await readyServices(limit, 'account', 'mailpit')).map(row => row.metadata.name),
             async (pod, path, authorization) => parseIntegrationJson(await exec(pod, 'account',
               ['node', '--input-type=module', '-e', inboxRequest], JSON.stringify({path, authorization}), limit)),
             path, authorization);
@@ -303,11 +312,11 @@ export async function runKubernetesServices(context) {
         }}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);
-          return command(baseline ? await service(limit) : 'job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);
+          return command(baseline ? await service('inspect', limit) : 'job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);
         },
       }});
       if (remote) return result;
-      const operations = parseIntegrationJson(await command(await service(signal), 'account', `exec node --input-type=module -e '
+      const operations = parseIntegrationJson(await command(await service('account', signal), 'account', `exec node --input-type=module -e '
         import {createRequire} from "node:module";
         import {operationsStatus} from "./packages/operations/src/status.ts";
         import {localHealthFetch} from "./deploy/local-stack/operations-health.mjs";
