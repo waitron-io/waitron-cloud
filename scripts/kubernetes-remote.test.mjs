@@ -54,7 +54,7 @@ for (const withdrawal of [undefined, 'before probes', 'after probes']) {
   test(withdrawal ? 'publication connectivity refuses DNS withdrawal ' + withdrawal :
     'publication connectivity probes both survivors while the dead DNS replica is advertised', async () => {
     assert.equal(typeof remoteRehearsal.measurePublicationConnectivity, 'function', 'publication must check connectivity during the stop');
-    let snapshots = 0;
+    let snapshots = 0, apiDisconnected = false;
     const probes = [];
     const check = () => remoteRehearsal.measurePublicationConnectivity({
       originalNode: 'stopped-node', primaryNode: 'primary-node', survivingWorker: 'survivor', signal: AbortSignal.timeout(3000),
@@ -64,14 +64,18 @@ for (const withdrawal of [undefined, 'before probes', 'after probes']) {
           const ready = [{nodeName: 'primary-node', conditions: {ready: true}}];
           if (args.includes('kubernetes.io/service-name=kube-dns')) {
             snapshots++;
-            if (withdrawal !== 'before probes' && (withdrawal !== 'after probes' || snapshots === 1)) {
-              ready.push({nodeName: 'stopped-node', conditions: {ready: true}});
-            }
+            if (withdrawal !== 'before probes') ready.push({
+              nodeName: 'stopped-node', conditions: {ready: withdrawal !== 'after probes' || snapshots === 1},
+            });
           }
           return JSON.stringify({items: [{endpoints: ready}]});
         }
         assert.equal(verb, 'exec');
         assert.equal(snapshots, 1, 'run probes between endpoint snapshots');
+        if (!withdrawal && resource === 'cloud-services' && !apiDisconnected) {
+          apiDisconnected = true;
+          throw Error('kubectl exec failed\nerror: EOF');
+        }
         probes.push([resource, args[3]]);
         return JSON.stringify({lookupMs: Array(10).fill(2), connectionMs: 5});
       },
@@ -81,7 +85,7 @@ for (const withdrawal of [undefined, 'before probes', 'after probes']) {
       assert.equal(probes.length, withdrawal === 'before probes' ? 0 : 2);
     } else {
       assert.deepEqual(Object.keys(await check()).sort(), ['account', 'worker']);
-      assert.deepEqual(probes, [['cloud-services', 'account'], ['survivor', 'worker']]);
+      assert.deepEqual(probes.sort(), [['cloud-services', 'account'], ['survivor', 'worker']]);
       assert.equal(snapshots, 2);
     }
   });

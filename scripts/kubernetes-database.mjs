@@ -3,6 +3,7 @@ import {createHash, randomBytes} from 'node:crypto';
 import {readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {retryApi} from './kubernetes-node-loss.mjs';
 import {separateByHost} from './kubernetes-placement.mjs';
 
 const operatorImage = 'ghcr.io/cloudnative-pg/cloudnative-pg:1.29.2@sha256:4710b10a4897a4f888cbe80bce8b279475315590fb9f2cb0ebb516f2f40ebf06';
@@ -125,10 +126,11 @@ export async function measureAccountRecovery({health, logs, identity, before, si
   const done = new AbortController();
   const limit = AbortSignal.any([signal, done.signal]);
   const elapsed = () => Math.ceil(performance.now() - stopStarted);
+  const sample = name => retryApi(() => health(name, limit), limit, 'account ' + name);
   let livenessFailure, failure, failureMs;
   const sampleLiveness = (async () => {
     while (!limit.aborted) {
-      assert.deepEqual(await health('live', limit), {status: 200, body: {status: 'live'}}, 'database_loss.account_not_live');
+      assert.deepEqual(await sample('live'), {status: 200, body: {status: 'live'}}, 'database_loss.account_not_live');
       await delay(1000, undefined, {signal: limit});
     }
   })().catch(error => {
@@ -136,8 +138,8 @@ export async function measureAccountRecovery({health, logs, identity, before, si
   });
   try {
     while (!limit.aborted) {
-      const ready = await health('ready', limit);
-      const output = await logs(limit);
+      const ready = await sample('ready');
+      const output = await retryApi(() => logs(limit), limit, 'account logs');
       if (!failure) {
         if (ready.status === 503 && ready.body.status === 'unavailable') failure = 'readiness 503';
         else if (output.includes('Account server database connection failed')) failure = 'connection discarded';
@@ -147,7 +149,8 @@ export async function measureAccountRecovery({health, logs, identity, before, si
         }
       }
       if (failure && ready.status === 200 && ready.body.status === 'ready') {
-        assert.deepEqual(await identity(limit), before, 'database_loss.account_restarted');
+        const current = await retryApi(() => identity(limit), limit, 'account identity');
+        assert.deepEqual(current, before, 'database_loss.account_restarted');
         assert.equal(output.split('\n').filter(line => line.startsWith('{"status":"listening",')).length, 1,
           'database_loss.account_listening_events');
         limit.throwIfAborted();
@@ -155,8 +158,9 @@ export async function measureAccountRecovery({health, logs, identity, before, si
       }
       await delay(1000, undefined, {signal: limit}).catch(() => {});
     }
-    throw livenessFailure ?? Error('database_loss.' +
-      (failure ? 'account_did_not_recover' : 'account_database_failure_not_observed'));
+    throw Error('database_loss.' + (failure ? 'account_did_not_recover' : 'account_database_failure_not_observed'));
+  } catch (error) {
+    throw livenessFailure ?? error;
   } finally {
     done.abort();
     await sampleLiveness;
@@ -220,12 +224,15 @@ export async function runKubernetesDatabase({nodes, directory, run, kube, stopNo
   const writeRow = name => `INSERT INTO failover_probe VALUES ('${name}') ON CONFLICT (marker) DO UPDATE SET marker=excluded.marker RETURNING marker`;
   const readRow = name => `SELECT marker FROM failover_probe WHERE marker = '${name}'`;
   async function verifyWrite(name, options) {
-    assert.equal(await sql(writeRow(name), options), name, 'database_loss.written_row');
+    // The marker can be written again if the API disconnects after PostgreSQL commits it.
+    const row = await retryApi(() => sql(writeRow(name), options), options.signal, name);
+    assert.equal(row, name, 'database_loss.written_row');
   }
 
   const accountTag = 'd621-account-' + randomBytes(8).toString('hex');
+  // Leave time for both the Kubernetes request and the HTTP probe inside the pod.
   const health = async (name, signal) => JSON.parse(await exec(account, 'account',
-    ['node', '--input-type=module', '-e', healthProbe, name], {signal, timeout: name === 'live' ? 5_000 : 27_000}));
+    ['node', '--input-type=module', '-e', healthProbe, name], {signal, timeout: name === 'live' ? 15_000 : 36_000}));
   const logs = signal => kube(['logs', account, '-c', 'account'], {signal});
   const identity = async signal => {
     const {metadata, status} = await read(['pod', account], {signal});

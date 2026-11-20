@@ -35,25 +35,39 @@ test('a changed operator download cannot reach Kubernetes', async () => {
 test('account recovery requires a database failure and readiness from the original process', async () => {
   assert.equal(typeof databaseRehearsal.measureAccountRecovery, 'function');
   const before = {uid: 'account-pod', containerId: 'account-container', restartCount: 0};
-  for (const scenario of ['recovers', 'different container', 'no observed database failure']) {
-    let readiness = 0, live = 0;
+  for (const [scenario, refusal] of [
+    ['recovers', null], ['different container', /account_restarted/],
+    ['second listening event', /account_listening_events/], ['liveness refused', /account_not_live/],
+    ['no observed database failure', /account_database_failure_not_observed/],
+  ]) {
+    let readiness = 0, live = 0, apiDisconnected = false;
     const run = databaseRehearsal.measureAccountRecovery({
       before, signal: AbortSignal.timeout(2500),
       async health(path) {
-        if (path === 'live') {live++; return {status: 200, body: {status: 'live'}};}
+        if (path === 'live') {
+          live++;
+          return scenario === 'liveness refused' ? {status: 503, body: {}} : {status: 200, body: {status: 'live'}};
+        }
+        if (scenario === 'recovers' && !apiDisconnected) {
+          apiDisconnected = true;
+          throw Error('kubectl exec failed\nerror: EOF');
+        }
         return ++readiness === 1 && scenario !== 'no observed database failure' ?
           {status: 503, body: {status: 'unavailable'}} : {status: 200, body: {status: 'ready'}};
       },
-      async logs() {return '{"status":"listening","port":3000}';},
+      async logs() {
+        const listening = '{"status":"listening","port":3000}';
+        return scenario === 'second listening event' ? listening + '\n' + listening : listening;
+      },
       async identity() {return scenario === 'different container' ? {...before, containerId: 'new-container'} : before;},
     });
-    if (scenario === 'recovers') {
+    if (!refusal) {
       const result = await run;
       assert.equal(result.failure, 'readiness 503');
       assert.ok(result.readyMs >= result.failureMs);
       assert.ok(live >= 2);
     } else {
-      await assert.rejects(run, scenario === 'different container' ? /account_restarted/ : /account_database_failure_not_observed/);
+      await assert.rejects(run, refusal);
     }
   }
 });

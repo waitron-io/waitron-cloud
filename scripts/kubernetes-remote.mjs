@@ -151,8 +151,8 @@ export async function measurePublicationConnectivity({kube, originalNode, primar
   }
   await snapshot('before probes');
   const limit = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
-  const probe = async (pod, container) => JSON.parse(await kube(
-    ['exec', pod, '-c', container, '--', 'sh', '-ec', connectivityProbe], limit));
+  const probe = async (pod, container) => JSON.parse(await retryApi(() => kube(
+    ['exec', pod, '-c', container, '--', 'sh', '-ec', connectivityProbe], limit), limit, 'publication connectivity ' + container));
   const [account, worker] = await Promise.all([probe('cloud-services', 'account'), probe(survivingWorker, 'worker')]);
   process.stderr.write('D621 publication connectivity ' + JSON.stringify({account, worker}) + '\n');
   await snapshot('after probes');
