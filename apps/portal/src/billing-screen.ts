@@ -65,7 +65,9 @@ export function billingScreen(app:PortalApp){
    ${(controller.methodState??venue.paymentMethods.setup?.state)==='pending'?html`<p role="status">${c.billingMethodPending}</p>`:nothing}
    ${(controller.methodState??venue.paymentMethods.setup?.state)==='failed'?html`<p role="status">${c.billingMethodFailed}</p>`:nothing}
    ${(controller.methodState??venue.paymentMethods.setup?.state)==='verified'?html`<p role="status">${c.billingMethodVerified}</p>`:nothing}
-   ${controller.methodCheckout?html`<billing-card .checkoutId=${controller.methodCheckout} .locale=${app.locale} @method-result=${()=>{void controller.verifyMethod();}} @widget-unavailable=${()=>{controller.error='billingMethodUncertain';app.draw();}}></billing-card>`:nothing}
+   ${controller.methodCheckout?html`
+    <p>${c.billingMethodCardConsent}</p>
+    <billing-card .checkoutId=${controller.methodCheckout} .locale=${app.locale} @method-result=${()=>{void controller.verifyMethod();}} @widget-unavailable=${()=>{controller.error='billingMethodUncertain';app.draw();}}></billing-card>`:nothing}
    <wt-button .disabled=${disabled} @click=${()=>{void controller.verifyMethod();}}>${c.billingMethodRefresh}</wt-button>
   </section>`:nothing}
  </section>`;

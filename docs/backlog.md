@@ -1721,7 +1721,10 @@ implementation or production evidence.
   The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
   covers the Connected trial chooser for configured synthetic accounts. The chooser shows
   the current Connected price before and after VAT and explains the first live charge. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
-  covers test-only saved methods. The [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
+  covers test-only saved methods. Billing names the SumUp switch above its form, and
+  the [sandbox receipt](billing-provider-test.md#local-sumup-save-card-switch-20-november-2026)
+  records the refusal with the switch off and a saved card with it on. The
+  [supplier inventory](cloud-data-processing-register.md#trace-the-current-payment-test-paths)
   records SumUp card and Stripe SEPA test paths; both suppliers and their live country
   flows remain unqualified. Paid-plan tax collection and Spanish tax-number
   validation, paid-plan choices, cancellation, account closure, hosting enrolment,

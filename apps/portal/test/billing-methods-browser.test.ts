@@ -61,6 +61,23 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  }finally{await browser.close();}
 });
 
+for(const [locale,button,instruction] of [
+ ['en','Add or switch test card',/monthly payments.*Save for future payments/i],
+ ['es','Añadir o cambiar tarjeta de prueba',/pagos mensuales.*Guardar para pagos futuros/i],
+] as const)test(`${locale}: the card consent instruction appears immediately above the open form`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({locale,viewport:{width:390,height:1000}});
+  page.setDefaultTimeout(3000);await fixture(page);await page.goto('https://portal.test/account/billing');
+  const start=page.getByRole('button',{name:button,exact:true});
+  await start.waitFor();assert.equal(await page.getByText(instruction).count(),0);
+  await start.click();await page.locator('billing-card iframe').waitFor();
+  const guidance=page.getByText(instruction);
+  await guidance.waitFor();
+  assert.equal(await guidance.evaluate(element=>element.nextElementSibling?.localName),'billing-card');
+ }finally{await browser.close();}
+});
+
 test('Stripe test redirect returns to Billing and verifies the saved setup without a browser reference',async()=>{
  const browser=await chromium.launch({headless:true});try{
   const page=await browser.newPage();page.setDefaultTimeout(5000);const server=await fixture(page);await page.goto('https://portal.test/account/billing');
