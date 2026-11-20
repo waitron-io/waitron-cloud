@@ -127,6 +127,19 @@ async function configureServices(context, kube, store, custody) {
   return {ca: tls.root, tls, config, runtimeDirectory, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
 }
 
+export function servicesDatabaseErrorCodes(log) {
+  const codes = new Set();
+  for (const line of log.split('\n')) {
+    try {
+      const {record} = JSON.parse(line);
+      const code = record?.sql_state_code;
+      if (typeof code === 'string' && /^[A-Z0-9]{5}$/.test(code) &&
+          ['ERROR', 'FATAL', 'PANIC'].includes(record.error_severity)) codes.add(code);
+    } catch {}
+  }
+  return [...codes].sort();
+}
+
 const inboxRequest = `
   import {readFileSync} from 'node:fs';
   const {path, authorization} = JSON.parse(readFileSync(0, 'utf8'));
@@ -247,6 +260,12 @@ export async function runKubernetesServices(context) {
     });
   } catch (error) {
     failure = error;
+    if (baseline && error.message === 'integration.command_failed:client-paid-remote') {
+      const log = await context.kube(['-n', servicesNamespace, 'logs', '-l', 'cnpg.io/cluster=cloud-db',
+        '-c', 'postgres', '--tail=350'], {signal: null, timeout: 10_000}).catch(() => undefined);
+      process.stderr.write('D621 staff certificate database error codes ' +
+        (log === undefined ? 'unavailable' : JSON.stringify(servicesDatabaseErrorCodes(log))) + '\n');
+    }
     if (remote || baseline) {
       for (const [name, args] of [
         ['gateway candidates', ['get', 'pods', '-l', 'app=remote-gateway', '-o', 'wide']],

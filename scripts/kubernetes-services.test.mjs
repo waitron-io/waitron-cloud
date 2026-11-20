@@ -9,7 +9,8 @@ import {prepareKindOutsideBaseline} from './kubernetes-outside.mjs';
 import {withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
 import {runKubernetesCheck} from './kubernetes-check.mjs';
 
-import {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} from './kubernetes-services.mjs';
+import * as servicesScript from './kubernetes-services.mjs';
+const {installServicesDatabase, servicesCredentialFiles, servicesStorageSettings} = servicesScript;
 
 test('the migration job follows all three prepared PostgreSQL copies and gates the service startup', async () => {
   const nodes = [1, 2, 3].map(number => ({name: 'node-' + number, id: 'id-' + number}));
@@ -111,6 +112,14 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
       throw failure;
     }}), error => error === failure);
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
+});
+
+test('failure diagnostics retain only database SQLSTATEs from error records', () => {
+  const {servicesDatabaseErrorCodes} = servicesScript;
+  assert.equal(typeof servicesDatabaseErrorCodes, 'function');
+  const row = (severity, code) => JSON.stringify({record: {error_severity: severity, sql_state_code: code, message: 'private query'}});
+  assert.deepEqual(servicesDatabaseErrorCodes([row('ERROR', '40P01'), row('LOG', '08006'),
+    row('ERROR', 'private'), 'not JSON', row('FATAL', '08006'), row('ERROR', '40P01')].join('\n')), ['08006', '40P01']);
 });
 
 test('outside baseline validates its Cloud image before creating a Kind cell', () => {
