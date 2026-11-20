@@ -102,6 +102,7 @@ function publicError(error: unknown): AccountHttpError {
 export function createAccountApp(options: {operatorAccountId?:string;guestOrigin?:string;pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
+  if(config.setupPairing&&options.planMode!=='test-venue-levels')throw Error('setup_pairing.test_mode_required');
   if(options.guestOrigin){validateGuestOrigin(options.guestOrigin);if(options.guestOrigin===config.portalOrigin)throw Error('guest_origin_invalid');}
   const billingAccount=validateBillingAccountOptions(options.billingAccount,options.planMode??'existing');
   const billingMethods=validateBillingMethodsOptions(options.billingMethods,options.planMode??'existing',billingAccount);
