@@ -1,7 +1,9 @@
+import {storageNamespace} from './secrets.mjs';
 import {cloudContainer, caVolume, requireTls} from '../../scripts/kubernetes-database.mjs';
 
 export const servicesNamespace = 'd621-data';
 export const servicesOrigin = 'https://cloud.example.test:3000';
+export const servicesStoreHost = 's3.' + storageNamespace + '.svc.cluster.local';
 export const verifierScratchPath = '/var/local/d621-verifier-scratch';
 export const verifierScratchVolume = 'd621-verifier-scratch';
 const publicStoreCa = {name: 'store-ca', configMap: {name: 'services-store-ca'}};
@@ -55,6 +57,19 @@ export function servicesPod(image, nodeName, remote) {
         service(image, 'usage', 'packages/registration/src/usage-reconcile-cli.ts --watch'),
         service(image, 'probe', 'packages/remote-access/src/probe-cli.ts')],
     }};
+}
+
+export function servicesDaemonSet(image, nodes, remoteCell) {
+  const {metadata, spec} = servicesPod(image, undefined, true);
+  const labels = {app: metadata.name};
+  const terms = [{matchFields: [{key: 'metadata.name', operator: 'In', values: nodes}]}];
+  const {containers: [inspect]} = servicesInspection(image, remoteCell).spec.template.spec;
+  spec.containers.push(inspect);
+  return {apiVersion: 'apps/v1', kind: 'DaemonSet', metadata, spec: {
+    selector: {matchLabels: labels},
+    template: {metadata: {labels}, spec: {...spec, restartPolicy: 'Always',
+      affinity: {nodeAffinity: {requiredDuringSchedulingIgnoredDuringExecution: {nodeSelectorTerms: terms}}}}},
+  }};
 }
 
 export function servicesVerifier(template, image, revision, nodeName) {

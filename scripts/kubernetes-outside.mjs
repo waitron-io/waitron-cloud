@@ -94,6 +94,7 @@ export function outsidePublication({cluster, signal, waitronImage, run, mesh, co
   let flux;
   return {
     get revision() {return flux?.revision;},
+    restoreNode: mesh.restoreNode,
     async install({deployment, kube, worker}) {
       flux = await installFlux({name: cluster, image: waitronImage, run, deployment, kube, signal,
         controllersPath, baselineNode: worker,
@@ -110,23 +111,33 @@ export async function startKindOutsideMesh({directory, nodes, run, signal}, {res
   const execute = (binary, args, input, cleanup) => run(binary, args, {input, signal: cleanup ? null : signal, timeout: 180_000});
   const bootstrap = fileURLToPath(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url));
   const peers = [];
+  const nodePid = async node => {
+    const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
+    assert.match(pid, /^[1-9][0-9]*$/);
+    return pid;
+  };
+  const configPath = index => join(directory, 'mesh-node-' + index, 'wg0.conf');
+  const connectNode = async (index, options) =>
+    run('nsenter', ['-t', await nodePid(nodes[index]), '-n', 'wg-quick', 'up', configPath(index)], options);
   for (const node of nodes) {
     const privateKey = await run('wg', ['genkey']);
     const publicKey = await execute('wg', ['pubkey'], privateKey + '\n');
-    const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
-    assert.match(pid, /^[1-9][0-9]*$/);
-    peers.push({endpoint: node.ip, publicKey, privateKey, pid});
+    peers.push({endpoint: node.ip, publicKey, privateKey});
   }
-  return startOutsideMesh({directory, peers, run: execute, restrictInbound, async prepareNodes(publicKey) {
-    for (const [index, {pid, privateKey}] of peers.entries()) {
-      const nodePath = join(directory, 'mesh-node-' + index), address = meshNodeAddress(index);
-      const path = join(nodePath, 'wg0.conf');
-      await mkdir(nodePath);
+  const mesh = await startOutsideMesh({directory, peers, run: execute, restrictInbound, async prepareNodes(publicKey) {
+    for (const [index, {privateKey}] of peers.entries()) {
+      const path = configPath(index), address = meshNodeAddress(index);
+      await mkdir(join(directory, 'mesh-node-' + index));
       const input = `[Interface]\nAddress = ${address}/32\nListenPort = 51821\nMTU = ${rehearsalMtu}\nPrivateKey = ${privateKey}\n` + outsideNodePeer(publicKey);
       await run('bash', ['-c', 'umask 077; bash "$1" mesh-config "$2" > "$3"', 'mesh-config', bootstrap, address, path], {input});
-      await run('nsenter', ['-t', pid, '-n', 'wg-quick', 'up', path]);
+      await connectNode(index);
     }
   }});
+  return {...mesh, restoreNode(name, options) {
+    const index = nodes.findIndex(node => node.name === name);
+    assert.ok(index >= 0, 'outside.unknown_node');
+    return connectNode(index, options);
+  }};
 }
 
 export async function prepareKindOutsideBaseline({prepareBundle = prepareFluxBundle, ...context}) {

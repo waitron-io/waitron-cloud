@@ -84,19 +84,27 @@ test('the Kind baseline keeps a cached controller image and removes the image it
   t.after(() => rm(directory, {recursive: true, force: true}));
   const key = 'A'.repeat(43) + '=';
   const imageNames = {kept: 'ghcr.io/fluxcd/source-controller', fresh: 'ghcr.io/fluxcd/kustomize-controller'};
-  const actions = [];
+  const actions = [], resumed = [];
+  let pid = 123;
   const outside = await prepareKindOutsideBaseline({directory, cluster: 'owned',
     nodes: [1, 2, 3].map(n => ({name: 'node-' + n, ip: '192.0.2.' + n, id: String(n)})),
     prepareBundle: async () => join(directory, 'synthetic-flux.json'),
     run: async (binary, args) => {
       if (binary === 'wg') return key;
+      if (binary === 'nsenter') resumed.push(args);
       if (binary !== 'docker') return '';
-      if (args[0] === 'inspect') return '123';
+      if (args[0] === 'inspect') return String(pid);
       const image = args.at(-1).split('@')[0];
       if (args[0] === 'image' && args[1] === 'inspect' && image === imageNames.fresh) throw Error('No such image: ' + args.at(-1));
       if (args[0] === 'pull' || args[1] === 'rm') actions.push([args[0], image]);
       return '';
     }});
+  const beforeRestart = resumed.length;
+  assert.equal(typeof outside.restoreNode, 'function');
+  pid = 456;
+  await outside.restoreNode('node-2');
+  assert.equal(resumed.length, beforeRestart + 1);
+  assert.deepEqual(resumed.at(-1), ['-t', '456', '-n', 'wg-quick', 'up', join(directory, 'mesh-node-1', 'wg0.conf')]);
   await outside.close();
   assert.deepEqual(actions, [['image', 'owned:source-controller'], ['pull', imageNames.fresh],
     ['image', 'owned:kustomize-controller'], ['image', imageNames.fresh]]);
@@ -112,6 +120,26 @@ test('the Kind baseline does not pull over a failed image inventory query', asyn
       throw failure;
     }}), error => error === failure);
   assert.deepEqual(commands, [['docker', 'image', 'inspect']]);
+});
+
+test('a mail list combines surviving inboxes and finds a message outside the first one', async () => {
+  assert.equal(typeof servicesScript.readServicesInbox, 'function');
+  const fetch = async (pod, path) => {
+    if (pod === 'unreachable') throw Error('node stopped');
+    if (path === 'messages') return {status: 200, text: JSON.stringify({messages: [{ID: pod}]})};
+    return pod === 'on-c' && path === 'message/on-c' ? {status: 200, text: '{"ID":"on-c"}'} : {status: 404, text: 'not found'};
+  };
+  const inbox = (path, auth) => servicesScript.readServicesInbox(['unreachable', 'on-b', 'on-c'], fetch, path, auth);
+  assert.deepEqual(await (await inbox('messages', 'synthetic')).json(), {messages: [{ID: 'on-b'}, {ID: 'on-c'}]});
+  assert.deepEqual(await (await inbox('message/on-c', 'synthetic')).json(), {ID: 'on-c'});
+  assert.equal((await inbox('message/absent', 'synthetic')).status, 404);
+});
+
+test('an unprotected surviving inbox cannot hide behind other inboxes that reject the request', async () => {
+  assert.equal(typeof servicesScript.readServicesInbox, 'function');
+  const response = await servicesScript.readServicesInbox(['protected', 'open'], async pod =>
+    pod === 'protected' ? {status: 401, text: 'unauthorized'} : {status: 200, text: '{"messages":[]}'}, 'messages', '');
+  assert.equal(response.status, 200, 'the caller must see that a surviving inbox accepted the unauthenticated request');
 });
 
 test('failure diagnostics retain only database SQLSTATEs from error records', () => {
@@ -135,7 +163,17 @@ test('one outside Linux venue signs in, pairs, reaches both HTTPS routes and res
   skip: process.env.TEST_KUBERNETES_OUTSIDE_BASELINE !== '1', timeout: 40 * 60 * 1000,
 }, async () => {
   assert.equal(process.platform, 'linux');
-  const {services} = await runKubernetesCheck('kind-baseline');
+  const stopServiceNodes = process.env.TEST_KUBERNETES_OUTSIDE_SERVICE_STOPS === '1';
+  const {services, nodes} = await runKubernetesCheck('kind-baseline', {stopServiceNodes});
+  if (stopServiceNodes) {
+    assert.deepEqual(services.serviceStops.map(leg => leg.stopped), nodes.map(node => node.name));
+    for (const leg of services.serviceStops) {
+      assert.equal(leg.session, true);
+      assert.equal(leg.mail, true);
+      assert.equal(leg.retainedObject, true);
+      assert.equal(leg.outsideStore, true);
+    }
+  }
   assert.equal(services.signup, true);
   assert.equal(services.signIn, true);
   assert.equal(services.pairing.persistedRenewal, true);

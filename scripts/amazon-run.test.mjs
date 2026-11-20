@@ -266,6 +266,10 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
       if (binary === 'scp' && args.at(-2).endsWith('target.json')) {target = JSON.parse(await readFile(args.at(-2), 'utf8')); if (scenario === 'observer copy baseline') time += 1;}
       if (binary === 'ssh') {
         const script = args.at(-1);
+        if (script.includes('--raw=/readyz')) {
+          if (scenario === 'baseline' && args.at(-2) === 'admin@203.0.113.1') throw Error('synthetic first control plane stopped');
+          return 'ok';
+        }
         if (script.includes("'get' 'endpointslices'") && script.includes('kubernetes.io/service-name=kube-dns')) {
           const clusterName = script.match(/'--context' '([^']+)'/)[1];
           return JSON.stringify({items: [{endpoints: ['-control-plane', '-worker', '-worker2'].map(suffix => {
@@ -408,8 +412,13 @@ for (const [scenario, expectedError] of [['complete', null], ['baseline', null],
     assert.equal(calls.some(row => row[0] === 'ssh' && row.at(-1).includes('scripts/kubernetes-storage.mjs')), false);
     assert.ok(calls.some(row => row[0] === 'env' && row.includes('--amazon-test')));
     assert.deepEqual(savedTags.filter(tag => /:(source|kustomize)-controller$/.test(tag)).length, 2);
-    assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.1');
-    assert.equal(transports.find(row => row.args.at(-1).includes('docker save'))?.args.at(-2), 'admin@203.0.113.1');
+    assert.match(transports.find(row => row.input === 'synthetic-migration')?.args.at(-1) ?? '', /--context/);
+    assert.equal(transports.find(row => row.input === 'synthetic-migration')?.args.at(-2), 'admin@203.0.113.2');
+    assert.equal(transports.find(row => row.args.at(-1).includes('docker save'))?.args.at(-2), 'admin@203.0.113.2');
+    for (const fragment of ['mkfs.ext4', "'docker' 'load'"]) {
+      assert.deepEqual(transports.filter(row => row.args.at(-1).includes(fragment)).map(row => row.args.at(-2)),
+        ['admin@203.0.113.1', 'admin@203.0.113.2', 'admin@203.0.113.3']);
+    }
     const removedNetwork = calls.findIndex(row => row[0] === 'docker' && row[1] === 'network' && row[2] === 'rm' && row[3] === 'd'.repeat(64));
     const deletedStack = calls.findIndex(row => row[1] === 'wait' && row[2] === 'stack-delete-complete');
     assert.ok(removedNetwork >= 0 && removedNetwork < deletedStack);

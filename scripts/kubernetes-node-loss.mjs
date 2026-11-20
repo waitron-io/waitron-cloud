@@ -72,13 +72,13 @@ exec crictl exec "$container" etcdctl --endpoints=https://127.0.0.1:2379 \
   --key=/etc/kubernetes/pki/etcd/healthcheck-client.key --command-timeout=5s "$@"
 `;
 
-export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, remote, coldRestart} = {}) {
+export async function runKubernetesNodeLoss({execute = executeCommand, database, storage, services, outsideServices, remote, coldRestart} = {}) {
   // Kind appends its role names to the cluster name, within one DNS label.
   const cluster = 'd621-' + randomUUID().replaceAll('-', '');
   const directory = await mkdtemp(join(tmpdir(), 'cloud-node-loss-'));
   const scratchMount = join(directory, 'verifier-mount');
   const scratchDisk = join(directory, 'verifier.ext4');
-  const scratchWork = join(scratchMount, 'work');
+  const scratchPaths = (outsideServices ? ['work', 'work-b', 'work-c'] : ['work']).map(name => join(scratchMount, name));
   const kubeconfig = join(directory, 'kubeconfig');
   const env = {...process.env, KUBECONFIG: kubeconfig, DOCKER_CONTEXT: 'default', KIND_EXPERIMENTAL_PROVIDER: 'docker',
     KIND_EXPERIMENTAL_DOCKER_NETWORK: cluster};
@@ -152,7 +152,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       await run('mkfs.ext4', ['-q', '-m', '0', scratchDisk]);
       scratchMountAttempted = true;
       await run('mount', ['-o', 'loop,nodev,nosuid,noexec', scratchDisk, scratchMount]);
-      await run('install', ['-d', '-m', '0700', '-o', '1000', '-g', '1000', scratchWork]);
+      for (const path of scratchPaths) await run('install', ['-d', '-m', '0700', '-o', '1000', '-g', '1000', path]);
     }
     networkId = await docker(['network', 'create', '--driver', 'bridge', '--subnet', subnet, '--label', `${networkLabel}=${cluster}`, cluster]);
     assert.match(networkId, dockerId, 'node_loss.network_id');
@@ -162,7 +162,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
     const input = JSON.stringify({kind: 'Cluster', apiVersion: 'kind.x-k8s.io/v1alpha4',
       networking: {apiServerAddress: '127.0.0.1', ipFamily: 'ipv4'}, nodes: names.map((_, index) => ({
         role: 'control-plane',
-        ...(services && index === 0 ? {extraMounts: [{hostPath: scratchWork, containerPath: verifierScratchPath}]} : {}),
+        ...(services && scratchPaths[index] ? {extraMounts: [{hostPath: scratchPaths[index], containerPath: verifierScratchPath}]} : {}),
       }))});
     // Retain a partial create so cleanup can check container IDs before removing anything.
     await run('kind', ['create', 'cluster', '--name', cluster, '--image', kindNodeImage, '--wait', '180s', '--retain', '--config', '-'],
@@ -296,7 +296,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {
-      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, signal: stop.signal});
+      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members,
         services: {...result, verifierScratchBytes: (await stat(scratchDisk)).size}};
     }

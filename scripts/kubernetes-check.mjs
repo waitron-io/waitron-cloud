@@ -56,7 +56,7 @@ export function forwardKubernetesPod(kubeArgs, name, ports, env, forwards) {
   });
 }
 
-export function createKubernetesVerifier({template, kube, pod, loadImage, classicImages = false}) {
+export function createKubernetesVerifier({template, kube, pod, loadImage, classicImages = false, selectNode}) {
   const status = async () => (await pod('verifier')).status.containerStatuses.find(row => row.name === 'verifier').state;
   const exec = args => kube(['exec', '-i', 'pod/verifier', '-c', 'verifier', '--', ...args]);
   return {
@@ -70,6 +70,7 @@ export function createKubernetesVerifier({template, kube, pod, loadImage, classi
       for (const row of worker.env) if (Object.hasOwn(environment, row.name)) row.value = environment[row.name];
       await verifierDiagnostics(kube, pod);
       await kube(['delete', 'pod/verifier', '--ignore-not-found', '--wait=true', '--timeout=30s']);
+      if (selectNode) value.spec.nodeName = await selectNode();
       await kube(['apply', '-f', '-'], JSON.stringify(value));
       await kube(['wait', '--for=condition=Ready', 'pod/verifier', '--timeout=180s']);
       await loadImage(image);
@@ -110,8 +111,9 @@ export async function loseKubernetesWorker({cluster, run, kube, manifest, onStop
   return {stopped, replacement};
 }
 
-export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux, stopGatewayNode = false, prepareOutside} = {}) {
+export async function runKubernetesCheck(target = 'kind', {clients = runTestCloudClients, observer = observeP1, flux = installFlux, stopGatewayNode = false, stopServiceNodes = false, prepareOutside} = {}) {
 assert.ok(!stopGatewayNode || target === 'kind-remote', 'kubernetes.target');
+assert.ok(!stopServiceNodes || target === 'kind-baseline', 'kubernetes.service_stop_target');
 assert.ok(!prepareOutside || target === 'kind-remote', 'kubernetes.outside_network_target');
 if (target === 'kind-node-loss') return runKubernetesNodeLoss();
 if (target === 'kind-services' || target === 'kind-remote' || target === 'kind-baseline') {
@@ -125,8 +127,8 @@ if (target === 'kind-services' || target === 'kind-remote' || target === 'kind-b
   const {runKubernetesServices} = await import('./kubernetes-services.mjs');
   const prepare = baseline ? (await import('./kubernetes-outside.mjs')).prepareKindOutsideBaseline : prepareOutside;
   const rehearse = context => runKubernetesServices({...context, image, waitronImage, verificationTarget,
-    remote, stopGatewayNode, baseline, prepareOutside: prepare});
-  return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse});
+    remote, stopGatewayNode, stopServiceNodes, baseline, prepareOutside: prepare});
+  return runKubernetesNodeLoss(remote ? {remote: rehearse} : {services: rehearse, outsideServices: baseline});
 }
 if (target === 'kind-storage-identity') {
   const {runStorageIdentity} = await import('./kubernetes-storage-identity.mjs');

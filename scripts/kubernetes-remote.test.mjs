@@ -382,6 +382,75 @@ test('outside relay keeps the client-facing address and uses only the three mesh
   assert.deepEqual(calls.at(-1), ['docker', ['rm', '-f', id], {signal: null}]);
 });
 
+test('the outside service relay binds account and store separately from the gateway', async () => {
+  const calls = [];
+  await remoteRehearsal.startRemoteRelay({cluster: 'private-proof', tag: 'cloud:proof',
+    outside: true, services: true, nodes: ['a', 'b', 'c'].map(name => ({name})),
+    run: async (_binary, args) => {
+      calls.push(args);
+      if (args[0] === 'create') return 'a'.repeat(64);
+      if (args[0] === 'inspect') return '172.30.250.8';
+    }});
+  assert.deepEqual(calls[0].slice(-4), ['10.77.0.2', '10.77.0.3', '--tcp=3000:3000', '--tcp=9000:30900']);
+});
+
+test('the next available control plane is selected after an API failure', async () => {
+  assert.equal(typeof remoteRehearsal.selectSurvivingNode, 'function');
+  const probes = [];
+  const found = await remoteRehearsal.selectSurvivingNode(['a', 'b', 'c'], async node => {
+    probes.push(node);
+    if (node === 'a') throw Error('SSH disconnected');
+    return node === 'b' ? 'ok' : 'unexpected';
+  });
+  assert.equal(found, 'b');
+  assert.deepEqual(probes, ['a', 'b']);
+  await assert.rejects(remoteRehearsal.selectSurvivingNode(['a', 'b', 'c'], async () => 'not ready'),
+    /remote\.no_surviving_control_plane/);
+});
+
+test('a service port does not depend on the gateway or the other service port', {timeout: 10000}, async t => {
+  const listen = async label => {
+    const server = createServer(socket => socket.once('data', () => socket.end(label)));
+    server.listen(0, '127.0.0.1');
+    t.after(() => server.close());
+    await once(server, 'listening');
+    return server;
+  };
+  const [account, storage] = await Promise.all([listen('account on B'), listen('storage on C')]);
+  const preload = `
+    import net from 'node:net';
+    import {syncBuiltinESMExports} from 'node:module';
+    const targets = {'192.0.2.2:3000': ${account.address().port}, '192.0.2.3:30900': ${storage.address().port}};
+    const connect = net.createConnection;
+    net.createConnection = (options, listener) => {
+      const port = targets[options.host + ':' + options.port];
+      return connect(port ? {...options, host: '127.0.0.1', port} : {path: '/nonexistent-private-relay.sock'}, listener);
+    };
+    syncBuiltinESMExports();
+  `;
+  const relay = spawn(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(preload),
+    fileURLToPath(new URL('../deploy/kubernetes/remote-relay.mjs', import.meta.url)),
+    '192.0.2.1', '31820', '0', '127.0.0.1', '0', '192.0.2.2', '192.0.2.3', '--tcp=0:3000', '--tcp=0:30900',
+  ], {stdio: ['ignore', 'pipe', 'inherit']});
+  const lines = createInterface({input: relay.stdout}), exited = once(relay, 'exit');
+  t.after(async () => {lines.close(); relay.kill(); await exited;});
+  const [line] = await once(lines, 'line', {signal: t.signal});
+  const ports = JSON.parse(line).services;
+  assert.equal(ports?.length, 2);
+  const read = port => new Promise((resolve, reject) => {
+    const socket = createConnection({host: '127.0.0.1', port}, () => socket.end('probe'));
+    const chunks = [];
+    socket.on('data', chunk => chunks.push(chunk));
+    socket.on('error', reject);
+    socket.on('end', () => resolve(Buffer.concat(chunks).toString()));
+  });
+  await remoteRehearsal.untilRemote(async () => {
+    const result = await Promise.all(ports.map(read));
+    assert.deepEqual(result, ['account on B', 'storage on C']);
+    return true;
+  }, 3000, t.signal, 'service_relay');
+});
+
 test('the outside Kind network drops traffic to the private API port and carries Flux and signed remote HTTPS', {
   skip: process.env.TEST_KUBERNETES_OUTSIDE_NETWORK !== '1', timeout: 40 * 60 * 1000,
 }, async () => {

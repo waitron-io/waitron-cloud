@@ -161,12 +161,24 @@ export async function measurePublicationConnectivity({kube, originalNode, primar
   return {account, worker};
 }
 
-export async function startRemoteRelay({cluster, nodes, run, tag, outside}) {
+export async function selectSurvivingNode(nodes, probe, signal) {
+  let failure;
+  for (const node of nodes) {
+    signal?.throwIfAborted();
+    try {if (await probe(node, signal) === 'ok') return node;}
+    catch (error) {failure = error;}
+  }
+  signal?.throwIfAborted();
+  throw Error('remote.no_surviving_control_plane', {cause: failure});
+}
+
+export async function startRemoteRelay({cluster, nodes, run, tag, outside, services = false}) {
   assert.equal(nodes.length, 3, 'remote.relay_nodes');
   const [primary, ...standbys] = nodes.map((node, index) => outside ? meshNodeAddress(index) : node.name);
   const relayId = await run('docker', ['create', '--pull=never', '--network', cluster, '--label', 'cloud.kind.node-loss=' + cluster,
     '--read-only', '--user', '1000:1000', '--cap-drop', 'ALL', '--memory', '64m', '--entrypoint', 'node', tag, 'deploy/kubernetes/remote-relay.mjs',
-    primary, '31820', '51820', '0.0.0.0', '30443', ...standbys]);
+    primary, '31820', '51820', '0.0.0.0', '30443', ...standbys,
+    ...(services ? ['--tcp=3000:3000', '--tcp=9000:30900'] : [])]);
   assert.match(relayId, /^[a-f0-9]{64}$/);
   const close = () => run('docker', ['rm', '-f', relayId], {signal: null});
   try {
@@ -261,7 +273,7 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
     return rows.length === 3 && rows.every(row => row.status.phase === 'Running') && new Set(rows.map(row => row.spec.nodeName)).size === 3 &&
       rows.map(row => row.metadata.name);
   }, 180000, signal, 'gateway_candidates');
-  const {gatewayIp, close} = await startRemoteRelay({cluster, nodes, run, tag, outside});
+  const {gatewayIp, close} = await startRemoteRelay({cluster, nodes, run, tag, outside, services: context.baseline});
   try {
     const exec = (pod, cmd, limit) => execGateway(call, pod, cmd, limit);
     const active = async limit => {
