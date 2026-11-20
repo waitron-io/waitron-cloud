@@ -1832,6 +1832,9 @@ implementation or production evidence.
   passed in disposable x86-64 Linux with a full API outage, retained PostgreSQL
   data and a fresh write. Rehearse the Stockholm cold restart from outside the
   cell with the same service clients before run 9.
+  Follow the [run 9 readiness sizing](superpowers/plans/2026-11-18-d621-run9-sizing.md)
+  for the remaining build and the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
+  for the timed dry run and billing gates.
   Flux-hosting-node loss and original A/all-node loss remain open. The three-node
   command `TEST_KUBERNETES_WORKER_LOSS=1 node --test scripts/kubernetes-worker-loss.test.mjs`
   passed locally on ARM64 Mac Docker: both journeys restored their captured backups
