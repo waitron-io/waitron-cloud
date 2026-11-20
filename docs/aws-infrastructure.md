@@ -1341,6 +1341,12 @@ and signing request and published signed sequence 4, up from 3, 985 ms after
 revocation. All three gateways received the withdrawal, and both routes refused
 the venue 45.240 seconds after revocation.
 
+With one DNS replica per machine, both survivors finished their lookups within
+5 ms and opened verified PostgreSQL connections in 17 ms and 16 ms. Kubernetes
+still listed the stopped replica as ready after the probes. The job inspection
+took 406 ms and the surviving worker signed the withdrawal in 886 ms. The stop
+leg took 13.821 seconds in disposable Linux.
+
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
 Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).

@@ -1812,10 +1812,11 @@ implementation or production evidence.
   rehearsal checks. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
   used the same peer through a standby and replaced the certificate on the same route.
   During the worker machine stop, the survivor reused the saved certificate and
-  signing request and published the owner's revocation. The check waited 51.613 seconds
-  for Kubernetes to withdraw the stopped DNS replica. Keep name lookup and fresh
-  database connections available across machine loss, and qualify the account process
-  through database primary failover. In the full-service machine-loss check,
+  signing request and published the owner's revocation. With local DNS replicas,
+  both survivors resolved names in at most 5 ms and opened verified PostgreSQL
+  connections in 17 ms and 16 ms while the stopped replica was still listed as ready.
+  Run the same checks in Stockholm and qualify account recovery across database
+  primary failover. In the full-service machine-loss check,
   measure how long the email worker, remote publication worker and backup verifier
   take to come back after the primary moves. They exit on idle database connection
   errors and depend on Kubernetes for a restart.
