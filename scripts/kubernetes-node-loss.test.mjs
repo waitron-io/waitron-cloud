@@ -403,6 +403,29 @@ test('outside services can run the verifier on any owned machine', async () => {
   assert.equal(result.services.verifierScratchBytes, 1024 ** 3);
 });
 
+test('the outside stop uses a surviving Kubernetes API and its original TLS identity', async () => {
+  const {execute: run, calls} = servicesFixture({outside: true});
+  const execute = (binary, args, options) => run(binary, args.filter(value =>
+    !value.startsWith('--server=') && !value.startsWith('--tls-server-name=')), options);
+  await runCheck({execute: async (binary, args, options) => {
+    const result = await execute(binary, args, options);
+    if (binary === 'kubectl' && args.includes('--selector=service-proof')) {
+      assert.ok(args.includes('--server=https://172.30.250.3:6443'));
+      assert.ok(args.includes('--tls-server-name=127.0.0.1'));
+    }
+    return result;
+  }, outsideServices: true, services: async ({nodes, stopNode, kube, kubeTarget}) => {
+    await stopNode(nodes[0].name, {whileStopped: async options => {
+      await kube(['get', 'nodes', '-o', 'json', '--selector=service-proof'], options);
+      assert.deepEqual(kubeTarget().slice(2), ['--server=https://172.30.250.3:6443', '--tls-server-name=127.0.0.1']);
+    }});
+    await kube(['get', '--raw=/readyz']);
+    assert.equal(calls.at(-1).binary, 'kubectl');
+    assert.equal(kubeTarget().length, 2, 'the healthy baseline uses the original API address again');
+    return {};
+  }});
+});
+
 test('a scratch unmount failure preserves the service failure', async t => {
   const serviceError = Error('restore failed'), unmountError = Error('scratch busy');
   const {execute, directory} = servicesFixture({unmountError});

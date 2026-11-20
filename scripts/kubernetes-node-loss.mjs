@@ -88,7 +88,10 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
   const run = (binary, args, {input, signal = stop.signal, timeout = 15_000} = {}) =>
     execute(binary, args, {env, input, signal, timeout});
   const docker = (args, options) => run('docker', args, options);
-  const kube = (args, options) => run('kubectl', ['--kubeconfig', kubeconfig, '--request-timeout=10s', ...args], options);
+  let apiPeer;
+  const kubeTarget = () => ['--kubeconfig', kubeconfig,
+    ...(apiPeer ? ['--server=https://' + apiPeer.ip + ':6443', '--tls-server-name=127.0.0.1'] : [])];
+  const kube = (args, options) => run('kubectl', [...kubeTarget(), '--request-timeout=10s', ...args], options);
   const names = controlPlanes.map(suffix => `${cluster}-${suffix}`), balancerName = `${cluster}-${balancerRole}`;
   const list = (options) => docker(['ps', '--all', '--quiet', '--no-trunc', '--filter', `label=${clusterLabel}=${cluster}`], options);
   const networks = (options) => docker(['network', 'ls', '--quiet', '--no-trunc', '--filter', `name=^${cluster}$`], options);
@@ -201,6 +204,8 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
         assert.ok(!State.Running && !State.Restarting, 'node_loss.container_still_running');
       }
       await expectStopped();
+      // A healthy reply through Kind's balancer does not prove its next connection will avoid the stopped node.
+      if (outsideServices) apiPeer = nodes.find(candidate => candidate !== node);
       process.stderr.write(`Kind node stopped ${node.name}\n`);
       await retry(async () => assert.equal(await kube(['get', '--raw=/readyz'], failover), 'ok'), failover.signal);
       const result = await whileStopped(failover);
@@ -221,6 +226,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       const restartedNodes = await retryApi(() => readNodes(rejoin), rejoin.signal, 'node identity');
       assert.deepEqual(restartedNodes, nodeUids, 'node_loss.node_identity');
       assert.deepEqual(await retry(() => readEtcd(nodes, rejoin), rejoin.signal), members, 'node_loss.etcd_identity');
+      apiPeer = undefined;
       return {stopped: node.name, failoverMs, ...result};
     }
     if (coldRestart) {
@@ -296,7 +302,7 @@ export async function runKubernetesNodeLoss({execute = executeCommand, database,
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members, remote: result};
     }
     if (services) {
-      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, stopNode, signal: stop.signal});
+      const result = await services({nodes, cluster, directory, run, kube, env, kubeconfig, kubeTarget, stopNode, signal: stop.signal});
       return {cluster, networkId, balancer: balancer.Id, nodes, nodeUids, members,
         services: {...result, verifierScratchBytes: (await stat(scratchDisk)).size}};
     }

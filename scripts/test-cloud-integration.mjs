@@ -657,11 +657,13 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
               await untilRemote(async limit =>
                 (await api('/api/account/session', undefined, browser, ca, cloudHostname, limit)).status === 200,
               90_000, signal, 'retained_account_session');
+              process.stderr.write('Outside Kind account session verified during stop\n');
               const recipient = 'integration-stop-' + randomUUID() + '@example.test';
               assert.equal((await api('/api/account/signup/request', {email: recipient}, {}, ca, cloudHostname, signal)).status,
                 202, 'integration.fault_mail_request');
               const message = await readMail(recipient, new Set(), signal);
               readSignupToken(message.Text, origin);
+              process.stderr.write('Outside Kind signup mail received during stop\n');
               const saved = parseIntegrationJson(await accountPhase('inspect-snapshot', captured));
               assert.deepEqual(saved, independent, 'integration.fault_snapshot_changed');
               return {session: true, mail: true, retainedObject: true};

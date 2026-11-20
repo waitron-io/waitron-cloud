@@ -169,10 +169,10 @@ export async function readServicesInbox(pods, fetch, path, authorization) {
 }
 
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal,
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, kubeTarget, signal,
     remote, stopGatewayNode, stopServiceNodes, stopNode, prepareOutside, baseline, amazon, importVerifierImage} = context;
   const tag = cluster + ':cloud';
-  const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
+  const kubeArgs = () => [...(kubeTarget ? kubeTarget() : ['--kubeconfig', kubeconfig]), '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
     input, timeout, signal: cleanup ? null : AbortSignal.any([signal, requestSignal].filter(Boolean)),
   });
@@ -237,7 +237,7 @@ export async function runKubernetesServices(context) {
         catch (error) {if (attempt === 29) throw error; await delay(1000, undefined, {signal});}
       }
       await exec(await service(signal), 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
-      const ports = baseline ? {3443: 3000} : await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
+      const ports = baseline ? {3443: 3000} : await forwardKubernetesPod(kubeArgs(), 'cloud-services', [3443, 8025], env, forwards);
       if (remote || baseline) {
         if (!baseline) outside = await prepareOutside?.(context, tag);
         remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings, outside: Boolean(outside),
@@ -258,7 +258,7 @@ export async function runKubernetesServices(context) {
             '--opt', 'type=none', '--opt', 'o=bind', '--opt', 'device=' + verifierScratchPath, verifierScratchVolume]);
           const args = ['exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'];
           if (importVerifierImage) await importVerifierImage(id, args);
-          else await loadVerifierImage(id, [...kubeArgs, ...args], env, signal);
+          else await loadVerifierImage(id, [...kubeArgs(), ...args], env, signal);
         }});
       process.stderr.write(remote ? 'Running authenticated signup, box pairing and gateway handover\n' :
         'Running authenticated signup, box pairing and native backup verification\n');
@@ -281,6 +281,7 @@ export async function runKubernetesServices(context) {
             const evidence = await stopNode(stopped, {
               whileStopped: async fault => {
                 const evidence = await prove(fault.signal);
+                process.stderr.write('Outside Kind session, mail and stored backup verified during stop\n');
                 await untilRemote(async limit => {
                   await run('curl', ['-fsS', '--max-time', '3', '--cacert', store.caPath, '--resolve',
                     servicesStoreHost + ':9000:' + remoteTarget.gatewayIp,
