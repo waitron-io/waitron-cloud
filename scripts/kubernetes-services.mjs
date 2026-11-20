@@ -14,6 +14,7 @@ import {cleanUp, migrationJob, requireTls} from './kubernetes-database.mjs';
 import {configurePolicy, withStockholmStorageIdentity} from './kubernetes-storage-identity.mjs';
 import {storageBucket, storageClient} from './kubernetes-storage-proof.mjs';
 import {storeNodePort} from './kubernetes-storage.mjs';
+import {meshNodeAddress} from './kubernetes-outside.mjs';
 import {createKubernetesVerifier, forwardKubernetesPod, loadVerifierImage} from './kubernetes-check.mjs';
 import {parseIntegrationJson, runTestCloudClients} from './test-cloud-integration.mjs';
 
@@ -27,12 +28,14 @@ const resource = (kind, name, body) => ({
 const randomPassword = () => randomBytes(24).toString('base64url');
 
 export async function installServicesDatabase(context, image) {
-  const {nodes, run, kube, installDatabase = installStockholmDatabase} = context;
-  const input = await asset('deploy/kubernetes/bounded-amazon/bootstrap.sh');
-  for (const node of nodes) {
-    await run('docker', ['exec', '-i', node.id, 'bash', '-s', '--', 'database-storage'], {input});
+  const {nodes, run, kube, databasePrepared, installDatabase = installStockholmDatabase} = context;
+  if (!databasePrepared) {
+    const input = await asset('deploy/kubernetes/bounded-amazon/bootstrap.sh');
+    for (const node of nodes) {
+      await run('docker', ['exec', '-i', node.id, 'bash', '-s', '--', 'database-storage'], {input});
+    }
+    await installDatabase({...context, nodes: nodes.map(({name}) => name)});
   }
-  await installDatabase({...context, nodes: nodes.map(({name}) => name)});
   await kube(['-n', servicesNamespace, 'create', '-f', '-'], {
     input: JSON.stringify(resource('Job', 'migrate', {spec: migrationJob(image)})),
   });
@@ -124,8 +127,18 @@ async function configureServices(context, kube, store, custody) {
   return {ca: tls.root, tls, config, runtimeDirectory, mailAuthorization: 'Basic ' + Buffer.from('inbox:' + inboxPassword).toString('base64')};
 }
 
+const inboxRequest = `
+  import {readFileSync} from 'node:fs';
+  const {path, authorization} = JSON.parse(readFileSync(0, 'utf8'));
+  const response = await fetch('http://127.0.0.1:8025/api/v1/' + path, {
+    headers: authorization ? {authorization} : {}, signal: AbortSignal.timeout(5000),
+  });
+  console.log(JSON.stringify({status: response.status, text: await response.text()}));
+`;
+
 export async function runKubernetesServices(context) {
-  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal, remote, stopGatewayNode, prepareOutside} = context;
+  const {cluster, nodes, run, image, waitronImage, verificationTarget, env, kubeconfig, signal,
+    remote, stopGatewayNode, prepareOutside, baseline, amazon, importVerifierImage} = context;
   const tag = cluster + ':cloud';
   const kubeArgs = ['--kubeconfig', kubeconfig, '-n', servicesNamespace];
   const kube = (args, input, cleanup = false, requestSignal) => context.kube(['-n', servicesNamespace, ...args], {
@@ -134,16 +147,20 @@ export async function runKubernetesServices(context) {
   const create = value => kube(['create', '-f', '-'], JSON.stringify(value));
   const forwards = [];
   let failure, remoteTarget, outside;
-  await run('docker', ['tag', image, tag]);
+  if (!amazon) await run('docker', ['tag', image, tag]);
   try {
-    await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
+    if (!amazon) await run('kind', ['load', 'docker-image', '--name', cluster, tag], {timeout});
+    if (baseline) {
+      outside = await prepareOutside(context, tag);
+      context = {...context, nodes: nodes.map((node, index) => ({...node, ip: meshNodeAddress(index)}))};
+    }
     process.stderr.write('Preparing the three PostgreSQL copies and Cloud schema\n');
     await installServicesDatabase(context, tag);
     return await withStockholmStorageIdentity(context, async (store, custody) => {
       const settings = await configureServices(context, kube, store, custody);
       const {ca, mailAuthorization, config} = settings;
-      await create(servicesPod(tag, nodes[0].name, remote));
-      await create(remote ? servicesInspection(tag, config.gateway.cellId, nodes[0].name) : servicesInspection(tag));
+      await create(servicesPod(tag, nodes[0].name, remote || baseline));
+      await create(remote || baseline ? servicesInspection(tag, config.gateway.cellId, nodes[0].name) : servicesInspection(tag));
       await kube(['wait', '--for=condition=Ready', 'pod/cloud-services', '--timeout=180s']);
       await kube(['wait', '--for=condition=Ready', 'pod', '-l', 'job-name=services-inspection', '--timeout=180s']);
       const exec = (pod, container, command, input, limit) =>
@@ -170,11 +187,12 @@ export async function runKubernetesServices(context) {
         catch (error) {if (attempt === 29) throw error; await delay(1000, undefined, {signal});}
       }
       await exec('cloud-services', 'email', ['node', '--input-type=module', '-e', smtpRefusals]);
-      const ports = await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
-      if (remote) {
+      const ports = baseline ? {3443: 3000} : await forwardKubernetesPod(kubeArgs, 'cloud-services', [3443, 8025], env, forwards);
+      if (remote || baseline) {
         const {startRemoteRehearsal} = await import('./kubernetes-remote.mjs');
-        outside = await prepareOutside?.(context, tag);
-        remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings, outside: Boolean(outside)});
+        if (!baseline) outside = await prepareOutside?.(context, tag);
+        remoteTarget = await startRemoteRehearsal({context, kube, create, tag, settings, outside: Boolean(outside),
+          installPublication: baseline ? outside.install : undefined});
       }
       const manifest = !remote && JSON.parse(await asset('deploy/kubernetes/local-checks.yaml'));
       const template = !remote && servicesVerifier(manifest.items.find(row => row.metadata.name === 'verifier'), tag,
@@ -184,13 +202,24 @@ export async function runKubernetesServices(context) {
           await verifier.docker(['volume', 'create', '--driver', 'local',
             '--label', 'cloud.backup-verifier.scratch=waitron-cloud-test-backup',
             '--opt', 'type=none', '--opt', 'o=bind', '--opt', 'device=' + verifierScratchPath, verifierScratchVolume]);
-          await loadVerifierImage(id, [...kubeArgs, 'exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'], env, signal);
+          const args = ['exec', '-i', 'pod/verifier', '-c', 'docker', '--', 'docker', 'load'];
+          if (importVerifierImage) await importVerifierImage(id, args);
+          else await loadVerifierImage(id, [...kubeArgs, ...args], env, signal);
         }});
       process.stderr.write(remote ? 'Running authenticated signup, box pairing and gateway handover\n' :
         'Running authenticated signup, box pairing and native backup verification\n');
-      const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...(remote ? {stockholmRemote: true, stockholmGatewayMachineLoss: stopGatewayNode} : {services: true}), kubernetes: {
+      const mode = baseline ? {stockholmBaseline: true} :
+        remote ? {stockholmRemote: true, stockholmGatewayMachineLoss: stopGatewayNode} : {services: true};
+      const result = await runTestCloudClients({image, waitronImage, verificationTarget, ...mode, kubernetes: {
         cluster, network: cluster, namespace: servicesNamespace, account: 'kube-account',
-        proxyIp: nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca, ...(remote ? {stockholmRemote: remoteTarget} : {verifier}),
+        proxyIp: context.nodes[0].ip, port: ports[3443], mailPort: ports[8025], ca, mailAuthorization, storeCa: store.ca,
+        stockholmRemote: remoteTarget, verifier, amazon,
+        ...(baseline && {async readInbox(path, authorization, limit) {
+          const body = JSON.stringify({path, authorization});
+          const response = parseIntegrationJson(await exec('cloud-services', 'account',
+            ['node', '--input-type=module', '-e', inboxRequest], body, limit));
+          return new Response(response.text, {status: response.status});
+        }}),
         exec: async (role, args, input, limit) => {
           assert.deepEqual([role, ...args], ['account', 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs']);
           return command('job/services-inspection', 'inspect', 'CLOUD_STOCKHOLM_REHEARSAL=1 exec ' + args.join(' '), input, limit);
@@ -214,11 +243,11 @@ export async function runKubernetesServices(context) {
       assert.equal(operations.ready, true, 'services.operations_readiness');
       await exec('job/services-inspection', 'inspect', ['touch', '/tmp/inspection-complete']);
       await kube(['wait', '--for=condition=Complete', 'job/services-inspection', '--timeout=30s']);
-      return {...result, operationsReady: true, smtpRefusals: true};
+      return {...result, operationsReady: true, smtpRefusals: true, ...(baseline && {flux: outside.revision})};
     });
   } catch (error) {
     failure = error;
-    if (remote) {
+    if (remote || baseline) {
       for (const [name, args] of [
         ['gateway candidates', ['get', 'pods', '-l', 'app=remote-gateway', '-o', 'wide']],
         ['gateway processes', ['logs', '-l', 'app=remote-gateway', '--tail=20', '--prefix']],
@@ -242,7 +271,7 @@ export async function runKubernetesServices(context) {
       try {
         try {await remoteTarget?.close();}
         finally {await outside?.close();}
-      } finally {await run('docker', ['image', 'rm', tag], {signal: null});}
+      } finally {if (!amazon) await run('docker', ['image', 'rm', tag], {signal: null});}
     });
   }
 }

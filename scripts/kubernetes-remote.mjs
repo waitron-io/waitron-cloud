@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {servicesNamespace} from '../deploy/kubernetes/services.mjs';
 import {createHash, createPublicKey, X509Certificate} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -180,7 +181,7 @@ export async function startRemoteRelay({cluster, nodes, run, tag, outside}) {
 }
 
 
-export async function startRemoteRehearsal({context, kube, create, tag, settings, outside}) {
+export async function startRemoteRehearsal({context, kube, create, tag, settings, outside, installPublication}) {
   const {cluster, nodes, run, signal, stopNode, stopGatewayNode} = context;
   const {tls, config: {gateway: {cellId}}, runtimeDirectory} = settings;
   const names = ['gateway-issuer.pem', 'gateway-signing-key.pem', 'gateway-wireguard.key', 'gateway-manifest.json'];
@@ -232,12 +233,17 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
   if (holdPrimary) await call(['taint', 'nodes', primaryAtPlacement, primaryPlacementTaint + '=held:NoSchedule'], signal);
   let originalWorker;
   try {
-    await create({apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
+    const publication = {apiVersion: 'apps/v1', kind: 'Deployment', metadata: {name: 'remote-worker'}, spec: {
       replicas: 1, selector: {matchLabels: workerLabels}, template: {metadata: {labels: workerLabels}, spec: {
         affinity, serviceAccountName: 'remote-worker', containers: [worker], volumes: [caVolume,
           {name: 'identity', secret: {secretName: 'remote-worker-identity', defaultMode: 384}}, {name: 'work', emptyDir: {}}],
       }},
-    }});
+    }};
+    if (installPublication) {
+      publication.metadata.namespace = servicesNamespace;
+      const workerNode = holdPrimary ? nodes.find(node => ![accountNode, primaryAtPlacement].includes(node.name)).name : null;
+      await installPublication({deployment: publication, kube, worker: workerNode});
+    } else await create(publication);
     [originalWorker] = await untilRemote(limit => readyWorkers(1, limit), 180000, signal, 'publication_worker');
     assert.notEqual(originalWorker.spec.nodeName, accountNode, 'remote.publication_worker_on_account_node');
     assert.notEqual(originalWorker.spec.nodeName, primaryAtPlacement, 'remote.publication_worker_on_database_primary');
@@ -278,6 +284,10 @@ export async function startRemoteRehearsal({context, kube, create, tag, settings
       }, Math.max(1, remoteDeadlineMs - (performance.now() - start)), signal, 'handover_90_seconds');
     }
     return {gatewayIp, host: gatewayIp, port: 30443, ca: tls.root, close, handover,
+      async peerTraffic(peer, limit) {
+        const stats = await peerCounters(call, await active(limit), peer, limit);
+        return stats.handshake > 0 && stats.receivedBytes > 0 && stats.sentBytes > 0;
+      },
       ...(stopGatewayNode ? {machineLoss: (checkRoutes, peer, prepareRoutes) => measureGatewayMachineLoss({kube: call,
         accountNode: nodes[0].name, stopNode, moveGateway: handover, checkRoutes, prepareRoutes, peer, signal})} : {}),
       async peers(limit) {return exec(await active(limit), ['wg', 'show', 'wg-cloud', 'peers'], limit);},

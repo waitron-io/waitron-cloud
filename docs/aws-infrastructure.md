@@ -1306,9 +1306,10 @@ child's 1 GiB memory limit stays in place. The check prints the archive size
 and scratch bound after it removes the Kind cluster, native client resources
 and scratch filesystem it created.
 
-Use the outside rehearsal for Stockholm and Flux startup, worker redundancy,
-durable mail and a storage address that survives machine loss. The outside
-rehearsal must also check returned disks and multipart through consecutive outages.
+Use the full-service baseline below to exercise Flux and the venue journey
+from the private host. The machine-loss rehearsal still needs to verify worker
+restarts, durable mail, access to a surviving storage address, returned disks
+and multipart completion through consecutive outages.
 
 If kube-proxy reports `too many open files` in a disposable Linux guest, check
 `sysctl fs.inotify.max_user_instances`. The fault check needs room for file
@@ -1335,8 +1336,31 @@ port. The test reads the firewall's drop counter to confirm the private API
 request reached the filter. Flux fetches a synthetic
 deployment through the host's read-only Git mirror on TCP 18000. The venue's
 existing remote-access check sends signed staff and public HTTPS through the
-relay, whose upstreams are the three private addresses. The full Stockholm
-service journey and its Amazon routing check still need to be run.
+relay, whose upstreams are the three private addresses.
+
+### Rehearse the full service journey from outside the cell
+
+Use the same pinned Cloud and Waitron images as the services rehearsal
+and run on the disposable Linux host used for the outside networking check.
+
+```sh
+TEST_KUBERNETES_OUTSIDE_BASELINE=1 node --test scripts/kubernetes-services.test.mjs
+```
+
+One venue signs up, pairs, reaches signed staff and public HTTPS, uploads
+an encrypted backup and completes an isolated restore. Flux applies the
+remote publication Deployment from the test host's read-only Git mirror.
+The host's WireGuard filter admits replies and incoming Git traffic.
+The test reads the authenticated mailbox inside the account pod and gives
+the backup verifier 1 GiB of scratch space on A.
+
+The owner-started Stockholm launcher uses `node scripts/amazon-run.mjs baseline`
+with the private `D618_CONFIG` on the test host. It reads Kubernetes and the
+inbox over SSH to A, uses the verifier image already copied to A, and waits
+for scheduled deletion. It leaves all three machines running until that
+deletion. Use the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
+for the gates on a paid run. Amazon routing, the machine-stop sequence and
+recovery after the full restart still need their own checks.
 
 ### Rehearse a gateway handover on a private Kind cell
 

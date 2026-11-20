@@ -1832,10 +1832,10 @@ implementation or production evidence.
   passed in disposable x86-64 Linux with a full API outage, retained PostgreSQL
   data and a fresh write. Rehearse the Stockholm cold restart from outside the
   cell with the same service clients before run 9.
-  The [outside network rehearsal](aws-infrastructure.md#rehearse-the-outside-network-in-disposable-linux)
-  connects the private test host to the three Kind nodes. The Stockholm
-  launcher still needs to use that connection for the one-venue signup,
-  pairing, remote access, upload and restore baseline.
+  The [outside full-service baseline](aws-infrastructure.md#rehearse-the-full-service-journey-from-outside-the-cell)
+  uses the private test host for one venue's signup, pairing, signed remote
+  access, encrypted upload and isolated restore. The individual stops and
+  all-machine restart still need to use the same outside clients in Stockholm.
   Follow the [run 9 readiness sizing](superpowers/plans/2026-11-18-d621-run9-sizing.md)
   for the remaining build and the [run 9 decision](superpowers/plans/2026-11-18-d621-run9-qualification.md)
   for the timed dry run and billing gates.

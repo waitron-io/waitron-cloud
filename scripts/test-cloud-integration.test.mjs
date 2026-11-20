@@ -158,6 +158,26 @@ test('production rehearsal refuses a remote target even with a valid local Kind 
   }
 });
 
+test('outside baseline requires the owned private route, inbox, peer and verifier', async () => {
+  const {runTestCloudClients} = await load();
+  const cluster = 'd618-85e61869-0ce9-4cf5-ab51-b2335fb89bc6';
+  const noIo = () => assert.fail('must validate before using the target');
+  const amazon = {type: 'amazon', cluster, context: cluster, address: '10.77.0.1', phase: 'baseline',
+    instances: ['1', '2', '3'].map(n => 'i-' + n.repeat(17)),
+    nodes: ['-control-plane', '-worker', '-worker2'].map(suffix => cluster + suffix)};
+  const target = {amazon, cluster, namespace: 'd621-data', network: cluster, account: 'kube-account',
+    proxyIp: '10.77.0.1', port: 3000, readInbox: noIo, ca: 'synthetic', storeCa: 'synthetic',
+    mailAuthorization: 'synthetic', exec: noIo, stockholmRemote: {peerTraffic: noIo},
+    verifier: Object.fromEntries(['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].map(name => [name, noIo]))};
+  const run = kubernetes => runTestCloudClients({stockholmBaseline: true, kubernetes});
+  await assert.rejects(run(target), /integration\.image_invalid/);
+  for (const changed of [{proxyIp: '127.0.0.1'}, {network: 'other-network'}, {readInbox: undefined},
+    {verifier: undefined}, {stockholmRemote: {}}, {amazon: {...amazon, phase: 'before'}}]) {
+    await assert.rejects(run({...target, ...changed}), /(?:integration\.stockholm_baseline_binding|kubernetes\.amazon_binding)/);
+  }
+  await assert.rejects(run({...target, amazon: undefined}), /integration\.stockholm_baseline_binding/);
+});
+
 test('the signup reader accepts the mailed language parameter and refuses another origin', async () => {
   const {readSignupToken} = await load();
   assert.equal(typeof readSignupToken, 'function', 'the authenticated rehearsal needs to read the signup link');

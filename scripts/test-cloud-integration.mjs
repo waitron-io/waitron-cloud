@@ -129,9 +129,9 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export function assertAmazonBinding(target) {
+export function assertAmazonBinding(target, phases = ['before', 'after']) {
   assert.ok(target?.type === 'amazon' && /^d618-[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(target.cluster) &&
-    target.context === target.cluster && ['before', 'after'].includes(target.phase) && target.address === '10.77.0.1' &&
+    target.context === target.cluster && phases.includes(target.phase) && target.address === '10.77.0.1' &&
     Array.isArray(target.instances) && target.instances.length === 3 && new Set(target.instances).size === 3 &&
     target.instances.every(id => /^i-[a-f0-9]{17}$/.test(id)) &&
     JSON.stringify(target.nodes) === JSON.stringify(['-control-plane', '-worker', '-worker2'].map(suffix => target.cluster + suffix)),
@@ -205,21 +205,29 @@ export async function runTestCloudClients(options = {}) {
     options = {...options, waitronTunnelImage};
   }
   assert.ok(!options.stockholmGatewayMachineLoss || options.stockholmRemote === true, 'integration.stockholm_machine_loss_scope');
-  if (options.services || options.stockholmRemote) {
+  if (options.services || options.stockholmRemote || options.stockholmBaseline) {
     assert.ok(!options.stockholmGatewayMachineLoss || typeof options.kubernetes?.stockholmRemote?.machineLoss === 'function',
       'integration.stockholm_machine_loss_binding');
-    const k = options.kubernetes, remote = options.stockholmRemote;
-    assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream',
-      'paidContinuousRecovery', 'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
-      'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)),
-      remote ? 'integration.stockholm_remote_scope' : 'integration.services_scope');
-    assert.ok(k && /^d621-[a-f0-9]{32}$/.test(k.cluster) && k.network === k.cluster &&
-      k.namespace === servicesNamespace && k.account === 'kube-account' && !k.amazon && !k.remote &&
-      /^172\.30\.250\.\d{1,3}$/.test(k.proxyIp) && Number.isInteger(k.port) && Number.isInteger(k.mailPort) &&
-      typeof k.mailAuthorization === 'string' && typeof k.storeCa === 'string' && typeof k.exec === 'function' &&
-      (remote ? typeof k.stockholmRemote?.handover === 'function' && typeof k.stockholmRemote?.projected === 'function' && !k.verifier :
-        !k.stockholmRemote && ['start', 'identity', 'docker', 'running', 'stop', 'exitCode'].every(name => typeof k.verifier?.[name] === 'function')),
-      remote ? 'integration.stockholm_remote_binding' : 'integration.services_binding');
+    const k = options.kubernetes, remote = options.stockholmRemote, baseline = options.stockholmBaseline;
+    const mode = baseline ? 'stockholm_baseline' : remote ? 'stockholm_remote' : 'services';
+    assert.ok(baseline || !k?.readInbox, 'integration.services_binding');
+    assert.ok(!['paidSnapshot', 'paidRecovery', 'paidAuthorisedRecovery', 'paidStream', 'paidContinuousRecovery',
+      'freeRemote', 'paidRemote', 'cloudRollback', 'measureCapacity', 'measureIntegration',
+      'schemaRollback', 'pairedExpiry', 'fixedProject'].some(key => options[key]) && !(remote && (options.services || options.paidVerification)) &&
+      !(baseline && (remote || options.services || options.paidVerification)), 'integration.' + mode + '_scope');
+    if (baseline && k?.amazon) assertAmazonBinding(k.amazon, ['baseline']);
+    const ownedCluster = baseline && k?.amazon ? k.amazon.cluster === k.cluster : /^d621-[a-f0-9]{32}$/.test(k?.cluster ?? '');
+    const accountRoute = baseline ? k?.proxyIp === '10.77.0.1' && k.port === 3000 && typeof k.readInbox === 'function' :
+      /^172\.30\.250\.\d{1,3}$/.test(k?.proxyIp ?? '') && Number.isInteger(k.port) && Number.isInteger(k.mailPort);
+    const verifier = ['start', 'identity', 'docker', 'running', 'stop', 'exitCode']
+      .every(name => typeof k?.verifier?.[name] === 'function');
+    const serviceRoles = baseline ? verifier && typeof k?.stockholmRemote?.peerTraffic === 'function' :
+      remote ? typeof k?.stockholmRemote?.handover === 'function' && typeof k.stockholmRemote.projected === 'function' && !k.verifier :
+        !k?.stockholmRemote && verifier;
+    assert.ok(ownedCluster && accountRoute && serviceRoles && k.network === k.cluster && (baseline || !k.amazon) &&
+      k.namespace === servicesNamespace && k.account === 'kube-account' && !k.remote &&
+      typeof k.ca === 'string' && typeof k.mailAuthorization === 'string' &&
+      typeof k.storeCa === 'string' && typeof k.exec === 'function', 'integration.' + mode + '_binding');
     options = {...options, services: true, paidVerification: !remote};
   } else if (options.kubernetes) {
     const k = options.kubernetes;
@@ -261,7 +269,7 @@ export async function runTestCloudClients(options = {}) {
   } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmGatewayMachineLoss = false, waitronTunnelImage, kubernetes}, fixedProject, waitronSource) {
+async function runClients({image, waitronImage, revision, verificationTarget, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false, services = false, stockholmBaseline = false, stockholmGatewayMachineLoss = false, waitronTunnelImage, kubernetes}, fixedProject, waitronSource) {
   const origin = services ? servicesOrigin : composeOrigin;
   const {host: cloudHost, hostname: cloudHostname} = new URL(origin);
   measureCapacity ||= measureIntegration;
@@ -434,7 +442,7 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
       if (path === '/api/account/login') budget?.attempt('login', body.email);
       if (path.startsWith('/api/account/signup/')) budget?.attempt('signup', body.email);
       return new Promise((resolve, reject) => {
-      const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
+      const req = request({hostname: stockholmBaseline ? kubernetes.proxyIp : '127.0.0.1', port, servername, ca: trust, path, signal: AbortSignal.any([runSignal(), signal, ...(signal ? [AbortSignal.timeout(5000)] : [])].filter(Boolean)), method: body === undefined ? 'GET' : 'POST',
         headers: {host: cloudHost, ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
@@ -450,11 +458,12 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
     const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
-    const fetchInbox = (path, signal, authorization = kubernetes?.mailAuthorization) =>
-      fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {
-        signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)]),
-        ...(authorization ? {headers: {authorization}} : {}),
-      });
+    const fetchInbox = (path, signal, authorization = kubernetes?.mailAuthorization) => {
+      const limit = AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal(), signal].filter(Boolean)]);
+      return stockholmBaseline ? kubernetes.readInbox(path, authorization, limit) :
+        fetch(`http://127.0.0.1:${mailPort}/api/v1/${path}`, {signal: limit,
+          ...(authorization ? {headers: {authorization}} : {})});
+    };
     const readInbox = async (path, signal) => {
       const response = await fetchInbox(path, signal);
       if (services) assert.equal(response.status, 200, 'integration.inbox_read');
@@ -818,21 +827,24 @@ async function runClients({image, waitronImage, revision, verificationTarget, pr
         }
       }
       if (services) {
+        let remote;
         if (kubernetes.stockholmRemote) {
           journeyStage = 'stockholm-remote';
           const {installationId, venueId} = evidence.registration;
           const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
-          const remote = await proveIntegrationPaidRemote({docker, control, account, image, waitronTunnelImage, runId,
+          remote = await proveIntegrationPaidRemote({docker, control, account, image, waitronTunnelImage, runId,
             paid: {id, stateVolume, venueRoot, organisationId, venueId, installationId},
             target: kubernetes.stockholmRemote, stockholm: {
-              origin, signal: runSignal(), machineLoss: stockholmGatewayMachineLoss, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
+              origin, signal: runSignal(), baseline: stockholmBaseline, machineLoss: stockholmGatewayMachineLoss, revoke: signal => api('/api/account/installations/revoke', {installationId}, browser, ca, cloudHostname, signal),
             }, own: id => {owned.push(id); record('container', id);}});
-          result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
-          return;
+          if (!stockholmBaseline) {
+            result = {version: 1, kind: 'stockholm-cloud-remote', origin, waitronHead: revision, pairing: persisted, ...remote};
+            return;
+          }
         }
         result = {version: 1, kind: 'stockholm-cloud-services', origin, waitronHead: revision,
           signup: true, signIn: true, emailActionProof: true, inboxRequiresAuthentication: true, pairing: persisted,
-          backup: publishedSnapshot, alteredPublicationRefused: true};
+          backup: publishedSnapshot, alteredPublicationRefused: true, ...(stockholmBaseline && {remote})};
         return;
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);

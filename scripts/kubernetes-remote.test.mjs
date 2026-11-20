@@ -387,32 +387,15 @@ test('the outside Kind network drops traffic to the private API port and carries
 }, async () => {
   assert.equal(process.platform, 'linux');
   const {installFlux, fluxImages, prepareFluxBundle, startOutsideFluxMirror} = await import('./kubernetes-git.mjs');
-  const {meshNodeAddress, outsideNodePeer, rehearsalMtu, startOutsideMesh} = await import('./kubernetes-outside.mjs');
+  const {meshNodeAddress, startKindOutsideMesh} = await import('./kubernetes-outside.mjs');
   let checked, cleaned;
   const {remote} = await runKubernetesCheck('kind-remote', {stopGatewayNode: true, async prepareOutside(context, tag) {
     const {cluster, directory, nodes, run, kube, signal, waitronImage} = context;
     const execute = (binary, args, input, cleanup) => run(binary, args, {input, signal: cleanup ? null : signal, timeout: 180000});
-    const bootstrap = fileURLToPath(new URL('../deploy/kubernetes/bounded-amazon/bootstrap.sh', import.meta.url));
-    const namespace = (pid, ...args) => run('nsenter', ['-t', pid, '-n', ...args]);
-    const peers = [];
-    for (const [index, node] of nodes.entries()) {
-      const privateKey = await run('wg', ['genkey']);
-      const publicKey = await execute('wg', ['pubkey'], privateKey + '\n');
-      const pid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', node.id]);
-      assert.match(pid, /^[1-9][0-9]*$/);
-      peers.push({endpoint: node.ip, publicKey, privateKey, pid});
-    }
+    const accountPid = await run('docker', ['inspect', '--type=container', '--format={{.State.Pid}}', nodes[0].id]);
+    assert.match(accountPid, /^[1-9][0-9]*$/);
+    const mesh = await startKindOutsideMesh(context);
     let flux;
-    const mesh = await startOutsideMesh({directory, peers, run: execute, async prepareNodes(publicKey) {
-      for (const [index, {pid, privateKey}] of peers.entries()) {
-        const nodePath = join(directory, 'mesh-node-' + index), address = meshNodeAddress(index);
-        const path = join(nodePath, 'wg0.conf');
-        await mkdir(nodePath);
-        const input = `[Interface]\nAddress = ${address}/32\nListenPort = 51821\nMTU = ${rehearsalMtu}\nPrivateKey = ${privateKey}\n` + outsideNodePeer(publicKey);
-        await run('bash', ['-c', 'umask 077; bash "$1" mesh-config "$2" > "$3"', 'mesh-config', bootstrap, address, path], {input});
-        await namespace(pid, 'wg-quick', 'up', path);
-      }
-    }});
     const close = async () => {
       try {await flux?.close();}
       finally {await mesh.close();}
@@ -431,7 +414,7 @@ test('the outside Kind network drops traffic to the private API port and carries
       }
       await kube(['get', '--raw=/readyz']);
       const countDrops = async () => {
-        const rules = await namespace(peers[0].pid, 'iptables', '-t', 'mangle', '-nvxL', 'D618-OUTSIDE');
+        const rules = await run('nsenter', ['-t', accountPid, '-n', 'iptables', '-t', 'mangle', '-nvxL', 'D618-OUTSIDE']);
         return Number(rules.match(/^\s*(\d+)\s+\d+\s+DROP\s/m)?.[1]);
       };
       const before = await countDrops();
