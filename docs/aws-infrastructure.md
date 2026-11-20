@@ -1325,6 +1325,15 @@ manifest without the revoked venue. After the machine rejoins, the check makes
 sure all three gateways received the withdrawal, the peer is gone and both HTTPS
 routes refuse the venue. It allows 180 seconds from revocation for those results.
 
+In the 20 November disposable Linux run, the first inspection succeeded after
+40.015 seconds across connection attempts. Kubernetes withdrew the stopped
+DNS replica after 51.613 seconds. The surviving worker reused the certificate
+and signing request and published signed sequence 4, up from 3, 985 ms after
+revocation. All three gateways received the withdrawal, and both routes refused
+the venue 45.240 seconds after revocation. The launch qualification still
+needs name lookup across machine loss and account recovery across database
+primary failover.
+
 An idle synthetic box missed the 90-second deadline. With periodic traffic
 from the fixture, the same peer restored both routes in 21.841 seconds.
 Keep the idle-box check open when reading the [reconnection measurements](gateway-reconnection-measurements.md#idle-venue-limit-in-private-kind).

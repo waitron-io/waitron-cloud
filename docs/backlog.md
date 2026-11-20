@@ -1807,9 +1807,12 @@ implementation or production evidence.
   and MinIO. Stockholm and Flux startup with the real services, worker redundancy,
   durable mail and a storage address that survives machine loss remain outside
   rehearsal checks. The [private Kind gateway check](aws-infrastructure.md#rehearse-a-gateway-handover-on-a-private-kind-cell)
-  uses the same peer through a standby and checks same-route certificate replacement,
-  then stops the original publication worker's machine and checks whether the
-  survivor reuses the certificate and publishes the owner's revocation.
+  used the same peer through a standby and replaced the certificate on the same route.
+  During the worker machine stop, the survivor reused the saved certificate and
+  signing request and published the owner's revocation. The check waited 51.613 seconds
+  for Kubernetes to withdraw the stopped DNS replica. Keep name lookup and fresh
+  database connections available across machine loss, and qualify the account process
+  through database primary failover.
   The [private Kind machine-stop check](gateway-reconnection-measurements.md#stop-a-gateway-machine-in-private-kind)
   used the Waitron companion's own traffic and restored staff and public HTTPS
   in 52.373 and 52.387 seconds through one private relay address. The former
